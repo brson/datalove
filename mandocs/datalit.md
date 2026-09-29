@@ -1,13 +1,13 @@
 # Datalove Literals
 
-Datalove literals is
+_Datalove Literals_ is
 a typed declarative expression language for
 serializing, storing and transmitting
 common data types.
 We often refer to it as _datalit_,
 and its types and datalit types.
 
-Datalove literals is the data sublanguage of Datalove:
+Datalove Literals is the data sublanguage of Datalove:
 every datalit expression is written the same way in Datalove,
 where it means the same value.
 Datalit has no names, no operators and no computation.
@@ -15,7 +15,7 @@ Datalit files use the `.dlt` extension.
 The format is intended for use in the Datalove ecosystem
 and not as a general-purpose serialization format.
 
-This document is an informal specification for Datalove literals
+This document is an informal specification for Datalove Literals
 and serves as a gentle introduction to the data model
 and syntax of Datalove in general.
 
@@ -1016,7 +1016,7 @@ Enum variant names order by UTF-8 byte.
 ## Canonical forms
 
 
-Datalove literals has no canonical serialized form
+Datalove Literals has no canonical serialized form
 as might be used for consistent hashing.
 There is no canonical form for floats.
 Required type-hint insertion points are unknown.
