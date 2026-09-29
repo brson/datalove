@@ -1,7 +1,7 @@
 # Datalove
 
-A simple and expressive interactive scripting language -
-strongly and statically typed -
+A simple and expressive interactive scripting language,
+strongly and statically typed,
 for efficient data modeling and transformation.
 
 
