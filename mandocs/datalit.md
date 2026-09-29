@@ -1025,10 +1025,10 @@ Will be revisited.
 
 
 
-## Discrepancies, unknowns and bugs
+## Bugs and open questions
 
 
-### Not implemented
+### Bugs
 
 - **`int` is not arbitrary precision when values are built.**
   The checker accepts any integer for `int`,
