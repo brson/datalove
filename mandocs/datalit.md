@@ -1050,16 +1050,7 @@ It prints no type hints.
   so `170141183460469231731687303715884105728` fails with
   "number too large to fit in target type".
 
-### Bugs
-
-- **Empty tensors of rank above 1 cannot be written.**
-  `[| |]` is always rank 1 with shape [0],
-  and `[| , |]` does not parse,
-  so `: [|u32, 2|] / ...` has no empty value.
-  A rank-0 type `[|u32, 0|]` parses but has no literal.
-
-
-### Unknowns
+### Open questions
 
 - Whether a float literal that overflows to infinity,
   or underflows to zero, should be an error.
@@ -1074,10 +1065,8 @@ It prints no type hints.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-
-### Open questions
-
 - Should empty collections synthesize?
+- Should empty tensors synthesize rank 1?
 - What are the rules for printing disambiguating type hints?
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?
