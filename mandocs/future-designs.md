@@ -87,6 +87,9 @@ In a local build:
 - for aot builds the datalove-rt crate is sourced from the absolute checkout path, built into a target directory in the workdir
 - in all builds the path to datalove-rtdt and datalove-rti is overridden to the local path so it doesn't try to pull from crates.io
 
+Obvious risk here is that the production path cannot be tested until the crates are published.
+
+
 
 
 ## 2026/02/19 - Pretty symbols
