@@ -97,7 +97,8 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-bench` | Divan benchmarks |
 
 The `sys/` tree at the repository root is the standard library: `sys/std/*.dfm`
-modules, plus `sys/std/rider.dli` and the `sys/std/rider` Rust crate behind it.
+modules, plus the `sys/std/rider` Rust crate and the `rider.dli` interface
+inside it.
 `sys/std/rider` is a workspace member like anything under `crates/`.
 
 `datalove-stdlib` sits above everything else: nothing in the compiler depends
@@ -621,7 +622,7 @@ require rider std
 import std.string_len
 ```
 
-The signatures live in a `.dli` interface file (`sys/std/rider.dli`), or in a
+The signatures live in a `.dli` interface file (`sys/std/rider/rider.dli`), or in a
 `rider <name>` worldfile section for tests. Each is a `native fun` declaration,
 and they may be generic:
 
@@ -729,7 +730,7 @@ Two things travel inside the binary, both assembled by
 
 | What | How | Where it comes from |
 |------|-----|---------------------|
-| Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm`, `sys/*/rider.dli` |
+| Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm`, `sys/*/rider/rider.dli` |
 | Rider functions | `datalove-rider-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
 
 `system_library()` assembles them into a `SystemLibrary`, which is a

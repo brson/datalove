@@ -395,7 +395,7 @@ drop the return type.")
                     .code("F062")
                     .primary_label(ts, "nothing supplies a body for this")
                     .note("a `native fun` names a Rust function, and the only place one is supplied \
-is a package's rider interface. Declare it in the package's `rider.dli` and reach it from a module \
+is a package's rider interface. Declare it in the package's `rider/rider.dli` and reach it from a module \
 with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.")
                     .emit_type();
             }

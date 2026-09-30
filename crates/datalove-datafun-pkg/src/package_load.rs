@@ -26,7 +26,7 @@ pub struct PackageWorld {
 impl PackageWorld {
     /// Collect rider sources from all packages in both libraries.
     ///
-    /// Returns (rider_name, source_text) pairs for each package that has a `rider.dli`.
+    /// Returns (rider_name, source_text) pairs for each package that has a `rider/rider.dli`.
     pub fn rider_sources(&self) -> Vec<(String, String)> {
         let mut riders = Vec::new();
         for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
@@ -54,9 +54,9 @@ impl PackageWorld {
 pub struct Package {
     pub name: PackageName,
     pub modules: BTreeMap<ModuleName, PackageModule>,
-    /// Source text of `rider.dli` if present in the package directory.
+    /// Source text of `rider/rider.dli` if present in the package.
     pub rider_source: Option<String>,
-    /// Path to `rider/` Cargo crate if present alongside `rider.dli`.
+    /// Path to the `rider/` Cargo crate, which holds the interface too.
     pub rider_crate_dir: Option<PathBuf>,
 }
 
@@ -122,8 +122,10 @@ pub async fn package_from_source_files(
     dir: PathBuf,
     package_name: PackageName,
 ) -> AnyResult<Package> {
-    // Check for rider.dli and rider/ crate before spawning the module-loading thread.
-    let rider_path = dir.join("rider.dli");
+    // Check for the rider before spawning the module-loading thread. Both the
+    // interface and the crate live in `rider/`, so a packaged datalove package
+    // that has had the Rust stripped out still declares what it needs.
+    let rider_path = dir.join("rider").join("rider.dli");
     let rider_source = if rider_path.is_file() {
         Some(fs::read_to_string(&rider_path)
             .context(fmt!("unable to read rider file {}", rider_path.display()))?)

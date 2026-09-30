@@ -5,6 +5,6 @@
  [38;5;240m  │[0m [38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  
  [38;5;240m  │[0m    [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m nothing supplies a body for this
  [38;5;240m  │[0m 
- [38;5;240m  │[0m [38;5;115mNote[0m: a `native fun` names a Rust function, and the only place one is supplied is a package's rider interface. Declare it in the package's `rider.dli` and reach it from a module with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.
+ [38;5;240m  │[0m [38;5;115mNote[0m: a `native fun` names a Rust function, and the only place one is supplied is a package's rider interface. Declare it in the package's `rider/rider.dli` and reach it from a module with `require rider <name>` and `import <name>.<function>`; a script has no rider of its own.
 [38;5;246m───╯[0m
 Error: Type error

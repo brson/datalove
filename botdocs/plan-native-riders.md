@@ -237,7 +237,7 @@ Minimal `workspace.dlt`:
 The system library is implicit (provided by the toolchain).
 Each library is a directory of packages.
 Each package is a directory of modules.
-Rider presence is detected by `rider.dli` in the package directory.
+Rider presence is detected by `rider/rider.dli` in the package directory.
 
 ## Migrating the Runtime
 

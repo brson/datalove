@@ -1,6 +1,6 @@
 //! Generates the table of native functions this rider exports.
 //!
-//! The names come from `rider.dli`, the rider's interface: every `native fun`
+//! The names come from `rider.dli` beside this file, the rider's interface: every `native fun`
 //! declared there has a `dlr_std__`-prefixed function in `src/lib.rs`. A
 //! datalove binary that links this crate reads the generated table to find
 //! those functions by linker symbol, the same names the compiler emits calls
@@ -9,7 +9,7 @@
 use std::fmt::Write as _;
 use std::path::Path;
 
-const INTERFACE: &str = "../rider.dli";
+const INTERFACE: &str = "rider.dli";
 
 fn main() {
     println!("cargo:rerun-if-changed={INTERFACE}");

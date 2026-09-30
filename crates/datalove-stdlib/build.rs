@@ -45,7 +45,7 @@ fn embed_sys() {
 
         writeln!(table, "        ],").expect("writing to a string");
 
-        let interface = package_dir.join("rider.dli");
+        let interface = package_dir.join("rider").join("rider.dli");
         if interface.is_file() {
             println!("cargo:rerun-if-changed={}", interface.display());
             writeln!(

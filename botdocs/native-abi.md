@@ -147,7 +147,7 @@ helper, not part of this C ABI.
 
 Three places have to agree, and all three derive from the same `.dli` line.
 
-1. **The interface**, in `sys/<package>/rider.dli`:
+1. **The interface**, in `sys/<package>/rider/rider.dli`:
 
    ```
    native fun fixedint_zero<T>(): T with { T is fixedint, }

@@ -67,11 +67,11 @@ fn every_rider_interface_is_embedded_verbatim() {
     let sys = datalove_stdlib::system_library();
 
     for (name, package) in &sys.library.packages {
-        let interface = sys_dir().join(name).join("rider.dli");
+        let interface = sys_dir().join(name).join("rider").join("rider.dli");
         match &package.rider {
             Some(rider) => assert_eq!(
                 rider.interface_source.to_string(), read(&interface),
-                "sys/{name}/rider.dli differs from the embedded copy",
+                "sys/{name}/rider/rider.dli differs from the embedded copy",
             ),
             None => assert!(
                 !interface.is_file(),
@@ -130,7 +130,7 @@ fn every_declared_native_is_linked() {
 
             assert!(
                 sys.natives.iter().any(|(linked, _)| *linked == symbol),
-                "{symbol} is declared in sys/{name}/rider.dli but is not linked in",
+                "{symbol} is declared in sys/{name}/rider/rider.dli but is not linked in",
             );
         }
     }
