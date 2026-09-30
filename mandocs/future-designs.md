@@ -7,29 +7,85 @@ Executing Datalove requires the runtime, the sys/ Datalove source library,
 and the sys native riders. Today sys just contains sys/std and the corresponding
 native rider written in Rust.
 
-There three scenarios that impact finding the rt, std and std rider:
+The runtime is composed of three crates:
 
-- in-tree
-- installed from a git checkout
-- installed from cargo
+- datalove-rtdt - data definitions
+- datalove-rti - the abstract runtime interface
+- datalove-rt - the runtime
 
-some mechanism at build time embeds the info about the kind of build above,
+The compiler manages linkage to the runtime itself - it is linked
+into the interpreter for use by dynamically loaded riders,
+and it is statically linked into AOT compiles.
+
+Riders link to rtdt and rti through standard Rust static linkage.
+
+The compiler needs direct access to datalove-rt to build it for AOT compiles.
+The compiler needs to be able to find the riders that are declared by sys packages.
+Riders need to find the correct versions of datalove-rtdt and datalove-rti.
+
+There three scenarios that impact finding the rt, rtdt/rti, std and the std rider:
+
+- in-tree or installed from a git checkout
+- installed from crates.io
+
+Some mechanism at build time embeds the info about the kind of build above,
 git checkout builds include the git revision and absolute path to source.
 
+Vaguely:
 
+``rust
+enum BuildInfo {
+  Prod { version: SemVer },
+  Local {
+    git_sha: String,
+    abs_path: PathBuf,
+  }
+}
+```
 
+Every workspace has a "work dir" where it can build to.
+All riders are compiled into a "native component" in the work dir.
 
-sourcing:
-in-tree all from the source tree;
-from git checkout - from the absolute source path (today), from github by rev once the repo is public;
-from cargo - rt crates from crates.io using same version number, std rider from crates.io
+Datalove source packages that contain riders look like:
 
-todo
+```
+sys/std
+  manifest.toml
+  rider/
+    rider.rdi
+    Cargo.toml
+    etc.
+  mod.dfm etc
+```
 
-we name the rider crate "datalove-rider-sys-std" to make sure there is namespace for other sys packages.
-i don't envision the std datalove code always coming from the rider package, but ite
+manifest.toml contains
 
-  
+```
+[rider]
+name = "datalove-rider-sys-std"
+version = "0.1.0"
+```
+
+The std rider is named datalove-rider-sys-std, reserving the -sys- namespace for future packages.
+When a datalove package is "packaged" the contents of the rider/ directory, except for rider.dri
+is stripped. The remainder is the datalove package - the rider is sourced from crates.io.
+
+In a production build:
+
+- the sys packages are sourced from the datalove-sys-packages crate, embedded, excluding the rust source.
+- the riders named in the sys packages are encoded into the synthetic native component crate by name and version, built from crates.io
+- the native component crate is built into a target directory in the work dir
+- for aot builds the datalove-rt crate is downloaded directly from crates.io into the workdir and built independently
+
+In a local build:
+
+- the sys packgages are sourced from the absolute path to the checkout
+- the riders named in the sys packages are sourced from their local paths;
+  not because it is a local build, but because the rider source is present next to the datalove packge,
+  a general rule, not sys-specific
+- the ative component crate is built into a target directory in the workdir
+- for aot builds the datalove-rt crate is sourced from the absolute checkout path, built into a target directory in the workdir
+- in all builds the path to datalove-rtdt and datalove-rti is overridden to the local path so it doesn't try to pull from crates.io
 
 
 
