@@ -829,7 +829,7 @@ mod tests {
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -840,7 +840,7 @@ mod tests {
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -851,7 +851,7 @@ mod tests {
             size: 1,
             align: 1,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -862,7 +862,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::Int>() as u32,
             align: std::mem::align_of::<rtdt::Int>() as u32,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -873,7 +873,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }

@@ -14,7 +14,7 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     });
 
@@ -23,7 +23,7 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     });
 
@@ -52,7 +52,7 @@ fn create_string_tydesc() -> Box<rtdt::TyDesc> {
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     })
 }
@@ -990,7 +990,7 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     });
 

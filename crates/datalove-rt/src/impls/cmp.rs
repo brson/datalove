@@ -1860,7 +1860,7 @@ mod tests {
                 _ => 0,
             },
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }

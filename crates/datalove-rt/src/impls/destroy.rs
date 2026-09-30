@@ -253,7 +253,7 @@ pub unsafe fn any_destroy_local(
                             size: std::mem::size_of::<rtdt::Error>() as u32,
                             align: std::mem::align_of::<rtdt::Error>() as u32,
                             type_info: rtdt::TyInfo {
-                                nothing: rtdt::TyInfoNothing,
+                                nothing: rtdt::TyInfoNothing { unused: 0 },
                             },
                         };
                         any_destroy_local(rt, payload_ptr, &error_tydesc as *const rtdt::TyDesc)
@@ -352,7 +352,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -364,7 +364,7 @@ mod tests {
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -525,7 +525,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::Data>() as u32,
             align: std::mem::align_of::<rtdt::Data>() as u32,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -537,7 +537,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::Error>() as u32,
             align: std::mem::align_of::<rtdt::Error>() as u32,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -575,7 +575,7 @@ mod tests {
             size: 8,
             align: 8,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         };
 
@@ -705,7 +705,7 @@ mod tests {
             size: 8,
             align: 8,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         };
 

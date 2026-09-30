@@ -782,7 +782,7 @@ pub fn packed_tydesc(tag: TyTag) -> core::option::Option<*const TyDesc> {
                 type_tag: $tag,
                 size: $size,
                 align: $size,
-                type_info: TyInfo { nothing: TyInfoNothing },
+                type_info: TyInfo { nothing: TyInfoNothing { unused: 0 } },
             });
             &$name.0 as *const TyDesc
         }};
@@ -1063,9 +1063,23 @@ pub union TyInfo {
     pub term: TyInfoTerm,
 }
 
+/// The arm for a type that describes itself: a scalar, or a string.
+///
+/// Its `type_tag`, `size` and `align` say everything, so none of the other
+/// arms applies and nothing ever reads this one. It exists because a union
+/// has to be initialized by naming an arm -- `TyInfo {}` is not a thing you
+/// can write -- and this is the honest name for having nothing to say.
+///
+/// The field is here so that the type is one C can express. A struct with no
+/// members is a GNU extension rather than C, and this type crosses into C: the
+/// AOT backend emits the matching union, and `datalove-rti` declares functions
+/// taking a `TyDesc`. One byte costs nothing, the arm being the smallest in a
+/// union whose size a pointer-bearing arm sets.
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct TyInfoNothing;
+pub struct TyInfoNothing {
+    pub unused: u8,
+}
 
 #[repr(C)]
 #[derive(Copy, Clone)]

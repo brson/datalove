@@ -11,7 +11,7 @@ fn create_string_tydesc() -> Box<rtdt::TyDesc> {
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     })
 }
@@ -23,7 +23,7 @@ fn create_wrong_tydesc() -> Box<rtdt::TyDesc> {
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     })
 }

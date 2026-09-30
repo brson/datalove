@@ -65,7 +65,7 @@ fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     })
 }
@@ -76,7 +76,7 @@ fn create_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
         size: 8,
         align: 8,
         type_info: rtdt::TyInfo {
-            nothing: rtdt::TyInfoNothing,
+            nothing: rtdt::TyInfoNothing { unused: 0 },
         },
     })
 }

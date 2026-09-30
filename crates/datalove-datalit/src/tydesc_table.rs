@@ -215,7 +215,7 @@ impl<'db> TyDescTable<'db> {
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -225,7 +225,7 @@ impl<'db> TyDescTable<'db> {
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -235,7 +235,7 @@ impl<'db> TyDescTable<'db> {
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -245,7 +245,7 @@ impl<'db> TyDescTable<'db> {
                     size: 2,
                     align: 2,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -255,7 +255,7 @@ impl<'db> TyDescTable<'db> {
                     size: 2,
                     align: 2,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -265,7 +265,7 @@ impl<'db> TyDescTable<'db> {
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -275,7 +275,7 @@ impl<'db> TyDescTable<'db> {
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -285,7 +285,7 @@ impl<'db> TyDescTable<'db> {
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -295,7 +295,7 @@ impl<'db> TyDescTable<'db> {
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -305,7 +305,7 @@ impl<'db> TyDescTable<'db> {
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -315,7 +315,7 @@ impl<'db> TyDescTable<'db> {
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -325,7 +325,7 @@ impl<'db> TyDescTable<'db> {
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -335,7 +335,7 @@ impl<'db> TyDescTable<'db> {
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -345,7 +345,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::Int>() as u32,
                     align: std::mem::align_of::<rtdt::Int>() as u32,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -355,7 +355,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::String>() as u32,
                     align: std::mem::align_of::<rtdt::String>() as u32,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -365,7 +365,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::Data>() as u32,
                     align: std::mem::align_of::<rtdt::Data>() as u32,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }
@@ -375,7 +375,7 @@ impl<'db> TyDescTable<'db> {
                     size: std::mem::size_of::<rtdt::Error>() as u32,
                     align: std::mem::align_of::<rtdt::Error>() as u32,
                     type_info: rtdt::TyInfo {
-                        nothing: rtdt::TyInfoNothing,
+                        nothing: rtdt::TyInfoNothing { unused: 0 },
                     },
                 })
             }

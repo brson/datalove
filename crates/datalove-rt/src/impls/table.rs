@@ -422,7 +422,7 @@ mod tests {
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
-                nothing: rtdt::TyInfoNothing,
+                nothing: rtdt::TyInfoNothing { unused: 0 },
             },
         }
     }
@@ -477,13 +477,13 @@ mod tests {
             type_tag: rtdt::TyTag::U32,
             size: 4,
             align: 4,
-            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
         };
         let td2 = rtdt::TyDesc {
             type_tag: rtdt::TyTag::U64,
             size: 8,
             align: 8,
-            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
         };
 
         let tydescs: Vec<&rtdt::TyDesc> = vec![&td1, &td2];

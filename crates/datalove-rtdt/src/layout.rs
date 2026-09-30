@@ -556,7 +556,7 @@ mod tests {
             size,
             align,
             type_info: TyInfo {
-                nothing: TyInfoNothing,
+                nothing: TyInfoNothing { unused: 0 },
             },
         }
     }

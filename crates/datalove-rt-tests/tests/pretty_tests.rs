@@ -28,7 +28,7 @@ fn create_string_tydesc() -> rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
-        type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+        type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
     }
 }
 

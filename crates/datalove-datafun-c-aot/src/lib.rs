@@ -305,7 +305,10 @@ impl CAotCompiler {
         writeln!(out).unwrap();
 
         writeln!(out, "typedef union {{").unwrap();
-        writeln!(out, "    struct {{ }} nothing;").unwrap();
+        // One unread byte, matching `rtdt::TyInfoNothing`. A member-less
+        // struct is a GNU extension rather than C, and would be a byte in C++
+        // rather than nothing, so the arm carries a field it never reads.
+        writeln!(out, "    struct {{ uint8_t unused; }} nothing;").unwrap();
         writeln!(out, "    struct {{ uint32_t num_fields; const dtlv_tuple_field_t* fields; }} tuple;").unwrap();
         writeln!(out, "    struct {{ const dtlv_struct_field_t* fields; uint32_t num_fields; }} struct_;").unwrap();
         writeln!(out, "    struct {{ const dtlv_enum_variant_t* variants; uint32_t num_variants; }} enum_;").unwrap();

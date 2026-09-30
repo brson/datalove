@@ -210,7 +210,7 @@ pub fn emit_tydesc(
         IrType::U32 | IrType::I32 | IrType::U64 | IrType::I64 |
         IrType::Index | IrType::Offset | IrType::F32 | IrType::F64 |
         IrType::Int | IrType::String | IrType::Data | IrType::Error => {
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .size = {}, .align = {}, .type_info = {{ .nothing = {{}} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .size = {}, .align = {}, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};",
                 name, tag, layout.size, layout.align).unwrap();
         }
 
@@ -369,7 +369,7 @@ pub fn emit_tydesc(
         IrType::Ref(inner) => {
             // Ref is just a pointer - emit as a primitive.
             let _inner_tydesc = compiler.get_tydesc_name(inner);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x10, .size = 8, .align = 8, .type_info = {{ .nothing = {{}} }} }};", name).unwrap();
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x10, .size = 8, .align = 8, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};", name).unwrap();
         }
     }
 

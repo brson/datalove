@@ -38,7 +38,7 @@ pub fn pretty_print_runtime_value<'db>(
             size: std::mem::size_of::<datalove_rtdt::String>() as u32,
             align: std::mem::align_of::<datalove_rtdt::String>() as u32,
             type_info: datalove_rtdt::TyInfo {
-                nothing: datalove_rtdt::TyInfoNothing,
+                nothing: datalove_rtdt::TyInfoNothing { unused: 0 },
             },
         };
 

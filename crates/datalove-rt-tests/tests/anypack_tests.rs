@@ -9,7 +9,7 @@ fn make_tydesc(type_tag: TyTag) -> TyDesc {
         size: 8,
         align: 8,
         type_info: TyInfo {
-            nothing: TyInfoNothing,
+            nothing: TyInfoNothing { unused: 0 },
         },
     }
 }
