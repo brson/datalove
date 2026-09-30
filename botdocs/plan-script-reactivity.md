@@ -633,3 +633,53 @@ where the old behaviour under-propagated. Narrowing the env so a unit depends
 only on the modules it imports from is the sound end state -- and it is the same
 whole-world-aggregate-in-a-per-unit-key shape that has come up six times now --
 but the correctness fix is the driver, and the narrowing can follow.
+
+## F. The over-propagation on module edits
+
+Any module edit re-keys every script unit, so every unit re-typechecks when
+asked -- a body change and a signature change alike, and whether or not the unit
+imports from that module. Wasted analysis rather than a wrong answer: the
+execution reach stays narrow, so nothing computes the wrong thing.
+
+**It is the sixth instance of one shape** -- a whole-world value in a per-unit
+key -- after `AllModuleExports` in `resolve_module_imports`, the rider stubs, the
+rider `IrModuleId` numbering, `accumulated` on script units, and
+`accumulated_lower_bindings`. The fix is the one that worked the other five
+times: replace the aggregate with a per-entity lookup, so a unit depends on the
+modules it names rather than on all of them.
+
+`ScriptEnv` is interned over `Vec<ModuleSpec>`, and a `ModuleSpec` holds the
+module's path, source, spans, parse, id and name resolution. Editing any module
+changes one of those, so the whole env interns to a new handle.
+
+**`Module` is already the stable handle this needs.** It is interned over
+`(ModuleId, Source)`; a `Source` is the input and `set_text` changes its text,
+not its handle. So a `Module` survives a module content edit unchanged, where a
+`ModuleSpec` does not. And every `ModuleSpec` field is derivable from a
+`Module`: the path and id off the id, the source off the module, `module_spans`,
+`parse_module_ast`, and `resolve_script_names`.
+
+So:
+
+```rust
+ScriptEnv { modules: Vec<Module>, auto_adapt_mode }   // was Vec<ModuleSpec>
+
+script_module_spec(db, module: Module) -> ModuleSpec  // new, tracked per module
+```
+
+The env is then stable across a module's *content* changing and moves only when
+the module *set* does -- which is right, since that is a different world. A unit
+that resolves an import asks `script_module_spec` for the one module it named, so
+it depends on that module and no other.
+
+Editing a module then reaches the units that import from it and stops. Which is
+what the execution reach already does, so the two would finally agree.
+
+**A second-order limit worth knowing before measuring the result.** `spans` is
+part of a `ModuleSpec`, and a body edit moves spans, so
+`script_module_spec` will not backdate on one -- the importing units still
+re-typecheck even though no signature moved. That is a large improvement on
+*every* unit re-typechecking, and it is not the end state. Splitting the spec so
+a unit depends on a module's signatures and not its spans would make a body edit
+backdate entirely; diagnostics are what want the spans, and they are needed only
+when something is reported.
