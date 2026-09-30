@@ -64,11 +64,11 @@ fn analyze_file(path: &Path) -> Result<String, String> {
 
     // Build unified native component and load it.
     let mut _loaded_riders = Vec::new();
-    let rider_crate_dirs = descriptor.rider_crate_dirs();
-    if !rider_crate_dirs.is_empty() {
+    let rider_crates = descriptor.rider_crates();
+    if !rider_crates.is_empty() {
         let work_dir = descriptor.work_dir.as_ref()
             .ok_or("workspace has riders but no work dir")?;
-        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
+        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crates)
             .map_err(|e| format!("rider build error: {}", e))?;
         let native_symbols = compiled.native_symbols();
         if !native_symbols.is_empty() {

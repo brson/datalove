@@ -91,7 +91,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-repl` | REPL evaluation engine |
 | `datalove-repl-rat` | Ratatui REPL application and terminal |
 | `datalove-stdlib` | The system library as the binary carries it: embedded sources, linked riders |
-| `datalove-rider-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
+| `datalove-rider-sys-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
 | `datalove-bench` | Divan benchmarks |
@@ -731,7 +731,7 @@ Two things travel inside the binary, both assembled by
 | What | How | Where it comes from |
 |------|-----|---------------------|
 | Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm`, `sys/*/rider/rider.dli` |
-| Rider functions | `datalove-rider-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
+| Rider functions | `datalove-rider-sys-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
 
 `system_library()` assembles them into a `SystemLibrary`, which is a
 `PackageLibrary` of sources plus `natives: Vec<(String, *const ())>`. Drivers

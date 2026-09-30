@@ -28,6 +28,8 @@ struct EmbeddedPackage {
     modules: &'static [(&'static str, &'static str)],
     /// Source of the package's rider interface, if it has one.
     rider_interface: Option<&'static str>,
+    /// What the package's manifest calls the rider crate, and which version.
+    rider_crate: Option<(&'static str, &'static str)>,
     /// Where the rider's Rust crate was when this binary was built.
     rider_crate_dir: Option<&'static str>,
 }
@@ -44,7 +46,7 @@ pub fn system_library() -> SystemLibrary {
                 .map(|package| (package.name.S(), descriptor(package)))
                 .collect(),
         },
-        natives: datalove_rider_std::symbols().into_iter()
+        natives: datalove_rider_sys_std::symbols().into_iter()
             .map(|(symbol, addr)| (symbol.S(), addr))
             .collect(),
     }
@@ -96,6 +98,8 @@ fn descriptor(package: &EmbeddedPackage) -> PackageDescriptor {
         modules,
         rider: package.rider_interface.map(|source| RiderDescriptor {
             interface_source: Arc::from(source),
+            crate_spec: package.rider_crate
+                .map(|(name, version)| (name.S(), version.S())),
             crate_dir: package.rider_crate_dir.map(PathBuf::from),
         }),
     }

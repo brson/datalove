@@ -61,6 +61,7 @@ fn typecheck_sections_with_mode(
                     name: pkg.C(),
                     modules: std::collections::BTreeMap::new(),
                     rider_source: None,
+                    rider_crate: None,
                     rider_crate_dir: None,
                 });
 

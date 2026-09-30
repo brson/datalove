@@ -20,8 +20,11 @@
 
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
+
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
+
+use super::workspace::RiderCrate;
 
 const NATIVE_COMPONENT_CRATE_NAME: &str = "datalove-native-component";
 
@@ -58,7 +61,7 @@ impl Kind {
 }
 
 /// Components already built by this process, keyed by work dir, riders and kind.
-type ComponentKey = (PathBuf, Vec<(String, PathBuf)>, Kind);
+type ComponentKey = (PathBuf, Vec<RiderCrate>, Kind);
 
 static COMPONENT_CACHE: LazyLock<Mutex<HashMap<ComponentKey, PathBuf>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
@@ -81,12 +84,12 @@ impl std::error::Error for RiderBuildError {}
 
 /// Build the riders as a shared library for the interpreter to dlopen.
 ///
-/// The runtime is not in it. The process loading it has one, and the symbols
-/// left undefined here resolve against that one, so there is a single
+/// The runtime is not in it. A rider reaches the one in the process that
+/// loads this through the table on its handle, so there is a single
 /// `RtLocal` and a single allocator however many riders are loaded.
 pub fn build_rider_dylib(
     work_dir: &Path,
-    riders: &[(String, PathBuf)],
+    riders: &[RiderCrate],
 ) -> Result<PathBuf, RiderBuildError> {
     build(work_dir, riders, Kind::Dylib)
 }
@@ -97,14 +100,14 @@ pub fn build_rider_dylib(
 /// that calls no rider still needs.
 pub fn build_component_staticlib(
     work_dir: &Path,
-    riders: &[(String, PathBuf)],
+    riders: &[RiderCrate],
 ) -> Result<PathBuf, RiderBuildError> {
     build(work_dir, riders, Kind::Staticlib)
 }
 
 fn build(
     work_dir: &Path,
-    riders: &[(String, PathBuf)],
+    riders: &[RiderCrate],
     kind: Kind,
 ) -> Result<PathBuf, RiderBuildError> {
     let key: ComponentKey = (work_dir.to_path_buf(), riders.to_vec(), kind);
@@ -124,28 +127,27 @@ fn build(
 
 fn build_uncached(
     work_dir: &Path,
-    riders: &[(String, PathBuf)],
+    riders: &[RiderCrate],
     kind: Kind,
 ) -> Result<PathBuf, RiderBuildError> {
-    // Resolve rider crate names from their Cargo.toml files.
+    // Where each rider's source is. The manifest already said what the crate
+    // is called, so nothing here reads a Cargo.toml to find out.
     let mut rider_crates = Vec::new();
-    for (rider_name, crate_dir) in riders {
-        let cargo_toml_path = crate_dir.join("Cargo.toml");
-        let cargo_toml = std::fs::read_to_string(&cargo_toml_path)
+    for rider in riders {
+        let Some(dir) = &rider.dir else {
+            todo!(
+                "rider '{}' has no local source, so it would have to come from \
+                 a registry, which this datalove cannot yet name",
+                rider.rider_name,
+            );
+        };
+        let abs_dir = dir.canonicalize()
             .map_err(|e| RiderBuildError {
-                rider_name: rider_name.clone(),
-                message: format!("failed to read Cargo.toml: {}", e),
-                stderr: String::new(),
-            })?;
-        let crate_name = extract_crate_name(&cargo_toml)
-            .unwrap_or_else(|| rider_name.clone());
-        let abs_dir = crate_dir.canonicalize()
-            .map_err(|e| RiderBuildError {
-                rider_name: rider_name.clone(),
+                rider_name: rider.rider_name.clone(),
                 message: format!("failed to canonicalize rider path: {}", e),
                 stderr: String::new(),
             })?;
-        rider_crates.push((rider_name.clone(), crate_name, abs_dir));
+        rider_crates.push((rider.crate_name.clone(), abs_dir));
     }
 
     let synth_dir = work_dir.join(kind.dir_name());
@@ -192,7 +194,7 @@ fn build_uncached(
         ));
     }
 
-    for (_rider_name, crate_name, abs_dir) in &rider_crates {
+    for (crate_name, abs_dir) in &rider_crates {
         cargo_toml.push_str(&format!(
             "{} = {{ path = \"{}\" }}\n",
             crate_name,
@@ -235,7 +237,7 @@ fn build_uncached(
              pub static DLR_ABI_VERSION: u64 = datalove_rti::ABI_VERSION;\n\n",
         );
     }
-    for (_rider_name, crate_name, _abs_dir) in &rider_crates {
+    for (crate_name, _abs_dir) in &rider_crates {
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
     }
@@ -375,18 +377,4 @@ fn find_staticlib(target_dir: &Path, lib_name: &str) -> Result<PathBuf, RiderBui
         "static library not found in {}; expected lib{}.a",
         target_dir.display(), lib_name,
     )))
-}
-
-/// Extract the crate name from a Cargo.toml string.
-fn extract_crate_name(cargo_toml: &str) -> Option<String> {
-    for line in cargo_toml.lines() {
-        let trimmed = line.trim();
-        if trimmed.starts_with("name") {
-            if let Some(value) = trimmed.split('=').nth(1) {
-                let name = value.trim().trim_matches('"').trim_matches('\'');
-                return Some(name.to_string());
-            }
-        }
-    }
-    None
 }

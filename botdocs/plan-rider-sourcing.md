@@ -62,28 +62,34 @@ one claiming the wrong version and one claiming none, and confirms both are
 refused and that a matching one still loads. A guard nobody exercises is worth
 nothing, and this one cannot be caught by any other test in the suite.
 
-## Phase 2 --- `manifest.toml`
+## Phase 2 --- `manifest.toml` --- DONE
 
 The rider's crate name and version have to survive the Rust source being
-stripped. Today `rider_build::extract_crate_name` reads `rider/Cargo.toml` and
-scans for a `name` line, which is both ad hoc and gone once the crate is
+stripped. `rider_build::extract_crate_name` read `rider/Cargo.toml` and
+scanned for a `name` line, which was both ad hoc and gone once the crate is
 stripped out of the package.
 
-1. Define the format. `[rider] name`, `[rider] version` to start. Assume it
-   grows: parse with a struct that rejects unknown keys loudly rather than
-   ignoring them, so a later field is a clear error on an older datalove.
-2. Parse it in `datalove-datafun-pkg`. Module discovery stays by convention;
-   only the rider's identity comes from the manifest.
-3. `RiderDescriptor` carries name and version alongside its source. Retire
-   `extract_crate_name`.
-4. Write `sys/std/manifest.toml` naming `datalove-rider-sys-std`.
-5. Rename the crate `datalove-rider-std` to `datalove-rider-sys-std`,
-   reserving the `-sys-` namespace.
+1. `[rider] name`, `[rider] version` to start, in `datalove-pkg-manifest`.
+   Unknown keys are refused rather than ignored, so a manifest written for a
+   later datalove says so instead of half working.
+2. It went in a crate of its own rather than in `datalove-datafun-pkg` as
+   first planned. Two readers need it --- `package_load` at run time and
+   `datalove-stdlib`'s build script when it embeds the library --- and a build
+   script must not drag a compiler in behind it. `datalove-datafun-pkg`
+   re-exports it as `manifest` so callers see one name.
+3. `RiderDescriptor::crate_spec` carries the name and version.
+   `WorkspaceDescriptor::rider_crate_dirs` becomes `rider_crates`, returning a
+   `RiderCrate` that says which crate, which version, and where its source is
+   when it has one. `extract_crate_name` is gone.
+4. `sys/std/manifest.toml` names `datalove-rider-sys-std`.
+5. The crate is renamed to match, reserving the `-sys-` namespace.
 
-A package with a `rider/` directory and no manifest should fail with a message
-saying a manifest is needed, not fall back to guessing.
+A package with a rider and no manifest fails saying so, rather than guessing.
+`ModuleCompilationPipeline::rider_crate_dirs` went with the rename: the field
+was written from two places and read from none, the component build taking its
+rider set from the descriptor directly.
 
-## Phase 3 --- move the interface inside the rider crate
+## Phase 3 --- move the interface inside the rider crate --- DONE
 
 `sys/std/rider.dli` becomes `sys/std/rider/rider.dli`. Small, and it clears
 one of the publishing blockers outright.

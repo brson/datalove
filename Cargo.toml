@@ -27,6 +27,7 @@ rmx.features = [
   "libc",
   "tera",
   "termcolor",
+  "toml",
 ]
 bct.package = "bcts"
 bct.path = "crates/bcts"

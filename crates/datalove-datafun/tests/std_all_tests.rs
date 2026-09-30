@@ -76,10 +76,10 @@ fn build_and_load_riders(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     executor: &mut datafun::pipeline::ScriptExecutor,
 ) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
-    let rider_crate_dirs = descriptor.rider_crate_dirs();
+    let rider_crates = descriptor.rider_crates();
     let work_dir = descriptor.work_dir.as_ref()
         .ok_or("workspace has riders but no work dir")?;
-    let staticlib = datafun::pipeline::rider_build::build_component_staticlib(work_dir, &rider_crate_dirs)
+    let staticlib = datafun::pipeline::rider_build::build_component_staticlib(work_dir, &rider_crates)
         .map_err(|e| format!("rider build error: {}", e))?;
 
     let lib_paths = vec![staticlib];
@@ -87,7 +87,7 @@ fn build_and_load_riders(
     let mut loaded_riders = Vec::new();
 
     if !native_symbols.is_empty() {
-        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
+        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crates)
             .map_err(|e| format!("rider build error: {}", e))?;
         let loaded = datafun::pipeline::rider_load::load_rider_library(
             &dylib,

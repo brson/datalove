@@ -1,0 +1,9 @@
+# The rider implementing this package's `native fun` declarations.
+#
+# Named here rather than read from `rider/Cargo.toml` because a packaged
+# datalove package has the Rust stripped out of it and this has to survive.
+# The version is used exactly: a rider and the runtime loading it have to
+# agree on the layout of everything that crosses between them.
+[rider]
+name = "datalove-rider-sys-std"
+version = "0.1.0"

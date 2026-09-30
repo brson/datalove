@@ -57,9 +57,18 @@ fn embed_sys() {
             writeln!(table, "        rider_interface: None,").expect("writing to a string");
         }
 
-        // Where the rider's Rust crate is, for the compiler to build a native
-        // component from. `package_load` finds this by the same convention
-        // when it reads a package off disk.
+        // What the package manifest calls the rider crate, and where its
+        // source is. `package_load` reads the same two things when it takes a
+        // package off disk.
+        match rider_crate(&package_dir) {
+            Some((name, version)) => writeln!(
+                table,
+                "        rider_crate: Some(({name:?}, {version:?})),",
+            ).expect("writing to a string"),
+            None => writeln!(table, "        rider_crate: None,")
+                .expect("writing to a string"),
+        }
+
         let crate_dir = package_dir.join("rider");
         if crate_dir.join("Cargo.toml").is_file() {
             writeln!(
@@ -130,4 +139,24 @@ fn read_dir(dir: &Path) -> impl Iterator<Item = PathBuf> {
 fn file_name(path: &Path) -> &str {
     path.file_name().expect("a named path")
         .to_str().expect("a utf-8 file name")
+}
+
+/// What the package's manifest calls its rider crate, and which version.
+///
+/// A package with a rider must declare it; `datalove_pkg_manifest::load` is
+/// the one that says so, and it says the same thing whether a package is read
+/// here or off disk at run time.
+fn rider_crate(package_dir: &Path) -> Option<(String, String)> {
+    let manifest_path = package_dir.join(datalove_pkg_manifest::FILE_NAME);
+    if manifest_path.is_file() {
+        println!("cargo:rerun-if-changed={}", manifest_path.display());
+    }
+
+    let has_rider = package_dir.join("rider").join("rider.dli").is_file();
+    let manifest = datalove_pkg_manifest::load(package_dir, has_rider)
+        .unwrap_or_else(|e| panic!("{e}"));
+
+    manifest
+        .and_then(|manifest| manifest.rider)
+        .map(|rider| (rider.name, rider.version))
 }

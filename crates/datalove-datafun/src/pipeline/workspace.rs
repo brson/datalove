@@ -104,9 +104,44 @@ pub struct RiderDescriptor {
     /// Interface source text (.dli content).
     pub interface_source: Arc<str>,
 
+    /// What the package's manifest calls the crate, and which version.
+    ///
+    /// `(name, version)`. None for a rider with no manifest behind it: an
+    /// inline one, or one from a worldfile, which carries interfaces without
+    /// the packages they came from.
+    pub crate_spec: Option<(String, String)>,
+
     /// Path to the rider Cargo crate directory.
-    /// None for synthetic or inline riders.
+    /// None for synthetic or inline riders, and for a packaged datalove
+    /// package, whose rider comes from a registry by `crate_spec` instead.
     pub crate_dir: Option<PathBuf>,
+}
+
+/// A rider to compile into a native component.
+///
+/// What `rider_build` needs to name one as a cargo dependency: which crate,
+/// which version, and where its source is when it is beside the package
+/// rather than in a registry.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RiderCrate {
+    /// The rider's name as `require rider` writes it, for messages.
+    pub rider_name: String,
+
+    /// The crate's name, as the package's manifest gives it.
+    pub crate_name: String,
+
+    /// The version the manifest asks for.
+    ///
+    /// Taken exactly rather than as a requirement: a rider and the runtime
+    /// loading it have to agree on the layout of everything crossing between
+    /// them, which a range does not promise.
+    pub version: String,
+
+    /// Where the crate's source is, when it is beside the package.
+    ///
+    /// None for a packaged datalove package, whose rider comes from a
+    /// registry by name and version instead.
+    pub dir: Option<PathBuf>,
 }
 
 /// Compiler options that affect all compilation.
@@ -280,6 +315,7 @@ impl WorkspaceDescriptor {
                 WorldfileSection::Rider { name, source } => {
                     riders.push((name.clone(), RiderDescriptor {
                         interface_source: Arc::from(source.as_str()),
+                        crate_spec: None,
                         crate_dir: None,
                     }));
                 }
@@ -398,18 +434,24 @@ impl WorkspaceDescriptor {
     }
 
     /// Collect all rider crate directories as (name, path) pairs.
-    pub fn rider_crate_dirs(&self) -> Vec<(String, PathBuf)> {
-        let mut dirs = Vec::new();
+    pub fn rider_crates(&self) -> Vec<RiderCrate> {
+        let mut riders = Vec::new();
         for lib in self.libraries() {
             for pkg in lib.packages.values() {
-                if let Some(ref rider) = pkg.rider {
-                    if let Some(ref dir) = rider.crate_dir {
-                        dirs.push((pkg.name.clone(), dir.clone()));
-                    }
-                }
+                let Some(rider) = &pkg.rider else { continue };
+                // A rider nothing declared is a rider nothing can call. The
+                // manifest is required wherever an interface is, so every
+                // rider a module reaches has a name and a version here.
+                let Some((crate_name, version)) = &rider.crate_spec else { continue };
+                riders.push(RiderCrate {
+                    rider_name: pkg.name.clone(),
+                    crate_name: crate_name.clone(),
+                    version: version.clone(),
+                    dir: rider.crate_dir.clone(),
+                });
             }
         }
-        dirs
+        riders
     }
 }
 
@@ -502,13 +544,18 @@ fn package_library_from_map(
             })
         }).collect();
 
+        let crate_spec = pkg.rider_crate.as_ref()
+            .map(|rider| (rider.name.clone(), rider.version.clone()));
+
         let rider = match (&pkg.rider_source, &pkg.rider_crate_dir) {
             (Some(source), crate_dir) => Some(RiderDescriptor {
                 interface_source: Arc::from(source.as_str()),
+                crate_spec,
                 crate_dir: crate_dir.clone(),
             }),
             (None, Some(crate_dir)) => Some(RiderDescriptor {
                 interface_source: Arc::from(""),
+                crate_spec,
                 crate_dir: Some(crate_dir.clone()),
             }),
             (None, None) => None,
@@ -548,7 +595,6 @@ impl WorkspaceDescriptor {
         }
 
         pipeline.set_rider_sources(self.rider_sources());
-        pipeline.set_rider_crate_dirs(self.rider_crate_dirs());
     }
 
     /// Create a fresh pipeline from this descriptor.
@@ -622,6 +668,7 @@ mod tests {
             )]),
             rider: rider.map(|interface| RiderDescriptor {
                 interface_source: Arc::from(interface),
+                crate_spec: None,
                 crate_dir: None,
             }),
         };

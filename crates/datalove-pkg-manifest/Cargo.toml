@@ -1,0 +1,16 @@
+[package]
+name = "datalove-pkg-manifest"
+description = "A datalove package's manifest.toml."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+# Deliberately small. A build script reads manifests to embed a package
+# library, so this must not drag a compiler in behind it.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+
+[dev-dependencies]
+tempfile = "3"

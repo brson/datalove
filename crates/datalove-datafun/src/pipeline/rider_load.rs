@@ -21,14 +21,14 @@ pub fn build_and_load_riders(
     compiled: &CompiledModules,
     executor: &mut ScriptExecutor,
 ) -> AnyResult<Vec<LoadedRider>> {
-    let rider_crate_dirs = descriptor.rider_crate_dirs();
-    if rider_crate_dirs.is_empty() {
+    let rider_crates = descriptor.rider_crates();
+    if rider_crates.is_empty() {
         return Ok(Vec::new());
     }
 
     let work_dir = descriptor.work_dir.as_ref()
         .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
-    let dylib = rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
+    let dylib = rider_build::build_rider_dylib(work_dir, &rider_crates)
         .map_err(|e| anyhow!("{}", e))?;
 
     let native_symbols = compiled.native_symbols();

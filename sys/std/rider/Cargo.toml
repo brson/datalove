@@ -1,5 +1,5 @@
 [package]
-name = "datalove-rider-std"
+name = "datalove-rider-sys-std"
 version = "0.1.0"
 edition = "2021"
 

@@ -745,7 +745,7 @@ impl AotCompileCommand {
         // here alongside the ones from `sys/`.
         let component = rider_build::build_component_staticlib(
             &work_dir,
-            &descriptor.rider_crate_dirs(),
+            &descriptor.rider_crates(),
         ).map_err(|e| anyhow!("{}", e))?;
         let rider_libs = vec![component];
 

@@ -59,7 +59,6 @@ pub struct ModuleCompilationPipeline {
     /// Maps rider name to source text for deferred parsing.
     rider_sources: Vec<(String, String)>,
     /// Rider crate directories discovered from package loading.
-    rider_crate_dirs: Vec<(String, std::path::PathBuf)>,
     /// Which of the world's modules to compile.
     ///
     /// `Roots::All` by default, which is the whole world and what every caller
@@ -74,7 +73,6 @@ impl ModuleCompilationPipeline {
             world: IncrementalModuleWorld::new(),
             options,
             rider_sources: Vec::new(),
-            rider_crate_dirs: Vec::new(),
             roots: Roots::All,
         }
     }
@@ -145,7 +143,6 @@ impl ModuleCompilationPipeline {
 
         // Extract rider sources and crate directories from loaded packages.
         self.rider_sources.extend(package_world_raw.rider_sources());
-        self.rider_crate_dirs.extend(package_world_raw.rider_crate_dirs());
 
         for (pkg_name, pkg) in &package_world_raw.pkglib_system {
             for (mod_name, pkg_module) in &pkg.modules {
@@ -159,22 +156,12 @@ impl ModuleCompilationPipeline {
     /// Add rider sources and crate directories from a loaded package world.
     pub fn add_riders_from_package_world(&mut self, world: &datalove_datafun_pkg::package_load::PackageWorld) {
         self.rider_sources.extend(world.rider_sources());
-        self.rider_crate_dirs.extend(world.rider_crate_dirs());
     }
 
-    /// Get discovered rider crate directories.
-    pub fn rider_crate_dirs(&self) -> &[(String, std::path::PathBuf)] {
-        &self.rider_crate_dirs
-    }
 
     /// Set rider interface sources (replaces any existing).
     pub fn set_rider_sources(&mut self, sources: Vec<(String, String)>) {
         self.rider_sources = sources;
-    }
-
-    /// Set rider crate directories (replaces any existing).
-    pub fn set_rider_crate_dirs(&mut self, dirs: Vec<(String, std::path::PathBuf)>) {
-        self.rider_crate_dirs = dirs;
     }
 
     /// Compile only what these modules reach, rather than the whole world.

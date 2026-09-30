@@ -39,7 +39,8 @@ impl PackageWorld {
 
     /// Collect rider crate directories from all packages in both libraries.
     ///
-    /// Returns (rider_name, crate_dir) pairs for each package that has a `rider/` Cargo crate.
+    /// Returns (rider_name, crate_dir) pairs for each package whose rider
+    /// crate has its source beside it.
     pub fn rider_crate_dirs(&self) -> Vec<(String, PathBuf)> {
         let mut dirs = Vec::new();
         for pkg in self.pkglib_system.values().chain(self.pkglib_local.values()) {
@@ -56,7 +57,15 @@ pub struct Package {
     pub modules: BTreeMap<ModuleName, PackageModule>,
     /// Source text of `rider/rider.dli` if present in the package.
     pub rider_source: Option<String>,
-    /// Path to the `rider/` Cargo crate, which holds the interface too.
+    /// What the manifest calls the rider's crate, and which version of it.
+    ///
+    /// Present whenever `rider_source` is: a package declaring a rider has to
+    /// name it, there being no Cargo.toml left to read once the package is
+    /// packaged.
+    pub rider_crate: Option<datalove_pkg_manifest::RiderManifest>,
+    /// Path to the `rider/` Cargo crate, when its source is beside the
+    /// package. Absent in a packaged one, where the crate comes from a
+    /// registry instead.
     pub rider_crate_dir: Option<PathBuf>,
 }
 
@@ -141,6 +150,12 @@ pub async fn package_from_source_files(
         }
     };
 
+    // The manifest is what names the rider's crate. `rider/Cargo.toml` would
+    // say the same thing where it exists, but it does not survive packaging,
+    // and reading two sources for one fact invites them to disagree.
+    let rider_crate = datalove_pkg_manifest::load(&dir, rider_source.is_some())?
+        .and_then(|manifest| manifest.rider);
+
     let (tx, mut rx) = mpsc::channel(1);
     {
         thread::spawn(move || {
@@ -167,6 +182,7 @@ pub async fn package_from_source_files(
         name: package_name,
         modules,
         rider_source,
+        rider_crate,
         rider_crate_dir,
     })
 }
