@@ -25,6 +25,41 @@ For detail see additional documentation.
 
 ## Functions
 
+Functions have a line-oriented and statement-oriented syntax:
+
+```datalove
+require sys/std/string
+import string.len
+import string.find_char
+import string.starts_with
+import string.slice_from
+
+fun count_substrings(s: string, ref needle: string): ?int
+  let haystack = s
+  let index = 0
+  let count = 0
+  loop
+    if len(ref haystack) == 0
+      break
+    end if
+
+    if starts_with(ref haystack, needle)
+      set count = count +? 1
+      let next_char_index = find_char(ref haystack, 1)
+      if next_char_index |index|
+        set haystack = slice_from(haystack, index)?
+      else
+        set haystack = ""
+      end if
+    else
+      break
+    end if
+  end loop
+  ret some count
+end fun
+```
+
+
 ## Control flow
 
 ## Data types and destructuring
