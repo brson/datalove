@@ -23,7 +23,7 @@ The compiler needs direct access to datalove-rt to build it for AOT compiles.
 The compiler needs to be able to find the riders that are declared by sys packages.
 Riders need to find the correct versions of datalove-rtdt and datalove-rti.
 
-There three scenarios that impact finding the rt, rtdt/rti, std and the std rider:
+There are two scenarios that impact finding the rt, rtdt/rti, std and the std rider:
 
 - in-tree or installed from a git checkout
 - installed from crates.io
@@ -52,7 +52,7 @@ Datalove source packages that contain riders look like:
 sys/std
   manifest.toml
   rider/
-    rider.rdi
+    rider.dli
     Cargo.toml
     etc.
   mod.dfm etc
@@ -67,15 +67,15 @@ version = "0.1.0"
 ```
 
 The std rider is named datalove-rider-sys-std, reserving the -sys- namespace for future packages.
-When a datalove package is "packaged" the contents of the rider/ directory, except for rider.dri
+When a datalove package is "packaged" the contents of the rider/ directory, except for rider.dli
 is stripped. The remainder is the datalove package - the rider is sourced from crates.io.
 
 In a production build:
 
 - the sys packages are sourced from the datalove-sys-packages crate, embedded, excluding the rust source.
-- the riders named in the sys packages are encoded into the synthetic native component crate by name and version, built from crates.io
+- the riders named in the sys packages are encoded into the synthetic native component crate by name and exact version, built from crates.io
 - the native component crate is built into a target directory in the work dir
-- for aot builds the datalove-rt crate is downloaded directly from crates.io into the workdir and built independently
+- for aot builds the datalove-rt crate is also added to the native component as a rust dependency
 
 In a local build:
 
@@ -84,10 +84,18 @@ In a local build:
   not because it is a local build, but because the rider source is present next to the datalove packge,
   a general rule, not sys-specific
 - the ative component crate is built into a target directory in the workdir
-- for aot builds the datalove-rt crate is sourced from the absolute checkout path, built into a target directory in the workdir
-- in all builds the path to datalove-rtdt and datalove-rti is overridden to the local path so it doesn't try to pull from crates.io
+- for aot builds the datalove-rt crate is also added to the native component as a rust dependency
+- the path to datalove-rt and datalove-rtdt and datalove-rti is overridden to the local path so it doesn't try to pull from crates.io
 
 Obvious risk here is that the production path cannot be tested until the crates are published.
+
+More notes:
+
+The interpreter probably should link directly to all the sys riders directly and have special knowledge
+about them, short-circuit actually building them and loading them, for convenience;
+but we also need some kind of flag to build the sys riders through the non-priviledged path to ensure it works.
+
+Riders should carry and propagate the index-64 cargo feature by convention.
 
 
 
