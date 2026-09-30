@@ -98,6 +98,13 @@ use crate::{{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus}};
 /// How many functions the runtime exports.
 pub const EXPORTED: usize = {len(found)};
 
+// `TyDesc` holds a union whose `nothing` member is a zero-sized struct, for
+// the scalar types that need no further description, and a zero-sized type
+// has no C counterpart for the lint to check against. Nothing here takes a
+// `TyDesc` by value -- it is always behind a pointer -- so the member's size
+// never reaches the ABI. `datalove-rt` gets the same warning on the matching
+// definitions.
+#[allow(improper_ctypes)]
 unsafe extern "C-unwind" {{
 {decls}
 }}

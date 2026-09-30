@@ -68,12 +68,12 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     if !rider_crate_dirs.is_empty() {
         let work_dir = descriptor.work_dir.as_ref()
             .ok_or("workspace has riders but no work dir")?;
-        let build_result = datafun::pipeline::rider_build::build_native_component(work_dir, &rider_crate_dirs)
+        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
             .map_err(|e| format!("rider build error: {}", e))?;
         let native_symbols = compiled.native_symbols();
         if !native_symbols.is_empty() {
             let loaded = datafun::pipeline::rider_load::load_rider_library(
-                &build_result.cdylib_path,
+                &dylib,
                 "native-component",
                 &native_symbols,
                 executor.native_table_mut(),

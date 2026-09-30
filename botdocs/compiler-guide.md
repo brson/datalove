@@ -670,17 +670,30 @@ Execution:
     package's, and `sys/std`'s, whether the library came off disk or out of
     the binary - goes through `pipeline/rider_build.rs`, which synthesizes one
     `datalove-native-component` crate depending on every such rider crate so
-    the runtime is bundled once rather than per rider. It builds a cdylib
-    (dlopened by `rider_load::load_rider_library`) and a staticlib (for AOT
-    linking). Builds are cached per work dir and rider set. The workspace's
-    `work_dir` is where this happens; a workspace with riders and no work dir
-    - a worldfile-derived one, for instance - cannot build them.
+    that whatever they share is shared once. Builds are cached per work dir,
+    rider set and kind. The workspace's `work_dir` is where this happens; a
+    workspace with riders and no work dir - a worldfile-derived one, for
+    instance - cannot build them.
 
-    This is the only way a staticlib for the linker is produced. A program
-    that calls no rider still needs the runtime, which it gets from the same
-    path with an empty rider set: `aot::runtime_only_component`, for callers
-    handed an object file rather than a workspace, builds one in
-    `rider_build::default_work_dir`.
+    There are two kinds, and they differ in whether the runtime is inside:
+
+    - `build_rider_dylib` gives the shared library `rider_load::load_rider_library`
+      dlopens. **The runtime is not in it.** The process loading it has one
+      already, so its `dtlv_rti_*` symbols are left undefined and resolve
+      against the host. That keeps one `RtLocal` and one allocator in the
+      process however many riders load, and it is why the library is under a
+      megabyte rather than the forty-odd a bundled runtime cost.
+    - `build_component_staticlib` gives the archive an AOT-compiled program
+      links. **The runtime is in it**, because that program is a separate
+      executable with no host to resolve against. An empty rider set gives a
+      runtime-only archive, which is what a program calling no rider still
+      needs: `aot::runtime_only_component`, for callers handed an object file
+      rather than a workspace, builds one in `rider_build::default_work_dir`.
+
+    The dylib only resolves if the host exports the runtime's symbols, which
+    an executable does not do by default. `-rdynamic` in `.cargo/config.toml`
+    is what puts them in `.dynsym`, and it is set for the whole target because
+    every test and bench that loads riders is its own executable.
 
   Both end at `register_native`, so the interpreter sees no difference. Both
   also return the raw addresses, which the JIT needs: it calls natives through

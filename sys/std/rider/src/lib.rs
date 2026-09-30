@@ -10,6 +10,14 @@
 use datalove_rtdt as rtdt;
 use datalove_rti::rider_helpers;
 
+// The runtime functions this crate calls are declared, not defined, so a
+// library built from it leaves them for whoever loads it to supply. The test
+// harness is an executable and has nobody to ask, so it links a runtime of its
+// own; nothing here calls through this name, the `extern crate` is what brings
+// the definitions in.
+#[cfg(test)]
+extern crate datalove_rt;
+
 // The `symbols` table, generated from `rider.dli`. A binary that links this
 // crate uses it to find these functions without a shared library.
 include!(concat!(env!("OUT_DIR"), "/symbols.rs"));

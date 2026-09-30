@@ -1,9 +1,25 @@
 //! Native component building via cargo.
 //!
-//! Synthesizes a single Rust crate that depends on all discovered rider crates,
-//! producing one shared library (for interpreter dlopen) and one static library
-//! (for AOT linking). This avoids duplicate symbols from each rider crate
-//! independently bundling the runtime.
+//! A rider is a Rust crate of native functions that a datalove program calls.
+//! Getting those functions to a program means compiling the riders a module
+//! graph uses into one library, which is what this does: it synthesizes a
+//! crate depending on them and runs cargo over it. One crate rather than one
+//! per rider, so that whatever they share is shared once.
+//!
+//! There are two shapes of that library, and they differ in whether the
+//! runtime is inside:
+//!
+//! - A **dylib**, which the interpreter and the JIT dlopen. The process doing
+//!   that already contains a runtime, so this must not contain another; its
+//!   `dtlv_rti_*` symbols are left undefined and resolve against the host.
+//!   That is why riders depend on `datalove-rti`, which declares those
+//!   functions without defining them.
+//! - A **staticlib**, which an AOT-compiled program links. That program is a
+//!   separate executable with no host to resolve against, so the runtime has
+//!   to be in it.
+//!
+//! The host has to export the runtime symbols for the dylib to find them.
+//! See `.cargo/config.toml`.
 
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
@@ -15,21 +31,40 @@ const NATIVE_COMPONENT_CRATE_NAME: &str = "datalove-native-component";
 /// Counter for unique temp file names in `write_atomic`.
 static TMP_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Identifies a native component build: where it is built and what goes in it.
-type ComponentKey = (PathBuf, Vec<(String, PathBuf)>);
-
-/// Components already built by this process, keyed by work dir and rider set.
-static COMPONENT_CACHE: LazyLock<Mutex<HashMap<ComponentKey, NativeComponentBuild>>> =
-    LazyLock::new(|| Mutex::new(HashMap::new()));
-
-/// Result of building the unified native component library.
-#[derive(Clone)]
-pub struct NativeComponentBuild {
-    /// Path to the built shared library (.so/.dylib/.dll) for interpreter use.
-    pub cdylib_path: PathBuf,
-    /// Path to the built static library (.a/.lib) for AOT linking.
-    pub staticlib_path: PathBuf,
+/// Which library is wanted, and so whether the runtime goes in it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum Kind {
+    /// For dlopen by a process that has a runtime already.
+    Dylib,
+    /// For linking into a program that has none.
+    Staticlib,
 }
+
+impl Kind {
+    /// The directory under a work dir that this one is built in.
+    ///
+    /// They are separate because their dependencies differ, and cargo would
+    /// otherwise rebuild one over the other on every alternation.
+    fn dir_name(self) -> &'static str {
+        match self {
+            Kind::Dylib => "native-component-dylib",
+            Kind::Staticlib => "native-component-static",
+        }
+    }
+
+    fn crate_type(self) -> &'static str {
+        match self {
+            Kind::Dylib => "cdylib",
+            Kind::Staticlib => "staticlib",
+        }
+    }
+}
+
+/// Components already built by this process, keyed by work dir, riders and kind.
+type ComponentKey = (PathBuf, Vec<(String, PathBuf)>, Kind);
+
+static COMPONENT_CACHE: LazyLock<Mutex<HashMap<ComponentKey, PathBuf>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 /// Error from a failed native component build.
 #[derive(Debug)]
@@ -47,43 +82,54 @@ impl std::fmt::Display for RiderBuildError {
 
 impl std::error::Error for RiderBuildError {}
 
-/// Build a unified native component library containing the runtime and all riders.
+/// Build the riders as a shared library for the interpreter to dlopen.
 ///
-/// Synthesizes a single Rust crate that depends on `datalove-rt` and all rider
-/// crates as rlib dependencies, producing one cdylib and one staticlib. The
-/// synthesized crate is generated in `native-component/` under `work_dir`, which
-/// is the workspace's writable working area (see
-/// [`WorkspaceDescriptor::work_dir`](super::WorkspaceDescriptor::work_dir)).
-///
-/// Can be called with an empty `riders` slice to produce a runtime-only component.
-///
-/// The result is memoized per process for a given work dir and rider set, so
-/// concurrent callers compiling the same workspace build once and share the
-/// artifacts. A caller that edits rider sources within one process will keep
-/// seeing the first build.
-pub fn build_native_component(
+/// The runtime is not in it. The process loading it has one, and the symbols
+/// left undefined here resolve against that one, so there is a single
+/// `RtLocal` and a single allocator however many riders are loaded.
+pub fn build_rider_dylib(
     work_dir: &Path,
     riders: &[(String, PathBuf)],
-) -> Result<NativeComponentBuild, RiderBuildError> {
-    let key: ComponentKey = (work_dir.to_path_buf(), riders.to_vec());
+) -> Result<PathBuf, RiderBuildError> {
+    build(work_dir, riders, Kind::Dylib)
+}
+
+/// Build the runtime and the riders as one archive for a program to link.
+///
+/// An empty `riders` gives a runtime-only archive, which is what a program
+/// that calls no rider still needs.
+pub fn build_component_staticlib(
+    work_dir: &Path,
+    riders: &[(String, PathBuf)],
+) -> Result<PathBuf, RiderBuildError> {
+    build(work_dir, riders, Kind::Staticlib)
+}
+
+fn build(
+    work_dir: &Path,
+    riders: &[(String, PathBuf)],
+    kind: Kind,
+) -> Result<PathBuf, RiderBuildError> {
+    let key: ComponentKey = (work_dir.to_path_buf(), riders.to_vec(), kind);
 
     // Held across the build so that concurrent callers wait for the first
     // build rather than each running cargo against the same directory.
     let mut cache = COMPONENT_CACHE.lock()
         .expect("native component cache poisoned");
-    if let Some(build) = cache.get(&key) {
-        return Ok(build.clone());
+    if let Some(path) = cache.get(&key) {
+        return Ok(path.clone());
     }
 
-    let build = build_native_component_uncached(work_dir, riders)?;
-    cache.insert(key, build.clone());
-    Ok(build)
+    let path = build_uncached(work_dir, riders, kind)?;
+    cache.insert(key, path.clone());
+    Ok(path)
 }
 
-fn build_native_component_uncached(
+fn build_uncached(
     work_dir: &Path,
     riders: &[(String, PathBuf)],
-) -> Result<NativeComponentBuild, RiderBuildError> {
+    kind: Kind,
+) -> Result<PathBuf, RiderBuildError> {
     // Resolve rider crate names from their Cargo.toml files.
     let mut rider_crates = Vec::new();
     for (rider_name, crate_dir) in riders {
@@ -105,38 +151,50 @@ fn build_native_component_uncached(
         rider_crates.push((rider_name.clone(), crate_name, abs_dir));
     }
 
-    let synth_dir = synth_crate_dir(work_dir);
+    let synth_dir = work_dir.join(kind.dir_name());
     let src_dir = synth_dir.join("src");
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
 
-    // The runtime crate is always included so the native component provides
-    // datalove_rt for AOT linking, eliminating the need for a separate
-    // libdatalove_rt.a.
     let workspace_root = workspace_root_dir();
-    let rt_dir = workspace_root.join("crates").join("datalove-rt");
-    let rt_abs = rt_dir.canonicalize()
-        .map_err(|e| build_err("native-component", format!("failed to canonicalize datalove-rt path: {}", e)))?;
 
-    // Propagate index-64 feature when this crate was compiled with it.
+    // `index-64` widens the index type in `rtdt`, which changes the layout of
+    // every value crossing the boundary. Naming these directly rather than
+    // relying on a rider to declare the feature puts the decision here, where
+    // it has to match the process this was built by.
     #[cfg(feature = "index-64")]
-    let rt_features = ", features = [\"index-64\"]";
+    let features = ", features = [\"index-64\"]";
     #[cfg(not(feature = "index-64"))]
-    let rt_features = "";
+    let features = "";
 
-    // Generate Cargo.toml.
     let mut cargo_toml = String::new();
     cargo_toml.push_str(&format!(
         "[package]\nname = \"{NATIVE_COMPONENT_CRATE_NAME}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n\
-         [lib]\ncrate-type = [\"cdylib\", \"staticlib\"]\n\n\
+         [lib]\ncrate-type = [\"{}\"]\n\n\
          # Empty workspace table prevents cargo from treating this as part of\n\
          # the parent workspace.\n\
          [workspace]\n\n\
-         [dependencies]\n\
-         datalove-rt = {{ path = \"{}\"{} }}\n",
-        rt_abs.display(),
-        rt_features,
+         [dependencies]\n",
+        kind.crate_type(),
     ));
+
+    // Depended on for their features, whoever else pulls them in.
+    for crate_name in ["datalove-rtdt", "datalove-rti"] {
+        let dir = crate_dep_dir(&workspace_root, crate_name)?;
+        cargo_toml.push_str(&format!(
+            "{} = {{ path = \"{}\"{} }}\n", crate_name, dir.display(), features,
+        ));
+    }
+
+    // The runtime goes in an archive a program links, and stays out of a
+    // library the interpreter loads, which gets it from the host instead.
+    if kind == Kind::Staticlib {
+        let dir = crate_dep_dir(&workspace_root, "datalove-rt")?;
+        cargo_toml.push_str(&format!(
+            "datalove-rt = {{ path = \"{}\"{} }}\n", dir.display(), features,
+        ));
+    }
+
     for (_rider_name, crate_name, abs_dir) in &rider_crates {
         cargo_toml.push_str(&format!(
             "{} = {{ path = \"{}\" }}\n",
@@ -156,15 +214,18 @@ fn build_native_component_uncached(
     // does not do is go looking for newer.
     let synth_lock = synth_dir.join("Cargo.lock");
     if !synth_lock.exists() {
-        let workspace_lock = workspace_root_dir().join("Cargo.lock");
+        let workspace_lock = workspace_root.join("Cargo.lock");
         if workspace_lock.is_file() {
             let _ = std::fs::copy(&workspace_lock, &synth_lock);
         }
     }
 
-    // Generate lib.rs that pulls in the runtime and all rider crates.
-    // The extern crate declarations ensure #[no_mangle] symbols are included.
-    let mut lib_rs = String::from("extern crate datalove_rt;\n");
+    // The `extern crate` declarations are what keep the linker from dropping
+    // the `#[no_mangle]` symbols these crates exist to provide.
+    let mut lib_rs = String::new();
+    if kind == Kind::Staticlib {
+        lib_rs.push_str("extern crate datalove_rt;\n");
+    }
     for (_rider_name, crate_name, _abs_dir) in &rider_crates {
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
@@ -172,7 +233,6 @@ fn build_native_component_uncached(
     write_if_changed(&src_dir.join("lib.rs"), &lib_rs)
         .map_err(|e| build_err("native-component", format!("failed to write lib.rs: {}", e)))?;
 
-    // Build the synthesized crate.
     let output = std::process::Command::new("cargo")
         .arg("build")
         .arg("--lib")
@@ -191,13 +251,19 @@ fn build_native_component_uncached(
 
     let lib_name = NATIVE_COMPONENT_CRATE_NAME.replace('-', "_");
     let target_dir = synth_dir.join("target").join("release");
-    let cdylib_path = find_cdylib(&target_dir, &lib_name)?;
-    let staticlib_path = find_staticlib(&target_dir, &lib_name)?;
+    match kind {
+        Kind::Dylib => find_cdylib(&target_dir, &lib_name),
+        Kind::Staticlib => find_staticlib(&target_dir, &lib_name),
+    }
+}
 
-    Ok(NativeComponentBuild {
-        cdylib_path,
-        staticlib_path,
-    })
+/// Where a workspace crate this depends on lives.
+fn crate_dep_dir(workspace_root: &Path, name: &str) -> Result<PathBuf, RiderBuildError> {
+    workspace_root.join("crates").join(name).canonicalize()
+        .map_err(|e| build_err(
+            "native-component",
+            format!("failed to canonicalize {} path: {}", name, e),
+        ))
 }
 
 /// Workspace root directory (repo root).
@@ -210,17 +276,13 @@ fn workspace_root_dir() -> PathBuf {
 /// The work dir for callers that have no workspace to take one from.
 ///
 /// A program that calls no rider still links the runtime, which it gets from a
-/// component built with an empty rider set. The linking helpers here and in
-/// [`c_aot`](super::c_aot) are handed an object file rather than a workspace,
-/// so they share this directory. What lands in it is fully determined by the
-/// empty rider set, so sharing costs one build for the whole tree.
+/// component built with an empty rider set. The linking helpers in
+/// [`aot`](super::aot) and [`c_aot`](super::c_aot) are handed an object file
+/// rather than a workspace, so they share this directory. What lands in it is
+/// fully determined by the empty rider set, so sharing costs one build for the
+/// whole tree.
 pub fn default_work_dir() -> PathBuf {
     workspace_root_dir().join("target").join("datalove-work").join("default")
-}
-
-/// Directory for the synthesized native component crate within a work dir.
-fn synth_crate_dir(work_dir: &Path) -> PathBuf {
-    work_dir.join("native-component")
 }
 
 /// Write a file only if its contents would change.

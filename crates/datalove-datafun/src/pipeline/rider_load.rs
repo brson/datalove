@@ -28,7 +28,7 @@ pub fn build_and_load_riders(
 
     let work_dir = descriptor.work_dir.as_ref()
         .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
-    let build_result = rider_build::build_native_component(work_dir, &rider_crate_dirs)
+    let dylib = rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
         .map_err(|e| anyhow!("{}", e))?;
 
     let native_symbols = compiled.native_symbols();
@@ -37,7 +37,7 @@ pub fn build_and_load_riders(
     }
 
     let loaded = load_rider_library(
-        &build_result.cdylib_path,
+        &dylib,
         "native-component",
         &native_symbols,
         executor.native_table_mut(),

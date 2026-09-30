@@ -79,16 +79,18 @@ fn build_and_load_riders(
     let rider_crate_dirs = descriptor.rider_crate_dirs();
     let work_dir = descriptor.work_dir.as_ref()
         .ok_or("workspace has riders but no work dir")?;
-    let build_result = datafun::pipeline::rider_build::build_native_component(work_dir, &rider_crate_dirs)
+    let staticlib = datafun::pipeline::rider_build::build_component_staticlib(work_dir, &rider_crate_dirs)
         .map_err(|e| format!("rider build error: {}", e))?;
 
-    let lib_paths = vec![build_result.staticlib_path.clone()];
+    let lib_paths = vec![staticlib];
     let native_symbols = compiled.native_symbols();
     let mut loaded_riders = Vec::new();
 
     if !native_symbols.is_empty() {
+        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crate_dirs)
+            .map_err(|e| format!("rider build error: {}", e))?;
         let loaded = datafun::pipeline::rider_load::load_rider_library(
-            &build_result.cdylib_path,
+            &dylib,
             "native-component",
             &native_symbols,
             executor.native_table_mut(),

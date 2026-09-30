@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-index-64 = ["datalove-rtdt/index-64", "datalove-rti/index-64"]
+index-64 = [
+    "datalove-rtdt/index-64",
+    "datalove-rti/index-64",
+    "datalove-rt/index-64",
+]
 
 [dependencies]
 datalove-rtdt = { path = "../../../crates/datalove-rtdt" }
@@ -12,3 +16,10 @@ datalove-rtdt = { path = "../../../crates/datalove-rtdt" }
 # resolves them against the runtime it is loaded into, rather than carrying a
 # second copy of one.
 datalove-rti = { path = "../../../crates/datalove-rti" }
+
+# A test harness is an executable, and an executable cannot leave the runtime
+# functions this crate calls undefined the way a shared library can. So tests
+# get a real runtime, while the library a program loads still gets none: a
+# dev-dependency is not built into it.
+[dev-dependencies]
+datalove-rt = { path = "../../../crates/datalove-rt" }

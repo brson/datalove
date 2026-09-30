@@ -743,11 +743,11 @@ impl AotCompileCommand {
         // the linker. Which riders those are comes from the module graph, so
         // a program using a package of its own gets that package's rider in
         // here alongside the ones from `sys/`.
-        let component = rider_build::build_native_component(
+        let component = rider_build::build_component_staticlib(
             &work_dir,
             &descriptor.rider_crate_dirs(),
         ).map_err(|e| anyhow!("{}", e))?;
-        let rider_libs = vec![component.staticlib_path];
+        let rider_libs = vec![component];
 
         // --run implies --link.
         let should_link = self.link || self.run;

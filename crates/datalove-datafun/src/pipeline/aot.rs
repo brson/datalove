@@ -103,8 +103,7 @@ pub fn use_lld() -> bool {
 /// Built through the same path as a component with riders in it, so there is
 /// one way a program acquires the runtime rather than two.
 pub fn runtime_only_component() -> Result<PathBuf, LinkError> {
-    rider_build::build_native_component(&rider_build::default_work_dir(), &[])
-        .map(|build| build.staticlib_path)
+    rider_build::build_component_staticlib(&rider_build::default_work_dir(), &[])
         .map_err(|e| LinkError::Component(e.to_string()))
 }
 
