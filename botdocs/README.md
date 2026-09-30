@@ -52,6 +52,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Unified Code Unit Migration](plan-unified-code-unit.md)
 - [Compiling What Is Reachable](plan-reachability.md)
 - [Script Reactivity](plan-script-reactivity.md)
+- [Sourcing the Runtime, Sys Packages and Riders](plan-rider-sourcing.md)
 
 ---
 
