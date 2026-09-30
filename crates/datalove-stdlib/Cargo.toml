@@ -10,6 +10,3 @@ authors.workspace = true
 rmx.workspace = true
 datalove-datafun.path = "../datalove-datafun"
 datalove-rider-std.path = "../../sys/std/rider"
-
-[build-dependencies]
-rmx.workspace = true

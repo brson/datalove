@@ -90,8 +90,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-cli` | Command line driver: build, run, AOT, native component linking |
 | `datalove-repl` | REPL evaluation engine |
 | `datalove-repl-rat` | Ratatui REPL application and terminal |
-| `datalove-stdlib` | The system library as the binary carries it: embedded sources, linked riders, embedded native component |
-| `datalove-native-component` | The runtime and riders as one `staticlib` for AOT-compiled programs to link |
+| `datalove-stdlib` | The system library as the binary carries it: embedded sources, linked riders |
 | `datalove-rider-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
@@ -101,9 +100,9 @@ The `sys/` tree at the repository root is the standard library: `sys/std/*.dfm`
 modules, plus `sys/std/rider.dli` and the `sys/std/rider` Rust crate behind it.
 `sys/std/rider` is a workspace member like anything under `crates/`.
 
-`datalove-stdlib` and `datalove-native-component` sit above everything else:
-nothing in the compiler depends on them, so editing a `.dfm` recompiles no
-compiler crate. See [The Shipped Binary](#user-content-the-shipped-binary).
+`datalove-stdlib` sits above everything else: nothing in the compiler depends
+on it, so editing a `.dfm` recompiles no compiler crate. See [The Shipped
+Binary](#user-content-the-shipped-binary).
 
 ## Module Compilation Pipeline
 
@@ -655,24 +654,33 @@ Execution:
   the regular dispatcher. Arguments follow the interpreter's own conventions -
   `in` params are moved values, `out` params are destinations, `ref`/`mut` are
   borrowed pointers.
-- **Loading**: there are two ways a rider's functions reach the table, and
-  which one applies depends on where the rider came from.
+- **Loading**: there are two ways a rider's functions reach the table. Which
+  one applies depends on whether the driver already has them in its own
+  process, not on where the rider came from.
   - *Linked in.* `sys/std`'s rider is an ordinary dependency of the binary, so
     its functions are already in the process. `sys/std/rider/build.rs` reads
     `rider.dli` and generates a `symbols()` table pairing each declared name
     with `dlr_std__{name} as *const ()`, which is also what forces the linker
     to keep them. `rider_load::register_linked_natives` matches the symbols
-    the compiled modules call against that table. No cargo, no dlopen. This
-    is what the `datalove` binary does.
-  - *Built from source.* A rider discovered on disk - a user package's, or
-    `sys/std`'s when a test compiles the tree rather than the embedded copy -
-    goes through `pipeline/rider_build.rs`, which synthesizes one
-    `datalove-native-component` crate depending on every discovered rider
-    crate so the runtime is bundled once rather than per rider. It builds a
-    cdylib (dlopened by `rider_load::load_rider_library`) and a staticlib (for
-    AOT linking). Builds are cached per work dir and rider set. The
-    workspace's `work_dir` is where this happens; a workspace with riders and
-    no work dir - a worldfile-derived one, for instance - cannot build them.
+    the compiled modules call against that table. No cargo, no dlopen. This is
+    how the `datalove` binary runs `sys/std` natives under the interpreter and
+    the JIT - an AOT-compiled program is a separate executable, so addresses
+    in this process are no use to it and it links a built component instead.
+  - *Built from source.* Every rider with a crate directory - a user
+    package's, and `sys/std`'s, whether the library came off disk or out of
+    the binary - goes through `pipeline/rider_build.rs`, which synthesizes one
+    `datalove-native-component` crate depending on every such rider crate so
+    the runtime is bundled once rather than per rider. It builds a cdylib
+    (dlopened by `rider_load::load_rider_library`) and a staticlib (for AOT
+    linking). Builds are cached per work dir and rider set. The workspace's
+    `work_dir` is where this happens; a workspace with riders and no work dir
+    - a worldfile-derived one, for instance - cannot build them.
+
+    This is the only way a staticlib for the linker is produced. A program
+    that calls no rider still needs the runtime, which it gets from the same
+    path with an empty rider set: `aot::runtime_only_component`, for callers
+    handed an object file rather than a workspace, builds one in
+    `rider_build::default_work_dir`.
 
   Both end at `register_native`, so the interpreter sees no difference. Both
   also return the raw addresses, which the JIT needs: it calls natives through
@@ -689,51 +697,47 @@ Design notes: [plan-native-riders.md](plan-native-riders.md).
 
 ## The Shipped Binary
 
-An installed `datalove` carries its standard library. It reads no part of the
-source tree it was built from and shells out to no toolchain: `repl`, `script`,
-`script --jit` and `aot-compile` all work with `sys/` deleted and cargo off
-`PATH`.
+An installed `datalove` carries its standard library. `repl`, `script` and
+`script --jit` work with `sys/` deleted and cargo off `PATH`. `aot-compile`
+does not: it emits a separate executable, and the runtime and riders that
+executable calls have to reach it as a library the linker is given, which is
+built with cargo.
 
-They did not always. The compiler used to find the library with
-`env!("CARGO_MANIFEST_DIR")` at three sites, and built the native riders by
-running `cargo build --release` at startup, against crate sources in the same
-tree. An installed binary therefore depended on the checkout it was compiled
-from still existing, unmoved, with a Rust toolchain and a warm registry. When
-any of that was missing the failure was silent - the REPL's engine thread died
-and every entry sat at "parsing..." forever.
+The library did not always travel. The compiler used to find it with
+`env!("CARGO_MANIFEST_DIR")` at three sites, so an installed binary depended
+on the checkout it was compiled from still existing, unmoved. When it was
+missing the failure was silent - the REPL's engine thread died and every entry
+sat at "parsing..." forever.
 
-Three things travel inside the binary, all of them assembled by
+Two things travel inside the binary, both assembled by
 `crates/datalove-stdlib`:
 
 | What | How | Where it comes from |
 |------|-----|---------------------|
 | Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm`, `sys/*/rider.dli` |
 | Rider functions | `datalove-rider-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
-| Native component | `build.rs` builds it in a nested cargo, embeds it gzipped | `datalove-native-component` |
 
-`system_library()` assembles the first two into a `SystemLibrary`, which is a
+`system_library()` assembles them into a `SystemLibrary`, which is a
 `PackageLibrary` of sources plus `natives: Vec<(String, *const ())>`. Drivers
 hand it to `WorkspaceDescriptor::from_system_library` and to
 `register_linked_natives`. The raw addresses are not `Send`, which is why
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` and calls it on the
 worker thread rather than being handed the value.
 
-`native_component_staticlib()` covers AOT, which needs a file for the linker
-rather than addresses. It writes the embedded archive to
-`$XDG_CACHE_HOME/datalove/lib/{sha256}-libdatalove_native_component.a` on
-first use and returns the path. The digest names the file so a later datalove
-never links an archive an earlier one left behind.
+**The rider's crate is named, not embedded.** `build.rs` writes each package's
+`rider/` directory into the table as `rider_crate_dir`, by the same convention
+`package_load` uses when it reads a package off disk, and `system_library()`
+puts it in `RiderDescriptor::crate_dir`. So the std rider reaches an
+AOT-compiled program the way any other rider does: the compiler synthesizes a
+native component for whatever riders the module graph holds and builds it with
+cargo. See [Riders](#user-content-riders).
 
-**The native component has its own cargo profile.** It ends up inside the
-programs the AOT backend emits, not inside datalove, so `[profile.native-component]`
-in the workspace manifest builds it the same way whatever profile datalove
-itself is built in. `lto` is off there: thin LTO pads the archive with bitcode
-nothing consumes, which cost 19 MB gzipped against 11 MB without.
-
-It also gets its own target directory, because cargo holds a lock on the one
-the outer build is running under. A nested cargo from a build script is
-otherwise unremarkable - the package cache lock is long released by the time
-build scripts run.
+That is what lets a program mix `sys/` with a rider of its own. The binary
+used to link a prebuilt archive containing the std rider and nothing else, so
+a script importing a package with its own rider failed at link time with
+undefined symbols. `work_dir()` gives the build somewhere to happen -
+`$XDG_CACHE_HOME/datalove/work` - and cargo caches within it, so the component
+for a given rider set is rebuilt only when one of its rider crates changes.
 
 ### What this costs in the tree
 
@@ -755,20 +759,25 @@ table is byte-identical to `sys/`, and that every `native fun` a rider
 interface declares is linked in. The REPL's `engine_tests` run against
 `system_library()`, so the suite covers the shipped path too.
 
-Editing `datalove-rt`, `datalove-rtdt` or the rider crate re-runs the nested
-component build. It is incremental and adds about a second, but it is a
-separate target directory from the main build - roughly 900 MB per profile -
-and `std_all_tests` still builds its own copy under `target/datalove-work`.
-Pointing that suite at the embedded artifacts would collapse the two.
+Editing `datalove-rt`, `datalove-rtdt` or the rider crate no longer re-runs
+anything at build time. It invalidates the native components instead, which
+cargo rebuilds incrementally the next time a suite links one. Each work dir
+carries its own target directory, so the cost is per rider set rather than per
+build.
 
 ### What is still tied to the tree
 
 - `datalove docs` builds the website out of `mandocs/`, so it keeps its
   `env!("CARGO_MANIFEST_DIR")`. It is a repository tool.
 - `cargo install --path` works; `cargo install datalove` from a registry would
-  not. `datalove-stdlib`'s build script runs `cargo build -p
-  datalove-native-component` from the repository root, which a packaged crate
-  would not have.
+  not. The component `rider_build` synthesizes names `datalove-rt` and the
+  rider crates by absolute path into the checkout, baked in at compile time
+  from `env!("CARGO_MANIFEST_DIR")`. Publishing means those become registry
+  dependencies, which is undecided - the local case has to keep working,
+  since compiling `datalove-rt` and a rider from in-tree source is the base
+  case for development and for any package outside `sys/`.
+- `datalove-stdlib` still embeds `sys/` with `include_str!`, so a packaged
+  crate would carry the library but not the rider crates it names.
 
 ## Script Compilation Pipeline
 

@@ -207,6 +207,17 @@ fn workspace_root_dir() -> PathBuf {
     manifest_dir.parent().unwrap().parent().unwrap().to_path_buf()
 }
 
+/// The work dir for callers that have no workspace to take one from.
+///
+/// A program that calls no rider still links the runtime, which it gets from a
+/// component built with an empty rider set. The linking helpers here and in
+/// [`c_aot`](super::c_aot) are handed an object file rather than a workspace,
+/// so they share this directory. What lands in it is fully determined by the
+/// empty rider set, so sharing costs one build for the whole tree.
+pub fn default_work_dir() -> PathBuf {
+    workspace_root_dir().join("target").join("datalove-work").join("default")
+}
+
 /// Directory for the synthesized native component crate within a work dir.
 fn synth_crate_dir(work_dir: &Path) -> PathBuf {
     work_dir.join("native-component")

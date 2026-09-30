@@ -2,9 +2,15 @@
 //!
 //! A datalove binary compiles against `sys/` without reading it from disk:
 //! the module sources are embedded here at build time, and the native rider
-//! functions those modules call are linked in from the rider crate. The
-//! native component an AOT-compiled program links against is embedded too.
-//! An installed binary therefore needs neither a source checkout nor cargo.
+//! functions those modules call are linked in from the rider crate, so the
+//! interpreter and the JIT need nothing on disk to run against `sys/`.
+//!
+//! An AOT-compiled program is different: it is a separate executable, so the
+//! runtime and the riders it calls have to reach it as a library the linker
+//! is given. That library is the native component, and the compiler builds
+//! one per rider set with cargo. This crate names the std rider's crate
+//! directory ([`PackageDescriptor::rider`]) rather than carrying a prebuilt
+//! component, which is what lets a program mix `sys/` with riders of its own.
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
@@ -22,13 +28,12 @@ struct EmbeddedPackage {
     modules: &'static [(&'static str, &'static str)],
     /// Source of the package's rider interface, if it has one.
     rider_interface: Option<&'static str>,
+    /// Where the rider's Rust crate was when this binary was built.
+    rider_crate_dir: Option<&'static str>,
 }
 
 // The `PACKAGES` table, generated from the `sys/` directory by `build.rs`.
 include!(concat!(env!("OUT_DIR"), "/packages.rs"));
-
-// The compressed native component and its digest, from `build.rs`.
-include!(concat!(env!("OUT_DIR"), "/native-component.rs"));
 
 /// The system library this binary carries.
 pub fn system_library() -> SystemLibrary {
@@ -45,36 +50,17 @@ pub fn system_library() -> SystemLibrary {
     }
 }
 
-/// Unpack the native component and return the path to link against.
+/// The directory the compiler may build native components in.
 ///
-/// An AOT-compiled program links the runtime and the rider functions it
-/// calls. The linker needs them as a file, so the embedded copy is written
-/// to the user's cache directory the first time it is asked for; the digest
-/// in the name means a later datalove writes its own rather than reusing
-/// this one.
-pub fn native_component_staticlib() -> AnyResult<PathBuf> {
-    let dir = cache_dir()?.join("lib");
-    let path = dir.join(fmt!("{NATIVE_COMPONENT_DIGEST}-{NATIVE_COMPONENT_NAME}"));
-
-    if path.is_file() {
-        return Ok(path);
-    }
-
+/// An installed binary has no source tree to write to, so this is under the
+/// user's cache directory. Cargo does the caching within it: the component
+/// for a given rider set is rebuilt only when one of the rider crates
+/// changes.
+pub fn work_dir() -> AnyResult<PathBuf> {
+    let dir = cache_dir()?.join("work");
     rmx::std::fs::create_dir_all(&dir)
         .context(fmt!("unable to create {}", dir.display()))?;
-
-    let mut decoder = rmx::flate2::read::GzDecoder::new(NATIVE_COMPONENT_GZ);
-    let mut unpacked = rmx::tempfile::NamedTempFile::new_in(&dir)
-        .context(fmt!("unable to create a file in {}", dir.display()))?;
-    rmx::std::io::copy(&mut decoder, &mut unpacked)
-        .context("unable to unpack the native component")?;
-
-    // Another process may be unpacking the same bytes; last one wins, and
-    // both wrote the same content under the same digest.
-    unpacked.persist(&path)
-        .context(fmt!("unable to write {}", path.display()))?;
-
-    Ok(path)
+    Ok(dir)
 }
 
 /// The directory datalove keeps generated files in.
@@ -102,7 +88,7 @@ fn descriptor(package: &EmbeddedPackage) -> PackageDescriptor {
         modules,
         rider: package.rider_interface.map(|source| RiderDescriptor {
             interface_source: Arc::from(source),
-            crate_dir: None,
+            crate_dir: package.rider_crate_dir.map(PathBuf::from),
         }),
     }
 }

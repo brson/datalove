@@ -97,11 +97,6 @@ pub enum ExecutionResult {
     Error { message: String, exit_code: Option<i32> },
 }
 
-/// Build the runtime library once and return the path to the lib directory.
-fn ensure_runtime_lib() -> &'static Path {
-    datafun::pipeline::aot::ensure_runtime_lib()
-}
-
 /// Normalize IR dump by removing trailing Drop instructions before unit_end.
 ///
 /// This strips unit_end_drop/unit_end_drop.tracked instructions to allow
@@ -545,18 +540,18 @@ fn c_aot_compile_link_run(
         all_sources.push_str(&format!("// === {} ===\n{}\n", filename, content));
     }
 
-    // Find runtime library.
-    let lib_dir = ensure_runtime_lib();
-    let lib_path = lib_dir.join("libdatalove_rt.a");
-
-    if !lib_path.exists() {
-        return (
-            AotCompileResult::Success,
-            LinkResult::Error { message: format!("Runtime library not found at {:?}", lib_path) },
-            ExecutionResult::Skipped { reason: "Link failed".to_string() },
-            String::new(),
-        );
-    }
+    // The component this program links, which is the runtime alone.
+    let lib_path = match datafun::pipeline::aot::runtime_only_component() {
+        Ok(path) => path,
+        Err(e) => {
+            return (
+                AotCompileResult::Success,
+                LinkResult::Error { message: e.to_string() },
+                ExecutionResult::Skipped { reason: "Link failed".to_string() },
+                String::new(),
+            );
+        }
+    };
 
     // Build compiler arguments: all C files + library + flags.
     let exe_path = dir.path().join("test");

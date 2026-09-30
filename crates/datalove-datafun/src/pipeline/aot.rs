@@ -2,7 +2,7 @@
 //!
 //! This module provides utilities for ahead-of-time compilation of IR units
 //! to native code. The workflow is: compile IR to object file, link with the
-//! runtime library, and optionally execute the result.
+//! native component, and optionally execute the result.
 //!
 //! # Functions
 //!
@@ -30,12 +30,14 @@ use std::sync::OnceLock;
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::{IrCodeUnit, FunctionRegistry};
 
+use super::rider_build;
+
 /// Linking error.
 #[derive(Debug)]
 pub enum LinkError {
     TempDir(std::io::Error),
     WriteObject(std::io::Error),
-    RuntimeNotFound { debug_path: PathBuf, release_path: PathBuf },
+    Component(String),
     LinkerExec(std::io::Error),
     LinkerFailed(String),
 }
@@ -45,9 +47,7 @@ impl std::fmt::Display for LinkError {
         match self {
             LinkError::TempDir(e) => write!(f, "failed to create temp directory: {}", e),
             LinkError::WriteObject(e) => write!(f, "failed to write object file: {}", e),
-            LinkError::RuntimeNotFound { debug_path, release_path } => {
-                write!(f, "runtime library not found at {} or {}", debug_path.display(), release_path.display())
-            }
+            LinkError::Component(msg) => write!(f, "{}", msg),
             LinkError::LinkerExec(e) => write!(f, "failed to execute linker: {}", e),
             LinkError::LinkerFailed(msg) => write!(f, "linker failed: {}", msg),
         }
@@ -81,8 +81,6 @@ pub struct ExecOutput {
     pub stderr: String,
 }
 
-static RUNTIME_LIB_DIR: OnceLock<PathBuf> = OnceLock::new();
-
 /// Cached result of whether lld linker is available.
 static USE_LLD: OnceLock<bool> = OnceLock::new();
 
@@ -100,35 +98,14 @@ pub fn use_lld() -> bool {
     })
 }
 
-/// Ensure the runtime library is built and return its directory.
-pub fn ensure_runtime_lib() -> &'static Path {
-    RUNTIME_LIB_DIR.get_or_init(|| {
-        let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-            .unwrap_or_else(|_| ".".to_string());
-        let manifest_path = PathBuf::from(manifest_dir);
-        let workspace_root = manifest_path.join("../..").canonicalize()
-            .expect("failed to find workspace root");
-        let lib_dir = workspace_root.join("target/debug");
-
-        // Build quietly to avoid polluting test output.
-        // Use index-64 feature if this crate was compiled with it.
-        #[cfg(feature = "index-64")]
-        let args = ["build", "-p", "datalove-rt", "--features", "index-64", "--quiet"];
-        #[cfg(not(feature = "index-64"))]
-        let args = ["build", "-p", "datalove-rt", "--quiet"];
-
-        let output = Command::new("cargo")
-            .args(args)
-            .current_dir(&workspace_root)
-            .output()
-            .expect("failed to run cargo build");
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            panic!("Failed to build datalove-rt: {}", stderr);
-        }
-
-        lib_dir
-    })
+/// The component a program with no riders links, which is the runtime alone.
+///
+/// Built through the same path as a component with riders in it, so there is
+/// one way a program acquires the runtime rather than two.
+pub fn runtime_only_component() -> Result<PathBuf, LinkError> {
+    rider_build::build_native_component(&rider_build::default_work_dir(), &[])
+        .map(|build| build.staticlib_path)
+        .map_err(|e| LinkError::Component(e.to_string()))
 }
 
 /// Compile a script unit to object bytes.
@@ -174,9 +151,11 @@ pub fn link_object_to_path(obj_bytes: &[u8], output_path: &Path) -> Result<(), L
 
 /// Link object bytes to an executable, including extra libraries.
 ///
-/// When `extra_libs` contains the native component staticlib, it provides
-/// `datalove_rt` and no separate runtime lib is linked. When `extra_libs` is
-/// empty, the standalone `libdatalove_rt.a` is linked via `ensure_runtime_lib()`.
+/// `extra_libs` is the native component the workspace built, which carries the
+/// runtime along with the riders the program calls. Empty means the caller has
+/// no workspace to have built one, so a rider-free component is used instead;
+/// either way exactly one component goes on the command line, because each of
+/// them carries the runtime.
 pub fn link_object_to_path_with_libs(
     obj_bytes: &[u8],
     output_path: &Path,
@@ -194,13 +173,8 @@ pub fn link_object_to_path_with_libs(
     cmd.arg(obj_path.to_str().unwrap());
 
     if extra_libs.is_empty() {
-        // No native component — link the standalone runtime lib.
-        let lib_dir = ensure_runtime_lib();
-        let lib_path = lib_dir.join("libdatalove_rt.a");
-        cmd.arg(lib_path.to_str().unwrap());
+        cmd.arg(runtime_only_component()?);
     } else {
-        // The native component staticlib bundles datalove_rt along with
-        // all rider symbols, so it replaces the standalone runtime lib.
         for lib in extra_libs {
             cmd.arg(lib.to_str().unwrap());
         }

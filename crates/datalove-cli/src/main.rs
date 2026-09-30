@@ -675,17 +675,19 @@ impl AotCompileCommand {
 
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::{WorkspaceDescriptor, aot};
+        use datafun::pipeline::{WorkspaceDescriptor, aot, rider_build};
 
         let db = datafun::Database::default();
 
-        // Build workspace descriptor.
+        // Build workspace descriptor. The work dir is where the native
+        // component the emitted program links gets built.
+        let work_dir = datalove_stdlib::work_dir()?;
         let sys = datalove_stdlib::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
             WorkspaceDescriptor::from_system_library(&sys)
-        };
+        }.with_work_dir(&work_dir);
 
                 // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -737,8 +739,15 @@ impl AotCompileCommand {
         let ir_unit = compiled_unit.ir_unit
             .ok_or_else(|| anyhow!("IR unit not available after lowering"))?;
 
-        // The runtime and riders the emitted program links against.
-        let rider_libs = vec![datalove_stdlib::native_component_staticlib()?];
+        // The runtime and the riders this program calls, as one library for
+        // the linker. Which riders those are comes from the module graph, so
+        // a program using a package of its own gets that package's rider in
+        // here alongside the ones from `sys/`.
+        let component = rider_build::build_native_component(
+            &work_dir,
+            &descriptor.rider_crate_dirs(),
+        ).map_err(|e| anyhow!("{}", e))?;
+        let rider_libs = vec![component.staticlib_path];
 
         // --run implies --link.
         let should_link = self.link || self.run;

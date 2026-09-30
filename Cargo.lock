@@ -1782,14 +1782,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "datalove-native-component"
-version = "0.1.0"
-dependencies = [
- "datalove-rider-std",
- "datalove-rt",
-]
-
-[[package]]
 name = "datalove-repl"
 version = "0.1.0"
 dependencies = [

@@ -81,6 +81,40 @@ fn every_rider_interface_is_embedded_verbatim() {
     }
 }
 
+/// Every rider crate named by the embedded table is where it says it is.
+///
+/// The name is a path baked in at build time, and the compiler hands it to
+/// cargo to build a native component from. `build.rs` finds it by the same
+/// convention `package_load` uses on a package read off disk, so the two
+/// agreeing is what keeps an embedded library and a disk one building the
+/// same component.
+#[test]
+fn every_rider_crate_is_where_it_is_named() {
+    let sys = datalove_stdlib::system_library();
+
+    for (name, package) in &sys.library.packages {
+        let Some(rider) = &package.rider else { continue };
+        let on_disk = sys_dir().join(name).join("rider");
+
+        match &rider.crate_dir {
+            Some(dir) => {
+                assert_eq!(
+                    dir, &on_disk,
+                    "sys/{name}'s rider crate is embedded as a path it is not at",
+                );
+                assert!(
+                    dir.join("Cargo.toml").is_file(),
+                    "{} has no Cargo.toml", dir.display(),
+                );
+            }
+            None => assert!(
+                !on_disk.join("Cargo.toml").is_file(),
+                "sys/{name} has a rider crate that was not named",
+            ),
+        }
+    }
+}
+
 /// Every function a rider interface declares is linked into this binary.
 #[test]
 fn every_declared_native_is_linked() {

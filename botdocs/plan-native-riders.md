@@ -183,8 +183,9 @@ Native functions fit the existing three-pass AOT compilation:
 - **Pass 3** (compile): call instructions targeting native functions generate the same code
   as any other call. No special case.
 - **Linking**: the rider's `.a` is linked alongside the runtime `.a`. As built,
-  the two are one archive - `datalove-native-component` - which the datalove
-  binary carries compressed and unpacks to a cache directory on first use.
+  the two are one archive - the native component `rider_build` synthesizes for
+  whatever riders the module graph holds, built with cargo in the workspace's
+  work dir.
 
 ## Compiler Driver
 

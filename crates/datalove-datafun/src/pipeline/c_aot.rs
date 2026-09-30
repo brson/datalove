@@ -28,6 +28,8 @@ pub enum CAotBuildError {
     WriteSource(std::io::Error),
     /// The C compiler could not be run at all.
     CompilerExec(std::io::Error),
+    /// The native component the program links could not be built.
+    Component(String),
     /// The C compiler ran and rejected the program.
     ///
     /// Carries the sources, because generated C is not on disk to look at
@@ -42,6 +44,7 @@ impl std::fmt::Display for CAotBuildError {
             CAotBuildError::TempDir(e) => write!(f, "temp dir: {}", e),
             CAotBuildError::WriteSource(e) => write!(f, "write c source: {}", e),
             CAotBuildError::CompilerExec(e) => write!(f, "run c compiler: {}", e),
+            CAotBuildError::Component(msg) => write!(f, "{}", msg),
             CAotBuildError::CompilerFailed { stderr, sources } => {
                 write!(f, "c compiler failed:\n{}\n\nC sources:\n{}", stderr, sources)
             }
@@ -78,11 +81,11 @@ pub fn compile_world(
 
 /// Compile and link C sources into an executable at `output_path`.
 ///
-/// `extra_libs` is the native component when the program calls a rider, and
-/// empty when it does not. Empty means the standalone runtime library, which
-/// is the same choice `aot::link_object_to_path_with_libs` makes and for the
-/// same reason: the component bundles the runtime, so the two never both go
-/// on the command line.
+/// `extra_libs` is the native component the workspace built. Empty means the
+/// caller has no workspace to have built one, so a rider-free component is
+/// used instead; this is the same choice `aot::link_object_to_path_with_libs`
+/// makes and for the same reason: every component carries the runtime, so
+/// exactly one of them goes on the command line.
 pub fn link_sources_to_path(
     sources: &CSources,
     output_path: &Path,
@@ -107,8 +110,8 @@ pub fn link_sources_to_path(
     }
 
     if extra_libs.is_empty() {
-        let lib_dir = super::aot::ensure_runtime_lib();
-        cmd.arg(lib_dir.join("libdatalove_rt.a"));
+        cmd.arg(super::aot::runtime_only_component()
+            .map_err(|e| CAotBuildError::Component(e.to_string()))?);
     } else {
         for lib in extra_libs {
             cmd.arg(lib);

@@ -1,27 +1,20 @@
-//! Embeds the `sys/` package library and the native component into this crate.
+//! Embeds the `sys/` package library into this crate.
 //!
 //! The generated table names every package, its modules and its rider
 //! interface, and pulls their text in with `include_str!` so that a built
 //! binary carries the system library rather than reading it back out of the
-//! source tree it was compiled from. The native component -- the runtime and
-//! the riders, which an AOT-compiled program links against -- is built here
-//! and embedded compressed, for the same reason.
+//! source tree it was compiled from.
+//!
+//! A package's rider crate is named rather than embedded. It is Rust, not
+//! datalove, so it reaches a program by being compiled into the native
+//! component the compiler builds for whatever riders a module graph uses --
+//! the same path a rider outside `sys/` takes.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
-use std::process::Command;
-
-use rmx::sha2::Digest as _;
-
-/// The package holding the runtime and riders an AOT program links.
-const COMPONENT_PACKAGE: &str = "datalove-native-component";
-
-/// The profile it is built with, defined in the workspace manifest.
-const COMPONENT_PROFILE: &str = "native-component";
 
 fn main() {
     embed_sys();
-    embed_native_component();
 }
 
 /// Generate the table of package sources.
@@ -64,89 +57,29 @@ fn embed_sys() {
             writeln!(table, "        rider_interface: None,").expect("writing to a string");
         }
 
+        // Where the rider's Rust crate is, for the compiler to build a native
+        // component from. `package_load` finds this by the same convention
+        // when it reads a package off disk.
+        let crate_dir = package_dir.join("rider");
+        if crate_dir.join("Cargo.toml").is_file() {
+            writeln!(
+                table,
+                "        rider_crate_dir: Some({:?}),",
+                crate_dir.display().to_string(),
+            ).expect("writing to a string");
+        } else {
+            writeln!(table, "        rider_crate_dir: None,").expect("writing to a string");
+        }
+
         writeln!(table, "    }},").expect("writing to a string");
     }
 
     table.push_str("];\n");
 
-    write_out("packages.rs", table.as_bytes());
+    write_out("packages.rs", &table);
 }
 
-/// Build the native component and embed it, compressed.
-///
-/// The component has its own profile whatever profile datalove itself is
-/// built in, because it ends up inside the programs the AOT backend emits
-/// rather than inside datalove. It also has its own target directory: cargo
-/// holds a lock on the one this build is running under.
-fn embed_native_component() {
-    for dir in ["crates/datalove-rt", "crates/datalove-rtdt", "sys/std/rider"] {
-        println!("cargo:rerun-if-changed={}", repo_root().join(dir).display());
-    }
-
-    let out_dir = out_dir();
-    let target_dir = out_dir.join("native-component");
-
-    let status = Command::new(std::env::var("CARGO").expect("CARGO"))
-        .arg("build")
-        .arg("--profile").arg(COMPONENT_PROFILE)
-        .arg("--package").arg(COMPONENT_PACKAGE)
-        .arg("--target-dir").arg(&target_dir)
-        .current_dir(repo_root())
-        .status()
-        .unwrap_or_else(|e| panic!("unable to run cargo for {COMPONENT_PACKAGE}: {e}"));
-
-    assert!(status.success(), "building {COMPONENT_PACKAGE} failed with {status}");
-
-    let staticlib = staticlib_path(&target_dir.join(COMPONENT_PROFILE));
-    let bytes = std::fs::read(&staticlib)
-        .unwrap_or_else(|e| panic!("unable to read {}: {e}", staticlib.display()));
-
-    // The digest names the unpacked file, so that a binary never links a
-    // component left behind by a different build.
-    let digest = rmx::sha2::Sha256::digest(&bytes);
-    let digest = digest.iter().map(|byte| format!("{byte:02x}")).collect::<String>();
-
-    // This script re-runs whenever any of its inputs change, including the
-    // stdlib sources, but compressing tens of megabytes is worth doing only
-    // when the component itself is new.
-    let stamp = out_dir.join("native-component.sha256");
-    if std::fs::read_to_string(&stamp).ok().as_deref() != Some(digest.as_str()) {
-        let mut encoder = rmx::flate2::write::GzEncoder::new(
-            Vec::new(),
-            rmx::flate2::Compression::default(),
-        );
-        std::io::Write::write_all(&mut encoder, &bytes).expect("compressing the native component");
-        let compressed = encoder.finish().expect("compressing the native component");
-
-        write_out("native-component.a.gz", &compressed);
-        write_out("native-component.sha256", digest.as_bytes());
-    }
-    write_out(
-        "native-component.rs",
-        format!(
-            "/// The native component, gzipped.\n\
-             static NATIVE_COMPONENT_GZ: &[u8] = include_bytes!(concat!(env!(\"OUT_DIR\"), \"/native-component.a.gz\"));\n\
-             \n\
-             /// Digest of the uncompressed component, which names the unpacked file.\n\
-             const NATIVE_COMPONENT_DIGEST: &str = {digest:?};\n\
-             \n\
-             /// File name of the unpacked component.\n\
-             const NATIVE_COMPONENT_NAME: &str = {:?};\n",
-            staticlib.file_name().expect("a named file").to_str().expect("a utf-8 file name"),
-        ).as_bytes(),
-    );
-}
-
-/// The static library cargo produced for the native component.
-fn staticlib_path(dir: &Path) -> PathBuf {
-    let candidates = ["libdatalove_native_component.a", "datalove_native_component.lib"];
-    candidates.iter()
-        .map(|name| dir.join(name))
-        .find(|path| path.is_file())
-        .unwrap_or_else(|| panic!("no static library in {}", dir.display()))
-}
-
-fn write_out(name: &str, contents: &[u8]) {
+fn write_out(name: &str, contents: &str) {
     let path = out_dir().join(name);
     std::fs::write(&path, contents)
         .unwrap_or_else(|e| panic!("unable to write {}: {e}", path.display()));
