@@ -205,10 +205,35 @@ typechecking is lazy. Ask the units directly when the question is about validity
   is added by hand. Correct and tested; if the reach ever under-reports, another
   resolution path answering a name outside the recorded lookups is the shape to
   look for.
-- **Removing a unit is inexpressible**, which is the `(unit_index, ValueId)`
-  numbering protecting itself: taking a unit out leaves every later unit's IR one
-  frame off. Blanking is what the numbering allows and behaves correctly, at the
-  cost of an index and a frame per deletion until the session ends.
+- **Insert and remove are unimplemented, and both cost the suffix.** A unit's
+  index is part of every value's identity, so inserting or removing at *i*
+  renumbers everything after it and every later unit's IR has to be rebuilt.
+  That is inherent, not a shortcoming of the walk: the ids really did change.
+
+  They are not far off, though -- the pieces exist. `Script::from_units` already
+  folds a chain out of a unit list, `scripts.pop()`/`unit_records.pop()` already
+  truncate the last unit for failure handling, and `rederive` already takes an
+  arbitrary `Vec<usize>`. What is missing is splicing the two index-aligned
+  session vectors, rebuilding the chain, and re-deriving from the insertion point
+  on. Appending and editing are cheap because neither disturbs an index; insert
+  and remove cannot be, while identity is positional.
+
+  **This is the third time positional identity has been the constraint** --
+  `IrModuleId` numbered by graph position, script `unit_index`, and now this. The
+  standing answer is the same each time: derive the id from something content- or
+  name-shaped rather than from a position, and the renumbering goes away.
+
+  Blanking a unit is what the numbering allows today, and behaves correctly at
+  the cost of an index and a frame per deletion until the session ends.
+
+- **There is no undo or redo.** Nothing keeps a unit's previous text;
+  `ModuleCompilationPipeline::module_text` exists only so `edit_module` can put
+  back an edit that did not compile. The machinery needs nothing new for it --
+  undoing an edit *is* an edit, and the reach is computed the same way -- so what
+  is missing is a history, which is engine-level rather than reactivity-level.
+  Three cases, and only one is hard: undoing an edit is trivial, undoing an
+  append is truncation at the end where no index moves, and undoing an insert or
+  a remove needs the item above.
 - **A `CallDispatcher` is not told about a module edit.** Cached inlining
   decisions and JIT code survive one. Unreachable today, the REPL passing `None`.
 - **No engine path adds or removes a module** mid-session. `WorkspaceDelta` knows
