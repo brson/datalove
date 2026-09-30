@@ -446,19 +446,6 @@ th {
     text-wrap: balance;
 }
 
-.toc a::before {
-    content: "\27E1";
-    content: "♡";
-    position: absolute;
-    left: 0;
-    color: var(--accent);
-    opacity: 0.0;
-}
-
-.toc a:hover::before {
-    opacity: 1;
-}
-
 @media (max-width: 768px) {
     body {
         flex-direction: column;
