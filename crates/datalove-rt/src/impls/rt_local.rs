@@ -3,6 +3,8 @@
 //! Contains the runtime state for single-threaded local execution,
 //! including the allocator and any other runtime-specific state.
 
+use datalove_rti::table::RtiTable;
+
 use crate::impls::alloc::AllocLocal;
 
 // Crosses the ABI as an argument to `dtlv_rti_set_debug_mode`, so it is
@@ -13,7 +15,17 @@ pub use datalove_rti::DebugOutputMode;
 ///
 /// Contains the allocator and other runtime-specific state needed
 /// for single-threaded local execution.
+/// `repr(C)` for the first field's sake. A rider does not link the runtime
+/// and cannot call it by name, so it calls through the table, which it finds
+/// by reading the first word of what its handle points at. That one offset is
+/// the only thing outside this crate may assume about this type.
+#[repr(C)]
 pub struct RtLocal {
+    /// The functions a rider calls this runtime through.
+    ///
+    /// First, and it has to stay first: `datalove_rti::table` reads it at
+    /// offset zero.
+    pub table: &'static RtiTable,
     /// Local allocator.
     pub alloc: AllocLocal,
     /// Debug output mode.
@@ -28,6 +40,7 @@ impl RtLocal {
     /// Create a new local runtime.
     pub fn new() -> Box<RtLocal> {
         Box::new(RtLocal {
+            table: &crate::abi_table::TABLE,
             alloc: AllocLocal::new_raw(),
             debug_output_mode: DebugOutputMode::default(),
             debug_buffer: String::new(),

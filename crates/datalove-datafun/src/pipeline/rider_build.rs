@@ -10,16 +10,13 @@
 //! runtime is inside:
 //!
 //! - A **dylib**, which the interpreter and the JIT dlopen. The process doing
-//!   that already contains a runtime, so this must not contain another; its
-//!   `dtlv_rti_*` symbols are left undefined and resolve against the host.
-//!   That is why riders depend on `datalove-rti`, which declares those
-//!   functions without defining them.
+//!   that already contains a runtime, so this must not contain another. A
+//!   rider reaches the runtime through the table on the handle it is passed
+//!   rather than by name, so this resolves nothing at load time and the
+//!   process loading it exports nothing. That is what `datalove-rti` is for.
 //! - A **staticlib**, which an AOT-compiled program links. That program is a
-//!   separate executable with no host to resolve against, so the runtime has
-//!   to be in it.
-//!
-//! The host has to export the runtime symbols for the dylib to find them.
-//! See `.cargo/config.toml`.
+//!   separate executable and calls the runtime by name like any other linked
+//!   library, so the runtime has to be in it.
 
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};

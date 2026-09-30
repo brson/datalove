@@ -12,7 +12,7 @@
 //! it does not contain.
 
 use datalove_rtdt as rtdt;
-use crate::decl;
+use crate::call;
 use crate::{LocalRtHandle, RtStatus};
 
 /// Write a None option to the result pointer.
@@ -76,7 +76,7 @@ pub unsafe fn write_option_some_string(
                 align: std::mem::align_of::<rtdt::String>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             };
-            let status = decl::dtlv_rti_string_from_bytes(
+            let status = call::dtlv_rti_string_from_bytes(
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
@@ -158,7 +158,7 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
         };
         unsafe {
-            decl::dtlv_rti_string_from_bytes(
+            call::dtlv_rti_string_from_bytes(
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
@@ -219,7 +219,7 @@ pub unsafe fn write_string_list(
 
     // Build the list by moving elements from the buffer.
     unsafe {
-        decl::dtlv_rti_list_build_from_slice_local(
+        call::dtlv_rti_list_build_from_slice_local(
             rt,
             out,
             element_td,
@@ -244,7 +244,7 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
         };
         unsafe {
-            decl::dtlv_rti_any_destroy_local(
+            call::dtlv_rti_any_destroy_local(
                 rt,
                 s as *mut u8,
                 &tydesc,
@@ -354,7 +354,7 @@ pub unsafe fn write_option_int_from_str(
     unsafe {
         *out = rtdt::OptionTag::Some as u8;
         let int_out = out.add(payload_offset);
-        decl::dtlv_rti_int_from_limbs(
+        call::dtlv_rti_int_from_limbs(
             rt,
             limbs.as_ptr(),
             limb_count as u32,

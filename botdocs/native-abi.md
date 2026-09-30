@@ -24,6 +24,18 @@ In order:
 
 - **`rt`** --- the runtime handle. Every `dtlv_rti_*` entry point takes it
   first, so a native that calls back into the runtime passes its own along.
+
+  It is also how a native *finds* those entry points. A rider does not link
+  the runtime --- it would otherwise carry a second copy of one --- so it
+  cannot call them by name. The handle points at the runtime's state, whose
+  first word is a table of its functions, and `datalove_rti::call` wraps
+  reading it: `call::dtlv_rti_string_from_bytes(rt, ..)` looks up the table on
+  `rt` and calls through it, passing `rt` on as the first argument. A rider
+  library therefore resolves nothing when it loads, and the process loading it
+  exports nothing.
+
+  That first word is all a holder of a handle may assume. The rest of what it
+  points at belongs to the runtime.
 - **One `(pointer, descriptor)` pair per declared parameter**, in declaration
   order. The pointer is at the value; the descriptor says what is behind it.
 - **The result, as an out parameter**, given the same way: somewhere to write

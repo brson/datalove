@@ -679,10 +679,12 @@ Execution:
 
     - `build_rider_dylib` gives the shared library `rider_load::load_rider_library`
       dlopens. **The runtime is not in it.** The process loading it has one
-      already, so its `dtlv_rti_*` symbols are left undefined and resolve
-      against the host. That keeps one `RtLocal` and one allocator in the
-      process however many riders load, and it is why the library is under a
-      megabyte rather than the forty-odd a bundled runtime cost.
+      already, and a rider reaches it through the table on the handle rather
+      than by name, so the library resolves nothing at load time: it has no
+      undefined `dtlv_rti_*` symbols and the host exports none. That keeps one
+      `RtLocal` and one allocator in the process however many riders load, and
+      it is why the library is under a megabyte rather than the forty-odd a
+      bundled runtime cost.
     - `build_component_staticlib` gives the archive an AOT-compiled program
       links. **The runtime is in it**, because that program is a separate
       executable with no host to resolve against. An empty rider set gives a
@@ -690,10 +692,10 @@ Execution:
       needs: `aot::runtime_only_component`, for callers handed an object file
       rather than a workspace, builds one in `rider_build::default_work_dir`.
 
-    The dylib only resolves if the host exports the runtime's symbols, which
-    an executable does not do by default. `-rdynamic` in `.cargo/config.toml`
-    is what puts them in `.dynsym`, and it is set for the whole target because
-    every test and bench that loads riders is its own executable.
+    Only the `dlr_*` rider functions are looked up by name, which the loader
+    does for a library it has opened on every platform. Nothing is resolved
+    the other way, into the host, which is the direction that needs
+    `-rdynamic` on ELF and has no equivalent on Windows at all.
 
   Both end at `register_native`, so the interpreter sees no difference. Both
   also return the raw addresses, which the JIT needs: it calls natives through

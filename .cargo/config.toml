@@ -6,17 +6,3 @@
 # initialization code, particularly from Salsa-generated constructors.
 [target.wasm32-unknown-unknown]
 rustflags = ["-C", "link-args=-z stack-size=4194304"]
-
-# Export the runtime's symbols from every executable built here.
-#
-# The interpreter dlopens a library of riders that does not contain a runtime;
-# its `dtlv_rti_*` symbols are undefined and resolve against the process that
-# loaded it. An executable puts nothing in `.dynsym` by default, so without
-# this the loader has nothing to resolve them to and `dlopen` fails.
-#
-# It is set for the whole target rather than on the `datalove` binary alone
-# because every test and bench that loads riders is its own executable and
-# needs it too. Note that a `RUSTFLAGS` in the environment replaces this
-# rather than adding to it, which is why `just test-san-*` cannot load riders.
-[target.x86_64-unknown-linux-gnu]
-rustflags = ["-C", "link-arg=-rdynamic"]

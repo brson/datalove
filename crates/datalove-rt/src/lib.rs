@@ -43,4 +43,4 @@ pub mod c;
 pub mod rust;
 pub mod impls;
 
-mod abi_check;
+mod abi_table;

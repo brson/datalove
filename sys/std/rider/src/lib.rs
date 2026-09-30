@@ -31,7 +31,7 @@ const OK: u8 = 1;
 /// rt, out, and out_td must be valid pointers.
 unsafe fn write_string_result(rt: *mut u8, out: *mut u8, out_td: *const u8, s: &str) -> u8 {
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_string_from_bytes(
+        datalove_rti::call::dtlv_rti_string_from_bytes(
             rt,
             s.as_ptr(),
             s.len() as rtdt::IndexRepr,
@@ -462,7 +462,7 @@ pub extern "C-unwind" fn dlr_std__string_push_str(
         return OK;
     }
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_string_push_bytes_local(
+        datalove_rti::call::dtlv_rti_string_push_bytes_local(
             rt,
             self_ptr,
             self_td as *const rtdt::TyDesc,
@@ -515,7 +515,7 @@ pub extern "C-unwind" fn dlr_std__string_push_char(
     let mut buf = [0u8; 4];
     let encoded = ch.encode_utf8(&mut buf);
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_string_push_bytes_local(
+        datalove_rti::call::dtlv_rti_string_push_bytes_local(
             rt,
             self_ptr,
             self_td as *const rtdt::TyDesc,
@@ -622,7 +622,7 @@ pub extern "C-unwind" fn dlr_std__string_insert_char(
 
     // First, grow the buffer by pushing the encoded bytes at the end.
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_string_push_bytes_local(
+        datalove_rti::call::dtlv_rti_string_push_bytes_local(
             rt,
             self_ptr,
             self_td as *const rtdt::TyDesc,
@@ -676,7 +676,7 @@ pub extern "C-unwind" fn dlr_std__string_insert_str(
 
     // Grow the buffer by pushing the insert bytes at the end.
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_string_push_bytes_local(
+        datalove_rti::call::dtlv_rti_string_push_bytes_local(
             rt,
             self_ptr,
             self_td as *const rtdt::TyDesc,
@@ -1067,7 +1067,7 @@ unsafe fn placed_or_dropped(
         return true;
     }
     unsafe {
-        datalove_rti::decl::dtlv_rti_any_destroy_local(
+        datalove_rti::call::dtlv_rti_any_destroy_local(
             rt, elem_ptr, elem_td as *const rtdt::TyDesc,
         );
     }
@@ -1081,7 +1081,7 @@ pub extern "C-unwind" fn dlr_std__list_len(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_len_local(
+        datalove_rti::call::dtlv_rti_list_len_local(
             rt, list_ptr, list_td as *const rtdt::TyDesc, out,
         ) as u8
     }
@@ -1134,7 +1134,7 @@ pub extern "C-unwind" fn dlr_std__list_get(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_get_erased_local(
+        datalove_rti::call::dtlv_rti_list_get_erased_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1156,7 +1156,7 @@ pub extern "C-unwind" fn dlr_std__list_push(
         // the slot's shape, and one that is the slot's shape with `data` at
         // some position inside it -- a `(A, B)` pushed into a `[(string,
         // u32)]` -- which is converted position by position.
-        datalove_rti::decl::dtlv_rti_list_push_erased_local(
+        datalove_rti::call::dtlv_rti_list_push_erased_local(
             rt, list_ptr, list_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(),
         ) as u8
     }
@@ -1172,7 +1172,7 @@ pub extern "C-unwind" fn dlr_std__list_pop(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_pop_erased_local(
+        datalove_rti::call::dtlv_rti_list_pop_erased_local(
             rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1185,7 +1185,7 @@ pub extern "C-unwind" fn dlr_std__list_clear(
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_clear_local(
+        datalove_rti::call::dtlv_rti_list_clear_local(
             rt, list_ptr, list_td as *const rtdt::TyDesc,
         ) as u8
     }
@@ -1204,7 +1204,7 @@ pub extern "C-unwind" fn dlr_std__list_set(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_list_set_erased_local(
+        datalove_rti::call::dtlv_rti_list_set_erased_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
         )
     };
@@ -1226,7 +1226,7 @@ pub extern "C-unwind" fn dlr_std__list_insert(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        datalove_rti::decl::dtlv_rti_list_insert_erased_local(
+        datalove_rti::call::dtlv_rti_list_insert_erased_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
         )
     };
@@ -1247,7 +1247,7 @@ pub extern "C-unwind" fn dlr_std__list_remove(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_remove_erased_local(
+        datalove_rti::call::dtlv_rti_list_remove_erased_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1262,7 +1262,7 @@ pub extern "C-unwind" fn dlr_std__list_reserve(
 ) -> u8 {
     let n = unsafe { *(n_ptr as *const rtdt::Index) };
     unsafe {
-        datalove_rti::decl::dtlv_rti_list_reserve_local(
+        datalove_rti::call::dtlv_rti_list_reserve_local(
             rt, list_ptr, list_td as *const rtdt::TyDesc, n.0,
         ) as u8
     }
@@ -1282,7 +1282,7 @@ pub extern "C-unwind" fn dlr_std__map_len(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_len_local(
+        datalove_rti::call::dtlv_rti_btreemap_len_local(
             rt, map_ptr, map_td as *const rtdt::TyDesc, out,
         ) as u8
     }
@@ -1295,7 +1295,7 @@ pub extern "C-unwind" fn dlr_std__map_clear(
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_clear_local(
+        datalove_rti::call::dtlv_rti_btreemap_clear_local(
             rt, map_ptr, map_td as *const rtdt::TyDesc,
         ) as u8
     }
@@ -1309,7 +1309,7 @@ pub extern "C-unwind" fn dlr_std__map_contains_key(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_contains_key_local(
+        datalove_rti::call::dtlv_rti_btreemap_contains_key_local(
             rt, map_ptr, map_td as *const rtdt::TyDesc,
             key_ptr, key_td as *const rtdt::TyDesc,
             out as *mut bool,
@@ -1329,12 +1329,12 @@ pub extern "C-unwind" fn dlr_std__map_get(
 
     unsafe {
         if boxes_the_element(out_ty.option_inner_ty(), map_ty.map_value_ty()) {
-            datalove_rti::decl::dtlv_rti_btreemap_get_as_data_local(
+            datalove_rti::call::dtlv_rti_btreemap_get_as_data_local(
                 rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
                 out, out_ty.as_ptr(),
             ) as u8
         } else {
-            datalove_rti::decl::dtlv_rti_btreemap_get_local(
+            datalove_rti::call::dtlv_rti_btreemap_get_local(
                 rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
                 out, out_ty.as_ptr(),
             ) as u8
@@ -1360,11 +1360,11 @@ pub extern "C-unwind" fn dlr_std__map_insert(
         if boxes_the_element(key_ty, map_ty.map_key_ty())
             || boxes_the_element(value_ty, map_ty.map_value_ty())
         {
-            datalove_rti::decl::dtlv_rti_btreemap_insert_data_local(
+            datalove_rti::call::dtlv_rti_btreemap_insert_data_local(
                 rt, map_ptr, map_ty.as_ptr(), key_ptr, value_ptr,
             ) as u8
         } else {
-            datalove_rti::decl::dtlv_rti_btreemap_insert_local(
+            datalove_rti::call::dtlv_rti_btreemap_insert_local(
                 rt, map_ptr, map_ty.as_ptr(),
                 key_ptr, key_ty.as_ptr(), value_ptr, value_ty.as_ptr(),
             ) as u8
@@ -1380,7 +1380,7 @@ pub extern "C-unwind" fn dlr_std__map_remove(
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_remove_local(
+        datalove_rti::call::dtlv_rti_btreemap_remove_local(
             rt, map_ptr, map_td as *const rtdt::TyDesc,
             key_ptr, key_td as *const rtdt::TyDesc,
         ) as u8
@@ -1394,7 +1394,7 @@ pub extern "C-unwind" fn dlr_std__set_len(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreeset_len_local(
+        datalove_rti::call::dtlv_rti_btreeset_len_local(
             rt, set_ptr, set_td as *const rtdt::TyDesc, out,
         ) as u8
     }
@@ -1407,7 +1407,7 @@ pub extern "C-unwind" fn dlr_std__set_clear(
     _out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreeset_clear_local(
+        datalove_rti::call::dtlv_rti_btreeset_clear_local(
             rt, set_ptr, set_td as *const rtdt::TyDesc,
         ) as u8
     }
@@ -1427,7 +1427,7 @@ pub extern "C-unwind" fn dlr_std__set_get(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
     let as_data = boxes_the_element(out_ty.option_inner_ty(), set_ty.set_element_ty());
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreeset_get_at_local(
+        datalove_rti::call::dtlv_rti_btreeset_get_at_local(
             rt, set_ptr, set_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
         ) as u8
     }
@@ -1446,7 +1446,7 @@ pub extern "C-unwind" fn dlr_std__map_key_at(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
     let as_data = boxes_the_element(out_ty.option_inner_ty(), map_ty.map_key_ty());
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_key_at_local(
+        datalove_rti::call::dtlv_rti_btreemap_key_at_local(
             rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
         ) as u8
     }
@@ -1465,7 +1465,7 @@ pub extern "C-unwind" fn dlr_std__map_value_at(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
     let as_data = boxes_the_element(out_ty.option_inner_ty(), map_ty.map_value_ty());
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreemap_value_at_local(
+        datalove_rti::call::dtlv_rti_btreemap_value_at_local(
             rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
         ) as u8
     }
@@ -1479,7 +1479,7 @@ pub extern "C-unwind" fn dlr_std__set_contains(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreeset_contains_local(
+        datalove_rti::call::dtlv_rti_btreeset_contains_local(
             rt, set_ptr, set_td as *const rtdt::TyDesc,
             elem_ptr, elem_td as *const rtdt::TyDesc, out,
         ) as u8
@@ -1494,7 +1494,7 @@ pub extern "C-unwind" fn dlr_std__set_remove(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_btreeset_remove_local(
+        datalove_rti::call::dtlv_rti_btreeset_remove_local(
             rt, set_ptr, set_td as *const rtdt::TyDesc,
             elem_ptr, elem_td as *const rtdt::TyDesc, out,
         ) as u8
@@ -1513,11 +1513,11 @@ pub extern "C-unwind" fn dlr_std__set_insert(
 
     unsafe {
         if boxes_the_element(elem_ty, set_ty.set_element_ty()) {
-            datalove_rti::decl::dtlv_rti_btreeset_insert_data_local(
+            datalove_rti::call::dtlv_rti_btreeset_insert_data_local(
                 rt, set_ptr, set_ty.as_ptr(), elem_ptr, out,
             ) as u8
         } else {
-            datalove_rti::decl::dtlv_rti_btreeset_insert_local(
+            datalove_rti::call::dtlv_rti_btreeset_insert_local(
                 rt, set_ptr, set_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(), out,
             ) as u8
         }
@@ -2125,7 +2125,7 @@ pub extern "C-unwind" fn dlr_std__float_abs(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 0, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2139,7 +2139,7 @@ pub extern "C-unwind" fn dlr_std__float_sqrt(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 1, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2153,7 +2153,7 @@ pub extern "C-unwind" fn dlr_std__float_floor(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 2, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2167,7 +2167,7 @@ pub extern "C-unwind" fn dlr_std__float_ceil(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 3, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2181,7 +2181,7 @@ pub extern "C-unwind" fn dlr_std__float_round(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 4, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2195,7 +2195,7 @@ pub extern "C-unwind" fn dlr_std__float_trunc(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 5, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2209,7 +2209,7 @@ pub extern "C-unwind" fn dlr_std__float_fract(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 6, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2223,7 +2223,7 @@ pub extern "C-unwind" fn dlr_std__float_recip(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 7, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2237,7 +2237,7 @@ pub extern "C-unwind" fn dlr_std__float_signum(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 8, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2251,7 +2251,7 @@ pub extern "C-unwind" fn dlr_std__float_neg(
     out: *mut u8, out_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_unop(
+        datalove_rti::call::dtlv_rti_dyn_unop(
             rt, 9, x, x_td as *const rtdt::TyDesc,
             out, out_td as *const rtdt::TyDesc,
         ) as u8
@@ -2269,7 +2269,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_zero(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_const(
+        datalove_rti::call::dtlv_rti_dyn_const(
             rt, 0, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2283,7 +2283,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_one(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_const(
+        datalove_rti::call::dtlv_rti_dyn_const(
             rt, 1, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2297,7 +2297,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_min_value(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_const(
+        datalove_rti::call::dtlv_rti_dyn_const(
             rt, 2, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2311,7 +2311,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_max_value(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_const(
+        datalove_rti::call::dtlv_rti_dyn_const(
             rt, 3, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2336,7 +2336,7 @@ pub extern "C-unwind" fn dlr_std__ord_compare(
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
-        let ordering = datalove_rti::decl::dtlv_rti_cmp_total_local(
+        let ordering = datalove_rti::call::dtlv_rti_cmp_total_local(
             rt,
             a, a_td as *const rtdt::TyDesc,
             b, b_td as *const rtdt::TyDesc,
@@ -2350,8 +2350,8 @@ pub extern "C-unwind" fn dlr_std__ord_compare(
             datalove_rti::RtOrdering::Error => return 2,
         };
         *(out as *mut i8) = answer;
-        datalove_rti::decl::dtlv_rti_any_destroy_local(rt, a as *mut u8, a_td as *const rtdt::TyDesc);
-        datalove_rti::decl::dtlv_rti_any_destroy_local(rt, b as *mut u8, b_td as *const rtdt::TyDesc);
+        datalove_rti::call::dtlv_rti_any_destroy_local(rt, a as *mut u8, a_td as *const rtdt::TyDesc);
+        datalove_rti::call::dtlv_rti_any_destroy_local(rt, b as *mut u8, b_td as *const rtdt::TyDesc);
     }
     OK
 }
@@ -2367,7 +2367,7 @@ pub extern "C-unwind" fn dlr_std__float_zero(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 0, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2381,7 +2381,7 @@ pub extern "C-unwind" fn dlr_std__float_one(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 1, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2395,7 +2395,7 @@ pub extern "C-unwind" fn dlr_std__float_nan(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 2, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2409,7 +2409,7 @@ pub extern "C-unwind" fn dlr_std__float_infinity(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 3, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2423,7 +2423,7 @@ pub extern "C-unwind" fn dlr_std__float_neg_infinity(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 4, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2437,7 +2437,7 @@ pub extern "C-unwind" fn dlr_std__float_min_value(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 5, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2451,7 +2451,7 @@ pub extern "C-unwind" fn dlr_std__float_max_value(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 6, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2465,7 +2465,7 @@ pub extern "C-unwind" fn dlr_std__float_min_positive(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 7, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2479,7 +2479,7 @@ pub extern "C-unwind" fn dlr_std__float_epsilon(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 8, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2493,7 +2493,7 @@ pub extern "C-unwind" fn dlr_std__float_pi(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 9, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
@@ -2507,7 +2507,7 @@ pub extern "C-unwind" fn dlr_std__float_e(
     value_td: *const u8,
 ) -> u8 {
     unsafe {
-        datalove_rti::decl::dtlv_rti_dyn_float_const(
+        datalove_rti::call::dtlv_rti_dyn_float_const(
             rt, 10, out, out_td as *const rtdt::TyDesc,
             value_td as *const rtdt::TyDesc,
         ) as u8
