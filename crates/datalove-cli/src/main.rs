@@ -50,6 +50,21 @@ fn type_error(diagnostics: &[&datalove_diagnostic::TypeDiagnostic], errors: &[St
     }
 }
 
+/// What `--version` prints.
+///
+/// The version alone would not say where this binary expects to find the
+/// runtime and the riders it has to compile, and those are the two things that
+/// go wrong. A build from a checkout names it, and says so when it has since
+/// gone missing.
+fn build_version() -> &'static str {
+    static VERSION: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VERSION.get_or_init(|| format!(
+        "{} (built from {})",
+        env!("CARGO_PKG_VERSION"),
+        datalove_buildinfo::BUILD_INFO.describe(),
+    )).as_str()
+}
+
 fn main() -> AnyResult<()> {
     rmx::extras::init_crate_name(env!("CARGO_CRATE_NAME"));
 
@@ -60,6 +75,7 @@ fn main() -> AnyResult<()> {
 }
 
 #[derive(clap::Parser)]
+#[command(version = build_version())]
 struct Cli {
     #[command(subcommand)]
     cmd: Command,

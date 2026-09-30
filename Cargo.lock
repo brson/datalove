@@ -1416,11 +1416,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-buildinfo"
+version = "0.1.0"
+
+[[package]]
 name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove",
+ "datalove-buildinfo",
  "datalove-datafun",
  "datalove-datafun-ast",
  "datalove-datafun-cranelift-jit",
@@ -1459,6 +1464,7 @@ name = "datalove-datafun"
 version = "0.1.0"
 dependencies = [
  "bcts",
+ "datalove-buildinfo",
  "datalove-ct",
  "datalove-datafun-ast",
  "datalove-datafun-c-aot",

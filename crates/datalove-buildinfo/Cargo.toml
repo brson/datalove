@@ -1,0 +1,12 @@
+[package]
+name = "datalove-buildinfo"
+description = "Whether this datalove was built from a checkout or from a registry."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+# Nothing. Everything here is decided by the build script and baked in, and
+# this sits near the bottom of the graph, where a dependency would be paid for
+# by everything above it.
+[dependencies]

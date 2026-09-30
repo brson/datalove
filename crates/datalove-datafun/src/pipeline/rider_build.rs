@@ -155,7 +155,7 @@ fn build_uncached(
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
 
-    let workspace_root = workspace_root_dir();
+    let workspace_root = checkout_root()?;
 
     // `index-64` widens the index type in `rtdt`, which changes the layout of
     // every value crossing the boundary. Naming these directly rather than
@@ -179,7 +179,7 @@ fn build_uncached(
 
     // Depended on for their features, whoever else pulls them in.
     for crate_name in ["datalove-rtdt", "datalove-rti"] {
-        let dir = crate_dep_dir(&workspace_root, crate_name)?;
+        let dir = crate_dep_dir(workspace_root, crate_name)?;
         cargo_toml.push_str(&format!(
             "{} = {{ path = \"{}\"{} }}\n", crate_name, dir.display(), features,
         ));
@@ -188,7 +188,7 @@ fn build_uncached(
     // The runtime goes in an archive a program links, and stays out of a
     // library the interpreter loads, which gets it from the host instead.
     if kind == Kind::Staticlib {
-        let dir = crate_dep_dir(&workspace_root, "datalove-rt")?;
+        let dir = crate_dep_dir(workspace_root, "datalove-rt")?;
         cargo_toml.push_str(&format!(
             "datalove-rt = {{ path = \"{}\"{} }}\n", dir.display(), features,
         ));
@@ -277,11 +277,32 @@ fn crate_dep_dir(workspace_root: &Path, name: &str) -> Result<PathBuf, RiderBuil
         ))
 }
 
-/// Workspace root directory (repo root).
-fn workspace_root_dir() -> PathBuf {
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // crates/datalove-datafun -> crates -> repo root
-    manifest_dir.parent().unwrap().parent().unwrap().to_path_buf()
+/// The checkout the runtime crates are named out of.
+///
+/// A build from a registry has none, and naming published versions instead is
+/// not written yet. A build from a checkout has one that may since have been
+/// moved or deleted, which is worth saying outright: cargo would otherwise
+/// report a path dependency it cannot find, naming a directory and none of the
+/// reasons it is being looked for.
+fn checkout_root() -> Result<&'static Path, RiderBuildError> {
+    let Some(checkout) = datalove_buildinfo::BUILD_INFO.checkout() else {
+        todo!(
+            "this datalove was built from a release, so the runtime and the \
+             riders would have to be named by published version, which it \
+             cannot yet do",
+        );
+    };
+
+    if !checkout.is_dir() {
+        return Err(build_err("native-component", format!(
+            "this datalove was built from {}, which is no longer there, and \
+             the runtime has to be compiled from it to build a program. Build \
+             from that checkout again, or put it back.",
+            checkout.display(),
+        )));
+    }
+
+    Ok(checkout)
 }
 
 /// The work dir for callers that have no workspace to take one from.
@@ -293,7 +314,14 @@ fn workspace_root_dir() -> PathBuf {
 /// fully determined by the empty rider set, so sharing costs one build for the
 /// whole tree.
 pub fn default_work_dir() -> PathBuf {
-    workspace_root_dir().join("target").join("datalove-work").join("default")
+    let base = match datalove_buildinfo::BUILD_INFO.checkout() {
+        Some(checkout) => checkout.join("target"),
+        // A release build has no tree to write into, so the cache it is.
+        // `datalove_stdlib::work_dir` is the same directory; this reaches it
+        // without depending on that crate, which sits above this one.
+        None => std::env::temp_dir().join("datalove"),
+    };
+    base.join("datalove-work").join("default")
 }
 
 /// Write a file only if its contents would change.

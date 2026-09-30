@@ -103,34 +103,43 @@ one of the publishing blockers outright.
    interface for its own codegen, and the published datalove package carries
    it for the compiler. Each is self-contained; neither reads the other.
 
-## Phase 4 --- `BuildInfo`
+## Phase 4 --- `BuildInfo` --- DONE
 
-1. A small crate --- `datalove-buildinfo` --- whose build script emits the
-   `BuildInfo` the rest of the tree reads. `Prod { version }` or
-   `Local { git_sha, abs_path }`.
-2. Deciding which: `Local` when the build is happening inside a git checkout
-   of this repository, `Prod` otherwise. Record the decision in the build
-   script's output so `datalove --version` can print it; a binary that cannot
-   say which kind it is will waste someone's afternoon.
-3. Replace `rider_build::workspace_root_dir()`, `aot`'s and
-   `datalove-stdlib`'s `env!("CARGO_MANIFEST_DIR")` derivations with
-   `BuildInfo`.
-4. A `Local` binary whose `abs_path` no longer exists must say exactly that.
-   Falling through to cargo produces an error about a missing path dependency
-   that names none of the things a user could act on.
+1. `datalove-buildinfo`, whose build script decides and bakes in
+   `Prod { version }` or `Local { git_sha, checkout }`. No dependencies: it
+   sits near the bottom of the graph, where one would be paid for by
+   everything above.
+2. Deciding which: **not** by asking git whether we are in a repository, which
+   answers a different question --- a published crate unpacked or vendored
+   inside somebody else's repository is in a checkout, just not this one.
+   The build script walks up from its own manifest looking for a directory
+   with `sys/std` and `crates/datalove-buildinfo` in it, which is this tree's
+   shape and no other's. It needs git only for the revision, so a tarball of
+   the tree is still recognised as the tree.
+3. `rider_build::workspace_root_dir` is `checkout_root`, reading `BuildInfo`.
+   `default_work_dir` follows. The `datalove docs` command keeps its
+   `env!("CARGO_MANIFEST_DIR")`, being a repository tool, and so does
+   `datalove-stdlib`'s build script, which runs at compile time and is in the
+   tree by definition; phase 5 takes that one.
+4. A `Local` binary whose checkout is gone says exactly that, naming the
+   directory and why it wants it. Cargo would otherwise report a path
+   dependency it cannot find and none of the reasons.
+5. `datalove --version` prints the build kind, and says `missing` when the
+   checkout it names is not there.
 
-**`cargo install --git` stays in the `Local` model.** It builds from a clone
-in a temporary directory and deletes it, so the `abs_path` such a build bakes
-is gone by the time the binary runs. The `git_sha` is the answer: once sources
-can be fetched from the repository by revision, a `Local` binary whose path
-has vanished falls back to the sha and gets the same sources it was built
-from. That also covers a checkout the user moved or deleted, which is the more
-common case.
+Two things worth knowing:
 
-Until the repository is public that fetch cannot happen, so a `--git` install
-has no way to source its riders and must say so plainly --- naming the sha it
-wants and that it cannot reach it --- rather than failing somewhere inside
-cargo.
+- `git_sha` is as of whenever `datalove-buildinfo` last compiled, not of this
+  moment. Watching `.git/HEAD` would rebuild this crate and relink everything
+  above it on every commit, which is not worth paying for a field nothing
+  reads yet. Whatever comes to rely on it should make that trade again rather
+  than inherit it.
+- It is `Option`, the plan having assumed a `String`. A tarball of the tree,
+  or a checkout with no git installed, has a path worth using and no revision
+  to give; saying so beats inventing one.
+
+Naming a published version instead of a path is phase 6, so under `Prod`
+`checkout_root` is a `todo!()` rather than a branch pretending otherwise.
 
 ## Phase 5 --- sys packages from a crate
 
