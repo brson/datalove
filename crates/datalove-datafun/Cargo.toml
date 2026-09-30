@@ -22,6 +22,8 @@ datalove-datafun-resolve.path = "../datalove-datafun-resolve"
 datalove-datafun-interp.path = "../datalove-datafun-interp"
 datalove-datafun-pkg.path = "../datalove-datafun-pkg"
 datalove-rtdt.path = "../datalove-rtdt"
+# For `ABI_VERSION`, which a rider library is checked against when loaded.
+datalove-rti.path = "../datalove-rti"
 datalove-rt.path = "../datalove-rt"
 datalove-diagnostic.path = "../datalove-diagnostic"
 datalove-datafun-cranelift-aot.path = "../datalove-datafun-cranelift-aot"

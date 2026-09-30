@@ -223,6 +223,18 @@ fn build_uncached(
     if kind == Kind::Staticlib {
         lib_rs.push_str("extern crate datalove_rt;\n");
     }
+
+    // What the loader checks before it trusts anything else in here. The
+    // value describes this side, being compiled against whatever `rti` the
+    // riders resolved; the process loading it compares against its own. Only
+    // a dylib is loaded, so only a dylib says.
+    if kind == Kind::Dylib {
+        lib_rs.push_str(
+            "\n/// The runtime interface these riders were built against.\n\
+             #[no_mangle]\n\
+             pub static DLR_ABI_VERSION: u64 = datalove_rti::ABI_VERSION;\n\n",
+        );
+    }
     for (_rider_name, crate_name, _abs_dir) in &rider_crates {
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));

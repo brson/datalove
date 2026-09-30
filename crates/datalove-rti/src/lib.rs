@@ -29,6 +29,75 @@ pub mod call;
 pub mod rider_helpers;
 pub mod table;
 
+/// What a rider and a runtime must agree on, as one number.
+///
+/// A rider calls the runtime through a table it reaches at run time, so
+/// nothing is resolved when its library loads and there is no link step to
+/// fail. That is what makes the library portable, and it costs us the linker
+/// as a checker: two sides that disagree do not fail to load, they call a
+/// function with the wrong arguments or read a field at the wrong offset and
+/// carry on. So they are compared on this instead, once, when the library is
+/// loaded.
+///
+/// Each side computes it at compile time from its own copy of these crates,
+/// so it differs exactly when their idea of the interface differs. What goes
+/// in is the shape of the table and the layout of the `rtdt` types that cross
+/// the boundary. What does not is the version of either crate: a release that
+/// moves no field should not invalidate a rider, and a version number says
+/// nothing about whether `index-64` is on, which changes layout by itself.
+pub const ABI_VERSION: u64 = abi_version();
+
+const fn abi_version() -> u64 {
+    use datalove_rtdt as rtdt;
+    use std::mem::{align_of, offset_of, size_of};
+
+    let hash = mix(table::TABLE_SHAPE, table::EXPORTED as u64);
+
+    // A descriptor reaches every native, and its union's size is set by the
+    // widest arm, so a new kind of type shows up here.
+    let hash = mix(hash, size_of::<rtdt::TyDesc>() as u64);
+    let hash = mix(hash, align_of::<rtdt::TyDesc>() as u64);
+    let hash = mix(hash, size_of::<rtdt::TyInfo>() as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyDesc, type_tag) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyDesc, size) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyDesc, align) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyDesc, type_info) as u64);
+
+    // The values a rider reads through and writes back. Sizes alone would
+    // miss two fields of one width trading places, so the offsets are here
+    // too. This list is what crosses today and has to grow with it.
+    let hash = mix(hash, size_of::<rtdt::String>() as u64);
+    let hash = mix(hash, offset_of!(rtdt::String, data) as u64);
+    let hash = mix(hash, offset_of!(rtdt::String, size) as u64);
+    let hash = mix(hash, offset_of!(rtdt::String, capacity) as u64);
+
+    let hash = mix(hash, size_of::<rtdt::Int>() as u64);
+    let hash = mix(hash, offset_of!(rtdt::Int, data) as u64);
+    let hash = mix(hash, offset_of!(rtdt::Int, size_and_sign) as u64);
+    let hash = mix(hash, offset_of!(rtdt::Int, capacity) as u64);
+
+    let hash = mix(hash, size_of::<rtdt::List>() as u64);
+    let hash = mix(hash, offset_of!(rtdt::List, data) as u64);
+    let hash = mix(hash, offset_of!(rtdt::List, size) as u64);
+    let hash = mix(hash, offset_of!(rtdt::List, capacity) as u64);
+
+    // Which is `index-64`, the one feature that moves layout.
+    mix(hash, size_of::<rtdt::IndexRepr>() as u64)
+}
+
+/// FNV-1a over one value's bytes. Detects difference; forging it is not a
+/// threat anybody has.
+const fn mix(mut hash: u64, value: u64) -> u64 {
+    let bytes = value.to_le_bytes();
+    let mut i = 0;
+    while i < 8 {
+        hash ^= bytes[i] as u64;
+        hash = hash.wrapping_mul(0x100000001b3);
+        i += 1;
+    }
+    hash
+}
+
 /// The table of runtime functions a handle carries.
 ///
 /// A handle points at the runtime's own state, whose first word is a pointer

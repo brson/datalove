@@ -1479,6 +1479,7 @@ dependencies = [
  "datalove-exampletest",
  "datalove-rt",
  "datalove-rtdt",
+ "datalove-rti",
  "libloading",
  "ron",
  "rustmax 0.0.10",
@@ -1853,6 +1854,7 @@ version = "0.1.0"
 dependencies = [
  "datalove-datafun",
  "datalove-rider-std",
+ "datalove-rti",
  "rustmax 0.0.10",
 ]
 

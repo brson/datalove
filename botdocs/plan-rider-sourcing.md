@@ -36,7 +36,7 @@ What blocks publishing:
 - `datalove-stdlib` embeds `sys/` with `include_str!` from outside its own
   package root, the same problem as the rider's interface.
 
-## Phase 1 --- the ABI check
+## Phase 1 --- the ABI check --- DONE
 
 First, because every later phase widens the ways a rider and a runtime can
 disagree, and because it is small and useful on its own. Explained in full
@@ -47,14 +47,20 @@ under *The ABI check* below.
 2. `datalove-rti` gains `ABI_VERSION`, a `const fn` mixing `TABLE_SHAPE`,
    `EXPORTED`, and the sizes and offsets of the `rtdt` types that cross.
 3. `rider_build` writes `#[no_mangle] pub static DLR_ABI_VERSION: u64 =
-   datalove_rti::ABI_VERSION;` into the component's `lib.rs`, so no rider
-   author has to do anything.
+   datalove_rti::ABI_VERSION;` into the dylib component's `lib.rs`, so no
+   rider author has to do anything. Only a dylib is loaded, so only a dylib
+   says.
 4. `rider_load::load_rider_library` reads that symbol before it looks up any
    `dlr_*` and refuses a library whose value differs or is absent.
-5. Work dirs are keyed by `ABI_VERSION`, so two datalove binaries sharing a
-   cache directory do not build over each other.
+5. `datalove_stdlib::work_dir` is named by `ABI_VERSION`, so two datalove
+   binaries sharing the cache do not build over each other. In-tree work dirs
+   are left alone: cargo fingerprints them against path dependencies, which is
+   already correct.
 
-Testable now, with no dependency on any other phase.
+`tests/rider_abi_tests.rs` builds libraries that lie about their interface,
+one claiming the wrong version and one claiming none, and confirms both are
+refused and that a matching one still loads. A guard nobody exercises is worth
+nothing, and this one cannot be caught by any other test in the suite.
 
 ## Phase 2 --- `manifest.toml`
 
@@ -107,11 +113,18 @@ one of the publishing blockers outright.
    Falling through to cargo produces an error about a missing path dependency
    that names none of the things a user could act on.
 
-**`cargo install --git` is a hole in the two-scenario model.** It builds from a
-clone in a temporary directory and deletes it, so a `Local` binary would bake
-a path that is already gone. Either detect it and record `Prod` with the
-resolved version, or refuse, or accept that `--git` installs are unsupported
-and say so. It should not be discovered by a user.
+**`cargo install --git` stays in the `Local` model.** It builds from a clone
+in a temporary directory and deletes it, so the `abs_path` such a build bakes
+is gone by the time the binary runs. The `git_sha` is the answer: once sources
+can be fetched from the repository by revision, a `Local` binary whose path
+has vanished falls back to the sha and gets the same sources it was built
+from. That also covers a checkout the user moved or deleted, which is the more
+common case.
+
+Until the repository is public that fetch cannot happen, so a `--git` install
+has no way to source its riders and must say so plainly --- naming the sha it
+wants and that it cannot reach it --- rather than failing somewhere inside
+cargo.
 
 ## Phase 5 --- sys packages from a crate
 
@@ -138,9 +151,11 @@ and say so. It should not be discovered by a user.
    The doc has riders propagating `index-64` by convention, which is right,
    but naming the two crates here means the feature is set by the process that
    has to match rather than by whether every rider author remembered.
-4. First run under `Prod` fetches from the network. Decide and document what
-   happens with no network: a clear error, a pre-warm at install time, or
-   vendoring. It also decides whether CI and air-gapped machines can work.
+4. First run under `Prod` fetches from the network, which is accepted for now
+   and worth revisiting once there is something installed to try it with. What
+   it should not do is fail obscurely: no network needs to read as no network,
+   not as a cargo error about a registry. Pre-warming at install time and
+   vendoring are the options if it turns out to matter.
 
 ## Phase 7 --- exercise the unprivileged path
 

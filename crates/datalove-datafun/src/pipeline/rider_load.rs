@@ -45,6 +45,41 @@ pub fn build_and_load_riders(
     Ok(vec![loaded])
 }
 
+/// Refuse a library built against a different runtime interface.
+///
+/// A rider calls the runtime through a table it reaches at run time, so its
+/// library resolves nothing when it loads and no link step can catch the two
+/// sides disagreeing. Left unchecked, a mismatch is a call with the wrong
+/// arguments or a field read at the wrong offset, which is to say nothing
+/// reports it. So the library carries the interface it was built against and
+/// it is compared here, before any of its functions are looked up.
+///
+/// See [`datalove_rti::ABI_VERSION`] for what the number covers.
+fn check_abi_version(
+    lib: &libloading::Library,
+    rider_name: &str,
+    lib_path: &Path,
+) -> AnyResult<()> {
+    let theirs: libloading::Symbol<*const u64> = unsafe { lib.get(b"DLR_ABI_VERSION") }
+        .context(fmt!(
+            "rider library '{}' at {} does not say which runtime interface it \
+             was built against; it is either not a rider library or was built \
+             by a datalove too old to say",
+            rider_name, lib_path.display(),
+        ))?;
+
+    let theirs = unsafe { **theirs };
+    if theirs != datalove_rti::ABI_VERSION {
+        bail!(
+            "rider library '{}' at {} was built against a different runtime \
+             interface than this datalove: library {:#018x}, datalove {:#018x}",
+            rider_name, lib_path.display(), theirs, datalove_rti::ABI_VERSION,
+        );
+    }
+
+    Ok(())
+}
+
 /// A loaded rider shared library.
 ///
 /// Holds the `libloading::Library` handle to keep the loaded code alive.
@@ -72,6 +107,8 @@ pub fn load_rider_library(
 ) -> AnyResult<LoadedRider> {
     let lib = unsafe { libloading::Library::new(lib_path) }
         .context(fmt!("failed to load rider library '{}' from {}", rider_name, lib_path.display()))?;
+
+    check_abi_version(&lib, rider_name, lib_path)?;
 
     let mut native_fn_ptrs = Vec::new();
 

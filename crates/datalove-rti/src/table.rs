@@ -18,6 +18,14 @@ use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 /// How many functions the runtime exports.
 pub const EXPORTED: usize = 125;
 
+/// A hash of every field's name and type, in order.
+///
+/// Part of [`ABI_VERSION`](crate::ABI_VERSION), which is what a rider and a
+/// runtime are checked against each other on. Anything that changes what a
+/// caller must pass changes this, order included: a field is reached by
+/// offset, so moving one breaks a caller as surely as changing its arguments.
+pub const TABLE_SHAPE: u64 = 0xab896543f772cae4;
+
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
 pub struct RtiTable {

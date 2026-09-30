@@ -10,3 +10,5 @@ authors.workspace = true
 rmx.workspace = true
 datalove-datafun.path = "../datalove-datafun"
 datalove-rider-std.path = "../../sys/std/rider"
+# For `ABI_VERSION`, which names the work dir.
+datalove-rti.path = "../datalove-rti"

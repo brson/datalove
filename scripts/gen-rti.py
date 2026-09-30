@@ -93,6 +93,15 @@ def parameters(params):
     return pairs
 
 
+def fnv1a(data):
+    """FNV-1a, 64 bit. Detects difference; it is not a security boundary."""
+    hashed = 0xCBF29CE484222325
+    for byte in data:
+        hashed ^= byte
+        hashed = (hashed * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return hashed
+
+
 def pointer_type(is_unsafe, params, returns):
     """The function pointer type a table field holds."""
     args = ", ".join(ty for _, ty in params)
@@ -108,10 +117,17 @@ def main():
     if len(found) != exported:
         sys.exit(f"parsed {len(found)} signatures but {exported} are exported")
 
-    fields = "\n".join(
-        f"    pub {name}: {pointer_type(is_unsafe, params, returns)},"
+    typed = [
+        (name, pointer_type(is_unsafe, params, returns))
         for name, is_unsafe, params, returns in found
-    )
+    ]
+    fields = "\n".join(f"    pub {name}: {ptype}," for name, ptype in typed)
+
+    # Every name and signature, in order, so that anything which would change
+    # what a caller must pass changes this. Order is included by construction:
+    # a table field is reached by offset, so moving one is as breaking as
+    # changing its arguments.
+    shape = fnv1a("".join(f"{name}:{ptype};" for name, ptype in typed).encode())
     TABLE.write_text(f'''//! The table of runtime functions a rider calls.
 //!
 //! Generated from `datalove-rt`'s `c.rs` by `scripts/gen-rti.py`. Do not edit.
@@ -131,6 +147,14 @@ use crate::{{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus}};
 
 /// How many functions the runtime exports.
 pub const EXPORTED: usize = {len(found)};
+
+/// A hash of every field's name and type, in order.
+///
+/// Part of [`ABI_VERSION`](crate::ABI_VERSION), which is what a rider and a
+/// runtime are checked against each other on. Anything that changes what a
+/// caller must pass changes this, order included: a field is reached by
+/// offset, so moving one breaks a caller as surely as changing its arguments.
+pub const TABLE_SHAPE: u64 = {shape:#018x};
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]

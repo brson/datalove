@@ -56,8 +56,16 @@ pub fn system_library() -> SystemLibrary {
 /// user's cache directory. Cargo does the caching within it: the component
 /// for a given rider set is rebuilt only when one of the rider crates
 /// changes.
+///
+/// The runtime interface names the directory because every datalove on a
+/// machine shares this cache. Two of them built against different interfaces
+/// would otherwise build over each other's components, and the one that
+/// found the other's would be refused at load. Keeping them apart is
+/// cheaper than explaining that.
 pub fn work_dir() -> AnyResult<PathBuf> {
-    let dir = cache_dir()?.join("work");
+    let dir = cache_dir()?
+        .join("work")
+        .join(fmt!("{:016x}", datalove_rti::ABI_VERSION));
     rmx::std::fs::create_dir_all(&dir)
         .context(fmt!("unable to create {}", dir.display()))?;
     Ok(dir)
