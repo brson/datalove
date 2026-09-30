@@ -1,6 +1,36 @@
 # Future designs
 
 
+## 2026/09/30 - Locating and loading the runtime, sys packages, and sys riders
+
+Executing Datalove requires the runtime, the sys/ Datalove source library,
+and the sys native riders. Today sys just contains sys/std and the corresponding
+native rider written in Rust.
+
+There three scenarios that impact finding the rt, std and std rider:
+
+- in-tree
+- installed from a git checkout
+- installed from cargo
+
+some mechanism at build time embeds the info about the kind of build above,
+git checkout builds include the git revision and absolute path to source.
+
+
+
+
+sourcing:
+in-tree all from the source tree;
+from git checkout - from the absolute source path (today), from github by rev once the repo is public;
+from cargo - rt crates from crates.io using same version number, std rider from crates.io
+
+todo
+
+we name the rider crate "datalove-rider-sys-std" to make sure there is namespace for other sys packages.
+i don't envision the std datalove code always coming from the rider package, but ite
+
+  
+
 
 
 ## 2026/02/19 - Pretty symbols
