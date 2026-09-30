@@ -245,6 +245,42 @@ more arguments including graph-level data that is not reachable from a module.
 Restructuring compiler phase signatures to serve test instrumentation is the
 wrong trade, and they were deliberately left alone.
 
+### A whole-world value in a per-unit key: the one that keeps coming back
+
+Six times now, in six shapes, always the same mistake: a query about one entity
+keyed on something describing the whole program, so a change anywhere moves the
+key and the entity re-runs for an edit it cannot see.
+
+| where | the aggregate in the key | replaced by |
+|---|---|---|
+| `resolve_module_imports` | `AllModuleExports` | per-module export lookup |
+| the rider stubs | `ParsedModuleGraph` | `rider_interfaces`, keyed on `RiderSources` |
+| rider `IrModuleId`s | the module's graph position | `ir_module_ids`, riders numbered first |
+| script units | `accumulated` diagnostics | per-unit reads |
+| script lowering | `accumulated_lower_bindings` | `UnitLowerRecord` folded per position |
+| `typecheck_script_unit` | `ScriptEnv` over `Vec<ModuleSpec>` | `Vec<Module>` plus `script_module_spec` |
+
+**The last one is the clearest statement of the rule, because the fix was a type
+change and nothing else.** A `ModuleSpec` holds a module's path, source, spans,
+parse, id and name resolution, and `ScriptEnv` -- which every per-unit script
+query is keyed on -- interned over a `Vec` of them. So editing any module's body
+gave every script unit a new `(script, env)` pair to answer, whether or not it
+imported from that module. A `Module` is interned over a `ModuleId` and a
+`Source`, and `set_text` changes a source's *text* and not its *handle*, so an
+env of `Module`s survives a module edit where an env of specs could not. The
+content is reached through `script_module_spec(db, module)`, per module, which a
+unit asks for the one module its import named.
+
+The test that catches this shape: **is anything in this key describing something
+the query is not about?** A script unit is not about the module set, so nothing
+about the module set beyond the handles belongs in its key. And note what does
+*not* catch it -- counting executions. The same query instance re-running is
+harmless; it is the key moving that costs, and a fixture recording "was this
+module typechecked" sees nothing. `QueryRecorder`'s salsa ids do, if the test
+attributes an event to an entity by the key a cold run used and treats an
+unrecognised key as a failure rather than something to skip.
+`script_scenario_tests` does that.
+
 ## The firewall: split a query so edits stop early
 
 The most effective memoization tool here is a cheap projection in front of an

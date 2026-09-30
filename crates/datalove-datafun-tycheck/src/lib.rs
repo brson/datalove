@@ -419,6 +419,11 @@ impl<'db> ScriptUnitSpec<'db> {
 }
 
 /// Spec for a module (path + pre-parsed statements + module ID + name resolution).
+///
+/// Derived per module by [`api::script_module_spec`] rather than gathered into
+/// [`ScriptEnv`]. Every field of it moves when the module's text does, which is
+/// why the env holds `Module` handles instead: the env is what a per-unit memo
+/// is keyed on, and a spec in there made a unit's key turn on every module.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ModuleSpec<'db> {
@@ -448,15 +453,25 @@ impl<'db> ModuleSpec<'db> {
 /// What a script is checked against, as a handle to key a query on.
 ///
 /// Interned rather than passed by value, and this is not a micro-optimization:
-/// a script unit asks [`api::binding_at`] once per name it uses, and the module
-/// specs are every module's parse, spans and name resolution. Hashing that at
-/// every name lookup is the module world by another route. The modules do not
-/// change while a session runs, so the same handle comes back each time.
+/// a script unit asks [`api::binding_at`] once per name it uses, so this is
+/// hashed once per name.
+///
+/// **The modules are handles, not specs.** A `Module` is interned over a
+/// `ModuleId` and a `Source`, and editing a module is `set_text`, which changes
+/// a source's text and not its handle -- so this env survives a module edit
+/// where one holding [`ModuleSpec`]s did not. That mattered because every
+/// per-unit query is keyed on `(script, env)`: with the specs in here, editing
+/// one module's body gave every unit a different question to answer, whether or
+/// not it imported from that module. A unit reaches a module's content through
+/// [`api::script_module_spec`], for the one module its import names.
+///
+/// The env still moves when the module *set* changes, which is right: that is a
+/// different world, and an import may resolve differently in it.
 #[salsa::interned]
 pub struct ScriptEnv<'db> {
     /// The modules the script may require and import from.
     #[returns(ref)]
-    pub modules: Vec<ModuleSpec<'db>>,
+    pub modules: Vec<bct::module_graph::Module<'db>>,
     /// Auto-adapt mode for type checking.
     #[returns(copy)]
     pub auto_adapt_mode: AutoAdaptMode,

@@ -275,11 +275,11 @@ pub fn typecheck_script_unit<'db>(
     script: Script<'db>,
     env: ScriptEnv<'db>,
 ) -> ScriptUnitTypecheckOutput<'db> {
-    let module_specs = env.modules(db);
     let auto_adapt_mode = env.auto_adapt_mode(db);
 
-    // Build module function info for import resolution.
-    let (module_functions, path_to_module_id) = build_script_module_functions(db, module_specs);
+    // Handles only. A module's parse and name resolution are asked for one
+    // module at a time, where an import names it.
+    let modules_by_path = script_modules_by_path(db, env);
 
     let unit_spec = unit_ast(db, script.unit(db));
     let mut ctx = TypeContext::with_options(db, unit_spec.spans.clone(), None, auto_adapt_mode);
@@ -318,8 +318,7 @@ pub fn typecheck_script_unit<'db>(
                 parsed,
                 &new_module_aliases,
                 |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
-                &module_functions,
-                &path_to_module_id,
+                &modules_by_path,
             );
             imported_modules = imports;
 
@@ -947,38 +946,73 @@ fn resolve_module_imports_internal<'db>(
     (resolved_imports, import_errors)
 }
 
-/// Build module function info for script import resolution.
+/// The modules an import may name, by the path it names them by.
 ///
-/// Collects function signatures and ASTs from modules, keyed by module path.
-/// Returns two maps: one for function info (signature + AST), one for path to ModuleId.
-fn build_script_module_functions<'db>(
-    _db: &'db dyn crate::Db,
-    modules: &[ModuleSpec<'db>],
-) -> (
-    HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
-    HashMap<String, ModuleId<'db>>,
-) {
-    let mut module_functions: HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>> = HashMap::new();
-    let mut path_to_module_id: HashMap<String, ModuleId<'db>> = HashMap::new();
+/// Handles only, and deliberately: a module's path is its `ModuleId`'s interned
+/// content and a `Module` is interned over that and a `Source`, so building this
+/// reads no module's text. The content is [`script_module_spec`], asked for the
+/// one module an import resolves into.
+fn script_modules_by_path<'db>(
+    db: &'db dyn crate::Db,
+    env: ScriptEnv<'db>,
+) -> HashMap<String, Module<'db>> {
+    env.modules(db).iter()
+        .map(|module| (module.id(db).path(db).C(), *module))
+        .collect()
+}
 
-    for module_spec in modules {
-        // Use pre-computed name resolution from ModuleSpec.
-        let collected = &module_spec.name_resolution;
+/// One module's parse, spans, id and name resolution, as a script sees it.
+///
+/// **Keyed on the module, which is what keeps a module edit from re-keying every
+/// script unit.** The spec used to be gathered into [`ScriptEnv`], and every
+/// per-unit query is keyed on the env, so editing any module's body gave every
+/// unit a new key -- the sixth instance of a whole-world value in a per-unit key
+/// in this compiler. See `botdocs/salsa-patterns.md` and
+/// `botdocs/plan-script-reactivity.md` section F.
+///
+/// A unit that resolves an import asks this for the module it named and so
+/// depends on that module alone. It does not backdate on a body edit, because
+/// `spans` move with the body; the importing units re-typecheck, and the units
+/// that import nothing from the module do not.
+#[salsa::tracked(returns(ref))]
+pub fn script_module_spec<'db>(
+    db: &'db dyn crate::Db,
+    module: Module<'db>,
+) -> ModuleSpec<'db> {
+    let module_id = module.id(db);
+    let source = module.source(db);
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module).clone();
+    let spans = datalove_datafun_parser::module_spans(db, module).clone();
+    let name_resolution =
+        datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
+    ModuleSpec::new(
+        module_id.path(db).C(),
+        source,
+        spans,
+        parsed,
+        module_id,
+        name_resolution,
+    )
+}
 
-        // Build function info map with ASTs.
-        let ast_map: HashMap<_, _> = collected.function_asts.iter().cloned().collect();
-        let mut funcs = HashMap::new();
-        for (name, func_ty) in &collected.functions {
-            if let Some(ast) = ast_map.get(name) {
-                funcs.insert(*name, (*func_ty, *ast));
-            }
-        }
-
-        path_to_module_id.insert(module_spec.path.clone(), module_spec.module_id);
-        module_functions.insert(module_spec.path.clone(), funcs);
-    }
-
-    (module_functions, path_to_module_id)
+/// The signature and AST of the function a module exports under `name`.
+///
+/// Both halves or neither, because a signature with no AST is a function
+/// nothing across the boundary can inline or call. Two linear scans of one
+/// module's declarations, where this used to be a map built over every module's
+/// -- the narrow lookup is the cheap half of keying the spec per module.
+fn module_function<'db>(
+    spec: &ModuleSpec<'db>,
+    name: InternedText<'db>,
+) -> Option<(TypeFunction<'db>, StmtFun<'db>)> {
+    let collected = &spec.name_resolution;
+    let func_ty = collected.functions.iter()
+        .find(|(declared, _)| *declared == name)
+        .map(|(_, func_ty)| *func_ty)?;
+    let ast = collected.function_asts.iter()
+        .find(|(declared, _)| *declared == name)
+        .map(|(_, ast)| *ast)?;
+    Some((func_ty, ast))
 }
 
 /// Collect the module aliases a script unit's require statements introduce.
@@ -1032,8 +1066,7 @@ fn resolve_script_imports<'db>(
     script: &ParsedStatements<'db>,
     own_aliases: &[(InternedText<'db>, String)],
     inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
-    module_functions: &HashMap<String, HashMap<InternedText<'db>, (TypeFunction<'db>, StmtFun<'db>)>>,
-    path_to_module_id: &HashMap<String, ModuleId<'db>>,
+    modules_by_path: &HashMap<String, Module<'db>>,
 ) -> (
     Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>,
     Vec<TypeError>,
@@ -1059,11 +1092,15 @@ fn resolve_script_imports<'db>(
             let module_path = module_path.as_str();
             imported.insert(module_path.S());
 
-            if let Some(funcs) = module_functions.get(module_path) {
-                if let Some((func_ty, func_ast)) = funcs.get(&item_name) {
-                    let source_module_id = path_to_module_id.get(module_path).cloned();
+            // The one module this import names, and no other: asking
+            // `script_module_spec` here is the dependency edge that confines a
+            // module edit to the units that import from it.
+            if let Some(module) = modules_by_path.get(module_path) {
+                if let Some((func_ty, func_ast)) =
+                    module_function(script_module_spec(db, *module), item_name)
+                {
                     resolved.push(
-                        (item_name, *func_ty, *func_ast, source_module_id, import.local_index),
+                        (item_name, func_ty, func_ast, Some(module.id(db)), import.local_index),
                     );
                 } else {
                     errors.push(TypeError::UnresolvedName(

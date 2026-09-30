@@ -28,8 +28,9 @@ Script (interned cons list)          the identity everything is keyed on
           source: Source             <- the input; set_text edits a unit
 
 ScriptEnv (interned)                 what the script is checked against
-  modules: Vec<ModuleSpec>
+  modules: Vec<Module>               <- handles; a Module survives set_text
   auto_adapt_mode
+          script_module_spec(module) -> ModuleSpec, per module, tracked
 
 per unit, from typechecking:         ScriptUnitTypecheckOutput
   new_vars / new_fns / new_fn_asts   what it provides
@@ -59,6 +60,15 @@ That is the property the design turns on. It used to be keyed on
 `AccumulatedBindings` -- every binding from every earlier unit -- so B's outputs
 moving re-keyed C whether or not C mentioned them. A whole-prefix value in a
 per-unit key; the same shape has been fixed six times in this compiler.
+
+**`ScriptEnv` is the other half of the same key, and it holds handles for the
+same reason.** A `Module` is interned over a `ModuleId` and a `Source`, so a
+module edit leaves it where it was; a unit reaches a module's parse and name
+resolution through `script_module_spec(db, module)`, for the module its import
+named. The env held every module's `ModuleSpec` at first -- spans included -- so
+any module edit re-keyed every unit. That was the sixth instance of the shape.
+The env still moves when the module *set* changes, which is a different world
+and so a different question.
 
 ### 2. The environment is read, not seeded
 
@@ -163,7 +173,7 @@ suites missed.
 | `script_graph_tests` | 7 | provides and uses per unit: the graph itself |
 | `script_reactivity_tests` | 6 | analysis reach, at the tycheck layer |
 | `script_exec_reactivity_tests` | 17 | lowering and execution reach, values through an executor |
-| `script_scenario_tests` | 10 | the edit-kind matrix, a twelve-unit session, blanking, ownership |
+| `script_scenario_tests` | 14 | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership |
 | `script_const_tests` | 11 | consts across units and into function bodies |
 | `datalove-repl/engine_edit_tests` | 6 | the shipped entry points end to end |
 
@@ -172,8 +182,10 @@ checked by injecting a fault into the shipped code and confirming the tests
 reported the *old* answer. Stage B against one; stage C against four -- a
 one-step reach, a reach widened to every later unit, one narrowed to the edited
 unit, and `replace_frame` with its destroy removed, which failed eight tests with
-leak reports. The module work against seven. Two of those failed exactly one
-test apiece.
+leak reports. The module work against seven. The module-edit narrowing against
+six, one of them a straight revert of the three shipped files with the new tests
+in place, which failed on the key attribution itself. Several of these faults
+failed exactly one or two tests apiece.
 
 One fault is worth recording because it found a hole in the tests rather than the
 code: making `set_module_registry` a no-op left a binding reading its old value,
@@ -189,12 +201,14 @@ typechecking is lazy. Ask the units directly when the question is about validity
 
 ## What is not covered, and what is known wrong
 
-- **Over-propagation on module edits.** `ScriptEnv` is interned over every
-  `ModuleSpec`, spans included, so *any* module edit re-keys *every* unit, body
-  change or signature change alike. Asserted outright rather than left implicit.
-  Execution reach stays narrow, so correctness is unaffected -- this is wasted
-  analysis, not a wrong answer. Narrowing it is the sixth instance of the
-  aggregate-in-a-per-unit-key shape and is still open.
+- **A module *body* edit still reaches the units that import from that module.**
+  The whole-unit over-propagation is gone -- a module edit reached every unit
+  until `ScriptEnv` stopped holding `ModuleSpec`s -- but a `ModuleSpec` carries
+  the module's spans, and a body edit moves those, so `script_module_spec` does
+  not backdate and the importers re-typecheck for a change no signature of
+  theirs saw. `name_resolution` is the only field of a spec anything reads, and
+  it backdates across a body edit by itself, so the remedy is to stop carrying
+  the rest; `botdocs/plan-script-reactivity.md` section F has that measured.
 - **The lowering reach is the compiler's own answer.** Phases 2 to 5 are plain
   functions with no per-unit query to record, so unlike the analysis reach it is
   not measured from outside. It is held to a graph-derived expectation and to the
@@ -236,8 +250,10 @@ typechecking is lazy. Ask the units directly when the question is about validity
   a remove needs the item above.
 - **A `CallDispatcher` is not told about a module edit.** Cached inlining
   decisions and JIT code survive one. Unreachable today, the REPL passing `None`.
-- **No engine path adds or removes a module** mid-session. `WorkspaceDelta` knows
-  how; the reach for an added or removed module has never been asked about.
+- **No engine path adds or removes a module** mid-session. `WorkspaceDelta`
+  knows how. What a set change does to the analysis is pinned -- the env interns
+  over the modules, so every unit re-keys, which is right -- but the *reach* for
+  an added or removed module has never been asked about.
 - **A rejected module edit is put back**, deliberately, because nothing can build
   a compiler against a module set with errors.
 - **Only pure `fun`s exist**, so the only effect is `debuglog` and skipping a

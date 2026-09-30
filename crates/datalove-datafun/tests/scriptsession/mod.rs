@@ -192,6 +192,22 @@ impl Session {
         self.rerun(redone)
     }
 
+    /// Add a module the session did not start with.
+    ///
+    /// The module *set* changes, which is a different world rather than an edit
+    /// to one: `ScriptEnv` interns over the modules it may import from, so the
+    /// env moves and every unit is re-keyed. Nothing is re-derived here -- the
+    /// caller asks the units whatever it wants to know afterwards.
+    pub fn add_module(&mut self, module: &Module<'_>) {
+        self.pipeline.add_module(
+            &self.db, module.library, module.package, module.module, module.source);
+    }
+
+    /// Take a module out of the session, the other half of [`Self::add_module`].
+    pub fn remove_module(&mut self, module: &Module<'_>) {
+        self.pipeline.remove_module(module.library, module.package, module.module);
+    }
+
     /// Change a module's text and re-derive what that reaches.
     ///
     /// Two steps rather than one, and the second is the one a unit edit does not

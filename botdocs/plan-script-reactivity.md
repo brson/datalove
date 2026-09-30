@@ -173,10 +173,11 @@ What went in, and it is the design below with one thing changed:
   whenever anything in its body moves -- it carries the expression types -- so
   without the projection a body edit would re-run every later unit's `binding_at`
   walk. With it, a body edit stops there.
-- **`ScriptEnv`** interns the module specs and the auto-adapt mode. The plan had
-  those passed by value; `binding_at` is asked once per name a unit uses, and
-  hashing every module's parse and spans at each of those is the module world in
-  the key by another route.
+- **`ScriptEnv`** interns the modules and the auto-adapt mode. The plan had those
+  passed by value; `binding_at` is asked once per name a unit uses, and hashing
+  the module list at each of those is the module world in the key by another
+  route. It held every module's `ModuleSpec` at first, which was the module world
+  in the key by the *direct* route -- see section F.
 - **A function body had to be told it is a body.** It is not a closure, and
   dropping the enclosing `let`s from `variables` was enough while they were
   seeded into it. Once a miss falls through to the earlier units, the body has
@@ -513,25 +514,27 @@ afterwards, which is the only observable, since the frame still holds the value.
   value-only edit does not move.
 - **The alias edge is the one edge not derived from a read.** Correct and tested;
   see the section above.
-- **A module edit re-typechecks every unit**, because `ScriptEnv`'s identity
-  includes every module's spans. Asserted rather than merely known, and it is
-  the same whole-world-aggregate-in-a-per-unit-key shape as the rest; see
-  section E.
+- **A module edit re-typechecks the units that import from it**, and no longer
+  every unit: section F. What is left is that a *body* edit still reaches the
+  importers, because `ModuleSpec` carries the module's spans.
 - **The cost per edit is still unmeasured.** The twelve-unit session says the
   *reach* is right at that size; it says nothing about time. The records fold
   from the start of the session for every unit re-derived, so the cost per edit
   grows with the session, and nobody has measured where that stops being free.
 - **`Engine` re-derives the module compilation per line**, resting on
-  `ScriptEnv` interning to the same handle each time -- which holds because
-  `ModuleSpec` compares equal over unchanged modules. If a `ModuleSpec` field
-  ever became unstable across compiles, every script memo would be lost
-  silently, and nothing tests that. What a module *edit* does to that handle is
-  now measured; what an unchanged recompile does to it is not.
-- **Nothing can add or remove a module mid-session.** `Engine::edit_module`
-  changes a module the session started with. `WorkspaceDelta` knows how to add
-  and remove, and there is no engine path to it, so the reach for those has
-  never been asked about -- an added module can only affect a unit typed after
-  it, but a removed one leaves an import naming nothing.
+  `ScriptEnv` interning to the same handle each time -- which is now a much
+  weaker thing to rest on: the env is a list of `Module` handles, and a `Module`
+  is interned over a `ModuleId` and a `Source`, neither of which a recompile
+  moves. It used to rest on every `ModuleSpec` field comparing equal. What an
+  unchanged recompile does to the handle is still not tested directly.
+- **No engine path adds or removes a module mid-session.** `Engine::edit_module`
+  changes a module the session started with, and `WorkspaceDelta` knows how to
+  add and remove with nothing reaching it. What an added or removed module does
+  to the *analysis* is measured now --
+  `adding_a_module_re_keys_every_unit` and its removal twin -- and it is that
+  every unit re-keys, because the env interns over the module set. What is still
+  unasked is the reach: an added module can only affect a unit typed after it,
+  but a removed one leaves an import naming nothing.
 
 ## E. The module gap -- done
 
@@ -568,16 +571,16 @@ work against a module set with errors -- `script_compiler_resumed` returns
 Reporting module errors while keeping the broken text means carrying them
 through every path that compiles, which is a larger change than this.
 
-**The over-propagation the plan warned about is real, and it is wider than
+**The over-propagation the plan warned about was real, and wider than
 predicted.** Measured with `QueryRecorder`: after *any* module edit, body or
-signature, every unit's `typecheck_script_unit` runs again -- and not because an
-answer moved but because the *key* moved. `ScriptEnv` is interned over every
-`ModuleSpec`, which holds the module's spans, so editing one module's body
-gives a new env handle and every `(script, env)` pair is a different question.
-The execution reach stays narrow, which is the half that decides correctness,
-and `script_scenario_tests` asserts the over-propagation outright rather than
-leaving it to be discovered. Narrowing the env so a unit depends only on the
-modules it imports from is still the sound end state.
+signature, every unit's `typecheck_script_unit` ran again -- and not because an
+answer moved but because the *key* moved. `ScriptEnv` was interned over every
+`ModuleSpec`, which holds the module's spans, so editing one module's body gave
+a new env handle and every `(script, env)` pair was a different question. The
+execution reach stayed narrow, which is the half that decides correctness, and
+`script_scenario_tests` asserted the over-propagation outright rather than
+leaving it to be discovered. Section F is the narrowing, and the assertion is
+inverted now.
 
 This is also where the diagnosis below is wrong: it says the env does not
 re-key, and it does. What is right about it is the conclusion -- **the gap was
@@ -634,7 +637,41 @@ only on the modules it imports from is the sound end state -- and it is the same
 whole-world-aggregate-in-a-per-unit-key shape that has come up six times now --
 but the correctness fix is the driver, and the narrowing can follow.
 
-## F. The over-propagation on module edits
+## F. The over-propagation on module edits -- done
+
+**Done.** `ScriptEnv` holds `Vec<Module>` and `script_module_spec` derives a
+module's spec per module, so a module edit re-keys nothing and reaches the units
+that import from the edited module plus their name-edge dependents. Measured:
+
+| edit | analysis reach, five units over three modules |
+|---|---|
+| module body (`m1`, imported by unit 2 alone) | `{2}` -- was `{0,1,2,3,4}` |
+| module signature (`m1`) | `{2,3}` -- was `{0,1,2,3,4}` |
+| a module added | every unit, and the env legitimately moved |
+| a module removed | every unit, same reason |
+
+The execution reach is unchanged at `{2,3}` either way, which is the point: it
+was already narrow and now analysis agrees with it. `script_scenario_tests`
+holds all four rows, the first two as dedicated cases and the matrix's module
+rows through the same `analysis_reach` the unit rows use, seeded with
+`module_importers` instead of the edited unit.
+
+**What the falsification showed.** Six faults. Restoring the aggregate -- asking
+`script_module_spec` for every module in the env rather than the one an import
+names -- reported `{0,1,2,3,4}` for both kinds of edit, which is the old answer
+exactly, and left the execution and lowering suites green: this really is wasted
+analysis rather than a wrong answer. Reverting the three shipped files to the
+previous commit with the new tests in place failed on the key attribution
+itself, "a typecheck under a key no cold run used", which is the assertion the
+old suite made in reverse. Dropping `module_spans` from `script_module_spec`
+made a body edit backdate to `{}` while leaving the signature case at `{2,3}`
+and every execution suite green -- see the note on splitting below, because that
+is the experiment for it. Pinning the env's module list at three modules left
+the add and remove cases reporting nothing. Seeding
+`relower_module_reach` with every unit and with no unit moved the execution
+reach to `{0,1,2,3,4}` and `{}`.
+
+What follows is the plan as written before the work.
 
 Any module edit re-keys every script unit, so every unit re-typechecks when
 asked -- a body change and a signature change alike, and whether or not the unit
@@ -683,3 +720,24 @@ re-typecheck even though no signature moved. That is a large improvement on
 a unit depends on a module's signatures and not its spans would make a body edit
 backdate entirely; diagnostics are what want the spans, and they are needed only
 when something is reported.
+
+**The measurement, taken as fault 3 of the falsification run above.** Building
+`script_module_spec` with an empty span table took a module body edit's analysis
+reach from `{2}` to `{}` and left the signature case at `{2,3}`, with
+`script_exec_reactivity_tests`, `script_reactivity_tests` and every other module
+row unchanged. So the split does the thing it promises and the signature edge
+does not go through the spans.
+
+It is also cheaper than it looks, because **the only field of a `ModuleSpec`
+anything now reads is `name_resolution`.** `path` and `module_id` came off the
+`Module`'s id once the env held handles, and `source`, `spans` and `parsed` were
+already unread before that. So the split is not a split: it is
+`script_module_names(db, module) -> CollectedNames`, and a body edit would
+backdate through it for free, because `parse_module_ast` compares equal across
+one -- a `StmtFun`'s body rides a tracked field -- so `resolve_script_names`
+does not re-run at all. The firewall is already there; the spec is what reaches
+around it.
+
+What to settle before doing it is whether anything is *meant* to read the other
+five. They predate `module_spans` being a query of its own, and a diagnostic
+against a module asks `module_spans(db, module)` directly now.

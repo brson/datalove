@@ -25,12 +25,16 @@
 //!   unit's memo turns on, which is why it is a smaller set than the execution
 //!   reach rather than the same one.
 //!
-//! **A module edit is the one row where analysis over-propagates**, and the
-//! matrix says so rather than glossing it: `ScriptEnv` is interned over every
-//! module's parse and spans, so editing any module gives every unit's typecheck
-//! a new key and every unit is checked again. The execution reach stays narrow,
-//! which is the half that decides correctness. Narrowing the env is
-//! `botdocs/plan-script-reactivity.md`'s "sound end state" and is not done here.
+//! **A module edit is measured the same way**, with the units that import from
+//! the edited module as the seeds. It used to be the one row where analysis
+//! over-propagated -- `ScriptEnv` was interned over every module's spec, so
+//! editing any module gave every unit's typecheck a new key -- and the matrix
+//! asserted that outright. The env holds `Module` handles now, which survive a
+//! `set_text`, so the keys stay put and the reach is the importing units and
+//! their name-edge dependents. See `botdocs/plan-script-reactivity.md` section
+//! F, and the module cases below for what is still not narrow: a module *body*
+//! edit moves the spans in a `ModuleSpec`, so an importing unit re-typechecks
+//! even though no signature moved.
 //!
 //! See also the longer session and the removal and ownership cases at the foot
 //! of this file, which are the other holes the plan's confidence section names.
@@ -220,9 +224,18 @@ struct Run {
 }
 
 fn build() -> Run {
+    build_over(&modules())
+}
+
+/// The same, over a module set the caller chose.
+///
+/// The fixture's units import from `m0`, `m1` and `m2`, so any set containing
+/// those will do; a spare module nobody imports from is what the add and remove
+/// cases need.
+fn build_over(mods: &[Module<'_>]) -> Run {
     let recorder = QueryRecorder::new();
     let mut session =
-        Session::with_modules_in(datafun::Database::recording(&recorder), &modules());
+        Session::with_modules_in(datafun::Database::recording(&recorder), mods);
     for unit in UNITS {
         session.append(unit);
     }
@@ -246,6 +259,22 @@ fn typecheck_keys(executed: &[ExecutedQuery]) -> Vec<salsa::Id> {
     executed.iter()
         .filter(|event| event.query == "typecheck_script_unit")
         .map(|event| event.key)
+        .collect()
+}
+
+/// The units a run of typechecks belongs to, named by their cold keys.
+///
+/// **The attribution is itself an assertion that no key moved.** A unit's
+/// typecheck is keyed on `(script, env)`, and both survive an edit, so a
+/// typecheck reported under a key the cold run never used means something
+/// re-keyed -- which is what a module edit used to do to every unit.
+fn attributed(cold_keys: &[salsa::Id], executed: &[salsa::Id]) -> BTreeSet<usize> {
+    executed.iter()
+        .map(|ran| {
+            cold_keys.iter().position(|key| key == ran).expect(
+                "a typecheck under a key no cold run used, so a key moved",
+            )
+        })
         .collect()
 }
 
@@ -358,39 +387,36 @@ fn check(scenario: &Scenario) {
 
     // --- The analysis reach -------------------------------------------------
 
-    if scenario.is_module() {
-        // **The known over-propagation.** `ScriptEnv` is interned over every
-        // module's parse and spans, so a module edit gives every unit's
-        // typecheck a new key -- not a stale answer, a different question --
-        // and every unit is checked again the first time anything asks.
-        assert_eq!(
-            analysis.len(), UNITS.len(),
-            "{name}: a module edit re-keys every unit's typecheck",
-        );
-        assert!(
-            analysis.iter().all(|key| !run.cold_keys.contains(key)),
-            "{name}: the keys moved rather than the answers, so none is a cold key",
-        );
+    // The units whose typecheck re-runs whatever their environment says. For a
+    // unit edit that is the edited unit, since `unit_ast` is keyed on the unit.
+    // For a module edit it is the units that import from the edited module:
+    // they depend on `script_module_spec` for the module they named, and its
+    // `spans` move whenever the module's text does, so it does not backdate.
+    // **A unit that imports nothing from the module is not among them**, which
+    // is the narrowing -- this used to be every unit, because `ScriptEnv` was
+    // interned over every module's spec and so re-keyed the lot.
+    let analysis_seeds: BTreeSet<usize> = if scenario.is_module() {
+        after.module_importers(&scenario.module().path())
     } else {
-        let reached_analysis: BTreeSet<usize> = analysis.iter()
-            .map(|ran| {
-                run.cold_keys.iter().position(|key| key == ran).unwrap_or_else(|| panic!(
-                    "{name}: a typecheck of something that is not one of the units",
-                ))
-            })
-            .collect();
-        assert_eq!(
-            reached_analysis,
-            analysis_reach(&before, &after, &seeds),
-            "{name}: the units typechecked again are the ones a name they asked \
-             about now answers differently for",
-        );
-        assert!(
-            reached_analysis.is_subset(&reached),
-            "{name}: analysis cannot reach further than lowering, which re-derives \
-             everything analysis had to look at",
-        );
-    }
+        seeds.C()
+    };
+
+    // `attributed` is also what says **the keys did not move**: a module edit
+    // that re-keyed a unit would report a key no cold run ever saw, and that
+    // panics rather than being silently attributed. The inversion of the
+    // assertion this file used to make.
+    let reached_analysis = attributed(&run.cold_keys, &analysis);
+    assert_eq!(
+        reached_analysis,
+        analysis_reach(&before, &after, &analysis_seeds),
+        "{name}: the units typechecked again are the ones whose own dependency \
+         moved, plus the ones a name they asked about now answers differently for",
+    );
+    assert!(
+        reached_analysis.is_subset(&reached),
+        "{name}: analysis cannot reach further than lowering, which re-derives \
+         everything analysis had to look at",
+    );
 }
 
 /// The matrix distinguishes the two reaches rather than measuring one twice.
@@ -425,6 +451,170 @@ fn a_value_only_edit_is_analyzed_narrowly_and_executed_widely() {
     assert_eq!(run.session.binding("a"), "7");
     assert_eq!(run.session.binding("b"), "8");
     assert_eq!(run.session.binding("d"), "10", "2 from `c` and 8 from `b`");
+}
+
+// ============================================================================
+// Module edits, narrowly
+// ============================================================================
+
+/// The spare module the add and remove cases work with.
+///
+/// No unit imports from it, so its presence changes nothing a unit could see --
+/// which is the point: it is the module *set* that moves the env, not anything
+/// about what is in the modules.
+fn spare_module() -> Module<'static> {
+    Module {
+        library: "local", package: "test", module: "m3",
+        source: "fun f3(x: int): int\n    ret x\nend fun\n",
+    }
+}
+
+/// **A module edit reaches the units that import from it and stops.**
+///
+/// The whole point of the narrowing. Unit 1 sits between two importing units --
+/// unit 0 imports from `m0`, unit 2 from `m1` -- and imports from neither, so a
+/// module edit has to leave it alone. It did not before: `ScriptEnv` was
+/// interned over every module's `ModuleSpec`, so any module edit gave every
+/// unit's typecheck a new key and all five re-ran.
+///
+/// A module *body* edit, which moves no signature. The importing unit is still
+/// re-typechecked, and that is the second-order limit
+/// `botdocs/plan-script-reactivity.md` section F names: a `ModuleSpec` carries
+/// the module's spans and a body edit moves those, so `script_module_spec` does
+/// not backdate. What stops is the propagation past the importer.
+#[test]
+fn a_module_body_edit_reaches_only_the_unit_that_imports_from_it() {
+    let mut run = build();
+    let before = run.session.graph();
+    assert_eq!(
+        before.module_importers("local/test/m1"),
+        BTreeSet::from([2]),
+        "unit 2 is the only unit importing from m1",
+    );
+
+    run.recorder.clear();
+    let redone = run.session.relower_module(&Module {
+        library: "local", package: "test", module: "m1",
+        source: "fun f1(x: int): int\n    ret x * 100\nend fun\n",
+    });
+    let analysis = attributed(&run.cold_keys, &typecheck_keys(&run.recorder.take()));
+    let after = run.session.graph();
+
+    assert_eq!(
+        analysis,
+        BTreeSet::from([2]),
+        "the importing unit, and no other: unit 1 sits between two importers and \
+         imports from neither, unit 3 reads `c` whose type did not move, and \
+         units 0 and 4 import from other modules",
+    );
+    assert_eq!(
+        analysis,
+        analysis_reach(&before, &after, &before.module_importers("local/test/m1")),
+        "which is what the graph says: the importers, and nobody whose \
+         `binding_at` answer moved, because none did",
+    );
+
+    assert_eq!(
+        redone.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
+        BTreeSet::from([2, 3]),
+        "and the execution reach is what it always was: unit 3 reads `c`, so it \
+         holds a stale value whether or not its typecheck had to re-run",
+    );
+}
+
+/// A module *signature* edit reaches the importing unit's readers as well.
+///
+/// The other half of the narrowing, and the reason the two kinds are measured
+/// apart: `f1` taking a string means unit 2's `f1(2)` no longer typechecks, so
+/// unit 2 provides nothing and unit 3's `c` resolves differently. That is a
+/// name edge rather than a module edge, and it carries exactly one unit further
+/// than the body edit does. Units 0, 1 and 4 are still untouched.
+#[test]
+fn a_module_signature_edit_reaches_the_importer_and_its_readers() {
+    let mut run = build();
+    let before = run.session.graph();
+
+    run.recorder.clear();
+    let redone = run.session.relower_module(&Module {
+        library: "local", package: "test", module: "m1",
+        source: "fun f1(x: string): int\n    ret 5\nend fun\n",
+    });
+    let analysis = attributed(&run.cold_keys, &typecheck_keys(&run.recorder.take()));
+    let after = run.session.graph();
+
+    assert!(after.failed[2], "unit 2 can no longer call `f1` the way it does");
+    assert_eq!(
+        analysis,
+        BTreeSet::from([2, 3]),
+        "the importing unit and the unit that reads what it bound; unit 1 reads \
+         `a` from unit 0 and is still untouched",
+    );
+    assert_eq!(
+        analysis,
+        analysis_reach(&before, &after, &before.module_importers("local/test/m1")),
+        "the importers plus the units a name they asked about now answers \
+         differently for",
+    );
+    assert_eq!(
+        redone.iter().map(|(unit, _)| *unit).collect::<BTreeSet<usize>>(),
+        BTreeSet::from([2, 3]),
+        "the execution reach is the same as for a body edit -- it is the imports \
+         that decide it -- which is what the narrowing had to catch up with",
+    );
+}
+
+/// **Adding a module changes the module set, so the env legitimately moves.**
+///
+/// The narrowing is about a module's *content*: a `Module` is interned over a
+/// `ModuleId` and a `Source`, and `set_text` changes a source's text and not
+/// its handle, so the env survives an edit. A module appearing is not that.
+/// `ScriptEnv` interns over the modules it may import from, so a different set
+/// is a different handle and every unit's typecheck is a different question --
+/// which is right, since an import resolves against the set.
+///
+/// Asserted so that the narrowing above cannot be mistaken for covering this.
+#[test]
+fn adding_a_module_re_keys_every_unit() {
+    let mut run = build();
+
+    run.recorder.clear();
+    run.session.add_module(&spare_module());
+    let _ = run.session.graph();
+    let analysis = typecheck_keys(&run.recorder.take());
+
+    assert_eq!(
+        analysis.len(), UNITS.len(),
+        "every unit was typechecked again, including the four importing nothing \
+         from the new module",
+    );
+    assert!(
+        analysis.iter().all(|key| !run.cold_keys.contains(key)),
+        "and under keys no cold run used, so it is the env that moved rather \
+         than any answer",
+    );
+}
+
+/// Removing a module moves the env the same way, for the same reason.
+///
+/// The session starts with a module nobody imports from, so taking it away
+/// changes nothing a unit could observe -- and every unit is still re-keyed,
+/// because the set it is checked against is not the set it was checked against.
+#[test]
+fn removing_a_module_re_keys_every_unit() {
+    let mut mods = modules();
+    mods.push(spare_module());
+    let mut run = build_over(&mods);
+
+    run.recorder.clear();
+    run.session.remove_module(&spare_module());
+    let _ = run.session.graph();
+    let analysis = typecheck_keys(&run.recorder.take());
+
+    assert_eq!(analysis.len(), UNITS.len(), "every unit was typechecked again");
+    assert!(
+        analysis.iter().all(|key| !run.cold_keys.contains(key)),
+        "and under keys no cold run used",
+    );
 }
 
 // ============================================================================

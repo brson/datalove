@@ -47,11 +47,10 @@ use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrTy
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::{
     type_check_script_units, typecheck_script_unit, unit_ast,
-    ModuleSpec, Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
+    Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
     UnitTypecheckResultTracked,
     AutoAdaptMode,
 };
-use datalove_datafun_resolve::resolve_script_names;
 use datalove_datafun_compiler::IrTypeExt;
 
 use super::compiled_modules::{CompiledModules, SharedModuleContext};
@@ -142,34 +141,17 @@ impl<'db> CompiledModules<'db> {
             return None;
         }
 
-        let mut module_specs = Vec::new();
-
-        for (salsa_module_id, parsed) in self.shared.parsed_graph.statements_only(db) {
-            let module_path = salsa_module_id.path(db).clone();
-            let module = self.shared.module_graph.iter_modules(db)
-                .find(|m| m.id(db) == *salsa_module_id)
-                .expect("module should exist in graph");
-            let module_source = module.source(db);
-            // A `ModuleSpec` owns its spans, so this is where they get built.
-            // Building a script compiler is a deliberate act; compiling the
-            // modules is not, which is why this no longer happens there.
-            let spans = datalove_datafun_parser::module_spans(db, module).clone();
-            let name_resolution = resolve_script_names(db, module_source, parsed.clone());
-
-            module_specs.push(ModuleSpec::new(
-                module_path.clone(),
-                module_source,
-                spans,
-                parsed.clone(),
-                *salsa_module_id,
-                name_resolution,
-            ));
-        }
+        // The module *handles*, in the graph's dependency order. Nothing about a
+        // module's content is read here: a unit asks `script_module_spec` for
+        // the modules its imports name, so building this compiler parses no
+        // module and resolves no module's names.
+        let modules: Vec<bct::module_graph::Module<'db>> =
+            self.shared.module_graph.iter_modules(db).collect();
 
         Some(ScriptCompiler {
             db,
             scripts: Vec::new(),
-            env: ScriptEnv::new(db, module_specs, AutoAdaptMode::Disabled),
+            env: ScriptEnv::new(db, modules, AutoAdaptMode::Disabled),
             last_script: None,
             unit_records: Vec::new(),
             last_source: None,
@@ -684,7 +666,7 @@ impl<'db> ScriptCompiler<'db> {
         self.auto_adapt_mode = mode;
         // The mode is part of what a unit is checked against, so the handle the
         // per-unit queries are keyed on has to carry it.
-        let modules: Vec<ModuleSpec<'db>> = self.env.modules(self.db).C();
+        let modules: Vec<bct::module_graph::Module<'db>> = self.env.modules(self.db).C();
         self.env = ScriptEnv::new(self.db, modules, mode);
     }
 
