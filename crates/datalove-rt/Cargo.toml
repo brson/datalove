@@ -10,11 +10,14 @@ crate-type = ["lib", "staticlib"]
 
 [features]
 slow_tests = []
-index-64 = ["datalove-rtdt/index-64"]
+index-64 = ["datalove-rtdt/index-64", "datalove-rti/index-64"]
 
 [dependencies]
 rmx.workspace = true
 datalove-rtdt = { path = "../datalove-rtdt" }
+# For the declarations this crate's exports are checked against. Nothing here
+# calls through them; see `abi_check`.
+datalove-rti = { path = "../datalove-rti" }
 
 # Proptest is only enabled here so that it stays out of the wasm build,
 # where its getrandom dependency does not compile.

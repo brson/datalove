@@ -5,18 +5,9 @@
 
 use crate::impls::alloc::AllocLocal;
 
-/// Debug output mode for debuglog statements.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[repr(C)]
-pub enum DebugOutputMode {
-    /// Print to stderr with newline.
-    Stderr = 0,
-    /// Store in internal buffer (for tests).
-    Buffer = 1,
-    /// Do nothing (default).
-    #[default]
-    Disabled = 2,
-}
+// Crosses the ABI as an argument to `dtlv_rti_set_debug_mode`, so it is
+// declared with the rest of the interface.
+pub use datalove_rti::DebugOutputMode;
 
 /// Local runtime state.
 ///

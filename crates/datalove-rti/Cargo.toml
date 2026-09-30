@@ -1,0 +1,13 @@
+[package]
+name = "datalove-rti"
+description = "The datalove runtime interface: declarations without implementations."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+[features]
+index-64 = ["datalove-rtdt/index-64"]
+
+[dependencies]
+datalove-rtdt.path = "../datalove-rtdt"

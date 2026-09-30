@@ -1809,8 +1809,8 @@ dependencies = [
 name = "datalove-rider-std"
 version = "0.1.0"
 dependencies = [
- "datalove-rt",
  "datalove-rtdt",
+ "datalove-rti",
 ]
 
 [[package]]
@@ -1818,6 +1818,7 @@ name = "datalove-rt"
 version = "0.1.0"
 dependencies = [
  "datalove-rtdt",
+ "datalove-rti",
  "rustmax 0.0.10",
 ]
 
@@ -1837,6 +1838,13 @@ dependencies = [
 [[package]]
 name = "datalove-rtdt"
 version = "0.1.0"
+
+[[package]]
+name = "datalove-rti"
+version = "0.1.0"
+dependencies = [
+ "datalove-rtdt",
+]
 
 [[package]]
 name = "datalove-stdlib"

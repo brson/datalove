@@ -148,6 +148,14 @@ doc:
 memo-table:
     python3 scripts/memo-table.py
 
+# Regenerate the runtime interface declarations from the runtime's definitions.
+#
+# Run after adding, removing or changing a `dtlv_rti_*` function in
+# `datalove-rt`'s `c.rs`. Leaving it unrun is a compile error rather than a
+# quiet mismatch; see `datalove-rt`'s `abi_check` module.
+gen-rti:
+    uv run --no-project scripts/gen-rti.py
+
 benchvs:
     cd benchvs && just run
 

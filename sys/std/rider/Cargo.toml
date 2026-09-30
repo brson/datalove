@@ -3,6 +3,12 @@ name = "datalove-rider-std"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+index-64 = ["datalove-rtdt/index-64", "datalove-rti/index-64"]
+
 [dependencies]
 datalove-rtdt = { path = "../../../crates/datalove-rtdt" }
-datalove-rt = { path = "../../../crates/datalove-rt" }
+# The interface only. A rider declares the runtime functions it calls and
+# resolves them against the runtime it is loaded into, rather than carrying a
+# second copy of one.
+datalove-rti = { path = "../../../crates/datalove-rti" }

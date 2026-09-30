@@ -25,38 +25,11 @@
 use datalove_rtdt as rtdt;
 use crate::impls::rt_local;
 
-/// A runtime handle. Needed for all calls.
-///
-/// This is the only native type used in the ABI directly;
-/// everything else is an rtdt argument type.
-pub type LocalRtHandle = *mut u8;
-
-/// A simple status code.
-#[repr(u8)]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum RtStatus {
-    Ok = 1,
-    Error = 2,
-}
-
-#[repr(u8)]
-#[derive(Debug, PartialEq, Eq)]
-pub enum RtEq {
-    Equals = 1,
-    NotEquals = 2,
-    /// Type mismatch.
-    Error = 3,
-}
-
-#[repr(u8)]
-#[derive(Debug, PartialEq, Eq)]
-pub enum RtOrdering {
-    Less = 1,
-    Equal = 2,
-    Greater = 3,
-    /// Type mismatch.
-    Error = 4,
-}
+// The ABI's own types come from `datalove-rti`, which declares this interface
+// for callers that link a runtime rather than containing one. They are defined
+// there rather than here so that a rider and a runtime cannot hold different
+// ideas of what an `RtStatus` is.
+pub use datalove_rti::{LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// Whether two descriptors describe the same type.
 ///
