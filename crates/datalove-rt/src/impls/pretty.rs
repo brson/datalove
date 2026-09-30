@@ -313,7 +313,7 @@ unsafe fn pretty_int(
 ) -> Result<(), ()> {
     unsafe {
         let int_ptr = value_ref as *const rtdt::Int;
-        let s = super::int_math::int_to_string_impl(int_ptr);
+        let s = (*int_ptr).to_decimal_string();
         push_str(rt, string_mut, string_tydesc, s.as_bytes())
     }
 }

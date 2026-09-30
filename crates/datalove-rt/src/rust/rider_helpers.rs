@@ -2,6 +2,14 @@
 //!
 //! Provides wrappers for writing Option and other complex return values
 //! from rider C ABI functions.
+//!
+//! These reach the runtime only through the `dtlv_rti_*` functions in
+//! [`crate::c`], never through anything private to this crate. A rider calls
+//! them, and a rider is code outside the runtime that has nothing but the ABI
+//! and the `rtdt` data types; a helper that read `RtLocal` directly would be
+//! holding a privilege it cannot pass on. Keeping to the ABI is what lets
+//! these move out of this crate, and lets a rider be built against a runtime
+//! it does not contain.
 
 use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
@@ -67,7 +75,7 @@ pub unsafe fn write_option_some_string(
                 align: std::mem::align_of::<rtdt::String>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
             };
-            let status = crate::impls::string::string_from_bytes(
+            let status = crate::c::dtlv_rti_string_from_bytes(
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
@@ -149,7 +157,7 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
         };
         unsafe {
-            crate::impls::string::string_from_bytes(
+            crate::c::dtlv_rti_string_from_bytes(
                 rt,
                 s.as_ptr(),
                 s.len() as rtdt::IndexRepr,
@@ -287,7 +295,7 @@ pub unsafe fn read_string_list<'a>(list_ptr: *const u8) -> Vec<&'a str> {
 ///
 /// `int_ptr` must point to a valid `rtdt::Int`.
 pub unsafe fn int_to_string(int_ptr: *const u8) -> String {
-    unsafe { crate::impls::int_math::int_to_string_impl(int_ptr as *const rtdt::Int) }
+    unsafe { (*(int_ptr as *const rtdt::Int)).to_decimal_string() }
 }
 
 /// Parse a decimal string into an `Int` (bigint), writing the result as `?int`.
@@ -335,16 +343,23 @@ pub unsafe fn write_option_int_from_str(
     let int_align = std::mem::align_of::<rtdt::Int>();
     let payload_offset = align_up(1, int_align);
 
+    let tydesc = rtdt::TyDesc {
+        type_tag: rtdt::TyTag::Int,
+        size: std::mem::size_of::<rtdt::Int>() as u32,
+        align: std::mem::align_of::<rtdt::Int>() as u32,
+        type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing },
+    };
+
     unsafe {
         *out = rtdt::OptionTag::Some as u8;
         let int_out = out.add(payload_offset);
-        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
-        crate::impls::int_math::int_from_limbs_impl(
-            rt_ref,
+        crate::c::dtlv_rti_int_from_limbs(
+            rt,
             limbs.as_ptr(),
             limb_count as u32,
             negative && limb_count > 0,
             int_out,
+            &tydesc,
         )
     }
 }

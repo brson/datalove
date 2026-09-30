@@ -369,6 +369,71 @@ pub struct Int {
     pub capacity: Index,
 }
 
+impl Int {
+    /// The value written in base ten.
+    ///
+    /// Reading the limbs is all this needs, so it lives here beside them
+    /// rather than in the runtime: a rider formatting an `int` is doing
+    /// arithmetic on data it already holds, not asking the runtime for
+    /// anything.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `abs(size_and_sign)` readable limbs.
+    pub unsafe fn to_decimal_string(&self) -> std::string::String {
+        let abs_size = self.size_and_sign.abs() as usize;
+        let is_negative = self.size_and_sign < 0;
+
+        if abs_size == 0 {
+            return "0".to_string();
+        }
+
+        let limbs = unsafe { std::slice::from_raw_parts(self.data, abs_size) };
+        let mut working = limbs.to_vec();
+
+        // Divide by 10^9 until nothing is left, which yields the decimal
+        // digits nine at a time, least significant chunk first.
+        const DIVISOR: u64 = 1_000_000_000;
+        let mut chunks = Vec::new();
+
+        loop {
+            let mut remainder: u64 = 0;
+            let mut all_zero = true;
+
+            for i in (0..working.len()).rev() {
+                let current = (remainder << 32) | (working[i] as u64);
+                working[i] = (current / DIVISOR) as u32;
+                remainder = current % DIVISOR;
+
+                if working[i] != 0 {
+                    all_zero = false;
+                }
+            }
+
+            chunks.push(remainder as u32);
+
+            if all_zero {
+                break;
+            }
+        }
+
+        let mut result = std::string::String::new();
+
+        if is_negative {
+            result.push('-');
+        }
+
+        // The most significant chunk is written as it is; the rest carry
+        // their leading zeros, being digits in the middle of a number.
+        result.push_str(&chunks.last().unwrap().to_string());
+        for i in (0..chunks.len() - 1).rev() {
+            result.push_str(&format!("{:09}", chunks[i]));
+        }
+
+        result
+    }
+}
+
 
 
 
