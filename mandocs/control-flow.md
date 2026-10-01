@@ -9,9 +9,9 @@ They require a `break` or `ret` to exit.
 var x = 0
 
 loop
-  if x = 0
+  if x == 0
     set x = 1
-  else if x = 10
+  else if x == 10
     set x = 11
     break
   end if

@@ -23,6 +23,39 @@ For detail see additional documentation.
 
 
 
+## Data types
+
+Datalove functions operate on the [datalit](datalit.md) types,
+which are structuaral and linear.
+They are in brief:
+
+Primitives: `bool`, `int`, `f64`, `f32`, `string`,
+`u8` .. `u64`, `i8` .. `i64`, `index`, `offset`.
+
+Collections:
+
+- list, `[T]`
+- map, `%{ K = V }`
+- set, `#{ K }`
+- tables `{\| col1: T1, col2: T2 \|}`
+- tensor, `[\|T, N\|]`
+
+Aggregates:
+
+- unit, `()`
+- 1-tuple, `(T1,)`
+- n-tuple, `(T1, T2)`
+- struct, `{ x: T1, y: T2}`
+- option, `?T`
+- result, `!T`
+- atom, `atom Foo`
+- term, `term Foo T`
+- enum, `enum { atom A, term B T }`
+
+As well as the dynamic types, `data` and `error`.
+
+
+
 ## Functions
 
 Functions have a line-oriented and statement-oriented syntax:
@@ -97,9 +130,8 @@ Mutable bindings are reassigned with `set`.
 
 ## Control flow
 
-Loops are performed with the `loop` keyword, `break` and `continue`.
-There are no conditional loops. Basic conditional control
-flow is performed with `if`.
+Loops are written with the `loop` keyword, `break` and `continue`.
+Basic conditional control flow is performed with `if`.
 
 ```datalove
 require module sys/std/int
@@ -124,12 +156,39 @@ end loop
 debuglog (evens, odds)
 ```
 
+Conditional loops are written with `loop while`:
+
+```datalove
+require module sys/std/int
+
+import int.rem_checked
+
+var counter = 10
+var evens = 0
+var odds = 0
+
+loop while counter != 0
+  if rem_checked(counter, 2) == some 0
+    set evens = evens + 1
+  else
+    set odds = odds + 1
+  end if
+  set counter = counter - 1
+end loop
+
+debuglog (evens, odds)
+```
+
 
 ## Data types and destructuring
 
 ## Option and result
 
-## Data types and their operations
+## Enums and match statements
+
+## Comparison and equality
+
+## Other operators
 
 ## The `adapt` operator
 
