@@ -130,32 +130,30 @@ fn build_uncached(
     riders: &[RiderCrate],
     kind: Kind,
 ) -> Result<PathBuf, RiderBuildError> {
-    // Where each rider's source is. The manifest already said what the crate
-    // is called, so nothing here reads a Cargo.toml to find out.
-    let mut rider_crates = Vec::new();
+    // How each rider is named. A rider whose source sits beside its package
+    // is named by path; one that does not --- a packaged datalove package,
+    // whose `rider/` holds the interface and no Rust --- is named by the
+    // version its manifest asks for. That is a question about the package,
+    // not about this build, so a checkout can use a published rider and a
+    // release can use neither.
+    let mut rider_deps = Vec::new();
     for rider in riders {
-        let Some(dir) = &rider.dir else {
-            todo!(
-                "rider '{}' has no local source, so it would have to come from \
-                 a registry, which this datalove cannot yet name",
-                rider.rider_name,
-            );
+        let dep = match &rider.dir {
+            Some(dir) => Dep::Path(dir.canonicalize()
+                .map_err(|e| RiderBuildError {
+                    rider_name: rider.rider_name.clone(),
+                    message: format!("failed to canonicalize rider path: {}", e),
+                    stderr: String::new(),
+                })?),
+            None => Dep::Registry(rider.version.clone()),
         };
-        let abs_dir = dir.canonicalize()
-            .map_err(|e| RiderBuildError {
-                rider_name: rider.rider_name.clone(),
-                message: format!("failed to canonicalize rider path: {}", e),
-                stderr: String::new(),
-            })?;
-        rider_crates.push((rider.crate_name.clone(), abs_dir));
+        rider_deps.push((rider.crate_name.clone(), dep));
     }
 
     let synth_dir = work_dir.join(kind.dir_name());
     let src_dir = synth_dir.join("src");
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
-
-    let workspace_root = checkout_root()?;
 
     // `index-64` widens the index type in `rtdt`, which changes the layout of
     // every value crossing the boundary. Naming these directly rather than
@@ -179,27 +177,19 @@ fn build_uncached(
 
     // Depended on for their features, whoever else pulls them in.
     for crate_name in ["datalove-rtdt", "datalove-rti"] {
-        let dir = crate_dep_dir(workspace_root, crate_name)?;
-        cargo_toml.push_str(&format!(
-            "{} = {{ path = \"{}\"{} }}\n", crate_name, dir.display(), features,
-        ));
+        let dep = runtime_dep(&datalove_buildinfo::BUILD_INFO, crate_name)?;
+        cargo_toml.push_str(&format!("{} = {}\n", crate_name, dep.spec(features)));
     }
 
     // The runtime goes in an archive a program links, and stays out of a
     // library the interpreter loads, which gets it from the host instead.
     if kind == Kind::Staticlib {
-        let dir = crate_dep_dir(workspace_root, "datalove-rt")?;
-        cargo_toml.push_str(&format!(
-            "datalove-rt = {{ path = \"{}\"{} }}\n", dir.display(), features,
-        ));
+        let dep = runtime_dep(&datalove_buildinfo::BUILD_INFO, "datalove-rt")?;
+        cargo_toml.push_str(&format!("datalove-rt = {}\n", dep.spec(features)));
     }
 
-    for (crate_name, abs_dir) in &rider_crates {
-        cargo_toml.push_str(&format!(
-            "{} = {{ path = \"{}\" }}\n",
-            crate_name,
-            abs_dir.display(),
-        ));
+    for (crate_name, dep) in &rider_deps {
+        cargo_toml.push_str(&format!("{} = {}\n", crate_name, dep.spec("")));
     }
     write_if_changed(&synth_dir.join("Cargo.toml"), &cargo_toml)
         .map_err(|e| build_err("native-component", format!("failed to write Cargo.toml: {}", e)))?;
@@ -213,9 +203,11 @@ fn build_uncached(
     // does not do is go looking for newer.
     let synth_lock = synth_dir.join("Cargo.lock");
     if !synth_lock.exists() {
-        let workspace_lock = workspace_root.join("Cargo.lock");
-        if workspace_lock.is_file() {
-            let _ = std::fs::copy(&workspace_lock, &synth_lock);
+        if let Some(checkout) = datalove_buildinfo::BUILD_INFO.checkout() {
+            let workspace_lock = checkout.join("Cargo.lock");
+            if workspace_lock.is_file() {
+                let _ = std::fs::copy(&workspace_lock, &synth_lock);
+            }
         }
     }
 
@@ -237,7 +229,7 @@ fn build_uncached(
              pub static DLR_ABI_VERSION: u64 = datalove_rti::ABI_VERSION;\n\n",
         );
     }
-    for (crate_name, _abs_dir) in &rider_crates {
+    for (crate_name, _dep) in &rider_deps {
         let ident = crate_name.replace('-', "_");
         lib_rs.push_str(&format!("extern crate {};\n", ident));
     }
@@ -268,41 +260,68 @@ fn build_uncached(
     }
 }
 
-/// Where a workspace crate this depends on lives.
-fn crate_dep_dir(workspace_root: &Path, name: &str) -> Result<PathBuf, RiderBuildError> {
-    workspace_root.join("crates").join(name).canonicalize()
-        .map_err(|e| build_err(
-            "native-component",
-            format!("failed to canonicalize {} path: {}", name, e),
-        ))
+/// How a crate the component depends on is named in its manifest.
+enum Dep {
+    /// Source beside us, named by where it is.
+    Path(PathBuf),
+    /// Published, named by exactly which release.
+    Registry(String),
 }
 
-/// The checkout the runtime crates are named out of.
-///
-/// A build from a registry has none, and naming published versions instead is
-/// not written yet. A build from a checkout has one that may since have been
-/// moved or deleted, which is worth saying outright: cargo would otherwise
-/// report a path dependency it cannot find, naming a directory and none of the
-/// reasons it is being looked for.
-fn checkout_root() -> Result<&'static Path, RiderBuildError> {
-    let Some(checkout) = datalove_buildinfo::BUILD_INFO.checkout() else {
-        todo!(
-            "this datalove was built from a release, so the runtime and the \
-             riders would have to be named by published version, which it \
-             cannot yet do",
-        );
-    };
-
-    if !checkout.is_dir() {
-        return Err(build_err("native-component", format!(
-            "this datalove was built from {}, which is no longer there, and \
-             the runtime has to be compiled from it to build a program. Build \
-             from that checkout again, or put it back.",
-            checkout.display(),
-        )));
+impl Dep {
+    /// The dependency as cargo wants it written.
+    ///
+    /// A registry version is pinned with `=` rather than left as a
+    /// requirement. A rider and the runtime it is loaded into have to agree on
+    /// the layout of everything crossing between them, and a range says only
+    /// that something semver-compatible will do, which is not the same claim.
+    /// `datalove-rti`'s `ABI_VERSION` is what catches a disagreement; this is
+    /// what avoids one.
+    fn spec(&self, features: &str) -> String {
+        match self {
+            Dep::Path(dir) => format!("{{ path = \"{}\"{} }}", dir.display(), features),
+            Dep::Registry(version) => format!("{{ version = \"={}\"{} }}", version, features),
+        }
     }
+}
 
-    Ok(checkout)
+/// How the runtime crates are named.
+///
+/// Unlike a rider, these have no package to say where they came from, so it
+/// is this datalove's own provenance that decides: built from a checkout, they
+/// are in it; built from a release, they are published alongside at the same
+/// version, the whole workspace sharing one.
+///
+/// Takes the provenance rather than reading it, so that the release answer can
+/// be tested from a checkout. It is the answer that cannot otherwise be tried
+/// until there is something published to try it against.
+fn runtime_dep(
+    info: &datalove_buildinfo::BuildInfo,
+    name: &str,
+) -> Result<Dep, RiderBuildError> {
+    match info {
+        datalove_buildinfo::BuildInfo::Prod { version } => {
+            Ok(Dep::Registry(version.to_string()))
+        }
+        datalove_buildinfo::BuildInfo::Local { checkout, .. } => {
+            let checkout = Path::new(checkout);
+            if !checkout.is_dir() {
+                return Err(build_err("native-component", format!(
+                    "this datalove was built from {}, which is no longer there, \
+                     and the runtime has to be compiled from it to build a \
+                     program. Build from that checkout again, or put it back.",
+                    checkout.display(),
+                )));
+            }
+
+            checkout.join("crates").join(name).canonicalize()
+                .map(Dep::Path)
+                .map_err(|e| build_err("native-component", format!(
+                    "{} is missing from the checkout at {}: {}",
+                    name, checkout.display(), e,
+                )))
+        }
+    }
 }
 
 /// The work dir for callers that have no workspace to take one from.
@@ -405,4 +424,51 @@ fn find_staticlib(target_dir: &Path, lib_name: &str) -> Result<PathBuf, RiderBui
         "static library not found in {}; expected lib{}.a",
         target_dir.display(), lib_name,
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use datalove_buildinfo::BuildInfo;
+
+    /// A release names published versions, which is the arrangement that
+    /// cannot be tried for real until something is published.
+    #[test]
+    fn a_release_names_versions() {
+        let info = BuildInfo::Prod { version: "0.1.0" };
+        let dep = runtime_dep(&info, "datalove-rt").expect("a release can name it");
+        assert_eq!(dep.spec(""), "{ version = \"=0.1.0\" }");
+    }
+
+    /// Pinned exactly, not left as a requirement. A range would let cargo
+    /// resolve a rider against a different layout of everything that crosses
+    /// between it and the runtime.
+    #[test]
+    fn a_version_is_pinned() {
+        assert!(Dep::Registry("0.1.0".into()).spec("").contains("=0.1.0"));
+    }
+
+    /// `index-64` has to reach the dependency whichever way it is named,
+    /// being the one feature that moves layout.
+    #[test]
+    fn features_survive_either_naming() {
+        let features = ", features = [\"index-64\"]";
+        assert!(Dep::Registry("0.1.0".into()).spec(features).contains("index-64"));
+        assert!(Dep::Path("/somewhere".into()).spec(features).contains("index-64"));
+    }
+
+    /// A checkout that has gone says so, rather than leaving cargo to report
+    /// a path dependency it cannot find and none of the reasons for it.
+    #[test]
+    fn a_missing_checkout_is_reported() {
+        let info = BuildInfo::Local {
+            git_sha: Some("deadbeef"),
+            checkout: "/nowhere/this/tree/went",
+        };
+        let error = runtime_dep(&info, "datalove-rt")
+            .err().expect("a missing checkout cannot be named");
+        let message = error.to_string();
+        assert!(message.contains("/nowhere/this/tree/went"), "{message}");
+        assert!(message.contains("no longer there"), "{message}");
+    }
 }

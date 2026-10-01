@@ -30,9 +30,9 @@ What blocks publishing:
   a description.
 - ~~`sys/std/rider/build.rs` reads `../rider.dli`, above its own package
   root.~~ Cleared by phase 3.
-- The component `rider_build` synthesizes names `datalove-rt`, `rtdt` and
-  `rti` by absolute path, baked from `env!("CARGO_MANIFEST_DIR")`. An
-  installed binary needs its checkout where it was.
+- ~~The component names `datalove-rt`, `rtdt` and `rti` by absolute path,
+  baked from `env!("CARGO_MANIFEST_DIR")`.~~ Cleared by phases 4 and 6: it
+  reads `BuildInfo` and names published versions from a release.
 - ~~`datalove-stdlib` embeds `sys/` with `include_str!` from outside its own
   package root.~~ Cleared by phase 5; the library is its own crate root now.
 
@@ -190,22 +190,35 @@ whether a published library carried it depended on the machine that published
 it. Now `.gitignore` says `*~` and the manifest excludes it; `--allow-dirty`
 walks the filesystem rather than git, so the manifest is the one that holds.
 
-## Phase 6 --- the component names riders by version or by path
+## Phase 6 --- the component names riders by version or by path --- DONE
 
-1. `rider_build` emits registry dependencies with exact versions
-   (`=0.1.0`, from the manifest) under `Prod`, and path dependencies under
-   `Local`.
-2. `datalove-rt`, `rtdt` and `rti` the same way: exact version under `Prod`,
-   `BuildInfo::abs_path` under `Local`.
-3. Keep naming `rtdt` and `rti` in the generated manifest directly, as now.
-   The doc has riders propagating `index-64` by convention, which is right,
-   but naming the two crates here means the feature is set by the process that
-   has to match rather than by whether every rider author remembered.
-4. First run under `Prod` fetches from the network, which is accepted for now
-   and worth revisiting once there is something installed to try it with. What
-   it should not do is fail obscurely: no network needs to read as no network,
-   not as a cargo error about a registry. Pre-warming at install time and
-   vendoring are the options if it turns out to matter.
+The generated manifest writes a `Dep`, which is either a path or an exactly
+pinned version. Pinned with `=` rather than left as a requirement: a range
+says only that something semver-compatible will do, which is not the claim
+that matters when a rider and the runtime it loads into have to agree on the
+layout of everything crossing between them. `ABI_VERSION` catches a
+disagreement; this is what avoids one.
+
+**Riders and runtime crates are decided differently**, which the plan ran
+together. A rider's package says where its source is, so a rider with a
+`rider/` directory holding Rust is named by path and one without --- a
+packaged datalove package, carrying the interface alone --- is named by the
+version its manifest asks for. That is a fact about the package, not about
+this build, so a checkout can use a published rider and nothing special
+happens. The runtime crates have no package to ask, so `BuildInfo` decides
+for them: in the checkout, or published alongside at the version the whole
+workspace shares.
+
+`runtime_dep` takes the provenance rather than reading the global, so the
+release answer is unit-tested from a checkout. That is the one answer which
+otherwise waits for something to be published before anyone finds out whether
+it was written correctly, and phase 8's local registry is the rest of that
+same worry.
+
+The `Cargo.lock` seeding is conditional on there being a checkout to seed
+from. A release build resolves fresh, which the exact pins make safe for our
+own crates; third-party versions float, and whether that wants pinning too is
+worth revisiting when there is a release to watch.
 
 ## Phase 7 --- exercise the unprivileged path
 
