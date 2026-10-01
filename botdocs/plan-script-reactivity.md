@@ -484,7 +484,10 @@ two measurements are not one measurement taken twice. The same file holds a
 twelve-unit session with a diamond, a unit drawing on two, a chain of four and
 two independent roots; the removal case; and the ownership cases.
 
-**Removing a unit turned out to be inexpressible rather than wrong.** Nothing in
+**Removing a unit turned out to be inexpressible rather than wrong** -- at the
+time. Section G built it, so what follows is the position the scenario suite was
+written from, and blanking is now one of two ways to delete a line rather than
+the only one. Nothing in
 `ScriptSession`, `ScriptCompiler`, `FrameStore` or `UnitFunctionRegistry` offers
 a removal, and that is the numbering protecting itself: every script value is a
 `(unit_index, ValueId)` pair, so taking a unit out would leave every later
@@ -762,7 +765,110 @@ What to settle before doing it was whether anything is *meant* to read the other
 five. They predate `module_spans` being a query of its own, and a diagnostic
 against a module asks `module_spans(db, module)` directly now.
 
-## G. Insert, remove and truncate
+## G. Insert, remove and truncate -- done
+
+**Done.** `truncate_units`, `remove_unit` and `insert_unit` exist on
+`ScriptCompiler` and on `Engine`, and all three go through one `splice`: put a
+new unit list in place, rebuild the `Script` chain over it, re-derive from the
+splice point to the end, and -- at the engine -- destroy the frames from the
+splice point on and run the re-derived suffix as appends. Truncating is the one
+that renumbers nothing and so re-derives nothing.
+
+What it came to, over four units A B C D where D reads A's binding and nothing
+reads B's:
+
+| verb | re-derived | the name reach from the same point |
+|---|---|---|
+| `truncate_units(1)` | `{}` | n/a -- nothing after what goes |
+| `remove_unit(1)` | `{1,2}` -- C and D at their new indices | `{1}` |
+| `insert_unit(1, ..)` | `{1,2,3,4}` | `{1}` |
+| `remove_unit(3)`, the last unit | `{}` | `{3}` |
+
+**The suffix being wider than the reach is the answer, not over-propagation**,
+and `the_whole_suffix_is_rederived_not_just_the_reach` asserts it by deriving
+the reach from the graph and showing the suffix exceeds it. A unit's index is
+part of every value's identity, so D's values are not the values they were
+whatever D reads.
+
+Five things were decided or found while doing it.
+
+1. **The put-back is the compiler's, not the engine's.** `splice` compiles the
+   new suffix, and if any unit of it failed puts the old list back and
+   re-derives, returning `Err`. So the engine never sees a half-spliced session
+   and touches the frame store only once the whole suffix has compiled, which is
+   what makes "the session is exactly as it was" true rather than nearly true.
+   Rejecting is the same policy `edit_module` follows, and for a related reason:
+   a unit that fails to compile has no IR and so no frame, and the numbering the
+   frame store shares with every `(unit_index, ValueId)` reference cannot have a
+   hole in it.
+2. **A splice cannot re-execute in place.** `rerun` goes through
+   `replace_frame`, which puts a frame at the index its unit already had -- right
+   for an edit and wrong for a splice, where the suffix has a different length
+   and every unit of it a new index. So `ScriptExecutor::truncate_units`
+   destroys the frames from the splice point on and the suffix is run as if it
+   were being appended, choosing `execute_fragment` or `execute_expr` by the
+   unit's `is_expr` flag. That flag is why `ScriptSession::unit_is_expr` exists:
+   nothing in a unit's text says which it is.
+3. **`set_units` clears the suffix's records rather than shifting them.** A
+   record belongs to an index, and after a splice the unit at that index is a
+   different unit. Shifting would be a valid optimization for a removal and is
+   not one for an insertion, and it buys nothing either way: the re-derivation
+   runs in index order and writes every record before the unit after it is
+   lowered against them.
+4. **A session can already hold a unit that does not compile**, because
+   `relower_reach` leaves one in place after an edit that broke it. So a splice
+   elsewhere in such a session is rejected by that unit rather than by anything
+   it did, and the restore path's own re-derivation reports the same errors,
+   which are discarded. That is consistent -- the policy is "the suffix must
+   compile" -- but it means a broken unit blocks every splice before it until it
+   is fixed or removed. Nothing asserts this today.
+5. **The wrong turn.** The first measurement of fault 2 was taken expecting a
+   stale *value*, on the reasoning that a unit left un-re-derived would keep IR
+   naming the wrong unit index. It does not get that far: the engine and the
+   harness both destroy the suffix's frames and then execute only what came
+   back, so a narrowed reach leaves units with no frame at all and the failure
+   is a missing binding rather than a wrong number. The useful finding came out
+   of the same run anyway -- narrowing to the reach *also* accepts a removal it
+   should reject, because the unit that would have failed is never compiled.
+
+**Falsification, four faults.**
+
+| fault | what failed |
+|---|---|
+| `FrameStore::truncate_units` shortens the three vectors without destroying | 7 of 13 splice tests and 4 engine tests, all with leak reports; the 6 that stayed green are the rejection cases and the no-op truncation, which correctly destroy nothing |
+| the splice re-derives `reach_from(splice_point)` | `{1}` for `{1,2}` and `{1,2}` for `{1,2,3,4}`, plus `removing_a_unit_a_later_unit_depends_on_is_rejected` getting `Ok` where it must get `Err`; 4 splice tests and 4 engine tests |
+| the splice does not rebuild the `Script` chain | 8 of 13: the removed unit's binding still in the environment, the same removal wrongly accepted, `no binding named d`, and an index panic on each insert case |
+| `UnitFunctionRegistry::truncate_units` is a no-op | **nothing, at first** -- see below |
+
+**The fourth fault found a hole in the tests rather than in the code**, which is
+the second time a fault has done that here. A unit's frame and its *functions*
+sit at the same index in two different places -- `FrameStore::frames` and
+`UnitFunctionRegistry::unit_functions` -- so truncating has to shorten both, and
+the second one had no test: making it a no-op left all 13 splice tests, all 12
+engine tests and the four other script suites green.
+
+It is load-bearing all the same, because **appending pushes a unit's functions
+on the end rather than writing them at an index**. Leave the registry long while
+the frame store is short and the next appended unit's functions go on at the
+dropped unit's index, so a later unit's cross-unit call --
+`get_external_function_as_unit(unit, id)`, which indexes by unit number --
+lands on the function that was dropped. `a_truncated_unit_s_functions_go_with_it`
+is the case: truncate away a unit defining `g`, append one defining `h`, call
+`h` from a unit after it, and under the fault it returns `g`'s 2 instead of 99.
+
+The reason no existing test reached it is worth keeping: a `CodeRef::Local`
+resolves through the running frame's own code-unit list, so **every call that
+stays inside one unit is blind to this**, and the splice tests defined their
+functions and called them within a single unit. A cross-unit call after a
+truncation is the only shape that asks the registry.
+
+
+Undo and redo were left out, deliberately. What they need is a history, which
+is engine-level; the machinery now has every verb one would be built on --
+undoing an append is `truncate_units`, and undoing an insert or a remove is the
+other splice verb.
+
+What follows is the plan as written before the work.
 
 The verbs today are append -- a fragment or a bare expression -- and edit, of a
 unit or of a module. A session can grow and anything in it can change, but it

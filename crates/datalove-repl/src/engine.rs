@@ -6,7 +6,7 @@ use serde::Serialize;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, TypecheckResult, OwnershipResult, LoweringResult, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::register_linked_natives;
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
@@ -258,7 +258,7 @@ impl Engine {
     fn eval_script_statement(&mut self, source: String) -> Eval {
         let compiled = self.with_compiler(|compiler| compiler.compile_fragment(&source));
 
-        if let Some(error) = compile_error(&compiled) {
+        if let Some(error) = compiled.first_error() {
             return Eval::Error(error);
         }
 
@@ -316,6 +316,63 @@ impl Engine {
 
         let redone = self.with_compiler(|compiler| compiler.relower_reach(unit));
         self.rerun(redone)
+    }
+
+    /// Drop the units from `n` on.
+    ///
+    /// The cheap one of the three splice verbs: nothing sits after what goes,
+    /// so no surviving unit's values change identity and nothing is re-derived
+    /// or re-executed. Their bindings leave the environment and the values they
+    /// held are destroyed, and the next line appended takes the index the first
+    /// dropped unit had.
+    pub fn truncate_units(&mut self, n: usize) {
+        let count = self.script.as_ref().expect("a session").unit_sources().len();
+        assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
+        self.with_compiler(|compiler| compiler.truncate_units(n));
+        self.executor.truncate_units(n);
+    }
+
+    /// Splice the unit at `unit` out, and re-derive everything after it.
+    ///
+    /// **The whole suffix is re-derived and re-executed**, not just what the
+    /// removal reaches by name: a script value is identified by
+    /// `(unit_index, ValueId)`, so taking a unit out renumbers every unit after
+    /// it and their IR has to be built again against the indices they now have.
+    /// That cost is inherent to the identity being positional.
+    ///
+    /// **A removal whose suffix does not compile is rejected and put back**, with
+    /// the errors returned, which is the policy [`Self::edit_module`] already
+    /// follows and for a related reason: a unit that fails to compile has no IR
+    /// and so no frame, which would leave a hole in the numbering the frame
+    /// store and every `(unit_index, ValueId)` reference share. So **a unit a
+    /// later unit depends on cannot be removed without removing its dependents
+    /// first.** A rejected removal leaves the session exactly as it was -- the
+    /// frame store is not touched until the whole suffix has compiled.
+    pub fn remove_unit(&mut self, unit: usize) -> Result<Vec<UnitEdit>, String> {
+        match self.with_compiler(|compiler| compiler.remove_unit(unit)) {
+            Ok(redone) => Ok(self.rerun_spliced(unit, redone)),
+            Err(errors) => Err(errors.join("; ")),
+        }
+    }
+
+    /// Splice a new unit in at `unit`, and re-derive everything after it.
+    ///
+    /// `is_expr` says whether the text is a bare expression or a fragment of
+    /// statements; nothing in the text decides it, which is why the appending
+    /// path has two entry points rather than one.
+    ///
+    /// The suffix is re-derived whole and an insertion whose suffix does not
+    /// compile is rejected, both for the reasons [`Self::remove_unit`] gives.
+    pub fn insert_unit(
+        &mut self,
+        unit: usize,
+        source: &str,
+        is_expr: bool,
+    ) -> Result<Vec<UnitEdit>, String> {
+        match self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr)) {
+            Ok(redone) => Ok(self.rerun_spliced(unit, redone)),
+            Err(errors) => Err(errors.join("; ")),
+        }
     }
 
     /// Change one module's source and re-derive the script units that import
@@ -412,7 +469,7 @@ impl Engine {
     ) -> Vec<UnitEdit> {
         let mut reports = Vec::new();
         for (index, compiled) in redone {
-            let eval = match (compile_error(&compiled), &compiled.ir_unit) {
+            let eval = match (compiled.first_error(), &compiled.ir_unit) {
                 (Some(error), _) => Eval::Error(error),
                 (None, None) => unreachable!("a unit that compiled without errors has ir"),
                 (None, Some(ir_unit)) => {
@@ -424,6 +481,49 @@ impl Engine {
                         (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
                         (false, None) => self.report_exports(ir_unit),
                     }
+                }
+            };
+            reports.push(UnitEdit { unit: index, eval });
+        }
+        reports
+    }
+
+    /// Run a re-derived suffix, which cannot be run in place.
+    ///
+    /// **This is the one thing a splice needs that an edit does not.**
+    /// [`Self::rerun`] re-executes through `replace_frame`, which puts a frame
+    /// at the index the unit already had -- sound for an edit, where no index
+    /// moved. A splice moves them: the suffix is a different length and every
+    /// unit of it has a new index, so the frames from the splice point on belong
+    /// to nobody. They are destroyed, and the re-derived units are executed as
+    /// appends, each taking the next free index.
+    ///
+    /// Every unit here compiled, because a splice whose suffix did not was
+    /// rejected before the frame store was touched.
+    fn rerun_spliced(
+        &mut self,
+        at: usize,
+        redone: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
+    ) -> Vec<UnitEdit> {
+        self.executor.truncate_units(at);
+        let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
+
+        let mut reports = Vec::new();
+        for (index, compiled) in redone {
+            let ir_unit = compiled.ir_unit.as_ref()
+                .expect("a splice whose suffix failed to compile was rejected");
+            let eval = if is_expr[index] {
+                let (ty, output) = self.executor.execute_expr(ir_unit);
+                match (output.starts_with("Error:"), ty) {
+                    (true, _) => Eval::Error(output),
+                    (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
+                    (false, None) => self.report_exports(ir_unit),
+                }
+            } else {
+                let output = self.executor.execute_fragment(ir_unit);
+                match output.starts_with("Error:") {
+                    true => Eval::Error(output),
+                    false => self.report_exports(ir_unit),
                 }
             };
             reports.push(UnitEdit { unit: index, eval });
@@ -454,7 +554,7 @@ impl Engine {
     fn eval_expression(&mut self, source: String) -> Eval {
         let compiled = self.with_compiler(|compiler| compiler.compile_expr(&source));
 
-        if let Some(error) = compile_error(&compiled) {
+        if let Some(error) = compiled.first_error() {
             return Eval::Error(error);
         }
 
@@ -542,16 +642,5 @@ impl Engine {
 impl Drop for Engine {
     fn drop(&mut self) {
         self.executor.destroy_live_values();
-    }
-}
-
-/// The first error a compilation ran into, in phase order, if any.
-fn compile_error(compiled: &datafun::pipeline::ScriptCompilationResult) -> Option<String> {
-    match (&compiled.typecheck, &compiled.ownership, &compiled.lowering) {
-        (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
-        (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
-        (_, OwnershipResult::Error { message }, _) => Some(message.C()),
-        (_, _, LoweringResult::Error { message }) => Some(message.C()),
-        _ => None,
     }
 }

@@ -83,6 +83,17 @@ impl ScriptEnvironment {
         self.registry.set_unit_code_units(unit, code_units);
     }
 
+    /// Drop every unit from `len` on, destroying what their frames owned.
+    ///
+    /// Both halves move together for the reason [`Self::replace_unit`] moves
+    /// both: a `(unit, value)` reference and a `CodeRef::Local` are both
+    /// positions in one unit's state, so a unit's frame and its functions
+    /// belong at the same index and go at the same time.
+    pub fn truncate_units(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, len: usize) {
+        self.frames.truncate_units(rt_handle, len);
+        self.registry.truncate_units(len);
+    }
+
     /// Destroy live values in all frames.
     pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         self.frames.destroy_live_values(rt_handle);

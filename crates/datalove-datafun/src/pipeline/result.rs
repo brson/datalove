@@ -94,3 +94,16 @@ pub struct ScriptCompilationResult {
     /// The lowered IR code unit, if compilation succeeded.
     pub ir_unit: Option<IrCodeUnit>,
 }
+
+impl ScriptCompilationResult {
+    /// The first error this compilation ran into, in phase order, if any.
+    pub fn first_error(&self) -> Option<String> {
+        match (&self.typecheck, &self.ownership, &self.lowering) {
+            (TypecheckResult::ParseError { errors }, _, _) => Some(errors.join("; ")),
+            (TypecheckResult::Error { errors }, _, _) => Some(errors.join("; ")),
+            (_, OwnershipResult::Error { message }, _) => Some(message.clone()),
+            (_, _, LoweringResult::Error { message }) => Some(message.clone()),
+            _ => None,
+        }
+    }
+}

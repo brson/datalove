@@ -384,6 +384,28 @@ impl ScriptExecutor {
         (result_ty, output)
     }
 
+    /// Drop the runtime state of every unit from `len` on.
+    ///
+    /// What truncating a session needs, and what a splice needs before it runs
+    /// the suffix it re-derived: splicing the unit list renumbers every unit
+    /// after the splice point, so the frames from there on belong to nobody and
+    /// the suffix is run again as if it were being appended. The values those
+    /// frames held are destroyed rather than dropped -- see
+    /// `FrameStore::truncate_units`.
+    ///
+    /// The bindings on offer are folded again from what is left, so a name only
+    /// a dropped unit exported stops resolving.
+    pub fn truncate_units(&mut self, len: usize) {
+        assert!(
+            len <= self.unit_exports.len(),
+            "cannot truncate to {len} units; {} have been executed",
+            self.unit_exports.len(),
+        );
+        self.unit_exports.truncate(len);
+        self.rebuild_script_ctx();
+        self.env.truncate_units(self.interp.runtime_handle(), len);
+    }
+
     /// Point the executor at a module compilation done since it was built.
     ///
     /// **An edited module reaches a running session only through here.** A

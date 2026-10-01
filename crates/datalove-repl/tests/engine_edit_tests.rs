@@ -112,6 +112,142 @@ fn a_unit_appended_after_an_edit_sees_the_new_values() {
 }
 
 // ============================================================================
+// Truncating, removing and inserting
+// ============================================================================
+
+/// A B C D, where D reads A's binding and nothing reads B's.
+///
+/// So a splice at B re-derives C and D, which the *name* edges do not reach.
+const INDEPENDENT: &str = "let a = 1\n---\nlet b = 2\n---\nlet c = 30\n---\nlet d = a + 5";
+
+/// A B C D over one name, so an inserted unit is seen and then shadowed.
+const SHADOWED: &str = "let n = 1\n---\nlet b = n + 1\n---\nlet n = 7\n---\nlet d = n + 100";
+
+/// **Truncating drops the units from `n` on, and the next line takes the index
+/// the first of them had.**
+#[test]
+fn truncating_drops_the_units_from_n_on() {
+    let mut engine = engine();
+    engine.run_source(SCRIPT);
+    assert_eq!(value_of(&mut engine, "d"), "7");
+
+    engine.truncate_units(2);
+
+    let bound: Vec<String> = engine.get_environment().into_iter()
+        .map(|(name, _, _)| name).collect();
+    assert_eq!(bound, vec!["a".S(), "b".S()], "C and D are gone with their units");
+
+    engine.run_source("let e = b + 1");
+    assert_eq!(value_of(&mut engine, "e"), "3", "and the session goes on");
+}
+
+/// **Removing a unit nothing later depends on re-derives the whole suffix**, and
+/// what survives computes the right values.
+///
+/// The suffix rather than the reach: `d` reads `a` and not `b`, so the name
+/// edges reach only C, but D's index moved and so did the identity of every
+/// value in it.
+#[test]
+fn removing_a_unit_rederives_the_suffix() {
+    let mut engine = engine();
+    engine.run_source(INDEPENDENT);
+
+    let reports = engine.remove_unit(1).expect("nothing reads `b`");
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![1, 2],
+        "C and D, at the indices they now have",
+    );
+    assert_eq!(value_of(&mut engine, "a"), "1", "A is upstream of the splice");
+    assert_eq!(value_of(&mut engine, "c"), "30");
+    assert_eq!(value_of(&mut engine, "d"), "6", "D still reads A's `a`");
+    assert!(
+        !engine.get_environment().iter().any(|(name, _, _)| name == "b"),
+        "`b` went with the unit that bound it",
+    );
+}
+
+/// **Removing a unit a later unit depends on is rejected, and the session is
+/// unchanged and still usable.**
+///
+/// D is `b + 5`, so taking B out leaves it with nothing to resolve `b` to. A
+/// unit that fails to compile has no frame, and the numbering the frame store
+/// shares with every `(unit, value)` reference cannot have a hole in it, so the
+/// removal is put back whole and the frame store is never touched.
+#[test]
+fn removing_a_unit_a_later_unit_depends_on_is_rejected() {
+    let mut engine = engine();
+    engine.run_source(SCRIPT);
+
+    let error = engine.remove_unit(1).expect_err("D reads `b`, which B provides");
+    assert!(!error.is_empty(), "the suffix's errors are reported");
+
+    assert_eq!(value_of(&mut engine, "b"), "2", "the session is as it was");
+    assert_eq!(value_of(&mut engine, "d"), "7");
+    engine.run_source("let e = d + 1");
+    assert_eq!(value_of(&mut engine, "e"), "8", "and it still compiles new lines");
+}
+
+/// **Inserting in the middle re-derives the suffix**, the inserted unit's
+/// bindings reach the units after it, and a later unit that shadows one still
+/// wins.
+#[test]
+fn inserting_a_unit_rederives_the_suffix() {
+    let mut engine = engine();
+    engine.run_source(SHADOWED);
+    assert_eq!(value_of(&mut engine, "b"), "2");
+
+    let reports = engine.insert_unit(1, "let n = 5", false).expect("the suffix compiles");
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![1, 2, 3, 4],
+        "the inserted unit and the three that moved up",
+    );
+    assert_eq!(value_of(&mut engine, "b"), "6", "B reads the inserted `n`");
+    assert_eq!(value_of(&mut engine, "d"), "107", "the later `n` still shadows it");
+}
+
+/// An inserted expression unit reports the value it came to.
+///
+/// The flag is what says which it is -- nothing in the text does -- and an
+/// expression unit has to be run as one, because it computes a value that needs
+/// somewhere to land.
+#[test]
+fn an_inserted_expression_unit_reports_its_value() {
+    let mut engine = engine();
+    engine.run_source("let a = 1\n---\nlet b = a + 1");
+
+    let reports = engine.insert_unit(1, "a + 100", true).expect("the suffix compiles");
+
+    assert_eq!(reports.len(), 2, "the expression and the unit it moved up");
+    assert!(
+        matches!(&reports[0].eval, Eval::SuccessExpr(expr) if expr.value == "101"),
+        "the inserted expression's value: {:?}", reports[0].eval,
+    );
+    assert_eq!(value_of(&mut engine, "b"), "2", "B is re-derived at its new index");
+}
+
+/// **An insertion whose suffix does not compile is rejected, and the session is
+/// unchanged.**
+#[test]
+fn an_insertion_that_breaks_a_later_unit_is_rejected() {
+    let mut engine = engine();
+    engine.run_source(SHADOWED);
+
+    let error = engine
+        .insert_unit(1, "let n = \"five\"", false)
+        .expect_err("B would add 1 to a string");
+    assert!(error.contains("unit 2"), "B is the unit that failed: {error}");
+
+    assert_eq!(value_of(&mut engine, "b"), "2", "B is back to reading the first `n`");
+    assert_eq!(value_of(&mut engine, "d"), "107");
+    engine.run_source("let e = b + d");
+    assert_eq!(value_of(&mut engine, "e"), "109", "and the session still computes");
+}
+
+// ============================================================================
 // Editing a module
 // ============================================================================
 

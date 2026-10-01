@@ -192,6 +192,88 @@ impl Session {
         self.rerun(redone)
     }
 
+    /// Drop the units from `n` on.
+    ///
+    /// Nothing is re-derived: truncating renumbers nothing, because there is
+    /// nothing after what goes.
+    pub fn truncate(&mut self, n: usize) {
+        let compiled = self.pipeline.compile_fresh(&self.db);
+        let mut compiler = compiled
+            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .expect("a script compiler");
+        compiler.truncate_units(n);
+        self.script = Some(compiler.into_session());
+        self.executor.truncate_units(n);
+        self.texts.truncate(n);
+    }
+
+    /// Splice the unit at `i` out and re-derive and re-execute the suffix.
+    ///
+    /// Returns the units re-derived, which a splice makes the whole suffix
+    /// rather than the reach: every one of their values changed identity. `Err`
+    /// is a rejected splice -- some unit of the suffix stopped compiling -- and
+    /// holds its errors, with the session left exactly as it was.
+    pub fn remove(&mut self, i: usize) -> Result<BTreeSet<usize>, Vec<String>> {
+        let compiled = self.pipeline.compile_fresh(&self.db);
+        let mut compiler = compiled
+            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .expect("a script compiler");
+        let spliced = compiler.remove_unit(i);
+        self.script = Some(compiler.into_session());
+
+        let redone = spliced?;
+        self.texts.remove(i);
+        Ok(self.rerun_spliced(i, redone))
+    }
+
+    /// Splice a new fragment in at `i`, the other half of [`Self::remove`].
+    pub fn insert(&mut self, i: usize, text: &str) -> Result<BTreeSet<usize>, Vec<String>> {
+        let compiled = self.pipeline.compile_fresh(&self.db);
+        let mut compiler = compiled
+            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .expect("a script compiler");
+        let spliced = compiler.insert_unit(i, text, false);
+        self.script = Some(compiler.into_session());
+
+        let redone = spliced?;
+        self.texts.insert(i, text.S());
+        Ok(self.rerun_spliced(i, redone))
+    }
+
+    /// Run a re-derived suffix as appends, which is what a splice needs.
+    ///
+    /// [`Self::rerun`] re-executes through `replace_frame`, which puts a frame
+    /// at the index its unit already had -- right for an edit, where no index
+    /// moved. A splice moves them, so the frames from the splice point on are
+    /// destroyed and the suffix is run again from the top.
+    fn rerun_spliced(
+        &mut self,
+        at: usize,
+        redone: Vec<(usize, ScriptCompilationResult)>,
+    ) -> BTreeSet<usize> {
+        self.executor.truncate_units(at);
+        let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
+
+        let mut order = Vec::new();
+        for (index, result) in redone {
+            let ir_unit = result.ir_unit.as_ref().unwrap_or_else(|| {
+                panic!("a rejected splice is reported rather than run: unit {index}")
+            });
+            let output = if is_expr[index] {
+                self.executor.execute_expr(ir_unit).1
+            } else {
+                self.executor.execute_fragment(ir_unit)
+            };
+            assert!(!output.starts_with("Error:"), "running unit {index}: {output}");
+            order.push(index);
+        }
+
+        let mut sorted = order.clone();
+        sorted.sort();
+        assert_eq!(order, sorted, "a suffix must be re-derived in index order");
+        order.into_iter().collect()
+    }
+
     /// Add a module the session did not start with.
     ///
     /// The module *set* changes, which is a different world rather than an edit
@@ -325,6 +407,25 @@ impl Session {
         let buffer = self.executor.get_debug_buffer();
         self.executor.clear_debug_buffer();
         (0..self.texts.len()).filter(|index| buffer.contains(&mark(*index))).collect()
+    }
+
+    /// Which of `names` left their mark since the buffer was last cleared.
+    ///
+    /// [`Self::units_run`] maps a mark back to an index, which a splice breaks:
+    /// a unit keeps the mark it was written with and moves to another index. So
+    /// a splice test names its units rather than numbering them.
+    pub fn marks_run<'a>(&mut self, names: &[&'a str]) -> BTreeSet<&'a str> {
+        let buffer = self.executor.get_debug_buffer();
+        self.executor.clear_debug_buffer();
+        names.iter().copied().filter(|name| buffer.contains(&format!("ran {name}"))).collect()
+    }
+
+    /// How many units the executor holds frames for.
+    ///
+    /// The index the next appended unit will take, which is what says a
+    /// truncated index is reused rather than skipped.
+    pub fn frame_count(&self) -> usize {
+        self.executor.env.frames.unit_count()
     }
 
     pub fn binding(&mut self, name: &str) -> String {

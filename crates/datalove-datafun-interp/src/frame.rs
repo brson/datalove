@@ -557,6 +557,36 @@ impl FrameStore {
         self.unit_end_slots[unit] = unit_end_slots;
     }
 
+    /// Drop the frames from `len` on, destroying what they owned.
+    ///
+    /// What truncating a session needs, and what splicing its unit list needs
+    /// for the suffix it is about to run again. **The destroy is the whole of
+    /// why this is not three `Vec::truncate` calls**, for the reason
+    /// [`Self::replace_frame`] destroys: dropping a `Frame` frees its buffer
+    /// without destroying the values in it, and the `let` and `var` bindings a
+    /// unit left behind live in that buffer.
+    ///
+    /// Nothing that survives points at what is destroyed. A unit copies out of
+    /// an earlier unit's bindings rather than referring to them, so a unit
+    /// before `len` that read one of these holds its own copy, and a binding a
+    /// dropped unit moved out of is no longer initialized and so is skipped
+    /// rather than destroyed twice.
+    pub fn truncate_units(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, len: usize) {
+        assert!(
+            len <= self.frames.len(),
+            "cannot truncate to {len} units; the store holds {}",
+            self.frames.len(),
+        );
+        for unit in len..self.frames.len() {
+            let values = &self.unit_end_values[unit];
+            let slots = &self.unit_end_slots[unit];
+            self.frames[unit].destroy_unit_end_bindings(rt_handle, values, slots);
+        }
+        self.frames.truncate(len);
+        self.unit_end_values.truncate(len);
+        self.unit_end_slots.truncate(len);
+    }
+
     /// How many units the store holds frames for.
     ///
     /// External operands index frames by unit, so this is also the index the

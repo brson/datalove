@@ -115,6 +115,20 @@ impl UnitFunctionRegistry {
         self.unit_functions[index] = units;
     }
 
+    /// Drop the code units of every unit from `len` on.
+    ///
+    /// The other half of truncating the frame store: a `CodeRef::Local` names a
+    /// position in one unit's list, so a unit's functions have to go when its
+    /// frame does or the next unit to take that index inherits them.
+    pub fn truncate_units(&mut self, len: usize) {
+        assert!(
+            len <= self.unit_functions.len(),
+            "cannot truncate to {len} units; the registry holds {}",
+            self.unit_functions.len(),
+        );
+        self.unit_functions.truncate(len);
+    }
+
     /// Look up a code unit from a previous unit.
     pub fn get_external_function_as_unit(&self, unit: u32, func_id: CodeUnitId) -> Option<&IrCodeUnit> {
         let functions = self.unit_functions.get(unit as usize)?;
@@ -214,6 +228,11 @@ impl FunctionRegistry {
     /// Put a re-executed unit's code units in place of the ones it had.
     pub fn set_unit_code_units(&mut self, unit: u32, units: Vec<IrCodeUnit>) {
         self.unit_registry.set_unit_code_units(unit, units);
+    }
+
+    /// Drop the code units of every unit from `len` on.
+    pub fn truncate_units(&mut self, len: usize) {
+        self.unit_registry.truncate_units(len);
     }
 
     /// Get a module code unit by module and function ID.

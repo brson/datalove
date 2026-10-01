@@ -234,6 +234,16 @@ impl ScriptSession {
     pub fn unit_sources(&self) -> Vec<bct::input::Source> {
         self.units.iter().map(|(source, _)| *source).collect()
     }
+
+    /// Whether each unit was submitted as a bare expression, in order.
+    ///
+    /// What a re-executed unit has to be run *as*: an expression computes a
+    /// value that needs somewhere to land and a fragment computes none, and
+    /// after a splice the suffix is run again from the top rather than in
+    /// place, so the caller has to know which it is holding.
+    pub fn unit_is_expr(&self) -> Vec<bool> {
+        self.units.iter().map(|(_, is_expr)| *is_expr).collect()
+    }
 }
 
 /// Script compiler for compiling script units.
@@ -392,6 +402,172 @@ impl<'db> ScriptCompiler<'db> {
         self.rederive(self.reach_from(&seeds))
     }
 
+    /// Drop the units from `n` on.
+    ///
+    /// The cheap one of the three splice verbs and **the only one that
+    /// renumbers nothing**: there is nothing after the units that go, so no
+    /// surviving unit's `(unit_index, ValueId)` references move and nothing has
+    /// to be re-derived. The caller drops the runtime state of the same units --
+    /// `ScriptExecutor::truncate_units` -- and the session carries on at `n`.
+    ///
+    /// The units' `Source`s are inputs and are simply let go of; appending
+    /// afterwards mints a new one, so the index they vacate is reused by a unit
+    /// with a key of its own.
+    pub fn truncate_units(&mut self, n: usize) {
+        assert!(
+            n <= self.scripts.len(),
+            "cannot truncate to {n} units; the script has {}",
+            self.scripts.len(),
+        );
+        self.scripts.truncate(n);
+        self.unit_records.truncate(n);
+        self.last_script = self.scripts.last().copied();
+    }
+
+    /// Splice the unit at `i` out, and re-derive everything after it.
+    ///
+    /// See [`Self::splice`] for why the whole suffix is re-derived and what
+    /// happens when a unit of it stops compiling. A unit a later unit depends
+    /// on cannot be removed without removing its dependents first: the later
+    /// unit would fail to compile, which rejects the removal.
+    pub fn remove_unit(
+        &mut self,
+        i: usize,
+    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
+        let mut units = self.unit_list();
+        assert!(
+            i < units.len(),
+            "unit {i} was removed but the script has {} units",
+            units.len(),
+        );
+        units.remove(i);
+        self.splice(units, i)
+    }
+
+    /// Splice a new unit in at `i`, and re-derive everything after it.
+    ///
+    /// `is_expr` says whether the text is a bare expression or a fragment of
+    /// statements, the way [`Self::compile_fragment`] and
+    /// [`Self::compile_expr`] say it for an append: nothing in the text decides
+    /// it.
+    ///
+    /// See [`Self::splice`] for why the whole suffix is re-derived and what
+    /// happens when a unit of it stops compiling.
+    pub fn insert_unit(
+        &mut self,
+        i: usize,
+        source: &str,
+        is_expr: bool,
+    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
+        let mut units = self.unit_list();
+        assert!(
+            i <= units.len(),
+            "unit {i} was inserted but the script has {} units",
+            units.len(),
+        );
+
+        let src = bct::input::Source::new(self.db, source.S());
+        self.last_source = Some(src);
+        let parse_diags = if is_expr {
+            datalove_datafun_parser::parse_expr::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
+        } else {
+            datalove_datafun_parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(self.db, src)
+        };
+        if let Some(result) = self.check_parse_errors(&parse_diags) {
+            return Err(vec![
+                result.first_error().expect("a parse error is an error"),
+            ]);
+        }
+
+        units.insert(i, (src, is_expr));
+        self.splice(units, i)
+    }
+
+    /// Put `units` in place of the unit list and re-derive from `at` on.
+    ///
+    /// **The whole suffix, not the reach.** A script value is identified by
+    /// `(unit_index, ValueId)`, so splicing the list renumbers every unit after
+    /// the splice point and every one of their IRs has to be built again. That
+    /// cost is inherent rather than over-propagation: the ids really did
+    /// change. The reach is for an edit, which moves no index.
+    ///
+    /// **A splice whose suffix does not compile is rejected and put back**, with
+    /// the errors returned. A unit that fails to compile has no IR, so it has no
+    /// frame, so it would leave a hole in the numbering the frame store and
+    /// every `(unit_index, ValueId)` reference share; keeping the numbering
+    /// hole-free would need a placeholder frame, and that is not built. This is
+    /// the policy a module edit that does not compile already follows. Putting
+    /// the old list back is cheap -- the same `Source` handles go back in, so
+    /// every memo keyed on them is still good.
+    ///
+    /// A session can already hold a unit that does not compile, since
+    /// [`Self::relower_reach`] leaves one in place after an edit that broke it.
+    /// So such a unit rejects every splice before it until it is fixed or
+    /// removed, and the restore path's own re-derivation reports its errors
+    /// again, which are discarded: the rule is that the suffix must compile,
+    /// and the session going back to exactly what it was is the point.
+    fn splice(
+        &mut self,
+        units: Vec<(bct::input::Source, bool)>,
+        at: usize,
+    ) -> Result<Vec<(usize, ScriptCompilationResult)>, Vec<String>> {
+        let held = self.unit_list();
+        self.set_units(units, at);
+        let redone = self.rederive((at..self.scripts.len()).collect());
+
+        let failed: Vec<String> = redone.iter()
+            .filter_map(|(index, result)| {
+                result.first_error().map(|error| format!("unit {index}: {error}"))
+            })
+            .collect();
+        if failed.is_empty() {
+            return Ok(redone);
+        }
+
+        self.set_units(held, at);
+        self.rederive((at..self.scripts.len()).collect());
+        Err(failed)
+    }
+
+    /// Each unit's source and kind, which is the list a splice is taken over.
+    fn unit_list(&self) -> Vec<(bct::input::Source, bool)> {
+        self.scripts.iter()
+            .map(|script| {
+                let unit = script.unit(self.db);
+                (unit.source(self.db), unit.is_expr(self.db))
+            })
+            .collect()
+    }
+
+    /// Put `units` in place of the unit list, keeping the records before `at`.
+    ///
+    /// The chain is built again because `scripts[i]` is the handle every
+    /// per-unit query about unit `i` is keyed on, and after a splice the unit at
+    /// `i` is a different unit. The records from `at` on are cleared rather than
+    /// shifted: each belongs to an index, and the re-derivation that follows
+    /// writes every one of them, in index order, so each unit is still lowered
+    /// against the records of the units before it.
+    fn set_units(&mut self, units: Vec<(bct::input::Source, bool)>, at: usize) {
+        self.scripts = self.chain_over(&units);
+        self.unit_records.truncate(at);
+        self.unit_records.resize(units.len(), UnitLowerRecord::default());
+        self.last_script = self.scripts.last().copied();
+    }
+
+    /// The chain node for each of `units`, in order.
+    ///
+    /// One interned node per unit, each over the one before it, so
+    /// `chain[i]` is "unit `i` and the units before it".
+    /// [`Script::from_units`] folds the same chain but hands back only its tail,
+    /// where a splice needs every prefix.
+    fn chain_over(&self, units: &[(bct::input::Source, bool)]) -> Vec<Script<'db>> {
+        units.iter().fold(Vec::new(), |mut chain, (src, is_expr)| {
+            let unit = ScriptUnit::new(self.db, *src, *is_expr);
+            chain.push(Script::new(self.db, chain.last().copied(), unit));
+            chain
+        })
+    }
+
     /// Compile each of `units` again, in the order given.
     fn rederive(&mut self, units: Vec<usize>) -> Vec<(usize, ScriptCompilationResult)> {
         units
@@ -542,11 +718,7 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Take up the units and the per-unit records a session left off with.
     fn resume(&mut self, session: ScriptSession) {
-        self.scripts = session.units.iter().fold(Vec::new(), |mut chain, (src, is_expr)| {
-            let unit = ScriptUnit::new(self.db, *src, *is_expr);
-            chain.push(Script::new(self.db, chain.last().copied(), unit));
-            chain
-        });
+        self.scripts = self.chain_over(&session.units);
         self.last_script = self.scripts.last().copied();
         self.unit_records = session.records;
         self.skip_const_inlining = session.skip_const_inlining;
@@ -556,12 +728,7 @@ impl<'db> ScriptCompiler<'db> {
 
     /// Hand back what an edit needs to survive letting this compiler go.
     pub fn into_session(self) -> ScriptSession {
-        let units = self.scripts.iter()
-            .map(|script| {
-                let unit = script.unit(self.db);
-                (unit.source(self.db), unit.is_expr(self.db))
-            })
-            .collect();
+        let units = self.unit_list();
         ScriptSession {
             units,
             records: self.unit_records,
