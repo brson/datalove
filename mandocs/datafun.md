@@ -97,6 +97,34 @@ Mutable bindings are reassigned with `set`.
 
 ## Control flow
 
+Loops are performed with the `loop` keyword, `break` and `continue`.
+There are no conditional loops. Basic conditional control
+flow is performed with `if`.
+
+```datalove
+require module sys/std/int
+
+import int.rem_checked
+
+var counter = 10
+var evens = 0
+var odds = 0
+
+loop
+  if counter == 0
+    break
+  else if rem_checked(counter, 2) == some 0
+    set evens = evens + 1
+  else
+    set odds = odds + 1
+  end if
+  set counter = counter - 1
+end loop
+
+debuglog (evens, odds)
+```
+
+
 ## Data types and destructuring
 
 ## Option and result
