@@ -10,18 +10,18 @@ publish = false
 
 [dev-dependencies]
 divan = "0.1"
-datalove-datafun-compiler.path = "../datalove-datafun-compiler"
-datalove-datafun-resolve.path = "../datalove-datafun-resolve"
-datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
-datalove-datafun.path = "../datalove-datafun"
-datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
-datalove-datafun-interp.path = "../datalove-datafun-interp"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
-datalove-datafun-parser.path = "../datalove-datafun-parser"
-datalove-sys-packages.path = "../../sys"
+datalove-datafun-compiler.workspace = true
+datalove-datafun-resolve.workspace = true
+datalove-datafun-tycheck.workspace = true
+datalove-datafun.workspace = true
+datalove-datafun-cranelift-jit.workspace = true
+datalove-datafun-interp.workspace = true
+datalove-datafun-ir.workspace = true
+datalove-datafun-parser.workspace = true
+datalove-sys-packages.workspace = true
 bct.workspace = true
 salsa.workspace = true
-datalove-ct.path = "../datalove-ct"
+datalove-ct.workspace = true
 rmx.workspace = true
 
 [[bench]]

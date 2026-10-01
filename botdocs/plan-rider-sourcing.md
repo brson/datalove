@@ -264,17 +264,38 @@ the upload itself.
    are gone; docs.rs needs no telling.
 3. `publish = false` on the four test and bench crates. 37 of the 41 members
    would publish.
-4. **Internal dev-dependencies stay path-only.** Giving them versions made the
-   workspace unpublishable: `datalove-datafun` depends on
-   `datalove-datafun-compiler`, whose tests depend on `datalove-datafun`
-   back, and neither can be first. Cargo drops a path-only dev-dependency
-   when it packages, so the cycle costs nothing --- except that an OS packager
-   cannot run the tests from a published tarball, which is the documented
-   trade.
+4. **Three dependency cycles broken**, rather than worked around. Giving
+   internal dev-dependencies versions exposed them --- a cycle is
+   unpublishable, neither end being able to go first --- and path-only
+   dev-dependencies would have hidden them again, cargo dropping those when
+   it packages. See *Cycles* below. With them gone, dev-dependencies on
+   published crates carry versions, so the tests in a published tarball can
+   be run.
 5. `just publish-check` is `cargo publish --dry-run --workspace --no-verify`,
    which passes clean. Note that `cargo package --workspace` does **not**
    honour `publish = false` --- it packages everything --- so checking with
    `package` reports failures for crates that would never be published.
+
+### Cycles
+
+Three, all into the pipeline from crates the pipeline is built on:
+
+- `datalove-datafun-compiler`'s `auto_adapt_tests` used `datalove-datafun`.
+- `datalove-datafun-cranelift-aot`'s `aot_run_tests` used `datalove-datafun`.
+- `datalove-datafun-cranelift-jit` declared a dev-dependency on
+  `datalove-datafun` and **never used it**: no tests directory, no reference
+  anywhere in the crate. Deleted.
+
+The first two are the same mistake: a test that needs the whole pipeline to
+exercise one crate cannot live in that crate, because the pipeline is built on
+it. They moved to `datalove-tests`, which exists for suites that span the
+workspace and is `publish = false`, so nothing it depends on has to be
+published for it. `auto_adapt`'s fixtures went with it, the example runner
+resolving them against its own crate.
+
+Worth noting that cargo allows this and says nothing: a dev-dependency cycle
+builds and tests happily, and only publishing complains. Nothing would have
+found these until the first release attempt.
 
 ### The release path, tried before releasing
 

@@ -28,4 +28,4 @@ datalove-rti.workspace = true
 # get a real runtime, while the library a program loads still gets none: a
 # dev-dependency is not built into it.
 [dev-dependencies]
-datalove-rt.path = "../../../crates/datalove-rt"
+datalove-rt.workspace = true

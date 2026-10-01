@@ -51,10 +51,10 @@ index-64 = [
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
-datalove-datalit.path = "../datalove-datalit"
-datalove-diagnostic.path = "../datalove-diagnostic"
-datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
-datalove-datafun-inline.path = "../datalove-datafun-inline"
+datalove-datalit.workspace = true
+datalove-diagnostic.workspace = true
+datalove-datafun-cranelift-jit.workspace = true
+datalove-datafun-inline.workspace = true
 ron = "0.8"
 
 [[test]]

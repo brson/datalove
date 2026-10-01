@@ -16,8 +16,8 @@ datalove-datalit.workspace = true
 datalove-datafun-ast.workspace = true
 
 [dev-dependencies]
-datalove-datafun.path = "../datalove-datafun"
-datalove-datafun-parser.path = "../datalove-datafun-parser"
-datalove-datafun-pkg.path = "../datalove-datafun-pkg"
-datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
-datalove-datafun-resolve.path = "../datalove-datafun-resolve"
+datalove-datafun.workspace = true
+datalove-datafun-parser.workspace = true
+datalove-datafun-pkg.workspace = true
+datalove-datafun-tycheck.workspace = true
+datalove-datafun-resolve.workspace = true

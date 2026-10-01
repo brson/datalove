@@ -1534,7 +1534,6 @@ version = "0.1.0"
 dependencies = [
  "bcts",
  "datalove-ct",
- "datalove-datafun",
  "datalove-datafun-ast",
  "datalove-datafun-common",
  "datalove-datafun-const",
@@ -1591,7 +1590,6 @@ dependencies = [
  "cranelift-frontend",
  "cranelift-module",
  "cranelift-object",
- "datalove-datafun",
  "datalove-datafun-cranelift",
  "datalove-datafun-ir",
  "rustmax 0.0.10",
@@ -1606,7 +1604,6 @@ dependencies = [
  "cranelift-frontend",
  "cranelift-jit",
  "cranelift-module",
- "datalove-datafun",
  "datalove-datafun-cranelift",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
@@ -1888,16 +1885,24 @@ dependencies = [
 name = "datalove-tests"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun",
+ "datalove-datafun-compiler",
  "datalove-datafun-cranelift-aot",
  "datalove-datafun-cranelift-jit",
  "datalove-datafun-interp",
  "datalove-datafun-ir",
+ "datalove-datafun-parser",
  "datalove-datafun-pkg",
+ "datalove-datafun-resolve",
+ "datalove-datafun-tycheck",
+ "datalove-diagnostic",
+ "datalove-exampletest",
  "datalove-rt",
  "datalove-worldgen",
  "rand 0.8.5",
  "rustmax 0.0.10",
+ "salsa",
 ]
 
 [[package]]

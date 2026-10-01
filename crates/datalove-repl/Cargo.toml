@@ -19,7 +19,7 @@ datalove-paths.workspace = true
 
 [dev-dependencies]
 # The engine tests run against the system library the binary ships.
-datalove-sys-packages.path = "../../sys"
+datalove-sys-packages.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]

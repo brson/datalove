@@ -19,9 +19,27 @@ datalove-datafun-interp.workspace = true
 datalove-datafun-cranelift-jit.workspace = true
 datalove-datafun-cranelift-aot.workspace = true
 datalove-rt.workspace = true
+# For the tests that moved here to break a dependency cycle: a test needing
+# the whole pipeline to drive one crate cannot live in that crate, because
+# the pipeline is built on it.
+datalove-datafun-compiler.workspace = true
+datalove-datafun-tycheck.workspace = true
+datalove-datafun-resolve.workspace = true
+datalove-datafun-parser.workspace = true
+datalove-diagnostic.workspace = true
+bct.workspace = true
+salsa.workspace = true
 rand = "0.8"
+
+[dev-dependencies]
+datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]
 name = "worldgen_dual_tests"
 path = "tests/worldgen_dual_tests.rs"
+harness = false
+
+[[test]]
+name = "auto_adapt_tests"
+path = "tests/auto_adapt_tests.rs"
 harness = false

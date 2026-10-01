@@ -49,8 +49,7 @@ datalove-rtdt.workspace = true
 
 [dev-dependencies]
 datalove-exampletest.path = "../datalove-exampletest"
-datalove-datafun.path = "../datalove-datafun"
-datalove-datafun-pkg.path = "../datalove-datafun-pkg"
+datalove-datafun-pkg.workspace = true
 rand = "0.8"
 
 [[test]]
@@ -61,10 +60,5 @@ harness = false
 [[test]]
 name = "tycheck_tests"
 path = "tests/tycheck_tests.rs"
-harness = false
-
-[[test]]
-name = "auto_adapt_tests"
-path = "tests/auto_adapt_tests.rs"
 harness = false
 
