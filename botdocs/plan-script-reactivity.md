@@ -751,6 +751,13 @@ stays non-zero. What *would* make zero wrong is a unit's typecheck result
 embedding something body-derived -- a diagnostic pointing into a module body,
 say -- so that is the thing to re-check if diagnostics ever start doing it.
 
-What to settle before doing it is whether anything is *meant* to read the other
+**Done.** `script_module_names(db, module) -> CollectedNames` replaced it and
+`ModuleSpec` is deleted. A module body edit now re-typechecks nobody, where it
+reached the importer before; a signature edit still reaches the importer and its
+readers; the execution reach is unchanged at both. The five unread fields were
+vestigial, as suspected -- nothing outside the one builder and the one consumer
+touched them.
+
+What to settle before doing it was whether anything is *meant* to read the other
 five. They predate `module_spans` being a query of its own, and a diagnostic
 against a module asks `module_spans(db, module)` directly now.

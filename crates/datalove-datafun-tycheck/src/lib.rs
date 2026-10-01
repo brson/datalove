@@ -418,37 +418,6 @@ impl<'db> ScriptUnitSpec<'db> {
     }
 }
 
-/// Spec for a module (path + pre-parsed statements + module ID + name resolution).
-///
-/// Derived per module by [`api::script_module_spec`] rather than gathered into
-/// [`ScriptEnv`]. Every field of it moves when the module's text does, which is
-/// why the env holds `Module` handles instead: the env is what a per-unit memo
-/// is keyed on, and a spec in there made a unit's key turn on every module.
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct ModuleSpec<'db> {
-    pub path: String,
-    pub source: bct::input::Source,
-    pub spans: DatafunSpans<'db>,
-    pub parsed: ParsedStatements<'db>,
-    pub module_id: ModuleId<'db>,
-    /// Pre-computed name resolution for this module.
-    pub name_resolution: CollectedNames<'db>,
-}
-
-impl<'db> ModuleSpec<'db> {
-    /// Create new ModuleSpec.
-    pub fn new(
-        path: String,
-        source: bct::input::Source,
-        spans: DatafunSpans<'db>,
-        parsed: ParsedStatements<'db>,
-        module_id: ModuleId<'db>,
-        name_resolution: CollectedNames<'db>,
-    ) -> Self {
-        Self { path, source, spans, parsed, module_id, name_resolution }
-    }
-}
 
 /// What a script is checked against, as a handle to key a query on.
 ///
@@ -456,14 +425,14 @@ impl<'db> ModuleSpec<'db> {
 /// a script unit asks [`api::binding_at`] once per name it uses, so this is
 /// hashed once per name.
 ///
-/// **The modules are handles, not specs.** A `Module` is interned over a
-/// `ModuleId` and a `Source`, and editing a module is `set_text`, which changes
-/// a source's text and not its handle -- so this env survives a module edit
-/// where one holding [`ModuleSpec`]s did not. That mattered because every
-/// per-unit query is keyed on `(script, env)`: with the specs in here, editing
-/// one module's body gave every unit a different question to answer, whether or
-/// not it imported from that module. A unit reaches a module's content through
-/// [`api::script_module_spec`], for the one module its import names.
+/// **The modules are handles, not their contents.** A `Module` is interned over
+/// a `ModuleId` and a `Source`, and editing a module is `set_text`, which
+/// changes a source's text and not its handle -- so this env survives a module
+/// edit. That matters because every per-unit query is keyed on `(script, env)`:
+/// when the env held each module's parse, spans and name resolution, editing one
+/// module's body gave every unit a different question to answer, whether or not
+/// it imported from that module. A unit reaches a module's declarations through
+/// [`api::script_module_names`], for the one module its import names.
 ///
 /// The env still moves when the module *set* changes, which is right: that is a
 /// different world, and an import may resolve differently in it.

@@ -19,6 +19,7 @@ pub use datalove_datafun_ast::spans::DatafunSpans;
 pub use bct::module_graph::ModuleId;
 
 pub use crate::{
+    CollectedNames,
     PendingDiagnostic,
     Type,
     TypeFunction,
@@ -27,7 +28,6 @@ pub use crate::{
     ScriptUnitKind,
     ScriptUnitSpec,
     ScriptEnv,
-    ModuleSpec,
     UnitTypecheckResultTracked,
     ScriptUnitsTypecheckResultTracked,
     ParsedModuleGraph,
@@ -961,38 +961,30 @@ fn script_modules_by_path<'db>(
         .collect()
 }
 
-/// One module's parse, spans, id and name resolution, as a script sees it.
+/// What a module declares, for a script unit that imports from it.
 ///
-/// **Keyed on the module, which is what keeps a module edit from re-keying every
-/// script unit.** The spec used to be gathered into [`ScriptEnv`], and every
-/// per-unit query is keyed on the env, so editing any module's body gave every
-/// unit a new key -- the sixth instance of a whole-world value in a per-unit key
-/// in this compiler. See `botdocs/salsa-patterns.md` and
-/// `botdocs/plan-script-reactivity.md` section F.
+/// Keyed on the `Module`, which is interned over `(ModuleId, Source)` and so
+/// survives a `set_text` -- a unit that imports from one module therefore
+/// depends on that module and no other. This replaced a whole-world map over
+/// every module's name resolution; see `botdocs/salsa-patterns.md` on a
+/// whole-world value in a per-unit key, which this was the sixth of.
 ///
-/// A unit that resolves an import asks this for the module it named and so
-/// depends on that module alone. It does not backdate on a body edit, because
-/// `spans` move with the body; the importing units re-typecheck, and the units
-/// that import nothing from the module do not.
+/// **Only the declarations, which is what makes a body edit free.**
+/// `parse_module_ast` compares equal across a body edit -- a `StmtFun`'s body
+/// rides a tracked field -- so `resolve_script_names` does not re-run and this
+/// backdates. A unit's typecheck cannot depend on a body in any case:
+/// `synthesize` reads a looked-up function's `type_params` and `type_bounds`,
+/// which are signature, and comptime evaluation of one happens in lowering.
+/// This used to return a whole `ModuleSpec`, whose `spans` move with a body, so
+/// an importing unit re-typechecked for an edit that could not change its
+/// answer.
 #[salsa::tracked(returns(ref))]
-pub fn script_module_spec<'db>(
+pub fn script_module_names<'db>(
     db: &'db dyn crate::Db,
     module: Module<'db>,
-) -> ModuleSpec<'db> {
-    let module_id = module.id(db);
-    let source = module.source(db);
+) -> CollectedNames<'db> {
     let parsed = datalove_datafun_parser::parse_module_ast(db, module).clone();
-    let spans = datalove_datafun_parser::module_spans(db, module).clone();
-    let name_resolution =
-        datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
-    ModuleSpec::new(
-        module_id.path(db).C(),
-        source,
-        spans,
-        parsed,
-        module_id,
-        name_resolution,
-    )
+    datalove_datafun_resolve::resolve_script_names(db, module.source(db), parsed)
 }
 
 /// The signature and AST of the function a module exports under `name`.
@@ -1002,10 +994,9 @@ pub fn script_module_spec<'db>(
 /// module's declarations, where this used to be a map built over every module's
 /// -- the narrow lookup is the cheap half of keying the spec per module.
 fn module_function<'db>(
-    spec: &ModuleSpec<'db>,
+    collected: &CollectedNames<'db>,
     name: InternedText<'db>,
 ) -> Option<(TypeFunction<'db>, StmtFun<'db>)> {
-    let collected = &spec.name_resolution;
     let func_ty = collected.functions.iter()
         .find(|(declared, _)| *declared == name)
         .map(|(_, func_ty)| *func_ty)?;
@@ -1093,11 +1084,11 @@ fn resolve_script_imports<'db>(
             imported.insert(module_path.S());
 
             // The one module this import names, and no other: asking
-            // `script_module_spec` here is the dependency edge that confines a
+            // `script_module_names` here is the dependency edge that confines a
             // module edit to the units that import from it.
             if let Some(module) = modules_by_path.get(module_path) {
                 if let Some((func_ty, func_ast)) =
-                    module_function(script_module_spec(db, *module), item_name)
+                    module_function(script_module_names(db, *module), item_name)
                 {
                     resolved.push(
                         (item_name, func_ty, func_ast, Some(module.id(db)), import.local_index),

@@ -245,6 +245,24 @@ more arguments including graph-level data that is not reachable from a module.
 Restructuring compiler phase signatures to serve test instrumentation is the
 wrong trade, and they were deliberately left alone.
 
+### Backdating compares the value, not the dependencies
+
+A query that reads something which changed re-executes. Whether its *consumers*
+re-run is decided by whether what it returned compares equal -- so **adding a
+dependency does not stop a query backdating, and removing one does not make it
+backdate.** What matters is the shape of the return value.
+
+This is easy to get backwards. `script_module_names` returns a module's
+declarations, and a module body edit changes its spans, so it re-executes and
+then backdates: the declarations are unmoved. Its predecessor returned a whole
+`ModuleSpec` with the spans *in it*, and that could not backdate. The fix was to
+narrow the value, not to read less.
+
+An attempt to falsify that by reading the spans and discarding them did nothing,
+correctly: the query re-ran and still backdated. The experiment that works is to
+put the spans back in the returned value, or to revert the change and keep the
+tests.
+
 ### A whole-world value in a per-unit key: the one that keeps coming back
 
 Six times now, in six shapes, always the same mistake: a query about one entity

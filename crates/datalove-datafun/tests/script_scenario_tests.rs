@@ -389,12 +389,18 @@ fn check(scenario: &Scenario) {
 
     // The units whose typecheck re-runs whatever their environment says. For a
     // unit edit that is the edited unit, since `unit_ast` is keyed on the unit.
-    // For a module edit it is the units that import from the edited module:
-    // they depend on `script_module_spec` for the module they named, and its
-    // `spans` move whenever the module's text does, so it does not backdate.
-    // **A unit that imports nothing from the module is not among them**, which
-    // is the narrowing -- this used to be every unit, because `ScriptEnv` was
-    // interned over every module's spec and so re-keyed the lot.
+    // For a module edit it is the units that import from the edited module,
+    // which is the narrowing -- this used to be every unit, because `ScriptEnv`
+    // was interned over every module's parse, spans and name resolution and so
+    // re-keyed the lot.
+    //
+    // **For a module edit the graph is a bound and not a prediction.** It says
+    // which units *could* be affected; whether one's answer actually moves is
+    // what backdating decides, and a body edit moves no signature so none does.
+    // `script_module_names` returns a module's declarations alone, which compare
+    // equal across a body edit, so the importer backdates too and the analysis
+    // reach is empty. The execution reach above is what says the edit still
+    // happened.
     let analysis_seeds: BTreeSet<usize> = if scenario.is_module() {
         after.module_importers(&scenario.module().path())
     } else {
@@ -406,12 +412,25 @@ fn check(scenario: &Scenario) {
     // panics rather than being silently attributed. The inversion of the
     // assertion this file used to make.
     let reached_analysis = attributed(&run.cold_keys, &analysis);
-    assert_eq!(
-        reached_analysis,
-        analysis_reach(&before, &after, &analysis_seeds),
-        "{name}: the units typechecked again are the ones whose own dependency \
-         moved, plus the ones a name they asked about now answers differently for",
-    );
+    let allowed = analysis_reach(&before, &after, &analysis_seeds);
+    match scenario.kind {
+        Kind::ModuleBody => assert!(
+            reached_analysis.is_empty(),
+            "{name}: a module body moves no signature, so nothing should \
+             re-typecheck: {reached_analysis:?}",
+        ),
+        Kind::ModuleSignature => assert!(
+            reached_analysis.is_subset(&allowed) && !reached_analysis.is_empty(),
+            "{name}: a signature change reaches some importer and no unit the \
+             graph disallows: {reached_analysis:?} against {allowed:?}",
+        ),
+        _ => assert_eq!(
+            reached_analysis, allowed,
+            "{name}: the units typechecked again are the ones whose own \
+             dependency moved, plus the ones a name they asked about now \
+             answers differently for",
+        ),
+    }
     assert!(
         reached_analysis.is_subset(&reached),
         "{name}: analysis cannot reach further than lowering, which re-derives \
@@ -477,11 +496,24 @@ fn spare_module() -> Module<'static> {
 /// interned over every module's `ModuleSpec`, so any module edit gave every
 /// unit's typecheck a new key and all five re-ran.
 ///
-/// A module *body* edit, which moves no signature. The importing unit is still
-/// re-typechecked, and that is the second-order limit
-/// `botdocs/plan-script-reactivity.md` section F names: a `ModuleSpec` carries
-/// the module's spans and a body edit moves those, so `script_module_spec` does
-/// not backdate. What stops is the propagation past the importer.
+/// A module *body* edit, which moves no signature, and so re-typechecks
+/// **nobody at all** -- not even the unit that imports from it.
+///
+/// That is the right answer rather than a suspiciously good one, and the
+/// execution assertion below is what says the edit is not being ignored: the
+/// importer and its reader still re-run, because the value changed. A unit's
+/// typecheck cannot depend on a module function's body -- `synthesize` reads a
+/// looked-up function's `type_params` and `type_bounds`, which are signature,
+/// and comptime evaluation of one happens in lowering.
+///
+/// It reached the importer until `script_module_names` replaced a query
+/// returning a whole `ModuleSpec`: a spec carried the module's spans, a body
+/// edit moves spans, so it could not backdate. The declarations alone do,
+/// because `parse_module_ast` compares equal across a body edit.
+///
+/// The graph is an upper bound here and not the answer. It says unit 2 *could*
+/// be affected, importing from the module; whether its answer actually moves is
+/// what `binding_at` backdating decides.
 #[test]
 fn a_module_body_edit_reaches_only_the_unit_that_imports_from_it() {
     let mut run = build();
@@ -500,18 +532,14 @@ fn a_module_body_edit_reaches_only_the_unit_that_imports_from_it() {
     let analysis = attributed(&run.cold_keys, &typecheck_keys(&run.recorder.take()));
     let after = run.session.graph();
 
-    assert_eq!(
-        analysis,
-        BTreeSet::from([2]),
-        "the importing unit, and no other: unit 1 sits between two importers and \
-         imports from neither, unit 3 reads `c` whose type did not move, and \
-         units 0 and 4 import from other modules",
+    assert!(
+        analysis.is_empty(),
+        "a body edit moves no type, so nothing should re-typecheck: {analysis:?}",
     );
-    assert_eq!(
-        analysis,
-        analysis_reach(&before, &after, &before.module_importers("local/test/m1")),
-        "which is what the graph says: the importers, and nobody whose \
-         `binding_at` answer moved, because none did",
+    assert!(
+        analysis.is_subset(
+            &analysis_reach(&before, &after, &before.module_importers("local/test/m1"))),
+        "and within what the graph allows, which bounds it without predicting it",
     );
 
     assert_eq!(
