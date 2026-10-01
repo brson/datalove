@@ -1,9 +1,11 @@
-## 2026/10/01 Compare and eq for all types
+## 2026/10/01 Compare and eq for more types
 
 ```datalove
 if some 1 == some 2
 end if
 ```
+
+Semantics for aggregates get complex.
 
 ## 2026/10/01 Call by module-qualified name
 

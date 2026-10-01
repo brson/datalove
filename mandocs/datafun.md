@@ -90,13 +90,19 @@ fun count_substrings(s: string, ref needle: string): ?int
 end fun
 ```
 
-Though lines can break freely between matched braces:
+Lines can break freely between matched braces of all kinds
+(`( .. )`, `{ .. }`, `< .. >` and others):
 
 ```datalove
 fun count_substrings(
   s: string, ref needle: string
-): ?int
-  ... etc ...
+): ?{ count: int, other_flags: u8 }
+  // ... etc ...
+
+  ret some {
+    count: count,
+    other_flags: 0x00,
+  }
 end fun
 ```
 
