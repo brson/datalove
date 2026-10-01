@@ -1,9 +1,13 @@
 [package]
 name = "datalove-exampletest"
+description = "An example-based test harness for datalove."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+# Tests, not a library anybody installs.
+publish = false
+repository.workspace = true
 
 [features]
 index-64 = []

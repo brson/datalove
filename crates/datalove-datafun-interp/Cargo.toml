@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-interp"
+description = "An interpreter for datafun IR."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64"]
@@ -11,8 +13,8 @@ index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64"]
 [dependencies]
 rmx.workspace = true
 rustc-hash.workspace = true
-datalove-datafun-inline.path = "../datalove-datafun-inline"
-datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
-datalove-rt.path = "../datalove-rt"
-datalove-rtdt.path = "../datalove-rtdt"
+datalove-datafun-inline.workspace = true
+datalove-datafun-intrinsics.workspace = true
+datalove-datafun-ir.workspace = true
+datalove-rt.workspace = true
+datalove-rtdt.workspace = true

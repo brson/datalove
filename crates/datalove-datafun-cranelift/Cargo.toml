@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-cranelift"
+description = "Cranelift codegen shared by the datafun backends."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = [
@@ -14,10 +16,10 @@ index-64 = [
 
 [dependencies]
 rmx.workspace = true
-datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
-datalove-rtdt.path = "../datalove-rtdt"
-datalove-rt.path = "../datalove-rt"
+datalove-datafun-intrinsics.workspace = true
+datalove-datafun-ir.workspace = true
+datalove-rtdt.workspace = true
+datalove-rt.workspace = true
 
 cranelift-codegen = "0.135"
 cranelift-frontend = "0.135"

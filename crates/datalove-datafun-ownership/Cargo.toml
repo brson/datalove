@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-ownership"
+description = "Ownership and liveness analysis for datafun."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64", "datalove-datafun-common/index-64", "datalove-datafun-sema/index-64"]
@@ -12,8 +14,8 @@ index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64", "datalove-
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-datalove-datafun-ast.path = "../datalove-datafun-ast"
-datalove-datafun-common.path = "../datalove-datafun-common"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
-datalove-rtdt.path = "../datalove-rtdt"
-datalove-datafun-sema.path = "../datalove-datafun-sema"
+datalove-datafun-ast.workspace = true
+datalove-datafun-common.workspace = true
+datalove-datafun-ir.workspace = true
+datalove-rtdt.workspace = true
+datalove-datafun-sema.workspace = true

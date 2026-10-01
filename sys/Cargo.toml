@@ -5,6 +5,7 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 # The crate root is the package library itself, so `sys/std/list.dfm` is inside
 # it and can be packaged. Embedding it from a crate under `crates/` meant
@@ -23,9 +24,9 @@ exclude = ["**/*~"]
 
 [dependencies]
 rmx.workspace = true
-datalove-datafun.path = "../crates/datalove-datafun"
+datalove-datafun.workspace = true
 # Each sys rider, for the interface it declares and the functions it exports.
-datalove-rider-sys-std.path = "std/rider"
+datalove-rider-sys-std.workspace = true
 
 [build-dependencies]
-datalove-pkg-manifest.path = "../crates/datalove-pkg-manifest"
+datalove-pkg-manifest.workspace = true

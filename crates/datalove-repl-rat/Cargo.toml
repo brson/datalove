@@ -1,13 +1,15 @@
 [package]
 name = "datalove-repl-rat"
+description = "A terminal REPL for datalove, in Ratatui."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
-datalove-repl.path = "../datalove-repl"
+datalove-repl.workspace = true
 ratatui = { version = "0.30", features = ["crossterm"] }
 crossterm = "0.29"
 tui-textarea.package = "tui-textarea-2"

@@ -1,9 +1,11 @@
 [package]
 name = "datalove-rtdt"
+description = "The datalove runtime data types."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = []

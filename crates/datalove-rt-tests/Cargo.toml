@@ -1,9 +1,13 @@
 [package]
 name = "datalove-rt-tests"
+description = "Tests for the datalove runtime."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+# Tests, not a library anybody installs.
+publish = false
+repository.workspace = true
 
 [features]
 slow_tests = []
@@ -13,9 +17,9 @@ index-64 = ["datalove-rt/index-64", "datalove-rtdt/index-64", "datalove-datalit/
 rmx = { workspace = true, features = ["proptest"] }
 bct.workspace = true
 salsa.workspace = true
-datalove-rt.path = "../datalove-rt"
-datalove-rtdt.path = "../datalove-rtdt"
-datalove-datalit.path = "../datalove-datalit"
+datalove-rt.workspace = true
+datalove-rtdt.workspace = true
+datalove-datalit.workspace = true
 datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]

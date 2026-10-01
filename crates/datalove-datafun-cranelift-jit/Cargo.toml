@@ -1,18 +1,20 @@
 [package]
 name = "datalove-datafun-cranelift-jit"
+description = "A per-function tracing JIT for the datafun interpreter."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
 rustc-hash.workspace = true
-datalove-datafun-ir.path = "../datalove-datafun-ir"
-datalove-datafun-interp.path = "../datalove-datafun-interp"
-datalove-datafun-cranelift.path = "../datalove-datafun-cranelift"
-datalove-rtdt.path = "../datalove-rtdt"
-datalove-rt.path = "../datalove-rt"
+datalove-datafun-ir.workspace = true
+datalove-datafun-interp.workspace = true
+datalove-datafun-cranelift.workspace = true
+datalove-rtdt.workspace = true
+datalove-rt.workspace = true
 
 cranelift-codegen = "0.135"
 cranelift-frontend = "0.135"

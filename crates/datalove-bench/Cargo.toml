@@ -1,25 +1,27 @@
 [package]
 name = "datalove-bench"
+description = "Benchmarks for datalove."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 publish = false
 
 [dev-dependencies]
 divan = "0.1"
-datalove-datafun-compiler = { path = "../datalove-datafun-compiler" }
-datalove-datafun-resolve = { path = "../datalove-datafun-resolve" }
-datalove-datafun-tycheck = { path = "../datalove-datafun-tycheck" }
-datalove-datafun = { path = "../datalove-datafun" }
-datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
-datalove-datafun-interp = { path = "../datalove-datafun-interp" }
-datalove-datafun-ir = { path = "../datalove-datafun-ir" }
-datalove-datafun-parser = { path = "../datalove-datafun-parser" }
-datalove-sys-packages = { path = "../../sys" }
+datalove-datafun-compiler.path = "../datalove-datafun-compiler"
+datalove-datafun-resolve.path = "../datalove-datafun-resolve"
+datalove-datafun-tycheck.path = "../datalove-datafun-tycheck"
+datalove-datafun.path = "../datalove-datafun"
+datalove-datafun-cranelift-jit.path = "../datalove-datafun-cranelift-jit"
+datalove-datafun-interp.path = "../datalove-datafun-interp"
+datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-parser.path = "../datalove-datafun-parser"
+datalove-sys-packages.path = "../../sys"
 bct.workspace = true
 salsa.workspace = true
-datalove-ct = { path = "../datalove-ct" }
+datalove-ct.path = "../datalove-ct"
 rmx.workspace = true
 
 [[bench]]

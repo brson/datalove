@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-parser"
+description = "A parser for datafun."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-datalit/index-64"]
@@ -12,7 +14,7 @@ index-64 = ["datalove-datalit/index-64"]
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
-datalove-datafun-ast.path = "../datalove-datafun-ast"
-datalove-ct.path = "../datalove-ct"
-datalove-datalit.path = "../datalove-datalit"
-datalove-diagnostic.path = "../datalove-diagnostic"
+datalove-datafun-ast.workspace = true
+datalove-ct.workspace = true
+datalove-datalit.workspace = true
+datalove-diagnostic.workspace = true

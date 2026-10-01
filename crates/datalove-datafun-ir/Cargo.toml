@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-ir"
+description = "An SSA intermediate representation for datafun."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-rtdt/index-64", "datalove-datalit/index-64"]
@@ -14,7 +16,7 @@ serde = { version = "1", features = ["derive"] }
 ron = "0.8"
 salsa.workspace = true
 rustc-hash.workspace = true
-datalove-datafun-intrinsics.path = "../datalove-datafun-intrinsics"
-datalove-datalit.path = "../datalove-datalit"
+datalove-datafun-intrinsics.workspace = true
+datalove-datalit.workspace = true
 bct.workspace = true
-datalove-rtdt.path = "../datalove-rtdt"
+datalove-rtdt.workspace = true

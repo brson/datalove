@@ -1,17 +1,19 @@
 [package]
 name = "datalove-worldgen"
+description = "A worldfile generator for datafun."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 rand = "0.8"
-datalove-datalit.path = "../datalove-datalit"
-datalove-datafun-ast.path = "../datalove-datafun-ast"
+datalove-datalit.workspace = true
+datalove-datafun-ast.workspace = true
 
 [dev-dependencies]
 datalove-datafun.path = "../datalove-datafun"

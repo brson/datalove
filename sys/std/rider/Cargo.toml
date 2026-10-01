@@ -1,6 +1,12 @@
 [package]
 name = "datalove-rider-sys-std"
-version = "0.1.0"
+description = "Native functions for the datalove sys/std package."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+# Not the workspace's 2024: the exported functions are written `#[no_mangle]`,
+# which 2024 wants spelled `#[unsafe(no_mangle)]`.
 edition = "2021"
 
 [features]
@@ -11,15 +17,15 @@ index-64 = [
 ]
 
 [dependencies]
-datalove-rtdt = { path = "../../../crates/datalove-rtdt" }
+datalove-rtdt.workspace = true
 # The interface only. A rider declares the runtime functions it calls and
 # resolves them against the runtime it is loaded into, rather than carrying a
 # second copy of one.
-datalove-rti = { path = "../../../crates/datalove-rti" }
+datalove-rti.workspace = true
 
 # A test harness is an executable, and an executable cannot leave the runtime
 # functions this crate calls undefined the way a shared library can. So tests
 # get a real runtime, while the library a program loads still gets none: a
 # dev-dependency is not built into it.
 [dev-dependencies]
-datalove-rt = { path = "../../../crates/datalove-rt" }
+datalove-rt.path = "../../../crates/datalove-rt"

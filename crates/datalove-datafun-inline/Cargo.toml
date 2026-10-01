@@ -1,12 +1,14 @@
 [package]
 name = "datalove-datafun-inline"
+description = "Function inlining over datafun IR."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-datafun-ir/index-64"]
 
 [dependencies]
-datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-ir.workspace = true

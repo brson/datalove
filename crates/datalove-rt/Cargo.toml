@@ -1,9 +1,11 @@
 [package]
 name = "datalove-rt"
+description = "The datalove runtime."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [lib]
 crate-type = ["lib", "staticlib"]
@@ -14,10 +16,10 @@ index-64 = ["datalove-rtdt/index-64", "datalove-rti/index-64"]
 
 [dependencies]
 rmx.workspace = true
-datalove-rtdt = { path = "../datalove-rtdt" }
+datalove-rtdt.workspace = true
 # For the declarations this crate's exports are checked against. Nothing here
 # calls through them; see `abi_check`.
-datalove-rti = { path = "../datalove-rti" }
+datalove-rti.workspace = true
 
 # Proptest is only enabled here so that it stays out of the wasm build,
 # where its getrandom dependency does not compile.

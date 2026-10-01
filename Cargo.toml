@@ -1,9 +1,8 @@
 [workspace.package]
-description = "todo"
 version = "0.1.0"
 license = "Apache-2.0 OR MIT"
 authors = ["Brian Anderson <andersrb@gmail.com>"]
-documentation = "todo"
+repository = "https://github.com/brson/datalove"
 edition = "2024"
 
 [workspace]
@@ -30,7 +29,10 @@ rmx.features = [
   "termcolor",
   "toml",
 ]
+# Versioned apart from the rest: `bcts` is published on its own schedule and
+# is already at 0.7.0 where this workspace is at 0.1.0.
 bct.package = "bcts"
+bct.version = "0.7.0"
 bct.path = "crates/bcts"
 serde.version = "1"
 serde.features = ["rc"]
@@ -38,6 +40,51 @@ enum-iterator.version = "2"
 salsa.version = "0.28.2"
 ariadne.version = "0.4"
 rustc-hash.version = "2"
+
+# The crates of this workspace, by version as well as by path: cargo will not
+# publish a dependency that has only a path, and a release bumps them here
+# rather than in every manifest that names one.
+#
+# The test and bench crates are left out. They are `publish = false`, and a
+# dev-dependency with only a path is dropped when a crate is packaged, so
+# nothing needs them to be published.
+
+datalove = { version = "0.1.0", path = "crates/datalove" }
+datalove-buildinfo = { version = "0.1.0", path = "crates/datalove-buildinfo" }
+datalove-cli = { version = "0.1.0", path = "crates/datalove-cli" }
+datalove-ct = { version = "0.1.0", path = "crates/datalove-ct" }
+datalove-datafun = { version = "0.1.0", path = "crates/datalove-datafun" }
+datalove-datafun-ast = { version = "0.1.0", path = "crates/datalove-datafun-ast" }
+datalove-datafun-c-aot = { version = "0.1.0", path = "crates/datalove-datafun-c-aot" }
+datalove-datafun-common = { version = "0.1.0", path = "crates/datalove-datafun-common" }
+datalove-datafun-compiler = { version = "0.1.0", path = "crates/datalove-datafun-compiler" }
+datalove-datafun-const = { version = "0.1.0", path = "crates/datalove-datafun-const" }
+datalove-datafun-cranelift = { version = "0.1.0", path = "crates/datalove-datafun-cranelift" }
+datalove-datafun-cranelift-aot = { version = "0.1.0", path = "crates/datalove-datafun-cranelift-aot" }
+datalove-datafun-cranelift-jit = { version = "0.1.0", path = "crates/datalove-datafun-cranelift-jit" }
+datalove-datafun-inline = { version = "0.1.0", path = "crates/datalove-datafun-inline" }
+datalove-datafun-interp = { version = "0.1.0", path = "crates/datalove-datafun-interp" }
+datalove-datafun-intrinsics = { version = "0.1.0", path = "crates/datalove-datafun-intrinsics" }
+datalove-datafun-ir = { version = "0.1.0", path = "crates/datalove-datafun-ir" }
+datalove-datafun-lower = { version = "0.1.0", path = "crates/datalove-datafun-lower" }
+datalove-datafun-ownership = { version = "0.1.0", path = "crates/datalove-datafun-ownership" }
+datalove-datafun-parser = { version = "0.1.0", path = "crates/datalove-datafun-parser" }
+datalove-datafun-pkg = { version = "0.1.0", path = "crates/datalove-datafun-pkg" }
+datalove-datafun-resolve = { version = "0.1.0", path = "crates/datalove-datafun-resolve" }
+datalove-datafun-sema = { version = "0.1.0", path = "crates/datalove-datafun-sema" }
+datalove-datafun-tycheck = { version = "0.1.0", path = "crates/datalove-datafun-tycheck" }
+datalove-datalit = { version = "0.1.0", path = "crates/datalove-datalit" }
+datalove-diagnostic = { version = "0.1.0", path = "crates/datalove-diagnostic" }
+datalove-paths = { version = "0.1.0", path = "crates/datalove-paths" }
+datalove-pkg-manifest = { version = "0.1.0", path = "crates/datalove-pkg-manifest" }
+datalove-repl = { version = "0.1.0", path = "crates/datalove-repl" }
+datalove-repl-rat = { version = "0.1.0", path = "crates/datalove-repl-rat" }
+datalove-rider-sys-std = { version = "0.1.0", path = "sys/std/rider" }
+datalove-rt = { version = "0.1.0", path = "crates/datalove-rt" }
+datalove-rtdt = { version = "0.1.0", path = "crates/datalove-rtdt" }
+datalove-rti = { version = "0.1.0", path = "crates/datalove-rti" }
+datalove-sys-packages = { version = "0.1.0", path = "sys" }
+datalove-worldgen = { version = "0.1.0", path = "crates/datalove-worldgen" }
 
 # Full DWARF for this workspace and its dependencies is the bulk of a target
 # directory. `line-tables-only` keeps the file and line that a backtrace

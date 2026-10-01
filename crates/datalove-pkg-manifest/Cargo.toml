@@ -5,6 +5,7 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 # Deliberately small. A build script reads manifests to embed a package
 # library, so this must not drag a compiler in behind it.

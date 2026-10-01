@@ -1,19 +1,21 @@
 [package]
 name = "datalove-repl"
+description = "The datalove REPL evaluation engine."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
-datalove-datafun.path = "../datalove-datafun"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun.workspace = true
+datalove-datafun-ir.workspace = true
 # For `Setter`, which is what editing a unit's source is.
 salsa.workspace = true
 serde = { version = "1.0", features = ["derive"] }
 # For the work dir, where riders are built when they are not linked in.
-datalove-paths.path = "../datalove-paths"
+datalove-paths.workspace = true
 
 [dev-dependencies]
 # The engine tests run against the system library the binary ships.

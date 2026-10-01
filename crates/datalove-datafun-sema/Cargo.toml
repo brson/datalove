@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-sema"
+description = "Semantic types shared by ownership analysis and lowering."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-datafun-ir/index-64", "datalove-datafun-common/index-64"]
@@ -12,7 +14,7 @@ index-64 = ["datalove-datafun-ir/index-64", "datalove-datafun-common/index-64"]
 rmx.workspace = true
 salsa.workspace = true
 bct.workspace = true
-datalove-datafun-ast.path = "../datalove-datafun-ast"
-datalove-datafun-common.path = "../datalove-datafun-common"
-datalove-datalit.path = "../datalove-datalit"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-ast.workspace = true
+datalove-datafun-common.workspace = true
+datalove-datalit.workspace = true
+datalove-datafun-ir.workspace = true

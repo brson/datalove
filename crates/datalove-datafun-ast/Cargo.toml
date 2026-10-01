@@ -1,14 +1,16 @@
 [package]
 name = "datalove-datafun-ast"
+description = "Abstract syntax for datafun."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
-datalove-datalit.path = "../datalove-datalit"
-datalove-diagnostic.path = "../datalove-diagnostic"
+datalove-datalit.workspace = true
+datalove-diagnostic.workspace = true

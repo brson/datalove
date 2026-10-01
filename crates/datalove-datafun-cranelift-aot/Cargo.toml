@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datafun-cranelift-aot"
+description = "The datafun ahead-of-time Cranelift backend."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = [
@@ -13,8 +15,8 @@ index-64 = [
 
 [dependencies]
 rmx.workspace = true
-datalove-datafun-cranelift.path = "../datalove-datafun-cranelift"
-datalove-datafun-ir.path = "../datalove-datafun-ir"
+datalove-datafun-cranelift.workspace = true
+datalove-datafun-ir.workspace = true
 
 cranelift-codegen = "0.135"
 cranelift-frontend = "0.135"

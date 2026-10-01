@@ -166,6 +166,38 @@ memo-table:
 gen-rti:
     uv run --no-project scripts/gen-rti.py
 
+# Check that every crate would publish, without publishing any.
+#
+# Manifests only. `--no-verify` skips building each packaged crate, which is
+# the slow half and says nothing a normal build does not.
+publish-check:
+    cargo publish --dry-run --workspace --no-verify
+
+# Build a local registry holding this workspace, for trying the release path.
+#
+# Vendors the third-party crates, packages ours, and puts both in one
+# directory a cargo config can stand in for crates.io with. See
+# `scripts/local-registry.py` for what to do with it.
+#
+# This is the answer to the release path being untestable until a release:
+# it is testable, against crates nobody published.
+local-registry DIR="target/local-registry":
+    cargo vendor --versioned-dirs {{DIR}}
+    cargo package --workspace --no-verify
+    uv run --no-project scripts/local-registry.py {{DIR}}
+
+# Publish the workspace.
+#
+# `bcts` is excluded: it is versioned on its own schedule and 0.7.0 is already
+# up, which cargo would refuse rather than skip. Bump it and drop the
+# exclusion when it next changes.
+#
+# Not atomic. Verification happens before any upload, so a failure part way is
+# a network or rate-limit problem rather than a manifest one, and leaves some
+# crates published. Re-running skips nothing, so pick up from what is left.
+publish:
+    cargo publish --workspace --exclude bcts
+
 benchvs:
     cd benchvs && just run
 

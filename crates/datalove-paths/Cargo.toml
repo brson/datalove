@@ -5,8 +5,9 @@ version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [dependencies]
 rmx.workspace = true
 # For `ABI_VERSION`, which names the work dir.
-datalove-rti.path = "../datalove-rti"
+datalove-rti.workspace = true

@@ -24,10 +24,10 @@ Already done, and this plan builds on it:
 
 What blocks publishing:
 
-- Internal path dependencies carry no `version`, so every crate fails
-  `cargo package`.
-- No crate but `bcts` has a `description` or `repository`; crates.io requires
-  a description.
+- ~~Internal path dependencies carry no `version`.~~ Cleared by phase 8:
+  named once in `[workspace.dependencies]`, version beside path.
+- ~~No crate but `bcts` has a `description` or `repository`.~~ Cleared by
+  phase 8.
 - ~~`sys/std/rider/build.rs` reads `../rider.dli`, above its own package
   root.~~ Cleared by phase 3.
 - ~~The component names `datalove-rt`, `rtdt` and `rti` by absolute path,
@@ -253,163 +253,58 @@ way, so `script --jit` is exercised, but the benches still call
 
 ## Phase 8 --- publish, having tested the production path first
 
-1. Give every internal path dependency a `version` next to its `path`, and
-   every crate a `description` and `repository`. `cargo package --workspace
-   --no-verify` names each failure in turn.
-2. Mark the test and bench crates `publish = false`. Cargo strips path-only
-   dev-dependencies, so `datalove-exampletest`, `datalove-tests`,
-   `datalove-rt-tests` and `datalove-bench` need no versions and need not
-   publish.
-3. Build a local registry from `cargo package` output and point
-   `[source.crates-io]` at it with `replace-with`. Run the suite with a `Prod`
-   `BuildInfo` against it. This is the whole of the answer to "the production
-   path cannot be tested until the crates are published": it can, against
-   crates that were never published, and it should run in CI rather than once
-   by hand before a release.
-4. `cargo publish --workspace`, stable since Rust 1.90, orders the publishes
-   and strips `path`. It is not atomic: a failure part way leaves some crates
-   published. Verification happens before any upload, so the likely causes are
-   network and rate limits rather than manifest errors.
-5. `bcts` stays on its own version. Everything else goes at `0.1.0`.
+Prepared and validated; **not published**. Everything below is done except
+the upload itself.
 
-## Ordering
+1. Every internal dependency is named once in `[workspace.dependencies]`,
+   with a version beside the path, so a release bumps them in one file rather
+   than in thirty-odd. `bcts` is there too, at its own 0.7.0.
+2. Every crate has a `description` and inherits `repository`. The
+   `[workspace.package]` `description = "todo"` and `documentation = "todo"`
+   are gone; docs.rs needs no telling.
+3. `publish = false` on the four test and bench crates. 37 of the 41 members
+   would publish.
+4. **Internal dev-dependencies stay path-only.** Giving them versions made the
+   workspace unpublishable: `datalove-datafun` depends on
+   `datalove-datafun-compiler`, whose tests depend on `datalove-datafun`
+   back, and neither can be first. Cargo drops a path-only dev-dependency
+   when it packages, so the cycle costs nothing --- except that an OS packager
+   cannot run the tests from a published tarball, which is the documented
+   trade.
+5. `just publish-check` is `cargo publish --dry-run --workspace --no-verify`,
+   which passes clean. Note that `cargo package --workspace` does **not**
+   honour `publish = false` --- it packages everything --- so checking with
+   `package` reports failures for crates that would never be published.
 
-Phase 1 stands alone and should land first. Phases 2 and 3 are independent of
-each other and of 1. Phase 4 must precede 5 and 6, which both read
-`BuildInfo`. Phase 6 needs 2, for the name and version it puts in the
-manifest. Phase 7 needs 6, there being no unprivileged path to test before
-that. Phase 8 needs all of them.
+### The release path, tried before releasing
 
-Nothing before phase 6 changes what an installed binary can do, so phases 1
-through 5 are all verifiable against the tree as it is.
+`just local-registry` vendors the third-party crates, packages ours, and puts
+both in one directory. With a `CARGO_HOME` whose config replaces `crates-io`
+with it, `cargo install --offline --locked datalove-cli --version 0.1.0`
+builds and installs. `CARGO_HOME` rather than a project config because the
+compiler shells out to cargo again for the native component, in a work dir
+with no project above it, and that invocation needs the replacement too.
 
-## The ABI check
+What that proved, none of which any other test covers:
 
-### What can go wrong
+- `datalove --version` says `0.1.0 (release)`. `BuildInfo` reads an unpacked
+  registry crate as `Prod`, which the structural check was written for.
+- `datalove script` on `50_string_len.dfs` gives `(5, 0, 2, false, true)`,
+  so `sys/` out of a crate and the linked rider natives both work in the
+  published shape.
+- `datalove aot-compile --run` builds a component whose manifest reads
+  `datalove-rt = { version = "=0.1.0" }` and the rest likewise, links, and
+  runs. That is the `Dep::Registry` branch doing it rather than being
+  unit-tested.
+- Same fixture, in-tree and installed: identical behaviour.
 
-A host and a rider are compiled separately and have to agree on three things:
+### What remains
 
-1. The layout of the `rtdt` types that cross --- `TyDesc`, `String`, `Int`,
-   `List`, `Index`.
-2. `RtiTable`'s field order and each field's signature. The rider indexes into
-   the table; field order *is* the ABI.
-3. That `RtLocal`'s first field is the table pointer, which is how the rider
-   finds the table at all.
+`just publish` runs `cargo publish --workspace --exclude bcts`. `bcts` is
+excluded because 0.7.0 is up and unchanged, and cargo refuses a version that
+exists rather than skipping it; bump it and drop the exclusion when it next
+changes.
 
-Ways they come apart, in rough order of likelihood:
-
-- **Independent version resolution.** Under `Prod` the rider names
-  `rtdt = "0.1"` and cargo resolves the component's graph without reference to
-  what the host was built against. A different minor version with a changed
-  layout is a silent mismatch. Phase 6's exact pinning is the prevention; this
-  is the detection.
-- **Features, not versions.** `index-64` changes `IndexRepr` between `u32` and
-  `u64`, so the same version of `rtdt` has two layouts. Nothing about a
-  version number says which one a library holds.
-- **A stale library.** Two datalove binaries built from different revisions of
-  a checkout, sharing `~/.cache/datalove/work`. Keying the work dir prevents
-  it; the check catches what prevention missed.
-- **A hand-built rider**, compiled against a different revision of `rti` than
-  the datalove that loads it.
-
-### Why nothing catches it now
-
-The table is reached through a pointer at run time, so there is no symbol to
-resolve and no link step to fail. That was the point --- resolving a symbol
-backward into the executable is what is not portable --- but the cost is
-losing the linker as an accidental checker.
-
-Before the table, a changed signature gave either a link error, if a symbol
-had gone, or silent undefined behaviour, if only its arguments had changed.
-With the table it is always the second. A mismatch does not fail: it calls a
-function with the wrong arguments, or reads a field at the wrong offset, and
-carries on.
-
-### The check
-
-One value, computed independently on each side from its own headers, compared
-once when a library is loaded.
-
-`datalove-rti` gains:
-
-```rust
-/// What a rider and a runtime must agree on, as one number.
-pub const ABI_VERSION: u64 = abi_version();
-```
-
-computed at compile time from:
-
-- `table::TABLE_SHAPE`, a hash `gen-rti.py` writes over the generated field
-  names and types. Field order and every signature are in it, so any
-  regeneration that changes the table changes this.
-- `table::EXPORTED`, the field count.
-- `size_of` and the `offset_of!`s of the `rtdt` types that cross. Sizes alone
-  would miss two fields of equal width being swapped, which is why the offsets
-  are in it too.
-
-Mixed with something that actually mixes --- FNV-1a over the bytes is enough.
-This detects difference; it is not a security boundary, and nobody is trying
-to forge it.
-
-Note what is deliberately *not* in it: the version numbers of `rtdt` and
-`rti`. A patch release that changes no layout should not invalidate every
-rider in the wild, and a version number does not say whether `index-64` is on.
-Layout facts trigger exactly when the layout differs, which is the question
-being asked.
-
-The component exports it. `rider_build` already generates the component's
-`lib.rs`, so this is one more generated line and no burden on a rider author:
-
-```rust
-#[no_mangle]
-pub static DLR_ABI_VERSION: u64 = datalove_rti::ABI_VERSION;
-```
-
-Because the component is compiled against whatever `rti` the riders resolved,
-the value it exports describes the rider side. The host compares against its
-own.
-
-The host checks it in `rider_load::load_rider_library`, before it looks up a
-single `dlr_*`:
-
-```rust
-let theirs: libloading::Symbol<*const u64> = lib.get(b"DLR_ABI_VERSION")
-    .context("rider library exports no ABI version; it was built by \
-              a datalove too old to say, or is not a rider library")?;
-if unsafe { **theirs } != datalove_rti::ABI_VERSION {
-    bail!("rider library was built against a different runtime interface \
-           (library {:#x}, this datalove {:#x})", unsafe { **theirs },
-          datalove_rti::ABI_VERSION);
-}
-```
-
-A missing symbol is a failure in its own right, not something to shrug at: an
-older library, or a library that is not one of ours.
-
-### What it costs and what it does not cover
-
-One `dlsym` and one comparison per library load. Nothing per call, and nothing
-in a rider's own code.
-
-It is a whole-interface check. Equal means compatible and different means
-incompatible, with nothing in between --- no partial compatibility, no
-per-function negotiation, no optional fields. That is the right granularity
-while the interface is one table and the only consumers are built from the
-same tree. A versioned table with appendable fields is the thing to do if
-riders ever ship on their own schedule, and this check is what would tell us
-we need it.
-
-### The AOT side
-
-An AOT program links the runtime by name, so the linker checks signatures
-there, and the component carries one runtime built together with the riders.
-The residual risk is different: the emitted code has struct offsets in it,
-from `tydesc_emit`'s `size_of` and `offset_of!` at *compiler* build time, and
-the component's `datalove-rt` might be a different version than the compiler
-was built against. Exact pinning in phase 6 prevents it, and the linker
-catches a signature that moved.
-
-If that turns out to be worth belt and braces, the emitted program can call
-the runtime for its `ABI_VERSION` at startup and compare against one the
-compiler baked in, aborting on mismatch. It costs a call per program start and
-is worth doing only if pinning proves not to hold in practice.
+Not atomic. Verification happens before any upload, so a failure part way is
+network or rate limits rather than a manifest problem, and leaves some crates
+published and the rest not.

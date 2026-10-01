@@ -1,9 +1,11 @@
 [package]
 name = "datalove-datalit"
+description = "The datalit data language: syntax, types and values."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
 edition.workspace = true
+repository.workspace = true
 
 [features]
 index-64 = ["datalove-rtdt/index-64"]
@@ -13,9 +15,9 @@ rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true
 serde = { version = "1", features = ["derive"] }
-datalove-diagnostic.path = "../datalove-diagnostic"
-datalove-rtdt.path = "../datalove-rtdt"
-datalove-rt.path = "../datalove-rt"
+datalove-diagnostic.workspace = true
+datalove-rtdt.workspace = true
+datalove-rt.workspace = true
 rand = "0.8"
 num-traits = "0.2"
 getrandom = { version = "0.2", features = ["js"] }
