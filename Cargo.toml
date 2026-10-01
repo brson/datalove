@@ -30,9 +30,9 @@ rmx.features = [
   "toml",
 ]
 # Versioned apart from the rest: `bcts` is published on its own schedule and
-# is already at 0.7.0 where this workspace is at 0.1.0.
+# is already at 0.7.1 where this workspace is at 0.1.0.
 bct.package = "bcts"
-bct.version = "0.7.0"
+bct.version = "0.7.1"
 bct.path = "crates/bcts"
 serde.version = "1"
 serde.features = ["rc"]

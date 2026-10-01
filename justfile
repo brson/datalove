@@ -188,15 +188,15 @@ local-registry DIR="target/local-registry":
 
 # Publish the workspace.
 #
-# `bcts` is excluded: it is versioned on its own schedule and 0.7.0 is already
-# up, which cargo would refuse rather than skip. Bump it and drop the
-# exclusion when it next changes.
+# `bcts` is versioned on its own schedule, so it is in only while the bump is
+# unpublished. Once 0.7.1 is up, cargo would refuse the crate rather than skip
+# it: exclude it again until it next changes.
 #
 # Not atomic. Verification happens before any upload, so a failure part way is
 # a network or rate-limit problem rather than a manifest one, and leaves some
 # crates published. Re-running skips nothing, so pick up from what is left.
 publish:
-    cargo publish --workspace --exclude bcts
+    cargo publish --workspace
 
 benchvs:
     cd benchvs && just run
