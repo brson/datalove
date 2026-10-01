@@ -186,17 +186,26 @@ local-registry DIR="target/local-registry":
     cargo package --workspace --no-verify
     uv run --no-project scripts/local-registry.py {{DIR}}
 
-# Publish the workspace.
+# Publish the workspace in one shot.
 #
-# `bcts` is versioned on its own schedule, so it is in only while the bump is
-# unpublished. Once 0.7.1 is up, cargo would refuse the crate rather than skip
-# it: exclude it again until it next changes.
-#
-# Not atomic. Verification happens before any upload, so a failure part way is
-# a network or rate-limit problem rather than a manifest one, and leaves some
-# crates published. Re-running skips nothing, so pick up from what is left.
+# Right for a release of crates that are all already up, which rate limits
+# barely touch: a new version of an existing name gets a burst of thirty and a
+# refill a minute. Wrong for a first publish and wrong for resuming a run that
+# stopped part way, because cargo checks the whole set against the index
+# before it uploads anything and fails on the first crate already published.
+# Use `publish-drip` for those.
 publish:
     cargo publish --workspace
+
+# Publish the workspace a crate at a time, waiting out the rate limit.
+#
+# A new crate name is limited to one per ten minutes after a burst of five, so
+# a first publish of this workspace stops after five and 429s, and cargo has
+# no way to pace itself. This reads the index to see what is already up,
+# excludes it, publishes what is left, and sleeps when the registry says to.
+# Interruptible and re-runnable. See `botdocs/release.md`.
+publish-drip:
+    uv run --no-project scripts/publish-drip.py
 
 benchvs:
     cd benchvs && just run
