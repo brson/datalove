@@ -1,0 +1,97 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "Place",
+            "root": "a",
+            "steps": []
+          }
+        },
+        "else_body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "Place",
+                "root": "b",
+                "steps": []
+              }
+            },
+            "else_body": [
+              {
+                "condition": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "c",
+                    "steps": []
+                  }
+                },
+                "else_body": [
+                  {
+                    "kind": "Let",
+                    "name": "x",
+                    "type_hint": null,
+                    "value": {
+                      "expr": {
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "3"
+                      }
+                    }
+                  }
+                ],
+                "kind": "If",
+                "then_body": [
+                  {
+                    "kind": "Let",
+                    "name": "x",
+                    "type_hint": null,
+                    "value": {
+                      "expr": {
+                        "kind": "Place",
+                        "root": "v",
+                        "steps": []
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "x",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "x",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": []
+}

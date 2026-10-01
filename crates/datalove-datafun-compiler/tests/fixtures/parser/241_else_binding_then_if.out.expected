@@ -1,0 +1,72 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "Place",
+            "root": "r",
+            "steps": []
+          }
+        },
+        "else_body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "True",
+                "type_hint": null
+              }
+            },
+            "else_body": null,
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "b",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "e",
+                    "steps": []
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "a",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "v",
+                "steps": []
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P066",
+      "labels": [
+        {
+          "message": "nest this `if` inside the else body instead",
+          "span": [
+            30,
+            32
+          ],
+          "text": "if"
+        }
+      ],
+      "message": "an else binding cannot be followed by `if`"
+    }
+  ]
+}

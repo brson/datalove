@@ -1,0 +1,4 @@
+if true
+  let a = 1
+else if false
+  let b = 2

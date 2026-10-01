@@ -801,49 +801,32 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         self.eat_word("if");
-
-        // Parse condition expression.
-        let condition = self.parse_expr_full();
-
-        // Parse optional then binding: |identifier|
-        let then_binding = if self.peek_sigil(Sigil::Pipe) {
-            self.eat_sigil(Sigil::Pipe);
-            let binding = match self.eat_declared_name(NameKind::Value) {
-                Some(n) => n,
-                None => {
-                    self.had_error = true;
-                    let ts = self.peek_text_span();
-                    DiagnosticBuilder::error(self.db, "expected binding name after '|'")
-                        .code("P019")
-                        .primary_label(ts, "expected binding name")
-                        .emit_parse();
-                    InternedText::new(self.db, "<error>".S())
-                }
-            };
-            if !self.eat_sigil(Sigil::Pipe) {
-                self.had_error = true;
-                // Use position after binding name, not peek position (which may be 0 at end of line).
-                let pos = self.last_byte_end();
-                let ts = TextSpan::new(self.source_text(), pos..pos);
-                DiagnosticBuilder::error(self.db, "expected '|' after binding name")
-                    .code("P020")
-                    .primary_label(ts, "expected '|'")
-                    .emit_parse();
+        match self.parse_if_arm(remaining_lines) {
+            Some(stmt) => {
+                self.eat_end_line(remaining_lines, "if");
+                ast::Statement::If(stmt)
             }
-            Some(binding)
-        } else {
-            None
-        };
+            None => self.unterminated_block("if"),
+        }
+    }
 
-        // Parse then body until we hit "else" or "end if".
+    /// Parse an `if` after its keyword, stopping before the `end if` line.
+    ///
+    /// An `else if` line is parsed as a nested arm that becomes the whole
+    /// else body, so a chain shares the single `end if` of its first `if`.
+    /// Returns `None` if the input ran out before `end if`.
+    fn parse_if_arm(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+    ) -> Option<ast::StmtIf<'db>> {
+        let condition = self.parse_expr_full();
+        let then_binding = self.parse_pipe_binding();
+
         let mut then_body = vec![];
         let mut found_else = false;
-        let mut found_end_if = false;
 
         while let Some((_, line)) = remaining_lines.peek() {
             if self.line_is_end_keyword(line, "if") {
-                self.eat_end_line(remaining_lines, "if");
-                found_end_if = true;
                 break;
             }
 
@@ -859,75 +842,86 @@ impl<'db> Parser<'db> {
             then_body.push(stmt);
         }
 
-        // Parse else binding and body if we found "else".
         let (else_binding, else_body) = if found_else {
-            // Consume the "else" line and parse any binding.
             let (_, else_line) = remaining_lines.next().X();
             let mut else_sub = self.new_sub(else_line);
             else_sub.eat_word("else");
+            let else_binding = else_sub.parse_pipe_binding();
 
-            // Parse optional else binding: |identifier|
-            let else_binding = if else_sub.peek_sigil(Sigil::Pipe) {
-                else_sub.eat_sigil(Sigil::Pipe);
-                let binding = match else_sub.eat_declared_name(NameKind::Value) {
-                    Some(n) => n,
-                    None => {
-                        else_sub.had_error = true;
-                        let ts = else_sub.peek_text_span();
-                        DiagnosticBuilder::error(else_sub.db, "expected binding name after '|'")
-                            .code("P019")
-                            .primary_label(ts, "expected binding name")
-                            .emit_parse();
-                        InternedText::new(else_sub.db, "<error>".S())
-                    }
-                };
-                if !else_sub.eat_sigil(Sigil::Pipe) {
+            if else_sub.peek_word() == Some("if") {
+                if else_binding.is_some() {
                     else_sub.had_error = true;
-                    // Use position after binding name, not peek position (which may be 0 at end of line).
-                    let pos = else_sub.last_byte_end();
-                    let ts = TextSpan::new(else_sub.source_text(), pos..pos);
-                    DiagnosticBuilder::error(else_sub.db, "expected '|' after binding name")
-                        .code("P020")
-                        .primary_label(ts, "expected '|'")
+                    let ts = else_sub.peek_text_span();
+                    DiagnosticBuilder::error(else_sub.db, "an else binding cannot be followed by `if`")
+                        .code("P066")
+                        .primary_label(ts, "nest this `if` inside the else body instead")
                         .emit_parse();
                 }
-                Some(binding)
+                else_sub.eat_word("if");
+                let nested = else_sub.parse_if_arm(remaining_lines);
+                else_sub.error_if_not_exhausted();
+                self.merge_identity_from(&mut else_sub);
+                (else_binding, Some(vec![ast::Statement::If(nested?)]))
             } else {
-                None
-            };
-            else_sub.error_if_not_exhausted();
-            self.had_error |= else_sub.had_error;
+                else_sub.error_if_not_exhausted();
+                self.merge_identity_from(&mut else_sub);
 
-            let mut body = vec![];
+                let mut body = vec![];
+                while let Some((_, line)) = remaining_lines.peek() {
+                    if self.line_is_end_keyword(line, "if") {
+                        break;
+                    }
 
-            while let Some((_, line)) = remaining_lines.peek() {
-                if self.line_is_end_keyword(line, "if") {
-                    self.eat_end_line(remaining_lines, "if");
-                    found_end_if = true;
-                    break;
+                    let (_, line) = remaining_lines.next().X();
+                    let stmt = self.parse_line_statement(line, remaining_lines);
+                    body.push(stmt);
                 }
-
-                let (_, line) = remaining_lines.next().X();
-                let stmt = self.parse_line_statement(line, remaining_lines);
-                body.push(stmt);
+                (else_binding, Some(body))
             }
-
-            (else_binding, Some(body))
         } else {
             (None, None)
         };
 
-        if !found_end_if {
-            return self.unterminated_block("if");
-        }
+        remaining_lines.peek()?;
 
-        ast::Statement::If(ast::StmtIf {
+        Some(ast::StmtIf {
             condition,
             then_binding,
             then_body,
             else_binding,
             else_body,
         })
+    }
+
+    /// Parse an optional `|name|` branch binding.
+    fn parse_pipe_binding(&mut self) -> Option<InternedText<'db>> {
+        if !self.peek_sigil(Sigil::Pipe) {
+            return None;
+        }
+        self.eat_sigil(Sigil::Pipe);
+        let binding = match self.eat_declared_name(NameKind::Value) {
+            Some(n) => n,
+            None => {
+                self.had_error = true;
+                let ts = self.peek_text_span();
+                DiagnosticBuilder::error(self.db, "expected binding name after '|'")
+                    .code("P019")
+                    .primary_label(ts, "expected binding name")
+                    .emit_parse();
+                InternedText::new(self.db, "<error>".S())
+            }
+        };
+        if !self.eat_sigil(Sigil::Pipe) {
+            self.had_error = true;
+            // Use position after binding name, not peek position (which may be 0 at end of line).
+            let pos = self.last_byte_end();
+            let ts = TextSpan::new(self.source_text(), pos..pos);
+            DiagnosticBuilder::error(self.db, "expected '|' after binding name")
+                .code("P020")
+                .primary_label(ts, "expected '|'")
+                .emit_parse();
+        }
+        Some(binding)
     }
 
     fn parse_loop(

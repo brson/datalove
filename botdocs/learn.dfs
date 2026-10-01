@@ -411,16 +411,16 @@ let length_of_original = consume(original)
 // 15. CONTROL FLOW
 // =========================================================================
 
-// `if` and `else`, closed by `end if`. There is no `else if`; nest instead.
+// `if` and `else`, closed by `end if`. An `else if` chains another arm, and
+// the whole chain shares the one `end if`. An `else |e|` binding cannot be
+// followed by `if`; nest instead.
 fun classify(n: u32): string
   if n == 0
     ret "zero"
+  else if n .< 10
+    ret "small"
   else
-    if n .< 10
-      ret "small"
-    else
-      ret "large"
-    end if
+    ret "large"
   end if
 end fun
 

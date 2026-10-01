@@ -1,0 +1,25 @@
+// An `else if` chain shares the one `end if` of its first `if`, and an arm
+// that matches none falls through to what follows.
+fun classify(n: u32): u32
+  if n .< 5
+    ret 1
+  else if n == 5
+    ret 2
+  else if n .< 10
+    ret 3
+  end if
+  ret 4
+end fun
+
+// A later arm can bind, and the final `else` covers what no arm took.
+fun pick(a: ?u32, b: ?u32): u32
+  if a |x|
+    ret x
+  else if b |y|
+    ret y
+  else
+    ret 0
+  end if
+end fun
+
+let output = ((classify(1), classify(5), classify(7), classify(50)), (pick(some 1, some 2), pick(none, some 2), pick(none, none)))
