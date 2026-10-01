@@ -47,10 +47,10 @@
         {
           "message": "column count mismatch",
           "span": [
-            22,
-            22
+            12,
+            19
           ],
-          "text": ""
+          "text": "1, 2, 3"
         }
       ],
       "message": "row 1 has 3 columns but header has 2"

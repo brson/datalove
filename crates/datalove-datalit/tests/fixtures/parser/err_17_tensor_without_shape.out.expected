@@ -60,10 +60,10 @@
         {
           "message": "shape mismatch",
           "span": [
-            16,
-            16
+            10,
+            13
           ],
-          "text": ""
+          "text": "4 5"
         }
       ],
       "message": "inconsistent tensor shape at group 1: expected [3] but got [2]"

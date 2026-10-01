@@ -153,6 +153,13 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
         token.text_span(self.source_text()).X()
     }
 
+    /// Extract the TextSpan covering a nonempty run of tokens.
+    fn extract_group_text_span(&self, tokens: &[TreeToken<'db>]) -> TextSpan<'db> {
+        let start = tokens.first().X().span().start;
+        let end = tokens.last().X().span().end;
+        TextSpan::new(self.source_text(), start..end)
+    }
+
     /// Get Text and ByteSpan from current position for error reporting.
     ///
     /// At the end of input this is an empty span just after the last token

@@ -502,7 +502,7 @@ impl<'db> Parser<'db> {
                 None => inner_shape = Some(sub_shape),
                 Some(expected) => {
                     if *expected != sub_shape {
-                        let ts = self.peek_text_span();
+                        let ts = self.extract_group_text_span(group);
                         DiagnosticBuilder::error(self.db,
                             &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
                                 group_idx, expected, sub_shape))
@@ -546,7 +546,7 @@ impl<'db> Parser<'db> {
         for (row_idx, row_tokens) in rows.iter().skip(1).enumerate() {
             let elements = self.parse_table_data_row(row_tokens);
             if elements.len() != num_columns && !elements.is_empty() {
-                let ts = self.peek_text_span();
+                let ts = self.extract_group_text_span(row_tokens);
                 DiagnosticBuilder::error(self.db,
                     &format!("row {} has {} columns but header has {}",
                         row_idx + 1, elements.len(), num_columns))
