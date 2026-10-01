@@ -92,7 +92,7 @@ debuglog (b, c)
 ```
 
 Immutable bindings are declared with `let`, mutable with `var`.
-`var`s are reassigned with `set`.
+Mutable bindings are reassigned with `set`.
 
 
 ## Control flow
