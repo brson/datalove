@@ -117,11 +117,7 @@ impl Started {
 
 impl Engine {
     pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
-        // The work dir is named whether or not it is used: with
-        // `DATALOVE_BUILD_SYS_RIDERS` set the riders are built rather than
-        // taken from this binary, and that is where they build.
-        let workspace = WorkspaceDescriptor::from_system_library(&sys)
-            .with_work_dir(datalove_paths::work_dir()?);
+        let workspace = WorkspaceDescriptor::from_system_library(&sys);
         Engine::with_workspace(sys, workspace)
     }
 
@@ -134,6 +130,17 @@ impl Engine {
         sys: SystemLibrary,
         workspace: WorkspaceDescriptor,
     ) -> AnyResult<Engine> {
+        // An engine needs somewhere to build riders, so a caller that did not
+        // say gets this installation's work dir rather than an engine that
+        // cannot start. It only matters with `DATALOVE_BUILD_SYS_RIDERS` set,
+        // where the riders are built rather than taken from this binary --
+        // which is exactly the arrangement a caller is least likely to have
+        // thought about.
+        let workspace = match workspace.work_dir {
+            Some(_) => workspace,
+            None => workspace.with_work_dir(datalove_paths::work_dir()?),
+        };
+
         let db = datafun::Database::default();
         let mut pipeline = workspace.to_pipeline(&db);
         let started = Started::compile(&db, &mut pipeline, &workspace, &sys)?;
