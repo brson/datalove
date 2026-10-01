@@ -203,7 +203,9 @@ publish:
 # a first publish of this workspace stops after five and 429s, and cargo has
 # no way to pace itself. This reads the index to see what is already up,
 # excludes it, publishes what is left, and sleeps when the registry says to.
-# Interruptible and re-runnable. See `botdocs/release.md`.
+# It verifies the whole workspace once at the start and publishes
+# `--no-verify` thereafter, so the waiting is not spent rebuilding. Hours,
+# then: interruptible and re-runnable. See `botdocs/release.md`.
 publish-drip:
     uv run --no-project scripts/publish-drip.py
 
