@@ -67,9 +67,10 @@ fun count_substrings(
 end fun
 ```
 
-Function arguments are either passed by value, by reference,
-by mutable reference, or as `out` paramaters,
+Function arguments are either passed by value, by reference (`ref`),
+by mutable reference (`mut`), or as `out` paramaters,
 which are mutable references that may not be read and may or may not be previously-initialized.
+The caller must correspondingly indicate the passing mode with `ref`, `mut` or `out`.
 
 ```datalove
 fun demo_param_modes(
@@ -82,10 +83,10 @@ fun demo_param_modes(
   set by_out = by_value * by_ref
 end fun
 
-let a = 2
-var b = 3
+let a = 3
+var b = 4
 var c: int
-demo_param_modes(1, ref a, mut b, out c)
+demo_param_modes(2, ref a, mut b, out c)
 
 debuglog (b, c)
 ```
