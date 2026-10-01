@@ -17,7 +17,7 @@ fn main() {
     let local = mode == "local";
 
     let mut db = datafun::Database::default();
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
     let mut pipeline = descriptor.to_pipeline(&db);
     let local_source = |salt: usize| format!(

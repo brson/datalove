@@ -18,6 +18,16 @@ use datalove_rti::rider_helpers;
 #[cfg(test)]
 extern crate datalove_rt;
 
+/// The interface this rider implements.
+///
+/// The declarations and the implementations have to agree, so they travel
+/// together: this crate is where `rider.dli` lives and is published, and the
+/// compiler reads the interface from here rather than from a path. A datalove
+/// package whose rider is a Rust crate cannot carry the file itself anyway --
+/// cargo excludes a directory holding a `Cargo.toml` from the package around
+/// it, silently, whatever its `include` says.
+pub const INTERFACE: &str = include_str!("../rider.dli");
+
 // The `symbols` table, generated from `rider.dli`. A binary that links this
 // crate uses it to find these functions without a shared library.
 include!(concat!(env!("OUT_DIR"), "/symbols.rs"));

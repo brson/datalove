@@ -317,7 +317,7 @@ pub fn default_work_dir() -> PathBuf {
     let base = match datalove_buildinfo::BUILD_INFO.checkout() {
         Some(checkout) => checkout.join("target"),
         // A release build has no tree to write into, so the cache it is.
-        // `datalove_stdlib::work_dir` is the same directory; this reaches it
+        // `paths::work_dir` is the same directory; this reaches it
         // without depending on that crate, which sits above this one.
         None => std::env::temp_dir().join("datalove"),
     };

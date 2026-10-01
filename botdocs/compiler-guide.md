@@ -90,7 +90,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-cli` | Command line driver: build, run, AOT, native component linking |
 | `datalove-repl` | REPL evaluation engine |
 | `datalove-repl-rat` | Ratatui REPL application and terminal |
-| `datalove-stdlib` | The system library as the binary carries it: embedded sources, linked riders |
+| `datalove-sys-packages` (`sys/`) | The system library as the binary carries it: embedded sources, linked riders. The library is the crate root, so it can be packaged |
 | `datalove-rider-sys-std` (`sys/std/rider`) | Native rider implementations for `sys/std` |
 | `datalove-tests` | Workspace-wide test suites |
 | `datalove-rt-tests` | Runtime tests, separated so the runtime need not depend on datalit |
@@ -101,7 +101,7 @@ modules, plus the `sys/std/rider` Rust crate and the `rider.dli` interface
 inside it.
 `sys/std/rider` is a workspace member like anything under `crates/`.
 
-`datalove-stdlib` sits above everything else: nothing in the compiler depends
+`datalove-sys-packages` sits above everything else: nothing in the compiler depends
 on it, so editing a `.dfm` recompiles no compiler crate. See [The Shipped
 Binary](#user-content-the-shipped-binary).
 
@@ -726,7 +726,7 @@ missing the failure was silent - the REPL's engine thread died and every entry
 sat at "parsing..." forever.
 
 Two things travel inside the binary, both assembled by
-`crates/datalove-stdlib`:
+`sys/`, which is the library and a crate at once:
 
 | What | How | Where it comes from |
 |------|-----|---------------------|
@@ -760,7 +760,7 @@ for a given rider set is rebuilt only when one of its rider crates changes.
 The embedding sits at the top of the crate graph on purpose. Had it gone where
 `load_default_sys` used to live, in `datalove-datafun`, every `.dfm` edit would
 invalidate the bottom of the stack: 22 s to rebuild what `just test` compiles,
-against 0 s before. From `datalove-stdlib`, which only the CLI and a couple of
+against 0 s before. From `datalove-sys-packages`, which only the CLI and a couple of
 test targets depend on, the same edit costs about 7 s, nearly all of it
 relinking the debug binary.
 
@@ -770,7 +770,7 @@ The loop that matters for stdlib work is untouched. `std_tests` and
 std_tests` after editing a module recompiles nothing at all.
 
 That only holds because the two copies cannot drift.
-`crates/datalove-stdlib/tests/embedded_matches_tree.rs` asserts the embedded
+`sys/tests/embedded_matches_tree.rs` asserts the embedded
 table is byte-identical to `sys/`, and that every `native fun` a rider
 interface declares is linked in. The REPL's `engine_tests` run against
 `system_library()`, so the suite covers the shipped path too.
@@ -792,8 +792,8 @@ build.
   dependencies, which is undecided - the local case has to keep working,
   since compiling `datalove-rt` and a rider from in-tree source is the base
   case for development and for any package outside `sys/`.
-- `datalove-stdlib` still embeds `sys/` with `include_str!`, so a packaged
-  crate would carry the library but not the rider crates it names.
+- Nothing: the library is its own crate root, so it packages. What a packaged
+  one cannot carry is the rider crates it names, which come from a registry.
 
 ## Script Compilation Pipeline
 
@@ -1362,7 +1362,7 @@ Two constructors supply the system library, and neither goes looking for it:
 
 ```rust
 // A driver that carries its own library, which is every shipped command.
-let sys = datalove_stdlib::system_library();
+let sys = datalove_sys_packages::system_library();
 let descriptor = WorkspaceDescriptor::from_system_library(&sys);
 
 // A test compiling the tree it lives in.
@@ -1435,7 +1435,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |
 | `std_tests`, `std_all_tests` | The `sys/std` library, compiled from `sys/` on disk. `std_all_tests` runs every fixture through all four backends and requires agreement, and is the only suite that puts a rider call, a bigint or a type parameter through the C backend |
-| `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-stdlib`) |
+| `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-sys-packages`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `database_memory_tests` | Database growth |

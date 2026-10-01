@@ -28,7 +28,7 @@ fn value_of(engine: &mut Engine, name: &str) -> String {
 }
 
 fn engine() -> Engine {
-    Engine::new(datalove_stdlib::system_library()).expect("the engine starts")
+    Engine::new(datalove_sys_packages::system_library()).expect("the engine starts")
 }
 
 /// An engine over the system library and one local module of our own.
@@ -37,7 +37,7 @@ fn engine() -> Engine {
 /// library is the copy embedded in the binary and editing it would recompile
 /// the standard library, which is not what these are measuring.
 fn engine_with_module(source: &str) -> Engine {
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
     let mut workspace = WorkspaceDescriptor::from_system_library(&sys);
     workspace.user_libraries.push(PackageLibrary {
         name: "local".S(),

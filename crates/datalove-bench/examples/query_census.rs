@@ -64,7 +64,7 @@ fn main() {
     let recorder = QueryRecorder::new();
     let mut db = datafun::Database::recording(&recorder);
 
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
     let mut pipeline = descriptor.to_pipeline(&db);
     pipeline.add_module(&db, "local", "app", "main", &local_source(0));

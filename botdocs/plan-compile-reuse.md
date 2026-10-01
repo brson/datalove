@@ -255,7 +255,7 @@ that baseline rather than against today's.
 There are two standard libraries and a process can want both:
 `WorkspaceDescriptor::load_sys_dir(repo_root/sys)` reads the sources in the tree, which is
 what `std_all_tests` uses because it is testing them, and
-`WorkspaceDescriptor::from_system_library(&datalove_stdlib::system_library())` uses the copy
+`WorkspaceDescriptor::from_system_library(&datalove_sys_packages::system_library())` uses the copy
 embedded in the binary, which is what the cli and the repl use. `embedded_matches_tree` exists
 because they are not interchangeable, so whatever holds a world holds one per descriptor, and
 a persisted artifact is fingerprinted against the sources it came from.

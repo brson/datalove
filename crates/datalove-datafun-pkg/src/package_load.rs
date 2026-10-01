@@ -106,11 +106,33 @@ async fn load_library(
             continue;
         }
 
+        if !is_package(&path) {
+            continue;
+        }
+
         let package = package_from_dir(path).await?;
         packages.insert(package.name.C(), package);
     }
 
     Ok(packages)
+}
+
+/// Whether a directory in a library is a datalove package.
+///
+/// A package has modules, or has a manifest and intends to. A library root can
+/// hold other things --- `sys` is itself a Rust crate, so `src` and `target`
+/// are beside the packages in it --- and those are left alone by not looking
+/// like a package rather than by being named here. `sys/build.rs` applies the
+/// same rule when it embeds the library.
+fn is_package(dir: &PathBuf) -> bool {
+    if dir.join(datalove_pkg_manifest::FILE_NAME).is_file() {
+        return true;
+    }
+
+    let Ok(entries) = fs::read_dir(dir) else { return false };
+    entries.filter_map(|entry| entry.ok()).any(|entry| {
+        entry.path().extension().is_some_and(|ext| ext == "dfm")
+    })
 }
 
 pub async fn package_from_dir(

@@ -3,6 +3,7 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
+mod paths;
 mod render;
 
 use datalove_datafun::pipeline::rider_load::register_linked_natives;
@@ -448,9 +449,9 @@ impl LitOpCommand {
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
-            datalove_repl::Engine::run_script(datalove_stdlib::system_library(), script_path)
+            datalove_repl::Engine::run_script(datalove_sys_packages::system_library(), script_path)
         } else {
-            datalove_repl_rat::run(datalove_stdlib::system_library)
+            datalove_repl_rat::run(datalove_sys_packages::system_library)
         }
     }
 }
@@ -477,7 +478,7 @@ impl ScriptCommand {
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         let descriptor = if no_sys {
             WorkspaceDescriptor::empty()
         } else {
@@ -573,7 +574,7 @@ impl ScriptIrCommand {
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
@@ -697,8 +698,8 @@ impl AotCompileCommand {
 
         // Build workspace descriptor. The work dir is where the native
         // component the emitted program links gets built.
-        let work_dir = datalove_stdlib::work_dir()?;
-        let sys = datalove_stdlib::system_library();
+        let work_dir = paths::work_dir()?;
+        let sys = datalove_sys_packages::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
@@ -851,7 +852,7 @@ impl ScriptWorldCommand {
         }
 
         // Build workspace descriptor from sys library + worldfile sections.
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         let sys_descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
@@ -976,7 +977,7 @@ impl TypecheckStdCommand {
 
         let db = datafun::Database::default();
 
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
 
         let mut pipeline = descriptor.to_pipeline(&db);

@@ -6,17 +6,19 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// The library, which is this crate's own directory.
 fn sys_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent().expect("crates dir")
-        .parent().expect("repo root")
-        .join("sys")
 }
 
 /// Package name to module name to source text, as the tree has it.
 fn packages_on_disk() -> BTreeMap<String, BTreeMap<String, String>> {
     dir_entries(&sys_dir()).into_iter()
         .filter(|path| path.is_dir())
+        // The library root is this crate, so `src`, `tests` and `target` are
+        // beside the packages. Same rule as `build.rs` and `package_load`: a
+        // package has modules or a manifest.
+        .filter(|path| is_package(path))
         .map(|package_dir| {
             let modules = dir_entries(&package_dir).into_iter()
                 .filter(|path| path.extension().is_some_and(|ext| ext == "dfm"))
@@ -29,7 +31,7 @@ fn packages_on_disk() -> BTreeMap<String, BTreeMap<String, String>> {
 
 #[test]
 fn every_module_is_embedded_verbatim() {
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
     let on_disk = packages_on_disk();
 
     let embedded: BTreeMap<String, BTreeMap<String, String>> = sys.library.packages.iter()
@@ -64,7 +66,7 @@ fn every_module_is_embedded_verbatim() {
 
 #[test]
 fn every_rider_interface_is_embedded_verbatim() {
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
 
     for (name, package) in &sys.library.packages {
         let interface = sys_dir().join(name).join("rider").join("rider.dli");
@@ -90,7 +92,7 @@ fn every_rider_interface_is_embedded_verbatim() {
 /// same component.
 #[test]
 fn every_rider_crate_is_where_it_is_named() {
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
 
     for (name, package) in &sys.library.packages {
         let Some(rider) = &package.rider else { continue };
@@ -118,7 +120,7 @@ fn every_rider_crate_is_where_it_is_named() {
 /// Every function a rider interface declares is linked into this binary.
 #[test]
 fn every_declared_native_is_linked() {
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
 
     for (name, package) in &sys.library.packages {
         let Some(rider) = &package.rider else { continue };
@@ -134,6 +136,13 @@ fn every_declared_native_is_linked() {
             );
         }
     }
+}
+
+/// Whether a directory in the library is a package.
+fn is_package(dir: &Path) -> bool {
+    dir.join("manifest.toml").is_file()
+        || dir_entries(dir).iter()
+            .any(|path| path.extension().is_some_and(|ext| ext == "dfm"))
 }
 
 fn dir_entries(dir: &Path) -> Vec<PathBuf> {

@@ -16,7 +16,7 @@ datalove-datafun-cranelift-jit = { path = "../datalove-datafun-cranelift-jit" }
 datalove-datafun-interp = { path = "../datalove-datafun-interp" }
 datalove-datafun-ir = { path = "../datalove-datafun-ir" }
 datalove-datafun-parser = { path = "../datalove-datafun-parser" }
-datalove-stdlib = { path = "../datalove-stdlib" }
+datalove-sys-packages = { path = "../../sys" }
 bct.workspace = true
 salsa.workspace = true
 datalove-ct = { path = "../datalove-ct" }

@@ -1,0 +1,31 @@
+[package]
+name = "datalove-sys-packages"
+description = "The datalove system package library, carried inside the binary."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+
+# The crate root is the package library itself, so `sys/std/list.dfm` is inside
+# it and can be packaged. Embedding it from a crate under `crates/` meant
+# reaching above that crate's root with `include_str!`, which cargo does not
+# package, and was one of the things stopping this being published at all.
+#
+# `sys/std/rider` holds a crate of its own, so cargo leaves that directory out
+# of this package. Nothing here needs it: the rider's interface arrives as a
+# Rust constant from the rider crate, which is published separately and carries
+# its own copy.
+#
+# Editor backups are excluded outright. A published library of `.dfm` modules
+# should not have a `string.dfm~` sitting beside `string.dfm`, and leaving that
+# to gitignore makes it depend on the machine that published it.
+exclude = ["**/*~"]
+
+[dependencies]
+rmx.workspace = true
+datalove-datafun.path = "../crates/datalove-datafun"
+# Each sys rider, for the interface it declares and the functions it exports.
+datalove-rider-sys-std.path = "std/rider"
+
+[build-dependencies]
+datalove-pkg-manifest.path = "../crates/datalove-pkg-manifest"

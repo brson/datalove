@@ -65,7 +65,7 @@ reset rebuilds the compiler and executor from them.
 
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` instead of a value:
 those addresses are raw pointers and so not `Send`, and the worker thread
-builds its own. `datalove-cli` passes `datalove_stdlib::system_library`, which
+builds its own. `datalove-cli` passes `datalove_sys_packages::system_library`, which
 is the copy embedded in the binary; see the compiler guide under "The Shipped
 Binary".
 
@@ -167,7 +167,7 @@ an earlier unit stops being available.
 
 - **engine_tests** - 21 `.repl` fixtures through `Engine::run_source`,
   snapshotting the parse, eval, and environment after every input as JSON.
-  They run against `datalove_stdlib::system_library()`, so the suite covers
+  They run against `datalove_sys_packages::system_library()`, so the suite covers
   the library and the linked riders the binary actually ships.
   `BLESS=1` updates them; unset `RUST_BACKTRACE` first.
 - **engine_edit_tests** - the edit path: `edit_unit` and `edit_module`, the

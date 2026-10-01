@@ -91,7 +91,7 @@ fn main() {
         .and_then(|a| a.parse().ok())
         .unwrap_or(10);
 
-    let sys = datalove_stdlib::system_library();
+    let sys = datalove_sys_packages::system_library();
     let descriptor = WorkspaceDescriptor::from_system_library(&sys);
 
     let library = descriptor.system_library.as_ref().expect("the system library is there");

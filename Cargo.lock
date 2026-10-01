@@ -1409,7 +1409,7 @@ dependencies = [
  "datalove-datafun-parser",
  "datalove-datafun-resolve",
  "datalove-datafun-tycheck",
- "datalove-stdlib",
+ "datalove-sys-packages",
  "divan",
  "rustmax 0.0.10",
  "salsa",
@@ -1440,7 +1440,8 @@ dependencies = [
  "datalove-repl",
  "datalove-repl-rat",
  "datalove-rt",
- "datalove-stdlib",
+ "datalove-rti",
+ "datalove-sys-packages",
  "datalove-worldgen",
  "megaspace-pipeliner",
  "pulldown-cmark",
@@ -1805,7 +1806,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-datafun-ir",
  "datalove-exampletest",
- "datalove-stdlib",
+ "datalove-sys-packages",
  "rustmax 0.0.10",
  "salsa",
  "serde",
@@ -1865,13 +1866,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "datalove-stdlib"
+name = "datalove-sys-packages"
 version = "0.1.0"
 dependencies = [
  "datalove-datafun",
  "datalove-pkg-manifest",
  "datalove-rider-sys-std",
- "datalove-rti",
  "rustmax 0.0.10",
 ]
 

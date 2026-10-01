@@ -104,7 +104,7 @@ fn with_world<R>(f: impl FnOnce(World) -> R) -> R {
             let db: &'static datafun::Database =
                 Box::leak(Box::new(datafun::Database::default()));
             let sys: &'static datafun::pipeline::SystemLibrary =
-                Box::leak(Box::new(datalove_stdlib::system_library()));
+                Box::leak(Box::new(datalove_sys_packages::system_library()));
             let descriptor = WorkspaceDescriptor::from_system_library(sys);
             let pipeline: &'static mut datafun::pipeline::ModuleCompilationPipeline =
                 Box::leak(Box::new(descriptor.to_pipeline(db)));

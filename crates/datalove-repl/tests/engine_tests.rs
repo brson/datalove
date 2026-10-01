@@ -9,7 +9,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    let mut engine = repl::Engine::new(datalove_stdlib::system_library())
+    let mut engine = repl::Engine::new(datalove_sys_packages::system_library())
         .map_err(|e| format!("Failed to create engine: {}", e))?;
 
     let results = engine.run_source(&source_text);

@@ -30,7 +30,7 @@ struct Corpus {
 impl Corpus {
     fn new() -> Self {
         let db = datafun::Database::default();
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         let sources = module_texts(&sys)
             .into_iter()
             .map(|text| Source::new(&db, text))
@@ -40,7 +40,7 @@ impl Corpus {
 
     /// How much source there is, so a rate can be worked out from a time.
     fn bytes(&self) -> usize {
-        let sys = datalove_stdlib::system_library();
+        let sys = datalove_sys_packages::system_library();
         module_texts(&sys).iter().map(|t| t.len()).sum()
     }
 }

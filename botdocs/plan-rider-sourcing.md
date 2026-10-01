@@ -28,13 +28,13 @@ What blocks publishing:
   `cargo package`.
 - No crate but `bcts` has a `description` or `repository`; crates.io requires
   a description.
-- `sys/std/rider/build.rs` reads `../rider.dli`, above its own package root,
-  so cargo cannot package the file it needs.
+- ~~`sys/std/rider/build.rs` reads `../rider.dli`, above its own package
+  root.~~ Cleared by phase 3.
 - The component `rider_build` synthesizes names `datalove-rt`, `rtdt` and
   `rti` by absolute path, baked from `env!("CARGO_MANIFEST_DIR")`. An
   installed binary needs its checkout where it was.
-- `datalove-stdlib` embeds `sys/` with `include_str!` from outside its own
-  package root, the same problem as the rider's interface.
+- ~~`datalove-stdlib` embeds `sys/` with `include_str!` from outside its own
+  package root.~~ Cleared by phase 5; the library is its own crate root now.
 
 ## Phase 1 --- the ABI check --- DONE
 
@@ -52,7 +52,7 @@ under *The ABI check* below.
    says.
 4. `rider_load::load_rider_library` reads that symbol before it looks up any
    `dlr_*` and refuses a library whose value differs or is absent.
-5. `datalove_stdlib::work_dir` is named by `ABI_VERSION`, so two datalove
+5. `paths::work_dir` is named by `ABI_VERSION`, so two datalove
    binaries sharing the cache do not build over each other. In-tree work dirs
    are left alone: cargo fingerprints them against path dependencies, which is
    already correct.
@@ -141,19 +141,54 @@ Two things worth knowing:
 Naming a published version instead of a path is phase 6, so under `Prod`
 `checkout_root` is a `todo!()` rather than a branch pretending otherwise.
 
-## Phase 5 --- sys packages from a crate
+## Phase 5 --- sys packages from a crate --- DONE
 
-1. New crate `datalove-sys-packages`, embedding every package's `.dfm` modules
-   and `rider/rider.dli`, and not the rider's Rust source. This is
-   `datalove-stdlib`'s `build.rs` with its own package as the root, so the
-   `include_str!` paths stay inside it and it becomes packageable.
-2. `datalove-stdlib` keeps what is about *this binary* --- the linked rider
-   natives, the work dir --- and takes its package sources from the new crate.
-3. `Prod` loads from the embedded crate; `Local` loads from
-   `BuildInfo::abs_path`, which `WorkspaceDescriptor::load_sys_dir` already
-   does.
-4. Keep `embedded_matches_tree`'s guarantee: what is embedded must equal the
-   tree it was built from, including the rider crate paths.
+`datalove-stdlib` embedded `sys/` with `include_str!` from above its own
+package root, which cargo does not package. The fix was to make the library
+*be* the crate root: `sys/Cargo.toml` is `datalove-sys-packages`, and
+`sys/std/list.dfm` is inside it. `cargo package --list` carries all 24 modules
+and the manifest.
+
+Two things fell out of trying it.
+
+**A nested `Cargo.toml` removes the whole directory from the package around
+it, silently, and `include` cannot override it.** Measured on a throwaway
+package: with `std/rider/Cargo.toml` present the list has `std/list.dfm` and
+no `std/rider/rider.dli`; with it renamed away, both. Same tree, same
+`include`, no warning either way. So the library crate cannot carry a rider
+interface as a file, because every sys rider is a crate sitting in its
+package's directory.
+
+The interface comes through Rust instead. `datalove-rider-sys-std` exports
+`INTERFACE`, which is `include_str!("../rider.dli")` inside its own root where
+it does get packaged, and the generated table says
+`rider_interface: Some(datalove_rider_sys_std::INTERFACE)` --- the build
+script deriving the crate's Rust name from the package manifest. One file, in
+the crate that implements it, reaching the compiler by dependency rather than
+by path. `every_rider_interface_is_embedded_verbatim` now checks that route
+against the file on disk.
+
+**`datalove-stdlib` is gone rather than kept.** The plan had it staying as the
+crate that joins embedded data to linked rider code, on the assumption that
+the data crate would be data alone. Once the interface arrives by dependency,
+the data crate needs the rider crates anyway --- and needing them was the
+whole of what `datalove-stdlib` was for. The two would have had identical
+dependency shapes with one forwarding to the other. `work_dir` went to the
+CLI, its only caller, as `cli::paths`.
+
+**The library root holds things that are not packages**, `src` and `tests`
+being in it now. They are excluded by not looking like a package rather than
+by name: a package has modules, or a manifest. `package_load`, `sys/build.rs`
+and `embedded_matches_tree` apply the same rule, which keeps "every directory
+in a library is a package" true as a rule rather than true except for these
+two names. Keeping `sys/std/<module>` was worth that: the path is what
+`require` writes.
+
+Editor backups are excluded from the package. `sys/std/string.dfm~` was in the
+file list, ignored only by a global gitignore the repository never declared, so
+whether a published library carried it depended on the machine that published
+it. Now `.gitignore` says `*~` and the manifest excludes it; `--allow-dirty`
+walks the filesystem rather than git, so the manifest is the one that holds.
 
 ## Phase 6 --- the component names riders by version or by path
 

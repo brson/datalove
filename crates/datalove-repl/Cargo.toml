@@ -15,7 +15,7 @@ serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
 # The engine tests run against the system library the binary ships.
-datalove-stdlib.path = "../datalove-stdlib"
+datalove-sys-packages.path = "../../sys"
 datalove-exampletest.path = "../datalove-exampletest"
 
 [[test]]

@@ -1,14 +1,20 @@
-//! Embeds the `sys/` package library into this crate.
+//! Embeds this crate's own package library into it.
 //!
-//! The generated table names every package, its modules and its rider
-//! interface, and pulls their text in with `include_str!` so that a built
-//! binary carries the system library rather than reading it back out of the
-//! source tree it was compiled from.
+//! The generated table names every package and its modules and pulls their
+//! text in with `include_str!`, so that a built binary carries the system
+//! library rather than reading it back out of the tree it was compiled from.
 //!
-//! A package's rider crate is named rather than embedded. It is Rust, not
-//! datalove, so it reaches a program by being compiled into the native
-//! component the compiler builds for whatever riders a module graph uses --
-//! the same path a rider outside `sys/` takes.
+//! The crate root is the library, so those paths are inside it and survive
+//! being packaged. Reaching above a crate's root is the thing cargo will not
+//! package, which is why this is not under `crates/` with everything else.
+//!
+//! Two things are named rather than embedded. A package's rider interface is a
+//! Rust constant in the rider's own crate, which has to be a dependency
+//! regardless -- cargo excludes a directory holding a `Cargo.toml` from the
+//! package around it, so `std/rider/rider.dli` is not in this crate's files
+//! whatever its `include` says, and silently so. The rider crate itself is
+//! named by the package's manifest, for the compiler to build a native
+//! component out of.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -45,28 +51,29 @@ fn embed_sys() {
 
         writeln!(table, "        ],").expect("writing to a string");
 
-        let interface = package_dir.join("rider").join("rider.dli");
-        if interface.is_file() {
-            println!("cargo:rerun-if-changed={}", interface.display());
-            writeln!(
-                table,
-                "        rider_interface: Some(include_str!({:?})),",
-                interface.display().to_string(),
-            ).expect("writing to a string");
-        } else {
-            writeln!(table, "        rider_interface: None,").expect("writing to a string");
-        }
-
-        // What the package manifest calls the rider crate, and where its
-        // source is. `package_load` reads the same two things when it takes a
+        // What the package manifest calls the rider crate, and which version.
+        // `package_load` reads the same from the same file when it takes a
         // package off disk.
         match rider_crate(&package_dir) {
-            Some((name, version)) => writeln!(
-                table,
-                "        rider_crate: Some(({name:?}, {version:?})),",
-            ).expect("writing to a string"),
-            None => writeln!(table, "        rider_crate: None,")
-                .expect("writing to a string"),
+            Some((name, version)) => {
+                // The interface is a constant in that crate rather than a file
+                // here, cargo having left `rider/` out of this package.
+                writeln!(
+                    table,
+                    "        rider_interface: Some({}::INTERFACE),",
+                    name.replace('-', "_"),
+                ).expect("writing to a string");
+                writeln!(
+                    table,
+                    "        rider_crate: Some(({name:?}, {version:?})),",
+                ).expect("writing to a string");
+            }
+            None => {
+                writeln!(table, "        rider_interface: None,")
+                    .expect("writing to a string");
+                writeln!(table, "        rider_crate: None,")
+                    .expect("writing to a string");
+            }
         }
 
         let crate_dir = package_dir.join("rider");
@@ -98,27 +105,33 @@ fn out_dir() -> PathBuf {
     PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"))
 }
 
-/// The source tree this crate is being built from.
-fn repo_root() -> PathBuf {
-    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"));
-    // crates/datalove-stdlib -> crates -> repo root.
-    manifest_dir.parent().expect("crates dir")
-        .parent().expect("repo root")
-        .to_path_buf()
-}
-
-/// The `sys/` directory of the source tree this crate is being built from.
+/// The package library, which is this crate's own directory.
 fn sys_dir() -> PathBuf {
-    repo_root().join("sys")
+    PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR"))
 }
 
 /// Package directories, in a fixed order so the generated table is stable.
+///
+/// The library root is this crate's directory, so `src` and `target` are in it
+/// and are not packages. They are excluded by not looking like one rather than
+/// by name: a package has modules, or a manifest, or it is some other
+/// directory that happens to be here. `package_load` applies the same rule
+/// when it reads a library off disk.
 fn sorted_dirs(dir: &Path) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = read_dir(dir)
         .filter(|path| path.is_dir())
+        .filter(|path| is_package(path))
         .collect();
     dirs.sort();
     dirs
+}
+
+/// Whether a directory is a datalove package.
+fn is_package(dir: &Path) -> bool {
+    if dir.join(datalove_pkg_manifest::FILE_NAME).is_file() {
+        return true;
+    }
+    read_dir(dir).any(|path| path.extension().is_some_and(|ext| ext == "dfm"))
 }
 
 /// Module files of a package, in a fixed order.

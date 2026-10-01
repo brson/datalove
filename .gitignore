@@ -6,3 +6,9 @@ crates/datalove-repl-worker/dist
 crates/datalove-web/dist
 docs/
 sys/*/rider/Cargo.lock
+
+# Editor backups. Declared here rather than left to whoever's global gitignore,
+# because `cargo package` includes what git would: without this, whether a
+# published crate carries `string.dfm~` next to `string.dfm` depends on the
+# machine that published it.
+*~
