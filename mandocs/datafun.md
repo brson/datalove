@@ -28,36 +28,70 @@ For detail see additional documentation.
 Functions have a line-oriented and statement-oriented syntax:
 
 ```datalove
-require sys/std/string
+require module sys/std/string
 import string.len
 import string.find_char
 import string.starts_with
 import string.slice_from
 
 fun count_substrings(s: string, ref needle: string): ?int
-  let haystack = s
-  let index = 0
-  let count = 0
+  var haystack = s
+  var count = 0
   loop
     if len(ref haystack) == 0
       break
     end if
 
-    if starts_with(ref haystack, needle)
-      set count = count +? 1
-      let next_char_index = find_char(ref haystack, 1)
-      if next_char_index |index|
-        set haystack = slice_from(haystack, index)?
-      else
-        set haystack = ""
-      end if
+    if starts_with(ref haystack, ref needle)
+      set count = count + 1
+    end if
+
+    let next_char_index = find_char(ref haystack, 1)
+    if next_char_index |index|
+      set haystack = slice_from(ref haystack, index)?
     else
-      break
+      set haystack = ""
     end if
   end loop
   ret some count
 end fun
 ```
+
+Though lines can break freely between matched braces:
+
+```datalove
+fun count_substrings(
+  s: string, ref needle: string
+): ?int
+  ... etc ...
+end fun
+```
+
+Function arguments are either passed by value, by reference,
+by mutable reference, or as `out` paramaters,
+which are mutable references that may not be read and may or may not be previously-initialized.
+
+```datalove
+fun demo_param_modes(
+  by_value: int,
+  ref by_ref: int,
+  mut by_mut: int,
+  out by_out: int,
+)
+  set by_mut = by_value + by_ref
+  set by_out = by_value * by_ref
+end fun
+
+let a = 2
+var b = 3
+var c: int
+demo_param_modes(1, ref a, mut b, out c)
+
+debuglog (b, c)
+```
+
+Immutable bindings are declared with `let`, mutable with `var`.
+`var`s are reassigned with `set`.
 
 
 ## Control flow
