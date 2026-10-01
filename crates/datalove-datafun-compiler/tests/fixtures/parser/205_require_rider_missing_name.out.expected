@@ -14,8 +14,8 @@
         {
           "message": "expected rider name",
           "span": [
-            0,
-            0
+            13,
+            13
           ],
           "text": ""
         }

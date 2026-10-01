@@ -18,8 +18,8 @@
         {
           "message": "expected ',' after element type",
           "span": [
-            0,
-            0
+            7,
+            7
           ],
           "text": ""
         }

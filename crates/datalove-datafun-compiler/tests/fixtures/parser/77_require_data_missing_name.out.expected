@@ -14,8 +14,8 @@
         {
           "message": "expected data name",
           "span": [
-            0,
-            0
+            12,
+            12
           ],
           "text": ""
         }

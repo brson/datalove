@@ -155,11 +155,17 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
 
     /// Get Text and ByteSpan from current position for error reporting.
     ///
-    /// Falls back to source_text with empty span if at end of input.
+    /// At the end of input this is an empty span just after the last token
+    /// consumed, which is where the missing token would have gone. A run is
+    /// usually a single line or bracket, so without that the error would point
+    /// at the start of the file.
     fn peek_text_span(&self) -> TextSpan<'db> {
         match self.peek() {
             Some(token) => self.extract_text_span(token),
-            None => TextSpan::new(self.source_text(), 0..0),
+            None => {
+                let end = self.prev_end().unwrap_or(0);
+                TextSpan::new(self.source_text(), end..end)
+            }
         }
     }
 

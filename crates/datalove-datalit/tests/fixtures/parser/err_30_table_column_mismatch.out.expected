@@ -47,8 +47,8 @@
         {
           "message": "column count mismatch",
           "span": [
-            0,
-            0
+            22,
+            22
           ],
           "text": ""
         }
