@@ -20,6 +20,7 @@ home here.
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+- [An early return out of an `if` with no `else` is refused when anything owned is live](#user-content-an-early-return-out-of-an-if-with-no-else-is-refused-when-anything-owned-is-live)
 
 ## The ownership pass panics on a clone returned out of a loop
 
@@ -247,3 +248,60 @@ different allocator would break the same way, and the failure is a segfault in
 free rather than anything that names the cause. The fix is for the boundary to
 be a C ABI over pointers the two sides do not both own -- the shared library
 should not be handing Rust heap ownership back and forth with its host.
+
+## An early return out of an `if` with no `else` is refused when anything owned is live
+
+**Reproduced.** A spurious D008, on code a user writes constantly.
+
+```datalove
+fun f(s: string, n: u32): u32
+  if n == 0
+    ret 0              // D008: `s` moved in then branch but not the other
+  end if
+  debuglog s
+  ret n
+end fun
+```
+
+Any non-copy binding live at the `ret` -- a `string` parameter, an `int`, a
+list -- triggers it. With an `else` whose body also returns, it is accepted, and
+with only copy types around nothing is reported, which is why it went unnoticed.
+
+`analyze_return` in `crates/datalove-datafun-ownership/src/lib.rs` schedules
+every live binding to be dropped before the return and marks each one `Moved`,
+so that scope exit does not drop it again. `analyze_if` then compares the then
+branch's state against the else branch's (or, with no else, the state before
+the `if`), sees `Moved` against `Live`, and raises `InconsistentBranchMove`. It
+has no idea the then branch never reaches the merge.
+
+`break` has the same shape: moving a value and then breaking out of a branch
+gets D007 `cannot move in loop` (and D008), though the move cannot happen twice.
+
+```datalove
+var s = "x"
+loop
+  if true
+    let t = s          // D007, D008
+    break
+  end if
+end loop
+```
+
+`analyze_match` merges arm states the same way and has the same fault.
+
+**What it would take.** A branch that ends in `ret`, `break` or `continue`
+diverges, and the merge after an `if` or `match` should take its state from the
+branches that fall through, ignoring the diverging ones; if none fall through,
+whatever follows is unreachable. The drops a diverging branch needs are already
+scheduled at its `ret`/`break`, so the scope-exit drops the merge decides on are
+the fall-through branches' business only -- but that is the part to check
+carefully, since those states are what drop scheduling reads. The loop check
+(`MoveInLoop`) wants the same knowledge: a move followed by a `break` on every
+path does not repeat.
+
+The clone-out-of-a-loop panic above is in the same corner of the pass and is
+worth looking at alongside.
+
+`ir_inline/008_multi_return` was written as two else-less early returns over
+an `int` and is spelled as an `else if` chain to avoid this; it can go back once
+this is fixed.
