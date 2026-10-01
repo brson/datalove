@@ -738,6 +738,19 @@ one -- a `StmtFun`'s body rides a tracked field -- so `resolve_script_names`
 does not re-run at all. The firewall is already there; the spec is what reaches
 around it.
 
+**Zero is the right answer for a body edit, not merely a smaller one.** It could
+be read as the edit being ignored. It is not: zero means no script unit
+re-typechecks, while the importers still re-execute, because the value changed
+and the type did not -- the same split as a value-only edit to a script unit.
+
+Safe because a unit's typecheck result cannot depend on a module function's
+body: `synthesize` reads `type_params` and `type_bounds` off the AST it looks
+up, which are signature, and nothing reads `body`. Comptime and const evaluation
+of a module function happen in lowering, driven by the execution reach, which
+stays non-zero. What *would* make zero wrong is a unit's typecheck result
+embedding something body-derived -- a diagnostic pointing into a module body,
+say -- so that is the thing to re-check if diagnostics ever start doing it.
+
 What to settle before doing it is whether anything is *meant* to read the other
 five. They predate `module_spans` being a query of its own, and a diagnostic
 against a module asks `module_spans(db, module)` directly now.
