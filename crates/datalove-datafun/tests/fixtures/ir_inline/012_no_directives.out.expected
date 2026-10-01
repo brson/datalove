@@ -1,1 +1,34 @@
-Typecheck error: line 3, col 9: error[F026]: invalid operand type `i64` for operator `+`
+=== BEFORE INLINING ===
+fn add(p0, p1):
+block0:
+    v0 = add p0, p1
+    drop p0
+    drop p1
+    return v0
+
+fn double(p0):
+block0:
+    v0 = clone p0
+    v1 = call @0 m0.u0(v0, p0)
+    return v1
+
+=== INLINE DIRECTIVES ===
+(none)
+
+=== AFTER INLINING ===
+fn add(p0, p1):
+block0:
+    v0 = add p0, p1
+    drop p0
+    drop p1
+    return v0
+
+fn double(p0):
+block0:
+    v0 = clone p0
+    v1 = call @0 m0.u0(v0, p0)
+    return v1
+
+=== INLINING STATS ===
+Inlined: 0 call(s)
+Skipped: 0

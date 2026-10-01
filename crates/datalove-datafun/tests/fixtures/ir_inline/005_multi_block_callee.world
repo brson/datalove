@@ -2,15 +2,15 @@
 module local/test/main
 ----------
 
-fun abs(x: i64): int
-    if x < 0
+fun abs(x: int): int
+    if x .< 0
         ret 0 - x
     else
         ret x
     end if
 end fun
 
-fun process(x: i64): int
+fun process(x: int): int
     ret abs(x)
 end fun
 

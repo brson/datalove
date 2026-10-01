@@ -1,1 +1,68 @@
-Typecheck error: line 3, col 9: error[F026]: invalid operand type `i64` for operator `+`
+=== BEFORE INLINING ===
+fn add_six(p0):
+block0:
+    v0 = clone p0
+    v1 = call @0 m0.u0(v0)
+    v2 = clone p0
+    v3 = call @1 m0.u0(v2)
+    v4 = call @2 m0.u0(p0)
+    v5 = add v1, v3
+    v6 = add v5, v4
+    drop v5
+    drop v1
+    drop v3
+    drop v4
+    return v6
+
+fn double(p0):
+block0:
+    v0 = add p0, p0
+    drop p0
+    return v0
+
+=== INLINE DIRECTIVES ===
+inline add_six double
+
+=== AFTER INLINING ===
+fn add_six(p0):
+block0:
+    v0 = clone p0
+    goto block5
+block1:
+    v8 = move p0
+    v7 = add v8, v8
+    drop v8
+    goto block2(v7)
+block2(v4):
+    v5 = add v1, v3
+    v6 = add v5, v4
+    drop v5
+    drop v1
+    drop v3
+    drop v4
+    return v6
+block3:
+    v10 = move v2
+    v9 = add v10, v10
+    drop v10
+    goto block4(v9)
+block4(v3):
+    goto block1
+block5:
+    v12 = move v0
+    v11 = add v12, v12
+    drop v12
+    goto block6(v11)
+block6(v1):
+    v2 = clone p0
+    goto block3
+
+fn double(p0):
+block0:
+    v0 = add p0, p0
+    drop p0
+    return v0
+
+=== INLINING STATS ===
+Inlined: 3 call(s)
+Skipped: 0

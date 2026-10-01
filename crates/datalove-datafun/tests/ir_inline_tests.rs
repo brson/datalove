@@ -191,6 +191,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
         ));
     }
 
+    let all_ownership_errors = compiled.all_ownership_errors();
+    if !all_ownership_errors.is_empty() {
+        return Ok(format!(
+            "Ownership error: {}\n",
+            all_ownership_errors.join("; ")
+        ));
+    }
+
     let all_lowering_errors = compiled.all_lowering_errors();
     if !all_lowering_errors.is_empty() {
         return Ok(format!("{}\n", all_lowering_errors.join("\n")));

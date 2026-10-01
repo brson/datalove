@@ -2,13 +2,13 @@
 module local/test/main
 ----------
 
-fun double(x: i64): int
+fun double(x: int): int
     ret x + x
 end fun
 
-fun add_six(x: i64): int
-    let a = double(x)
-    let b = double(x)
+fun add_six(x: int): int
+    let a = double(x@)
+    let b = double(x@)
     let c = double(x)
     ret a + b + c
 end fun

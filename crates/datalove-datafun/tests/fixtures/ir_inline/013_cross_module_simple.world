@@ -3,7 +3,7 @@ module local/test/base
 ----------
 
 // Base module with a helper function.
-fun add(a: i64, b: i64): int
+fun add(a: int, b: int): int
     ret a + b
 end fun
 
@@ -15,8 +15,8 @@ require module local/test/base
 import base.add
 
 // Main module calls base module function.
-fun double(x: i64): int
-    ret add(x, x)
+fun double(x: int): int
+    ret add(x@, x)
 end fun
 
 ----------

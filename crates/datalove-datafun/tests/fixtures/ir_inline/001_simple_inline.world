@@ -2,12 +2,12 @@
 module local/test/main
 ----------
 
-fun add(a: i64, b: i64): int
+fun add(a: int, b: int): int
     ret a + b
 end fun
 
-fun double(x: i64): int
-    ret add(x, x)
+fun double(x: int): int
+    ret add(x@, x)
 end fun
 
 ----------

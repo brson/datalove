@@ -2,17 +2,17 @@
 module local/test/main
 ----------
 
-fun classify(x: i64): int
-    if x < 0
+fun classify(x: int): int
+    if x@ .< 0
         ret 0 - 1
-    end if
-    if x > 0
+    else if x@ .> 0
         ret 1
+    else
+        ret 0
     end if
-    ret 0
 end fun
 
-fun use_classify(x: i64): int
+fun use_classify(x: int): int
     ret classify(x)
 end fun
 
