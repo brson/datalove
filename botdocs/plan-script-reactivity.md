@@ -761,3 +761,46 @@ touched them.
 What to settle before doing it was whether anything is *meant* to read the other
 five. They predate `module_spans` being a query of its own, and a diagnostic
 against a module asks `module_spans(db, module)` directly now.
+
+## G. Insert, remove and truncate
+
+The verbs today are append -- a fragment or a bare expression -- and edit, of a
+unit or of a module. A session can grow and anything in it can change, but it
+cannot be **reordered**, and insert, remove and undo-of-insert are all the same
+problem: a unit's index is part of every value's identity, so splicing the list
+renumbers everything after the splice and every later unit's IR has to be
+rebuilt. That cost is inherent. The ids really did change.
+
+**All three are one mechanism.** Splice the unit list, rebuild the chain,
+discard the suffix's runtime state, re-derive the suffix:
+
+```
+truncate(n)    drop units >= n.                 No renumbering: nothing after.
+remove(i)      splice out i, then the above from i.
+insert(i, ..)  splice in at i, then the above from i.
+```
+
+Truncate is the cheap one and the only one that renumbers nothing, which is why
+it is also what undo-of-append would use.
+
+The pieces exist. `Script::from_units(db, &[ScriptUnit])` already folds a chain
+out of any unit list. `ScriptSession`'s `units` and `records` are index-aligned
+`Vec`s, so splicing is a splice. `rederive(Vec<usize>)` already re-derives an
+arbitrary list, and `relower_reach` already walks a reach. What is missing:
+
+- **`FrameStore` cannot truncate.** It has `add_frame`, `replace_frame` and
+  `destroy_unit_end_bindings`, and nothing that drops the frames from *i* on.
+  Re-deriving a suffix means destroying those units' unit-end values first --
+  this repo has had leak bugs, and the leak checker only runs under `just test`.
+- The three verbs themselves, on `ScriptCompiler` and then `Engine`.
+
+**Two things to get right rather than discover.** A removal whose bindings a
+later unit reads must leave that unit failing to compile, which is what blanking
+already does -- and a unit that fails to re-lower keeps its frame, because the
+numbering cannot have a hole. And the suffix re-deriving is *not* a reach bug to
+be narrowed away: those units' values genuinely changed identity, so a test
+should assert the suffix is re-derived rather than treat it as over-propagation.
+
+Undo and redo are deliberately not part of this. They need a history, which is
+engine-level and needs nothing from the machinery -- undoing an edit *is* an
+edit. Only undo-of-insert and undo-of-remove wait on this item.
