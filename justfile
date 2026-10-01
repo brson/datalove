@@ -17,6 +17,16 @@ test:
     cargo check --all --benches
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
+# Run the tests with sys riders built and loaded rather than linked in.
+#
+# A sys rider is compiled into the binary, so the interpreter takes its
+# addresses directly: no cargo, no component, no dlopen. That is worth having
+# and it means the path every other rider takes goes untested for exactly the
+# riders this suite leans on hardest. Same suite, the other arrangement
+# underneath.
+test-sys-riders:
+    DATALOVE_BUILD_SYS_RIDERS=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+
 # Run tests with 64-bit collection indexes.
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
@@ -29,7 +39,7 @@ test-slow:
     just check-wasm
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64
+test-ci: test test-slow test-64 test-sys-riders
 
 # Run tests with parallelism enabled.
 test-parallel:

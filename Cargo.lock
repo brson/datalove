@@ -1437,10 +1437,10 @@ dependencies = [
  "datalove-datalit",
  "datalove-diagnostic",
  "datalove-exampletest",
+ "datalove-paths",
  "datalove-repl",
  "datalove-repl-rat",
  "datalove-rt",
- "datalove-rti",
  "datalove-sys-packages",
  "datalove-worldgen",
  "megaspace-pipeliner",
@@ -1791,6 +1791,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "datalove-paths"
+version = "0.1.0"
+dependencies = [
+ "datalove-rti",
+ "rustmax 0.0.10",
+]
+
+[[package]]
 name = "datalove-pkg-manifest"
 version = "0.1.0"
 dependencies = [
@@ -1806,6 +1814,7 @@ dependencies = [
  "datalove-datafun",
  "datalove-datafun-ir",
  "datalove-exampletest",
+ "datalove-paths",
  "datalove-sys-packages",
  "rustmax 0.0.10",
  "salsa",

@@ -45,6 +45,60 @@ pub fn build_and_load_riders(
     Ok(vec![loaded])
 }
 
+/// Whether to drive `sys` riders the way every other rider goes.
+///
+/// A `sys` rider is linked into this binary, so its addresses are already
+/// here and the interpreter takes them directly --- no cargo, no component,
+/// no dlopen. That is worth having, and it means the general path goes
+/// untested for exactly the riders the test suite leans on hardest.
+///
+/// Setting `DATALOVE_BUILD_SYS_RIDERS` gives up the shortcut: the riders are
+/// discovered, compiled into a component and loaded like a package's own.
+/// Same results expected, different arrangement underneath, which is the
+/// point of running the suite with it set.
+pub fn build_sys_riders() -> bool {
+    rmx::std::env::var_os("DATALOVE_BUILD_SYS_RIDERS").is_some()
+}
+
+/// The natives an executor was pointed at, and what has to stay alive for it.
+pub struct RegisteredNatives {
+    /// Raw addresses, which the JIT needs: it calls natives through a
+    /// trampoline built from the address rather than through the
+    /// interpreter's table.
+    pub native_fn_ptrs: Vec<(String, *const u8)>,
+
+    /// Libraries that must outlive the executor, dropping one unmapping the
+    /// code every registered pointer points into. Empty when the riders were
+    /// linked in, there being nothing loaded to keep.
+    pub loaded: Vec<LoadedRider>,
+}
+
+/// Point an executor at the native functions the compiled modules call.
+///
+/// Both ways in, chosen by [`build_sys_riders`]. A driver that skips this and
+/// registers nothing does not fail until a script reaches a native call, and
+/// under the JIT that is a panic inside compilation rather than an error.
+pub fn register_natives(
+    descriptor: &WorkspaceDescriptor,
+    compiled: &CompiledModules,
+    linked: &[(String, *const ())],
+    executor: &mut ScriptExecutor,
+) -> AnyResult<RegisteredNatives> {
+    let symbols = compiled.native_symbols();
+
+    if !build_sys_riders() {
+        let native_fn_ptrs = register_linked_natives(
+            &symbols, linked, executor.native_table_mut())?;
+        return Ok(RegisteredNatives { native_fn_ptrs, loaded: Vec::new() });
+    }
+
+    let loaded = build_and_load_riders(descriptor, compiled, executor)?;
+    let native_fn_ptrs = loaded.iter()
+        .flat_map(|rider| rider.native_fn_ptrs.iter().cloned())
+        .collect();
+    Ok(RegisteredNatives { native_fn_ptrs, loaded })
+}
+
 /// Refuse a library built against a different runtime interface.
 ///
 /// A rider calls the runtime through a table it reaches at run time, so its

@@ -220,17 +220,36 @@ from. A release build resolves fresh, which the exact pins make safe for our
 own crates; third-party versions float, and whether that wants pinning too is
 worth revisiting when there is a release to watch.
 
-## Phase 7 --- exercise the unprivileged path
+## Phase 7 --- exercise the unprivileged path --- DONE
 
-The interpreter short-circuits `sys` riders by linking them, which is worth
-keeping and means the general path goes untested for exactly the riders the
-test suite uses most.
+`DATALOVE_BUILD_SYS_RIDERS` gives up the shortcut: the sys riders are
+discovered, compiled into a component and dlopened like a package's own.
+`just test-sys-riders` runs the whole suite that way and is in `test-ci`.
 
-1. A flag --- `DATALOVE_BUILD_SYS_RIDERS=1` --- that ignores the linked
-   natives and drives `sys/std` through discovery, component build and dlopen
-   like any other rider.
-2. One CI configuration with it set. It belongs beside `test-64` in the
-   justfile: same suite, different arrangement underneath.
+`rider_load::register_natives` is the one place the choice is made, and both
+drivers go through it. It hands back a `RegisteredNatives` holding whatever
+libraries were loaded, which the caller has to keep: dropping one unmaps the
+code every pointer in the native table leads to.
+
+**It earned its keep on the first run**, with a SIGSEGV in the REPL's
+`engine_tests`. `Started` is destructured into `Engine`'s fields, so the
+libraries it held were dropped at the end of `Engine::new` --- `dlclose`
+immediately after registering --- and the first native call jumped into
+unmapped memory. The engine holds them now, declared after `executor` so they
+outlive it, and reset assigns them after the executor for the same reason.
+Nothing in the default arrangement could have found that: with the riders
+linked in there is no library to unmap.
+
+`datalove-paths` is a crate of its own, holding `work_dir`. Phase 5 had put it
+in the CLI as its only caller; the REPL needs it now, and neither the package
+library nor the CLI is the right owner --- the REPL deliberately takes
+whatever `SystemLibrary` it is handed rather than depending on the embedded
+one, and that was worth keeping. The CLI's script and worldfile descriptors
+name a work dir now as well as the AOT one.
+
+What this does not cover: the JIT is fed from the same `native_fn_ptrs` either
+way, so `script --jit` is exercised, but the benches still call
+`register_linked_natives` directly and are not run by the suite.
 
 ## Phase 8 --- publish, having tested the production path first
 

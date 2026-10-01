@@ -10,7 +10,7 @@ rmx.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-buildinfo.path = "../datalove-buildinfo"
 # For `ABI_VERSION`, which names the work dir a component is built in.
-datalove-rti.path = "../datalove-rti"
+datalove-paths.path = "../datalove-paths"
 megaspace-pipeliner = "0.1"
 bct.workspace = true
 datalove.path = "../datalove"

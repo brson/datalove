@@ -3,39 +3,37 @@ use rmx::prelude::*;
 use rmx::clap::{self, Parser as _};
 use rmx::std::path::PathBuf;
 
-mod paths;
 mod render;
 
-use datalove_datafun::pipeline::rider_load::register_linked_natives;
-
-/// Point an executor at the rider functions linked into this binary.
+/// Point an executor at the native functions the script calls.
 ///
 /// The interpreter calls them through its native table, and the JIT calls
 /// them directly, so it needs the addresses as well; a script that reaches a
 /// native call with a JIT that has not been told about it aborts the process.
+///
+/// The returned value owns any libraries that were loaded and has to outlive
+/// the executor, which is why it is handed back rather than dropped here.
 fn register_natives(
+    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
     compiled: &datalove_datafun::pipeline::CompiledModules,
     sys: &datalove_datafun::pipeline::SystemLibrary,
     executor: &mut datalove_datafun::pipeline::ScriptExecutor,
-) -> AnyResult<()> {
+) -> AnyResult<datalove_datafun::pipeline::rider_load::RegisteredNatives> {
     use datalove_datafun_cranelift_jit::JitEngine;
 
-    let native_fn_ptrs = register_linked_natives(
-        &compiled.native_symbols(),
-        &sys.natives,
-        executor.native_table_mut(),
-    )?;
+    let registered = datalove_datafun::pipeline::rider_load::register_natives(
+        descriptor, compiled, &sys.natives, executor)?;
 
     if let Some(dispatcher) = executor.take_dispatcher() {
         if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
-            for (symbol, ptr) in &native_fn_ptrs {
+            for (symbol, ptr) in &registered.native_fn_ptrs {
                 jit.register_native_symbol(symbol, *ptr);
             }
         }
         executor.set_dispatcher(dispatcher);
     }
 
-    Ok(())
+    Ok(registered)
 }
 
 /// The failure for a type error, saying what it was when nothing else did.
@@ -477,13 +475,15 @@ impl ScriptCommand {
 
         let db = datafun::Database::default();
 
-        // Build workspace descriptor.
+        // Build workspace descriptor. The work dir goes on whether or not it
+        // is used: with `DATALOVE_BUILD_SYS_RIDERS` set the riders are built
+        // rather than taken from this binary, and that is where they build.
         let sys = datalove_sys_packages::system_library();
         let descriptor = if no_sys {
             WorkspaceDescriptor::empty()
         } else {
             WorkspaceDescriptor::from_system_library(&sys)
-        };
+        }.with_work_dir(datalove_paths::work_dir()?);
 
         // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -520,7 +520,7 @@ impl ScriptCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
 
-        register_natives(&compiled, &sys, &mut executor)?;
+        let _natives = register_natives(&descriptor, &compiled, &sys, &mut executor)?;
 
         // Compile the script as a fragment.
         let compiled_unit = compiler.compile_fragment(&script_source);
@@ -698,7 +698,7 @@ impl AotCompileCommand {
 
         // Build workspace descriptor. The work dir is where the native
         // component the emitted program links gets built.
-        let work_dir = paths::work_dir()?;
+        let work_dir = datalove_paths::work_dir()?;
         let sys = datalove_sys_packages::system_library();
         let descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
@@ -862,7 +862,8 @@ impl ScriptWorldCommand {
             &parsed.sections,
             datafun::pipeline::CompilerOptions::default(),
         );
-        let descriptor = sys_descriptor.merge(&worldfile_descriptor);
+        let descriptor = sys_descriptor.merge(&worldfile_descriptor)
+            .with_work_dir(datalove_paths::work_dir()?);
         let mut pipeline = descriptor.to_pipeline(&db);
 
         // Compile only what the script section reaches, the same as `script`
@@ -913,7 +914,7 @@ impl ScriptWorldCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");
 
-        register_natives(&compiled, &sys, &mut executor)?;
+        let _natives = register_natives(&descriptor, &compiled, &sys, &mut executor)?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];

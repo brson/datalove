@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
 use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
-use datafun::pipeline::rider_load::register_linked_natives;
+use datafun::pipeline::rider_load::{RegisteredNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
 /// The engine, which owns the database the session is compiled in.
@@ -43,6 +43,14 @@ pub struct Engine {
     script: Option<ScriptSession>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
+    /// The rider libraries `executor`'s native table points into.
+    ///
+    /// Only non-empty when the riders were built rather than taken from this
+    /// binary; see `rider_load::build_sys_riders`. Declared after `executor`
+    /// so that it is dropped after it: dropping one unmaps the code every
+    /// registered pointer leads to, and the executor destroying its live
+    /// values can still call into them.
+    natives: RegisteredNatives,
 }
 
 /// One input's parse and eval, and the environment it left behind.
@@ -74,6 +82,9 @@ pub struct EnvBinding {
 struct Started {
     script: ScriptSession,
     executor: ScriptExecutor,
+    /// Rider libraries the executor's native table points into, to be kept
+    /// for as long as that executor is.
+    natives: RegisteredNatives,
 }
 
 impl Started {
@@ -81,6 +92,7 @@ impl Started {
     fn compile(
         db: &datafun::Database,
         pipeline: &mut ModuleCompilationPipeline,
+        workspace: &WorkspaceDescriptor,
         sys: &SystemLibrary,
     ) -> AnyResult<Started> {
         let compiled = pipeline.compile_fresh(db);
@@ -96,19 +108,20 @@ impl Started {
             .into_session();
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after error check");
-        register_linked_natives(
-            &compiled.native_symbols(),
-            &sys.natives,
-            executor.native_table_mut(),
-        )?;
+        let natives = register_natives(
+            workspace, &compiled, &sys.natives, &mut executor)?;
 
-        Ok(Started { script, executor })
+        Ok(Started { script, executor, natives })
     }
 }
 
 impl Engine {
     pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
-        let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        // The work dir is named whether or not it is used: with
+        // `DATALOVE_BUILD_SYS_RIDERS` set the riders are built rather than
+        // taken from this binary, and that is where they build.
+        let workspace = WorkspaceDescriptor::from_system_library(&sys)
+            .with_work_dir(datalove_paths::work_dir()?);
         Engine::with_workspace(sys, workspace)
     }
 
@@ -123,7 +136,7 @@ impl Engine {
     ) -> AnyResult<Engine> {
         let db = datafun::Database::default();
         let mut pipeline = workspace.to_pipeline(&db);
-        let started = Started::compile(&db, &mut pipeline, &sys)?;
+        let started = Started::compile(&db, &mut pipeline, &workspace, &sys)?;
 
         Ok(Engine {
             db,
@@ -132,6 +145,7 @@ impl Engine {
             pipeline,
             script: Some(started.script),
             executor: started.executor,
+            natives: started.natives,
         })
     }
 
@@ -140,10 +154,13 @@ impl Engine {
         self.executor.destroy_live_values();
         // The library compiled at startup and has not changed since, so this is
         // salsa verifying what it has rather than compiling it again.
-        let started = Started::compile(&self.db, &mut self.pipeline, &self.sys)
+        let started = Started::compile(&self.db, &mut self.pipeline, &self.workspace, &self.sys)
             .expect("system library compiled successfully at startup");
         self.script = Some(started.script);
         self.executor = started.executor;
+        // Assigned after the executor, so the libraries the old one pointed
+        // into stay mapped until it is gone.
+        self.natives = started.natives;
     }
 
     /// Build a compiler over the current module compilation, run `work` with

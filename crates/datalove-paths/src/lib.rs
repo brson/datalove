@@ -1,8 +1,12 @@
-//! Where this installation writes what it generates.
+//! Where a datalove installation writes what it generates.
 //!
 //! Only the native component so far. It lands under the user's cache rather
 //! than beside the script being compiled, there being no reason for a build
 //! artifact of the toolchain to turn up in somebody's source directory.
+//!
+//! Its own crate because more than one driver needs it and none of them is
+//! the right owner: it is not the package library, and the REPL takes whatever
+//! library it is handed rather than depending on the embedded one.
 
 use rmx::prelude::*;
 use rmx::std::path::PathBuf;
