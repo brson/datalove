@@ -1,0 +1,2 @@
+let r: !u32 = ok : u32 / 1
+debuglog r == r

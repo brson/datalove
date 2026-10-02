@@ -1,0 +1,5 @@
+// A type parameter inside another type is carried as `data`, which the
+// runtime compares only when it is a number.
+fun same<T>(a: ?T, b: ?T): bool with { T is float, }
+  ret a == b
+end fun

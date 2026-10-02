@@ -1,0 +1,3 @@
+// Comparisons do not chain.
+let a = true
+debuglog a == true == false

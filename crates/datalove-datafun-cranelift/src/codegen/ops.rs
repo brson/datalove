@@ -24,6 +24,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get the type of the result to determine how to compile.
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
+
         // Check operand types for Int operations.
         let lhs_ty = self.get_operand_type(lhs)?;
         let rhs_ty = self.get_operand_type(rhs)?;
@@ -55,6 +56,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // the runtime reads the descriptor and picks.
         if matches!(lhs_ty, IrType::Data) || matches!(rhs_ty, IrType::Data) {
             return self.compile_binop_dynamic(builder, dest, op, lhs, rhs);
+        }
+
+        // A type with one value is equal to itself, with nothing to read.
+        let operand_ty = match &lhs_ty {
+            IrType::Ref(inner) => inner.as_ref(),
+            other => other,
+        };
+        if matches!(operand_ty, IrType::Unit | IrType::Atom(_)) {
+            let result = match op {
+                BinOp::Eq => builder.ins().iconst(cl_types::I8, 1),
+                BinOp::Ne => builder.ins().iconst(cl_types::I8, 0),
+                _ => panic!("{:?} on {:?}, which the typechecker refuses", op, operand_ty),
+            };
+            self.values.insert(dest, result);
+            return Ok(());
+        }
+
+        // Everything else that is not a scalar the runtime compares by walking
+        // its descriptor.
+        if matches!(
+            operand_ty,
+            IrType::String
+                | IrType::Tuple(_)
+                | IrType::Struct(_)
+                | IrType::Option(_)
+                | IrType::Term(..)
+                | IrType::Enum(_)
+        ) {
+            return self.compile_structural_eq(builder, dest, op, lhs, rhs);
         }
 
         let lhs_val = self.get_operand_value(builder, lhs)?;
@@ -406,6 +436,48 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             _ => {
                 panic!("{:?} as an `int` comparison, which is not one", op);
             }
+        };
+
+        self.values.insert(dest, result);
+        Ok(())
+    }
+
+    /// Compile `==` or `!=` on a value the runtime compares by its descriptor.
+    fn compile_structural_eq(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        op: BinOp,
+        lhs: &Operand,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let runtime = self.runtime.ok_or_else(|| {
+            CraneliftError::Codegen("equality requires runtime imports".into())
+        })?;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("equality requires runtime handle".into())
+        })?;
+
+        let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+        let lhs_desc = self.operand_tydesc(builder, lhs)?;
+        let rhs_desc = self.operand_tydesc(builder, rhs)?;
+
+        let func_ref = self.module.declare_func_in_func(runtime.eq, builder.func);
+        let call = builder.ins().call(func_ref, &[rt_handle, lhs_ptr, lhs_desc, rhs_ptr, rhs_desc]);
+        let eq = builder.inst_results(call)[0];
+
+        // RtEq values: Equals=1, NotEquals=2, Error=3. An error is two types
+        // the typechecker let through as one, so it traps.
+        let error = builder.ins().iconst(cl_types::I8, 3);
+        let is_error = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, eq, error);
+        builder.ins().trapnz(is_error, cl_ir::TrapCode::unwrap_user(1));
+
+        let equals = builder.ins().iconst(cl_types::I8, 1);
+        let result = match op {
+            BinOp::Eq => builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, eq, equals),
+            BinOp::Ne => builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, eq, equals),
+            _ => panic!("{:?} as structural equality, which it is not", op),
         };
 
         self.values.insert(dest, result);

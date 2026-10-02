@@ -962,6 +962,46 @@ impl<'a> FunctionCodegenContext<'a> {
             return Ok(());
         }
 
+        let operand_ty = match lhs_ty {
+            IrType::Ref(inner) => inner.as_ref(),
+            other => other,
+        };
+
+        // A type with one value is equal to itself, with nothing to read.
+        if matches!(operand_ty, IrType::Unit | IrType::Atom(_)) {
+            let result = match op {
+                BinOp::Eq => 1,
+                BinOp::Ne => 0,
+                _ => return Err(CAotError::Unsupported(format!("{:?} on {:?}", op, operand_ty))),
+            };
+            writeln!(out, "    *(bool_t*){dest_addr} = {result};").unwrap();
+            return Ok(());
+        }
+
+        // Everything else that is not a scalar the runtime compares by walking
+        // its descriptor. An error is two types the typechecker let through as
+        // one, so it traps.
+        if matches!(
+            operand_ty,
+            IrType::String
+                | IrType::Tuple(_)
+                | IrType::Struct(_)
+                | IrType::Option(_)
+                | IrType::Term(..)
+                | IrType::Enum(_)
+        ) {
+            let test = match op {
+                BinOp::Eq => "__eq == EQ_EQUALS",
+                BinOp::Ne => "__eq != EQ_EQUALS",
+                _ => return Err(CAotError::Unsupported(format!("{:?} on {:?}", op, operand_ty))),
+            };
+            let lhs_td = self.operand_tydesc(lhs);
+            let rhs_td = self.operand_tydesc(rhs);
+            writeln!(out, "    {{ uint8_t __eq = dtlv_rti_eq_local(rt, {lhs_addr}, {lhs_td}, {rhs_addr}, {rhs_td}); \
+                if (__eq == EQ_ERROR) __builtin_trap(); *(bool_t*){dest_addr} = ({test}); }}").unwrap();
+            return Ok(());
+        }
+
         let lhs_c_ty = types::ir_type_to_c(lhs_ty);
         let dest_c_ty = types::ir_type_to_c(dest_ty);
 

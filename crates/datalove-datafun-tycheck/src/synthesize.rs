@@ -445,6 +445,60 @@ fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool 
     }
 }
 
+/// True if an expression constructs a value whose type it can only guess at.
+///
+/// `none` has no type at all, and `some 1`, `(1, 2)` and `atom A` each
+/// synthesize one that is a default rather than information: `?int` where a
+/// `?u32` was meant, or an atom where an enum was. Beside an operand that has
+/// a type of its own, they take that one instead.
+fn is_untyped_construction<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
+    let kind = expr.expr(ctx.db);
+    if kind.type_hint().is_some() {
+        return false;
+    }
+    matches!(
+        kind,
+        ExprFunKind::None(_)
+            | ExprFunKind::Some(_)
+            | ExprFunKind::Tuple(_)
+            | ExprFunKind::AnonTuple(_)
+            | ExprFunKind::AnonStruct(_)
+            | ExprFunKind::Atom(_)
+            | ExprFunKind::Term(_)
+            | ExprFunKind::EnumLiteral(_)
+    )
+}
+
+/// The part of a type that keeps `==` from comparing it, if any.
+///
+/// Equality is structural: an option, tuple, struct, term or enum compares when
+/// everything it holds does. A float compares by IEEE 754, so a NaN anywhere
+/// inside makes two values unequal. Collections, results, `data` and `error`
+/// are left out until what equality means for them is settled -- a set's
+/// elements are told apart by total order, which an IEEE comparison of them
+/// would contradict.
+///
+/// A type parameter inside an aggregate is refused too. The aggregate is then
+/// carried as `data`, and the runtime only compares a `data` that is a number.
+fn equality_blocker<'db>(ty: &Type<'db>) -> Option<Type<'db>> {
+    use datalit::tycheck::Type as T;
+    let Type::Datalit(dt) = ty else {
+        return Some(ty.C());
+    };
+    let blocker = |inner: &T<'db>| equality_blocker(&Type::Datalit(inner.C()));
+    match dt {
+        T::Bool | T::U8 | T::I8 | T::U16 | T::I16 | T::U32 | T::I32 | T::U64 | T::I64
+        | T::Index | T::Offset | T::F32 | T::F64 | T::Int | T::String | T::Atom(_) => None,
+        T::AnonTuple(tuple) => tuple.fields.iter().find_map(blocker),
+        T::AnonStruct(st) => st.fields.iter().find_map(|f| blocker(&f.ty)),
+        T::Option(opt) => blocker(&opt.inner_type),
+        T::Term(term) => blocker(&term.payload),
+        T::Enum(en) => en.variants.iter().find_map(|v| v.payload.as_deref().and_then(blocker)),
+        T::List(_) | T::Map(_) | T::Set(_) | T::Result(_) | T::Tensor(_) | T::Table(_)
+        | T::Data | T::Error | T::Var(_) => Some(ty.C()),
+    }
+}
+
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -471,6 +525,8 @@ fn synthesize_binop<'db>(
     let rhs_bare = is_bare_numeric_literal(ctx, rhs);
     let lhs_untyped = operand_has_no_type(ctx, lhs);
     let rhs_untyped = operand_has_no_type(ctx, rhs);
+    let lhs_construction = is_untyped_construction(ctx, lhs);
+    let rhs_construction = is_untyped_construction(ctx, rhs);
     let result: Result<(Type<'db>, Type<'db>), TypeError> = (|ctx: &mut TypeContext<'db>| {
         // An operand with no type of its own takes the other one's, whatever
         // that is, so `a@ == b` works for any type and `a@ .< 0` takes the
@@ -485,6 +541,20 @@ fn synthesize_binop<'db>(
             let lhs_ty = ctx.synthesize_expr(lhs)?;
             check_expr(ctx, rhs, &lhs_ty)?;
             return Ok((lhs_ty.clone(), lhs_ty));
+        }
+
+        // A construction beside an operand with a type of its own is checked
+        // against that type, so `x == none` and `x == some 1` work for an
+        // `x: ?u32`. With constructions on both sides each picks its own.
+        if rhs_construction && !lhs_construction && !lhs_bare {
+            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            check_expr(ctx, rhs, &lhs_ty)?;
+            return Ok((lhs_ty.clone(), lhs_ty));
+        }
+        if lhs_construction && !rhs_construction && !rhs_bare {
+            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            check_expr(ctx, lhs, &rhs_ty)?;
+            return Ok((rhs_ty.clone(), rhs_ty));
         }
 
         // Only a numeric type can inform a numeric literal. Against anything
@@ -551,6 +621,24 @@ fn synthesize_binop<'db>(
         }
     } else if float_bounded || fixedint_bounded {
         // Nothing more to check: every type either bound admits is numeric.
+    } else if matches!(op, BinOp::Eq | BinOp::Ne) {
+        if let Some(part) = equality_blocker(&operand_ty) {
+            let ty_str = type_to_string(db, &operand_ty);
+            let part_str = type_to_string(db, &part);
+            let note = if part_str == ty_str {
+                None
+            } else if matches!(part, Type::Datalit(datalit::tycheck::Type::Var(_))) {
+                Some(fmt!("`{ty_str}` holds the type parameter `{part_str}`, which cannot be compared inside another type"))
+            } else {
+                Some(fmt!("`{ty_str}` holds `{part_str}`, which cannot be compared"))
+            };
+            return Err(ctx.error_invalid_operand_type_because(
+                expr,
+                binop_to_str(op),
+                &ty_str,
+                note.as_deref(),
+            ));
+        }
     } else {
         // All other operators require numeric types.
         if !is_numeric_type(&operand_ty) {

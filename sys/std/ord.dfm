@@ -6,14 +6,15 @@
 // type there is -- what it rules out is a type with no ordering, of which
 // there are none today.
 //
-// This is not the same relation as `.<`. The operators are the numeric ones
-// and behave the standard way for floats, so NaN compares false against
-// everything and the two zeros are equal. The order here is IEEE 754-2008
-// `totalOrder`, under which NaN has a place and the two zeros do not. The two
-// differ only over those, and only for floats.
+// This is not the same relation as the operators. They behave the standard
+// way for floats, so NaN compares false against everything and the two zeros
+// are equal, including inside an option or a tuple. The order here is IEEE
+// 754-2008 `totalOrder`, under which NaN has a place and the two zeros do not.
+// The two differ only over those, and only for floats.
 //
-// It is also more than the operators reach: `.<` and `==` are refused for a
-// string, a list, a tuple or an option, and the functions here are not.
+// It is also more than the operators reach. `.<` is for numbers only, and `==`
+// is refused for a list, a set, a map, a table, a tensor, a result and anything
+// holding a type parameter; the functions here are not.
 
 require rider std
 require module sys/std/index

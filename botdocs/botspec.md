@@ -639,10 +639,24 @@ the dividend, or use `int.rem_checked`.
 !=    not equal
 ```
 
-All comparison operators return `bool`. Both operands must already have the
-same numeric type; there is no implicit widening, and `bool`, `string` and
-the collection types are not comparable with these. Compare strings with
-`string.eq` and `string.cmp`.
+All comparison operators return `bool`, and both operands must have the same
+type; there is no implicit widening.
+
+The ordering operators `.<`, `.>`, `<=` and `>=` take numeric operands only.
+Order strings with `string.cmp`, and anything else with `sys/std/ord`.
+
+`==` and `!=` take a number, `bool`, `string`, unit or an atom, and an
+option, tuple, struct, term or enum whose parts all do. Such a value is
+compared part by part. Floats compare by IEEE 754 wherever they are, so
+`some nan != some nan` and `(0.0, 1) == (-0.0, 1)`. Lists, sets, maps,
+tables, tensors, results, `data`, `error` and functions have no equality
+operator yet, and neither does an aggregate holding a type parameter.
+
+A construction with no type of its own takes the other operand's: with
+`x: ?u32`, `x == none` and `x == some 1` compare `?u32`s.
+
+Comparisons do not chain. `a == b == c` is refused; parenthesize the
+comparison being compared, or join two with `and`.
 
 ### 6.4 Logical Operators
 
@@ -1256,15 +1270,16 @@ There are three bounds:
 - **`ord`** is every type there is, and says that the total order every value
   has may be used. It is the weakest bound: what it rules out is a type with no
   ordering, of which the language has none today. It is worth asking for
-  because the order is otherwise out of reach — `.<` and `==` are the numeric
-  operators and are refused for a string, a list, a tuple or an option, whether
-  or not a generic is involved. `sys/std/ord` is what it offers: the
+  because the order is otherwise out of reach — `.<` is for numbers only, and
+  `==` is refused for a list, a result, a type parameter inside an aggregate
+  and more (section 6.3), whether or not a generic is involved. `sys/std/ord`
+  is what it offers: the
   comparisons, `min`, `max`, `clamp`, and sorting and searching over a list.
 
   The relation is the one sets and maps keep their keys in, which walks a value
   structurally. For floats that is IEEE 754-2008 `totalOrder`, so it puts NaN
-  in order and tells the two zeros apart; `.<` on a concrete float does
-  neither. They differ over nothing else.
+  in order and tells the two zeros apart; `.<` and `==` on a float do
+  neither, even inside an option or a tuple. They differ over nothing else.
 
   A set or a map written over a type parameter has to ask for it. A set keeps
   its elements in order and a map keeps its keys in order, so `#{T}` and

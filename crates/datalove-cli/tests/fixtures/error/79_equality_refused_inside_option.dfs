@@ -1,0 +1,4 @@
+// An option compares only when its payload does.
+let a: ?[u8] = none
+let b: ?[u8] = none
+debuglog a == b

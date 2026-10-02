@@ -374,6 +374,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_int_from_fixed(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_int_from_limbs(void* rt, const uint32_t* limbs_ptr, uint32_t limb_count, uint8_t negative, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern int8_t dtlv_rti_cmp_local(void* rt, const void* a_ref, const dtlv_tydesc_t* a_tydesc, const void* b_ref, const dtlv_tydesc_t* b_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_eq_local(void* rt, const void* a_ref, const dtlv_tydesc_t* a_tydesc, const void* b_ref, const dtlv_tydesc_t* b_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_move_value_local(void* rt, const void* src_ref, const dtlv_tydesc_t* tydesc, void* dst_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_clone_local(void* rt, const void* src_ref, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_error_from_local(void* rt, void* inner_in, const dtlv_tydesc_t* inner_tydesc, void* dest_out);").unwrap();
@@ -413,6 +414,12 @@ impl CAotCompiler {
         writeln!(out, "#define ORD_LESS    1").unwrap();
         writeln!(out, "#define ORD_EQUAL   2").unwrap();
         writeln!(out, "#define ORD_GREATER 3").unwrap();
+        writeln!(out).unwrap();
+
+        // RtEq values returned by dtlv_rti_eq_local.
+        writeln!(out, "// RtEq values").unwrap();
+        writeln!(out, "#define EQ_EQUALS 1").unwrap();
+        writeln!(out, "#define EQ_ERROR  3").unwrap();
         writeln!(out).unwrap();
 
         // Option/Result tag values.

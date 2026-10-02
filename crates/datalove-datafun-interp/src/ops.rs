@@ -314,6 +314,13 @@ impl IrInterpreter {
                 rtdt::TyTag::F32 => Self::execute_binop_f32(op, lhs, rhs, dest),
                 rtdt::TyTag::F64 => Self::execute_binop_f64(op, lhs, rhs, dest),
                 rtdt::TyTag::Bool => Self::execute_binop_bool(op, lhs, rhs, dest),
+                rtdt::TyTag::String
+                | rtdt::TyTag::Tuple
+                | rtdt::TyTag::Struct
+                | rtdt::TyTag::Option
+                | rtdt::TyTag::Atom
+                | rtdt::TyTag::Term
+                | rtdt::TyTag::Enum => self.execute_binop_structural_eq(op, lhs, rhs, dest),
                 // A value whose type only its descriptor says: a type parameter
                 // bounded to `float`, which the call site fixed at one width or
                 // the other. The runtime reads the descriptor and picks; this
@@ -483,7 +490,28 @@ impl IrInterpreter {
         }
     }
 
-    /// Boolean binary operations.
+    /// `==` or `!=` on a value the runtime compares by walking its descriptor.
+    fn execute_binop_structural_eq(&mut self, op: BinOp, lhs: &Value, rhs: &Value, dest: Destination) {
+        use datalove_rt::c::RtEq;
+        let eq = unsafe {
+            datalove_rt::c::dtlv_rti_eq_local(
+                self.runtime.handle(), lhs.ptr, lhs.tydesc, rhs.ptr, rhs.tydesc,
+            )
+        };
+        let equal = match eq {
+            RtEq::Equals => true,
+            RtEq::NotEquals => false,
+            RtEq::Error => unreachable!("comparing values of different types"),
+        };
+        let result = match op {
+            BinOp::Eq => equal,
+            BinOp::Ne => !equal,
+            // The type checker admits only equality for these types.
+            _ => unreachable!("unsupported structural binop {:?}", op),
+        };
+        unsafe { *(dest.ptr as *mut bool) = result };
+    }
+
     /// A binop whose operands are carried as `data`.
     ///
     /// Reached only through a bound: without one nothing may be done to a type

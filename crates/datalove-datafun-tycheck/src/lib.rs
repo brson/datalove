@@ -186,6 +186,8 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         op: InternedText<'db>,
         ty: InternedText<'db>,
+        /// Why, when the type alone does not say.
+        note: Option<InternedText<'db>>,
     },
     /// F045: Function arity mismatch.
     ArityMismatch {

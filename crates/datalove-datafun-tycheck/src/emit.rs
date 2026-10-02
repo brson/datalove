@@ -436,14 +436,14 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                     .emit_type();
             }
         }
-        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
+        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty, note } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 let msg = format!(
                     "invalid operand type `{}` for operator `{}`",
                     ty.as_str(db),
                     op.as_str(db)
                 );
-                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("F026")
                     .primary_label(
                         ts,
@@ -452,8 +452,11 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                             op.as_str(db),
                             ty.as_str(db)
                         ),
-                    )
-                    .emit_type();
+                    );
+                if let Some(note) = note {
+                    builder = builder.note(note.as_str(db));
+                }
+                builder.emit_type();
             }
         }
         PendingDiagnostic::ArityMismatch {
@@ -753,7 +756,7 @@ fn format_single_diagnostic<'db>(
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F065]: {}", loc, message.as_str(db)))
         }
-        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty } => {
+        PendingDiagnostic::InvalidOperandType { expr_key, module_id: _, op, ty, note: _ } => {
             let ts = spans.lookup_expr(db, *expr_key)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F026]: invalid operand type `{}` for operator `{}`", loc, ty.as_str(db), op.as_str(db)))

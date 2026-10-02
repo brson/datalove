@@ -703,6 +703,7 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.int_from_fixed, c::dtlv_rti_int_from_fixed as *const u8)?;
     tramp(jit_module, &mut runtime.int_from_limbs, c::dtlv_rti_int_from_limbs as *const u8)?;
     tramp(jit_module, &mut runtime.int_cmp, c::dtlv_rti_cmp_local as *const u8)?;
+    tramp(jit_module, &mut runtime.eq, c::dtlv_rti_eq_local as *const u8)?;
     tramp(jit_module, &mut runtime.move_value, c::dtlv_rti_move_value_local as *const u8)?;
     tramp(jit_module, &mut runtime.clone_local, c::dtlv_rti_clone_local as *const u8)?;
     tramp(jit_module, &mut runtime.error_from, c::dtlv_rti_error_from_local as *const u8)?;
@@ -803,6 +804,7 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_int_from_fixed", c::dtlv_rti_int_from_fixed as *const u8);
     jit_builder.symbol("dtlv_rti_int_from_limbs", c::dtlv_rti_int_from_limbs as *const u8);
     jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);
+    jit_builder.symbol("dtlv_rti_eq_local", c::dtlv_rti_eq_local as *const u8);
 
     // Value move and clone functions.
     jit_builder.symbol("dtlv_rti_move_value_local", c::dtlv_rti_move_value_local as *const u8);

@@ -379,8 +379,16 @@ let disjunction = true or false
 let exclusive = true xor true
 let negation = not true
 
-// Comparison and arithmetic are for numbers. Comparing a string, a list or a
-// tuple goes through `sys/std/ord`, which reaches types the operators do not.
+// Ordering and arithmetic are for numbers. Equality reaches further: a bool,
+// a string, and an option, tuple or struct of things that have it, compared
+// part by part. A literal on one side takes the other side's type.
+let maybe: ?u32 = some 7
+let same_text = "datalove" == "datalove"
+let same_maybe = maybe == some 7
+let same_pair = (1, "one") != (1, "two")
+
+// Ordering a string, and comparing a list, go through `sys/std/ord`, which
+// reaches types the operators do not.
 
 
 // =========================================================================
@@ -749,7 +757,7 @@ let output = (
   double(21), to_fill, to_bump, bumped,
   // Operators.
   int_sum, float_quotient, checked_add(1, 2), optional_add(1, 2),
-  int_divide(7, 2), is_less, is_eq, conjunction, negation,
+  int_divide(7, 2), is_less, is_eq, same_text, same_maybe, same_pair, conjunction, negation,
   // Clone and widen.
   widen_then_add(2, 3), length_of_copy, length_of_original,
   // Control flow.

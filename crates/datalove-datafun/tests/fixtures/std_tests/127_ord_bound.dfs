@@ -31,9 +31,9 @@ import list.get
 //
 // It is the weakest bound there is: every type has a total order, so `ord`
 // admits every type. What it says is that the order may be used, which without
-// it nothing can -- `.<` and `==` are the numeric operators and are refused for
-// a string, a list, a tuple or an option, whether or not a generic is
-// involved. So these reach further than the operators do.
+// it nothing can -- `.<` is a numeric operator, and `==` is refused for a list
+// or anything holding a type parameter, whether or not a generic is involved.
+// So these reach further than the operators do.
 //
 // The order is the one sets and maps keep their keys in, which walks a value
 // structurally. For floats it is IEEE 754-2008 `totalOrder`, so it differs

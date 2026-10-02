@@ -1,0 +1,2 @@
+// Strings have equality but no ordering yet.
+debuglog "a" .< "b"

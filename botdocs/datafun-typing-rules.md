@@ -106,13 +106,33 @@ e1 +? e2 => T
 
 **Note**: Optional operators return the element type directly. On overflow/error, the function early-returns None.
 
-#### Comparison (<, >, <=, >=, ==, !=)
+#### Ordering (.<, .>, <=, >=)
 ```
 e1 => T, e2 => T
 T is numeric type
 -----------------
-e1 < e2 => bool
+e1 .< e2 => bool
 ```
+
+#### Equality (==, !=)
+```
+e1 => T, e2 => T
+T has equality
+-----------------
+e1 == e2 => bool
+```
+
+A type has equality if it is numeric, `bool`, `string`, unit or an atom, or
+if it is an option, tuple, struct, term or enum whose parts all have
+equality. Floats inside compare by IEEE 754. Lists, sets, maps, tables,
+tensors, results, `data`, `error` and functions do not have equality, and
+neither does a type parameter inside another type.
+
+When one operand is a construction with no type of its own (`none`,
+`some e`, a tuple or struct literal, an atom or a term) and the other is
+not, the construction is checked against the other operand's type.
+
+Comparisons do not chain: `a == b == c` is a parse error (P067).
 
 ### Rule: Syn-UnaryOp
 
@@ -666,7 +686,8 @@ Float:    f32 (no widening)
 | `-` (unary) | f32, bigint | T | - |
 | `-!` (unary) | signed fixed int | T | Result return |
 | `-?` (unary) | signed fixed int | T | Option return |
-| `<`, `>`, etc. | numeric | bool | - |
+| `.<`, `.>`, `<=`, `>=` | numeric | bool | - |
+| `==`, `!=` | numeric, bool, string, unit, atom; option, tuple, struct, term, enum of those | bool | - |
 | `?` | Option<T> | T | Option return |
 | `!` | Result<T> | T | Result return |
 

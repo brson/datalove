@@ -555,11 +555,23 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
     }
 
     pub fn error_invalid_operand_type(&mut self, expr: ExprFun<'db>, op: &str, ty: &str) -> TypeError {
+        self.error_invalid_operand_type_because(expr, op, ty, None)
+    }
+
+    /// F026, with a note saying which part of the type is at fault.
+    pub fn error_invalid_operand_type_because(
+        &mut self,
+        expr: ExprFun<'db>,
+        op: &str,
+        ty: &str,
+        note: Option<&str>,
+    ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
             expr_key: ExprKey::of(self.db, expr),
             module_id: self.current_module_id,
             op: InternedText::new(self.db, op.S()),
             ty: InternedText::new(self.db, ty.S()),
+            note: note.map(|n| InternedText::new(self.db, n.S())),
         });
         TypeError::InvalidOperandType {
             op: op.S(),

@@ -40,6 +40,10 @@ impl<'db> Parser<'db> {
         // These have highest precedence and are parsed before binary operators.
         lhs = self.parse_postfix_try_operators(lhs);
 
+        // Whether `lhs` is a comparison built by this loop. One in parentheses
+        // came from `parse_expr_primary` and may be compared again.
+        let mut lhs_is_comparison = false;
+
         loop {
             // Check for binary operator.
             let op = match self.peek_binop() {
@@ -50,6 +54,21 @@ impl<'db> Parser<'db> {
             let precedence = Self::binop_precedence(op);
             if precedence < min_precedence {
                 break;
+            }
+
+            // Comparisons do not chain. `a == b == c` would compare `a == b`,
+            // a bool, with `c`, and `a .< b .< c` is refused by the types only
+            // as long as bools are not ordered; neither means what it reads as.
+            if is_comparison(op) && lhs_is_comparison {
+                use datalove_diagnostic::DiagnosticBuilderExt;
+                let ts = self.peek_text_span();
+                let op_text = ts.text.as_str(self.db)[ts.span.clone()].S();
+                self.had_error = true;
+                bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op_text}` after a comparison"))
+                    .code("P067")
+                    .primary_label(ts, "comparisons do not chain")
+                    .note("parenthesize the comparison whose result is being compared, or join two comparisons with `and`")
+                    .emit_parse();
             }
 
             // Consume the operator.
@@ -65,6 +84,7 @@ impl<'db> Parser<'db> {
                 ast::ExprFunKind::BinOp(ast::ExprBinOp { op, lhs, rhs }),
                 TextSpan::new(text, span),
             );
+            lhs_is_comparison = is_comparison(op);
         }
 
         lhs
@@ -799,4 +819,9 @@ operation in the payload, or the whole constructor to apply it to what is built"
             self.create_expr(ast::ExprFunKind::Tuple(ast::ExprTuple { elements }), tuple_ts)
         }
     }
+}
+
+fn is_comparison(op: ast::BinOp) -> bool {
+    use ast::BinOp::*;
+    matches!(op, Eq | Ne | Lt | Gt | Le | Ge)
 }

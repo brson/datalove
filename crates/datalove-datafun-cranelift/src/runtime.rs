@@ -100,6 +100,8 @@ pub struct RuntimeImports {
     pub int_from_limbs: FuncId,
     /// `dtlv_rti_cmp_local(rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering`
     pub int_cmp: FuncId,
+    /// `dtlv_rti_eq_local(rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtEq`
+    pub eq: FuncId,
 
     // Value move function.
     /// `dtlv_rti_move_value_local(rt, src_ref, tydesc, dst_out) -> RtStatus`
@@ -615,6 +617,20 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_cmp_local: {}", e)))?
         };
 
+        // Structural equality: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtEq (u8)
+        let eq = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // a_tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_ref
+            sig.params.push(AbiParam::new(PTR_TYPE)); // b_tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8)); // RtEq
+            module
+                .declare_function("dtlv_rti_eq_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_eq_local: {}", e)))?
+        };
+
         // dtlv_rti_move_value_local(ptr, ptr, ptr, ptr) -> u8
         let move_value = {
             let mut sig = cl_ir::Signature::new(call_conv);
@@ -940,6 +956,7 @@ impl RuntimeImports {
             int_from_fixed,
             int_from_limbs,
             int_cmp,
+            eq,
             move_value,
             clone_local,
             error_from,

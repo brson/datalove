@@ -1,0 +1,89 @@
+// `==` and `!=` beyond the numbers.
+//
+// A bool, unit, atom or string compares directly. An option, tuple, struct,
+// term or enum compares when everything it holds does, part by part. A float
+// anywhere inside compares by IEEE 754, so a NaN makes two values unequal
+// even when they are the same value, and the two zeros are equal.
+
+require module sys/std/float
+import float.nan
+
+type Colour: enum { atom Red, atom Blue }
+type Tagged: enum { atom Empty, term Note string, term Count u32 }
+
+let n: f64 = nan()
+
+// Bools, unit, atoms and strings.
+let simple = (
+  true == true, true == false, false != true,
+  () == (), () != (),
+  atom A == atom A,
+  "abc" == "abc", "abc" == "abd", "" == "", "abc" != "ab"
+)
+
+// Options: a payload is compared only when both hold one. A literal on one
+// side takes its type from the other, so `x == some 1` is a `?u32` comparison.
+fun same_option(a: ?u32, b: ?u32): bool
+  ret a == b
+end fun
+
+let x: ?u32 = some 1
+let options = (
+  same_option(some 1, some 1), same_option(some 1, some 2),
+  same_option(none, none), same_option(some 1, none),
+  x == some 1, x == none, x != some 2,
+  (some "s") == (some "s")
+)
+
+// Nested, and holding strings.
+let nested: ??string = some (some "deep")
+let deeper = (nested == some (some "deep"), nested == some none, nested != none)
+
+// Tuples and structs, compared field by field.
+fun same_pair(ref a: (u8, string), ref b: (u8, string)): bool
+  ret a == b
+end fun
+
+let p: (u8, string) = (: u8 / 1, "one")
+let q: (u8, string) = (: u8 / 1, "one")
+let r: (u8, string) = (: u8 / 2, "one")
+let s = {name = "x", ok = true}
+let aggregates = (
+  same_pair(ref p, ref q), same_pair(ref p, ref r),
+  p == (1, "one"), p != (1, "two"),
+  s == {name = "x", ok = true}, s == {name = "x", ok = false}
+)
+
+// Floats inside follow IEEE 754.
+let nan_inside: ?f64 = some n
+let zeros: (f64, f64) = (0.0, -0.0)
+let floats = (
+  nan_inside == nan_inside, nan_inside != nan_inside,
+  zeros == (-0.0, 0.0),
+  (some 1.5) == (some 1.5)
+)
+
+// Enums and terms: the variant first, then the payload.
+fun same_tag(a: Tagged, b: Tagged): bool
+  ret a == b
+end fun
+
+let red: Colour = (atom Red)@
+let blue: Colour = (atom Blue)@
+let enums = (
+  red == red, red == blue, red != blue,
+  same_tag((term Note : string / "a")@, (term Note : string / "a")@),
+  same_tag((term Note : string / "a")@, (term Note : string / "b")@),
+  same_tag((term Count : u32 / 3)@, (term Note : string / "3")@),
+  same_tag((atom Empty)@, (atom Empty)@),
+  (term Count : u32 / 3) == (term Count : u32 / 3)
+)
+
+// A comparison in parentheses may be compared again, and two may be joined.
+let grouped = ((1 == 1) == true, (1 == 2) != (2 == 2), 1 == 1 and "a" != "b")
+
+// Comparing reads its operands and leaves them to be used again.
+let kept = "still here"
+let compared = kept == "still here"
+
+let output = (simple, options, deeper, aggregates, floats, enums, grouped, compared, kept)
