@@ -4,7 +4,10 @@
 //! function symbols, and registers them in the interpreter's `NativeFunctionTable`.
 
 use rmx::prelude::*;
-use rmx::std::path::Path;
+use rmx::std::path::{Path, PathBuf};
+
+use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 
 use datalove_datafun_interp::{NativeFunctionTable, Value, Destination, InterpError};
 use datalove_rt::c::LocalRtHandle;
@@ -134,17 +137,91 @@ fn check_abi_version(
     Ok(())
 }
 
+/// A rider library mapped into this process.
+///
+/// Dropping the last of these closes the library, which unmaps the code every
+/// pointer taken out of it leads to. Nothing else closes one: there is no
+/// unload to call, because what decides a library is finished with is that
+/// nobody holds it, and that is this count.
+pub struct LoadedLibrary {
+    path: PathBuf,
+    lib: libloading::Library,
+}
+
+impl LoadedLibrary {
+    /// Look up a symbol's address.
+    ///
+    /// # Safety
+    ///
+    /// The caller is trusting the library to define `symbol` with the type it
+    /// goes on to use it as.
+    unsafe fn symbol(&self, symbol: &str) -> AnyResult<*const ()> {
+        let sym: libloading::Symbol<*const ()> = unsafe { self.lib.get(symbol.as_bytes()) }
+            .context(fmt!("symbol '{}' not found in {}", symbol, self.path.display()))?;
+        Ok(*sym)
+    }
+}
+
+impl std::fmt::Debug for LoadedLibrary {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LoadedLibrary").field("path", &self.path).finish()
+    }
+}
+
+/// The rider libraries this process has open, by the path each was opened from.
+///
+/// Weak, so that the registry is a way of finding a library rather than a
+/// reason for one to stay open. An entry whose library has gone is replaced by
+/// the next load of that path.
+///
+/// Held because `dlopen` of a path already open returns the same mapping
+/// whatever we do, so two interpreters sharing a rider share its code either
+/// way. What this adds is a count we can see: the library closes when the last
+/// interpreter holding it is dropped, and not at whatever point a libc decides,
+/// and the symbols are looked up once per library rather than once per
+/// interpreter.
+static OPEN_LIBRARIES: LazyLock<Mutex<HashMap<PathBuf, Weak<LoadedLibrary>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Open a rider library, or take a share of one already open.
+fn open_library(lib_path: &Path, rider_name: &str) -> AnyResult<Arc<LoadedLibrary>> {
+    let mut open = OPEN_LIBRARIES.lock().expect("rider library registry poisoned");
+
+    if let Some(existing) = open.get(lib_path).and_then(Weak::upgrade) {
+        return Ok(existing);
+    }
+
+    let lib = unsafe { libloading::Library::new(lib_path) }
+        .context(fmt!("failed to load rider library '{}' from {}", rider_name, lib_path.display()))?;
+
+    check_abi_version(&lib, rider_name, lib_path)?;
+
+    let loaded = Arc::new(LoadedLibrary { path: lib_path.to_path_buf(), lib });
+    open.insert(lib_path.to_path_buf(), Arc::downgrade(&loaded));
+    Ok(loaded)
+}
+
+/// How many rider libraries this process has open.
+///
+/// For tests, which is the only place the count is interesting; a caller that
+/// wanted to act on it would be asking about a library it does not hold.
+pub fn open_library_count() -> usize {
+    let open = OPEN_LIBRARIES.lock().expect("rider library registry poisoned");
+    open.values().filter(|weak| weak.strong_count() > 0).count()
+}
+
 /// A loaded rider shared library.
 ///
-/// Holds the `libloading::Library` handle to keep the loaded code alive.
-/// Must outlive any calls through the registered native functions.
+/// Holds a share of the mapped library to keep the loaded code alive. Must
+/// outlive any calls through the registered native functions.
 pub struct LoadedRider {
     pub rider_name: String,
     /// Raw native function pointers extracted from the library.
     ///
     /// Used by the JIT to register symbols for direct native calls.
     pub native_fn_ptrs: Vec<(String, *const u8)>,
-    _lib: libloading::Library,
+    /// The library those pointers lead into.
+    pub library: Arc<LoadedLibrary>,
 }
 
 /// Load a rider shared library and register its symbols in the native function table.
@@ -159,20 +236,13 @@ pub fn load_rider_library(
     symbols: &[String],
     native_table: &mut NativeFunctionTable,
 ) -> AnyResult<LoadedRider> {
-    let lib = unsafe { libloading::Library::new(lib_path) }
-        .context(fmt!("failed to load rider library '{}' from {}", rider_name, lib_path.display()))?;
-
-    check_abi_version(&lib, rider_name, lib_path)?;
+    let library = open_library(lib_path, rider_name)?;
 
     let mut native_fn_ptrs = Vec::new();
 
     for symbol in symbols {
-        // Look up the raw function pointer.
-        let fn_ptr: *const () = unsafe {
-            let sym: libloading::Symbol<*const ()> = lib.get(symbol.as_bytes())
-                .context(fmt!("symbol '{}' not found in rider '{}'", symbol, rider_name))?;
-            *sym
-        };
+        let fn_ptr = unsafe { library.symbol(symbol) }
+            .context(fmt!("rider '{}'", rider_name))?;
 
         // Save raw pointer for JIT registration.
         native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
@@ -183,7 +253,7 @@ pub fn load_rider_library(
     Ok(LoadedRider {
         rider_name: rider_name.to_string(),
         native_fn_ptrs,
-        _lib: lib,
+        library,
     })
 }
 
