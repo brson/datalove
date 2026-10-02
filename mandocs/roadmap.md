@@ -13,7 +13,6 @@ Thorough compiler architecture, bare language.
 - [ ] workspaces
 - [x] tensors and tables
 - [x] indexing
-- [ ] table column projections
 - [x] adapt opt / clone and coerce / @
 - [x] logic ops
 - [x] type aliases
@@ -45,7 +44,7 @@ Thorough compiler architecture, bare language.
 - tensor std features
 - assert and using it in favor of hacks in test harnesses
 - closures
-- table row polymorphism etc
+- table row polymorphism, column projections etc
 
 
 
