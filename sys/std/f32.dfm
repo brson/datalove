@@ -378,8 +378,8 @@ end fun
 
 // Conversion from the other width.
 //
-// The language does not widen between the float widths on its own - see
-// botspec section 10 - so this is the way down. `f64.from_f32` is the way up.
+// `@` widens an f32 to an f64 but never narrows, so this is the way down.
+// `f64.from_f32` and `@` are the way up.
 //
 // Narrowing rounds to the nearest f32, so it loses precision by design. A
 // value too small to hold rounds to zero, which is the nearest f32 to it and

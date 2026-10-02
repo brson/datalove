@@ -382,8 +382,8 @@ end fun
 
 // Conversion from the other width.
 //
-// The language does not widen between the float widths on its own - see
-// botspec section 10 - so this is the way up. `f32.from_f64` is the way down.
+// The same as `x@`, for a caller that wants the conversion named.
+// `f32.from_f64` is the way down.
 
 // Every f32 is an f64 exactly, so this loses nothing and cannot fail. It is
 // the way back from a value that took the narrower type by default.
