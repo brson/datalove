@@ -35,8 +35,8 @@ For detail see additional documentation.
 - [Comparison and equality](#user-content-comparison-and-equality)
 - [The adapt operator: `@`](#user-content-the-adapt-operator-)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
-- [Modules, packages, and libraries](#user-modules-packages-and-libraries)
-- [The system library and `std` package](#user-content-the-system-library-and-std-package)
+- [Modules, packages, and libraries](#user-content-modules-packages-and-libraries)
+- [The system library and the `std` package](#user-content-the-system-library-and-the-std-package)
 - [Scripts](#user-content-scripts)
 - [Interactive script units](#user-content-interactive-script-units)
 - [Workspaces](#user-content-workspaces)
@@ -48,7 +48,7 @@ For detail see additional documentation.
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
-which are structuaral and linear.
+which are structural and linear.
 They are in brief:
 
 Primitives: `bool`, `int`, `f64`, `f32`, `string`,
@@ -79,7 +79,7 @@ As well as the dynamic types, `data` and `error`.
 Types can be given names with the `type` statement.
 These are called _type aliases_ and do not create new types.
 They can be used to name the type but not construct it.
-They are spelled with `SnakeCase` by convention.
+They are spelled with `PascalCase` by convention.
 
 ```datalove
 type Shape: enum {
@@ -143,14 +143,14 @@ fun count_substrings(
   // ... etc ...
 
   ret some {
-    count: count,
-    other_flags: 0x00,
+    count = count,
+    other_flags = 0x00,
   }
 end fun
 ```
 
 Function arguments are either passed by value, by reference (`ref`),
-by mutable reference (`mut`), or as `out` paramaters.
+by mutable reference (`mut`), or as `out` parameters.
 The caller must correspondingly indicate the passing mode with `ref`, `mut` or `out`.
 
 ```datalove
@@ -203,7 +203,7 @@ var odds = 0
 loop
   if counter == 0
     break
-  else if rem_checked(counter, 2) == some 0
+  else if rem_checked(counter@, 2) == some 0
     set evens = evens + 1
   else
     set odds = odds + 1
@@ -226,7 +226,7 @@ var evens = 0
 var odds = 0
 
 loop while counter != 0
-  if rem_checked(counter, 2) == some 0
+  if rem_checked(counter@, 2) == some 0
     set evens = evens + 1
   else
     set odds = odds + 1
@@ -339,13 +339,13 @@ end match
 
 Optional and result types are first-class in the language,
 spelled `?T` and `!T`. The question mark and bang sigils
-are reserved solely for types operations involving
+are reserved solely for operations involving
 optional values and error handling.
 
 Optionals contain an optional payload, spelled `some x`,
 or they are empty, spelled `none`. Results are for handling
 fallible operations, and are either `ok x` or `er e`,
-where the type of `e` must by the dynamic `error` type.
+where the type of `e` must be the dynamic `error` type.
 
 ```datalove
 let maybe_text1: ?string = some "status info"
@@ -371,7 +371,7 @@ fun add_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-debuglog(: u32 / 100, max_value())
+debuglog(add_saturating(: u32 / 100, max_value()))
 ```
 
 The postfix `?` and `!` operators propagate
@@ -388,7 +388,7 @@ fun add_twice(self: u32, other: u32): ?u32
   ret some twice
 end fun
 
-debuglog(add_twice(:u32 / 1, : u32 / 2))
+debuglog(add_twice(: u32 / 1, : u32 / 2))
 ```
 
 With the result type, `!`:
@@ -455,7 +455,7 @@ end fun
 
 Numeric types never automatically coerce between types,
 neither truncating nor widening.
-Widening conversions are be performed with the multi-purpose adapt operator, `@`.
+Widening conversions are performed with the multi-purpose adapt operator, `@`.
 
 ```datalove
 let a: u8 = 10
@@ -474,7 +474,7 @@ let d: f64 = d@
 Lossy conversions are performed with type-specific library functions.
 
 ```datalove
-require sys/std/u8
+require module sys/std/u8
 
 import u8.from_u64
 
@@ -497,11 +497,11 @@ which early return from their enclosing function with either `none` or `er`.
 
 ```datalove
 fun do_some_math_opt(a: u32, b: u32, c: u32): ?u32
-  ret some (a +? b) /? c
+  ret some ((a +? b) /? c)
 end fun
 
 fun do_some_math_result(a: u32, b: u32, c: u32): !u32
-  ret ok (a +! b) /! c
+  ret ok ((a +! b) /! c)
 end fun
 ```
 
@@ -510,7 +510,7 @@ a checked operator.
 
 ```datalove
 fun do_some_big_math(a: int, b: int, c: int): ?int
-  ret some (a + b) /? c
+  ret some ((a + b) /? c)
 end fun
 ```
 
