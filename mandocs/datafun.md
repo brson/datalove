@@ -6,8 +6,8 @@ On top of the data types defined by [Datalove Literals](datalit.md) it adds:
 
 - Pure and (nearly) total functions
   that cannot perform I/O and have no exceptional control-flow.
-- A simple, acyclic module system.
 - Constants with full compile-time function evaluation.
+- A simple acyclic module system.
 - Reactive script units that may be chained together, and that incrementally
   recompile and reevaluate as dependent units and modules are updated.
 
@@ -474,7 +474,14 @@ let d: f64 = d@
 Lossy conversions are performed with type-specific library functions.
 
 ```datalove
-todo
+require sys/std/u8
+
+import u8.from_u64
+
+let fits: ?u8 = from_u64(100)
+let dontfits: ?u8 = from_u64(1000)
+
+debuglog (fits, dontfits)
 ```
 
 Datalove supports basic numerical binops for
