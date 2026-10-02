@@ -131,7 +131,7 @@ impl CAotCompiler {
 
         // Emit one file per module.
         for (module_id, units) in &modules_by_id {
-            let module_file = self.compile_module_file(*module_id, units, registry)?;
+            let module_file = self.compile_module_file(*module_id, units, registry, &modules_by_id)?;
             // Use first function name as module name hint.
             let module_name = units.first().map(|u| u.name.as_str()).unwrap_or("unknown");
             let filename = format!("mod_{}_{}.c", module_id.0, module_name);
@@ -151,6 +151,7 @@ impl CAotCompiler {
         module_id: IrModuleId,
         units: &[&IrCodeUnit],
         registry: &FunctionRegistry,
+        modules_by_id: &BTreeMap<IrModuleId, Vec<&IrCodeUnit>>,
     ) -> Result<String, CAotError> {
         let mut output = String::new();
 
@@ -166,15 +167,9 @@ impl CAotCompiler {
         // Emit type descriptors.
         self.emit_tydescs(&mut output, &types)?;
 
-        // Forward declare functions in this module.
-        writeln!(output, "// Function declarations").unwrap();
-        for unit in units {
-            let func_name = format!("__mod_{}_{}", module_id.0, &unit.name);
-            let sig = self.build_signature(unit);
-            // Not static - needs to be visible to script.
-            writeln!(output, "{} {}({});", sig.return_type, func_name, sig.params).unwrap();
-        }
-        writeln!(output).unwrap();
+        // A module calls into the modules it imports, so it declares every
+        // module function, its own included, the same as the script does.
+        self.emit_module_declarations(&mut output, modules_by_id);
 
         // Emit module functions.
         for unit in units {
@@ -203,18 +198,7 @@ impl CAotCompiler {
         // Emit type descriptors.
         self.emit_tydescs(&mut output, &types)?;
 
-        // Extern declarations for module functions.
-        if !modules_by_id.is_empty() {
-            writeln!(output, "// Extern declarations for module functions").unwrap();
-            for (module_id, units) in modules_by_id {
-                for ir_unit in units {
-                    let func_name = format!("__mod_{}_{}", module_id.0, &ir_unit.name);
-                    let sig = self.build_signature(ir_unit);
-                    writeln!(output, "extern {} {}({});", sig.return_type, func_name, sig.params).unwrap();
-                }
-            }
-            writeln!(output).unwrap();
-        }
+        self.emit_module_declarations(&mut output, modules_by_id);
 
         // Forward declare local functions.
         if !unit.nested_units.is_empty() {
@@ -243,6 +227,26 @@ impl CAotCompiler {
         self.emit_main(&mut output)?;
 
         Ok(output)
+    }
+
+    /// Emit an `extern` declaration for every module function in the world.
+    fn emit_module_declarations(
+        &self,
+        out: &mut String,
+        modules_by_id: &BTreeMap<IrModuleId, Vec<&IrCodeUnit>>,
+    ) {
+        if modules_by_id.is_empty() {
+            return;
+        }
+        writeln!(out, "// Extern declarations for module functions").unwrap();
+        for (module_id, units) in modules_by_id {
+            for ir_unit in units {
+                let func_name = format!("__mod_{}_{}", module_id.0, &ir_unit.name);
+                let sig = self.build_signature(ir_unit);
+                writeln!(out, "extern {} {}({});", sig.return_type, func_name, sig.params).unwrap();
+            }
+        }
+        writeln!(out).unwrap();
     }
 
     /// Emit C header with includes and type definitions.

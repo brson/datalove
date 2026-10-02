@@ -586,14 +586,24 @@ impl<'a> FunctionCodegenContext<'a> {
             ConstValue::U64(v) => {
                 writeln!(out, "    *(uint64_t*){} = {}ULL;", dest_addr, v).unwrap();
             }
+            // C has no negative literals, only negated positive ones, and the
+            // most negative value of a type has no positive to negate. A
+            // decimal literal past the signed range is likewise not a value C
+            // will take without a suffix that allows it to be unsigned.
             ConstValue::I64(v) => {
-                writeln!(out, "    *(int64_t*){} = {}LL;", dest_addr, v).unwrap();
+                let lit = if *v == i64::MIN { "INT64_MIN".to_string() } else { format!("{v}LL") };
+                writeln!(out, "    *(int64_t*){} = {};", dest_addr, lit).unwrap();
             }
             ConstValue::Index(v) => {
-                writeln!(out, "    *(index_t*){} = {};", dest_addr, v).unwrap();
+                writeln!(out, "    *(index_t*){} = {}u;", dest_addr, v).unwrap();
             }
             ConstValue::Offset(v) => {
-                writeln!(out, "    *(offset_t*){} = {};", dest_addr, v).unwrap();
+                let lit = if *v == datalove_rtdt::OffsetRepr::MIN {
+                    "DTLV_OFFSET_MIN".to_string()
+                } else {
+                    format!("{v}")
+                };
+                writeln!(out, "    *(offset_t*){} = {};", dest_addr, lit).unwrap();
             }
             // A float goes across as its bits rather than as a number written
             // out and read back. Decimal loses nothing for most values but
@@ -1167,33 +1177,6 @@ impl<'a> FunctionCodegenContext<'a> {
 
         let c_ty = types::ir_type_to_c(&lhs_ty);
 
-        // Use GCC/Clang builtins for overflow checking.
-        // Index and Offset are platform-dependent sizes.
-        #[cfg(not(feature = "index-64"))]
-        let (index_add, index_sub, index_mul) = (
-            "__builtin_uadd_overflow",
-            "__builtin_usub_overflow",
-            "__builtin_umul_overflow",
-        );
-        #[cfg(feature = "index-64")]
-        let (index_add, index_sub, index_mul) = (
-            "__builtin_uaddll_overflow",
-            "__builtin_usubll_overflow",
-            "__builtin_umulll_overflow",
-        );
-        #[cfg(not(feature = "index-64"))]
-        let (offset_add, offset_sub, offset_mul) = (
-            "__builtin_sadd_overflow",
-            "__builtin_ssub_overflow",
-            "__builtin_smul_overflow",
-        );
-        #[cfg(feature = "index-64")]
-        let (offset_add, offset_sub, offset_mul) = (
-            "__builtin_saddll_overflow",
-            "__builtin_ssubll_overflow",
-            "__builtin_smulll_overflow",
-        );
-
         // Handle small integer types by widening to 32-bit.
         let (min_val, max_val): (Option<i64>, Option<i64>) = match lhs_ty {
             IrType::I8 => (Some(-128), Some(127)),
@@ -1262,25 +1245,17 @@ impl<'a> FunctionCodegenContext<'a> {
             return Ok(());
         }
 
+        // The type-generic builtins check against the type their result
+        // pointer points to, so one name serves every width. The fixed-width
+        // ones name C's `int`, `long` and `long long`, which `int64_t` and
+        // `index_t` do not reliably match.
         let builtin = match (lhs_ty, op) {
-            (IrType::I32, BinOp::Add) => "__builtin_sadd_overflow",
-            (IrType::I32, BinOp::Sub) => "__builtin_ssub_overflow",
-            (IrType::I32, BinOp::Mul) => "__builtin_smul_overflow",
-            (IrType::I64, BinOp::Add) => "__builtin_saddll_overflow",
-            (IrType::I64, BinOp::Sub) => "__builtin_ssubll_overflow",
-            (IrType::I64, BinOp::Mul) => "__builtin_smulll_overflow",
-            (IrType::U32, BinOp::Add) => "__builtin_uadd_overflow",
-            (IrType::U32, BinOp::Sub) => "__builtin_usub_overflow",
-            (IrType::U32, BinOp::Mul) => "__builtin_umul_overflow",
-            (IrType::U64, BinOp::Add) => "__builtin_uaddll_overflow",
-            (IrType::U64, BinOp::Sub) => "__builtin_usubll_overflow",
-            (IrType::U64, BinOp::Mul) => "__builtin_umulll_overflow",
-            (IrType::Index, BinOp::Add) => index_add,
-            (IrType::Index, BinOp::Sub) => index_sub,
-            (IrType::Index, BinOp::Mul) => index_mul,
-            (IrType::Offset, BinOp::Add) => offset_add,
-            (IrType::Offset, BinOp::Sub) => offset_sub,
-            (IrType::Offset, BinOp::Mul) => offset_mul,
+            (IrType::I32 | IrType::I64 | IrType::U32 | IrType::U64
+                | IrType::Index | IrType::Offset, BinOp::Add) => "__builtin_add_overflow",
+            (IrType::I32 | IrType::I64 | IrType::U32 | IrType::U64
+                | IrType::Index | IrType::Offset, BinOp::Sub) => "__builtin_sub_overflow",
+            (IrType::I32 | IrType::I64 | IrType::U32 | IrType::U64
+                | IrType::Index | IrType::Offset, BinOp::Mul) => "__builtin_mul_overflow",
             _ => {
                 // Fall back to unchecked operation.
                 self.emit_binop(out, dest, op, lhs, rhs)?;
