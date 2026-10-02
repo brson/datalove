@@ -1,7 +1,3 @@
-# There's a fixpoint algorithm to determine tydescs for empty collections
-
-Understand the impact of this.
-
 ## 2026/10/02 int.neg_checked is ! instead of ?
 
 looks inconsistent
@@ -34,3 +30,8 @@ else if b |y|
 else |e|
 end if
 ```
+
+# 2026/10/01 There's a fixpoint algorithm to determine tydescs for empty collections
+
+Understand the impact of this.
+
