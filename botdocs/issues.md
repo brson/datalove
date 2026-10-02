@@ -17,7 +17,6 @@ home here.
 - [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
-- [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
 
 ## Nothing but a test inlines
@@ -126,20 +125,6 @@ disturb the counting.
 Closing it means the compiler's unit numbering and the runtime's agreeing about
 failed units, which `CodeRef::External` already assumes today. Worth examining
 as its own question rather than patching the key.
-
-## A specialized function keeps an original nobody calls
-
-**By design, and wrong for one of the two cases.**
-
-Const parameter specialization is additive: the original function stays and a
-copy per instantiation is added beside it. That is what makes a call site the
-pass cannot see -- a script unit's, compiled later -- still have something to
-call.
-
-An AOT build has no later script unit. There, a function whose every call site
-was specialized keeps an original that nothing reaches, and it is emitted.
-Dead-code elimination over the module graph would remove it; nothing does that
-today.
 
 ## The loop check asks where a binding ended up, not whether its move repeats
 
