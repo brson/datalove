@@ -169,23 +169,18 @@ Enums with `match`.
 
 ```datalove
 type Shape: enum {
-  atom Circle,
+  term Point
   term Rect (f32, f32),
-  term Tri (f32, f32, f32),
 }
 
-let s: Shape = term Rect (3.0, 4.0)@
+let s: Shape = term Rect (3.0, 4.0)
 
-var area: f64 = 0.0
+var area: f32 = 0.0
 match s
 case atom Circle
   set area = 0.0
 case term Rect dims
-  // dims: (f32, f32), the whole payload bound to one name
-  set area = 0.0
-case term Tri sides
-  // sides: (f32, f32, f32)
-  set area = 0.0
+  set area = dims.0 * dims.1
 end match
 ```
 
@@ -193,12 +188,12 @@ There is no deep destructuring,
 just a single binding for the whole payload.
 Matches move out of their input.
 
-Match must be exhaustive;
-use `case default` for a catch-all.
+Match must be exhaustive.
+Use `case default` for a catch-all.
 
 ```datalove
 match s
-case atom Circle
+case atom Point
   set area = 0.0
 case default
   set area = 1.0

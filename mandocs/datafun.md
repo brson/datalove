@@ -155,6 +155,14 @@ debuglog (b, c)
 
 Immutable bindings are declared with `let`, mutable with `var`.
 Mutable bindings are reassigned with `set`.
+New bindings may shadow previous bindings.
+
+```datalove
+let a = true
+debuglog a
+let a = 100
+debuglog a
+```
 
 
 
@@ -250,11 +258,6 @@ set b = 200
 debuglog (a, b)
 ```
 
-
-
-
-## Option and result
-
 The option and result types are destructured
 with special `if` statements.
 
@@ -276,16 +279,49 @@ else |e|
 end if
 ```
 
+These forms disallow `else`-`if` chains.
+In the result case the `else` branch is required.
+
+Enums are destructured with `match`.
+
+```datalove
+type Shape: enum {
+  term Point
+  term Rect (f32, f32),
+}
+
+let s: Shape = term Rect (3.0, 4.0)
+
+var area: f32 = 0.0
+match s
+case atom Point
+  set area = 0.0
+case term Rect dims
+  set area = dims.0 * dims.1
+end match
+```
+
+Match must be exhaustive;
+Use `case default` for a catch-all.
+
+```datalove
+match s
+case atom Point
+  set area = 0.0
+case default
+  set area = 1.0
+end match
+```
 
 
 
-## Enums and match statements
+## Option and result handling
 
 ## Comparison and equality
 
 ## Other operators
 
-## The "adapt" operator: `@`
+## The adapt operator: `@`
 
 ## Constants and compile-time evaluation
 
