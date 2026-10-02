@@ -24,6 +24,26 @@ For detail see additional documentation.
 
 ## Contents
 
+<div class="toc toc-repeat-8">
+
+- [Data types](#user-content-data-types)
+- [Functions](#user-content-functions)
+- [Control flow](#user-content-control-flow)
+- [Data types and destructuring](#user-content-data-types-and-destructuring)
+- [Option and result handling](#user-content-option-and-result-handling)
+- [Numerics](#user-content-numerics)
+- [Comparison and equality](#user-content-comparison-and-equality)
+- [Other operators](#user-content-other-operators)
+- [The adapt operator: `@`](#user-content-the-adapt-operator-)
+- [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
+- [Modules and their organization](#user-content-modules-and-their-organization)
+- [The standard library](#user-content-the-standard-library)
+- [Scripts](#user-content-scripts)
+- [Interactive script units](#user-content-interactive-script-units)
+- [Workspaces](#user-content-workspaces)
+
+</div>
+
 
 
 ## Data types
@@ -372,7 +392,7 @@ end fun
 debuglog(add_twice(:u32 / 1, : u32 / 2))
 ```
 
-With `!`:
+With the result type, `!`:
 
 ```datalove
 require module sys/std/u32
@@ -396,7 +416,9 @@ debuglog(add_twice(: u32 / 1, : u32 / 4000000000))
 
 ## Numerics
 
-todo
+Datalove has fixed-width integer types,
+`u8` .. `u64` and `i8` .. `i64`,
+and unbounded big integer types, `int`.
 
 Integer literals have the bigint `int` type by default.
 To create integers of other types use a prefix
@@ -419,12 +441,90 @@ fun u32_zero(): u32
 end fun
 ```
 
+Floating point literals are always written with a decimal
+and produce `f64` unless hinted with `f32`.
+
+```datalove
+fun f64_zero(): f64
+  ret 0.0
+end fun
+
+fun f32_zero(): f32
+  ret : f32 / 0.0
+end fun
+```
+
+Numeric types never automatically coerce between types,
+neither truncating nor widening.
+Widening conversions are be performed with the multi-purpose adapt operator, `@`.
+
+```datalove
+let a: u8 = 10
+let a: u32 = a@
+
+let b: i8 = -10
+let b: i32 = b@
+
+let c: u64 = 10
+let c: int = c@
+
+let d: f32 = 10.0
+let d: f64 = d@
+```
+
+Lossy conversions are performed with type-specific library functions.
+
+```datalove
+todo
+```
+
+Datalove supports basic numerical binops for
+addition, subtraction, multiplication, division, and unary negation.
+For floating point types these work according to IEEE spec,
+with some operations producing `NaN` or +/- infinity.
+
+Because Datalove prioritizes numerical correctness,
+silent overflow and divide-by-zero is not allowed for integers.
+Thus none of the bare math binops work on fixed-sized integers.
+Instead these types must use checked versions of the binops
+which early return from their enclosing function with either `none` or `er`.
+
+```datalove
+fun do_some_math_opt(a: u32, b: u32, c: u32): ?u32
+  ret some (a +? b) /? c
+end fun
+
+fun do_some_math_result(a: u32, b: u32, c: u32): !u32
+  ret ok (a +! b) /! c
+end fun
+```
+
+Bigints directly support `+`, `-` and `*`, but still division requires
+a checked operator.
+
+```datalove
+fun do_some_big_math(a: int, b: int, c: int): ?int
+  ret some (a + b) /? c
+end fun
+```
+
+For further control over math operations,
+wrapping and saturating versions are provided as library functions.
+
+```datalove
+require module sys/std/u8
+
+import u8.add_wrapping
+
+let v = add_wrapping(255, 1)
+
+debuglog(v)
+```
+
 
 
 
 ## Comparison and equality
-
-## Other operators
 
 ## The adapt operator: `@`
 

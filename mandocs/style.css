@@ -641,6 +641,10 @@ th {
     grid-template-rows: repeat(7, auto);
     list-style-type: decimal;
 }
+.toc.toc-repeat-8 ul {
+    grid-template-rows: repeat(8, auto);
+    list-style-type: decimal;
+}
 
 .toc li {
     padding: 0 0;

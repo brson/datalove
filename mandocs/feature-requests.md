@@ -1,4 +1,14 @@
-## 2026/10/01 Compare and eq for more types
+## 2026/10/02 Bare binops that produce optionals
+
+Would be nice:
+
+```datalove
+fun do_some_math(a: u32, b: u32, c: u32): ?u32
+  ret (a + b) / c
+end fun
+```
+
+## 2026/10/02 Compare and eq for more types
 
 ```datalove
 if some 1 == some 2
