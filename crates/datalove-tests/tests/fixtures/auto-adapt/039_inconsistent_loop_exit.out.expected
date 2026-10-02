@@ -1,0 +1,43 @@
+{
+  "auto_adapt_execution": {
+    "environment": [
+      {
+        "kind": "var",
+        "name": "a",
+        "ty": "int",
+        "value": "5"
+      },
+      {
+        "kind": "var",
+        "name": "b",
+        "ty": "int",
+        "value": "5"
+      }
+    ],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "(fragment executed)"
+      }
+    ],
+    "status": "ran"
+  },
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "error[D014]: `b` is given away on one way out of this loop and not another"
+      }
+    ],
+    "success": false
+  }
+}

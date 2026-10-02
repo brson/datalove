@@ -1,0 +1,85 @@
+// What is true after a loop is what every way out of it agrees on.
+//
+// A `break` that gives an owned value away used to be D007 `cannot move in
+// loop`, which was the wrong complaint twice over: the move cannot happen more
+// than once, since the only path reaching it leaves the loop, and the thing
+// actually at stake is whether the value is still held afterwards. Each `break`
+// now records what it took with it, and a conditional loop counts its condition
+// failing as a way out as well, with the state it was entered with. Agreement
+// settles the state; disagreement is D014, which says so.
+//
+// A `continue` is not a way out -- it goes back to the head, so what it moved
+// can be moved again, and that stays D007. See
+// `auto-adapt/039_inconsistent_loop_exit` for the refusal and
+// `std_tests/151_owned_past_a_returning_branch` for the `ret` half of this.
+//
+// Each of these hands back a string that one path gave away and another did not,
+// so a drop placed on the wrong path shows up as a wrong answer, not just a leak.
+
+// The only way out takes the value with it, so afterwards it is gone.
+fun sole_break(s: string): string
+  var out = "none"
+  loop
+    set out = s
+    break
+  end loop
+  ret out
+end fun
+
+// Two ways out, both giving it away: they agree, so it is gone either way.
+fun both_breaks_take(s: string, c: bool): string
+  var out = "none"
+  loop
+    if c
+      set out = s
+      break
+    end if
+    set out = s
+    break
+  end loop
+  ret out
+end fun
+
+// Two ways out, neither touching it, so it is still here to return.
+fun breaks_leave_it(s: string, c: bool): string
+  loop
+    if c
+      break
+    end if
+    break
+  end loop
+  ret s
+end fun
+
+// The inner loop's break takes it and the outer one carries that out. The end of
+// the outer body is past its `break` and never reached, so nothing there counts
+// as the move coming round again.
+fun nested_break(s: string): string
+  var out = "none"
+  loop
+    loop
+      set out = s
+      break
+    end loop
+    break
+  end loop
+  ret out
+end fun
+
+// A `continue` that moves nothing is no one's business.
+fun benign_continue(s: string): string
+  var again = true
+  loop
+    if again
+      set again = false
+      continue
+    end if
+    break
+  end loop
+  ret s
+end fun
+
+let output = (sole_break("a"), both_breaks_take("b", true),
+              both_breaks_take("c", false), breaks_leave_it("d", true),
+              breaks_leave_it("e", false), nested_break("f"),
+              benign_continue("g"))

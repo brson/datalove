@@ -8,9 +8,9 @@
 // clause -- the first shape here -- an error for any owned value in scope, and
 // refused a recursive function over `int` outright, which is the last one.
 //
-// A `ret` is the only exit this holds for. `break` and `continue` rejoin the
-// program and what they moved is still given away where they land, so they are
-// not merged around; see `botdocs/issues.md`.
+// `break` and `continue` are left out of the merge too, but they rejoin the
+// program rather than leaving it, so what they moved has to be accounted for
+// where they land: see `152_owned_past_a_loop_exit` for the loop's side of it.
 //
 // Every one of these hands back the owned parameter on the path that keeps it,
 // so a drop gone wrong shows up as a wrong answer rather than only as a leak.

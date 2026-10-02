@@ -1,0 +1,27 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: D014 InconsistentLoopExit in script
+// One way out of the loop gives `b` away and another does not, so whether it is
+// still held afterwards depends on which ran.
+// Expected: D014 in normal mode, success in auto-adapt mode by cloning the move.
+//
+// Not D007. The move happens on the path that breaks, so it cannot happen
+// twice; what cannot be settled is the state after the loop. The `while` is
+// what makes the exits disagree -- the condition can fail on the first read,
+// leaving `b` untouched.
+// Uses int (bigint) which is a linear type
+//
+// They start equal so that auto-adapt mode actually runs the body and takes the
+// break, which is the path whose clone has to hold up at runtime.
+
+var a: int = (: int / 5)
+var b: int = (: int / 5)
+
+loop while a == b
+  if a == b
+    set a = b
+    break
+  end if
+end loop

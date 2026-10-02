@@ -44,7 +44,7 @@ use datalove_datafun_ast::ast::{
     StmtMatch, MatchCaseKind,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
 };
-use datalove_datafun_ast::reachable::body_returns;
+use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ir::IrType;
 
 // Re-export types from sema for backward compatibility.
@@ -117,6 +117,24 @@ struct AnalysisCtx<'a, 'db> {
     schedule: DropSchedule,
     /// Auto-adapt mode for suppressing recoverable errors.
     auto_adapt_mode: AutoAdaptMode,
+    /// The ways out of each loop currently being analyzed, innermost last.
+    ///
+    /// `break` and `continue` carry no label, so both always belong to the
+    /// innermost loop and this is a plain stack.
+    loop_exits: Vec<LoopExits>,
+}
+
+/// The states a loop's `break`s and `continue`s left behind.
+///
+/// Kept apart because they answer different questions. A `continue` goes back to
+/// the loop head, so a binding it moved can be moved again on the next
+/// iteration: those states belong to the repeat check. A `break` goes past the
+/// loop and never returns to the head, so it cannot repeat, but it decides what
+/// is true afterwards along with every other exit.
+#[derive(Default)]
+struct LoopExits {
+    breaks: Vec<BTreeMap<BindingId, BindingState>>,
+    continues: Vec<BTreeMap<BindingId, BindingState>>,
 }
 
 /// A scope frame for tracking bindings.
@@ -178,6 +196,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             errors: Vec::new(),
             schedule: DropSchedule::default(),
             auto_adapt_mode,
+            loop_exits: Vec::new(),
         }
     }
 
@@ -384,6 +403,25 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn set_out_param_init(&mut self, id: BindingId, state: OutParamInitState) {
         if let Some(frame) = self.scope_stack.last_mut() {
             frame.out_param_init.insert(id, state);
+        }
+    }
+
+    /// Record the state a `break` or `continue` leaves the innermost loop with.
+    ///
+    /// The drops this exit needs are already scheduled against it, so what is
+    /// kept here is only what the loop has to know afterwards: which bindings it
+    /// took with it. Bindings the loop body declared are left out -- they do not
+    /// exist past the loop, and the exit dropped them on its way.
+    fn record_loop_exit(&mut self, is_continue: bool) {
+        let state = self.scope_stack.last()
+            .map(|frame| frame.current_state.C())
+            .unwrap_or_default();
+        let exits = self.loop_exits.last_mut()
+            .expect("a `break` or `continue` outside a loop is F050/F051, which typecheck refuses");
+        if is_continue {
+            exits.continues.push(state);
+        } else {
+            exits.breaks.push(state);
         }
     }
 
@@ -1323,6 +1361,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
                 if !drops.is_empty() {
                     ctx.schedule.before_break.insert(stmt_id, drops);
                 }
+                ctx.record_loop_exit(false);
             }
             Statement::Continue(_) => {
                 // Drops before continue: all live bindings in loop body.
@@ -1330,6 +1369,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
                 if !drops.is_empty() {
                     ctx.schedule.before_continue.insert(stmt_id, drops);
                 }
+                ctx.record_loop_exit(true);
             }
             Statement::Fun(_) => {
                 // Nested functions handled separately.
@@ -1650,18 +1690,21 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
         (state_before.C(), out_param_init_before.C())
     };
 
-    // Which branches reach the code after the `if` at all.
-    let then_returns = body_returns(&stmt.then_body);
-    let else_returns = stmt.else_body.as_ref().is_some_and(|body| body_returns(body));
+    // Which branches reach the code after the `if` at all. A branch that leaves
+    // by any means -- `ret`, `break`, `continue` -- does not, and each of those
+    // has somewhere else its state is accounted for: a `ret` at its own drops, a
+    // `break` or `continue` in the loop's exit records.
+    let then_leaves = !body_completes(&stmt.then_body);
+    let else_leaves = stmt.else_body.as_ref().is_some_and(|body| !body_completes(body));
 
     // Check for inconsistent moves between branches.
     // If a binding is moved in one branch but not the other, that's an error.
     // This ensures drop points are precise - no runtime tracking needed.
     //
-    // Only between branches that merge. A branch that returns has already had
-    // its drops scheduled at the `ret` and never arrives here, so the two
-    // states describe different points in the program and disagreeing about a
-    // binding is what they are supposed to do. Comparing them anyway refused
+    // Only between branches that merge. A branch that left never arrives here,
+    // so the two states describe different points in the program and
+    // disagreeing about a binding is what they are supposed to do. Comparing
+    // them anyway refused
     //
     //     if n == 0
     //       ret 0
@@ -1670,7 +1713,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     //
     // for every owned `s` live at the `ret`, which is to say most guard
     // clauses anyone writes.
-    if !then_returns && !else_returns {
+    if !then_leaves && !else_leaves {
         for (&id, &then_state) in &state_after_then {
             let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
 
@@ -1696,10 +1739,10 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // Whichever branch falls through decides what is known afterwards. Both
     // branches must otherwise have the same state for each binding (or an error
     // was reported above), so taking the then branch's is the same as taking
-    // the else branch's; it is only when the then branch returns that they
-    // differ and the else branch's -- or, with no else, the state before the
-    // `if` -- is the one that describes the merge.
-    let state_after = if then_returns && !else_returns {
+    // the else branch's; it is only when the then branch left that they differ
+    // and the else branch's -- or, with no else, the state before the `if` -- is
+    // the one that describes the merge.
+    let state_after = if then_leaves && !else_leaves {
         &state_after_else
     } else {
         &state_after_then
@@ -1753,9 +1796,9 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         .unwrap_or_default();
 
     let mut arm_states: Vec<BTreeMap<BindingId, BindingState>> = Vec::new();
-    // Whether each arm, in the same order, leaves the function rather than
-    // merging after the `match`.
-    let mut arm_returns: Vec<bool> = Vec::new();
+    // Whether each arm, in the same order, leaves rather than merging after the
+    // `match`.
+    let mut arm_leaves: Vec<bool> = Vec::new();
 
     // Analyze each case arm.
     for (arm_idx, case) in stmt.cases.iter().enumerate() {
@@ -1800,7 +1843,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             .map(|f| f.current_state.C())
             .unwrap_or_default();
         arm_states.push(state_after);
-        arm_returns.push(body_returns(&case.body));
+        arm_leaves.push(!body_completes(&case.body));
     }
 
     // Analyze default arm if present.
@@ -1823,15 +1866,15 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             .map(|f| f.current_state.C())
             .unwrap_or_default();
         arm_states.push(state_after);
-        arm_returns.push(body_returns(default_body));
+        arm_leaves.push(!body_completes(default_body));
     }
 
     // Only the arms that fall through meet after the `match`, so only they can
-    // disagree, and only their state describes what follows. An arm that
-    // returns dropped what it owned at its `ret`.
+    // disagree, and only their state describes what follows. An arm that left
+    // has its state accounted for where it went.
     let merging: Vec<&BTreeMap<BindingId, BindingState>> = arm_states.iter()
-        .zip(&arm_returns)
-        .filter(|(_, returns)| !**returns)
+        .zip(&arm_leaves)
+        .filter(|(_, leaves)| !**leaves)
         .map(|(state, _)| state)
         .collect();
 
@@ -1853,7 +1896,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         }
     }
 
-    // Update state after match convergence. With every arm returning, nothing
+    // Update state after match convergence. With every arm leaving, nothing
     // after the `match` runs and any of them will do.
     match merging.first().copied().or_else(|| arm_states.first()) {
         Some(state_after) => {
@@ -1890,6 +1933,13 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         }
     }
 
+    // The state the loop is entered with, which is also the state it is left
+    // with when the condition fails, since nothing that changed a binding here
+    // survives the repeat check below.
+    let state_before = ctx.scope_stack.last()
+        .map(|frame| frame.current_state.C())
+        .unwrap_or_default();
+
     // Capture outer-scope non-copy bindings that are Live before entering the loop.
     // If any of these become Moved during loop body analysis, that's an error
     // because the loop could iterate multiple times.
@@ -1904,15 +1954,37 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         })
         .unwrap_or_default();
 
+    ctx.loop_exits.push(LoopExits::default());
     ctx.enter_scope(ScopeKind::Loop);
 
     analyze_statements(ctx, &stmt.body);
 
-    // Check for outer-scope bindings that were moved inside the loop body.
-    // This is an error because the loop could iterate multiple times.
-    // Can be recovered by cloning inside the loop.
+    let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
+
+    // Check for outer-scope bindings moved somewhere that gets back to the loop
+    // head, which is the only way a move repeats. The end of the body gets
+    // there, and so does every `continue`.
+    //
+    // The `continue` states have to be asked separately, because a branch that
+    // leaves is kept out of the merge after an `if`: a move followed by
+    // `continue` no longer shows in the state at the end of the body, and
+    // missing it would let one value be given away on every iteration.
+    //
+    // A `break` is deliberately not asked. It does not reach the head, so what
+    // it moved cannot be moved twice; it is settled at the loop's exit instead.
+    //
+    // The end of the body only counts when control can get there. A body that
+    // ends in `break` -- an inner loop followed by one, say -- leaves a state
+    // behind that nothing reads, and reading it anyway reported a repeat for a
+    // move that happens at most once.
+    let body_reaches_head = body_completes(&stmt.body);
+    let mut adapted: Vec<BindingId> = Vec::new();
     for id in &outer_live_bindings {
-        if ctx.get_state(*id) == Some(BindingState::Moved) {
+        let moved_at_body_end = body_reaches_head
+            && ctx.get_state(*id) == Some(BindingState::Moved);
+        let moved_at_continue = exits.continues.iter()
+            .any(|state| state.get(id) == Some(&BindingState::Moved));
+        if moved_at_body_end || moved_at_continue {
             if ctx.auto_adapt_mode.is_enabled() {
                 // Clone at the use inside the loop, so each iteration takes a
                 // copy and the binding survives the loop.
@@ -1920,6 +1992,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
                     ctx.adapt_sites.insert(moved_at);
                 }
                 ctx.set_state(*id, BindingState::Live);
+                adapted.push(*id);
             } else {
                 let name = ctx.bindings[id.0 as usize].name.C();
                 // The binding is Moved, so mark_moved recorded where.
@@ -1936,5 +2009,66 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
     let loop_drops = ctx.exit_scope();
     if !loop_drops.is_empty() {
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
+    }
+
+    merge_loop_exits(ctx, stmt, stmt_idx, &exits, &state_before, &adapted);
+}
+
+/// Settle what is true after a loop from the ways out of it.
+///
+/// Every `break` is a way out, and a conditional loop can leave by its condition
+/// failing as well -- on the first read, so with the state it was entered with.
+/// A `ret` is not: it leaves the function and has already dropped what it owned.
+///
+/// Where the exits agree, that is the answer, and a binding a `break` took with
+/// it reads moved afterwards so nothing drops it twice. Where they disagree, the
+/// move is still fine -- it cannot have happened more than once -- but there is
+/// no state to write down, since whether the binding is still held depends on
+/// which exit ran. Drop points here are static, so that is refused.
+fn merge_loop_exits<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    stmt: &StmtLoop<'db>,
+    stmt_idx: usize,
+    exits: &LoopExits,
+    state_before: &BTreeMap<BindingId, BindingState>,
+    adapted: &[BindingId],
+) {
+    let mut exit_states: Vec<&BTreeMap<BindingId, BindingState>> = exits.breaks.iter().collect();
+    if stmt.condition.is_some() {
+        exit_states.push(state_before);
+    }
+
+    // A bare `loop` nothing breaks out of is left by returning or not at all, so
+    // there is nothing after it for this to describe.
+    if exit_states.is_empty() {
+        return;
+    }
+
+    for &id in state_before.keys() {
+        // A binding the repeat check cloned is live on every path by
+        // construction, the move it disagreed about having gone away.
+        if adapted.contains(&id) || ctx.bindings[id.0 as usize].ty.is_copy() {
+            continue;
+        }
+
+        let mut states = exit_states.iter()
+            .map(|state| state.get(&id).copied().unwrap_or(BindingState::Live));
+        let first = states.next().X();
+
+        if states.all(|state| state == first) {
+            if let Some(frame) = ctx.scope_stack.last_mut() {
+                frame.current_state.insert(id, first);
+            }
+        } else if ctx.auto_adapt_mode.is_enabled() {
+            // Clone at the move, so the exit that took it leaves it behind and
+            // every way out agrees it is still held.
+            if let Some(moved_at) = ctx.get_moved_at(id) {
+                ctx.adapt_sites.insert(moved_at);
+            }
+            ctx.set_state(id, BindingState::Live);
+        } else {
+            let name = ctx.bindings[id.0 as usize].name.C();
+            ctx.errors.push(AnalysisError::InconsistentLoopExit { stmt_idx, name });
+        }
     }
 }

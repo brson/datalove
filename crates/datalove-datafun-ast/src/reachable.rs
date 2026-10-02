@@ -1,14 +1,20 @@
 //! Whether control can reach the end of a list of statements.
 //!
-//! Two checks want this, and they want the same answer: a function with a
+//! Three checks want this, and they want the same answer. A function with a
 //! return type has to return a value on every path out, and a function with an
-//! out parameter has to write it on every path out. What both mean by "every
+//! out parameter has to write it on every path out; what both mean by "every
 //! path" includes the end of the body, which is a return the source does not
 //! write down, and neither should report against one the body cannot arrive at.
+//! The third is the ownership pass merging an `if` or a `match`: a branch
+//! control cannot reach the end of never arrives at the merge, so what it moved
+//! describes somewhere else and is accounted for there -- at a `ret`'s own
+//! drops, or in a loop's break and continue records.
 //!
-//! Only as much of it as those two need. Anything not named here is taken to
+//! Only as much of it as those three need. Anything not named here is taken to
 //! complete, which at worst repeats a report a `ret` already made rather than
-//! inventing one against unreachable code.
+//! inventing one against unreachable code. For the ownership pass that
+//! direction is safe too: a branch wrongly thought to fall through is merged
+//! against, which is the conservative answer it had before any of this.
 
 use crate::ast::Statement;
 
@@ -40,53 +46,6 @@ fn statement_completes<'db>(statement: &Statement<'db>) -> bool {
                 || stmt.default_body.as_ref().is_some_and(|body| body_completes(body))
         }
         _ => true,
-    }
-}
-
-/// Whether every path through these statements leaves the function.
-///
-/// The ownership pass wants this where an `if` or a `match` merges. A branch
-/// that returns never arrives at the merge, so what it moved describes a
-/// different point in the program and must not be compared against, or taken
-/// for, the state of a branch that does arrive.
-///
-/// **This is not the negation of [`body_completes`], and the difference is
-/// `break` and `continue`.** Those do not complete a body, so `body_completes`
-/// says no to them, and rightly: the end of the body is not where they go. But
-/// they do rejoin the program -- after the loop, or at its head -- and whatever
-/// they moved is still given away when they land there. A merge that ignored
-/// them would take the state of the path that did not move, and schedule a drop
-/// for a value the other path had already handed over. Returning is the only
-/// exit that arrives at no merge at all, so it is the only one here.
-///
-/// Conservative where it can afford to be, since missing a divergence costs
-/// only the spurious error that not knowing about it caused in the first place:
-/// a `loop` whose every exit is a `ret` is not recognized.
-pub fn body_returns<'db>(statements: &[Statement<'db>]) -> bool {
-    statements.iter().any(statement_returns)
-}
-
-fn statement_returns<'db>(statement: &Statement<'db>) -> bool {
-    match statement {
-        Statement::Ret(_) => true,
-        // With no else, the way round the `if` returns nothing.
-        Statement::If(stmt) => match &stmt.else_body {
-            Some(else_body) => body_returns(&stmt.then_body) && body_returns(else_body),
-            None => false,
-        },
-        Statement::Match(stmt) => {
-            // Exhaustive, as `body_completes` says, so there is no falling out
-            // of one: every arm returning is every path returning. An arm list
-            // with nothing in it is not that.
-            let default_returns = match &stmt.default_body {
-                Some(body) => body_returns(body),
-                None => true,
-            };
-            (!stmt.cases.is_empty() || stmt.default_body.is_some())
-                && stmt.cases.iter().all(|case| body_returns(&case.body))
-                && default_returns
-        }
-        _ => false,
     }
 }
 

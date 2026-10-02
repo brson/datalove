@@ -418,6 +418,21 @@ fn emit_single_ownership_diagnostic<'db>(
                 .code("D008")
                 .emit_ownership();
         }
+        AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {
+            let msg = format!(
+                "`{}` is given away on one way out of this loop and not another",
+                name,
+            );
+            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                .code("D014")
+                .note(
+                    "the move itself is fine -- it cannot happen twice. What cannot be \
+                     settled is whether the binding is still held after the loop, which \
+                     depends on which exit ran. Give it away on every exit, or clone it \
+                     with `@` at the move.",
+                )
+                .emit_ownership();
+        }
         AnalysisError::OutParamPartialWrite { expr_key, name } => {
             if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
                 let msg = format!("cannot partially write to out parameter: `{}`", name);

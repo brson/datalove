@@ -279,6 +279,19 @@ pub enum AnalysisError<'db> {
         /// Which branch has the move (for error message).
         moved_in: &'static str,
     },
+    /// Value moved on one way out of a loop and not another.
+    ///
+    /// Distinct from [`AnalysisError::MoveInLoop`]: the move does not repeat, so
+    /// nothing is moved twice. What cannot be said is whether the binding is
+    /// still held after the loop, since that depends on which exit ran, and a
+    /// drop point has to be decided without knowing.
+    ///
+    /// D014
+    InconsistentLoopExit {
+        /// Statement index of the loop statement.
+        stmt_idx: usize,
+        name: String,
+    },
     /// Partial field write to out param (must write whole value).
     /// D009
     OutParamPartialWrite {
@@ -347,6 +360,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
             format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
+        }
+        AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {
+            format!("error[D014]: `{}` is given away on one way out of this loop and not another", name)
         }
         AnalysisError::OutParamPartialWrite { expr_key: _, name } => {
             format!("error[D009]: cannot partially write to out parameter: `{}`", name)

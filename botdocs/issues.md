@@ -19,7 +19,7 @@ home here.
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
 - [The runtime is duplicated across the rider dlopen boundary, and shares a heap across it](#user-content-the-runtime-is-duplicated-across-the-rider-dlopen-boundary-and-shares-a-heap-across-it)
-- [A move followed by a `break` is refused, though it cannot repeat](#user-content-a-move-followed-by-a-break-is-refused-though-it-cannot-repeat)
+- [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
 
 ## Nothing but a test inlines
 
@@ -181,49 +181,52 @@ free rather than anything that names the cause. The fix is for the boundary to
 be a C ABI over pointers the two sides do not both own -- the shared library
 should not be handing Rust heap ownership back and forth with its host.
 
-## A move followed by a `break` is refused, though it cannot repeat
+## The loop check asks where a binding ended up, not whether its move repeats
 
-**Reproduced.** A spurious D007 and D008.
+**Reproduced.** A spurious D007 on a loop that re-initializes before it moves.
 
 ```datalove
-var s = "x"
-loop
-  if true
-    let t = s          // D007 `cannot move s in loop`, D008
-    break
-  end if
+var s = "a"
+loop while i .< 3
+  set s = "b"        // s is Live again here
+  let t = s          // D007 -- but no iteration reads a moved s
+  ...
 end loop
 ```
 
-The move cannot happen twice: the only path that reaches it leaves the loop
-immediately after. `analyze_loop` sees the binding `Moved` at the end of the body
-and raises `MoveInLoop` without asking whether anything gets back to the loop
-head from there.
+Every path reaches the move with `s` live, because the `set` precedes it. The
+pass knows: `analyze_set` marks the binding `Live` again. What it does with that
+is nothing, because `MoveInLoop` is positional -- it asks whether the binding is
+`Moved` at the end of the body, not whether the move could ever read a value
+already given away.
 
-**This is what is left of a larger fault.** The same merge mishandled `ret`, and
-that part is fixed: a branch that returns is now left out of the merge after an
-`if` or a `match`, so a guard clause with owned values live is accepted and a
-recursive function over `int` compiles. See
-`std_tests/151_owned_past_a_returning_branch` and
-`reachable::body_returns`, whose docs say why.
+**Why one pass is otherwise enough.** `analyze_loop` analyzes the body once, from
+the state before the loop; iteration 2 is never modelled. That works because the
+pass does not carry a "maybe moved" to widen into -- a binding is `Live` or
+`Moved` and drop points are static -- so instead of converging it *demands the
+loop-head state be invariant* and refuses anything else. Accepted programs are
+exactly those already at a fixpoint after one pass. The approximation is paired
+with a rule that excludes its blind spot, which is why it is sound; this is the
+precision that rule costs.
 
-**`break` is not the same problem, and the easy version of the fix is wrong.**
-Returning arrives at no merge, so ignoring the branch costs nothing. A `break`
-arrives after the loop, and whatever it moved is given away on that path. Leave
-it out of the merge and the binding reads `Live` afterwards, so scope exit drops
-a value the break path already handed over -- a double free, not a spurious
-error. The state after a loop genuinely depends on which exit was taken, which is
-the ambiguity the pass refuses in order to keep drop points static.
+The condition is read once too, before the body, so a condition reading a binding
+the body moves is never analyzed against the moved state. Nothing in the
+condition handling catches that -- `MoveInLoop` does, by refusing the move at
+all. So the blunt rule is load-bearing for soundness, not only for precision.
 
-So closing this wants either a merge at the loop exit over the break paths and
-the fall-through together -- and a refusal when they disagree, with a message
-that says so rather than `cannot move in loop` -- or the loop exit knowing that a
-`break` is the only way out, which makes the binding definitely moved. The
-present message is the misleading part either way: the move is fine, and what is
-wrong is that nothing can say what is true after the loop.
+**What it would take**, and the coupling to watch. A real fixpoint: analyze the
+body, feed the end state back to the head, repeat until it settles, and ask of
+each *use* whether it can read a moved value rather than asking where the binding
+ended up. Two things depend on the present rule and would have to move with it:
 
-`continue` has the same shape, going to the loop head instead.
+- The loop-exit merge (`merge_loop_exits`) takes the state before the loop as the
+  state at a condition-failure exit. That is sound only because `MoveInLoop`
+  guarantees the end of the body agrees with it for every outer non-copy
+  binding. Relax the rule and that guarantee goes, and the exit merge is
+  unsound rather than imprecise.
+- Auto-adapt mode recovers from the same site by inserting a clone, so the
+  imprecision shows up there as a copy per iteration that nothing needed, not as
+  an error. A fixpoint would remove those too.
 
-`ir_inline/008_multi_return` was written as two else-less early returns over an
-`int` and is spelled as an `else if` chain to avoid the `ret` half of this; it
-can go back now.
+Loop exits themselves are settled: see `merge_loop_exits`, D014, and
+`std_tests/152_owned_past_a_loop_exit`.

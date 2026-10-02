@@ -73,6 +73,13 @@ pub fn render_ownership_errors_direct<'db>(
                 AnalysisError::InconsistentBranchMove { name, moved_in, .. } => {
                     eprintln!("error[D008]: `{name}` moved in {moved_in} branch but not the other");
                 }
+                AnalysisError::InconsistentLoopExit { name, .. } => {
+                    eprintln!("error[D014]: `{name}` is given away on one way out of this loop and not another");
+                    eprintln!("  note: the move cannot happen twice, so it is not the problem. \
+                               Whether `{name}` is still held after the loop depends on which \
+                               way out ran, and a drop has to be placed without knowing.");
+                    eprintln!("  help: give it away on every way out, or clone it with `@` at the move");
+                }
                 _ => {}
             },
         }
@@ -257,6 +264,7 @@ fn ownership_diagnostic<'db>(
         }
         // These carry no expression to point at.
         AnalysisError::OutParamNotInitialized { .. }
-        | AnalysisError::InconsistentBranchMove { .. } => None,
+        | AnalysisError::InconsistentBranchMove { .. }
+        | AnalysisError::InconsistentLoopExit { .. } => None,
     }
 }
