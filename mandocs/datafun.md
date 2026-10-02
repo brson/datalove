@@ -57,27 +57,6 @@ Aggregates:
 
 As well as the dynamic types, `data` and `error`.
 
-Integer literals have the bigint `int` type by default.
-To create integers of other types use a prefix
-type hint of the form `: <type> / <expr>`,
-which can be applied to any expression.
-
-```datalove
-fun u32_zero(): u32
-  ret : u32 / 0
-end fun
-```
-
-Specifying the type in an intermediate `let` binding
-also works.
-
-```datalove
-fun u32_zero(): u32
-  let zero: u32 = 0
-  ret zero
-end fun
-```
-
 Types can be given names with the `type` statement.
 These are called _type aliases_ and do not create new types.
 They can be used to name the type but not construct it.
@@ -352,12 +331,12 @@ where the type of `e` must by the dynamic `error` type.
 ```datalove
 let maybe_text1: ?string = some "status info"
 let maybe_text2: ?string = none
-let result_text1: ?string = ok "status info"
-let result_text2: ?string = er error "failed to load"
+let result_text1: !string = ok "status info"
+let result_text2: !string = er error "failed to load"
 ```
 
 As described previously their payloads are accessed
-by destructuring using `if` statements.
+through destructuring `if` statements.
 
 ```datalove
 require module sys/std/u32
@@ -373,7 +352,71 @@ fun add_saturating(self: u32, other: u32): u32
   end if
 end fun
 
-debuglog(: u32 /
+debuglog(: u32 / 100, max_value())
+```
+
+The postfix `?` and `!` operators propagate
+option and result return types.
+
+```datalove
+require module sys/std/u32
+
+import u32.add_checked
+
+fun add_twice(self: u32, other: u32): ?u32
+  let once: u32 = add_checked(self, other)?
+  let twice: u32 = add_checked(once, other)?
+  ret some twice
+end fun
+
+debuglog(add_twice(:u32 / 1, : u32 / 2))
+```
+
+With `!`:
+
+```datalove
+require module sys/std/u32
+require module sys/std/option
+
+import u32.add_checked
+import option.ok_or
+
+fun add_twice(self: u32, other: u32): !u32
+  let once: u32 = ok_or(add_checked(self, other), error "overflow")!
+  let twice: u32 = ok_or(add_checked(once, other), error "overflow")!
+  ret ok twice
+end fun
+
+debuglog(add_twice(: u32 / 1, : u32 / 2))
+debuglog(add_twice(: u32 / 1, : u32 / 4000000000))
+```
+
+
+
+
+## Numerics
+
+todo
+
+Integer literals have the bigint `int` type by default.
+To create integers of other types use a prefix
+type hint of the form `: <type> / <expr>`,
+which can be applied to any expression.
+
+```datalove
+fun u32_zero(): u32
+  ret : u32 / 0
+end fun
+```
+
+Specifying the type in an intermediate `let` binding
+also works.
+
+```datalove
+fun u32_zero(): u32
+  let zero: u32 = 0
+  ret zero
+end fun
 ```
 
 
