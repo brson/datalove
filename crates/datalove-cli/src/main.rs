@@ -11,8 +11,9 @@ mod render;
 /// them directly, so it needs the addresses as well; a script that reaches a
 /// native call with a JIT that has not been told about it aborts the process.
 ///
-/// The returned value owns any libraries that were loaded and has to outlive
-/// the executor, which is why it is handed back rather than dropped here.
+/// Hands back the libraries that were loaded. The executor's table and the jit
+/// hold their own share of each, so this is not what keeps them mapped; it is
+/// returned because a caller wanting to hand a share to anything else needs it.
 fn register_natives(
     descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
     compiled: &datalove_datafun::pipeline::CompiledModules,
@@ -28,6 +29,11 @@ fn register_natives(
         if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
             for (symbol, ptr) in &registered.native_fn_ptrs {
                 jit.register_native_symbol(symbol, *ptr);
+            }
+            // The jit emits these addresses into the code it generates, which
+            // outlives the lookup, so it holds the libraries they lead into.
+            for owner in registered.code_owners() {
+                jit.hold_code_owner(owner);
             }
         }
         executor.set_dispatcher(dispatcher);

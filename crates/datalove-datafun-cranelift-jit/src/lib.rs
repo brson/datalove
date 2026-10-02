@@ -191,6 +191,14 @@ impl JitEngine {
         self.compiler.register_native_symbol(name, addr);
     }
 
+    /// Hold what a registered native symbol's code lives in.
+    ///
+    /// Needed because the address is emitted into compiled code, which outlives
+    /// the symbol table it was looked up in. See `JitCompiler::code_owners`.
+    pub fn hold_code_owner(&self, owner: std::sync::Arc<dyn std::any::Any + Send + Sync>) {
+        self.compiler.hold_code_owner(owner);
+    }
+
     /// Get compilation statistics.
     pub fn stats(&self) -> &JitStats {
         &self.stats

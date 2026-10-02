@@ -3,7 +3,9 @@
 //! Maps linker symbols to Rust closures that implement native rider functions.
 //! The interpreter calls through this table when executing `NativeContext` code units.
 
+use std::any::Any;
 use std::collections::HashMap;
+use std::sync::Arc;
 use datalove_rt::c::LocalRtHandle;
 use crate::value::{Value, Destination};
 use crate::error::InterpError;
@@ -32,17 +34,37 @@ pub type NativeFnImpl = Box<
 /// Keyed by linker symbol (e.g. `dlr_testlib__int_add`).
 pub struct NativeFunctionTable {
     table: HashMap<String, NativeFnImpl>,
+    /// Whatever the registered implementations' code lives in.
+    ///
+    /// A native taken out of a loaded library is a pointer into mapped code,
+    /// and the mapping goes when the last holder of the library does. The
+    /// table holds one, so that a table something can still call is a table
+    /// whose code is still there. Without it the two lifetimes were unrelated
+    /// and every holder of both had to write down the order they went in.
+    ///
+    /// Opaque because the table has no business knowing what a library is;
+    /// what it needs is for the thing to outlive it. Empty when the natives
+    /// were linked into this binary, there being nothing to keep.
+    code_owners: Vec<Arc<dyn Any>>,
 }
 
 impl NativeFunctionTable {
     /// Create an empty table.
     pub fn new() -> Self {
-        Self { table: HashMap::new() }
+        Self { table: HashMap::new(), code_owners: Vec::new() }
     }
 
     /// Register a native function implementation.
     pub fn register(&mut self, symbol: impl Into<String>, f: NativeFnImpl) {
         self.table.insert(symbol.into(), f);
+    }
+
+    /// Hold what a registered native's code lives in for as long as this table.
+    ///
+    /// Call this with the library a native was read out of, in the same breath
+    /// as registering it. See [`NativeFunctionTable::code_owners`].
+    pub fn hold_code_owner(&mut self, owner: Arc<dyn Any>) {
+        self.code_owners.push(owner);
     }
 
     /// Call a native function by its linker symbol.

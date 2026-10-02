@@ -124,6 +124,9 @@ fn run_with_executor(
                 for (symbol, ptr) in &rider.native_fn_ptrs {
                     jit_engine.register_native_symbol(symbol, *ptr);
                 }
+                // The addresses go into generated code, so the jit holds the
+                // library they lead into as well.
+                jit_engine.hold_code_owner(rider.library.clone());
             }
         }
         executor.set_dispatcher(dispatcher);

@@ -68,6 +68,8 @@ fn a_library_is_opened_once_and_closed_by_its_last_holder() {
 
     let code = two.native_fn_ptrs.clone();
     drop(two);
+    drop(table_one);
+    drop(table_two);
     assert_eq!(open_library_count(), 0, "the last holder going closes it");
 
     // And it can be taken again, the registry not left holding a dead entry.
@@ -76,4 +78,17 @@ fn a_library_is_opened_once_and_closed_by_its_last_holder() {
         .expect("load again after the library closed");
     assert_eq!(open_library_count(), 1);
     assert_eq!(three.native_fn_ptrs, code, "the same library gives the same code");
+
+    // The table is a holder in its own right, which is the point: the caller's
+    // copy going does not take the code out from under a table that can still
+    // be called through. This is what the drop order at each caller used to
+    // have to say by hand.
+    drop(three);
+    assert_eq!(
+        open_library_count(), 1,
+        "the table registered against this library still holds it",
+    );
+
+    drop(table_three);
+    assert_eq!(open_library_count(), 0, "and going itself releases it");
 }

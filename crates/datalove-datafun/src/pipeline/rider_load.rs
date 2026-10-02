@@ -6,6 +6,7 @@
 use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, Weak};
 
@@ -17,8 +18,9 @@ use super::{CompiledModules, ScriptExecutor, WorkspaceDescriptor, rider_build};
 
 /// Build a workspace's native component and register its symbols with an executor.
 ///
-/// The returned riders own the loaded shared library and must outlive the
-/// executor they were registered with.
+/// The executor's native table takes a share of the loaded library as the
+/// symbols are registered, so the returned riders are the caller's copy rather
+/// than what keeps the code mapped.
 pub fn build_and_load_riders(
     descriptor: &WorkspaceDescriptor,
     compiled: &CompiledModules,
@@ -70,10 +72,26 @@ pub struct RegisteredNatives {
     /// interpreter's table.
     pub native_fn_ptrs: Vec<(String, *const u8)>,
 
-    /// Libraries that must outlive the executor, dropping one unmapping the
-    /// code every registered pointer points into. Empty when the riders were
-    /// linked in, there being nothing loaded to keep.
+    /// The libraries the registered pointers lead into.
+    ///
+    /// Empty when the riders were linked in, there being nothing loaded. The
+    /// interpreter's table holds its own share of each, so this is no longer
+    /// what keeps them: it is here for a caller that wants to hand the same
+    /// share to something else, which is what `code_owners` is for.
     pub loaded: Vec<LoadedRider>,
+}
+
+impl RegisteredNatives {
+    /// A share of every library these natives came out of.
+    ///
+    /// For whatever else took the raw addresses and has to outlive them --- the
+    /// JIT, which emits them into compiled code. The interpreter's table was
+    /// given its share when the symbols were registered.
+    pub fn code_owners(&self) -> Vec<Arc<dyn Any + Send + Sync>> {
+        self.loaded.iter()
+            .map(|rider| rider.library.clone() as Arc<dyn Any + Send + Sync>)
+            .collect()
+    }
 }
 
 /// Point an executor at the native functions the compiled modules call.
@@ -249,6 +267,11 @@ pub fn load_rider_library(
 
         register_native(symbol, fn_ptr, native_table);
     }
+
+    // The table now holds pointers into this library, so it holds the library.
+    // Nothing the caller does with the returned rider can take the code out
+    // from under a table that could still be called through.
+    native_table.hold_code_owner(library.clone());
 
     Ok(LoadedRider {
         rider_name: rider_name.to_string(),

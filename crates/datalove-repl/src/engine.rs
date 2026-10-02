@@ -46,10 +46,10 @@ pub struct Engine {
     /// The rider libraries `executor`'s native table points into.
     ///
     /// Only non-empty when the riders were built rather than taken from this
-    /// binary; see `rider_load::build_sys_riders`. Declared after `executor`
-    /// so that it is dropped after it: dropping one unmaps the code every
-    /// registered pointer leads to, and the executor destroying its live
-    /// values can still call into them.
+    /// binary; see `rider_load::build_sys_riders`. Holding it here no longer
+    /// decides anything: the table and the jit each took a share of every
+    /// library when its symbols were registered, so neither can be reached
+    /// after its code has gone whatever order these two fields go in.
     natives: RegisteredNatives,
 }
 
@@ -82,8 +82,9 @@ pub struct EnvBinding {
 struct Started {
     script: ScriptSession,
     executor: ScriptExecutor,
-    /// Rider libraries the executor's native table points into, to be kept
-    /// for as long as that executor is.
+    /// Rider libraries the executor's native table points into. The table
+    /// holds its own share of each, so this is the caller's copy rather than
+    /// what keeps them.
     natives: RegisteredNatives,
 }
 
@@ -165,8 +166,6 @@ impl Engine {
             .expect("system library compiled successfully at startup");
         self.script = Some(started.script);
         self.executor = started.executor;
-        // Assigned after the executor, so the libraries the old one pointed
-        // into stay mapped until it is gone.
         self.natives = started.natives;
     }
 

@@ -1,5 +1,6 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
+use std::any::Any;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
@@ -89,6 +90,17 @@ pub struct JitCompiler {
     /// Populated after construction via `register_native_symbol()`.
     /// The JITModule's symbol lookup function checks this map.
     native_symbols: Arc<Mutex<HashMap<String, SendPtr>>>,
+    /// Whatever the native symbols' code lives in.
+    ///
+    /// Worse than the interpreter's case, which at least keeps its pointers in
+    /// one place: a native's address is emitted into the code cranelift
+    /// generates, so clearing `native_symbols` would not take it back. Compiled
+    /// code outlives the lookup that built it, so the library has to outlive
+    /// the compiler.
+    ///
+    /// Opaque for the same reason as the interpreter's; see
+    /// `NativeFunctionTable::code_owners`.
+    code_owners: Mutex<Vec<Arc<dyn Any + Send + Sync>>>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -190,6 +202,7 @@ impl JitCompiler {
             tydesc_emitter,
             dispatch_func_id,
             native_symbols,
+            code_owners: Mutex::new(Vec::new()),
         })
     }
 
@@ -198,6 +211,15 @@ impl JitCompiler {
     /// Must be called before compiling any function that calls this native.
     pub fn register_native_symbol(&self, name: &str, addr: *const u8) {
         self.native_symbols.lock().unwrap().insert(name.to_string(), SendPtr(addr));
+    }
+
+    /// Hold what a registered native symbol's code lives in.
+    ///
+    /// See [`JitCompiler::code_owners`]. `&self` to match
+    /// `register_native_symbol`, which a caller reaching the engine through a
+    /// dispatcher has only a shared reference to.
+    pub fn hold_code_owner(&self, owner: Arc<dyn Any + Send + Sync>) {
+        self.code_owners.lock().expect("jit code owners poisoned").push(owner);
     }
 
     /// Compile a function to native code (no calls to other functions).
