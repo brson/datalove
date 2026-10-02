@@ -3435,6 +3435,18 @@ impl<'a> FunctionCodegenContext<'a> {
             IntrinsicId::F64ToF32 => {
                 writeln!(out, "    *(float*){} = (float)*(double*){};", dest_addr, arg0()).unwrap();
             }
+            IntrinsicId::U64ToF64 => {
+                writeln!(out, "    *(double*){} = (double)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::I64ToF64 => {
+                writeln!(out, "    *(double*){} = (double)*(int64_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::U64ToF32 => {
+                writeln!(out, "    *(float*){} = (float)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::I64ToF32 => {
+                writeln!(out, "    *(float*){} = (float)*(int64_t*){};", dest_addr, arg0()).unwrap();
+            }
             IntrinsicId::U16ToU8 => {
                 writeln!(out, "    *(uint8_t*){} = (uint8_t)*(uint16_t*){};", dest_addr, arg0()).unwrap();
             }

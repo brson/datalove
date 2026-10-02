@@ -376,6 +376,51 @@ fun from_int(ref n: int): ?f32
   ret f32_from_int(ref n)
 end fun
 
+// Conversion from the fixed-width integers.
+//
+// Every one is in range, so these cannot fail. A value with more significant
+// bits than the format carries rounds to the nearest f32. Each widens to the
+// 64-bit integer of its signedness first, which is exact, so there is only the
+// one rounding.
+
+fun from_u8(x: u8): f32
+  let wide: u64 = x@
+  ret icall u64_to_f32(wide)
+end fun
+
+fun from_u16(x: u16): f32
+  let wide: u64 = x@
+  ret icall u64_to_f32(wide)
+end fun
+
+fun from_u32(x: u32): f32
+  let wide: u64 = x@
+  ret icall u64_to_f32(wide)
+end fun
+
+fun from_u64(x: u64): f32
+  ret icall u64_to_f32(x)
+end fun
+
+fun from_i8(x: i8): f32
+  let wide: i64 = x@
+  ret icall i64_to_f32(wide)
+end fun
+
+fun from_i16(x: i16): f32
+  let wide: i64 = x@
+  ret icall i64_to_f32(wide)
+end fun
+
+fun from_i32(x: i32): f32
+  let wide: i64 = x@
+  ret icall i64_to_f32(wide)
+end fun
+
+fun from_i64(x: i64): f32
+  ret icall i64_to_f32(x)
+end fun
+
 // Conversion from the other width.
 //
 // `@` widens an f32 to an f64 but never narrows, so this is the way down.

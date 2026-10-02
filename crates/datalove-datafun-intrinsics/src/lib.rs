@@ -194,6 +194,12 @@ pub enum IntrinsicId {
     F32ToF64 = 270,
     F64ToF32 = 271,
 
+    // Fixed-width integer to float (272-279). Rounds to nearest.
+    U64ToF64 = 272,
+    I64ToF64 = 273,
+    U64ToF32 = 274,
+    I64ToF32 = 275,
+
     // Fixed-width narrowing within a signedness (280-299). Keeps the low bits.
     U16ToU8 = 280,
     U32ToU8 = 281,
@@ -1109,6 +1115,34 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         params: &[IntrinsicType::Offset, IntrinsicType::Offset],
         ret: IntrinsicType::Offset,
     },
+    // Fixed-width integer to float, from the widest of each signedness; the
+    // narrower ones widen to these exactly first. Rounds to nearest, and every
+    // value is in range for either width.
+    IntrinsicDef {
+        id: IntrinsicId::U64ToF64,
+        name: "u64_to_f64",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToF64,
+        name: "i64_to_f64",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::F64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U64ToF32,
+        name: "u64_to_f32",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::F32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToF32,
+        name: "i64_to_f32",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::F32,
+    },
+
     // Index and offset to and from the 64-bit integers. Toward 64 bits is
     // exact at either width; away from them keeps the low bits.
     IntrinsicDef {

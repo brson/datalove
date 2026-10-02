@@ -1,0 +1,59 @@
+require module sys/std/f32
+
+import f32.from_u8
+import f32.from_u16
+import f32.from_u32
+import f32.from_u64
+import f32.from_i8
+import f32.from_i16
+import f32.from_i32
+import f32.from_i64
+
+// Into an f32 from each fixed-width integer, at both ends of its range.
+// The format carries 24 significant bits, so past 2^24 not every integer
+// has an f32 of its own and the nearest is taken.
+
+let u8_min: u8 = 0
+let u8_max: u8 = 255
+let u8_ends = (from_u8(u8_min), from_u8(u8_max))
+
+let u16_min: u16 = 0
+let u16_max: u16 = 65535
+let u16_ends = (from_u16(u16_min), from_u16(u16_max))
+
+let u32_min: u32 = 0
+let u32_max: u32 = 4294967295
+let u32_ends = (from_u32(u32_min), from_u32(u32_max))
+
+let u64_min: u64 = 0
+let u64_max: u64 = 18446744073709551615
+let u64_ends = (from_u64(u64_min), from_u64(u64_max))
+
+let i8_min: i8 = -128
+let i8_max: i8 = 127
+let i8_ends = (from_i8(i8_min), from_i8(i8_max))
+
+let i16_min: i16 = -32768
+let i16_max: i16 = 32767
+let i16_ends = (from_i16(i16_min), from_i16(i16_max))
+
+let i32_min: i32 = -2147483648
+let i32_max: i32 = 2147483647
+let i32_ends = (from_i32(i32_min), from_i32(i32_max))
+
+let i64_min: i64 = -9223372036854775808
+let i64_max: i64 = 9223372036854775807
+let i64_ends = (from_i64(i64_min), from_i64(i64_max))
+
+// 2^24 + 1 is between two f32s and rounds to the even one, 2^24.
+let unsigned_odd: u64 = 16777217
+let signed_odd: i64 = -16777217
+let rounded = (from_u64(unsigned_odd), from_i64(signed_odd))
+
+// With the top bit set, 2^63 + 2^39 + 1 is just past halfway between two f32s
+// and rounds up to 2^63 + 2^40. A conversion that halves the value first and
+// drops the low bit would see an exact tie and round down to 2^63 instead.
+let top_bit: u64 = 9223372586610589697
+let past_halfway = from_u64(top_bit)
+
+let output = (u8_ends, u16_ends, u32_ends, u64_ends, i8_ends, i16_ends, i32_ends, i64_ends, rounded, past_halfway)

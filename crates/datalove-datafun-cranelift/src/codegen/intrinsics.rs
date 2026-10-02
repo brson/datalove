@@ -230,6 +230,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let a = self.get_operand_value(builder, &args[0])?;
                 builder.ins().fdemote(cl_ir::types::F32, a)
             }
+            U64ToF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fcvt_from_uint(cl_ir::types::F64, a)
+            }
+            I64ToF64 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fcvt_from_sint(cl_ir::types::F64, a)
+            }
+            U64ToF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fcvt_from_uint(cl_ir::types::F32, a)
+            }
+            I64ToF32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().fcvt_from_sint(cl_ir::types::F32, a)
+            }
 
             // Fixed-width narrowing, keeping the low bits.
             U16ToU8 | U32ToU8 | U64ToU8 | I16ToI8 | I32ToI8 | I64ToI8 => {

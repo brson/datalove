@@ -212,6 +212,22 @@ impl IrInterpreter {
                 let a = self.read_f64(&args[0], frame, frames);
                 self.write_f32(a as f32, dest);
             }
+            U64ToF64 => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_f64(a as f64, dest);
+            }
+            I64ToF64 => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_f64(a as f64, dest);
+            }
+            U64ToF32 => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_f32(a as f32, dest);
+            }
+            I64ToF32 => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_f32(a as f32, dest);
+            }
 
             // Fixed-width narrowing, keeping the low bits.
             U16ToU8 => {

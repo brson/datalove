@@ -1656,8 +1656,11 @@ the build chose, and `index.from_int` and `offset.from_int` likewise;
 `index.from_u32` and `offset.from_i32` cannot fail. The other way,
 `u64.from_index` and `i64.from_offset` cannot fail, and `u32.from_index` and
 `i32.from_offset` give none when a 64-bit build has a value past 32 bits.
-Narrowing across signedness, and conversions between the integers and the
-floats other than through `int`, are not provided yet.
+`f32` and `f64` each have `from_u8` through `from_u64` and `from_i8` through
+`from_i64`, which cannot fail and round to nearest when the value has more
+significant bits than the float carries. Narrowing across signedness, and
+conversion from the floats to the fixed-width integers other than through
+`int`, are not provided yet.
 
 `index` and `offset` widen only to `int`. They are 32-bit or 64-bit
 depending on how the compiler is configured, so a conversion to a fixed
