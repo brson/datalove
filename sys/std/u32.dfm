@@ -263,6 +263,13 @@ fun from_int_wrapping(ref n: int): u32
   ret from_u64_wrapping(int_low_bits_u64(ref n))
 end fun
 
+// Conversion from index, none when it is past what a u32 holds, which can
+// only happen when the build makes an index 64 bits.
+
+fun from_index(x: index): ?u32
+  ret from_u64(icall index_to_u64(x))
+end fun
+
 // Checked arithmetic.
 
 fun neg_checked(self: u32): ?u32

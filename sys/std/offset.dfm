@@ -1,3 +1,6 @@
+require rider std
+import std.int_to_i64
+
 // Constants.
 //
 // An `offset` is the signed counterpart of an `index` and is as wide as one,
@@ -148,6 +151,32 @@ end fun
 
 fun cast_unsigned(self: offset): index
   ret icall offset_to_index(self)
+end fun
+
+// Conversion from the integers.
+//
+// An offset is at least 32 bits, so an i32 always fits; anything wider gives
+// none when it does not fit the width the build chose.
+
+fun from_i64(x: i64): ?offset
+  if x >= icall offset_to_i64(min_value()) and x <= icall offset_to_i64(max_value())
+    ret some icall i64_to_offset(x)
+  else
+    ret none
+  end if
+end fun
+
+fun from_i32(x: i32): offset
+  let wide: i64 = x@
+  ret icall i64_to_offset(wide)
+end fun
+
+fun from_int(ref n: int): ?offset
+  if int_to_i64(ref n) |x|
+    ret from_i64(x)
+  else
+    ret none
+  end if
 end fun
 
 // Checked arithmetic.

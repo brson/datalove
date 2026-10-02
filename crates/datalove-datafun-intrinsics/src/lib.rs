@@ -179,12 +179,16 @@ pub enum IntrinsicId {
     RemIndex = 234,
     IndexToOffset = 235,
     IndexBits = 236,
+    IndexToU64 = 237,
+    U64ToIndex = 238,
 
     // Offset operations (250-269).
     OffsetToIndex = 250,
     NegWrappingOffset = 251,
     SshrOffset = 252,
     SremOffset = 253,
+    OffsetToI64 = 254,
+    I64ToOffset = 255,
 
     // Float width conversion (270-279).
     F32ToF64 = 270,
@@ -1105,6 +1109,33 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         params: &[IntrinsicType::Offset, IntrinsicType::Offset],
         ret: IntrinsicType::Offset,
     },
+    // Index and offset to and from the 64-bit integers. Toward 64 bits is
+    // exact at either width; away from them keeps the low bits.
+    IntrinsicDef {
+        id: IntrinsicId::IndexToU64,
+        name: "index_to_u64",
+        params: &[IntrinsicType::Index],
+        ret: IntrinsicType::U64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U64ToIndex,
+        name: "u64_to_index",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::Index,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::OffsetToI64,
+        name: "offset_to_i64",
+        params: &[IntrinsicType::Offset],
+        ret: IntrinsicType::I64,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToOffset,
+        name: "i64_to_offset",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::Offset,
+    },
+
     // Fixed-width narrowing within a signedness. Keeps the low bits, which is
     // the wrapping conversion; the checked one is written over it in `sys/std`.
     IntrinsicDef {

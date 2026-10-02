@@ -1,0 +1,45 @@
+require module sys/std/offset
+require module sys/std/i64
+require module sys/std/option
+
+import offset.from_i64
+import offset.from_i32
+import offset.from_int
+import offset.min_value
+import offset.max_value
+import offset.bits
+import i64.from_offset
+import option.is_some
+import option.unwrap_or
+
+// Into an offset from the integers. The edges are asked of min_value(),
+// max_value() and bits() rather than written down, so the answers are the
+// same at either index width.
+
+let small: i64 = -5
+let small_int: int = -5
+let i32_min: i32 = -2147483648
+let zero: offset = 0
+
+let top: i64 = from_offset(max_value())
+let bottom: i64 = from_offset(min_value())
+let top_int: int = max_value()@
+let bottom_int: int = min_value()@
+let over_int: int = top_int@ + 1
+let under_int: int = bottom_int@ - 1
+let i64_max: i64 = 9223372036854775807
+let i64_min: i64 = -9223372036854775808
+
+let in_range = (from_i64(small), from_int(ref small_int), from_i32(i32_min))
+let at_ends = (
+  unwrap_or(from_i64(top), zero) == max_value(),
+  unwrap_or(from_i64(bottom), zero) == min_value(),
+  unwrap_or(from_int(ref top_int), zero) == max_value(),
+  unwrap_or(from_int(ref bottom_int), zero) == min_value())
+let past_ends = (
+  from_int(ref over_int),
+  from_int(ref under_int),
+  is_some(from_i64(i64_max)) == (bits() == 64),
+  is_some(from_i64(i64_min)) == (bits() == 64))
+
+let output = (in_range, at_ends, past_ends)

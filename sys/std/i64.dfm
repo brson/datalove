@@ -143,6 +143,12 @@ fun from_int_wrapping(ref n: int): i64
   ret int_low_bits_i64(ref n)
 end fun
 
+// Conversion from offset, which is at most 64 bits and so always fits.
+
+fun from_offset(x: offset): i64
+  ret icall offset_to_i64(x)
+end fun
+
 // Checked arithmetic.
 
 fun neg_checked(self: i64): ?i64

@@ -733,6 +733,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             OffsetToIndex => {
                 self.get_operand_value(builder, &args[0])?
             }
+            IndexToU64 | OffsetToI64 | U64ToIndex | I64ToOffset => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                if crate::index_types::INDEX_BITS == 64 {
+                    a
+                } else {
+                    match intrinsic {
+                        IndexToU64 => builder.ins().uextend(cl_types::I64, a),
+                        OffsetToI64 => builder.ins().sextend(cl_types::I64, a),
+                        _ => builder.ins().ireduce(crate::index_types::INDEX_TYPE, a),
+                    }
+                }
+            }
 
             // Offset operations.
             NegWrappingOffset => {

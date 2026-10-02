@@ -1651,8 +1651,13 @@ so `u8.from_u64` and `i16.from_i32` but not `u8.from_i64`. `from_X` gives
 none for a value outside the target's range; `from_X_wrapping` keeps the low
 bits. Every fixed-width integer also has `from_int` and `from_int_wrapping`,
 the wrapping form keeping the low bits of the value in two's complement.
-Narrowing across signedness, and conversions between the fixed-width integers
-and `index`, `offset` or the floats, are not provided yet.
+`index.from_u64` and `offset.from_i64` give none for a value past the width
+the build chose, and `index.from_int` and `offset.from_int` likewise;
+`index.from_u32` and `offset.from_i32` cannot fail. The other way,
+`u64.from_index` and `i64.from_offset` cannot fail, and `u32.from_index` and
+`i32.from_offset` give none when a 64-bit build has a value past 32 bits.
+Narrowing across signedness, and conversions between the integers and the
+floats other than through `int`, are not provided yet.
 
 `index` and `offset` widen only to `int`. They are 32-bit or 64-bit
 depending on how the compiler is configured, so a conversion to a fixed

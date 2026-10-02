@@ -242,6 +242,12 @@ fun from_int_wrapping(ref n: int): u64
   ret int_low_bits_u64(ref n)
 end fun
 
+// Conversion from index, which is at most 64 bits and so always fits.
+
+fun from_index(x: index): u64
+  ret icall index_to_u64(x)
+end fun
+
 // Checked arithmetic.
 
 fun neg_checked(self: u64): ?u64

@@ -1,0 +1,15 @@
+require module sys/std/u32
+require module sys/std/index
+require module sys/std/option
+
+import u32.from_index
+import index.max_value
+import index.bits
+import option.is_some
+
+// Out of an index into a u32, which holds every index only when the build
+// makes an index 32 bits.
+
+let five: index = 5
+
+let output = (from_index(five), is_some(from_index(max_value())) == (bits() == 32))

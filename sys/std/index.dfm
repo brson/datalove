@@ -1,3 +1,6 @@
+require rider std
+import std.int_to_u64
+
 // Constants.
 //
 // How wide an `index` is, is decided by the build rather than by this source:
@@ -238,6 +241,32 @@ end fun
 
 fun cast_signed(self: index): offset
   ret icall index_to_offset(self)
+end fun
+
+// Conversion from the integers.
+//
+// An index is at least 32 bits, so a u32 always fits; anything wider gives
+// none when it does not fit the width the build chose.
+
+fun from_u64(x: u64): ?index
+  if x <= icall index_to_u64(max_value())
+    ret some icall u64_to_index(x)
+  else
+    ret none
+  end if
+end fun
+
+fun from_u32(x: u32): index
+  let wide: u64 = x@
+  ret icall u64_to_index(wide)
+end fun
+
+fun from_int(ref n: int): ?index
+  if int_to_u64(ref n) |x|
+    ret from_u64(x)
+  else
+    ret none
+  end if
 end fun
 
 // Checked arithmetic.

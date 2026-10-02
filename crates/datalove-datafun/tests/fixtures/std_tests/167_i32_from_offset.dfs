@@ -1,0 +1,19 @@
+require module sys/std/i32
+require module sys/std/offset
+require module sys/std/option
+
+import i32.from_offset
+import offset.min_value
+import offset.max_value
+import offset.bits
+import option.is_some
+
+// Out of an offset into an i32, which holds every offset only when the build
+// makes an offset 32 bits.
+
+let minus_five: offset = -5
+
+let output = (
+  from_offset(minus_five),
+  is_some(from_offset(max_value())) == (bits() == 32),
+  is_some(from_offset(min_value())) == (bits() == 32))

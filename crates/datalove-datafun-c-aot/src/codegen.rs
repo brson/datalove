@@ -3760,6 +3760,18 @@ impl<'a> FunctionCodegenContext<'a> {
             IntrinsicId::OffsetToIndex => {
                 writeln!(out, "    *(index_t*){} = (index_t)*(offset_t*){};", dest_addr, arg0()).unwrap();
             }
+            IntrinsicId::IndexToU64 => {
+                writeln!(out, "    *(uint64_t*){} = (uint64_t)*(index_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::U64ToIndex => {
+                writeln!(out, "    *(index_t*){} = (index_t)*(uint64_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::OffsetToI64 => {
+                writeln!(out, "    *(int64_t*){} = (int64_t)*(offset_t*){};", dest_addr, arg0()).unwrap();
+            }
+            IntrinsicId::I64ToOffset => {
+                writeln!(out, "    *(offset_t*){} = (offset_t)*(int64_t*){};", dest_addr, arg0()).unwrap();
+            }
             IntrinsicId::NegWrappingOffset => {
                 writeln!(out, "    *(offset_t*){} = -*(offset_t*){};", dest_addr, arg0()).unwrap();
             }

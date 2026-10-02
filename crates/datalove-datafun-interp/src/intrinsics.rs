@@ -719,6 +719,22 @@ impl IrInterpreter {
                 let a = self.read_isize(&args[0], frame, frames);
                 self.write_usize(a as datalove_rtdt::IndexRepr, dest);
             }
+            IndexToU64 => {
+                let a = self.read_usize(&args[0], frame, frames);
+                self.write_u64(a as u64, dest);
+            }
+            U64ToIndex => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_usize(a as datalove_rtdt::IndexRepr, dest);
+            }
+            OffsetToI64 => {
+                let a = self.read_isize(&args[0], frame, frames);
+                self.write_i64(a as i64, dest);
+            }
+            I64ToOffset => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_isize(a as datalove_rtdt::OffsetRepr, dest);
+            }
 
             // Offset operations.
             NegWrappingOffset => {

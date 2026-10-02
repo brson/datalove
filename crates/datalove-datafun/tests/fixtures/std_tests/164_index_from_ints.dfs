@@ -1,0 +1,33 @@
+require module sys/std/index
+require module sys/std/u64
+require module sys/std/option
+
+import index.from_u64
+import index.from_u32
+import index.from_int
+import index.max_value
+import index.bits
+import u64.from_index
+import option.is_some
+import option.unwrap_or
+
+// Into an index from the integers. The edges are asked of max_value() and
+// bits() rather than written down, so the answers are the same at either
+// index width.
+
+let small: u64 = 5
+let small_int: int = 5
+let u32_max: u32 = 4294967295
+let zero: index = 0
+
+let top: u64 = from_index(max_value())
+let top_int: int = max_value()@
+let over_int: int = top_int@ + 1
+let negative: int = -1
+let u64_max: u64 = 18446744073709551615
+
+let in_range = (from_u64(small), from_int(ref small_int), from_u32(u32_max))
+let at_top = (unwrap_or(from_u64(top), zero) == max_value(), unwrap_or(from_int(ref top_int), zero) == max_value())
+let past_top = (from_int(ref over_int), from_int(ref negative), is_some(from_u64(u64_max)) == (bits() == 64))
+
+let output = (in_range, at_top, past_top)
