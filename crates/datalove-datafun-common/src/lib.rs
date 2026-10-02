@@ -69,6 +69,7 @@ pub fn parallel_mode_from_env() -> ParallelMode {
 /// to fix recoverable type errors, such as:
 /// - Integer widening (u8 → int, i16 → i32, etc.)
 /// - Cross-sign widening (u8 → i16, u16 → i32, etc.)
+/// - Float widening (f32 → f64)
 /// - Cloning linear types for reuse
 ///
 /// See `botdocs/report-adapt-cases.md` for the full list of recoverable errors.
@@ -536,6 +537,7 @@ pub fn is_signed_fixed_int_type(ty: &Type<'_>) -> bool {
 /// - Clone: for linear types where source and target are the same
 /// - Widen: for fixed integers along signedness chains
 /// - Cross-sign widen: for unsigned to larger signed (u8 -> i16, u16 -> i32, etc.)
+/// - Float widen: f32 -> f64, which is exact
 /// - Both: when widening produces a linear type (e.g., to `int`)
 ///
 /// This function returns true if the conversion is valid.
@@ -565,6 +567,9 @@ pub fn can_clone_coerce_to<'db>(from: &Type<'db>, to: &Type<'db>, db: &'db dyn D
         (DT::U8, DT::I16 | DT::I32 | DT::I64 | DT::Int) => true,
         (DT::U16, DT::I32 | DT::I64 | DT::Int) => true,
         (DT::U32, DT::I64 | DT::Int) => true,
+        // Every f32 is exactly an f64. This is not in `can_widen_to`, which
+        // datalit also uses for implicit coercion, and floats only widen by `@`.
+        (DT::F32, DT::F64) => true,
         // Atom -> Enum: atom is a variant of the enum (no payload).
         (DT::Atom(a), DT::Enum(e)) => {
             e.variants.iter().any(|v| v.name == a.name && v.payload.is_none())

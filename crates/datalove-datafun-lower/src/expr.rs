@@ -8,6 +8,7 @@ use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
     SlotDest,
 };
+use datalove_datafun_intrinsics::IntrinsicId;
 use super::context::LowerCtx;
 use super::literal::{parse_int_const, parse_hex_const, parse_float_const, try_parse_negated_int_const};
 use super::LowerError;
@@ -425,7 +426,7 @@ pub fn lower_expression_for_ref<'db>(
 /// Produce an owned value from an operand without consuming it.
 ///
 /// Emits what an explicit `@` on the expression would: a widening between
-/// fixed ints, a clone for linear types. Used where auto-adapt supplies the
+/// fixed ints or from f32 to f64, a clone for linear types. Used where auto-adapt supplies the
 /// `@`, and for every consuming use of a binding an earlier unit owns.
 fn emit_owned_copy<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -444,6 +445,8 @@ fn emit_owned_copy<'db>(
         }
     } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
         ctx.emit(Instruction::WidenFixed { dest, src: operand });
+    } else if matches!((&src_type, &dest_type), (IrType::F32, IrType::F64)) {
+        ctx.emit_intrinsic(dest, IntrinsicId::F32ToF64, vec![operand]);
     } else if widens_to_int(&src_type) && matches!(dest_type, IrType::Int) {
         ctx.emit(Instruction::Widen { dest, src: operand });
     } else {
@@ -2005,6 +2008,7 @@ pub(crate) fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrTy
 /// - For same type copy types: emit Copy
 /// - For fixed-width int widening to larger fixed-width: emit WidenFixed
 /// - For fixed-width int widening to Int: emit Widen
+/// - For f32 widening to f64: emit the F32ToF64 intrinsic
 /// - For linear types (clone): emit Clone
 fn lower_clone_coerce<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -2069,8 +2073,9 @@ fn lower_clone_coerce<'db>(
     // Determine the right instruction based on types:
     // 1. Same type copy types: Copy (no-op for same type)
     // 2. Fixed-width int to larger fixed-width int: WidenFixed
-    // 3. Fixed int to Int (bigint): Widen
-    // 4. Linear types: Clone
+    // 3. f32 to f64: the F32ToF64 intrinsic
+    // 4. Fixed int to Int (bigint): Widen
+    // 5. Linear types: Clone
     if src_type.is_copy() && dest_type.is_copy() {
         if src_type == dest_type {
             // Same type - just copy.
@@ -2078,9 +2083,10 @@ fn lower_clone_coerce<'db>(
         } else if is_fixed_width_int(&src_type) && is_fixed_width_int(&dest_type) {
             // Fixed-width to fixed-width widening.
             ctx.emit(Instruction::WidenFixed { dest, src });
+        } else if matches!((&src_type, &dest_type), (IrType::F32, IrType::F64)) {
+            ctx.emit_intrinsic(dest, IntrinsicId::F32ToF64, vec![src]);
         } else {
-            // Other copy types - just copy (shouldn't happen in practice).
-            ctx.emit(Instruction::Copy { dest, src });
+            panic!("@ from {:?} to {:?} passed the typechecker but has no lowering", src_type, dest_type);
         }
     } else if widens_to_int(&src_type) && matches!(dest_type, IrType::Int) {
         // Fixed int, index, or offset to Int (bigint) - widen.

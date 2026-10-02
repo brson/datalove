@@ -10,7 +10,8 @@ The `@` operator performs two operations:
 
 1. **Clone**: Creates a deep copy of linear values (string, int, list, map, set,
    tensor, data, error, tables)
-2. **Widen**: Performs lossless integer type conversion along signedness chains
+2. **Widen**: Performs lossless integer type conversion along signedness chains,
+   and f32 to f64
 
 ## Type System Background
 
@@ -40,6 +41,11 @@ Cross-sign widening (requires `@`):
 u8 → i16, i32, i64, int
 u16 → i32, i64, int
 u32 → i64, int
+```
+
+Float widening (requires `@`, never implicit):
+```
+f32 → f64
 ```
 
 ---

@@ -1,0 +1,8 @@
+----------
+scriptunit-fragment
+----------
+
+// Widen f32 to f64 with @ operator, which is exact.
+let x: f32 = (: f32 / 0.1)
+let y: f64 = x@
+debuglog y

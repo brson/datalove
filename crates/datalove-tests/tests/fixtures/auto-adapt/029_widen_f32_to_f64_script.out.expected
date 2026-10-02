@@ -1,0 +1,60 @@
+{
+  "auto_adapt_execution": {
+    "environment": [
+      {
+        "kind": "let",
+        "name": "x",
+        "ty": "f32",
+        "value": "0.1"
+      },
+      {
+        "kind": "let",
+        "name": "y",
+        "ty": "f64",
+        "value": "0.10000000149011612"
+      }
+    ],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "(fragment executed)"
+      }
+    ],
+    "status": "ran"
+  },
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 1,
+    "diagnostics": [
+      {
+        "code": "F016",
+        "labels": [
+          {
+            "span": [
+              207,
+              208
+            ],
+            "text": "x"
+          }
+        ],
+        "message": "mismatched types: expected `f64`, found `f32`",
+        "notes": [
+          "help: use `@` to convert from `f32` to `f64`"
+        ]
+      }
+    ],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "TypeMismatch { expected: \"f64\", actual: \"f32\" }"
+      }
+    ],
+    "success": false
+  }
+}

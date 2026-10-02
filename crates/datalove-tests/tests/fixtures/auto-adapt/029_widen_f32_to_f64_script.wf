@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: Widening f32 → f64 in script
+// Floats do not widen implicitly, but f32 → f64 is exact, so @ does it
+// Expected: F016 type mismatch with recovery hint
+
+let x: f32 = (: f32 / 0.1)
+let y: f64 = x
