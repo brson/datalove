@@ -1,0 +1,31 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a, b",
+      "type": "(bool, string)"
+    },
+    {
+      "kind": "variable",
+      "name": "x, my_y",
+      "type": "{x: int, y: [int]}"
+    },
+    {
+      "kind": "variable",
+      "name": "t",
+      "type": "term Foo string"
+    },
+    {
+      "kind": "variable",
+      "name": "",
+      "type": "atom Bar"
+    },
+    {
+      "kind": "variable",
+      "name": "",
+      "type": "()"
+    }
+  ]
+}

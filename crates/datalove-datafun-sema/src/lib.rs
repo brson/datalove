@@ -9,7 +9,8 @@
 
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
-use datalove_datafun_ast::ast::{Statement, StmtFun, ParamMode, ExprKey};
+use bct::text::InternedText;
+use datalove_datafun_ast::ast::{Binding, Statement, StmtFun, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
 /// Types of expressions, keyed by the expression's identity.
@@ -55,6 +56,67 @@ pub struct ResolvedCallTarget<'db> {
     /// it expected back, and nothing downstream can work it out again.
     #[returns(ref)]
     pub type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
+}
+
+// ============================================================================
+// Destructuring
+// ============================================================================
+
+/// How a `let` or `var` takes its value apart.
+///
+/// Ownership analysis and lowering both read this, and they have to allocate
+/// the bindings in one order: the order the pattern names them, which is the
+/// order `names` lists them in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Destructure<'db> {
+    /// The whole value, under one name.
+    Whole(InternedText<'db>),
+    /// Every field of a tuple or struct. Each name is listed with the index of
+    /// its field and the field's type; `field_count` is how many there are,
+    /// which a pattern naming every field makes the same as `names.len()`.
+    Fields {
+        names: Vec<(InternedText<'db>, u32, IrType)>,
+        field_count: usize,
+    },
+    /// The payload of a term.
+    Payload(InternedText<'db>, IrType),
+    /// An atom or `()`, which binds nothing.
+    Nothing,
+}
+
+impl<'db> Destructure<'db> {
+    /// Work out how `binding` takes apart a value of type `ty`.
+    ///
+    /// The typechecker has said the two fit.
+    pub fn of(db: &'db dyn salsa::Database, binding: &Binding<'db>, ty: &IrType) -> Self {
+        match (binding, ty) {
+            (Binding::Name(name), _) => Destructure::Whole(*name),
+            (Binding::Tuple(names), IrType::Unit) if names.is_empty() => Destructure::Nothing,
+            (Binding::Tuple(names), IrType::Tuple(fields)) => Destructure::Fields {
+                names: names.iter().zip(fields)
+                    .enumerate()
+                    .map(|(i, (name, ty))| (*name, i as u32, ty.clone()))
+                    .collect(),
+                field_count: fields.len(),
+            },
+            (Binding::Struct(bindings), IrType::Struct(fields)) => Destructure::Fields {
+                names: bindings.iter()
+                    .map(|b| {
+                        let field = b.field.as_str(db);
+                        let index = fields.iter().position(|(name, _)| name == field)
+                            .unwrap_or_else(|| panic!("field `{field}` not in {ty:?}"));
+                        (b.binding, index as u32, fields[index].1.clone())
+                    })
+                    .collect(),
+                field_count: fields.len(),
+            },
+            (Binding::Atom(_), IrType::Atom(_)) => Destructure::Nothing,
+            (Binding::Term { binding, .. }, IrType::Term(_, payload)) => {
+                Destructure::Payload(*binding, (**payload).clone())
+            }
+            _ => panic!("pattern does not fit {ty:?}; the typechecker should have caught it"),
+        }
+    }
 }
 
 // ============================================================================

@@ -478,6 +478,19 @@ impl<'db> TypeContext<'db> {
         TypeError::ArityMismatch { expected, actual }
     }
 
+    /// F071: A destructuring pattern that does not fit the value it takes apart.
+    ///
+    /// Reported at the value, since a pattern has no span of its own.
+    pub fn error_pattern_mismatch(&mut self, value: ExprFun<'db>, message: String, label: &str) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::PatternMismatch {
+            expr_key: ExprKey::of(self.db, value),
+            module_id: self.current_module_id,
+            message: InternedText::new(self.db, message.C()),
+            label: InternedText::new(self.db, label.S()),
+        });
+        TypeError::PatternMismatch { message }
+    }
+
     /// F046: Result destructuring requires error binding.
     pub fn error_result_requires_binding(&mut self, expr: ExprFun<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {

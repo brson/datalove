@@ -174,6 +174,13 @@ pub enum PendingDiagnostic<'db> {
         label: InternedText<'db>,
         note: Option<InternedText<'db>>,
     },
+    /// F071: A destructuring pattern that does not fit the value it takes apart.
+    PatternMismatch {
+        expr_key: ExprKey<'db>,
+        module_id: Option<ModuleId<'db>>,
+        message: InternedText<'db>,
+        label: InternedText<'db>,
+    },
     /// F066: A type alias defined twice.
     DuplicateTypeAlias {
         local_index: u32,

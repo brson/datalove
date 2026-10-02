@@ -37,16 +37,62 @@ pub enum Statement {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtLet {
-    pub name: String,
+    /// The name bound, when it is one name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// What is bound, when it is a destructure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<Binding>,
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: ExprFun,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtVar {
-    pub name: String,
+    /// The name bound, when it is one name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// What is bound, when it is a destructure.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<Binding>,
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: Option<ExprFun>,
+}
+
+/// A destructuring pattern. A plain name is `StmtLet::name` instead.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind")]
+pub enum Binding {
+    Tuple { names: Vec<String> },
+    Struct { fields: Vec<StructBinding> },
+    Atom { name: String },
+    Term { name: String, binding: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StructBinding {
+    pub field: String,
+    pub binding: String,
+}
+
+impl Binding {
+    /// Split a binding into the name or the pattern a statement records.
+    fn split_ast<'db>(db: &'db dyn Db, ast: &crate::ast::Binding<'db>) -> (Option<String>, Option<Self>) {
+        use crate::ast::Binding as B;
+        let s = |t: &bct::text::InternedText<'db>| t.as_str(db).to_string();
+        let pattern = match ast {
+            B::Name(name) => return (Some(s(name)), None),
+            B::Tuple(names) => Binding::Tuple { names: names.iter().map(s).collect() },
+            B::Struct(fields) => Binding::Struct {
+                fields: fields.iter()
+                    .map(|f| StructBinding { field: s(&f.field), binding: s(&f.binding) })
+                    .collect(),
+            },
+            B::Atom(name) => Binding::Atom { name: s(name) },
+            B::Term { name, binding } => Binding::Term { name: s(name), binding: s(binding) },
+        };
+        (None, Some(pattern))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -597,8 +643,10 @@ impl StmtDebugLog {
 
 impl StmtLet {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtLet<'db>) -> Self {
+        let (name, pattern) = Binding::split_ast(db, &ast.binding);
         StmtLet {
-            name: ast.name.as_str(db).to_string(),
+            name,
+            pattern,
             type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ExprFun::from_ast(db, ast.value),
         }
@@ -607,8 +655,10 @@ impl StmtLet {
 
 impl StmtVar {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtVar<'db>) -> Self {
+        let (name, pattern) = Binding::split_ast(db, &ast.binding);
         StmtVar {
-            name: ast.name.as_str(db).to_string(),
+            name,
+            pattern,
             type_hint: ast.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
             value: ast.value.map(|v| ExprFun::from_ast(db, v)),
         }

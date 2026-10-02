@@ -146,19 +146,67 @@ pub enum Statement<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtLet<'db> {
-    pub name: InternedText<'db>,
+    pub binding: Binding<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
+}
+
+/// What a `let` or `var` binds: one name, or the parts of a value taken apart.
+///
+/// Destructuring is one level deep, and a struct pattern names every field.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum Binding<'db> {
+    /// `let x`.
+    Name(InternedText<'db>),
+    /// `let (a, b)`, `let (a,)`, and `let ()`, which binds nothing.
+    Tuple(Vec<InternedText<'db>>),
+    /// `let {x, y = my_y}`, in the order written.
+    Struct(Vec<StructBinding<'db>>),
+    /// `let atom Foo`, which binds nothing.
+    Atom(InternedText<'db>),
+    /// `let term Foo x`, binding the payload.
+    Term { name: InternedText<'db>, binding: InternedText<'db> },
+}
+
+/// One field of a struct pattern: `field`, or `field = binding`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct StructBinding<'db> {
+    pub field: InternedText<'db>,
+    pub binding: InternedText<'db>,
+}
+
+impl<'db> Binding<'db> {
+    /// The names bound, in the order written.
+    pub fn names(&self) -> Vec<InternedText<'db>> {
+        match self {
+            Binding::Name(name) => vec![*name],
+            Binding::Tuple(names) => names.clone(),
+            Binding::Struct(fields) => fields.iter().map(|f| f.binding).collect(),
+            Binding::Atom(_) => vec![],
+            Binding::Term { binding, .. } => vec![*binding],
+        }
+    }
+
+    /// The one name bound, if this is not a destructure.
+    pub fn as_name(&self) -> Option<InternedText<'db>> {
+        match self {
+            Binding::Name(name) => Some(*name),
+            _ => None,
+        }
+    }
 }
 
 /// Mutable variable declaration.
 ///
 /// If `value` is None, the variable is declared but not initialized.
 /// A type hint is required when there is no initializer.
+/// So is a plain name, since there is nothing to take apart.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtVar<'db> {
-    pub name: InternedText<'db>,
+    pub binding: Binding<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     /// The initial value. None for uninitialized declarations like `var x: i32`.
     pub value: Option<ExprFun<'db>>,

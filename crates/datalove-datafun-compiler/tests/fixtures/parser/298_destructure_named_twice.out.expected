@@ -1,0 +1,162 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "a",
+            "a"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "fields": [
+            {
+              "binding": "b",
+              "field": "b"
+            },
+            {
+              "binding": "b",
+              "field": "b"
+            }
+          ],
+          "kind": "Struct"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "b",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "fields": [
+            {
+              "binding": "c",
+              "field": "c"
+            },
+            {
+              "binding": "c",
+              "field": "d"
+            }
+          ],
+          "kind": "Struct"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "c",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              },
+              {
+                "name": "d",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D038",
+      "labels": [
+        {
+          "message": "a binding is named once",
+          "span": [
+            8,
+            9
+          ],
+          "text": "a"
+        }
+      ],
+      "message": "`a` is named twice"
+    },
+    {
+      "code": "D038",
+      "labels": [
+        {
+          "message": "a field is named once",
+          "span": [
+            28,
+            29
+          ],
+          "text": "b"
+        }
+      ],
+      "message": "`b` is named twice"
+    },
+    {
+      "code": "D038",
+      "labels": [
+        {
+          "message": "a binding is named once",
+          "span": [
+            53,
+            54
+          ],
+          "text": "c"
+        }
+      ],
+      "message": "`c` is named twice"
+    }
+  ]
+}

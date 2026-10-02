@@ -1,0 +1,39 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "bar"
+                        v1 = move v0
+                        v2 = move v1
+                        debuglog v2
+                        v3 = const "p"
+                        v4 = const "q"
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = move v5
+                        v7 = move v6
+                        debuglog v7
+                        v9 = const "atom"
+                        debuglog v9
+                        drop v9
+                        unit_end_drop v2
+                        unit_end_drop v7
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("\"bar\"\n(\"p\", \"q\")\n\"atom\"\n"),
+        ),
+    ],
+)

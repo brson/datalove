@@ -1,0 +1,245 @@
+DualAnalysis(
+    sections: [
+        DualSectionResult(
+            section_type: "scriptunit-fragment",
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            interp_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = const 1int
+                        v2 = const 2int
+                        v3 = list [v1, v2]
+                        v4 = pack Tuple2 {v0, v3}
+                        v5 = call @0 u0(v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const "a"
+                        v7 = const "b"
+                        v8 = pack Tuple2 {v6, v7}
+                        v9 = some v8
+                        v10 = const "c"
+                        v11 = const "d"
+                        v12 = pack Tuple2 {v10, v11}
+                        v13 = some v12
+                        v14 = call @1 u1(v9, v13)
+                        debuglog v14
+                        drop v14
+                        v15 = const "a"
+                        v16 = const "b"
+                        v17 = pack Tuple2 {v15, v16}
+                        v18 = some v17
+                        v19 = none
+                        v20 = call @2 u1(v18, v19)
+                        debuglog v20
+                        drop v20
+                        v21 = const 4int
+                        v22 = call @3 u2(v21)
+                        debuglog v22
+                        drop v22
+                        unit_end
+                    
+                    fn swap(p0):
+                    block0:
+                        v0 = move p0
+                        (v1, v2) = unpack v0
+                        v3 = pack Tuple2 {v2, v1}
+                        return v3
+                    
+                    fn first(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop p1
+                        return v3
+                    block2:
+                        (v4, v5) = unpack v1
+                        v6 = move p1
+                        v7, v8 = unwrap_option v6
+                        branch v8, block4, block3
+                    block3:
+                        v9 = none
+                        drop v4
+                        drop v5
+                        return v9
+                    block4:
+                        (v10, v11) = unpack v7
+                        v12 = some v10
+                        drop v4
+                        drop v5
+                        drop v11
+                        return v12
+                    
+                    fn count(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        goto block1
+                    block1:
+                        v2 = eq s0, p0
+                        branch v2, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v3 = const "item"
+                        v4 = clone s0
+                        v5 = pack Struct0 {v3, v4}
+                        (v6, v7) = unpack v5
+                        v8 = add s1, v7
+                        drop.tracked s1
+                        store.move.tracked s1, v8
+                        v9 = const 1int
+                        v10 = add s0, v9
+                        drop v9
+                        drop.tracked s0
+                        store.move.tracked s0, v10
+                        drop v6
+                        drop v7
+                        goto block1
+                    block5:
+                        v11 = load.move.tracked s1
+                        drop p0
+                        drop.tracked s0
+                        return v11
+                """,
+            ),
+            aot_lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = const 1int
+                        v2 = const 2int
+                        v3 = list [v1, v2]
+                        v4 = pack Tuple2 {v0, v3}
+                        v5 = call @0 u0(v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const "a"
+                        v7 = const "b"
+                        v8 = pack Tuple2 {v6, v7}
+                        v9 = some v8
+                        v10 = const "c"
+                        v11 = const "d"
+                        v12 = pack Tuple2 {v10, v11}
+                        v13 = some v12
+                        v14 = call @1 u1(v9, v13)
+                        debuglog v14
+                        drop v14
+                        v15 = const "a"
+                        v16 = const "b"
+                        v17 = pack Tuple2 {v15, v16}
+                        v18 = some v17
+                        v19 = none
+                        v20 = call @2 u1(v18, v19)
+                        debuglog v20
+                        drop v20
+                        v21 = const 4int
+                        v22 = call @3 u2(v21)
+                        debuglog v22
+                        drop v22
+                        unit_end
+                    
+                    fn swap(p0):
+                    block0:
+                        v0 = move p0
+                        (v1, v2) = unpack v0
+                        v3 = pack Tuple2 {v2, v1}
+                        return v3
+                    
+                    fn first(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop p1
+                        return v3
+                    block2:
+                        (v4, v5) = unpack v1
+                        v6 = move p1
+                        v7, v8 = unwrap_option v6
+                        branch v8, block4, block3
+                    block3:
+                        v9 = none
+                        drop v4
+                        drop v5
+                        return v9
+                    block4:
+                        (v10, v11) = unpack v7
+                        v12 = some v10
+                        drop v4
+                        drop v5
+                        drop v11
+                        return v12
+                    
+                    fn count(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        goto block1
+                    block1:
+                        v2 = eq s0, p0
+                        branch v2, block2, block3
+                    block2:
+                        goto block5
+                    block3:
+                        goto block4
+                    block4:
+                        v3 = const "item"
+                        v4 = clone s0
+                        v5 = pack Struct0 {v3, v4}
+                        (v6, v7) = unpack v5
+                        v8 = add s1, v7
+                        drop.tracked s1
+                        store.move.tracked s1, v8
+                        v9 = const 1int
+                        v10 = add s0, v9
+                        drop v9
+                        drop.tracked s0
+                        store.move.tracked s0, v10
+                        drop v6
+                        drop v7
+                        goto block1
+                    block5:
+                        v11 = load.move.tracked s1
+                        drop p0
+                        drop.tracked s0
+                        return v11
+                """,
+            ),
+            ir_match: true,
+            interp_output: "([1, 2], \"a\")\nsome \"c\"\nnone\n6\n",
+            aot_output: "([1, 2], \"a\")\nsome \"c\"\nnone\n6\n",
+            output_match: true,
+            aot_compile: Some(AotCompileResult(
+                status: "Success",
+            )),
+            link: Some(LinkResult(
+                status: "Success",
+            )),
+            execution: Some(ExecutionResult(
+                status: "Success",
+                exit_code: 0,
+            )),
+        ),
+    ],
+)

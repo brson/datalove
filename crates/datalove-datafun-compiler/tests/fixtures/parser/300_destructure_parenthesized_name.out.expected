@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "a"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P070",
+      "labels": [
+        {
+          "message": "write `(a,)` for a one-element tuple, or drop the parentheses",
+          "span": [
+            4,
+            7
+          ],
+          "text": "(a)"
+        }
+      ],
+      "message": "a parenthesized name is not a pattern"
+    }
+  ]
+}

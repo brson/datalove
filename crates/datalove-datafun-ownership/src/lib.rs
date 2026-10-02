@@ -45,7 +45,9 @@ use datalove_datafun_ast::ast::{
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
 };
 use datalove_datafun_ast::reachable::body_completes;
+use datalove_datafun_ast::ast::Binding;
 use datalove_datafun_ir::IrType;
+use datalove_datafun_sema::Destructure;
 
 // Re-export types from sema for backward compatibility.
 pub use datalove_datafun_sema::{
@@ -1416,10 +1418,34 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_id
         }
     }
 
-    // Create binding for the let.
-    let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
-    ctx.alloc_binding(name, ty, false, None);
+    alloc_pattern_bindings(ctx, &stmt.binding, ty, false);
+}
+
+/// Allocate the bindings a `let` or `var` takes out of a value of type `ty`.
+///
+/// The value is consumed whole, and each name owns its part from here on.
+fn alloc_pattern_bindings<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    binding: &Binding<'db>,
+    ty: IrType,
+    is_slot: bool,
+) {
+    let db = ctx.db;
+    match Destructure::of(db, binding, &ty) {
+        Destructure::Whole(name) => {
+            ctx.alloc_binding(name.text(db).S(), ty, is_slot, None);
+        }
+        Destructure::Fields { names, .. } => {
+            for (name, _, field_ty) in names {
+                ctx.alloc_binding(name.text(db).S(), field_ty, is_slot, None);
+            }
+        }
+        Destructure::Payload(name, payload_ty) => {
+            ctx.alloc_binding(name.text(db).S(), payload_ty, is_slot, None);
+        }
+        Destructure::Nothing => {}
+    }
 }
 
 /// Analyze a const statement.
@@ -1448,8 +1474,6 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
-    let name = stmt.name.text(ctx.db).S();
-
     if let Some(expr) = stmt.value {
         // Initialized var - analyze the initializer expression.
         let may_early_return = ctx.expr_may_early_return(expr);
@@ -1465,10 +1489,14 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
             }
         }
 
-        // Create binding for the var (as a slot), initialized.
+        // Create a binding for each name the var binds, each its own slot.
         let ty = ctx.expr_type(expr);
-        ctx.alloc_binding(name, ty, true, None);
+        alloc_pattern_bindings(ctx, &stmt.binding, ty, true);
     } else {
+        let name = stmt.binding.as_name()
+            .expect("the parser requires a plain name without a value")
+            .text(ctx.db).S();
+
         // Uninitialized var - get type from type hint.
         let ty = stmt.type_hint.as_ref()
             .map(|th| IrType::from_type_hint(ctx.db, th))

@@ -1,0 +1,12 @@
+----------
+scriptunit-fragment
+----------
+
+let term Foo x = term Foo "bar"
+debuglog x
+
+let term Pair pq = term Pair ("p", "q")
+debuglog pq
+
+let atom Foo = atom Foo
+debuglog "atom"

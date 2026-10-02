@@ -1,0 +1,11 @@
+type S: enum { atom A, term B int }
+
+let (a, b) = (1, 2, 3)
+let {c} = {c = 1, d = 2}
+let {e, f} = {e = 1}
+let (g, h) = 1
+let {i} = (1,)
+let term Foo j = term Bar 1
+let atom Foo = atom Bar
+let s: S = atom A@
+let atom A = s

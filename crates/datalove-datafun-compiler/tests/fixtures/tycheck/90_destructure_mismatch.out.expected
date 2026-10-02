@@ -1,0 +1,197 @@
+{
+  "diagnostics": [
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "this has a different number of elements",
+          "span": [
+            50,
+            59
+          ],
+          "text": "(1, 2, 3)"
+        }
+      ],
+      "message": "a pattern of 2 names cannot take apart `(int, int, int)`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "a destructure names every field",
+          "span": [
+            70,
+            84
+          ],
+          "text": "{c = 1, d = 2}"
+        }
+      ],
+      "message": "the pattern does not name field `d` of `{c: int, d: int}`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "the pattern names a field this does not have",
+          "span": [
+            98,
+            105
+          ],
+          "text": "{e = 1}"
+        }
+      ],
+      "message": "`{e: int}` has no field `f`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "this is not a tuple",
+          "span": [
+            119,
+            120
+          ],
+          "text": "1"
+        }
+      ],
+      "message": "a tuple pattern cannot take apart `int`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "this is not a struct",
+          "span": [
+            131,
+            135
+          ],
+          "text": "(1,)"
+        }
+      ],
+      "message": "a struct pattern cannot take apart `(int)`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "this is not that term",
+          "span": [
+            153,
+            157
+          ],
+          "text": "term"
+        }
+      ],
+      "message": "a pattern for `term Foo` cannot take apart `term Bar int`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "this is not that atom",
+          "span": [
+            179,
+            183
+          ],
+          "text": "atom"
+        }
+      ],
+      "message": "a pattern for `atom Foo` cannot take apart `atom Bar`"
+    },
+    {
+      "code": "F071",
+      "labels": [
+        {
+          "message": "an enum is taken apart with `match`",
+          "span": [
+            220,
+            221
+          ],
+          "text": "s"
+        }
+      ],
+      "message": "a `let` cannot take apart `enum{atom A, term B int}`"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "PatternMismatch",
+      "message": "a pattern of 2 names cannot take apart `(int, int, int)`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "the pattern does not name field `d` of `{c: int, d: int}`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "`{e: int}` has no field `f`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "a tuple pattern cannot take apart `int`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "a struct pattern cannot take apart `(int)`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "a pattern for `term Foo` cannot take apart `term Bar int`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "a pattern for `atom Foo` cannot take apart `atom Bar`"
+    },
+    {
+      "kind": "PatternMismatch",
+      "message": "a `let` cannot take apart `enum{atom A, term B int}`"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a, b",
+      "type": "(int, int, int)"
+    },
+    {
+      "kind": "variable",
+      "name": "c",
+      "type": "{c: int, d: int}"
+    },
+    {
+      "kind": "variable",
+      "name": "e, f",
+      "type": "{e: int}"
+    },
+    {
+      "kind": "variable",
+      "name": "g, h",
+      "type": "int"
+    },
+    {
+      "kind": "variable",
+      "name": "i",
+      "type": "(int)"
+    },
+    {
+      "kind": "variable",
+      "name": "j",
+      "type": "term Bar int"
+    },
+    {
+      "kind": "variable",
+      "name": "",
+      "type": "atom Bar"
+    },
+    {
+      "kind": "variable",
+      "name": "s",
+      "type": "enum{atom A, term B int}"
+    },
+    {
+      "kind": "variable",
+      "name": "",
+      "type": "enum{atom A, term B int}"
+    }
+  ]
+}

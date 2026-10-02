@@ -371,15 +371,17 @@ pub fn typecheck_script_unit<'db>(
             for stmt in parsed.statements.iter() {
                 match stmt {
                     Statement::Let(let_stmt) => {
-                        let name = let_stmt.name;
-                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
-                            new_vars.push((name, ty.clone(), *is_mutable));
+                        for name in let_stmt.binding.names() {
+                            if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
+                                new_vars.push((name, ty.clone(), *is_mutable));
+                            }
                         }
                     }
                     Statement::Var(var_stmt) => {
-                        let name = var_stmt.name;
-                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
-                            new_vars.push((name, ty.clone(), *is_mutable));
+                        for name in var_stmt.binding.names() {
+                            if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
+                                new_vars.push((name, ty.clone(), *is_mutable));
+                            }
                         }
                     }
                     Statement::Const(const_stmt) => {

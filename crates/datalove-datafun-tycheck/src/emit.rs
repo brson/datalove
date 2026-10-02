@@ -427,6 +427,14 @@ with `require rider <name>` and `import <name>.<function>`; a script has no ride
                 builder.emit_type();
             }
         }
+        PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label } => {
+            if let Some(ts) = spans.lookup_expr(db, *expr_key) {
+                bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
+                    .code("F071")
+                    .primary_label(ts, label.as_str(db))
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note } => {
             if let Some(ts) = spans.lookup_expr(db, *expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -750,6 +758,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_type_alias(db, *local_index)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F066]: `{}` is defined twice", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label: _ } => {
+            let ts = spans.lookup_expr(db, *expr_key)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F071]: {}", loc, message.as_str(db)))
         }
         PendingDiagnostic::LiteralOutOfRange { expr_key, module_id: _, message, note: _ } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

@@ -476,6 +476,35 @@ e => T
 x : T in subsequent context
 ```
 
+### Statement: Let, destructuring
+```
+let (x1, ..., xn) = e
+---------------------
+e => (T1, ..., Tn)
+xi : Ti in subsequent context
+
+let {f1 = x1, ..., fn = xn} = e
+-------------------------------
+e => {f1: T1, ..., fn: Tn}
+xi : Ti in subsequent context
+
+let term N x = e
+----------------
+e => term N T
+x : T in subsequent context
+
+let atom N = e
+--------------
+e => atom N
+```
+
+With a hint, `e <= T` against the hint instead, and the pattern is checked
+against the hint. `{f}` is short for `{f = f}`. A struct pattern names every
+field, in any order. `let ()` takes apart `()`. The pattern is one level deep,
+and an enum is not taken apart here but with `match`. `var` takes the same
+patterns, each name a mutable binding of its own. A pattern that does not fit
+is F071, reported at the value.
+
 ### Statement: Var
 ```
 var x: T = e
@@ -640,6 +669,7 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 - **F047**: Try operator used outside function
 - **F048**: Try operator operand type mismatch
 - **F049**: Try operator return type mismatch
+- **F071**: Destructuring pattern does not fit the value
 
 ### Match Errors (reported as F016 type mismatches)
 - Non-exhaustive match: missing variant names without default arm

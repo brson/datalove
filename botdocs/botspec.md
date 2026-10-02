@@ -966,6 +966,24 @@ var x: u32 = 0
 var y: i32             // uninitialized; must set before use
 ```
 
+**Destructuring.** `let` and `var` take apart a tuple, a struct, or a term,
+spelled as the value is written. The value is consumed, and each name takes
+ownership of its part; with `var`, each is a mutable binding of its own:
+
+```datalove
+let (a, b) = (true, "s")
+let (c,) = ("c",)                  // a one-tuple needs its comma
+let {x, y = my_y} = {x = 1, y = 2} // `x` is short for `x = x`
+let term Foo t = term Foo "bar"
+let atom Foo = atom Foo            // binds nothing
+var (m, n) = (1, 2)
+```
+
+A struct pattern names every field, and `let (a)` is an error (P070): a
+pattern has nothing to group, so it is spelled `(a,)` or `a`. Patterns are one
+level deep, and an enum is taken apart with `match` rather than `let`. A `var`
+without a value binds a plain name.
+
 **Const** binds a value the compiler evaluates. It is valid at script top
 level, in a script or module function body, and at module top level, where it
 is in scope for every function in the module regardless of where it is written:

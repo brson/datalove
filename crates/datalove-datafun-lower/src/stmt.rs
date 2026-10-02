@@ -5,7 +5,8 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_ir::{IrType, Operand, ValueId, Instruction, Terminator, SlotDest, ParamMode};
+use datalove_datafun_ir::{IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
+use datalove_datafun_sema::Destructure;
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref, lower_operand, operand_type, field_type_from_base};
 use super::LowerError;
@@ -35,6 +36,94 @@ fn is_self_assignment<'db>(
         }
     }
     false
+}
+
+/// Take apart the value a `let` or `var` binds.
+///
+/// Returns each name with the value bound to it and its type, in the order the
+/// pattern names them, which is the order ownership analysis allocated them in.
+pub(super) fn lower_destructure<'db>(
+    ctx: &mut LowerCtx<'db>,
+    binding: &ast::Binding<'db>,
+    init_expr: ExprFun<'db>,
+    value_id: ValueId,
+) -> Vec<(String, ValueId, IrType)> {
+    let ty = ctx.expr_type(init_expr);
+    let db = ctx.db;
+    match Destructure::of(db, binding, &ty) {
+        Destructure::Whole(name) => vec![(name.text(db).to_string(), value_id, ty)],
+        Destructure::Fields { names, field_count } => {
+            // A pattern names every field, so every field has a name to go to.
+            let mut dests = vec![None; field_count];
+            for (_, index, field_ty) in &names {
+                dests[*index as usize] = Some(ctx.fresh_value(field_ty.clone()));
+            }
+            let dests: Vec<ValueId> = dests.into_iter()
+                .map(|d| d.expect("a destructure names every field"))
+                .collect();
+            ctx.emit_unpack(dests.clone(), Operand::Value(value_id));
+            names.into_iter()
+                .map(|(name, index, field_ty)| (name.text(db).to_string(), dests[index as usize], field_ty))
+                .collect()
+        }
+        Destructure::Payload(name, payload_ty) => {
+            // A term is laid out as its payload, so taking it out is a move.
+            let dest = ctx.fresh_value(payload_ty.clone());
+            ctx.emit(Instruction::Move { dest, src: Operand::Value(value_id) });
+            vec![(name.text(db).to_string(), dest, payload_ty)]
+        }
+        Destructure::Nothing => vec![],
+    }
+}
+
+/// Lower a `var`, giving each name it binds a slot of its own.
+///
+/// Returns each name with its slot, in the order the pattern names them.
+/// Script lowering does not keep a wrapped container's shape, and passes
+/// `record_shape` false.
+pub(super) fn lower_var<'db>(
+    ctx: &mut LowerCtx<'db>,
+    var_stmt: &ast::StmtVar<'db>,
+    record_shape: bool,
+) -> Result<Vec<(String, SlotId)>, LowerError> {
+    let Some(init_expr) = var_stmt.value else {
+        // Uninitialized var - get type from type hint.
+        let name = var_stmt.binding.as_name()
+            .expect("the parser requires a plain name without a value")
+            .text(ctx.db).to_string();
+        let type_hint = var_stmt.type_hint.as_ref()
+            .expect("uninitialized var must have type hint");
+        let slot = ctx.fresh_slot(IrType::from_type_hint(ctx.db, type_hint));
+        let operand = Operand::Slot(slot);
+        ctx.bind_var(&name, operand);
+        // The slot is uninitialized and tracked.
+        ctx.record_binding_operand(operand);
+        return Ok(vec![(name, slot)]);
+    };
+
+    let value_id = lower_expression(ctx, init_expr)?;
+    let mut slots = vec![];
+    for (name, value_id, slot_type) in lower_destructure(ctx, &var_stmt.binding, init_expr, value_id) {
+        let is_copy = slot_type.is_copy();
+        let slot = ctx.fresh_slot(slot_type);
+        let operand = Operand::Slot(slot);
+        ctx.bind_var(&name, operand);
+        if record_shape && var_stmt.binding.as_name().is_some() {
+            if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
+                ctx.record_wrapped_shape(operand, shape);
+            }
+        }
+        // Record binding operand for drop schedule. This has to happen
+        // before the store, which asks whether the slot is tracked.
+        ctx.record_binding_operand(operand);
+        if is_copy {
+            ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+        } else {
+            ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+        }
+        slots.push((name, slot));
+    }
+    Ok(slots)
 }
 
 /// Lower a statement.
@@ -78,60 +167,25 @@ fn lower_statement_with_id<'db>(
 ) -> Result<(), LowerError> {
     match stmt {
         Statement::Let(let_stmt) => {
-            let name = let_stmt.name.text(ctx.db).to_string();
             let init_expr = let_stmt.value;
             let value_id = lower_expression(ctx, init_expr)?;
-            let operand = Operand::Value(value_id);
-            ctx.bind_var(&name, operand);
-            // A wrapped container keeps the shape it was written as; see
-            // `LowerBody::wrapped_shapes`.
-            if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
-                ctx.record_wrapped_shape(operand, shape);
+            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, init_expr, value_id) {
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                // A wrapped container keeps the shape it was written as; see
+                // `LowerBody::wrapped_shapes`.
+                if let_stmt.binding.as_name().is_some() {
+                    if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
+                        ctx.record_wrapped_shape(operand, shape);
+                    }
+                }
+                // Record binding operand for drop schedule.
+                ctx.record_binding_operand(operand);
             }
-            // Record binding operand for drop schedule.
-            ctx.record_binding_operand(operand);
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            let name = var_stmt.name.text(ctx.db).to_string();
-
-            // Get type and optionally lower the initializer.
-            let (slot_type, init_value) = if let Some(init_expr) = var_stmt.value {
-                let slot_type = ctx.expr_type(init_expr);
-                let value_id = lower_expression(ctx, init_expr)?;
-                (slot_type, Some(value_id))
-            } else {
-                // Uninitialized var - get type from type hint.
-                let type_hint = var_stmt.type_hint.as_ref()
-                    .expect("uninitialized var must have type hint");
-                let slot_type = IrType::from_type_hint(ctx.db, type_hint);
-                (slot_type, None)
-            };
-
-            let is_copy = slot_type.is_copy();
-            let slot = ctx.fresh_slot(slot_type);
-
-            let operand = Operand::Slot(slot);
-            ctx.bind_var(&name, operand);
-            if let Some(init_expr) = var_stmt.value {
-                if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
-                    ctx.record_wrapped_shape(operand, shape);
-                }
-            }
-            // Record binding operand for drop schedule. This has to happen
-            // before the store, which asks whether the slot is tracked.
-            ctx.record_binding_operand(operand);
-
-            // Only emit store instruction if there's an initializer.
-            if let Some(value_id) = init_value {
-                if is_copy {
-                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-                } else {
-                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-                }
-            }
-            // If no initializer, slot is uninitialized and tracked.
-
+            lower_var(ctx, var_stmt, true)?;
             Ok(())
         }
         Statement::Set(set_stmt) => {

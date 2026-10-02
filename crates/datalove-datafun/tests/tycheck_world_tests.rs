@@ -45,6 +45,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "CannotSynthesize"
             })
         }
+        TypeError::PatternMismatch { message } => {
+            json!({
+                "kind": "PatternMismatch",
+                "message": message
+            })
+        }
         TypeError::InvalidOperandType { op, ty } => {
             json!({
                 "kind": "InvalidOperandType",

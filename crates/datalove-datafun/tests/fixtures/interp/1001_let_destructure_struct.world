@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+// Fields are bound in any order, under their own names or new ones.
+let {b, a} = {a = "a", b = ["b"]}
+debuglog (a, b)
+
+let {
+  x = my_x,
+  y = my_y,
+} = {x = "x", y = 2}
+debuglog (my_x, my_y)

@@ -21,7 +21,7 @@ pub use crate::{Type, TypeError};
 /// Otherwise, synthesizes type from value.
 fn check_variable_decl<'db>(
     ctx: &mut TypeContext<'db>,
-    name: bct::text::InternedText<'db>,
+    binding: &Binding<'db>,
     value: ExprFun<'db>,
     type_hint: Option<datalit::ast::TypeHint<'db>>,
     is_mutable: bool,
@@ -60,7 +60,99 @@ fn check_variable_decl<'db>(
     };
 
     if let Some(ty) = var_type {
-        ctx.add_variable(name, ty, is_mutable);
+        bind_pattern(ctx, binding, value, ty, is_mutable);
+    }
+}
+
+/// Bind the names a pattern takes out of a value of type `ty`.
+///
+/// A pattern that does not fit is reported, and binds nothing.
+fn bind_pattern<'db>(
+    ctx: &mut TypeContext<'db>,
+    binding: &Binding<'db>,
+    value: ExprFun<'db>,
+    ty: Type<'db>,
+    is_mutable: bool,
+) {
+    use datalit::tycheck::Type as T;
+    let db = ctx.db;
+    let ty_str = type_to_string(db, &ty);
+    let bindings: Result<Vec<(bct::text::InternedText<'db>, Type<'db>)>, (String, &str)> =
+        match (binding, &ty) {
+            (Binding::Name(name), _) => Ok(vec![(*name, ty.C())]),
+            (Binding::Tuple(names), Type::Datalit(T::AnonTuple(tuple))) => {
+                if names.len() == tuple.fields.len() {
+                    Ok(names.iter().copied()
+                        .zip(tuple.fields.iter().map(|f| Type::Datalit(f.C())))
+                        .collect())
+                } else {
+                    Err((
+                        fmt!("a pattern of {} names cannot take apart `{ty_str}`", names.len()),
+                        "this has a different number of elements",
+                    ))
+                }
+            }
+            (Binding::Struct(fields), Type::Datalit(T::AnonStruct(st))) => {
+                let unknown = fields.iter()
+                    .find(|f| !st.fields.iter().any(|sf| sf.name == f.field));
+                let missing = st.fields.iter()
+                    .find(|sf| !fields.iter().any(|f| f.field == sf.name));
+                if let Some(f) = unknown {
+                    Err((
+                        fmt!("`{ty_str}` has no field `{}`", f.field.as_str(db)),
+                        "the pattern names a field this does not have",
+                    ))
+                } else if let Some(sf) = missing {
+                    Err((
+                        fmt!("the pattern does not name field `{}` of `{ty_str}`", sf.name.as_str(db)),
+                        "a destructure names every field",
+                    ))
+                } else {
+                    Ok(fields.iter()
+                        .map(|f| {
+                            let field_ty = st.fields.iter()
+                                .find(|sf| sf.name == f.field).X()
+                                .ty.as_ref().C();
+                            (f.binding, Type::Datalit(field_ty))
+                        })
+                        .collect())
+                }
+            }
+            (Binding::Atom(name), Type::Datalit(T::Atom(atom))) if atom.name == *name => Ok(vec![]),
+            (Binding::Term { name, binding }, Type::Datalit(T::Term(term))) if term.name == *name => {
+                Ok(vec![(*binding, Type::Datalit(term.payload.as_ref().C()))])
+            }
+            (_, Type::Datalit(T::Enum(_))) => Err((
+                fmt!("a `let` cannot take apart `{ty_str}`"),
+                "an enum is taken apart with `match`",
+            )),
+            (Binding::Tuple(_), _) => Err((
+                fmt!("a tuple pattern cannot take apart `{ty_str}`"),
+                "this is not a tuple",
+            )),
+            (Binding::Struct(_), _) => Err((
+                fmt!("a struct pattern cannot take apart `{ty_str}`"),
+                "this is not a struct",
+            )),
+            (Binding::Atom(name), _) => Err((
+                fmt!("a pattern for `atom {}` cannot take apart `{ty_str}`", name.as_str(db)),
+                "this is not that atom",
+            )),
+            (Binding::Term { name, .. }, _) => Err((
+                fmt!("a pattern for `term {}` cannot take apart `{ty_str}`", name.as_str(db)),
+                "this is not that term",
+            )),
+        };
+    match bindings {
+        Ok(bindings) => {
+            for (name, ty) in bindings {
+                ctx.add_variable(name, ty, is_mutable);
+            }
+        }
+        Err((message, label)) => {
+            let error = ctx.error_pattern_mismatch(value, message, label);
+            ctx.add_error(error);
+        }
     }
 }
 
@@ -97,20 +189,22 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &stmt.binding, stmt.value, stmt.type_hint.clone(), false);
         }
 
         Statement::Var(stmt) => {
             match stmt.value {
                 Some(value) => {
-                    check_variable_decl(ctx, stmt.name, value, stmt.type_hint.clone(), true);
+                    check_variable_decl(ctx, &stmt.binding, value, stmt.type_hint.clone(), true);
                 }
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
                     if let Some(hint) = stmt.type_hint.clone() {
                         match ctx.convert_hint(hint) {
                             Ok(ty) => {
-                                ctx.add_variable(stmt.name, ty, true);
+                                let name = stmt.binding.as_name()
+                                    .expect("the parser requires a plain name without a value");
+                                ctx.add_variable(name, ty, true);
                             }
                             Err(e) => {
                                 ctx.add_error(e);
@@ -506,7 +600,7 @@ pub fn check_statement<'db>(
             // during lowering.
             let saved_in_const_expr = ctx.in_const_expr;
             ctx.in_const_expr = true;
-            check_variable_decl(ctx, stmt.name, stmt.value, stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &Binding::Name(stmt.name), stmt.value, stmt.type_hint.clone(), false);
             ctx.in_const_expr = saved_in_const_expr;
             // Track this as a const binding for comptime arg validation.
             ctx.add_const_binding(stmt.name);

@@ -1,0 +1,35 @@
+----------
+scriptunit-fragment
+----------
+
+fun swap(t: (string, [int])): ([int], string)
+  let (s, l) = t
+  ret (l, s)
+end fun
+
+// A '?' that returns early drops what is already bound.
+fun first(p: ?(string, string), q: ?(string, string)): ?string
+  let (a, b) = p?
+  let (c, d) = q?
+  ret some c
+end fun
+
+// A destructure in a loop body is dropped each time round.
+fun count(n: int): int
+  var i = 0
+  var total = 0
+  loop
+    if i == n
+      break
+    end if
+    let {name, size} = {name = "item", size = i@}
+    set total = total + size
+    set i = i + 1
+  end loop
+  ret total
+end fun
+
+debuglog swap(("a", [1, 2]))
+debuglog first(some ("a", "b"), some ("c", "d"))
+debuglog first(some ("a", "b"), none)
+debuglog count(4)

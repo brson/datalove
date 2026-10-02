@@ -101,6 +101,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "CannotSynthesize"
             })
         }
+        TypeError::PatternMismatch { message } => {
+            json!({
+                "kind": "PatternMismatch",
+                "message": message
+            })
+        }
         TypeError::InvalidOperandType { op, ty } => {
             json!({
                 "kind": "InvalidOperandType",
@@ -363,14 +369,18 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     for statement in script.statements.iter() {
         match statement {
             datalove_datafun_ast::ast::Statement::Let(let_stmt) => {
-                let name = let_stmt.name;
+                // A destructure is judged by the type of what it takes apart.
+                let name = let_stmt.binding.names().iter()
+                    .map(|n| n.as_str(&db))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 // Get type from the let statement's value expression.
                 let value_expr = let_stmt.value;
                 let key = datalove_datafun_ast::ast::ExprKey::of(&db, value_expr);
                 if let Some(ty) = expr_types.get(&key) {
                     judgements.push(json!({
                         "kind": "variable",
-                        "name": name.as_str(&db),
+                        "name": name,
                         "type": datalove_datafun_tycheck::type_to_string(&db, ty)
                     }));
                 }

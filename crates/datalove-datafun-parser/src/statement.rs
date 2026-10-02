@@ -111,8 +111,8 @@ impl<'db> Parser<'db> {
     fn parse_let(&mut self) -> ast::Statement<'db> {
         self.eat_word("let");
 
-        let name = match self.eat_declared_name(NameKind::Value) {
-            Some(n) => n,
+        let binding = match self.parse_binding() {
+            Some(b) => b,
             None => {
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
@@ -145,17 +145,132 @@ impl<'db> Parser<'db> {
         let value = self.parse_expr_full();
 
         ast::Statement::Let(ast::StmtLet {
-            name,
+            binding,
             type_hint,
             value,
         })
     }
 
+    /// Parse what a `let` or `var` binds: a name or a destructuring pattern.
+    ///
+    /// None if what follows is neither, having consumed nothing. A pattern that
+    /// starts well and then goes wrong is reported here, and returned with
+    /// what could be read of it.
+    fn parse_binding(&mut self) -> Option<ast::Binding<'db>> {
+        let mut seen = datalit::parser_util::SeenNames::default();
+        if self.peek_sigil(Sigil::ParenOpen) {
+            let paren_ts = self.peek_text_span();
+            let inner = self.eat_branch(Sigil::ParenOpen).X();
+            let mut sub = self.sub_parser(inner, None);
+            let (names, had_comma) = sub.parse_comma_separated_with_trailing(|p| {
+                p.parse_pattern_name(&mut seen)
+            });
+            sub.error_if_not_exhausted();
+            self.merge_from_sub(&mut sub);
+            // In an expression `(x)` groups, but a pattern has nothing to
+            // group, so `(a)` is neither a name nor a tuple.
+            if names.len() == 1 && !had_comma {
+                self.had_error = true;
+                DiagnosticBuilder::error(self.db, "a parenthesized name is not a pattern")
+                    .code("P070")
+                    .primary_label(paren_ts, "write `(a,)` for a one-element tuple, or drop the parentheses")
+                    .emit_parse();
+            }
+            return Some(ast::Binding::Tuple(names));
+        }
+        if let Some(inner) = self.eat_branch(Sigil::BraceOpen) {
+            let mut sub = self.sub_parser(inner, None);
+            let mut seen_fields = datalit::parser_util::SeenNames::default();
+            let fields = sub.parse_comma_separated(|p| {
+                let field_ts = p.peek_text_span();
+                let field = match p.eat_name() {
+                    Some(field) => field,
+                    None => {
+                        let error = p.pattern_name_error();
+                        return ast::StructBinding { field: error, binding: error };
+                    }
+                };
+                let fresh_field = seen_fields.take(p.db, field, field_ts.clone(), "field");
+                if !fresh_field {
+                    p.had_error = true;
+                }
+                let binding = if p.eat_sigil(Sigil::Equals) {
+                    p.parse_pattern_name(&mut seen)
+                } else {
+                    // A field named twice has been reported once already.
+                    if fresh_field {
+                        p.declare_pattern_name(field, field_ts, &mut seen);
+                    }
+                    field
+                };
+                ast::StructBinding { field, binding }
+            });
+            sub.error_if_not_exhausted();
+            self.merge_from_sub(&mut sub);
+            return Some(ast::Binding::Struct(fields));
+        }
+        match self.peek_word() {
+            Some("atom") => {
+                self.next();
+                let name = self.eat_name().unwrap_or_else(|| self.pattern_name_error());
+                Some(ast::Binding::Atom(name))
+            }
+            Some("term") => {
+                self.next();
+                let name = self.eat_name().unwrap_or_else(|| self.pattern_name_error());
+                let binding = self.parse_pattern_name(&mut seen);
+                Some(ast::Binding::Term { name, binding })
+            }
+            _ => self.eat_declared_name(NameKind::Value).map(ast::Binding::Name),
+        }
+    }
+
+    /// Parse a name a pattern binds, reporting it if it is bound twice.
+    fn parse_pattern_name(
+        &mut self,
+        seen: &mut datalit::parser_util::SeenNames<'db>,
+    ) -> InternedText<'db> {
+        let ts = self.peek_text_span();
+        match self.eat_declared_name(NameKind::Value) {
+            Some(name) => {
+                self.declare_pattern_name(name, ts, seen);
+                name
+            }
+            None => self.pattern_name_error(),
+        }
+    }
+
+    fn declare_pattern_name(
+        &mut self,
+        name: InternedText<'db>,
+        ts: TextSpan<'db>,
+        seen: &mut datalit::parser_util::SeenNames<'db>,
+    ) {
+        if !seen.take(self.db, name, ts, "binding") {
+            self.had_error = true;
+        }
+    }
+
+    /// Report a pattern missing a name, and stand in for it.
+    fn pattern_name_error(&mut self) -> InternedText<'db> {
+        self.had_error = true;
+        let ts = self.error_span();
+        DiagnosticBuilder::error(self.db, "expected a name in this pattern")
+            .code("P069")
+            .primary_label(ts, "expected a name")
+            .emit_parse();
+        // Skip the rest of this element, so one mistake is one report.
+        while self.peek().is_some() && !self.peek_sigil(Sigil::Comma) {
+            self.next();
+        }
+        InternedText::new(self.db, "<error>".S())
+    }
+
     fn parse_var(&mut self) -> ast::Statement<'db> {
         self.eat_word("var");
 
-        let name = match self.eat_declared_name(NameKind::Value) {
-            Some(n) => n,
+        let binding = match self.parse_binding() {
+            Some(b) => b,
             None => {
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
@@ -179,7 +294,15 @@ impl<'db> Parser<'db> {
         let value = if self.eat_sigil(Sigil::Equals) {
             Some(self.parse_expr_full())
         } else {
-            // No initializer - require type hint.
+            // No initializer - require a plain name and a type hint.
+            if binding.as_name().is_none() {
+                let ts = self.peek_text_span();
+                return self.emit_stmt_error(ts,
+                    "a destructuring var needs a value to take apart",
+                    "P068",
+                    "expected '='"
+                );
+            }
             if type_hint.is_none() {
                 let ts = self.peek_text_span();
                 return self.emit_stmt_error(ts,
@@ -192,7 +315,7 @@ impl<'db> Parser<'db> {
         };
 
         ast::Statement::Var(ast::StmtVar {
-            name,
+            binding,
             type_hint,
             value,
         })

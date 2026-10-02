@@ -1,0 +1,54 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "a",
+            "<error>"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P069",
+      "labels": [
+        {
+          "message": "expected a name",
+          "span": [
+            8,
+            9
+          ],
+          "text": "1"
+        }
+      ],
+      "message": "expected a name in this pattern"
+    }
+  ]
+}

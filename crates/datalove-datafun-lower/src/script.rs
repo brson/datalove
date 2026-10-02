@@ -22,7 +22,7 @@ use crate::ScriptFunctionAnalyses;
 use super::context::{LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
-use super::stmt::{collect_field_path_from_place, lower_statement};
+use super::stmt::{collect_field_path_from_place, lower_destructure, lower_statement, lower_var};
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
 
@@ -391,54 +391,22 @@ fn lower_statement_for_script<'db>(
     let stmt_idx = ctx.alloc_stmt_id(stmt);
     match stmt {
         Statement::Let(let_stmt) => {
-            let name = let_stmt.name.text(ctx.db).to_string();
             let init_expr = let_stmt.value;
             let value_id = lower_expression(ctx, init_expr)?;
-            let operand = Operand::Value(value_id);
-            ctx.bind_var(&name, operand);
-            // Record binding operand for drop schedule.
-            ctx.record_binding_operand(operand);
-            // Export the binding.
-            ctx.exports.push((name, ExportBinding::Value(value_id)));
+            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, init_expr, value_id) {
+                let operand = Operand::Value(value_id);
+                ctx.bind_var(&name, operand);
+                // Record binding operand for drop schedule.
+                ctx.record_binding_operand(operand);
+                // Export the binding.
+                ctx.exports.push((name, ExportBinding::Value(value_id)));
+            }
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            let name = var_stmt.name.text(ctx.db).to_string();
-
-            // Get type and optionally lower the initializer.
-            let (slot_type, init_value) = if let Some(init_expr) = var_stmt.value {
-                let slot_type = ctx.expr_type(init_expr);
-                let value_id = lower_expression(ctx, init_expr)?;
-                (slot_type, Some(value_id))
-            } else {
-                // Uninitialized var - get type from type hint.
-                let type_hint = var_stmt.type_hint.as_ref()
-                    .expect("uninitialized var must have type hint");
-                let slot_type = IrType::from_type_hint(ctx.db, type_hint);
-                (slot_type, None)
-            };
-
-            let is_copy = slot_type.is_copy();
-            let slot = ctx.fresh_slot(slot_type);
-
-            let operand = Operand::Slot(slot);
-            ctx.bind_var(&name, operand);
-            // Record binding operand for drop schedule. This has to happen
-            // before the store, which asks whether the slot is tracked.
-            ctx.record_binding_operand(operand);
-
-            // Only emit store instruction if there's an initializer.
-            if let Some(value_id) = init_value {
-                if is_copy {
-                    ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-                } else {
-                    ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-                }
+            for (name, slot) in lower_var(ctx, var_stmt, false)? {
+                ctx.exports.push((name, ExportBinding::Slot(slot)));
             }
-            // If no initializer, slot is uninitialized and tracked.
-
-            // Export the binding.
-            ctx.exports.push((name.clone(), ExportBinding::Slot(slot)));
             Ok(())
         }
         Statement::Set(set_stmt) => {

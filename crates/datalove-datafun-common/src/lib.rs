@@ -363,6 +363,8 @@ pub enum TypeError {
     FieldNotFound { field_name: String, ty: String },
     /// Projection on non-aggregate type.
     ProjectionOnNonAggregate { ty: String },
+    /// A destructuring pattern that does not fit the value it takes apart.
+    PatternMismatch { message: String },
     /// Field projection on move-type field (not allowed outside ref context).
     NonCopyFieldProjection { field_ty: String },
     /// Index projection on move-type element (not allowed outside ref context).

@@ -1,0 +1,13 @@
+----------
+scriptunit-fragment
+----------
+
+let (a, b) = ("a", ["b"])
+var {x, y} = {x = 1, y = "y"}
+
+----------
+scriptunit-fragment
+----------
+
+set x = x + 1
+debuglog (a, b, x, y)

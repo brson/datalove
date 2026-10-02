@@ -1,0 +1,261 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "a",
+            "b"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "True",
+                  "type_hint": null
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "100"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "c"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": []
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "fields": [
+            {
+              "binding": "e",
+              "field": "e"
+            },
+            {
+              "binding": "my_f",
+              "field": "f"
+            }
+          ],
+          "kind": "Struct"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "e",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              },
+              {
+                "name": "f",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "2"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Atom",
+          "name": "Foo"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Atom",
+            "name": "Foo",
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "binding": "g",
+          "kind": "Term",
+          "name": "Bar"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Term",
+            "name": "Bar",
+            "payload": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "h",
+            "i"
+          ]
+        },
+        "type_hint": {
+          "AnonTuple": {
+            "fields": [
+              "U32",
+              "U32"
+            ]
+          }
+        },
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Var",
+        "pattern": {
+          "kind": "Tuple",
+          "names": [
+            "j",
+            "k"
+          ]
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Var",
+        "pattern": {
+          "fields": [
+            {
+              "binding": "l",
+              "field": "l"
+            }
+          ],
+          "kind": "Struct"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "l",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

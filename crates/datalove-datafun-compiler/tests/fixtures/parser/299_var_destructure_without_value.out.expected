@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "ParseError",
+        "message": "a destructuring var needs a value to take apart"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P068",
+      "labels": [
+        {
+          "message": "expected '='",
+          "span": [
+            22,
+            22
+          ],
+          "text": ""
+        }
+      ],
+      "message": "a destructuring var needs a value to take apart"
+    }
+  ]
+}

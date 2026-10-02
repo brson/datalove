@@ -1,0 +1,5 @@
+let (a, b) = (true, "s")
+let {x, y = my_y} = {x = 1, y = [2]}
+let term Foo t = term Foo "t"
+let atom Bar = atom Bar
+let () = ()

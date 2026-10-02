@@ -1,0 +1,72 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = const "s"
+                        v2 = pack Tuple2 {v0, v1}
+                        (v3, v4) = unpack v2
+                        store.copy s0, v3
+                        store.move.tracked s1, v4
+                        v5 = const false
+                        store.copy s0, v5
+                        v6 = const "t"
+                        drop.tracked s1
+                        store.move.tracked s1, v6
+                        v7 = load.copy s0
+                        v8 = load.move.tracked s1
+                        v9 = pack Tuple2 {v7, v8}
+                        debuglog v9
+                        drop v9
+                        v10 = const "x"
+                        v11 = const 1int
+                        v12 = list [v11]
+                        v13 = pack Struct0 {v10, v12}
+                        (v14, v15) = unpack v13
+                        store.move.tracked s2, v14
+                        store.move.tracked s3, v15
+                        v16 = const "changed"
+                        drop.tracked s2
+                        store.move.tracked s2, v16
+                        v17 = const 2int
+                        v18 = const 3int
+                        v19 = list [v17, v18]
+                        drop.tracked s3
+                        store.move.tracked s3, v19
+                        v20 = load.move.tracked s2
+                        v21 = load.move.tracked s3
+                        v22 = pack Tuple2 {v20, v21}
+                        debuglog v22
+                        drop v22
+                        v23 = const "f"
+                        v24 = move v23
+                        v25 = move v24
+                        store.move.tracked s4, v25
+                        v26 = const "g"
+                        drop.tracked s4
+                        store.move.tracked s4, v26
+                        debuglog s4
+                        unit_end_drop.tracked s1
+                        unit_end_drop.tracked s2
+                        unit_end_drop.tracked s3
+                        unit_end_drop.tracked s4
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(false, \"t\")\n(\"changed\", [2, 3])\n\"g\"\n"),
+        ),
+    ],
+)
