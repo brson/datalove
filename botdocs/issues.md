@@ -14,51 +14,12 @@ home here.
 
 ## Contents
 
-- [The ownership pass panics on a clone returned out of a loop](#user-content-the-ownership-pass-panics-on-a-clone-returned-out-of-a-loop)
 - [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
 - [The runtime is duplicated across the rider dlopen boundary, and shares a heap across it](#user-content-the-runtime-is-duplicated-across-the-rider-dlopen-boundary-and-shares-a-heap-across-it)
-- [An early return out of an `if` with no `else` is refused when anything owned is live](#user-content-an-early-return-out-of-an-if-with-no-else-is-refused-when-anything-owned-is-live)
-
-## The ownership pass panics on a clone returned out of a loop
-
-**Reproduced.** A compiler crash, not a diagnostic.
-
-```datalove
-fun build(n: u32): [u32]
-    var out: [u32] = []
-    loop
-      if n == 0
-        ret out@            // panics
-      end if
-      break
-    end loop
-    ret []
-end fun
-```
-
-`crates/datalove-datafun-ownership/src/lib.rs:1871` reads
-
-```rust
-// The binding is Moved, so mark_moved recorded where.
-let expr_key = ctx.get_moved_at(*id).X();
-```
-
-on the way to raising `MoveInLoop`, and that does not hold: a clone-through leaves the
-binding `Moved` without `mark_moved` having recorded a site, so the `X()` panics with
-`impossible None option`.
-
-Without the `@` the same program is correctly refused, with D007 `cannot move out in loop`
-and D008. So the panic is on the path that should have *accepted* it -- reading a clone out
-of a loop is the thing `@` is for, and the pass reaches the move-in-loop error branch for
-it anyway.
-
-**What it costs.** A process abort with no diagnostic on source a user would reasonably
-write. Found while writing
-[report-jit-and-inliner.md](reports/report-jit-and-inliner.md), trying to write a
-stdlib-shaped benchmark.
+- [A move followed by a `break` is refused, though it cannot repeat](#user-content-a-move-followed-by-a-break-is-refused-though-it-cannot-repeat)
 
 ## Nothing but a test inlines
 
@@ -220,59 +181,49 @@ free rather than anything that names the cause. The fix is for the boundary to
 be a C ABI over pointers the two sides do not both own -- the shared library
 should not be handing Rust heap ownership back and forth with its host.
 
-## An early return out of an `if` with no `else` is refused when anything owned is live
+## A move followed by a `break` is refused, though it cannot repeat
 
-**Reproduced.** A spurious D008, on code a user writes constantly.
-
-```datalove
-fun f(s: string, n: u32): u32
-  if n == 0
-    ret 0              // D008: `s` moved in then branch but not the other
-  end if
-  debuglog s
-  ret n
-end fun
-```
-
-Any non-copy binding live at the `ret` -- a `string` parameter, an `int`, a
-list -- triggers it. With an `else` whose body also returns, it is accepted, and
-with only copy types around nothing is reported, which is why it went unnoticed.
-
-`analyze_return` in `crates/datalove-datafun-ownership/src/lib.rs` schedules
-every live binding to be dropped before the return and marks each one `Moved`,
-so that scope exit does not drop it again. `analyze_if` then compares the then
-branch's state against the else branch's (or, with no else, the state before
-the `if`), sees `Moved` against `Live`, and raises `InconsistentBranchMove`. It
-has no idea the then branch never reaches the merge.
-
-`break` has the same shape: moving a value and then breaking out of a branch
-gets D007 `cannot move in loop` (and D008), though the move cannot happen twice.
+**Reproduced.** A spurious D007 and D008.
 
 ```datalove
 var s = "x"
 loop
   if true
-    let t = s          // D007, D008
+    let t = s          // D007 `cannot move s in loop`, D008
     break
   end if
 end loop
 ```
 
-`analyze_match` merges arm states the same way and has the same fault.
+The move cannot happen twice: the only path that reaches it leaves the loop
+immediately after. `analyze_loop` sees the binding `Moved` at the end of the body
+and raises `MoveInLoop` without asking whether anything gets back to the loop
+head from there.
 
-**What it would take.** A branch that ends in `ret`, `break` or `continue`
-diverges, and the merge after an `if` or `match` should take its state from the
-branches that fall through, ignoring the diverging ones; if none fall through,
-whatever follows is unreachable. The drops a diverging branch needs are already
-scheduled at its `ret`/`break`, so the scope-exit drops the merge decides on are
-the fall-through branches' business only -- but that is the part to check
-carefully, since those states are what drop scheduling reads. The loop check
-(`MoveInLoop`) wants the same knowledge: a move followed by a `break` on every
-path does not repeat.
+**This is what is left of a larger fault.** The same merge mishandled `ret`, and
+that part is fixed: a branch that returns is now left out of the merge after an
+`if` or a `match`, so a guard clause with owned values live is accepted and a
+recursive function over `int` compiles. See
+`std_tests/151_owned_past_a_returning_branch` and
+`reachable::body_returns`, whose docs say why.
 
-The clone-out-of-a-loop panic above is in the same corner of the pass and is
-worth looking at alongside.
+**`break` is not the same problem, and the easy version of the fix is wrong.**
+Returning arrives at no merge, so ignoring the branch costs nothing. A `break`
+arrives after the loop, and whatever it moved is given away on that path. Leave
+it out of the merge and the binding reads `Live` afterwards, so scope exit drops
+a value the break path already handed over -- a double free, not a spurious
+error. The state after a loop genuinely depends on which exit was taken, which is
+the ambiguity the pass refuses in order to keep drop points static.
 
-`ir_inline/008_multi_return` was written as two else-less early returns over
-an `int` and is spelled as an `else if` chain to avoid this; it can go back once
-this is fixed.
+So closing this wants either a merge at the loop exit over the break paths and
+the fall-through together -- and a refusal when they disagree, with a message
+that says so rather than `cannot move in loop` -- or the loop exit knowing that a
+`break` is the only way out, which makes the binding definitely moved. The
+present message is the misleading part either way: the move is fine, and what is
+wrong is that nothing can say what is true after the loop.
+
+`continue` has the same shape, going to the loop head instead.
+
+`ir_inline/008_multi_return` was written as two else-less early returns over an
+`int` and is spelled as an `else if` chain to avoid the `ret` half of this; it
+can go back now.

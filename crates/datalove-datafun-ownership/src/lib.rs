@@ -44,6 +44,7 @@ use datalove_datafun_ast::ast::{
     StmtMatch, MatchCaseKind,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
 };
+use datalove_datafun_ast::reachable::body_returns;
 use datalove_datafun_ir::IrType;
 
 // Re-export types from sema for backward compatibility.
@@ -1649,20 +1650,39 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
         (state_before.C(), out_param_init_before.C())
     };
 
+    // Which branches reach the code after the `if` at all.
+    let then_returns = body_returns(&stmt.then_body);
+    let else_returns = stmt.else_body.as_ref().is_some_and(|body| body_returns(body));
+
     // Check for inconsistent moves between branches.
     // If a binding is moved in one branch but not the other, that's an error.
     // This ensures drop points are precise - no runtime tracking needed.
-    for (&id, &then_state) in &state_after_then {
-        let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
+    //
+    // Only between branches that merge. A branch that returns has already had
+    // its drops scheduled at the `ret` and never arrives here, so the two
+    // states describe different points in the program and disagreeing about a
+    // binding is what they are supposed to do. Comparing them anyway refused
+    //
+    //     if n == 0
+    //       ret 0
+    //     end if
+    //     debuglog s
+    //
+    // for every owned `s` live at the `ret`, which is to say most guard
+    // clauses anyone writes.
+    if !then_returns && !else_returns {
+        for (&id, &then_state) in &state_after_then {
+            let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
 
-        if then_state != else_state && !ctx.bindings[id.0 as usize].ty.is_copy() {
-            let name = ctx.bindings[id.0 as usize].name.C();
-            let moved_in = if then_state == BindingState::Moved { "then" } else { "else" };
-            ctx.errors.push(AnalysisError::InconsistentBranchMove {
-                stmt_idx,
-                name,
-                moved_in,
-            });
+            if then_state != else_state && !ctx.bindings[id.0 as usize].ty.is_copy() {
+                let name = ctx.bindings[id.0 as usize].name.C();
+                let moved_in = if then_state == BindingState::Moved { "then" } else { "else" };
+                ctx.errors.push(AnalysisError::InconsistentBranchMove {
+                    stmt_idx,
+                    name,
+                    moved_in,
+                });
+            }
         }
     }
 
@@ -1672,10 +1692,22 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     }
 
     // Update state after convergence.
-    // Both branches must have the same state for each binding (or error was reported).
+    //
+    // Whichever branch falls through decides what is known afterwards. Both
+    // branches must otherwise have the same state for each binding (or an error
+    // was reported above), so taking the then branch's is the same as taking
+    // the else branch's; it is only when the then branch returns that they
+    // differ and the else branch's -- or, with no else, the state before the
+    // `if` -- is the one that describes the merge.
+    let state_after = if then_returns && !else_returns {
+        &state_after_else
+    } else {
+        &state_after_then
+    };
+
     if let Some(frame) = ctx.scope_stack.last_mut() {
-        for (&id, &then_state) in &state_after_then {
-            frame.current_state.insert(id, then_state);
+        for (&id, &state) in state_after {
+            frame.current_state.insert(id, state);
         }
 
         // Writing an out parameter in one branch and not the other is not an
@@ -1690,6 +1722,11 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
         //
         // where the write after the branch is the one that counts. Every exit
         // checks for itself, so all this has to do is say what is known after.
+        //
+        // Unlike the move state above, this does not need to know which branch
+        // returned. Every `ret` checks the out parameters it leaves through, so
+        // a branch that returned had them all written, and converging against
+        // it already gives the other branch's answer.
         for (&id, &then_init) in &out_param_init_after_then {
             let else_init = out_param_init_after_else.get(&id).copied()
                 .unwrap_or(OutParamInitState::Uninitialized);
@@ -1716,6 +1753,9 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         .unwrap_or_default();
 
     let mut arm_states: Vec<BTreeMap<BindingId, BindingState>> = Vec::new();
+    // Whether each arm, in the same order, leaves the function rather than
+    // merging after the `match`.
+    let mut arm_returns: Vec<bool> = Vec::new();
 
     // Analyze each case arm.
     for (arm_idx, case) in stmt.cases.iter().enumerate() {
@@ -1760,6 +1800,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             .map(|f| f.current_state.C())
             .unwrap_or_default();
         arm_states.push(state_after);
+        arm_returns.push(body_returns(&case.body));
     }
 
     // Analyze default arm if present.
@@ -1782,12 +1823,22 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             .map(|f| f.current_state.C())
             .unwrap_or_default();
         arm_states.push(state_after);
+        arm_returns.push(body_returns(default_body));
     }
 
-    // Check consistency across all arms.
-    if let Some(first_state) = arm_states.first() {
-        for (_arm_idx, arm_state) in arm_states.iter().enumerate().skip(1) {
-            for (&id, &first_s) in first_state {
+    // Only the arms that fall through meet after the `match`, so only they can
+    // disagree, and only their state describes what follows. An arm that
+    // returns dropped what it owned at its `ret`.
+    let merging: Vec<&BTreeMap<BindingId, BindingState>> = arm_states.iter()
+        .zip(&arm_returns)
+        .filter(|(_, returns)| !**returns)
+        .map(|(state, _)| state)
+        .collect();
+
+    // Check consistency across the arms that merge.
+    if let Some(first_state) = merging.first() {
+        for arm_state in merging.iter().skip(1) {
+            for (&id, &first_s) in first_state.iter() {
                 let other_s = arm_state.get(&id).copied().unwrap_or(BindingState::Live);
                 if first_s != other_s && !ctx.bindings[id.0 as usize].ty.is_copy() {
                     let name = ctx.bindings[id.0 as usize].name.C();
@@ -1802,17 +1853,21 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         }
     }
 
-    // Update state after match convergence.
-    if let Some(first_state) = arm_states.first() {
-        if let Some(frame) = ctx.scope_stack.last_mut() {
-            for (&id, &state) in first_state {
-                frame.current_state.insert(id, state);
+    // Update state after match convergence. With every arm returning, nothing
+    // after the `match` runs and any of them will do.
+    match merging.first().copied().or_else(|| arm_states.first()) {
+        Some(state_after) => {
+            if let Some(frame) = ctx.scope_stack.last_mut() {
+                for (&id, &state) in state_after {
+                    frame.current_state.insert(id, state);
+                }
             }
         }
-    } else {
-        // No arms - restore pre-match state.
-        if let Some(frame) = ctx.scope_stack.last_mut() {
-            frame.current_state = state_before;
+        None => {
+            // No arms - restore pre-match state.
+            if let Some(frame) = ctx.scope_stack.last_mut() {
+                frame.current_state = state_before;
+            }
         }
     }
 }

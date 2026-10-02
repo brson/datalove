@@ -16,17 +16,21 @@ block1:
     drop p0
     return v5
 block2:
+    goto block3
+block3:
     v6 = clone p0
     v7 = const 0int
     v8 = gt v6, v7
     drop v6
     drop v7
-    branch v8, block3, block4
-block3:
+    branch v8, block4, block5
+block4:
     v9 = const 1int
     drop p0
     return v9
-block4:
+block5:
+    goto block6
+block6:
     v10 = const 0int
     drop p0
     return v10
@@ -57,17 +61,21 @@ block1:
     drop p0
     return v5
 block2:
+    goto block3
+block3:
     v6 = clone p0
     v7 = const 0int
     v8 = gt v6, v7
     drop v6
     drop v7
-    branch v8, block3, block4
-block3:
+    branch v8, block4, block5
+block4:
     v9 = const 1int
     drop p0
     return v9
-block4:
+block5:
+    goto block6
+block6:
     v10 = const 0int
     drop p0
     return v10
@@ -90,23 +98,27 @@ block2:
     drop v4
     drop v5
     drop v12
-    goto block6(v6)
+    goto block8(v6)
 block3:
+    goto block4
+block4:
     v7 = clone v12
     v8 = const 0int
     v9 = gt v7, v8
     drop v7
     drop v8
-    branch v9, block4, block5
-block4:
+    branch v9, block5, block6
+block5:
     v10 = const 1int
     drop v12
-    goto block6(v10)
-block5:
+    goto block8(v10)
+block6:
+    goto block7
+block7:
     v11 = const 0int
     drop v12
-    goto block6(v11)
-block6(v0):
+    goto block8(v11)
+block8(v0):
     return v0
 
 === INLINING STATS ===

@@ -1,8 +1,15 @@
 // Ownership analysis refuses this, and the reason reaches the reader rather
 // than being replaced by whatever the next step noticed was missing.
+//
+// This was written as a `ret x` inside an `if` with no `else`, which the pass
+// refused and no longer does: a branch that returns never reaches the merge, so
+// moving out through it is not a disagreement with the branch that falls
+// through. The move here is a real one -- the then branch gives `x` away and the
+// way round the `if` does not -- which is what the fixture is for.
 fun pick(x: string, flag: bool): string
   if flag
-    ret x
+    let taken = x
+    debuglog taken
   end if
   ret "other"
 end fun
