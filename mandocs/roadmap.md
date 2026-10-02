@@ -1,5 +1,16 @@
 # Datalove Roadmap
 
+Datalove is in a research and prototype stage.
+Neither the design nor implementation are complete.
+
+I am currently focused on end-to-end compiler architecture
+to ensure all my primary goals are feasible,
+as well as working on the CLI repl experience.
+
+The surface language is spartan,
+as is the standard library,
+and the language can perform no direct I/O.
+
 
 
 
