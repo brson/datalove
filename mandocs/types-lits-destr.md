@@ -125,14 +125,22 @@ type Shape: enum {
 
 let s: Shape = enum { atom Circle }
 let s: Shape = enum { term Rect (1.0, 2.0) }
-let s: Shape = atom Circle@
-let s: Shape = term Rect (1.0, 2.0)@
-
-// Data and error
-let d: data = data 42
-let d: data = data : u32 / 42
-let e: error = error "oops"
+let s: Shape = atom Circle
+let s: Shape = term Rect (1.0, 2.0)
 ```
+
+Values can also be destructured into `var` bindings,
+in which case all names are mutable.
+
+```datalove
+let s: { x: f32, y: f32 } = { x = 1.0, y = 2.0 }
+var { x, y } = s
+
+set x = 0.0
+set y = 0.0
+```
+
+Destructuring bindings must name every field.
 
 
 
