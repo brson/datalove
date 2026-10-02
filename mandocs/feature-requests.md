@@ -7,6 +7,7 @@ end if
 
 Semantics for aggregates get complex.
 
+
 ## 2026/10/01 Call by module-qualified name
 
 ```datalove

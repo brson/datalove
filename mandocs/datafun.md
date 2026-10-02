@@ -95,8 +95,10 @@ Lines can break freely between matched braces of all kinds
 
 ```datalove
 fun count_substrings(
-  s: string, ref needle: string
-): ?{ count: int, other_flags: u8 }
+  s: string, ref needle: string,
+): ?{
+  count: int, other_flags: u8,
+}
   // ... etc ...
 
   ret some {
@@ -107,8 +109,7 @@ end fun
 ```
 
 Function arguments are either passed by value, by reference (`ref`),
-by mutable reference (`mut`), or as `out` paramaters,
-which are mutable references that may not be read and may or may not be previously-initialized.
+by mutable reference (`mut`), or as `out` paramaters.
 The caller must correspondingly indicate the passing mode with `ref`, `mut` or `out`.
 
 ```datalove
@@ -196,7 +197,7 @@ debuglog (evens, odds)
 
 ## Other operators
 
-## The `adapt` operator
+## The "adapt" operator: `@`
 
 ## Constants and compile-time evaluation
 
