@@ -18,8 +18,8 @@ home here.
 - [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
-- [A field of a const cannot be projected, but a const can be destructured](#user-content-a-field-of-a-const-cannot-be-projected-but-a-const-can-be-destructured)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
+- [The runtime is duplicated across the rider dlopen boundary, and shares a heap across it](#user-content-the-runtime-is-duplicated-across-the-rider-dlopen-boundary-and-shares-a-heap-across-it)
 - [An early return out of an `if` with no `else` is refused when anything owned is live](#user-content-an-early-return-out-of-an-if-with-no-else-is-refused-when-anything-owned-is-live)
 
 ## The ownership pass panics on a clone returned out of a loop
@@ -65,10 +65,12 @@ stdlib-shaped benchmark.
 **Reproduced**, in the sense that the constructors are countable.
 
 `DynamicInliner` is constructed in exactly one place,
-`OptimizingDispatcher::with_config`, and `OptimizingDispatcher` is constructed
-in exactly two, both test binaries. `datalove script --jit` builds a bare
-`JitEngine`; the REPL, the benches and `worldfile_analysis` pass no dispatcher
-at all. So the inliner has never run in anything a user can invoke.
+`OptimizingDispatcher::with_config`. `OptimizingDispatcher` in turn is
+constructed only in its own unit tests, in the two dispatch suites, and in
+`datalove-bench/benches/jit.rs` -- and a bench is compiled by `just test` but
+not run by it. `datalove script --jit` builds a bare `JitEngine`; the REPL and
+`worldfile_analysis` pass no dispatcher at all. So the inliner has never run in
+anything a user can invoke.
 
 The other inliner, the directive-driven `datalove-datafun-inline` API --
 `parse_inline_directives`, `inline_module`, `inline_cross_module`, and the
@@ -125,9 +127,9 @@ column, which is what column projection syntax (`t.x`) would give.
 **What exists underneath.** The runtime has `table_create`, `table_destroy`,
 `table_push_row`, `table_build_from_rows`, `table_get`, `table_set`,
 `table_clear` and `table_len`, none of them reachable from the language. The
-spec mentions column projections yielding a list view; `t.x` is
-`ProjectionOnNonAggregate` today, and `t[i]?` is refused because indexing wants
-a list, map or tensor.
+spec mentions column projections yielding a list view; `t.x` is F068 `has no
+fields` today, and `t[i]?` is F011, because indexing wants a list, map or
+tensor.
 
 Because nothing reaches `table_push_row`, a table's row count is whatever was
 written in the literal that made it, so a table cannot be built from data at
@@ -164,37 +166,6 @@ disturb the counting.
 Closing it means the compiler's unit numbering and the runtime's agreeing about
 failed units, which `CodeRef::External` already assumes today. Worth examining
 as its own question rather than patching the key.
-
-## A field of a const cannot be projected, but a const can be destructured
-
-**Reproduced.**
-
-```datalove
-const PAIR: (int, int) = (: int / 10, : int / 20)
-let a = PAIR.0       // NonCopyFieldProjection
-let b = PAIR.0@      // NonCopyFieldProjection as well
-
-const MAYBE: ?int = some :int/42
-if MAYBE |val|       // fine: unwraps a fresh copy
-    debuglog val
-end if
-```
-
-So a linear payload may be taken out of a const option and a linear field may
-not be taken out of a const tuple, though both are reading one part of a
-constant. A const of an aggregate type can therefore be passed along whole and
-not read into, which is what `specialize_differential/017_comptime_tuple` means
-by "can't destructure tuples yet".
-
-The projection rule exists to stop a non-copy field moving out of a place
-someone still holds. Reading a constant is not that: each read materializes its
-own copy, which is why reading a const binding does not consume it. Settling
-this is a rule about every const rather than about const parameters, which is
-why it was left alone while those were being worked on.
-
-Note that `p.a@` on a `let` binding works, since lowering borrows the field and
-clones through the borrow. The const path refuses earlier, at typecheck, so it
-never reaches that.
 
 ## A specialized function keeps an original nobody calls
 
