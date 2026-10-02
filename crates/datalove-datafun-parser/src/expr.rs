@@ -609,8 +609,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     };
 
                                     // Parse arguments in parentheses.
-                                    let mut intrinsic_arg_modes = Vec::new();
-                                    let args = match self.peek() {
+                                    let (args, intrinsic_arg_modes) = match self.peek() {
                                         Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                                             let (args_iter, open_span) = match self.next() {
                                                 Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
@@ -621,9 +620,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             };
                                             // Intrinsics have no parameter modes; a marker
                                             // here is rejected during typechecking.
-                                            let (args, modes) = self.parse_function_call_args(*args_iter, Some((open_span, "in this argument list")));
-                                            intrinsic_arg_modes = modes;
-                                            args
+                                            self.parse_function_call_args(*args_iter, Some((open_span, "in this argument list")))
                                         }
                                         _ => {
                                             return self.emit_expr_error(ts,

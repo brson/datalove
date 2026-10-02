@@ -50,16 +50,6 @@ impl Reach {
             assemblies: ran("lower_module"),
         }
     }
-
-    /// The frontend part, which is what an import or a signature moving decides.
-    fn frontend(&self) -> (usize, usize) {
-        (self.typechecks, self.analyses)
-    }
-
-    /// The lowering part, which `reachable_func_ids` decides.
-    fn lowering(&self) -> (usize, usize) {
-        (self.lowerings, self.assemblies)
-    }
 }
 
 // ============================================================================

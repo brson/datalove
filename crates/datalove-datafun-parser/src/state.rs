@@ -182,11 +182,6 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
-    pub(super) fn from_branch(db: &'db dyn Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
-        Self::from_branch_with_context(db, iter, source_text, None, None)
-    }
-
     /// Create a new parser from a BracerIter with an optional context label.
     ///
     /// The context is used to add a secondary label to error messages showing

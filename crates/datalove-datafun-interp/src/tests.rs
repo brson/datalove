@@ -102,30 +102,6 @@ fn make_test_func(
     )
 }
 
-/// Simple helper for script units without nested functions.
-fn make_simple_script(
-    blocks: Vec<IrBlock>,
-    value_types: Vec<IrType>,
-    slot_types: Vec<IrType>,
-    unit_end_values: Vec<ValueId>,
-    unit_end_slots: Vec<SlotId>,
-    result: Option<ValueId>,
-) -> IrCodeUnit {
-    make_script_unit(
-        blocks,
-        value_types.len() as u32,
-        value_types,
-        slot_types.len() as u32,
-        slot_types,
-        0,
-        unit_end_values,
-        unit_end_slots,
-        result,
-        vec![],
-        vec![],
-    )
-}
-
 #[test]
 fn test_tydesc_table_primitives() {
     let mut table = IrTyDescTable::new();

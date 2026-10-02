@@ -87,7 +87,7 @@ fn make_package<'db>(
     db: &'db dyn salsa::Database,
     package: pl::Package,
     durability: Durability,
-) -> Package {
+) -> Package<'db> {
     Package::new(
         db,
         package.name,

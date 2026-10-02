@@ -1076,7 +1076,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
                 // Check we got Some.
-                let tag = unsafe { *option_buffer.as_ptr() };
+                let tag = *option_buffer.as_ptr();
                 prop_assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
                 // Check the value matches.
@@ -1150,7 +1150,7 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                let tag = unsafe { *option_buffer.as_ptr() };
+                let tag = *option_buffer.as_ptr();
 
                 if inserted_set.contains(key) {
                     // Key exists, should get Some.
@@ -1222,7 +1222,7 @@ proptest! {
                 );
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                let tag = unsafe { *option_buffer.as_ptr() };
+                let tag = *option_buffer.as_ptr();
                 prop_assert_eq!(tag, rtdt::OptionTag::Some as u8);
 
                 let value_ptr = option_buffer.as_ptr().add(option_layout.payload_offset as usize) as *const u32;
@@ -1294,7 +1294,7 @@ proptest! {
                     );
                     prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
-                    let tag = unsafe { *option_buffer.as_ptr() };
+                    let tag = *option_buffer.as_ptr();
 
                     if let Some(expected_value) = expected_values.get(&key) {
                         // Key should exist.

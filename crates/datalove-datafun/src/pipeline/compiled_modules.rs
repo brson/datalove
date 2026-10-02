@@ -7,13 +7,12 @@
 use rmx::std::collections::BTreeMap;
 use std::sync::Arc;
 
-use datalove_datafun_ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
 use datalove_datafun_interp::ModuleFunctionRegistry;
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
 use datalove_datafun_resolve::resolve_all_names;
 use datalove_datafun_compiler::module_graph::{
-    ModuleGraph, ModuleGraphTypecheckResult, ModuleId,
+    ModuleGraph, ModuleGraphTypecheckResult,
     ParsedModuleGraph,
 };
 

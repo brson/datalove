@@ -794,12 +794,12 @@ impl<'db> ScriptCompiler<'db> {
     /// Get the structured ownership errors from the last compilation.
     ///
     /// Use with `get_last_spans()` for direct diagnostic rendering.
-    pub fn get_ownership_errors(&self) -> &[AnalysisError] {
+    pub fn get_ownership_errors(&self) -> &[AnalysisError<'_>] {
         &self.last_ownership_errors
     }
 
     /// Get the spans from the last compilation for diagnostic rendering.
-    pub fn get_last_spans(&self) -> Option<&datalove_datafun_ast::spans::DatafunSpans> {
+    pub fn get_last_spans(&self) -> Option<&datalove_datafun_ast::spans::DatafunSpans<'_>> {
         self.last_spans.as_ref()
     }
 
@@ -1611,7 +1611,7 @@ impl<'db> ScriptCompiler<'db> {
     /// A script has no type parameters of its own, so it never forwards one;
     /// everything it hands over is a descriptor for a type it named outright.
     fn phase_resolve_shape_descriptors(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
-        use datalove_datafun_ir::{CodeRef, CodeUnitId, DescriptorShape, Instruction, IrModuleId};
+        use datalove_datafun_ir::{CodeRef, CodeUnitId, DescriptorShape, IrModuleId};
 
         /// A function this closure has to name, whether beside the script or
         /// in a module.

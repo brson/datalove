@@ -2336,13 +2336,6 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// The shapes this function itself declared.
-    fn unit_descriptor_shapes(&self) -> Vec<datalove_datafun_ir::DescriptorShape> {
-        self.unit.function_context()
-            .map(|c| c.descriptor_shapes.clone())
-            .unwrap_or_default()
-    }
-
     /// Build a list described by a handed-over descriptor, then wrap it.
     ///
     /// The destination is a `data`, because a list built over a type parameter

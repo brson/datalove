@@ -7,7 +7,7 @@ use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
 use crate::context::TypeContext;
 use crate::check::check_expr;
-use crate::types::{convert_type_hint_with_aliases, type_to_string};
+use crate::types::type_to_string;
 
 pub use crate::{Type, TypeError};
 
@@ -26,8 +26,6 @@ fn check_variable_decl<'db>(
     type_hint: Option<datalit::ast::TypeHint<'db>>,
     is_mutable: bool,
 ) {
-    let db = ctx.db;
-
     let var_type = match type_hint {
         Some(hint) => {
             match ctx.convert_hint(hint) {

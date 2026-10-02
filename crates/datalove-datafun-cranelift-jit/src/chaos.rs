@@ -124,7 +124,7 @@ impl ChaosDispatcher {
                         unsafe { set_dispatch_context(&mut dispatch_ctx) };
 
                         // Call JIT code.
-                        let result = unsafe {
+                        unsafe {
                             bridge::call_jit(
                                 code_ptr,
                                 uses_sret,
@@ -220,7 +220,7 @@ impl CallDispatcher for ChaosDispatcher {
                     // SAFETY: context is valid for duration of call.
                     unsafe { set_dispatch_context(&mut dispatch_ctx) };
 
-                    let result = unsafe {
+                    unsafe {
                         bridge::call_jit(
                             code_ptr,
                             uses_sret,

@@ -281,9 +281,6 @@ fn find_const_refs_inner<'db>(
         ExprFunKind::EnumLiteral(e) => {
             find_const_refs_inner(db, e.variant, const_names, name_to_stmt, refs);
         }
-        ExprFunKind::Hinted(h) => {
-            find_const_refs_inner(db, h.inner, const_names, name_to_stmt, refs);
-        }
         ExprFunKind::Index(i) => {
             find_const_refs_inner(db, i.base, const_names, name_to_stmt, refs);
             find_const_refs_inner(db, i.index, const_names, name_to_stmt, refs);

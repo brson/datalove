@@ -262,7 +262,7 @@ use datalove_datafun_ast::spans::{SpanMapEntry, DatafunSpans};
 pub fn datafun_spans<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> DatafunSpans {
+) -> DatafunSpans<'db> {
     use bct::diagnostic::SpanEntry;
 
     let parse_result = parse(db, source);

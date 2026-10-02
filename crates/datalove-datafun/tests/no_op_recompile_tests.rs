@@ -103,7 +103,7 @@ fn an_edit_runs_fewer_queries_than_a_first_compile() {
         );
     }
 
-    let mut compile = |world: &IncrementalModuleWorld| {
+    let compile = |world: &IncrementalModuleWorld| {
         let deps = extract_dependencies(world, &db, &Roots::All);
         let (graph, requires) = world.build_graph(&db, &deps, &Roots::All);
         let _ = parse_module_graph(&db, graph, requires, Vec::new());

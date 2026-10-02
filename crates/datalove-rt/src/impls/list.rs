@@ -595,7 +595,7 @@ pub unsafe fn list_set_data_impl(
     data_in: *const u8,
 ) -> RtStatus {
     let element_ty = list_tydesc.list_element_ty();
-    let mut list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
 
     if index >= list.size() {
         return RtStatus::Error;

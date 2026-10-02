@@ -225,7 +225,7 @@ fn walk_expr<'db>(
     let kind = expr.expr(db);
     cov.hit("expr", expr_name(&kind));
 
-    let mut sub = |e: ExprFun<'db>, cov: &mut Coverage| walk_expr(db, e, params, cov);
+    let sub = |e: ExprFun<'db>, cov: &mut Coverage| walk_expr(db, e, params, cov);
 
     match kind {
         ExprFunKind::BinOp(e) => {

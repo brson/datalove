@@ -29,7 +29,7 @@ use datalove_datafun_compiler::compile::{
     compile_modules as compiler_compile_modules,
 };
 use datalove_datafun_compiler::tracked_lower::{
-    func_id_lookup, lower_module_graph_with_evaluator, FuncIdLookup,
+    func_id_lookup, lower_module_graph_with_evaluator,
     ModuleGraphLoweringResult,
 };
 use datalove_datafun_tycheck::ParsedModuleGraph;
