@@ -33,11 +33,10 @@ For detail see additional documentation.
 - [Option and result handling](#user-content-option-and-result-handling)
 - [Numerics](#user-content-numerics)
 - [Comparison and equality](#user-content-comparison-and-equality)
-- [Other operators](#user-content-other-operators)
 - [The adapt operator: `@`](#user-content-the-adapt-operator-)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
-- [Modules and their organization](#user-content-modules-and-their-organization)
-- [The standard library](#user-content-the-standard-library)
+- [Modules, packages, and libraries](#user-modules-packages-and-libraries)
+- [The system library and `std` package](#user-content-the-system-library-and-std-package)
 - [Scripts](#user-content-scripts)
 - [Interactive script units](#user-content-interactive-script-units)
 - [Workspaces](#user-content-workspaces)
@@ -530,14 +529,16 @@ debuglog(v)
 
 ## Constants and compile-time evaluation
 
-## Modules and their organization
+## Modules, packages, and libraries
 
-modules, packages, libraries
-
-## The standard library
+## The system library and the `std` package
 
 ## Scripts
 
 ## Interactive script units
 
 ## Workspaces
+
+## Todo
+
+aggregates and collections
