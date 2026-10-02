@@ -157,7 +157,7 @@ proptest! {
         }
 
         // Verify map length matches unique keys.
-        prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as u32));
+        prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
         // Clean up.
         let status = unsafe {
@@ -350,7 +350,7 @@ proptest! {
                 prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
             }
 
-            prop_assert_eq!(map.len, rtdt::Index(num_entries as u32));
+            prop_assert_eq!(map.len, rtdt::Index(num_entries as rtdt::IndexRepr));
 
             // Clean up.
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -531,7 +531,7 @@ proptest! {
                 unique_keys.insert(*key);
             }
 
-            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as u32));
+            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
             // Clean up.
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
@@ -588,7 +588,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as u32));
+            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -778,7 +778,7 @@ proptest! {
                 // We must NOT destroy them here - the btreemap now owns them.
             }
 
-            prop_assert_eq!(map.len, rtdt::Index(num_entries as u32));
+            prop_assert_eq!(map.len, rtdt::Index(num_entries as rtdt::IndexRepr));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
@@ -971,7 +971,7 @@ proptest! {
                 unique_keys.insert(format!("key_{}", key));
             }
 
-            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as u32));
+            prop_assert_eq!(map.len, rtdt::Index(unique_keys.len() as rtdt::IndexRepr));
 
             let status = datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, &*map_tydesc);
             prop_assert_eq!(status, datalove_rt::c::RtStatus::Ok);
