@@ -22,6 +22,8 @@ use rmx::prelude::*;
 use rmx::std::path::{Path, PathBuf};
 
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::{LazyLock, Mutex};
 
 use super::workspace::RiderCrate;
@@ -58,6 +60,25 @@ impl Kind {
             Kind::Staticlib => "staticlib",
         }
     }
+}
+
+/// The subdirectory a given set of riders is built in.
+///
+/// One directory per rider set, because the synthesized crate is written into it
+/// and the library comes out under a name that says nothing about what went in:
+/// every set built in one directory would be the same
+/// `libdatalove_native_component.so`, so a second set would overwrite the first
+/// and whoever loaded the path afterwards would not find its symbols. The same
+/// reason `Kind` has a directory of its own, for the same reason it rebuilt on
+/// every alternation.
+///
+/// Hashed rather than spelled out because a set can be long and a rider is named
+/// by a path. The hash need only be stable within a toolchain: a different one
+/// is a directory nothing is in yet, which costs a rebuild and no correctness.
+fn rider_set_dir(riders: &[RiderCrate]) -> String {
+    let mut hasher = DefaultHasher::new();
+    riders.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
 }
 
 /// Components already built by this process, keyed by work dir, riders and kind.
@@ -150,7 +171,7 @@ fn build_uncached(
         rider_deps.push((rider.crate_name.clone(), dep));
     }
 
-    let synth_dir = work_dir.join(kind.dir_name());
+    let synth_dir = work_dir.join(kind.dir_name()).join(rider_set_dir(riders));
     let src_dir = synth_dir.join("src");
     std::fs::create_dir_all(&src_dir)
         .map_err(|e| build_err("native-component", format!("failed to create synth dir: {}", e)))?;
@@ -430,6 +451,43 @@ fn find_staticlib(target_dir: &Path, lib_name: &str) -> Result<PathBuf, RiderBui
 mod tests {
     use super::*;
     use datalove_buildinfo::BuildInfo;
+
+    fn rider(name: &str) -> RiderCrate {
+        RiderCrate {
+            rider_name: name.to_string(),
+            crate_name: format!("datalove-rider-{}", name),
+            version: "0.1.0".to_string(),
+            dir: None,
+        }
+    }
+
+    /// Two rider sets are built apart, so neither's library is the other's.
+    ///
+    /// They shared one directory once, and the library's name says nothing
+    /// about what went into it, so the second set built over the first and a
+    /// load of the first's path came up without its symbols.
+    #[test]
+    fn a_rider_set_is_built_in_its_own_directory() {
+        let one = rider_set_dir(&[rider("std")]);
+        let two = rider_set_dir(&[rider("std"), rider("other")]);
+        let none = rider_set_dir(&[]);
+
+        assert_ne!(one, two);
+        assert_ne!(one, none);
+        assert_ne!(two, none);
+
+        // The same set asks for the same directory, or nothing would ever be
+        // reused between runs.
+        assert_eq!(one, rider_set_dir(&[rider("std")]));
+    }
+
+    /// Order is part of the set, since it is the order the deps are written in.
+    #[test]
+    fn a_reordered_rider_set_is_a_different_directory() {
+        let forward = rider_set_dir(&[rider("a"), rider("b")]);
+        let backward = rider_set_dir(&[rider("b"), rider("a")]);
+        assert_ne!(forward, backward);
+    }
 
     /// A release names published versions, which is the arrangement that
     /// cannot be tried for real until something is published.
