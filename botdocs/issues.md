@@ -18,7 +18,6 @@ home here.
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [A specialized function keeps an original nobody calls](#user-content-a-specialized-function-keeps-an-original-nobody-calls)
-- [The runtime is duplicated across the rider dlopen boundary, and shares a heap across it](#user-content-the-runtime-is-duplicated-across-the-rider-dlopen-boundary-and-shares-a-heap-across-it)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
 
 ## Nothing but a test inlines
@@ -141,45 +140,6 @@ An AOT build has no later script unit. There, a function whose every call site
 was specialized keeps an original that nothing reaches, and it is emitted.
 Dead-code elimination over the module graph would remove it; nothing does that
 today.
-
-## The runtime is duplicated across the rider dlopen boundary, and shares a heap across it
-
-**Latent. Works today only because both copies use the same system malloc.**
-
-`rider_build.rs` synthesizes a crate with `extern crate datalove_rt;` and builds
-it as a `cdylib`, which `rider_load.rs` then `dlopen`s. That shared library
-carries its own copy of `datalove-rt` and its own Rust global allocator, so the
-process contains **two runtimes**. They do not merely coexist: they touch the
-same `AllocLocal`, whose `active_allocations` is a `HashMap` on the Rust heap.
-
-So a `HashMap` grown inside the dlopened library is allocated by that copy's
-allocator and freed by the main binary's, or the reverse. Both resolve to glibc
-malloc today, so it happens to work.
-
-Putting `#[global_allocator] = mimalloc` on the `std_all_tests` harness segfaults
-immediately, and the backtrace says exactly this:
-
-```
-mi_free (p=0x7f1b240020f0)                      <- not a mimalloc pointer
-<mimalloc::MiMalloc as GlobalAlloc>::dealloc
-hashbrown::raw::free_buckets
-hashbrown::raw::reserve_rehash<(*mut u8, datalove_rt::impls::alloc::unix_impl::AllocationInfo), ...>
-<datalove_rt::impls::alloc::unix_impl::AllocLocal>::alloc
-datalove_rt::impls::string::string_push_bytes_local
-```
-
-The cli was unaffected by the same experiment: it reaches riders through
-`register_linked_natives`, which are linked into the binary, so there is one
-runtime and one allocator. It is the dlopen path that duplicates. Nothing in the
-tree sets a global allocator today -- the experiment was measured and backed out
--- so this is latent rather than live.
-
-This is worth fixing on its own terms, separately from any allocator question. A
-rider library built by a different toolchain, a different rustc, or with a
-different allocator would break the same way, and the failure is a segfault in
-free rather than anything that names the cause. The fix is for the boundary to
-be a C ABI over pointers the two sides do not both own -- the shared library
-should not be handing Rust heap ownership back and forth with its host.
 
 ## The loop check asks where a binding ended up, not whether its move repeats
 
