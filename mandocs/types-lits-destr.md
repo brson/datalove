@@ -86,7 +86,7 @@ let a: [|int, 3|] = [|
 | `()`                          | `()`                           | `let ()`                      |
 | `(T1,)`                       | `(true,)`                      | `let (a,)`                    |
 | `(T1, T2)`                    | `(true, 42)`                   | `let (a, b)`                  |
-| `{ x: T1, y: T2}`             | `{x = 1, y = 2}`               | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
+| `{x: T1, y: T2}`              | `{x = 1, y = 2}`               | `let {x, y}` <br> `let {x = my_x, y = my_y}` |
 | `?T`                          | `some 1` <br> `none`           | `some a` <br> `none` †        |
 | `!T`                          | `ok 1` <br> `er 2`             | `ok a` <br> `er b` †          |
 | `atom Foo`                    | `atom Foo`                     | `let atom Foo`                |

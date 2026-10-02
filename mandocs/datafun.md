@@ -4,7 +4,8 @@ _Datalove Functions_ is the side-effect-free sublanguage of Datalove.
 We often refer to it as _datafun_.
 On top of the data types defined by [Datalove Literals](datalit.md) it adds:
 
-- Pure and (nearly) total functions.
+- Pure and (nearly) total functions
+  that cannot perform I/O and have no exceptional control-flow.
 - A simple, acyclic module system.
 - Constants with full compile-time function evaluation.
 - Reactive script units that may be chained together, and that incrementally
@@ -17,6 +18,8 @@ suitable as a constrained embedded application scripting language.
 
 This document is a broad overview of the language.
 For detail see additional documentation.
+
+
 
 
 ## Contents
@@ -54,11 +57,30 @@ Aggregates:
 
 As well as the dynamic types, `data` and `error`.
 
+Types can be given names with the `type` statement.
+These are called _type aliases_ and do not create new types.
+They can be used to name the type but not construct it.
+They are spelled with `SnakeCase` by convention.
+
+```datalove
+type Shape: enum {
+  atom Circle,
+  term Rect (f32, f32),
+}
+
+fun debug_shape(my_shape: Shape)
+  debuglog my_shape
+end fun
+
+debug_shape(atom Circle)
+```
+
+
 
 
 ## Functions
 
-Functions have a line-oriented and statement-oriented syntax:
+Functions have a line-oriented and statement-oriented syntax.
 
 ```datalove
 require module sys/std/string
@@ -91,7 +113,7 @@ end fun
 ```
 
 Lines can break freely between matched braces of all kinds
-(`( .. )`, `{ .. }`, `< .. >` and others):
+(`( .. )`, `{ .. }`, `< .. >` and others).
 
 ```datalove
 fun count_substrings(
@@ -135,6 +157,8 @@ Immutable bindings are declared with `let`, mutable with `var`.
 Mutable bindings are reassigned with `set`.
 
 
+
+
 ## Control flow
 
 Loops are written with the `loop` keyword, `break` and `continue`.
@@ -163,7 +187,7 @@ end loop
 debuglog (evens, odds)
 ```
 
-Conditional loops are written with `loop while`:
+Conditional loops are written with `loop while`.
 
 ```datalove
 require module sys/std/int
@@ -187,9 +211,73 @@ debuglog (evens, odds)
 ```
 
 
+
+
 ## Data types and destructuring
 
+Datalove types and values are generally spelled the same way,
+or at least in predictably similar ways,
+so e.g. the set type is `#{ K }` and its constructor is `#{ 1, 2, 3}`.
+Similarly, aggregate data types can generally be destructured
+with spellings similar to their constructors,
+with struct-like types (product types) destructuring directly
+into `let` bindings, and option/result and enums (sum types)
+using specialized control flow constructs.
+
+```datalove
+let (a, b) = (true, 100)
+
+let {a, b} = {a = true, b = 100}
+
+// Binding the fields to new names.
+let {
+  a = my_a,
+  b = my_b,
+} = {a = true, b = 100}
+
+debuglog (my_a, my_b)
+
+let term Foo x = term Foo "bar"
+```
+
+Values can also be destructured into `var` bindings,
+making each binding individually mutable.
+
+```datalove
+var (a, b) = (true, 100)
+set a = false
+set b = 200
+debuglog (a, b)
+```
+
+
+
+
 ## Option and result
+
+The option and result types are destructured
+with special `if` statements.
+
+```datalove
+let maybe_label = some "report"
+
+if maybe_label |label_text|
+  debuglog label_text
+else
+  debuglog "no label"
+end if
+
+let report_status = ok "sent"
+
+if report_status |status|
+  debuglog ("report status ok", status)
+else |e|
+  debuglog ("report status error", e)
+end if
+```
+
+
+
 
 ## Enums and match statements
 
