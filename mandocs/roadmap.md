@@ -5,7 +5,8 @@ Neither the design nor implementation are complete.
 
 I am currently focused on end-to-end compiler architecture
 to ensure all my primary goals are feasible,
-as well as working on the CLI repl experience.
+as well as working on the CLI repl experience
+for my own use and to shake out bugs.
 
 The surface language is spartan,
 as is the standard library,
@@ -19,9 +20,8 @@ and the language can perform no direct I/O.
 Initial prototype.
 Thorough compiler architecture, bare language.
 
-- [ ] documentation
+- [ ] basic documentation
 - [x] diagnostics
-- [ ] workspaces
 - [x] tensors and tables
 - [x] indexing
 - [x] adapt opt / clone and coerce / @
@@ -76,6 +76,7 @@ Focus on ergonomic REPL experience.
 
 ## Backburner
 
+- filesystem workspaces
 - doc generator and std docs
 - multiple scripts
 - pipeline tools
