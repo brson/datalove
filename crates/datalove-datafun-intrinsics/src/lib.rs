@@ -189,6 +189,20 @@ pub enum IntrinsicId {
     // Float width conversion (270-279).
     F32ToF64 = 270,
     F64ToF32 = 271,
+
+    // Fixed-width narrowing within a signedness (280-299). Keeps the low bits.
+    U16ToU8 = 280,
+    U32ToU8 = 281,
+    U32ToU16 = 282,
+    U64ToU8 = 283,
+    U64ToU16 = 284,
+    U64ToU32 = 285,
+    I16ToI8 = 286,
+    I32ToI8 = 287,
+    I32ToI16 = 288,
+    I64ToI8 = 289,
+    I64ToI16 = 290,
+    I64ToI32 = 291,
 }
 
 /// Simplified type for intrinsic parameters and return values.
@@ -1090,6 +1104,80 @@ pub static INTRINSICS: &[IntrinsicDef] = &[
         name: "srem_offset",
         params: &[IntrinsicType::Offset, IntrinsicType::Offset],
         ret: IntrinsicType::Offset,
+    },
+    // Fixed-width narrowing within a signedness. Keeps the low bits, which is
+    // the wrapping conversion; the checked one is written over it in `sys/std`.
+    IntrinsicDef {
+        id: IntrinsicId::U16ToU8,
+        name: "u16_to_u8",
+        params: &[IntrinsicType::U16],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U32ToU8,
+        name: "u32_to_u8",
+        params: &[IntrinsicType::U32],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U32ToU16,
+        name: "u32_to_u16",
+        params: &[IntrinsicType::U32],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U64ToU8,
+        name: "u64_to_u8",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U64ToU16,
+        name: "u64_to_u16",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::U64ToU32,
+        name: "u64_to_u32",
+        params: &[IntrinsicType::U64],
+        ret: IntrinsicType::U32,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I16ToI8,
+        name: "i16_to_i8",
+        params: &[IntrinsicType::I16],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I32ToI8,
+        name: "i32_to_i8",
+        params: &[IntrinsicType::I32],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I32ToI16,
+        name: "i32_to_i16",
+        params: &[IntrinsicType::I32],
+        ret: IntrinsicType::I16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToI8,
+        name: "i64_to_i8",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::I8,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToI16,
+        name: "i64_to_i16",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::I16,
+    },
+    IntrinsicDef {
+        id: IntrinsicId::I64ToI32,
+        name: "i64_to_i32",
+        params: &[IntrinsicType::I64],
+        ret: IntrinsicType::I32,
     },
 ];
 

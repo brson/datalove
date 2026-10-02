@@ -1,0 +1,24 @@
+require module sys/std/u32
+require module sys/std/i32
+
+import u32.from_u64
+import u32.from_u64_wrapping
+import i32.from_i64
+import i32.from_i64_wrapping
+
+// Narrowing to u32 and i32 from each wider integer of the same signedness.
+// The plain form is none out of range, at both ends for the signed ones.
+// The wrapping form keeps the low bits, so one past the end comes round to
+// the other end.
+
+let u64_max: u64 = 4294967295
+let u64_over: u64 = 4294967296
+let u64_cases = (from_u64(u64_max), from_u64(u64_over), from_u64_wrapping(u64_max), from_u64_wrapping(u64_over))
+
+let i64_max: i64 = 2147483647
+let i64_over: i64 = 2147483648
+let i64_min: i64 = -2147483648
+let i64_under: i64 = -2147483649
+let i64_cases = (from_i64(i64_max), from_i64(i64_over), from_i64(i64_min), from_i64(i64_under), from_i64_wrapping(i64_over), from_i64_wrapping(i64_under))
+
+let output = (u64_cases, i64_cases)

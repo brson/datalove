@@ -1645,6 +1645,14 @@ widen implicitly, and `f64` does not narrow by `@`: `f32.from_f64` converts
 that way, rounding, with none for a finite value too large for an `f32` to
 hold.
 
+Fixed-width integers do not narrow by `@` either. Each one has `from_X` and
+`from_X_wrapping` for every wider fixed-width integer of the same signedness,
+so `u8.from_u64` and `i16.from_i32` but not `u8.from_i64`. `from_X` gives
+none for a value outside the target's range; `from_X_wrapping` keeps the low
+bits. Narrowing from `int` or across signedness, and conversions between the
+fixed-width integers and `index`, `offset` or the floats, are not provided
+yet.
+
 `index` and `offset` widen only to `int`. They are 32-bit or 64-bit
 depending on how the compiler is configured, so a conversion to a fixed
 width would mean something different in each configuration, while `int`

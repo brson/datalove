@@ -212,6 +212,56 @@ impl IrInterpreter {
                 let a = self.read_f64(&args[0], frame, frames);
                 self.write_f32(a as f32, dest);
             }
+
+            // Fixed-width narrowing, keeping the low bits.
+            U16ToU8 => {
+                let a = self.read_u16(&args[0], frame, frames);
+                self.write_u8(a as u8, dest);
+            }
+            U32ToU8 => {
+                let a = self.read_u32(&args[0], frame, frames);
+                self.write_u8(a as u8, dest);
+            }
+            U32ToU16 => {
+                let a = self.read_u32(&args[0], frame, frames);
+                self.write_u16(a as u16, dest);
+            }
+            U64ToU8 => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_u8(a as u8, dest);
+            }
+            U64ToU16 => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_u16(a as u16, dest);
+            }
+            U64ToU32 => {
+                let a = self.read_u64(&args[0], frame, frames);
+                self.write_u32(a as u32, dest);
+            }
+            I16ToI8 => {
+                let a = self.read_i16(&args[0], frame, frames);
+                self.write_i8(a as i8, dest);
+            }
+            I32ToI8 => {
+                let a = self.read_i32(&args[0], frame, frames);
+                self.write_i8(a as i8, dest);
+            }
+            I32ToI16 => {
+                let a = self.read_i32(&args[0], frame, frames);
+                self.write_i16(a as i16, dest);
+            }
+            I64ToI8 => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_i8(a as i8, dest);
+            }
+            I64ToI16 => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_i16(a as i16, dest);
+            }
+            I64ToI32 => {
+                let a = self.read_i64(&args[0], frame, frames);
+                self.write_i32(a as i32, dest);
+            }
             F64ToBits => {
                 let a = self.read_f64(&args[0], frame, frames);
                 self.write_u64(a.to_bits(), dest);

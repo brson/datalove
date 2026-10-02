@@ -126,6 +126,35 @@ fun cast_unsigned(self: i16): u16
   ret icall i16_to_u16(self)
 end fun
 
+// Conversion from the wider signed integers.
+//
+// `@` widens but never narrows, so these are the way down. The plain form is
+// none when the value is out of range; the wrapping form keeps the low bits.
+
+fun from_i32(x: i32): ?i16
+  if x >= min_value()@ and x <= max_value()@
+    ret some icall i32_to_i16(x)
+  else
+    ret none
+  end if
+end fun
+
+fun from_i32_wrapping(x: i32): i16
+  ret icall i32_to_i16(x)
+end fun
+
+fun from_i64(x: i64): ?i16
+  if x >= min_value()@ and x <= max_value()@
+    ret some icall i64_to_i16(x)
+  else
+    ret none
+  end if
+end fun
+
+fun from_i64_wrapping(x: i64): i16
+  ret icall i64_to_i16(x)
+end fun
+
 // Checked arithmetic.
 
 fun neg_checked(self: i16): ?i16

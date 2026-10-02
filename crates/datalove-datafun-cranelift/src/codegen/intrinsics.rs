@@ -230,6 +230,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let a = self.get_operand_value(builder, &args[0])?;
                 builder.ins().fdemote(cl_ir::types::F32, a)
             }
+
+            // Fixed-width narrowing, keeping the low bits.
+            U16ToU8 | U32ToU8 | U64ToU8 | I16ToI8 | I32ToI8 | I64ToI8 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ireduce(cl_ir::types::I8, a)
+            }
+            U32ToU16 | U64ToU16 | I32ToI16 | I64ToI16 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ireduce(cl_ir::types::I16, a)
+            }
+            U64ToU32 | I64ToI32 => {
+                let a = self.get_operand_value(builder, &args[0])?;
+                builder.ins().ireduce(cl_ir::types::I32, a)
+            }
             F64ToBits => {
                 let a = self.get_operand_value(builder, &args[0])?;
                 builder.ins().bitcast(cl_ir::types::I64, cl_ir::MemFlagsData::new(), a)

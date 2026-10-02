@@ -1,0 +1,52 @@
+require module sys/std/u8
+require module sys/std/i8
+
+import u8.from_u16
+import u8.from_u16_wrapping
+import u8.from_u32
+import u8.from_u32_wrapping
+import u8.from_u64
+import u8.from_u64_wrapping
+import i8.from_i16
+import i8.from_i16_wrapping
+import i8.from_i32
+import i8.from_i32_wrapping
+import i8.from_i64
+import i8.from_i64_wrapping
+
+// Narrowing to u8 and i8 from each wider integer of the same signedness.
+// The plain form is none out of range, at both ends for the signed ones.
+// The wrapping form keeps the low bits, so one past the end comes round to
+// the other end.
+
+let u16_max: u16 = 255
+let u16_over: u16 = 256
+let u16_cases = (from_u16(u16_max), from_u16(u16_over), from_u16_wrapping(u16_max), from_u16_wrapping(u16_over))
+
+let u32_max: u32 = 255
+let u32_over: u32 = 256
+let u32_cases = (from_u32(u32_max), from_u32(u32_over), from_u32_wrapping(u32_max), from_u32_wrapping(u32_over))
+
+let u64_max: u64 = 255
+let u64_over: u64 = 256
+let u64_cases = (from_u64(u64_max), from_u64(u64_over), from_u64_wrapping(u64_max), from_u64_wrapping(u64_over))
+
+let i16_max: i16 = 127
+let i16_over: i16 = 128
+let i16_min: i16 = -128
+let i16_under: i16 = -129
+let i16_cases = (from_i16(i16_max), from_i16(i16_over), from_i16(i16_min), from_i16(i16_under), from_i16_wrapping(i16_over), from_i16_wrapping(i16_under))
+
+let i32_max: i32 = 127
+let i32_over: i32 = 128
+let i32_min: i32 = -128
+let i32_under: i32 = -129
+let i32_cases = (from_i32(i32_max), from_i32(i32_over), from_i32(i32_min), from_i32(i32_under), from_i32_wrapping(i32_over), from_i32_wrapping(i32_under))
+
+let i64_max: i64 = 127
+let i64_over: i64 = 128
+let i64_min: i64 = -128
+let i64_under: i64 = -129
+let i64_cases = (from_i64(i64_max), from_i64(i64_over), from_i64(i64_min), from_i64(i64_under), from_i64_wrapping(i64_over), from_i64_wrapping(i64_under))
+
+let output = (u16_cases, u32_cases, u64_cases, i16_cases, i32_cases, i64_cases)

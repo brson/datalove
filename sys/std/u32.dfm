@@ -225,6 +225,23 @@ fun cast_signed(self: u32): i32
   ret icall u32_to_i32(self)
 end fun
 
+// Conversion from the wider unsigned integers.
+//
+// `@` widens but never narrows, so these are the way down. The plain form is
+// none when the value is out of range; the wrapping form keeps the low bits.
+
+fun from_u64(x: u64): ?u32
+  if x <= max_value()@
+    ret some icall u64_to_u32(x)
+  else
+    ret none
+  end if
+end fun
+
+fun from_u64_wrapping(x: u64): u32
+  ret icall u64_to_u32(x)
+end fun
+
 // Checked arithmetic.
 
 fun neg_checked(self: u32): ?u32
