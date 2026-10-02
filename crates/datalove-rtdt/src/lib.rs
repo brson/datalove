@@ -432,6 +432,53 @@ impl Int {
 
         result
     }
+
+    /// The value as an `i128`, or none when it does not fit in one.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `abs(size_and_sign)` readable limbs.
+    pub unsafe fn to_i128(&self) -> std::option::Option<i128> {
+        let limbs = unsafe { self.limbs() };
+        if limbs.len() > 4 {
+            return std::option::Option::None;
+        }
+        let magnitude = limbs.iter().rev().fold(0u128, |acc, &limb| (acc << 32) | limb as u128);
+        if self.size_and_sign < 0 {
+            0i128.checked_sub_unsigned(magnitude)
+        } else {
+            i128::try_from(magnitude).ok()
+        }
+    }
+
+    /// The low 64 bits of the value in two's complement, which is the value
+    /// wrapped to 64 bits.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `abs(size_and_sign)` readable limbs.
+    pub unsafe fn low_u64(&self) -> u64 {
+        let limbs = unsafe { self.limbs() };
+        let low = limbs.iter().take(2).rev().fold(0u64, |acc, &limb| (acc << 32) | limb as u64);
+        if self.size_and_sign < 0 {
+            low.wrapping_neg()
+        } else {
+            low
+        }
+    }
+
+    /// The limbs, least significant first.
+    ///
+    /// # Safety
+    ///
+    /// `data` must point to `abs(size_and_sign)` readable limbs.
+    unsafe fn limbs(&self) -> &[u32] {
+        let abs_size = self.size_and_sign.unsigned_abs() as usize;
+        if abs_size == 0 {
+            return &[];
+        }
+        unsafe { std::slice::from_raw_parts(self.data, abs_size) }
+    }
 }
 
 

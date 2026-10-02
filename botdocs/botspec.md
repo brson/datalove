@@ -1649,9 +1649,10 @@ Fixed-width integers do not narrow by `@` either. Each one has `from_X` and
 `from_X_wrapping` for every wider fixed-width integer of the same signedness,
 so `u8.from_u64` and `i16.from_i32` but not `u8.from_i64`. `from_X` gives
 none for a value outside the target's range; `from_X_wrapping` keeps the low
-bits. Narrowing from `int` or across signedness, and conversions between the
-fixed-width integers and `index`, `offset` or the floats, are not provided
-yet.
+bits. Every fixed-width integer also has `from_int` and `from_int_wrapping`,
+the wrapping form keeping the low bits of the value in two's complement.
+Narrowing across signedness, and conversions between the fixed-width integers
+and `index`, `offset` or the floats, are not provided yet.
 
 `index` and `offset` widen only to `int`. They are 32-bit or 64-bit
 depending on how the compiler is configured, so a conversion to a fixed

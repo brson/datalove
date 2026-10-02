@@ -200,6 +200,15 @@ native fun f32_from_int(ref n: int): ?f32
 native fun int_from_f64(x: f64): ?int
 native fun int_from_f32(x: f32): ?int
 
+// Conversion from the integers to the widest fixed-width integers. The plain
+// forms are none out of range; the low-bits forms wrap to 64 bits. Narrower
+// widths are reached from these by the fixed-width modules.
+
+native fun int_to_u64(ref n: int): ?u64
+native fun int_to_i64(ref n: int): ?i64
+native fun int_low_bits_u64(ref n: int): u64
+native fun int_low_bits_i64(ref n: int): i64
+
 // Float formatting and parsing.
 
 native fun string_from_f64(x: f64): string

@@ -1,0 +1,21 @@
+require module sys/std/u32
+
+import u32.from_int
+import u32.from_int_wrapping
+
+// Narrowing from int to u32. The plain form is none past either end of the
+// range; the wrapping form keeps the low bits, as two's complement, so one past
+// one end comes round to the other, and a value wider than 64 bits keeps its
+// low bits too.
+
+let max: int = 4294967295
+let over: int = 4294967296
+let min: int = 0
+let under: int = -1
+let huge: int = 1180591620717411303429
+let neg_huge: int = -1180591620717411303429
+
+let checked = (from_int(ref max), from_int(ref over), from_int(ref min), from_int(ref under), from_int(ref huge), from_int(ref neg_huge))
+let wrapping = (from_int_wrapping(ref over), from_int_wrapping(ref under), from_int_wrapping(ref huge), from_int_wrapping(ref neg_huge))
+
+let output = (checked, wrapping)

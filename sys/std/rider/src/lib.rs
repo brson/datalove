@@ -2037,6 +2037,62 @@ pub extern "C-unwind" fn dlr_std__f32_from_int(
     OK
 }
 
+// --- Conversion from the integers to the fixed-width integers ---
+
+/// Convert a bigint to a `u64`, or none if it is out of range.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_to_u64(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let n = unsafe { (*(n_ptr as *const rtdt::Int)).to_i128() };
+    match n.and_then(|n| u64::try_from(n).ok()) {
+        Some(value) => unsafe { rider_helpers::write_option_some(out, value) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+/// Convert a bigint to an `i64`, or none if it is out of range.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_to_i64(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let n = unsafe { (*(n_ptr as *const rtdt::Int)).to_i128() };
+    match n.and_then(|n| i64::try_from(n).ok()) {
+        Some(value) => unsafe { rider_helpers::write_option_some(out, value) },
+        None => unsafe { rider_helpers::write_option_none(out) },
+    }
+    OK
+}
+
+/// The low 64 bits of a bigint in two's complement, as a `u64`.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_low_bits_u64(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let bits = unsafe { (*(n_ptr as *const rtdt::Int)).low_u64() };
+    unsafe { write_result(out, bits) };
+    OK
+}
+
+/// The low 64 bits of a bigint in two's complement, as an `i64`.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__int_low_bits_i64(
+    _rt: *mut u8,
+    n_ptr: *const u8, _n_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let bits = unsafe { (*(n_ptr as *const rtdt::Int)).low_u64() };
+    unsafe { write_result(out, bits as i64) };
+    OK
+}
+
 /// The decimal digits of a float's integer part, truncated toward zero.
 ///
 /// `None` for a value with no integer part to name, which is a nan or an

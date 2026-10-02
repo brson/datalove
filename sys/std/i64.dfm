@@ -1,3 +1,7 @@
+require rider std
+import std.int_to_i64
+import std.int_low_bits_i64
+
 // Constants.
 
 fun min_value(): i64
@@ -124,6 +128,19 @@ end fun
 
 fun cast_unsigned(self: i64): u64
   ret icall i64_to_u64(self)
+end fun
+
+// Conversion from int.
+//
+// The plain form is none out of range; the wrapping form keeps the low bits,
+// as two's complement for a negative value.
+
+fun from_int(ref n: int): ?i64
+  ret int_to_i64(ref n)
+end fun
+
+fun from_int_wrapping(ref n: int): i64
+  ret int_low_bits_i64(ref n)
 end fun
 
 // Checked arithmetic.
