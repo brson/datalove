@@ -24,7 +24,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get the type of the result to determine how to compile.
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
-
         // Check operand types for Int operations.
         let lhs_ty = self.get_operand_type(lhs)?;
         let rhs_ty = self.get_operand_type(rhs)?;
@@ -85,6 +84,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 | IrType::Enum(_)
         ) {
             return self.compile_structural_eq(builder, dest, op, lhs, rhs);
+        }
+
+        // What is left has to be a scalar the instructions below can read.
+        // Anything else would compare whatever word stands for it, which for
+        // an aggregate is its address: a wrong answer rather than a failure.
+        if !matches!(
+            operand_ty,
+            IrType::Bool
+                | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+                | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64
+                | IrType::Index | IrType::Offset
+                | IrType::F32 | IrType::F64
+        ) {
+            panic!("{:?} on {:?}, which has no scalar form to compare", op, operand_ty);
         }
 
         let lhs_val = self.get_operand_value(builder, lhs)?;

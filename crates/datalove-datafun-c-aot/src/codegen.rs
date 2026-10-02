@@ -1002,6 +1002,20 @@ impl<'a> FunctionCodegenContext<'a> {
             return Ok(());
         }
 
+        // What is left has to be a scalar the instructions below can read.
+        // Anything else would compare whatever word stands for it, which for
+        // an aggregate is its address: a wrong answer rather than a failure.
+        if !matches!(
+            operand_ty,
+            IrType::Bool
+                | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+                | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64
+                | IrType::Index | IrType::Offset
+                | IrType::F32 | IrType::F64
+        ) {
+            panic!("{:?} on {:?}, which has no scalar form to compare", op, operand_ty);
+        }
+
         let lhs_c_ty = types::ir_type_to_c(lhs_ty);
         let dest_c_ty = types::ir_type_to_c(dest_ty);
 
