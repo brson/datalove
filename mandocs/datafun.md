@@ -57,6 +57,27 @@ Aggregates:
 
 As well as the dynamic types, `data` and `error`.
 
+Integer literals have the bigint `int` type by default.
+To create integers of other types use a prefix
+type hint of the form `: <type> / <expr>`,
+which can be applied to any expression.
+
+```datalove
+fun u32_zero(): u32
+  ret : u32 / 0
+end fun
+```
+
+Specifying the type in an intermediate `let` binding
+also works.
+
+```datalove
+fun u32_zero(): u32
+  let zero: u32 = 0
+  ret zero
+end fun
+```
+
 Types can be given names with the `type` statement.
 These are called _type aliases_ and do not create new types.
 They can be used to name the type but not construct it.
@@ -286,7 +307,7 @@ Enums are destructured with `match`.
 
 ```datalove
 type Shape: enum {
-  term Point
+  atom Point,
   term Rect (f32, f32),
 }
 
@@ -315,7 +336,48 @@ end match
 
 
 
+
 ## Option and result handling
+
+Optional and result types are first-class in the language,
+spelled `?T` and `!T`. The question mark and bang sigils
+are reserved solely for types operations involving
+optional values and error handling.
+
+Optionals contain an optional payload, spelled `some x`,
+or they are empty, spelled `none`. Results are for handling
+fallible operations, and are either `ok x` or `er e`,
+where the type of `e` must by the dynamic `error` type.
+
+```datalove
+let maybe_text1: ?string = some "status info"
+let maybe_text2: ?string = none
+let result_text1: ?string = ok "status info"
+let result_text2: ?string = er error "failed to load"
+```
+
+As described previously their payloads are accessed
+by destructuring using `if` statements.
+
+```datalove
+require module sys/std/u32
+
+import u32.add_checked
+import u32.max_value
+
+fun add_saturating(self: u32, other: u32): u32
+  if add_checked(self, other) |value|
+    ret value
+  else
+    ret max_value()
+  end if
+end fun
+
+debuglog(: u32 /
+```
+
+
+
 
 ## Comparison and equality
 

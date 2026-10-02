@@ -169,7 +169,7 @@ Enums with `match`.
 
 ```datalove
 type Shape: enum {
-  term Point
+  atom Point,
   term Rect (f32, f32),
 }
 
