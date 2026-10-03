@@ -1,12 +1,19 @@
-//! Frame layout computation for Cranelift compilation.
+//! Frame layout of a compiled function.
 //!
-//! Computes stack slot offsets for values and mutable slots within a function frame,
-//! matching the interpreter's layout for ABI compatibility.
+//! Where each parameter, value and slot of a code unit lives in the frame the
+//! compiled backends give it, and where the tracking bytes go. Both the
+//! cranelift and the C backend lay their frames out from this. The interpreter
+//! does not: its `IrLayout` keeps parameters out of the frame and tracks
+//! liveness beside it, so its offsets differ from these. Nothing reads one
+//! function's frame from another's code, so the two need not agree.
+//!
+//! Sizes come from `layout::layout_of`, so a value occupies the same bytes here
+//! as it does anywhere else.
 
-use datalove_datafun_ir::{IrType, ParamId, SlotId};
-use crate::types::{self, align_up, TypeLayout, CraneliftRepr};
+use crate::layout::{align_up, layout_of, TypeLayout};
+use crate::{IrType, ParamId, SlotId};
 
-/// Layout information for a single value or slot.
+/// Layout information for a single parameter, value or slot.
 #[derive(Debug, Clone)]
 pub struct SlotLayout {
     /// Offset from frame base.
@@ -15,8 +22,6 @@ pub struct SlotLayout {
     pub size: u32,
     /// Alignment requirement.
     pub align: u32,
-    /// Cranelift representation.
-    pub repr: CraneliftRepr,
     /// Offset of tracking byte, if this value/slot is tracked.
     pub tracking_byte: Option<u32>,
 }
@@ -32,9 +37,6 @@ pub mod tracking {
 }
 
 /// Layout information for a function/unit frame.
-///
-/// Maps ValueId/SlotId to stack slot offsets. This matches the interpreter's
-/// `IrLayout` for ABI compatibility.
 #[derive(Debug)]
 pub struct FrameLayout {
     /// Layout for each ValueId.
@@ -56,8 +58,8 @@ pub struct FrameLayout {
 impl FrameLayout {
     /// Compute frame layout from IR type arrays.
     ///
-    /// Layout order: params, values, slots, tracking bytes.
-    /// Tracked slots and Out params need tracking bytes.
+    /// Layout order: params, values, slots, tracking bytes. Tracked slots and
+    /// tracked params each get a tracking byte; values are precise and get none.
     pub fn compute(
         param_types: &[IrType],
         value_types: &[IrType],
@@ -65,77 +67,36 @@ impl FrameLayout {
         tracked_slots: &[SlotId],
         tracked_params: &[ParamId],
     ) -> Self {
-        let mut params = Vec::with_capacity(param_types.len());
-        let mut values = Vec::with_capacity(value_types.len());
-        let mut slots = Vec::with_capacity(slot_types.len());
-
         let mut offset = 0u32;
         let mut max_align = 1u32;
-
-        // Layout params first (pointers to caller's data).
-        // Params are stored as pointers regardless of their underlying type.
-        for ty in param_types {
-            let repr = types::ir_type_to_cranelift(ty);
-
-            offset = align_up(offset, types::PTR_ALIGN);
-            params.push(SlotLayout {
+        let mut place = |layout: TypeLayout| {
+            offset = align_up(offset, layout.align);
+            let slot = SlotLayout {
                 offset,
-                size: types::PTR_SIZE,
-                align: types::PTR_ALIGN,
-                repr,
+                size: layout.size,
+                align: layout.align,
                 tracking_byte: None,
-            });
-            offset += types::PTR_SIZE;
-            max_align = max_align.max(types::PTR_ALIGN);
-        }
+            };
+            offset += layout.size;
+            max_align = max_align.max(layout.align);
+            slot
+        };
 
-        // Layout values (no tracking bytes - all values are precise).
-        for ty in value_types {
-            let repr = types::ir_type_to_cranelift(ty);
-            let TypeLayout { size, align } = repr.layout();
+        // A parameter is a pointer to the caller's data, whatever its type.
+        let ptr = layout_of(&IrType::Ref(Box::new(IrType::Unit)));
+        let mut params: Vec<SlotLayout> = param_types.iter().map(|_| place(ptr)).collect();
+        let values: Vec<SlotLayout> = value_types.iter().map(|ty| place(layout_of(ty))).collect();
+        let mut slots: Vec<SlotLayout> = slot_types.iter().map(|ty| place(layout_of(ty))).collect();
 
-            offset = align_up(offset, align);
-            values.push(SlotLayout {
-                offset,
-                size,
-                align,
-                repr,
-                tracking_byte: None,
-            });
-            offset += size;
-            max_align = max_align.max(align);
-        }
-
-        // Layout mutable slots.
-        for ty in slot_types {
-            let repr = types::ir_type_to_cranelift(ty);
-            let TypeLayout { size, align } = repr.layout();
-
-            offset = align_up(offset, align);
-            slots.push(SlotLayout {
-                offset,
-                size,
-                align,
-                repr,
-                tracking_byte: None,
-            });
-            offset += size;
-            max_align = max_align.max(align);
-        }
-
-        // Layout tracking bytes region.
-        // Tracked slots and Out params need tracking bytes.
         let tracking_offset = offset;
         let slot_tracking_count = tracked_slots.len() as u32;
-        let param_tracking_count = tracked_params.len() as u32;
-        let tracking_count = slot_tracking_count + param_tracking_count;
+        let tracking_count = slot_tracking_count + tracked_params.len() as u32;
 
-        // Assign tracking byte offsets to tracked slots.
         for (i, &sid) in tracked_slots.iter().enumerate() {
             slots[sid.0 as usize].tracking_byte = Some(tracking_offset + i as u32);
         }
 
-        // Assign tracking byte offsets to tracked params (after slots).
+        // Tracked params' bytes come after the slots'.
         let param_tracking_base = tracking_offset + slot_tracking_count;
         for (i, &pid) in tracked_params.iter().enumerate() {
             params[pid.0 as usize].tracking_byte = Some(param_tracking_base + i as u32);
@@ -143,9 +104,8 @@ impl FrameLayout {
 
         offset += tracking_count;
 
-        // Ensure frame_size is at least 1 so we always have a valid frame slot.
-        // This is needed for zero-size types like Unit that still need a valid
-        // address for debuglog.
+        // At least 1, so there is always a valid address in the frame, which
+        // debuglog of a zero-size type such as unit needs.
         let frame_size = align_up(offset, max_align).max(1);
 
         Self {
@@ -172,6 +132,21 @@ impl FrameLayout {
     /// Get the offset for a param by index.
     pub fn param_offset(&self, idx: u32) -> u32 {
         self.params[idx as usize].offset
+    }
+
+    /// Get the tracking byte offset for a value, if tracked.
+    pub fn value_tracking_byte(&self, idx: u32) -> Option<u32> {
+        self.values[idx as usize].tracking_byte
+    }
+
+    /// Get the tracking byte offset for a slot, if tracked.
+    pub fn slot_tracking_byte(&self, idx: u32) -> Option<u32> {
+        self.slots[idx as usize].tracking_byte
+    }
+
+    /// Get the tracking byte offset for a param, if tracked.
+    pub fn param_tracking_byte(&self, idx: u32) -> Option<u32> {
+        self.params[idx as usize].tracking_byte
     }
 }
 

@@ -172,7 +172,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             })?;
             let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
             let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
-            let live = builder.ins().iconst(cl_types::I8, crate::layout::tracking::LIVE as i64);
+            let live = builder.ins().iconst(cl_types::I8, datalove_datafun_ir::frame_layout::tracking::LIVE as i64);
             let is_live = builder.ins().icmp(
                 cranelift_codegen::ir::condcodes::IntCC::Equal, track_val, live);
 

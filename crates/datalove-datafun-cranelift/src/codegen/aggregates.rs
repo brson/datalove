@@ -658,7 +658,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         field_path: &[u32],
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
         use cranelift_codegen::ir::types as cl_types;
 
         // Get base address and type from param.

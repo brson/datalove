@@ -190,7 +190,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         param: ParamId,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
         use cranelift_codegen::ir::types as cl_types;
 
         // Get the param pointer (points to caller's data).

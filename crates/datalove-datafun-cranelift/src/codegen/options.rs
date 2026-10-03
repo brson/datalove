@@ -210,7 +210,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         is_some: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         // Get source Option type.
         let src_ty = self.get_operand_type(src)?;
@@ -417,7 +417,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         is_ok: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         // Get source Result type.
         let src_ty = self.get_operand_type(src)?;

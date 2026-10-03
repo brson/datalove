@@ -209,7 +209,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 );
             }
             Some(track_offset) => {
-                use crate::layout::tracking;
+                use datalove_datafun_ir::frame_layout::tracking;
                 use cranelift_codegen::ir::types as cl_types;
 
                 let frame = self.frame_slot.ok_or_else(|| {

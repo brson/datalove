@@ -84,7 +84,7 @@ use datalove_datafun_ir::{
     ValueId,
 };
 
-use crate::layout::FrameLayout;
+use datalove_datafun_ir::frame_layout::FrameLayout;
 use crate::runtime::RuntimeImports;
 use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
@@ -1220,7 +1220,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         if let Some(track_offset) = self.tracking_byte_offset(operand) {
             let frame_slot = self.frame_slot
@@ -1237,7 +1237,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         if let Some(track_offset) = self.tracking_byte_offset(operand) {
             let frame_slot = self.frame_slot
@@ -1265,7 +1265,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Mark a tracked param as LIVE after store.
     fn mark_param_live(&self, builder: &mut FunctionBuilder, pid: ParamId) {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         if let Some(track_offset) = self.param_tracking_byte_offset(pid) {
             let frame_slot = self.frame_slot
@@ -1316,7 +1316,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         is_valid_val: cl_ir::Value,
     ) {
         if let Some(track_offset) = self.layout.values[dest.0 as usize].tracking_byte {
-            use crate::layout::tracking;
+            use datalove_datafun_ir::frame_layout::tracking;
             let frame_slot = self.frame_slot.expect("tracking requires frame slot");
             let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);

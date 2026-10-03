@@ -21,7 +21,6 @@
 //! - `main()`: Entry point that initializes runtime, runs body, cleans up.
 
 mod codegen;
-mod layout;
 mod types;
 mod tydesc;
 
@@ -32,7 +31,6 @@ use datalove_datafun_ir::{
     CodeRef, FunctionRegistry, IrCodeUnit, IrModuleId, IrType,
 };
 
-pub use layout::FrameLayout;
 pub use types::TypeLayout;
 
 /// Errors during C AOT compilation.

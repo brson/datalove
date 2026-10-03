@@ -30,11 +30,6 @@ impl CRepr {
             CRepr::Aggregate(layout) => *layout,
         }
     }
-
-    /// Check if this is a scalar type.
-    pub fn is_scalar(&self) -> bool {
-        matches!(self, CRepr::Scalar(_))
-    }
 }
 
 /// Get the size and alignment for a C scalar type.
@@ -58,13 +53,6 @@ fn scalar_type_layout(ty: &str) -> (u32, u32) {
         }
         _ => (8, 8), // Assume pointer-sized for unknown types
     }
-}
-
-/// Align a value up to the given alignment.
-#[inline]
-/// Round `value` up to a multiple of `align`.
-pub fn align_up(value: u32, align: u32) -> u32 {
-    ir_layout::align_up(value, align)
 }
 
 /// Get the C representation for an IR type.
@@ -133,12 +121,6 @@ pub fn uses_sret(ty: &IrType) -> bool {
         _ => matches!(ir_type_to_crepr(ty), CRepr::Aggregate(_)),
     }
 }
-
-/// Pointer size in bytes.
-pub const PTR_SIZE: u32 = 8;
-
-/// Pointer alignment in bytes.
-pub const PTR_ALIGN: u32 = 8;
 
 /// Bridge the shared layout type into this backend's own.
 fn to_layout(l: ir_layout::TypeLayout) -> TypeLayout {

@@ -1872,6 +1872,7 @@ The three `module-change-*` kinds drive the memoization tests.
 | `const/src/inline.rs` | `inline_script_consts()`, `inline_module_functions()` |
 | `ir/src/lib.rs` | `IrCodeUnit`, `CodeRef`, `IrType`, `Instruction` |
 | `ir/src/layout.rs` | The layout authority for `IrType` |
+| `ir/src/frame_layout.rs` | Frame layout shared by the cranelift and C backends; the interpreter has its own (`interp/src/layout.rs`) |
 | `ir/src/registry.rs` | `ModuleFunctionRegistry`, `UnitFunctionRegistry` |
 | `datafun/src/pipeline/mod.rs` | `ModuleCompilationPipeline` re-exports |
 | `datafun/src/pipeline/module_pipeline.rs` | The pipeline itself, `add_native_rider_units()` |

@@ -25,7 +25,7 @@
 
 // Re-export shared codegen infrastructure.
 pub use datalove_datafun_cranelift::{
-    codegen, index_types, layout, runtime, tydesc_emit, types,
+    codegen, index_types, runtime, tydesc_emit, types,
     CraneliftError,
 };
 

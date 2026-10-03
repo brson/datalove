@@ -11,9 +11,9 @@ use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
 use datalove_datafun_ir::{IrCodeUnit, IrType};
+use datalove_datafun_ir::layout as ir_layout;
 use datalove_rtdt::{
-    Data as RtData, Error as RtError, Int as RtInt, List as RtList, Map as RtMap,
-    Set as RtSet, String as RtString, Table as RtTable, Tensor as RtTensor, TyDesc,
+    List as RtList, Map as RtMap, Set as RtSet, Table as RtTable, Tensor as RtTensor, TyDesc,
     TyInfoEnum, TyInfoEnumVariant, TyInfoList, TyInfoMap, TyInfoOption, TyInfoResult,
     TyInfoSet, TyInfoStruct, TyInfoStructField, TyInfoTable, TyInfoTableColumn, TyInfoTensor,
     TyInfoTuple, TyInfoTupleField, TyTag,
@@ -432,12 +432,8 @@ impl TyDescEmitter {
         // First, emit the inner type TyDesc.
         let inner_tydesc_id = self.emit(module, inner_ty)?;
 
-        // Compute Option layout.
-        let inner_layout = crate::types::ir_type_to_cranelift(inner_ty).layout();
-        let tag_size = 1u32;
-        let payload_offset = crate::types::align_up(tag_size, inner_layout.align);
-        let overall_align = inner_layout.align.max(1);
-        let total_size = crate::types::align_up(payload_offset + inner_layout.size, overall_align);
+        let ir_layout::TypeLayout { size: total_size, align: overall_align } =
+            ir_layout::option_layout(inner_ty);
 
         // Build base TyDesc bytes.
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -490,16 +486,8 @@ impl TyDescEmitter {
         // First, emit the ok type TyDesc.
         let ok_tydesc_id = self.emit(module, ok_ty)?;
 
-        // Compute Result layout.
-        let ok_layout = crate::types::ir_type_to_cranelift(ok_ty).layout();
-        let error_size = size_of::<RtError>() as u32;
-        let error_align = align_of::<RtError>() as u32;
-        let tag_size = 1u32;
-        let max_payload_size = ok_layout.size.max(error_size);
-        let max_payload_align = ok_layout.align.max(error_align);
-        let payload_offset = crate::types::align_up(tag_size, max_payload_align);
-        let overall_align = max_payload_align.max(1);
-        let total_size = crate::types::align_up(payload_offset + max_payload_size, overall_align);
+        let ir_layout::TypeLayout { size: total_size, align: overall_align } =
+            ir_layout::result_layout(ok_ty);
 
         // Build base TyDesc bytes.
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -1396,29 +1384,30 @@ impl TyDescEmitter {
     fn build_tydesc_bytes(&self, ty: &IrType) -> Result<Vec<u8>, CraneliftError> {
         let mut bytes = vec![0u8; TYDESC_SIZE];
 
-        let (tag, size, align) = match ty {
+        let tag = match ty {
             // Unit is handled by emit_tuple_tydesc, not here.
-            IrType::Bool => (TyTag::Bool as u8, size_of::<bool>() as u32, align_of::<bool>() as u32),
-            IrType::U8 => (TyTag::U8 as u8, size_of::<u8>() as u32, align_of::<u8>() as u32),
-            IrType::I8 => (TyTag::I8 as u8, size_of::<i8>() as u32, align_of::<i8>() as u32),
-            IrType::U16 => (TyTag::U16 as u8, size_of::<u16>() as u32, align_of::<u16>() as u32),
-            IrType::I16 => (TyTag::I16 as u8, size_of::<i16>() as u32, align_of::<i16>() as u32),
-            IrType::U32 => (TyTag::U32 as u8, size_of::<u32>() as u32, align_of::<u32>() as u32),
-            IrType::I32 => (TyTag::I32 as u8, size_of::<i32>() as u32, align_of::<i32>() as u32),
-            IrType::U64 => (TyTag::U64 as u8, size_of::<u64>() as u32, align_of::<u64>() as u32),
-            IrType::I64 => (TyTag::I64 as u8, size_of::<i64>() as u32, align_of::<i64>() as u32),
-            IrType::Index => (TyTag::Index as u8, datalove_rtdt::INDEX_SIZE, datalove_rtdt::INDEX_ALIGN),
-            IrType::Offset => (TyTag::Offset as u8, datalove_rtdt::INDEX_SIZE, datalove_rtdt::INDEX_ALIGN),
-            IrType::F32 => (TyTag::F32 as u8, size_of::<f32>() as u32, align_of::<f32>() as u32),
-            IrType::F64 => (TyTag::F64 as u8, size_of::<f64>() as u32, align_of::<f64>() as u32),
-            IrType::Int => (TyTag::Int as u8, size_of::<RtInt>() as u32, align_of::<RtInt>() as u32),
-            IrType::String => (TyTag::String as u8, size_of::<RtString>() as u32, align_of::<RtString>() as u32),
-            IrType::Data => (TyTag::Data as u8, size_of::<RtData>() as u32, align_of::<RtData>() as u32),
-            IrType::Error => (TyTag::Error as u8, size_of::<RtError>() as u32, align_of::<RtError>() as u32),
+            IrType::Bool => TyTag::Bool,
+            IrType::U8 => TyTag::U8,
+            IrType::I8 => TyTag::I8,
+            IrType::U16 => TyTag::U16,
+            IrType::I16 => TyTag::I16,
+            IrType::U32 => TyTag::U32,
+            IrType::I32 => TyTag::I32,
+            IrType::U64 => TyTag::U64,
+            IrType::I64 => TyTag::I64,
+            IrType::Index => TyTag::Index,
+            IrType::Offset => TyTag::Offset,
+            IrType::F32 => TyTag::F32,
+            IrType::F64 => TyTag::F64,
+            IrType::Int => TyTag::Int,
+            IrType::String => TyTag::String,
+            IrType::Data => TyTag::Data,
+            IrType::Error => TyTag::Error,
             // An aggregate has its own emitter and does not reach here; `emit`
             // routes by type before the bytes are built.
             _ => panic!("scalar tydesc bytes for {:?}, which is not a scalar", ty),
-        };
+        } as u8;
+        let ir_layout::TypeLayout { size, align } = ir_layout::layout_of(ty);
 
         // Write fields.
         bytes[OFFSET_TYPE_TAG] = tag;

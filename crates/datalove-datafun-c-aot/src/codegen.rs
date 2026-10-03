@@ -9,7 +9,7 @@ use datalove_datafun_ir::{
     ValueId,
 };
 
-use crate::layout::FrameLayout;
+use datalove_datafun_ir::frame_layout::FrameLayout;
 use crate::types::{self, CRepr};
 use crate::{CAotCompiler, CAotError};
 

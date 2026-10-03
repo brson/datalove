@@ -124,7 +124,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<(), CraneliftError> {
-        use crate::layout::tracking;
+        use datalove_datafun_ir::frame_layout::tracking;
 
         // Get the type of the operand.
         let ty = self.get_operand_type(operand)?;
