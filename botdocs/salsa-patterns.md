@@ -445,6 +445,13 @@ count the rest. `ChunkLex` does, and without it the tokens would appear free.
 `database_memory_tests.rs` includes a test whose only job is to check the bytes
 are still counted, so that "no `Token` structs" cannot pass by hiding them.
 
+**Time.** Run the variants interleaved in one session -- A, B, A, B -- and
+compare medians. A block of A followed by a block of B measures the machine as
+much as the code: the parser profile saw one binary range from 8.9ms to 10.9ms
+in a session, and a change that read as 8% in blocks was nothing interleaved.
+`datalove-bench` has the front-end benches; build a fresh database per
+iteration outside the timer, or you measure a memo hit.
+
 ## Parallel execution
 
 `DbClone` lets a database be cloned across threads. Clones share `Arc<Zalsa>`,
@@ -476,6 +483,18 @@ Enabled with `DATALOVE_PARALLEL=1`.
   `bcts/src/source_map.rs`. It suppresses the equality check that backdating
   relies on, so add it only when equality is genuinely meaningless or too
   expensive, and say why.
+- **A tracked field read is a table lookup**, though it looks like a field
+  access. Read `#[returns(ref)]` fields once and carry the `&'db` slice into
+  hot loops; the lexer's `peek` and the bracer's iterator each re-read theirs
+  per character or token, and fixing that was the largest win in both
+  front-end profiles.
+- **Interning hashes every occurrence.** Salsa deduplicates, but only after
+  hashing into its sharded map, so interning a stream where a few dozen
+  strings recur tens of thousands of times (the lexer's whitespace and
+  sigils) is costly. Intern from a `&str` rather than building a `String`
+  first (the key need only be `HashEqLike` with the field), index fixed sets
+  by enum, and put a local `FxHashMap<&str, _>` in front for the rest; see
+  `bcts/src/lexer.rs`. And do not re-intern what a token already holds.
 - **Do not put a crate under `#![allow(unused)]`.** `bcts` was, and it hid 41
   warnings including two `db` parameters that a refactor had made redundant.
 

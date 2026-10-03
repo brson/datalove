@@ -6,9 +6,9 @@
 //! actually costs. Both were around 15ms of a 53ms first compile before phase
 //! 5a was memoized, which is to say an edit cost what compiling everything did.
 //!
-//! Held together by the pipeline: `plan-compile-reuse.md` measured that the
-//! `Source` inputs it owns are the unit of reuse, and rebuilding it loses
-//! everything, so these all drive one.
+//! Held together by the pipeline: the `Source` inputs it owns are the unit of
+//! reuse (see "Reusing a Compiled World" in `botdocs/compiler-guide.md`), and
+//! rebuilding it loses everything, so these all drive one.
 
 use std::cell::RefCell;
 

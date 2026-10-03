@@ -1038,7 +1038,7 @@ assume.
 | `ir_inline_tests` | The inlining pass |
 | `ir_serial_tests` | Serialization round-trip, and that both backends agree across it |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
-| `aot_layout_tests` | The AOT frame layout |
+| `aot_layout_tests` | The cranelift AOT type layouts against the interpreter's type descriptors |
 | `interp_specialize_tests` | Specialized and unspecialized output agreeing |
 | `dual_tests`, `c_dual_tests` | The interpreter and the two AOT backends agreeing |
 
@@ -1055,7 +1055,9 @@ Bless expected output with `BLESS=1 cargo test`.
 - [Language Specification](botspec.md) -- what the source means
 - [The Native Rider ABI](native-abi.md) -- how a native call is made
 - [Generics and Specialization](plan-generics.md) -- where erasure is going
-- [Const Parameter Implementation](const-param-impl-plan.md) -- monomorphization
-- [Unified Code Unit Migration](plan-unified-code-unit.md) -- how `IrCodeUnit`
-  came to represent all three kinds
-- [index-64 Feature](index-64.md) -- what decides the width of `Index`
+- [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
+  -- monomorphization
+- [IrCodeUnit](compiler-guide.md#user-content-ircodeunit) -- one type for all
+  three kinds of code unit
+- [index-64](compiler-guide.md#user-content-index-64) -- what decides the width
+  of `Index`

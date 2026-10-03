@@ -55,7 +55,7 @@ fun swap(const T: type, x: T, y: T): (T, T)
 ->  fun swap(tag: i32, x: ???, y: ???): ???     // nothing to write here
 ```
 
-`const-param-specialization.md` reaches this point and offers three answers: a union
+The const parameter design reached this point and offered three answers: a union
 sized to the largest instantiation, a pointer plus a size descriptor, or boxing. All
 three are the same answer, which is *adopt a uniform representation*, and that is a
 different mechanism with nothing to do with tags. Monomorphizing a value keeps the
@@ -186,9 +186,9 @@ universal, and that is a later design.
 
 Independent of generics, and worth doing regardless:
 
-- Replace union-branch with monomorphization. Smaller, faster to compile, simpler code,
-  and it restores per-instantiation tiering. Keep the differential test suite, which is
-  the valuable part of the existing work.
+- ~~Replace union-branch with monomorphization.~~ Done: each instantiation is now an
+  additive copy, `name__ct0` and so on, and the differential suite was kept. See
+  [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization).
 - Reconsider the const-binding-only restriction. `pow(2, 10)` failing because `10` is a
   literal is a bad first impression, and once specialization no longer depends on
   pre-resolved `ResolvedConsts` lookups the restriction is easier to lift.
@@ -198,7 +198,7 @@ Independent of generics, and worth doing regardless:
   along different axes -- specialization deletes the first, erasure replaces the
   second -- so one copy per const instantiation serves every type instantiation.
   What used to stop it was a phase ordering rather than a conflict, and is written
-  up in [Const Parameters and Generics](reports/report-const-params-and-generics.md).
+  up in [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization).
   A const parameter whose own *type* is a type parameter is still refused.
 
 ## What a first attempt found
@@ -235,8 +235,8 @@ generic value's size and representation are, which is one decision but eighty
 edits, and none of it is the calling convention work.
 
 **Erasing `T` to `data` avoids all of that, and is the better plan.** This
-document first dismissed it, on the grounds that `report-match-downcast.md` lists
-downcasting out of `data` as an open question. That confuses a missing surface
+document first dismissed it, on the grounds that downcasting out of `data` was an
+open question with no surface syntax (see [Known issues](issues.md)). That confuses a missing surface
 syntax with a missing mechanism. A generic function never asks a user to write a
 downcast: the compiler erases at the call site, where it knows the concrete type,
 and reifies on the way back. What it needs is an IR instruction, not syntax.
@@ -576,7 +576,7 @@ this area has had.
 >
 > **Fixed for fields.** A reference now carries the descriptor of what it points
 > at, and offsets come from that; see
-> [Fat references for borrowed generic values](plan-fat-refs.md) and
+> [What each backend carries](generics.md#user-content-what-each-backend-carries) and
 > `backend/15_borrowed_generic_aggregate.dfs`. Element references still do not,
 > which is the entry left in [Known issues](issues.md).
 >
@@ -591,7 +591,7 @@ this area has had.
 > their stride from `operand_type(list)`, so a borrowed index inside a generic
 > landed between elements and segfaulted. They take it from the container's
 > descriptor now, and the element's descriptor travels with the reference; see
-> [Fat references for borrowed generic values](plan-fat-refs.md).
+> [What each backend carries](generics.md#user-content-what-each-backend-carries).
 >
 > The reading half was also less done than it said. A map lookup inside a
 > generic described the map by its static type, a `%{data = data}`, and returned
@@ -685,12 +685,22 @@ so a program that calls a rider, does bigint arithmetic or passes a borrowed
 collection of a type parameter builds and runs the same under it as under the
 interpreter and the two cranelift backends.
 
-**No bounds, so no operations on a `T`.** A type parameter is equal only to
-itself and nothing can be done with a value of that type but move it, drop it,
-clone it, print it, and hand it back. Printing is the exception because the
-descriptor travelling with the value is enough to format it; `==` is not, so
-`contains`, `index_of` and `max` stay unwritable. That rules out `map`, `and_then`, `filter` and
-anything else needing a function argument, though those want closures first.
+**Bounds are a closed set: `ord`, `fixedint` and `float`.** An unbounded `T`
+can be moved, dropped, cloned, printed and handed back, and nothing else.
+`T is ord` gives comparison, which is what a set or map over `T` needs;
+`fixedint` and `float` give the arithmetic their members share. Each dispatches
+through the runtime on the descriptor (`dyn_ops`). A user cannot declare a
+bound. `map`, `and_then`, `filter` and anything else taking a function argument
+want closures, which the language does not have.
+
+Why a closed set, from the overloading-versus-traits study that preceded it:
+of the three ways to dispatch a bound, dictionary passing needs indirect calls
+and so closures, and monomorphization needs the call sites before the callee,
+which is wrong for a REPL. Runtime dispatch on the type tag fits erasure and
+needs no new IR, at the price of a runtime entry per bounded operation. A set
+of built-in bounds over built-in types covers the numeric tower, which was the
+whole of the demand, without opening trait declaration, coherence or
+associated types.
 
 **A type parameter is always linear**, because the caller may supply a linear
 type. A value taken out of an option by `if x |v|` has moved out of `x`, so a
@@ -801,28 +811,22 @@ which is why step 2 reads as it does.
 5. **Only then**, if measurement says so, specialize hot instantiations in the
    JIT tier. Nothing is monomorphized today.
 
-What is left, in the order it is worth doing:
+Owned collections, descriptor-driven indexing, owned tuples and structs, and a
+first set of bounds are all done. What is left:
 
-- **Owned collections**, by erasing a container whole rather than structurally
-  so that the value carries its own descriptor. The route and what was weighed
-  against it are in
-  [Carrying the descriptor with the value](#user-content-carrying-the-descriptor-with-the-value).
-  This is the one being built.
-- **Descriptor-driven indexing**, which is the other place the language refuses
-  something a reader expects to work, and which turns out not to depend on the
-  above: when the container is a parameter the descriptor is already in reach,
-  and `xs[i]` wants lowering to the runtime call `list.get` already makes.
-- **Owned tuples and structs**, which unlike collections do need converting,
-  but by a walk whose length the type fixes rather than the data.
-- **Bounds of some kind**, without which nothing can be done to a `T` but move
-  it. Closures are the bigger prerequisite for the functions people ask for.
+- **Closures**, the prerequisite for `map`, `filter` and the rest of what
+  people ask for, and for any dictionary-passing bound.
+- **Bounds beyond the closed set**, if a want appears that `ord`, `fixedint`
+  and `float` do not cover. Each new one costs runtime entries per operation.
+- **A generic that builds a collection and recurses at a larger type**, which
+  is refused; see [Limitations](#user-content-limitations). Narrow, and may
+  never matter.
 
 ## Prior art
 
-The survey in [Const Parameter Specialization](const-param-specialization.md) covers
-Harper and Morrisett's intensional type analysis, dictionary passing, Go's GCShape
-stenciling, Swift's witness tables, defunctionalization and partial evaluation. Two
-systems it omits are the closest fits to this problem.
+The usual survey covers Harper and Morrisett's intensional type analysis, dictionary
+passing, Go's GCShape stenciling, Swift's witness tables, defunctionalization and partial
+evaluation. Two systems it tends to omit are the closest fits to this problem.
 
 **The .NET CLR** splits by representation rather than by type: reference types share one
 JIT-compiled instantiation through the `__Canon` placeholder, value types are

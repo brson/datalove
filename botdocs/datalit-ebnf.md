@@ -134,8 +134,8 @@ newline        = "\n" | "\r\n" ;
    `2.5e - 10` and `- 5` are reported rather than assembled out of whatever
    is nearby. Letters on the end of the digits are reported too, datalove
    having no numeric suffixes: `1u8` asks for `: u8 / 1`. See
-   [design-token-gluing.md](design-token-gluing.md), which also covers how
-   spacing decides an operator's fixity in datafun.
+   [Section 2.4 of the spec](botspec.md#user-content-24-spacing), which also
+   covers how spacing decides an operator's fixity in datafun.
 10. **A delimiter someone wrote needs something before it.** A `;` or a `,`
    separates two particular things, so one with nothing before it separates
    nothing and is an error: `{| x, y;; 1, 2 |}`, `{| x,, y |}`, `[|,1 2|]`.

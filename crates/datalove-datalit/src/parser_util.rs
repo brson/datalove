@@ -80,7 +80,7 @@ impl<'db> SeenNames<'db> {
 ///
 /// Datalove has no words reserved everywhere. A word is reserved for a kind
 /// of name only where it can stand where that name is read and mean something
-/// else there; see `botdocs/report-reserved-words.md`.
+/// else there; see `botdocs/botspec.md` §2.1.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NameKind {
     /// A `let`, `var` or `const`, or a binding in `if`, `else` or `case`.

@@ -18,6 +18,21 @@ home here.
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
+- [The jit cannot see a loop, and the C backend is built at -O0](#user-content-the-jit-cannot-see-a-loop-and-the-c-backend-is-built-at--o0)
+- [A script const that calls through a second function panics](#user-content-a-script-const-that-calls-through-a-second-function-panics)
+- [A map upsert at script top level panics the lowerer](#user-content-a-map-upsert-at-script-top-level-panics-the-lowerer)
+- [A failed `set m[k]!` on a map says "index out of bounds"](#user-content-a-failed-set-mk-on-a-map-says-index-out-of-bounds)
+- [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
+- [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
+- [One function per name, so no prelude](#user-content-one-function-per-name-so-no-prelude)
+- [Borrowed enum payloads and tables inside a generic were never probed](#user-content-borrowed-enum-payloads-and-tables-inside-a-generic-were-never-probed)
+- [Nothing proves the suite runs with leak checking on](#user-content-nothing-proves-the-suite-runs-with-leak-checking-on)
+- [The allocator maps a page per large block and keeps every small page](#user-content-the-allocator-maps-a-page-per-large-block-and-keeps-every-small-page)
+- [Module ids are positional](#user-content-module-ids-are-positional)
+- [Pruning stops at the module](#user-content-pruning-stops-at-the-module)
+- [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
+- [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
+- [Every REPL line is a new salsa input](#user-content-every-repl-line-is-a-new-salsa-input)
 
 ## Nothing but a test inlines
 
@@ -48,6 +63,16 @@ caller. A hot loop inside a single call never benefits from inlining its
 callees. That is what makes the feature much weaker than the thresholds
 suggest, and it is worth deciding whether the inliner earns its place at all
 before building anything on top of it.
+
+**Two more things, reasoned from the code.** The inlined body never reaches the
+jit: `OptimizingDispatcher::dispatch_call` always hands `try_jit_execution` the
+original callee ("We always pass the original function to JIT"), and the inlined
+caller is only picked up in `execute_call`, after dispatch has declined. So
+`InlinedJit` is a metrics label, not a different compile. And `DynamicInliner`
+has no cost model: it inlines when a site's count crosses `threshold` (100), with
+no size limit, no growth budget, no depth limit and no recursion check, so a hot
+self-recursive function inlines into itself and the moved sites, with fresh ids,
+cross the threshold in turn. The directive-driven path does check recursion.
 
 ## No table module, and none can be written
 
@@ -175,3 +200,258 @@ ended up. Two things depend on the present rule and would have to move with it:
 
 Loop exits themselves are settled: see `merge_loop_exits`, D014, and
 `std_tests/152_owned_past_a_loop_exit`.
+
+## The jit cannot see a loop, and the C backend is built at -O0
+
+**Reasoned from the code; the speedups are measured.** Four gaps in what the
+compiled tiers do, each cheap to state and none started.
+
+- **No back-edge counting and no OSR.** `JitEngine::record_call` counts calls
+  and only calls, and compiled code is entered only at a call. A function called
+  once that loops ten million times is never compiled. `loop_arith`'s 86x exists
+  because its loop sits in a function called twenty times; move it up a level and
+  the speedup is 1.0x.
+- **No inlining in Cranelift.** Nothing implements
+  `cranelift_codegen::inline::Inline` or calls `Context::inline`, so neither the
+  jit nor the cranelift AOT backend inlines. For the jit this is where inlining
+  would pay: every call from compiled code goes through `__jit_dispatch_call`,
+  16.7% of the jit profile.
+- **The C backend runs `cc -std=c11 -O0 -g`** (`pipeline/c_aot.rs`, and the
+  same in `c_dual_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
+  number in the jit report. The work is whatever undefined behaviour `-O2` exposes
+  in the emitted C, which the four-backend differential suite would find.
+- **`register_natives` in the cli only finds a bare `JitEngine`.** It downcasts
+  the dispatcher to `JitEngine`, so an `OptimizingDispatcher` would get no native
+  symbols and the first native call from jitted code would abort the process.
+  Unreachable today, since the cli never builds one; it is in the way of doing so.
+
+## A script const that calls through a second function panics
+
+**Reproduced** with the debug cli. A const in a script whose evaluation calls one
+script function from another panics the interpreter:
+
+```datalove
+fun a(): int
+  ret 3
+end fun
+fun b(): int
+  ret a()
+end fun
+const X: int = b()     // local unit CodeUnitId(0) not found (interp/src/env.rs)
+```
+
+Calling `a` directly works, and the same shape in a worldfile module works. It is
+the same panic whether the const is at top level or in a function body. Not
+investigated further; the CTFE environment presumably has the script's own units
+registered for the first call but not for a call made from inside it.
+
+A second crash, also reproduced: `!` in a *script-level* const panics the lowerer
+(`lower/src/context.rs`, "early return requires function context"), where the
+same const in a module is refused with F049 as botspec says it should be.
+
+## A map upsert at script top level panics the lowerer
+
+**Reproduced** with the debug cli. An upsert into a map at script top level,
+followed by any further statement, panics:
+
+```datalove
+var m: %{string = u32} = %{"a" = 1}
+set m["a"] = 2
+let v = m["a"]!     // stmt_id mismatch (lower/src/context.rs)
+```
+
+Ownership analysis and lowering disagree about which statement they are on:
+ownership records the `set` under one `StmtKey` and lowering looks it up under
+another. The same code inside a function works, so it is the script path's
+statement numbering for `set` with a map target that is off. Not investigated
+further.
+
+## A failed `set m[k]!` on a map says "index out of bounds"
+
+**Reasoned about** from the code. Reading `m[k]!` fails with `"key not found"`
+(`lower/src/expr.rs` picks the message by collection kind), but the `set` path,
+`emit_fallible_index_check` in `lower/src/stmt.rs`, emits `MapContainsKey` for a
+map and then hard-codes `"index out of bounds"` for the error. The fix is to
+pick the message the way `expr.rs` does, then drop the exception botspec §7.3
+notes.
+
+## Compile-time evaluation has no limits
+
+**Reproduced.** CTFE runs the ordinary interpreter (`InterpCtfeEvaluator`) with
+no step limit, no recursion-depth limit and no allocation limit. A const calling
+a function that never terminates hangs `datalove script-ir`, which only compiles;
+a const calling unbounded recursion aborts the compiler with a Rust stack
+overflow. There is a `ConstEvalError::GasExpired` and an arm mapping an error
+message containing "gas" to it, but nothing produces such a message, so the arm
+is dead.
+
+Errors are reported thinly too. A const whose expression early-returns says
+`h::X: early return: const expression returned early via ! or ?` as a lowering
+error: the error value is discarded, and there is no span and no evaluation call
+stack.
+
+What it would take: a step budget and a depth limit in the interpreter, checked
+only when evaluating a const, each failing as a diagnostic on the const; and
+carrying the returned error and the call chain into that diagnostic.
+
+## Nothing takes a value back out of data or error
+
+**Checked against the spec and the parser.** `data x` and `error x` wrap any
+value, and nothing in the language unwraps one: there is no type test, no cast,
+no type pattern in `match`. `is` parses only in a `with` bound. So a `data` can
+be moved, cloned, compared and printed, and an `error` can be printed, but code
+cannot recover what is inside.
+
+The candidate syntaxes considered were a type-testing `if` (`if d is u32 |x|`),
+`as` returning a result with `as!` panicking, and type patterns in `match`
+(`case : u32 |x|`). Unchosen, along with whether the test is structural or
+nominal.
+
+## One function per name, so no prelude
+
+**Reproduced.** `TypeContext.functions` maps a name to one `TypeFunction`, and
+importing a second function of the same name is F059 ("a name binds one
+function"). There are no qualified calls either: `u8.from_int(5)` is P021, since
+`require module` binds an alias that only `import` uses, and `import` has no
+`as`. Together, one script cannot use both `u8.from_int` and `i8.from_int`.
+
+The same blocks a REPL prelude: 152 of the 275 distinct function names in
+`sys/std` are defined in more than one module (`min`, `max` and `clamp` in
+fifteen, `from_int` in thirteen), so any prelude naming more than one numeric
+type collides with itself.
+
+What it would take is either fix. Exact-match overloading is cheaper than its
+reputation here, because datalove has no implicit conversions to rank: a call
+resolves to the one candidate whose parameters match, in the typechecker, and
+nothing below it changes. Qualified calls (`f64.sqrt(2.0)`) and `import ... as`
+are each smaller still and also remove the collision.
+
+## Borrowed enum payloads and tables inside a generic were never probed
+
+**Not probed.** Borrowed generic values carry their descriptor, and field
+projections, list, map and tensor indexing under a borrow are covered by
+`backend/15` to `backend/23`. Two shapes are not:
+
+- An enum or term payload reached through a borrow inside a generic --
+  matching on a `ref` parameter like `?{a: T, b: u32}` and reading the payload.
+  `TyInfoEnumVariant` has an offset and a payload descriptor, so the same rule
+  should apply, but whether payload projection goes through `GetFieldRef` or its
+  own path was never checked. `backend/18`'s `get_opt` returns such an option
+  whole; nothing reads into it.
+- A table as a borrowed generic value, `ref t: {| a: T, ... |}`. Nothing can look
+  inside a table yet (see above), so this is about moving and cloning one.
+
+What it would take is a fixture in `backend/` for each, run across the four
+backends.
+
+## Nothing proves the suite runs with leak checking on
+
+**Reasoned; the first half was reproduced when the default flipped.**
+`LeakCheckMode::from_env` defaults to `Ignore`, and the justfile sets
+`DATALOVE_LEAK_CHECK=panic` on every test recipe. Nothing checks that it does:
+`DATALOVE_LEAK_CHECK=ignore just test` passes, so if a recipe loses the variable
+the hundred-odd fixtures that exist to be checked by the leak detector -- and the
+double-free and `free`-mismatch checks, which catch codegen bugs -- silently stop
+checking anything. The `alloc.rs` unit tests pass `LeakCheckMode::Panic`
+explicitly, so they test the mechanism and not the wiring. The fix is one canary
+in `datalove-rt-tests` that leaks through `dtlv_rti_init` with the mode taken from
+the environment and expects the panic.
+
+Separately, the cli tests spawn the real binary with no `env_remove`, so they
+inherit `panic` and test a configuration no user runs. Either clear the variable
+at the spawn sites (seven `Command::new`s in `datalove-cli/tests`, built inline,
+which is where a helper would earn its place) or accept that they are not testing
+the shipped default.
+
+## The allocator maps a page per large block and keeps every small page
+
+**Reasoned from `datalove-rt/src/impls/alloc.rs`; none of it measured as a
+cost.** Three structural costs in the runtime allocator:
+
+- **Every block from 2049 to 4096 bytes is its own `mmap`.** The largest size
+  class is 4096 and `PAGE_SIZE` is 4096, so `allocate_page_for_size_class` makes
+  one block per page. Freed blocks go back on the free list and are reused, so
+  this costs a syscall per *live* block, not per allocation. Above 4096 every
+  allocation is an `mmap` and every free a `munmap`, with no cache in front.
+- **`free_large` scans `large_pages` linearly** to find the page, so freeing one
+  of *n* live large blocks is O(n) and a workload holding many is quadratic.
+- **Small pages are never returned.** `free_small` pushes onto the free list and
+  the page stays mapped until shutdown. Fine for a short process, not for a REPL
+  or anything long-lived.
+
+A program working in buffers of a few kilobytes would find the first two.
+
+## Module ids are positional
+
+**Measured.** `ir_module_ids` numbers rider modules first, by path, then regular
+modules in graph order, and the ids are encoded in the IR. So a module appearing
+anywhere but the end renumbers everything after it: a newly required module that
+sorts first costs one parse, typecheck and ownership analysis, but re-lowers every
+module. A newly required rider, numbered ahead of all of them, should renumber
+every regular module (reasoned, not measured).
+
+It costs nothing shipped today, because the cli fixes its roots once and the REPL
+compiles `Roots::All`, so no module set changes mid-session. It blocks narrowing
+the REPL. The two fixes are priced very differently: hash the path to an id
+(small, but about 215 expected-output files render ids as `m{}` and need
+blessing, and collisions need deterministic resolution), or name modules
+symbolically in the IR
+and assign dense numbers at registry-build time (the right end state; touches the
+IR, its serialization, both AOT backends, the jit and display).
+
+## Pruning stops at the module
+
+**Reasoned from the code.** Narrowing roots drops unreachable *modules*, and
+nothing finer:
+
+- **Unused functions in a reachable module are emitted.** The cranelift AOT
+  backend walks the whole registry, and DCE (`datalove-datafun-const/src/dce.rs`)
+  removes unreachable blocks within a function, never a function.
+- **The original of a fully specialized function is kept.** Const-parameter
+  specialization is additive (`specialize.rs`, "Why the original is kept"),
+  because a later script line may call it. An AOT build has no later line, so an
+  original whose every call site was specialized is dead weight there.
+- **`rider_interfaces` parses every rider source** whether or not anything
+  requires it. Memoized, so paid once per process, but paid on every short
+  invocation.
+
+## Nothing consumes a WorkspaceDelta
+
+**Checked.** `WorkspaceDescriptor::diff` produces a `WorkspaceDelta`, and
+`WorkspaceDelta::apply_to_pipeline` applies its module half -- added to
+`add_module`, removed to `remove_module`, changed to `update_source`, which keeps
+salsa identity -- and refuses a delta changing riders or options, which need a new
+pipeline (and, for riders, a rebuilt native component). Both are called only from
+their unit tests. The REPL keeps its descriptor in step
+(`Engine::set_workspace_module`, which says nothing reads it) but edits the
+pipeline directly; no driver diffs two snapshots. So the delta path is built and
+unexercised, and the first real consumer (a file watcher, an LSP) is what would
+test it.
+
+## No batch of scripts against one world
+
+**Not built.** `datalove script` takes one file. Compiling `a.dfs b.dfs c.dfs`
+against one `CompiledWorld` would pay the library once and roughly a ninth of it
+per script after, with no serialization: the same reuse that took
+`std_all_tests` from 534s to 17s of library compilation.
+
+It matters as the baseline for salsa `persistence`, the cross-process
+alternative. That was sized, not attempted, at about 132 `persist` annotations
+across ten crates, with everything they hold needing `Serialize` and
+`Deserialize`, and it can fail late: one unserializable tracked struct blocks it
+after most of the annotating. It should be justified against the in-process batch,
+not against today's one-script-per-process.
+
+## Every REPL line is a new salsa input
+
+**Reasoned from the code.** `ScriptCompiler::compile_fragment` and
+`compile_expr` mint a `bct::input::Source` per call, and salsa never collects
+inputs, so a session grows by one input (and its text) per line, forever. Small
+per line; unbounded in a long session. Editing a unit already goes through a
+stable per-unit `Source` and `set_text`; appending does not.
+
+The same minting means a fresh compiler replaying a session's lines would reuse
+nothing, since identical text is a different input. Nothing replays today --
+`Engine::reset` after a panic starts an empty session rather than replaying the
+old one -- so that half only matters if recovery is ever meant to keep the
+session. Holding a stable `Source` per unit for appends too would fix both.

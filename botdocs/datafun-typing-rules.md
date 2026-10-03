@@ -9,7 +9,9 @@ It extends datalit typing rules with functions, control flow, and operations.
 - **Extends datalit**: All datalit types are also datafun types
 - **Function types**: Functions have types of the form `(T1, T2, ...) -> R`
 - **Effect tracking**: Checked/optional operators require compatible function return types
-- **Structural coercion**: Numeric widening and data coercion
+- **No implicit coercion**: A checked expression must have exactly the expected
+  type. Numeric widening is written with `@` and wrapping in `data` with
+  `data` (botspec Sections 3.5, 10 and 12)
 
 ## Type Representation
 
@@ -26,9 +28,10 @@ enum Type {
 
 ```
 TypeFunction {
-    param_types: Vec<TypeAndHeap>,
-    param_modes: Vec<ParamMode>,  // Value, Ref, RefMut
-    return_type: TypeAndHeap,
+    param_types: Vec<Type>,
+    param_modes: Vec<ParamMode>,  // In, Out, Ref, Mut
+    param_comptime: Vec<bool>,    // Which parameters are `const`
+    return_type: Type,
 }
 ```
 
@@ -62,23 +65,20 @@ Binary operations require operands of the same type.
 #### Basic Arithmetic (+, -, *)
 ```
 e1 => T, e2 => T
-T is numeric type
----------------------------------
-e1 + e2 => result_type(T)
-
-where result_type(T) =
-  - T if T is float (f32)
-  - T if T is bigint (int)
-  - int if T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64)
+T is float (f32, f64) or bigint (int)
+-------------------------------------
+e1 + e2 => T
 ```
 
-**Note**: Fixed integer arithmetic widens to `int` to prevent overflow.
+**Note**: Bare arithmetic on fixed integers (u8 through u64, i8 through i64,
+`index`, `offset`) is an error (F026). Widen the operands to `int` with `@`, or
+use the checked or optional operators.
 
 #### Division (/)
 ```
 e1 => T, e2 => T
-T is float type
------------------
+T is float (f32, f64)
+---------------------
 e1 / e2 => T
 ```
 
@@ -139,12 +139,14 @@ Comparisons do not chain: `a == b == c` is a parse error (P067).
 #### Negation (-)
 ```
 e => T
-T is float or bigint
---------------------
+T is float (f32, f64) or bigint (int)
+-------------------------------------
 -e => T
 ```
 
-**Note**: Bare negation only for floats and bigints (no overflow possible).
+**Note**: Bare negation only for floats and bigints (no overflow possible). A
+negated integer literal checked against a fixed int is read as a signed
+literal, so `let x: i32 = -5` is fine; `-x` for an `i32` variable is not.
 
 #### Checked Negation (-!)
 ```
@@ -198,12 +200,9 @@ e! => T
 ### Rule: Syn-Tuple
 ```
 for all i: ei => Ti
-Ti is datalit type
 ----------------------------------
 (e1, e2, ..., en) => (T1, T2, ..., Tn)
 ```
-
-**Note**: Tuple elements must be datalit types, not function types.
 
 ### Literal Synthesis
 
@@ -211,7 +210,7 @@ Literals follow the same rules as datalit:
 
 - `true`, `false` => `bool`
 - Integer literals => `int` (arbitrary-precision) by default
-- Float literals => `f32`
+- Float literals => `f64` by default (a float literal checks against `f32` or `f64`)
 - Hex literals => `int` by default
 - String literals => `string`
 - `none` => cannot synthesize (requires type context)
@@ -280,9 +279,9 @@ Enum literals (`enum { atom Foo }`) can only be checked, not synthesized.
 Collections follow datalit rules with element type inference:
 
 ```
-[e1, e2, ...] => [T]     where first element determines T
-set{e1, e2, ...} => set<T>
-map{k1 = v1, ...} => map<K, V>
+[e1, e2, ...] => [T]          where first element determines T
+#{e1, e2, ...} => #{T}
+%{k1 = v1, ...} => %{K = V}
 ```
 
 Empty collections default to unit element type: `[] => [()]`
@@ -292,10 +291,13 @@ Empty collections default to unit element type: `[] => [()]`
 ### Rule: Check-Subsume
 ```
 e => T'
-T' = T OR can_widen(T', T) OR T = data
---------------------------------------
+T' = T
+-------
 e <= T
 ```
+
+There is no subsumption beyond equality: no numeric widening and no implicit
+`data`.
 
 ### Rule: Check-None
 ```
@@ -388,8 +390,8 @@ If checking fails (e.g., operand type mismatch, wrong return type), the expressi
 ```
 check fails
 e => T'
-T' = T OR can_widen(T', T)
----------------------------
+T' = T
+-------
 e <= T
 ```
 
@@ -457,9 +459,9 @@ n <= T (where T is integer type)
 
 ### Coercion Rules
 
-1. **Exact match**: `T <= T`
-2. **Numeric widening**: `u8 <= u16 <= u32 <= u64 <= int`, `i8 <= i16 <= i32 <= i64 <= int`
-3. **Data coercion**: Any type `T <= data`
+There are none: the only rule is exact match, `T <= T`. Widening is the `@`
+operator (botspec Sections 6.8 and 10), which is itself checked against the
+expected type, and a value becomes `data` only through `data e`.
 
 ## Statement Typing
 
@@ -532,7 +534,7 @@ params have types T1, T2, ...
 return type is R (or () if omitted)
 body type checks with params in scope
 -------------------------------------
-fun name(p1: T1, p2: T2, ...) -> R { body }
+fun name(p1: T1, p2: T2, ...): R body end fun
 name : (T1, T2, ...) -> R in subsequent context
 ```
 
@@ -555,7 +557,7 @@ condition <= bool
 then_body type checks
 else_body type checks (if present)
 ----------------------------------
-if condition { then_body } else { else_body }
+if condition then_body else else_body end if
 ```
 
 #### Option destructuring
@@ -565,7 +567,7 @@ binding : T in then_body scope
 then_body type checks
 else_body type checks (if present)
 ----------------------------------
-if let some(binding) = condition { then_body } else { else_body }
+if condition |binding| then_body else else_body end if
 ```
 
 #### Result destructuring
@@ -573,43 +575,33 @@ if let some(binding) = condition { then_body } else { else_body }
 condition => Result<T>
 binding : T in then_body scope
 err_binding : error in else_body scope
-else_body required
+else_body and err_binding required (F046)
 then_body type checks
 else_body type checks
 ----------------------------------
-if let ok(binding) = condition { then_body } else error(err_binding) { else_body }
+if condition |binding| then_body else |err_binding| else_body end if
 ```
 
 ### Statement: Loop
 ```
-carry bindings: c1: T1 = e1, c2: T2 = e2, ...
-bring bindings: b1: U1, b2: U2, ... (require type hints)
-condition <= bool (if present, checked after carries bound)
-body type checks with carries in scope
-break values <= bring types
-continue values <= carry types
-loops with carries must not fall through (all paths must break/continue/return)
--------------------------------------------------------------------------------
-loop carry c1: T1 = e1, ... bring b1: U1, ... while condition { body }
-b1: U1, b2: U2, ... in subsequent context
+condition <= bool (if present)
+body type checks
+------------------------------
+loop while condition body end loop
 ```
 
 ### Statement: Break
 ```
-inside loop with bring bindings b1: U1, ...
-values.len() == brings.len()
-for all i: vi <= Ui
--------------------------------------------
-break v1, v2, ...
+inside a loop (F050 otherwise)
+------------------------------
+break
 ```
 
 ### Statement: Continue
 ```
-inside loop with carry bindings c1: T1, ...
-values.len() == carries.len()
-for all i: vi <= Ti
--------------------------------------------
-continue v1, v2, ...
+inside a loop (F051 otherwise)
+------------------------------
+continue
 ```
 
 ### Statement: Match
@@ -651,9 +643,10 @@ Functions establish a typing context:
 - **parameters**: Added to variable context with declared types
 - **loop_contexts**: Stack for validating break/continue
 
-Try operators (`?`, `!`) and checked/optional arithmetic require:
-- Being inside a function (`expected_return_type` is set)
-- Return type matches operator requirement (Option for `?`/`+?`, Result for `!`/`+!`)
+Try operators (`?`, `!`) and checked/optional arithmetic require the return
+type to match the operator: Option for `?`/`+?`, Result for `!`/`+!` (F049
+otherwise). Script top level returns `!()`, so the Result forms work there and
+the Option forms do not.
 
 ## Type Error Codes
 
@@ -663,10 +656,8 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 - **F011**: Cannot synthesize type
 - **F016**: Type mismatch
 - **F026**: Invalid operand type for operator
-- **F027**: Invalid tuple element type (function type in tuple)
 - **F045**: Function arity mismatch
 - **F046**: Result destructuring requires error binding
-- **F047**: Try operator used outside function
 - **F048**: Try operator operand type mismatch
 - **F049**: Try operator return type mismatch
 - **F071**: Destructuring pattern does not fit the value
@@ -678,42 +669,28 @@ Try operators (`?`, `!`) and checked/optional arithmetic require:
 - Match input is not an enum type
 
 ### Control Flow Errors
-- **BreakOutsideLoop**: Break statement outside loop
-- **ContinueOutsideLoop**: Continue statement outside loop
-- **BreakArityMismatch**: Wrong number of break values
-- **ContinueArityMismatch**: Wrong number of continue values
-- **LoopBodyFallthrough**: Loop with carries has paths that don't break/continue/return
+- **F050** (BreakOutsideLoop): Break statement outside loop
+- **F051** (ContinueOutsideLoop): Continue statement outside loop
 
 ### Inherited from Datalit
 - **TypeMismatch**: Expected type doesn't match actual type
-- **HeapMismatch**: Expected heap doesn't match actual heap
 - **CannotSynthesize**: Cannot infer type without context
 - **IntOutOfRange**: Integer literal out of range for target type
 - **ArityMismatch**: Wrong number of tuple/struct fields
 - **FieldOrderMismatch**: Struct fields in wrong order
 - **MissingField/ExtraField**: Struct field errors
 
-## Numeric Type Hierarchy
-
-```datalove
-Unsigned: u8 -> u16 -> u32 -> u64 -> int
-Signed:   i8 -> i16 -> i32 -> i64 -> int
-Float:    f32 (no widening)
-```
-
-**No cross-widening**: Unsigned cannot widen to signed or vice versa.
-
 ## Operator Type Requirements
 
 | Operator | Allowed Types | Return Type | Context Required |
 |----------|---------------|-------------|------------------|
-| `+`, `-`, `*` | numeric | int (fixed), T (float/bigint) | - |
-| `/` | f32 only | f32 | - |
+| `+`, `-`, `*` | f32, f64, int | T | - |
+| `/` | f32, f64 | T | - |
 | `+!`, `-!`, `*!` | fixed int | T | Result return |
 | `/!` | fixed int, bigint | T | Result return |
 | `+?`, `-?`, `*?` | fixed int | T | Option return |
 | `/?` | fixed int, bigint | T | Option return |
-| `-` (unary) | f32, bigint | T | - |
+| `-` (unary) | f32, f64, int | T | - |
 | `-!` (unary) | signed fixed int | T | Result return |
 | `-?` (unary) | signed fixed int | T | Option return |
 | `.<`, `.>`, `<=`, `>=` | numeric | bool | - |

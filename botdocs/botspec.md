@@ -200,9 +200,6 @@ This is what settles how many elements a tensor literal's innermost axis has,
 that being the one place in the language where members are separated by nothing
 at all (Section 3.2).
 
-The design is written up in
-[Token Gluing and Operator Fixity](design-token-gluing.md).
-
 ## 3. Types
 
 ### 3.1 Primitive Types
@@ -284,8 +281,10 @@ goes between two things, so one with nothing before it is an error
 holds wherever the two languages read a delimiter -- table rows and columns,
 tensor axes, and the `;` between two statements.
 
-Column projections (e.g., `table.x`) yield a list view that cannot be moved or
-mutated, but can be passed to `ref` parameters.
+A table is opaque: nothing can look inside one. Column projection
+(`table.x`) is not implemented and is refused as a projection on a value with
+no fields (F068); the options are written up in
+[Tables: what the type system is missing](design-table-rows.md).
 
 A projection of a field whose type is linear may not be read as a value: it
 would move the field out of an aggregate that still holds it. It may be
@@ -579,6 +578,10 @@ Operators listed from highest to lowest precedence:
 | 7 | `and` | Logical AND |
 | 8 | `or` `xor` | Logical OR/XOR |
 
+Binary operators are left-associative, so `a - b - c` is `(a - b) - c`, except
+that comparisons do not chain (Section 6.3). Postfix operators chain left to
+right: `a.b[0]?@` applies each in turn.
+
 Postfix binds looser than unary prefix, so a postfix operator applies to the
 prefix expression as a whole: `-x@` is `(-x)@`. The payload keywords `some`,
 `ok`, `er`, `data` and `error` are the exception, taking postfix onto their
@@ -600,8 +603,8 @@ this table, and `a -b` is not one (Section 2.4).
   (`+!`, `-!`, `*!`, `/!` or `+?`, `-?`, `*?`, `/?`) for overflow handling.
 
 **Checked arithmetic** (`+!`, `-!`, `*!`, `/!`) operates on fixed integers and
-returns a result type. On overflow or division by zero, the function
-early-returns an error:
+yields the operands' type. On overflow or division by zero, the function
+early-returns an error, so the enclosing function must return a result:
 
 ```datalove
 fun add(a: u32, b: u32): !u32
@@ -609,11 +612,11 @@ fun add(a: u32, b: u32): !u32
 end fun
 ```
 
-Bigint division `/!` returns `!int`.
+Bigint division `/!` yields `int`.
 
 **Optional arithmetic** (`+?`, `-?`, `*?`, `/?`) operates on fixed integers and
-returns an option type. On overflow or division by zero, the function
-early-returns `none`:
+yields the operands' type. On overflow or division by zero, the function
+early-returns `none`, so the enclosing function must return an option:
 
 ```datalove
 fun add(a: u32, b: u32): ?u32
@@ -621,7 +624,7 @@ fun add(a: u32, b: u32): ?u32
 end fun
 ```
 
-Bigint division `/?` returns `?int`. Unary `-?` is permitted only for signed
+Bigint division `/?` yields `int`. Unary `-?` is permitted only for signed
 fixed integers.
 
 Integer division truncates toward zero, so `-7 /? 2` is `-3`. There is no
@@ -880,6 +883,10 @@ t[i]?      // early-return none on out-of-bounds (tensor axis-0)
 Bare `a[i]` without `?` or `!` is a type error in read context. There is no
 infallible/panicking index variant.
 
+The error that `!` returns is a fixed string: `error "index out of bounds"`
+for lists and tensors, `error "key not found"` for maps. (A failed `!` step
+in a `set` target currently reports `"index out of bounds"` for maps too.)
+
 The enclosing function's return type determines which variant is valid: `?`
 requires the function to return `?R`, `!` requires `!R`.
 
@@ -945,8 +952,10 @@ Fallible indexing mirrors checked arithmetic:
 
 | Operation | `?` variant | `!` variant |
 |-----------|-------------|-------------|
-| Arithmetic | `a +? b` returns `?T` | `a +! b` returns `!T` |
+| Arithmetic | `a +? b` early-returns `none` | `a +! b` early-returns `error` |
 | Indexing | `a[i]?` early-returns `none` | `a[i]!` early-returns `error` |
+
+Both yield the plain value when they succeed.
 
 ## 8. Statements
 
@@ -1042,12 +1051,26 @@ set m[key] = v             // upsert: insert or overwrite
 ```
 
 The `set` target is a place expression (see Section 7). The root must be
-`var` or `mut`. For indexed targets, the `?` or `!` on each index step
-provides early-return on failure; the write only happens if all checks pass.
+`var` or `mut` (F055 otherwise). Mutability propagates backward through the
+chain: `set a[i]?.x = 5` needs mutable access to `a[i]?` and so to `a`, so a
+`let` or `ref` root is rejected however deep the target. For indexed targets,
+the `?` or `!` on each index step provides early-return on failure; the write
+only happens if all checks pass.
 
 **Map upsert.** Bare `set m[key] = v` (without `?` or `!`) is valid only for
 maps. It inserts if the key is absent, overwrites if present. Lists reject
 bare index on `set` LHS -- list elements must exist to be overwritten.
+
+An upsert evaluates the key, then the RHS, then looks the key up. If the key
+is present, the old value is dropped and the new one stored; the key already
+in the map stays and the provided key is dropped. If the key is absent, the
+provided key and value are inserted as a pair:
+
+```datalove
+var m: %{string = string} = %{ "a" = "one" }
+set m["a"] = "uno"    // drops the provided "a" and "one", stores "uno"
+set m["b"] = "two"    // inserts "b" = "two"
+```
 
 **Evaluation order** for `set` with indexed targets:
 
@@ -1151,7 +1174,11 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 - Cannot combine `const` with a passing mode. A const parameter is not passed:
   specialization removes it and writes the value into the body, so `ref` has no
   borrow to describe and `out` and `mut` have nothing to write back to
-- Cannot combine const parameters with type parameters
+- A const parameter's type cannot be a type parameter (`const n: T` in a
+  generic function is an error). A const parameter of a concrete type in a
+  generic function is fine: specialization removes const parameters and
+  erasure replaces type parameters, so one copy per const instantiation
+  serves every type instantiation
 - Nothing else is accepted, not a literal and not an expression: `repeat(3, s)`
   is refused as surely as `repeat(2 + 1, s)`. The value a const parameter takes
   has to be one the compiler already holds, and a `const` binding is the one
@@ -1160,7 +1187,8 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 
 **Implementation:** The compiler monomorphizes, keeping the original function
 and adding a copy per instantiation beside it. See
-[Const Parameter Implementation](const-param-impl-plan.md).
+[Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
+in the compiler guide.
 
 ### 8.5 Generic Functions
 

@@ -25,9 +25,7 @@ use crate::pretty::{pretty_expr, pretty_type_hint};
 /// Whether a const may hold this type.
 ///
 /// Everything. The spec says a const holds anything a function can compute,
-/// and it does now. What used to be refused, and why, is in
-/// `botdocs/reports/report-worldgen-coverage.md`: seven things in the way, the
-/// last of them a `data` that did not keep the type of what it held.
+/// and it does now.
 ///
 /// Kept as a function rather than deleted because the next thing added to the
 /// language will want asking.

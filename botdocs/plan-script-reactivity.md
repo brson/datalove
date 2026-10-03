@@ -13,7 +13,7 @@ because it does not use anything B provides**, even though it sits between them.
 
 That last clause is the whole problem. Everything else follows from it.
 
-This is the shape `mandocs/script-semantics.md` is reaching for and what
+This is the shape the script semantics were reaching for and what
 `repl-architecture.md` calls "rewind and replay". The UI is out of scope here;
 this is the engine.
 
@@ -219,8 +219,8 @@ What follows is the design as written before the work, kept because the argument
 for reading through a query rather than keying on resolved uses is the part that
 matters and is unchanged.
 
-**The script becomes a `#[salsa::input]`,** which is what
-`mandocs/script-semantics.md` specified in the first place:
+**The script becomes a `#[salsa::input]`,** which is what the
+script semantics specified in the first place:
 
 ```rust
 #[salsa::input]
@@ -397,7 +397,7 @@ Two things make this tractable now and will stop being true:
   rethinking -- `repl-architecture.md` says so too.
 - **Only pure `fun`s exist.** The only effect is `debuglog`, which is per-unit
   output, so skipping a unit's execution skips nothing observable beyond it.
-  `proc`s and real I/O need the virtualized I/O `script-semantics.md` describes.
+  `proc`s and real I/O need virtualized I/O.
 
 ### The alias edge, and why it is the soft spot
 
@@ -420,7 +420,13 @@ The sound version extends the recording to cover `module_alias_at` so the edge
 comes from the read like every other one. Not urgent -- it is correct and
 tested -- but it is the one asymmetry left in the design.
 
-### D. The edit itself
+### D. The edit itself -- done
+
+Done as `Engine::edit_unit` (`crates/datalove-repl/src/engine.rs`), over
+`ScriptSession::unit_sources`, `set_text` and `ScriptCompiler::relower_reach`;
+`engine_edit_tests` holds it. What follows was the plan. The replay row and the
+input leak it mentions are still open: `compile_fragment` mints a `Source` per
+call.
 
 `ScriptCompiler::edit_unit(i, text)` and an engine entry point: hold a stable
 `Source` per unit and `set_text` on it, exactly as `IncrementalModuleWorld` does
@@ -433,7 +439,7 @@ from the edited one, in order, and leave the rest.
 
 ## Order, and what each stage is worth
 
-A is done. Then B, C, D. A was a prerequisite for everything. B is the visible
+All four are done. A was a prerequisite for everything. B is the visible
 half of the goal and is testable on its own, by constructing batches directly
 without needing edits to work. C is the biggest piece and buys nothing until D.
 D is small once C is done.
@@ -446,11 +452,11 @@ the table above and the input leak per line, neither of which C touched: a
 session still mints a `Source` per appended line, and a fresh compiler still
 re-does the session from nothing.
 
-The measurement to hold the whole thing to is the one the
-`edit_reach_tests`/`roots_tests` technique has caught three bugs with this month:
-build A B C D, edit B, and count how many units re-ran each phase. Today the
-answer for analysis is B, C and D; it should be B and D. Write that test first,
-against today's behaviour, so the target is a number rather than a description.
+The measurement the whole thing is held to is the one the
+`edit_reach_tests`/`roots_tests` technique has caught bugs with: build A B C D,
+edit B, and count how many units re-ran each phase. The answer is B and D, for
+analysis in `script_reactivity_tests` and for lowering and execution in
+`script_exec_reactivity_tests`.
 
 ## Confidence, and what is not covered
 

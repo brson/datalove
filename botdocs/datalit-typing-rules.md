@@ -7,7 +7,9 @@ It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2
 
 - **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
 - **Structural typing**: Anonymous types (tuples, structs) are compatible by structure
-- **Nominal typing**: Named types (`struct Foo`, `tuple Pair`) are distinct even with same structure
+- **No nominal types**: There are no named struct or tuple types. A type alias is
+  only a name for a structural type, and two aliases for the same structure are
+  the same type (botspec Section 3.7)
 - **Explicit at boundaries**: The `: type / expr` syntax provides type information at expression boundaries
 
 ## Type Equivalence
@@ -139,17 +141,17 @@ Examples:
 ```
 f : float literal (contains decimal point)
 ------------------------------------
-f => f32
+f => f64
 ```
 
-Float literals without type context synthesize as `f32`.
-Use a type hint for `f64`: `: f64 / 3.14`.
+Float literals without type context synthesize as `f64`.
+Use a type hint for `f32`: `: f32 / 3.14`.
 
 Example:
 ```datalove
-1.0 => f32
-3.14159 => f32
-: f64 / 3.14 => f64
+1.0 => f64
+3.14159 => f64
+: f32 / 3.14 => f32
 ```
 
 ### Rule: Syn-Hex
@@ -193,7 +195,7 @@ Anonymous tuples are synthesized by synthesizing each element independently.
 
 Example:
 ```datalove
-(true, 42, 3.14) => (bool, int, f32)
+(true, 42, 3.14) => (bool, int, f64)
 ```
 
 ### Rule: Syn-AnonStruct
@@ -207,7 +209,7 @@ Anonymous structs are synthesized by synthesizing each field value independently
 
 Example:
 ```datalove
-{x = 42, y = 3.14} => {x: int, y: f32}
+{x = 42, y = 3.14} => {x: int, y: f64}
 ```
 
 ### Rule: Syn-List
@@ -702,7 +704,7 @@ Field order must match:
 
 Bare numeric literals synthesize to concrete types:
 - Integer literals -> `int` (arbitrary-precision)
-- Float literals -> `f32`
+- Float literals -> `f64`
 - Hex literals -> `int` (arbitrary-precision)
 
 Use explicit type hints for fixed-width numeric types:
@@ -710,7 +712,7 @@ Use explicit type hints for fixed-width numeric types:
 : u32 / 42                              unsigned 32-bit
 : i64 / -42                             signed 64-bit
 : u8 / 255                              unsigned 8-bit
-: f64 / 3.14                            64-bit float
+: f32 / 3.14                            32-bit float
 ```
 
 ### 4. Explicit Option/Result constructors
@@ -763,3 +765,4 @@ The `Type` enum in `crates/datalove-datalit/src/tycheck/types.rs` includes:
 - Wrappers: Option, Result
 - Tagged: Atom, Term, Enum
 - Special: Tensor, Table, Data, Error
+- Type parameters: Var (a type parameter of the enclosing generic function)

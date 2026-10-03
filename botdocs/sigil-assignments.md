@@ -9,26 +9,26 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 ### Punctuation
 - `.` - Dot
   - Member access in import statements: `import u32.negate`
+  - Field and tuple element access: `p.x`, `t.0`
   - Part of comparison operators: `.<`, `.>`
   - Decimal point in float literals: `3.14`
 
 - `,` - Comma
   - Separating items in lists, tuples, function parameters, etc.
+  - Tensor axis separators: `,` between rows, `,,` between slabs, and so on
 
 - `;` - Semicolon
   - Statement separator (alternative to newline)
 
-### Adapt / Clone / Widen
+### Adapt
 - `@` - At
   - Postfix adapt operator: clone, widen, or coerce
 
 - `$` - Dollar
-  - Lexed, not yet read by the parser: postfix clone, see
-    [design-clone-and-coerce.md](design-clone-and-coerce.md)
+  - Reserved, unassigned. Lexed, not read by the parser
 
 - `~` - Tilde
-  - Lexed, not yet read by the parser: postfix widen, see
-    [design-clone-and-coerce.md](design-clone-and-coerce.md)
+  - Reserved, unassigned. Lexed, not read by the parser
 
 ### Hash
 - `#` - Hash
@@ -60,7 +60,7 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Total multiplication
 
 - `/` - SlashForward
-  - Total division (panics on overflow/zero)
+  - Float division (`f32`, `f64` only; integers use `/!` or `/?`)
   - Path separator in require statements: `require module sys/std/u32`
   - Type hint / expression separator: `: u32 / @42`
 
@@ -76,10 +76,10 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Struct field assignment: `{ x = 1 }`
   - Map entry assignment: `%{ 1 = 10 }`
   - Map type key-value separator: `%{K = V}`
-  - Carry binding: `loop carry (x = 0)`
 
 - `|` - Pipe
   - Binding delimiter in if statements: `if condition |x|`
+  - Tensor shape header separator: `[| 1 3 | 1 2 3 |]`
 
 ### Braces (Balanced Pairs)
 - `(` `)` - ParenOpen, ParenClose
@@ -88,7 +88,6 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
   - Tuples: `(1, 2, 3)`
   - Tuple type hints: `(u32, u32)`
   - Expression grouping
-  - Carry/bring clauses: `loop carry (x = 0)`
 
 - `{` `}` - BraceOpen, BraceClose
   - Structs: `{ x = 1, y = 2 }`
@@ -123,7 +122,7 @@ Sigils are defined in the `bcts` crate (`lexer.rs`).
 ## Two-Character Sigils
 
 ### Arithmetic Variants - Optional (?)
-Return Option on overflow/error instead of panicking.
+Early-return `none` on overflow or division by zero.
 
 - `+?` - PlusQuestion: Optional addition
 - `-?` - MinusQuestion: Optional subtraction / unary optional negation
@@ -131,7 +130,7 @@ Return Option on overflow/error instead of panicking.
 - `/?` - SlashQuestion: Optional division
 
 ### Arithmetic Variants - Checked (!)
-Return Result on overflow/error instead of panicking.
+Early-return an error on overflow or division by zero.
 
 - `+!` - PlusExclamation: Checked addition
 - `-!` - MinusExclamation: Checked subtraction / unary checked negation
@@ -211,10 +210,4 @@ What a sigil operator attaches to is decided by how it was written: one
 against both its neighbours or against neither goes between them, one against
 only what follows it is a prefix operator, and one against only what precedes
 it is a postfix operator. See
-[design-token-gluing.md](design-token-gluing.md).
-
-
-# Open design questions
-
-Tensor constructors use multi-comma separators (`[| 1 2, 3 4,, 5 6, 7 8 |]`)
-instead of semicolons, since `;` is used as a line separator.
+[Section 2.4 of the spec](botspec.md#user-content-24-spacing).

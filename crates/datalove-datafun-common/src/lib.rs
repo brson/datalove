@@ -72,7 +72,7 @@ pub fn parallel_mode_from_env() -> ParallelMode {
 /// - Float widening (f32 → f64)
 /// - Cloning linear types for reuse
 ///
-/// See `botdocs/report-adapt-cases.md` for the full list of recoverable errors.
+/// See "Auto-adapt" in `botdocs/compiler-guide.md` for which errors it recovers.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 #[derive(salsa::SalsaValue)]
 pub enum AutoAdaptMode {

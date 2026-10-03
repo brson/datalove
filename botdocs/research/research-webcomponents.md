@@ -82,80 +82,11 @@ This is relevant for datafun if we want to support async I/O in the future.
 
 ## 2. Datafun Compiler Architecture
 
-### 2.1 Current Pipeline
-
-```
-Source (.dfs/.dfm)
-    |
-    v
-[Parser] -> ParsedStatements (AST + spans)
-    |
-    v
-[Typecheck] -> Type annotations (bidirectional typing)
-    |
-    v
-[Drop Analysis] -> Consume/drop marking for linear types
-    |
-    v
-[Lowering] -> IR (SSA + slots)
-    |
-    v
-[Interpreter] or [AOT Cranelift] -> Execution / Native code
-```
-
-### 2.2 IR Summary
-
-The IR (`datalove-datafun-ir`) is an SSA-based representation with:
-
-**Core Concepts:**
-- `ValueId` - Immutable SSA values (expression temps, let bindings)
-- `SlotId` - Mutable slots (var bindings)
-- `ParamId` - Function parameters (references to caller data)
-- `BlockId` - Basic blocks with parameters (no Phi nodes)
-- `FuncRef` - Local, External (prior unit), or Module function references
-
-**IrType Enum:**
-- Primitives: Unit, Bool, U8-U64, I8-I64, F32, F64, Int, String, Data, Error
-- Composites: Tuple(Vec), Struct(Vec), Enum(Vec)
-- Collections: List, Set, Map, Tensor
-- Wrappers: Option, Result
-
-**Instructions:**
-- Data: Const, Copy, Move, Widen
-- Arithmetic: BinOp, UnaryOp, BinOpChecked, UnaryOpChecked
-- Calls: Call
-- Composites: Pack, Unpack, EnumVariant
-- Option/Result: WrapSome/Ok/Err/None, UnwrapOption/Result
-- Collections: ListNew, SetNew, MapNew, TensorNew
-- Memory: SlotStore, SlotLoad, ParamStore, Drop, DebugLog
-
-**Terminators:**
-- Goto { target, args } - Unconditional jump with block args
-- Branch { cond, then_block, then_args, else_block, else_args }
-- Return { value }
-- UnitEnd / UnitEarlyReturn - Script unit completion
-
-### 2.3 Existing Codegen (Cranelift)
-
-The AOT backend (`datalove-datafun-aot-cranelift`) demonstrates the codegen pattern:
-
-1. **Type collection** - Gather all types for TyDesc emission
-2. **Declaration** - Declare all functions upfront
-3. **Definition** - Compile function bodies with full visibility
-
-Key files:
-- `lib.rs` - AotCompiler entry point
-- `codegen/` - IR instruction translation to Cranelift IR
-- `tydesc_emit.rs` - Runtime type descriptor emission
-- `layout.rs` - Stack frame layout computation
-- `runtime.rs` - Runtime function imports (dtlv_rti_*)
-
-The runtime (`datalove-rt`) is a C library providing:
-- Memory allocation (dtlv_rti_alloc, dtlv_rti_free)
-- Type descriptors (TyDesc) for runtime type info
-- Collection operations (list, map, set)
-- Bigint operations
-- Debug output
+See [compiler-guide.md](../compiler-guide.md): the module pipeline, the IR
+(SSA values plus mutable slots, block parameters rather than phis), and the
+execution backends. A Wasm backend would sit beside the Cranelift AOT and C
+backends, consume the same IR, and call the runtime through the same
+`dtlv_rti_*` C ABI that `datalove-rt` exports.
 
 ## 3. Lowering Strategy for WebAssembly Components
 
@@ -386,6 +317,44 @@ impl FunctionCompiler {
 - Roundtrip: IR -> Wasm -> Execute -> Verify
 - Compare with interpreter results
 - Fuzz testing with property-based tests
+
+### 3.10 The Boundary: Ownership, Collections, Bigints
+
+**Parameter modes** map onto WIT ownership:
+
+| Mode | WIT |
+|------|-----|
+| `in` (move) | `T`, ownership transfers |
+| `out` | return value |
+| `ref` | `borrow<T>` |
+| `mut` | no equivalent yet; WIT has no mutable borrow |
+
+**Collections** cross one of two ways. Copied, a `[T]` becomes `list<T>`, a
+set a sorted `list<T>` and a map a `list<tuple<K, V>>`: simple, but every
+crossing copies. Or kept in their runtime representation and exposed as
+resource handles, which shares memory and preserves identity under mutation:
+
+```wit
+resource list<T> {
+    push: func(elem: T);
+    get: func(idx: u32) -> option<T>;
+    len: func() -> u32;
+}
+```
+
+**`int`** (arbitrary precision) has no WIT counterpart. The options are an
+opaque `resource int`, a `record int { limbs: list<u32>, negative: bool }`, or
+a base-10 string. The table in 3.3 assumes limbs.
+
+**Open questions:**
+
+- The use case: embedding datafun in other Wasm hosts, calling components from
+  datafun, or both.
+- Interop: should a datafun component be callable from any WIT language, or is
+  datafun-to-datafun the main case? The answer decides whether collections and
+  `int` can stay resources or have to be copied into plain WIT types.
+- Runtime linkage: one runtime per component, or a shared one imported as an
+  interface (see 3.4).
 
 ## 4. References
 

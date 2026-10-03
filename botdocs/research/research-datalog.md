@@ -364,7 +364,7 @@ and obscure the relational intent.
 Two constructs could make the patterns direct:
 a `from` comprehension and named rules.
 Fixed-point iteration uses existing loop syntax,
-but loop carry (a removed feature, see `carry-bring.md`)
+but loop carry (a removed feature, see [carry-bring.md](../carry-bring.md))
 would enable termination proofs.
 
 They share a common core:
@@ -590,7 +590,7 @@ All existing syntax, explicit termination condition.
 
 #### With loop carry
 
-Loop carry (see `carry-bring.md`) was removed
+Loop carry (see [carry-bring.md](../carry-bring.md)) was removed
 but keeps coming up in design discussions.
 A saturation loop is one of its strongest use cases.
 With carry the loop state is declared, not mutated:
@@ -973,7 +973,7 @@ Saturation loops use existing `loop`/`break`/`var`/`set`
 
 ## Relationship to top-down logic programming
 
-The research-logic-programming doc explores Mercury-style
+Mercury-style logic programming is about
 modes, determinism, and backtracking.
 The constructs here are the **bottom-up** (forward-chaining) complement:
 
@@ -1138,9 +1138,8 @@ works in either option via type-context coercion.
 
 ### Connection to generators
 
-The logic programming research doc
-(`research/research-logic-programming.md`)
-proposes a phased generator design:
+A phased generator design
+for top-down logic programming:
 
 1. Deterministic iterators (`fun foo() yields T`).
 2. Semidet (0 or 1 result, `?T` return).

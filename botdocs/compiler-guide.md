@@ -6,12 +6,17 @@ Reference for the datalove-datafun compiler architecture.
 
 - [Crate Organization](#user-content-crate-organization)
 - [Module Compilation Pipeline](#user-content-module-compilation-pipeline)
+  - [Token Gluing](#user-content-token-gluing)
   - [Phase 5: IR Lowering Detail](#user-content-phase-5-ir-lowering-detail)
   - [Const Parameter Specialization](#user-content-const-parameter-specialization)
   - [Const Evaluation](#user-content-const-evaluation)
 - [Generics](#user-content-generics) -- orientation; the full account is [Generics: how it works](generics.md)
 - [Native Riders](#user-content-native-riders)
+  - [The Runtime Kernel and What Belongs in a Rider](#user-content-the-runtime-kernel-and-what-belongs-in-a-rider)
 - [The Shipped Binary](#user-content-the-shipped-binary)
+  - [Checkout and Release Builds](#user-content-checkout-and-release-builds)
+  - [The ABI Check](#user-content-the-abi-check)
+  - [Rider Manifests and Interfaces](#user-content-rider-manifests-and-interfaces)
 - [Script Compilation Pipeline](#user-content-script-compilation-pipeline)
 - [IR Types](#user-content-ir-types)
   - [IDs](#user-content-ids)
@@ -25,6 +30,7 @@ Reference for the datalove-datafun compiler architecture.
   - [Database](#user-content-database)
   - [Tracked Functions](#user-content-tracked-functions)
   - [Incremental Compilation](#user-content-incremental-compilation)
+  - [Reusing a Compiled World](#user-content-reusing-a-compiled-world)
   - [Parallel Execution](#user-content-parallel-execution)
 - [Ownership Analysis](#user-content-ownership-analysis)
   - [Tracking Categories](#user-content-tracking-categories)
@@ -33,8 +39,13 @@ Reference for the datalove-datafun compiler architecture.
   - [Drop Schedule](#user-content-drop-schedule)
   - [AOT Tracking Bytes](#user-content-aot-tracking-bytes)
 - [Execution Backends](#user-content-execution-backends)
+  - [Leak Checking](#user-content-leak-checking)
+- [Performance Notes](#user-content-performance-notes)
 - [Entry Points](#user-content-entry-points)
+  - [Compiling From Roots](#user-content-compiling-from-roots)
 - [Test Patterns](#user-content-test-patterns)
+  - [index-64](#user-content-index-64)
+  - [Worldgen Coverage](#user-content-worldgen-coverage)
 - [Key Files](#user-content-key-files)
 
 ## Crate Organization
@@ -76,6 +87,10 @@ Reference for the datalove-datafun compiler architecture.
 |-------|----------------|
 | `bcts` (imported as `bct`) | Base compiler toolkit: `ModuleGraph`, `Module`, `ModuleId`, source maps, text interning |
 | `datalove-datafun-pkg` | Package loading, `PackageWorld`, worldfile parsing, module resolution |
+| `datalove-pkg-manifest` | A package's `manifest.toml`, read by `package_load` and by `sys/build.rs` |
+| `datalove-rti` | The runtime's call table as riders see it, and `ABI_VERSION` |
+| `datalove-buildinfo` | `BuildInfo`: whether this binary was built from a checkout or a release |
+| `datalove-paths` | `work_dir()`, where native components are built |
 | `datalove-ct` | Compile-time utilities, query logging |
 | `datalove-diagnostic` | Diagnostic/error infrastructure |
 | `datalove-datalit` | Data literal types and typechecking |
@@ -165,6 +180,53 @@ Neither takes an integer literal where a float is expected, or the reverse.
 There is no implicit conversion between the two families; see
 [Numeric Widening](botspec.md) in the spec, and `f64.from_int` and
 `int.from_f64` for the named conversions.
+
+### Token Gluing
+
+Whitespace is significant inside an expression: `1 . 5` is not a float and
+`a -b` is two expressions. The rules are in [botspec.md](botspec.md) §2.4,
+Spacing; this is where they live in the code.
+
+The lexer breaks words at character-class boundaries and never puts them back
+together, so `1.5` arrives as three tokens, and whitespace and comments are
+filtered out before either parser sees a token. That leaves the spans as the
+only evidence that two tokens touched. Two tokens are glued when the first
+one's span ends where the second's begins; a comment between them leaves a gap,
+which is the wanted answer for free.
+
+All of it is in `bcts/src/parser_util.rs`, so that datafun and datalit give the
+same answer for the same spelling:
+
+- `TokenStream::prev_end` and `peek_next` are the primitives. `TokenStreamExt`
+  builds `glued_left`, `glued_right` and `is_infix_spacing` on them.
+- `eat_number` reads a numeric literal as far as it is glued, and both parsers
+  call it. It reads a number whole even where the spacing was wrong, so a
+  parser makes one complaint about the number rather than meeting its pieces
+  again as something else.
+- `Number::complaint` words that complaint, in bcts so both languages say the
+  same thing. A suffix (`1u8`) is a field rather than an error, since bcts does
+  not know whether its caller has units; datalove's message refusing one is
+  `datalove-datalit::parser_util::suffix_complaint`, shared by both parsers.
+
+The literal reader runs before fixity is judged, and fixity only sees the
+operators it declined. That is why `2.5e-10` is one number while `x-1`
+subtracts. There is no sign rule: `eat_number` takes a glued leading `-`
+whenever it is offered one, and whether it is offered one is the grammar's
+business. Datafun's prefix `-` claims the sign first in expression position;
+datalit has no prefix operator, so there the literal owning it is the only
+reading.
+
+| Written | Said |
+|---------|------|
+| `1 . 5` | a float is written without spaces in it (write it as `1.5`) |
+| `2.5e - 10` | an exponent is written without spaces in it (write it as `2.5e-10`) |
+| `1u8` | numeric suffixes are not supported (write a type hint, as in `: u8 / 1`) |
+| `a -1` | this `-` is spaced as a prefix operator |
+| `p . 0`, `x ?` | this `.` / `?` is written apart from what it applies to |
+
+The last two come from `lopsided_operator` in the datafun parser's `expr.rs`.
+Datalit has no operators to misplace, and a `-` there that no number follows is
+D013, "unexpected minus sign".
 
 ### Phase 5: IR Lowering Detail
 
@@ -318,7 +380,9 @@ were worth:
   `resolve_call_descriptors` returns what each call should hand over instead of
   writing it, so `Arc::make_mut` is reached for only when the answer moved --
   it used to copy every function in the program on any compile where a shape
-  existed anywhere.
+  existed anywhere, which is also why the handle pass-through never fired for
+  a program with a generic in it. `set_call_descriptors` keeps the
+  write-through behaviour for the script paths, which own their units.
 - **The three maps** -- placement, shapes, calls -- are keyed on
   `(IrModuleId, FuncId)` and rebuilt whenever the pass runs. They are
   `FxHashMap`s. This is the one place in the tree where the hasher was worth
@@ -327,59 +391,6 @@ were worth:
 `close_shapes_over_calls` no longer appears in a profile of an edit, or in
 `query_census`. On the system library, editing a module of your own went from
 3.1ms to 2.0ms across these.
-
-**A module the closure does not change keeps the handle it came in under.** A
-tracked struct's identity map belongs to the query instance that created it, so
-minting a fresh handle would give phase 5d a new key for a module whose IR is
-the same, and the graph key moves whenever a module is added. The
-`module_memo` fixtures are what catch this; they failed on precisely that
-regression while it was being built.
-
-#### What is not tracked, and what stands in the way
-
-`lower_module_graph_with_evaluator` is still a plain function, and the two
-const evaluations under it still run in full on every compile. They cannot be
-tracked as they stand, because they take a `Rc<RefCell<dyn CtfeEvaluator>>` and
-a trait object is not a memo key. The gates above mean a program with no consts
-never reaches them, which is why an unchanged recompile no longer pays for
-them; a program that does have consts still pays on every compile.
-
-`specialize_comptime_functions` has the same obstacle for the same reason: it
-evaluates a comptime function's const bindings once the instantiation is known,
-so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
-memoizing it, so a program that does specialize re-specializes on every
-compile.
-
-#### What the shape closure costs, and why it is shaped as it is
-
-It is a fixpoint over the call graph -- see `close_shapes` for the rule and why
-it settles -- so it cannot be split per module and it re-runs whenever any
-module's IR moves. That part is inherent. What surrounds the fixpoint is not,
-and the three things around it were each larger than it:
-
-- **Reading the call graph out of the IR** is per function and per module, so
-  it is `module_shape_inputs`, tracked on the handle. An edit re-reads one
-  module and takes the rest out of a memo.
-- **The write-back asks before it writes.** `resolve_call_descriptors` returns
-  what each call should hand over rather than writing it, and the module path
-  reaches for `Arc::make_mut` only when the answer moved. It used to copy every
-  function in the program on every compile where any shape existed anywhere,
-  which is also why the handle pass-through never fired for a program with a
-  generic in it. `set_call_descriptors` keeps the write-through behaviour for
-  the script paths, which own their units.
-- **The three maps** -- placement, shapes, calls -- are keyed on
-  `(IrModuleId, FuncId)` and rebuilt whole, one entry per function. They are
-  `FxHashMap`s. This is the one place in the tree where the hasher was worth
-  changing; sweeping all of them was tried once and backed out at about 1%.
-
-On a system library edit the pass went from 27% of the compile to under half
-that, and the fixpoint itself was a twenty-fifth of the original.
-
-What is left is the apply step, which still *reads* every unit on every compile
-that moves any module. Making it a query per module means keying it on that
-module's settled shapes and its callees' rather than on the global map -- hand
-it the global map and every module's key moves whenever any module's shapes do,
-which is the problem it was meant to solve.
 
 The `skip_const_inlining` flag skips phase 5b and the inlining phase 5d does after it,
 lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
@@ -421,11 +432,20 @@ and runs the original.
 **What a const argument may be.** The name of a `const` binding, and nothing else --
 not a literal, not an expression. The value has to be one the compiler already holds, and
 a binding is the one form that says so on its face; anything else would mean deciding
-case by case which shapes to see through. A const parameter counts, being a const binding
-within the body.
-A function with both const parameters and type parameters is refused outright
-(`ComptimeParamOnGeneric`), because lowering takes the comptime branch before a call's
-type arguments are computed and the copy would lose its descriptors.
+case by case which shapes to see through, which is how a rule stops being one. It is
+also what makes monomorphization the right shape: every call site's value is known when
+the call is compiled. A const parameter counts, being a const binding within the body,
+which is what lets one comptime function pass its parameter to another.
+
+**Const parameters and type parameters combine**, independently: specialization deletes
+the const parameters, erasure replaces the type parameters, and a copy is as generic as
+its original. One copy per const instantiation serves every type instantiation, the call
+site handing over the descriptors it would have anyway. `ComptimeCall` carries
+`type_args` and `shape_descriptors` exactly as `Call` does, and the rewrite carries both
+across. The one refused case is a const parameter whose own type is a type parameter,
+`const x: T` (`ComptimeParamOfGenericType`): the const argument would be all that says
+what `T` is, and a copy is built by substituting into cloned blocks, so it cannot change
+its signature or the erasure decisions in its body.
 
 **Where instantiations come from.** They are read out of the IR. The const argument at a
 call site is already an operand defined by a `Const` instruction, so the values the
@@ -465,8 +485,25 @@ regular `Call` to the copy, dropping the const arguments the copy does not take.
 **Testing:** The `skip_specialization` flag (like `skip_const_inlining`) allows differential
 testing - comparing specialized vs unspecialized output to verify correctness.
 
-See [Const Parameter Implementation](const-param-impl-plan.md) for what remains, and
-[Generics and Specialization](plan-generics.md) for why this machinery is not a
+**The union-branch approach, tried and dropped.** The first implementation compiled one
+function per callee with a `Switch` on a tag, one arm per instantiation, on the theory
+that a branch is cheaper than a copy. It is not: each arm *was* a copy of the body
+(`build_dispatch_blocks` cloned every block once per instantiation), so it was
+monomorphization plus a switch on a value every call site passed as a constant, in one
+oversized symbol that inlined whole or not at all, and whose instantiations shared one
+call count in the JIT's tiering. What decided it, though, was that it rewrote the
+callee's signature in place, which obliged every call site in the program to be found
+and rewritten -- and script units compile later than that. A module function called from
+both a module and a script miscompiled exactly that way (fixture
+`specialize_differential/023_module_and_script_call`). `ComptimeCall` survives from it.
+If a call site is ever allowed to pass a value chosen at run time from a known set, the
+tag becomes the right shape for that case.
+
+**What remains.** A function all of whose call sites were specialized keeps an original
+nobody calls. That is deliberate, since a later script line may call it, but it is dead
+weight in an AOT build, where there is no later line.
+
+See [Generics and Specialization](plan-generics.md) for why this machinery is not a
 foundation for type parameters.
 
 ### Field Projections
@@ -709,7 +746,25 @@ Rider implementations follow the runtime C ABI:
 `extern "C-unwind" fn(rt, arg0_ptr, arg0_tydesc, ..., result_out, result_tydesc) -> u8`,
 returning 1 for Ok and 2 for Error.
 
-Design notes: [plan-native-riders.md](plan-native-riders.md).
+### The Runtime Kernel and What Belongs in a Rider
+
+A package has at most one rider, shared by all its modules, and `sys/std` uses the
+same mechanism as any user package. The rule for what stays a `dtlv_rti_*` call the
+codegen emits by name, rather than a native function reached through the module
+system, is whether rider code itself needs it:
+
+- **The kernel**: `init` and `shutdown`, memory allocation, type descriptors,
+  `debuglog`, `any_destroy` and `any_clone`. A rider cannot be built without these,
+  so they cannot live in one.
+- **Everything else belongs in a rider**: list, map, set, string, int arithmetic,
+  table and tensor operations.
+
+That migration is incomplete. The Cranelift backends still call constructors and
+domain operations as hard-coded runtime functions -- `list_create`,
+`list_build_from_slice`, `list_push`, `string_from_bytes`, the `btreemap_*` and
+`btreeset_*` builders, `table_*`, `tensor_init`, `int_add` and the rest of the bigint
+arithmetic -- mostly because literals and operators lower to them directly. Moving one
+means the codegen stops naming it and the module that wants it imports it.
 
 ## The Shipped Binary
 
@@ -730,7 +785,8 @@ Two things travel inside the binary, both assembled by
 
 | What | How | Where it comes from |
 |------|-----|---------------------|
-| Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm`, `sys/*/rider/rider.dli` |
+| Module sources | `build.rs` walks `sys/`, emits a table of `include_str!` | `sys/*/*.dfm` |
+| Rider interfaces | The rider crate's `INTERFACE` constant; see [below](#user-content-rider-manifests-and-interfaces) | `sys/*/rider/rider.dli` |
 | Rider functions | `datalove-rider-sys-std` is a normal dependency; its generated `symbols()` gives addresses | `sys/std/rider` |
 
 `system_library()` assembles them into a `SystemLibrary`, which is a
@@ -746,14 +802,15 @@ worker thread rather than being handed the value.
 puts it in `RiderDescriptor::crate_dir`. So the std rider reaches an
 AOT-compiled program the way any other rider does: the compiler synthesizes a
 native component for whatever riders the module graph holds and builds it with
-cargo. See [Riders](#user-content-riders).
+cargo. See [Native Riders](#user-content-native-riders).
 
 That is what lets a program mix `sys/` with a rider of its own. The binary
 used to link a prebuilt archive containing the std rider and nothing else, so
 a script importing a package with its own rider failed at link time with
-undefined symbols. `work_dir()` gives the build somewhere to happen -
-`$XDG_CACHE_HOME/datalove/work` - and cargo caches within it, so the component
-for a given rider set is rebuilt only when one of its rider crates changes.
+undefined symbols. `datalove_paths::work_dir()` gives the build somewhere to
+happen - `$XDG_CACHE_HOME/datalove/work/<ABI_VERSION>` - and cargo caches within
+it, so the component for a given rider set is rebuilt only when one of its rider
+crates changes.
 
 ### What this costs in the tree
 
@@ -781,19 +838,79 @@ cargo rebuilds incrementally the next time a suite links one. Each work dir
 carries its own target directory, so the cost is per rider set rather than per
 build.
 
-### What is still tied to the tree
+### Checkout and Release Builds
 
-- `datalove docs` builds the website out of `mandocs/`, so it keeps its
-  `env!("CARGO_MANIFEST_DIR")`. It is a repository tool.
-- `cargo install --path` works; `cargo install datalove` from a registry would
-  not. The component `rider_build` synthesizes names `datalove-rt` and the
-  rider crates by absolute path into the checkout, baked in at compile time
-  from `env!("CARGO_MANIFEST_DIR")`. Publishing means those become registry
-  dependencies, which is undecided - the local case has to keep working,
-  since compiling `datalove-rt` and a rider from in-tree source is the base
-  case for development and for any package outside `sys/`.
-- Nothing: the library is its own crate root, so it packages. What a packaged
-  one cannot carry is the rider crates it names, which come from a registry.
+The component `rider_build` synthesizes has to name the runtime crates and
+every rider as cargo dependencies, and there are exactly two ways to do it:
+by path, when the sources are beside us, or by an exactly pinned version
+(`=x.y.z`), when they are published. A range would only promise something
+semver-compatible, which is not the claim that matters when a rider and the
+runtime it loads into must agree on the layout of everything between them.
+
+Nothing at run time can tell which applies, so `datalove-buildinfo`'s build
+script decides while the answer is in front of it and bakes in a `BuildInfo`:
+`Prod { version }` or `Local { git_sha, checkout }`. It does **not** ask git
+whether it is in a repository -- a published crate unpacked or vendored inside
+somebody else's repository is in a checkout, just not this one. It walks up
+from its own manifest for a directory holding both `sys/std` and
+`crates/datalove-buildinfo`, which is this tree's shape and no other's, and
+uses git only for the revision, so a tarball of the tree is still the tree.
+`git_sha` is as of whenever `datalove-buildinfo` last compiled, not of this
+moment: watching `.git/HEAD` would relink everything above it on every commit,
+for a field nothing reads yet.
+
+`runtime_dep` reads that for the runtime crates, which have no package to say
+where they came from. A rider's package does say: one with Rust source in its
+`rider/` directory is named by path, and one carrying only its interface is
+named by the version its manifest asks for. A `Local` binary whose checkout
+has gone says so, naming the directory, rather than leaving cargo to report a
+missing path. `datalove --version` prints which kind of build it is.
+
+So `cargo install datalove-cli` from a registry is meant to work, and the
+workspace is published to crates.io (0.1.0 at the time of writing). Every crate
+but the test and bench ones publishes, `just publish-check` dry-runs it, and
+`just local-registry` builds a registry out of the tree to try the release path
+against before anything is uploaded. `datalove docs` still reads
+`env!("CARGO_MANIFEST_DIR")`, being a repository tool.
+
+### The ABI Check
+
+A rider library and the process loading it each compile their own copy of
+`datalove-rti` and `datalove-rtdt`, and nothing else would notice if the two
+disagreed: a rider would call a function with the wrong arguments or read a
+field at the wrong offset and carry on. So `datalove-rti::ABI_VERSION` hashes
+the shape of the runtime's call table and the sizes and offsets of the `rtdt`
+types that cross. It deliberately leaves out crate versions -- a release that
+moves no field should not invalidate a rider, and a version says nothing about
+whether `index-64` is on.
+
+`rider_build` writes `DLR_ABI_VERSION` into every dylib component it
+synthesizes, so no rider author does anything. `load_rider_library` reads it
+before looking up any `dlr_*` symbol and refuses a library whose value differs
+or is absent. Only a dylib is loaded, so only a dylib says. The shared work dir
+is named by the same value, so two datalove binaries sharing a cache do not
+build over each other. `rider_abi_tests` builds libraries that lie about their
+interface and checks both lies are refused.
+
+### Rider Manifests and Interfaces
+
+A package with a rider has a `manifest.toml` whose `[rider]` section names the
+crate and its version, read by `datalove-pkg-manifest`. Unknown keys are
+refused rather than ignored, so a manifest written for a later datalove says
+so instead of half working, and a package with a rider and no manifest is an
+error rather than a guess. The manifest is what survives once the Rust source
+is stripped from a published datalove package.
+
+The interface lives inside the rider crate, at `rider/rider.dli`, so the
+crate's own `build.rs` can read it within its package root. It reaches the
+compiler as Rust, not as a file: the crate exports
+`INTERFACE = include_str!("../rider.dli")`, and `sys/build.rs` writes
+`rider_interface: Some(<crate>::INTERFACE)` into the embedded table. The
+reason is a cargo behaviour worth knowing: **a nested `Cargo.toml` silently
+removes its whole directory from the package around it, and `include` cannot
+override that.** `datalove-sys-packages` is `sys/`, so `sys/std/rider/` is never
+in it, and the interface arrives by dependency instead.
+`embedded_matches_tree` checks that route against the file on disk.
 
 ## Script Compilation Pipeline
 
@@ -1110,6 +1227,46 @@ an input once, when every `::new()` made a distinct one, which is why the world
 holds `Source` handles across an edit rather than rebuilding from paths -- a
 `Source` is the input, and it is the only handle worth keeping.
 
+### Reusing a Compiled World
+
+**The unit of reuse is the pipeline, not the database.** A
+`ModuleCompilationPipeline` owns the `Source` inputs every tracked query is
+keyed on, and `descriptor.to_pipeline(db)` makes new ones, so a fresh pipeline
+misses every memo however warm the database is. Measured in debug on `sys/std`:
+a fresh database and pipeline, the same database with a fresh pipeline, and a
+cloned database with a fresh pipeline all took about 756ms; the same pipeline
+compiling a second time took 84ms (and less since).
+
+`CompiledWorld` (`datafun/src/pipeline/compiled_world.rs`) is that pair kept
+together: a `Database` and the pipeline whose inputs live in it. It is not a
+cache, just the state a caller holds if it wants salsa to do its job -- owned,
+no thread-local, dropped with its owner. `std_all_tests` holds one per worker,
+and the REPL's `Engine` keeps its pipeline across a reset for the same reason.
+
+**Threads.** `Storage::clone` keeps the `Arc<Zalsa>` -- every memo, interned
+value and tracked struct -- and makes a fresh `ZalsaLocal`, the per-thread
+query stack. So `Database` is `Send` and not `Sync` by design, and a clone is
+how another thread gets a handle onto the same work; the handle must be
+per-thread, what it points at need not be. Note that a clone alone buys nothing
+cold, since the cost is in the inputs. Compilation is therefore single-threaded
+per handle, while execution is free: `IrCodeUnit` and
+`Arc<ModuleFunctionRegistry>` are `Send + Sync` and carry nothing of salsa, so
+any number of executors, each with its own runtime, can run the same IR in
+parallel.
+
+**Two sources, so two worlds.** There are two standard libraries and a process
+can want both: `WorkspaceDescriptor::load_sys_dir` reads `sys/` off disk, which
+is what the stdlib suites use because they test it, and
+`from_system_library` uses the copy embedded in the binary, which is what the
+CLI and REPL use. They are not interchangeable (`embedded_matches_tree` exists
+for that reason), so whatever holds a world holds one per descriptor.
+
+Persisting a compiled world across processes was sized and not attempted.
+Salsa's `persistence` feature would need about 132 items across ten crates
+annotated and made serializable, and can fail late on one unserializable
+field; compiling several scripts against one in-process `CompiledWorld` is the
+baseline it would have to beat.
+
 ### Parallel Execution
 
 Enabled via `DATALOVE_PARALLEL=1`:
@@ -1174,26 +1331,52 @@ across all match arms: if a value is moved in one arm, it must be moved in all.
 
 ### Auto-adapt
 
-`AutoAdaptMode::Enabled` accepts the `@`-recoverable errors catalogued in
-`report-adapt-cases.md` by supplying the `@` the source left out. Both
-analyses record where it belongs as `AdaptSites`, keyed by `ExprKey`, and
-lowering emits what an explicit `@` on that expression would - a widening
-between fixed ints, a clone for linear types.
+`AutoAdaptMode::Enabled` accepts the errors an `@` would have fixed by
+supplying the `@` the source left out. Both analyses record where it belongs
+as `AdaptSites`, keyed by `ExprKey`, and lowering emits what an explicit `@` on
+that expression would - a widening, a clone for linear types.
+
+| Code | What `@` fixes | Auto-adapt |
+|------|----------------|------------|
+| F016 | Widening along a signedness chain, `f32` to `f64`, cross-sign widening (`u8` to `i16` and up), a clone where the types already match, an atom or term into its enum -- whatever `can_clone_coerce_to` accepts | Yes |
+| D001, D002 | A clone at the earlier move | Yes |
+| D007 | A clone at the use inside the loop, so each iteration takes a copy | Yes |
+| D013 | A clone where an earlier script unit gave the value away | No: that unit has already run |
+| D003, D004 | Nothing; the parameter mode is wrong | No |
+| D005, D006 | Nothing; there is no value to clone | No |
+| F011 | Nothing; `@` needs an expected type, so `let x = v@` cannot synthesize one | No |
+
+Arithmetic on fixed integers producing `int` where a fixed type was wanted is
+deliberately not on the list: the result really is an `int`, and the fix is
+checked arithmetic.
 
 Ownership analysis records the *earlier* use, not the one that would have
 errored: a value read after a move is already gone, so the repair belongs
-where it was given away. That covers D001, D002, and D007, where the clone
-restores the binding for the next iteration. The typechecker's adaptations
-travel the same way, which is why `ScriptCompiler` typechecks through
-`create_batch_spec_with_auto_adapt` rather than `create_batch_spec` and its
-hardcoded `Disabled`.
+where it was given away. The REPL avoids D013 differently, by copying out of
+earlier units in the first place (see [Ownership across
+units](#user-content-ownership-across-units)). Sites are keyed by expression,
+so handing a body a set naming expressions from elsewhere is harmless - no
+expression there matches.
 
-Sites are keyed by expression, so handing a body a set naming expressions
-from elsewhere is harmless - no expression there matches.
+The mode is set on a `ScriptCompiler` with `set_auto_adapt_mode`, which also
+rebuilds its `ScriptEnv`, since the mode is part of what the per-unit queries
+are keyed on. What is not done:
 
-Module-level auto-adapt is not wired up: `compile_modules` passes
-`AutoAdaptMode::Disabled` to both typechecking and ownership analysis, and
-`ModuleCompilationPipeline` has no way to ask for anything else.
+- **Modules.** `compile_modules` passes `AutoAdaptMode::Disabled` to both
+  typechecking and ownership analysis, and `ModuleCompilationPipeline` has no
+  way to ask for anything else, so the module fixtures record that their
+  modules did not compile.
+- **`EnabledWithReport`** behaves exactly like `Enabled`; the report is a TODO
+  in the typechecker's `context.rs`.
+- **No driver exposes it.** The `--auto-adapt` CLI flags and
+  `DATALOVE_AUTO_ADAPT` variable once proposed were never implemented.
+
+`auto_adapt_tests` (in `datalove-tests`, fixtures under
+`tests/fixtures/auto-adapt/`) runs each worldfile with the mode off and on and
+then *executes* what the mode accepted, recording the computed values. A check
+that the errors went away says nothing about whether the adapted program is
+the one meant, and running it is what showed the mode had once inserted
+nothing at all.
 
 ### Error Codes
 
@@ -1215,8 +1398,8 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
 | D013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
 
-D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` and are the ones
-auto-adapt can repair. The `D0xx` codes in `datalove-datalit`'s parser are a
+D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`;
+auto-adapt can apply the first three, not D013. The `D0xx` codes in `datalove-datalit`'s parser are a
 separate namespace and unrelated.
 
 ### Drop Schedule
@@ -1295,6 +1478,76 @@ docs also describe a `dtlv_rt_*` family the language would call under a
 restricted ABI, but none exist yet. Everything but `init` takes a runtime
 handle, and every value pointer is followed by its tydesc.
 
+### Leak Checking
+
+The runtime allocator can record every live allocation, so that `shutdown`
+reports what leaked and every `free` checks that its pointer is known (double
+free, untracked pointer) and that its size, align and count match what was
+allocated. `LeakCheckMode` (`datalove-rt/src/impls/alloc.rs`) is read from
+`DATALOVE_LEAK_CHECK` -- `ignore`, `warn`, `panic`, `panic-backtrace` -- and
+defaults to **`Ignore`**, which skips all of it. The justfile sets
+`LEAK_CHECK := "panic"` on every recipe that runs tests, and children inherit
+it, so it reaches the executables the AOT backends build and the `datalove`
+binary the CLI tests spawn. A bare `cargo test` has it off.
+
+It is one switch rather than two on purpose. The free-time checks read the
+same allocation map the leak report enumerates, so they cannot be kept
+without keeping the map, and the map is the whole cost: 13-17% of an
+allocation-heavy program. Keeping the checks in release was tried and saved
+nothing. Nor should a release pay it, because **datalove is safe**: a program
+cannot reach `free` with the wrong size, or free a pointer twice, by being
+written badly. Only the compiler can, by lowering a drop wrongly, and the test
+suite is where that is caught. On the suite itself the tracking costs nothing
+measurable.
+
+Nothing fails if a recipe loses the variable; see [Nothing proves the suite
+runs with leak checking
+on](issues.md#user-content-nothing-proves-the-suite-runs-with-leak-checking-on).
+
+## Performance Notes
+
+Measured facts worth having before optimizing anything. Release builds; the
+numbers drift, the proportions less so. Open work from these measurements is in
+[issues.md](issues.md).
+
+**Startup is the standard library.** A process starts in about 3ms and a trivial
+`script --no-sys` finishes in under 4ms; the same script with `sys/` is 55-60ms.
+Narrowing to [roots](#user-content-compiling-from-roots) is what takes a script
+that uses little of the library well under that. The largest real program in the
+tree, `botdocs/learn.dfs`, adds under 10ms on top of the floor.
+
+**Compiling is allocation-bound.** There is no hot spot -- the largest single
+symbol in a profile of compiling `sys/` is about 2% -- and about 40% of the time is
+malloc, `memcpy`, `hashbrown` and the kernel faulting memory back in. mimalloc as
+the CLI's global allocator measured 1.33x on startup, with system time down 2.9x,
+and was not adopted; there is no `#[global_allocator]` in the tree. The runtime's
+own allocator is not part of that 40%: it mmaps its payloads directly.
+
+**Front end.** Two lessons from profiling the lexer and parser recur. A
+`#[salsa::tracked]` field read looks like a field access and is a table lookup, so
+read fields once and carry the slices -- the lexer's `peek` and the bracer's
+iterator both went through salsa per character or per token. And alternate the
+variants within one run and compare medians; a block of A then a block of B
+measures the machine. Two attempts that were reverted: an ASCII fast path for
+classifying whitespace measured as nothing and would have been wrong, since
+`char::is_ascii_whitespace` rejects `\x0B` where `char::is_whitespace` accepts it;
+and a byte cursor for the lexer measured 1.48x on lexing alone and was not judged
+worth keeping. Carrying a newline flag on `TokenKind::Whitespace`, so
+`split_lines` need not resolve every whitespace token through salsa, is worth
+perhaps 1% and is open.
+
+**The JIT** is about 85x on a tight arithmetic loop and 2-3.5x on call-heavy code.
+It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, registering every
+runtime symbol) and compiles synchronously at `opt_level = "speed"` in the dispatch
+that crossed the threshold. It counts calls only, so a loop in a function called
+once is never compiled. About a third of stdlib-shaped execution is in the native
+runtime, which the JIT cannot speed up, so it is near its ceiling of about 1.8x
+there; arithmetic-shaped code is over 90% interpreter, which is where the 85x
+comes from. The interpreter's call path reuses frames from a `FramePool`
+(`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`),
+which together made it 1.5-1.8x faster on call-heavy code and turned inlining
+under the interpreter from a regression into roughly break-even.
+
 ## Entry Points
 
 ### Module Compilation
@@ -1349,6 +1602,52 @@ under options it was not made with, so there are no setters for them, and a
 `WorkspaceDelta` that changes them says `requires_new_pipeline` rather than
 being applied to one that exists.
 
+### Compiling From Roots
+
+The world is every module a workspace holds, and a program using the system
+library would otherwise compile two dozen modules it may touch none of.
+`Roots` (`datafun/src/incremental.rs`) says which modules to start from:
+
+```rust
+pub enum Roots {
+    All,                    // every module in the world
+    From(BTreeSet<String>), // these, and what they reach by transitive `require`
+}
+```
+
+It is a **parameter of the graph build**, not a mode: `IncrementalModuleWorld::build_graph`
+takes it, and package resolution walks from it too, so modules nothing reaches
+are not even parsed. `Roots::All` is bit-for-bit the compile there was before the
+choice existed, so the two are one path with a different argument. Because
+`ModuleGraph` is interned, the roots are part of the graph's identity, and
+changing them on a live pipeline (`set_roots`) is a different graph rather than a
+memo to invalidate; `roots_tests` holds that. On `sys/` plus one module, a
+script requiring nothing went from about 43ms to under 7ms end to end.
+
+**It changes what is an error.** A type error in a module nothing requires is not
+reported. So the line is that compiling from roots is for running a program, not
+for vouching for a world, and `All` stays the default:
+
+- `script`, `script-ir`, `aot-compile` and `script-world` narrow, through
+  `ModuleCompilationPipeline::narrow_roots_to_script`, which reads the script's
+  `require`s.
+- `typecheck-std`, the test suites that build their own pipelines, and the REPL
+  pass `All`.
+
+A worldfile's own modules are always roots, whether the script reaches them or
+not: a module the author wrote in the file being compiled is part of what they
+asked to be compiled, and a library module they do not use is not.
+`narrow_roots_to_script` refuses to narrow -- leaving `All` -- when a `require`
+does not resolve, because pruning on a program whose requires are wrong would
+drop the module the diagnostic is about.
+
+The REPL stays at `All` because narrowing it looks like a net loss. Its module
+set is fixed for the session, compiled once at startup, and each line compiles
+against it. Narrowing would save that startup compile once and then re-lower
+everything reachable on every line that adds a `require`, since modules are
+numbered by their place in the graph and an inserted module renumbers what
+follows it. See issues.md for the numbering.
+
 ### Workspaces
 
 `WorkspaceDescriptor` is an immutable snapshot of everything compilation reads:
@@ -1377,7 +1676,18 @@ each other. Only workspaces that build riders from source need one; a
 descriptor built from a `SystemLibrary` has no rider crate directories and
 never writes anything.
 
-See [proposal-workspaces.md](proposal-workspaces.md).
+**Scripts are compiled against a workspace, not as part of it.** A descriptor
+describes the module world a script can `require` and `import` from; the script
+itself -- a `.dfs` file, a REPL line -- goes to a `ScriptCompiler` made from the
+compiled modules, which keeps its own incremental state. A driver holds a
+descriptor and its script sessions separately. Nor is the execution mode in the
+descriptor, or whether riders are built as a dylib or a staticlib; those are
+decided by the driver that consumes it.
+
+`WorkspaceDelta::apply_to_pipeline` applies module additions, removals and
+changes to a live pipeline, and refuses a delta that `requires_new_pipeline`
+(compiler options, or any rider change). No driver consumes deltas yet; see
+issues.md.
 
 ### Script Compilation
 
@@ -1414,6 +1724,17 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
   indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, `just test-slow`
   the `slow_tests` features.
 
+`ExampleTestRunner::with_worker_context(dir, init, analyzer)` hands each
+fixture a context built by `init`, for state that is expensive and cannot be
+shared between threads -- `std_all_tests` keeps a `CompiledWorld` there (see
+[Reusing a Compiled World](#user-content-reusing-a-compiled-world)). The runner
+keeps contexts in a pool, borrowing one per fixture and handing it back,
+rather than using rayon's `map_init`: `map_init` runs its initializer once per
+*work split*, not once per thread, and built 80 worlds for 143 fixtures. One
+context per `par_chunks` chunk builds the fewest but gives up per-fixture work
+stealing, so slow chunks straggle. The pool never holds more contexts than
+threads running at once.
+
 ### Test Suites
 
 Most live in `crates/datalove-datafun/tests`.
@@ -1422,7 +1743,7 @@ Most live in `crates/datalove-datafun/tests`.
 |-------|---------|
 | `parser_tests` | Parse and emit AST + diagnostics (in the compiler crate) |
 | `tycheck_tests`, `tycheck_world_tests` | Typecheck results |
-| `auto_adapt_tests` | `@`-recoverable errors under `AutoAdaptMode::Enabled` |
+| `auto_adapt_tests` | `@`-recoverable errors under `AutoAdaptMode::Enabled`, then run (in `datalove-tests`) |
 | `ir_lower_tests` | IR lowering from worldfiles |
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |
@@ -1439,7 +1760,63 @@ Most live in `crates/datalove-datafun/tests`.
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
 | `database_memory_tests` | Database growth |
-| `worldgen_tests`, `worldgen_dual_tests` | Generated worldfiles typecheck and run the same both ways |
+| `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) |
+
+### index-64
+
+The `index-64` feature makes `index` and `offset` 64 bits wide instead of 32.
+`datalove-rtdt` switches `IndexRepr`/`OffsetRepr` between `u32`/`i32` and
+`u64`/`i64`, and `INDEX_SIZE` and `INDEX_ALIGN` between 4 and 8, which changes
+the layout of every collection, string and bigint header. The Cranelift
+backends take their width from `INDEX_TYPE` and `INDEX_BITS` in
+`datafun-cranelift/src/index_types.rs`. It is compile-time only, so a binary
+is one width or the other; `ABI_VERSION` covers it, so a rider built at the
+other width is refused.
+
+`just test-64` runs the suite with it. Where a fixture's output differs by
+width, `.out.expected.64` takes precedence over `.out.expected` when the
+feature is on. Prefer fixtures that do not need one: ask for the edge rather
+than naming it -- `bits()` rather than `32`, `max_value()` rather than
+`4294967295`, comparing against an extreme rather than printing it.
+`std_tests/106_index_math_parity`, `107_index_edges` and `108_offset_edges` are
+written that way and share one expected file.
+
+`sys/std/index.dfm` and `offset.dfm` derive their width the same way:
+`const BITS: u32 = icall index_bits()`, a nullary intrinsic reporting the
+configured width, with the extremes computed from it. They are `const`
+bindings, so CTFE folds them before any backend sees them. Both modules used
+to hardcode 32-bit constants, which under `index-64` made `max_value()` and
+`bits()` disagree with the arithmetic around them.
+
+### Worldgen Coverage
+
+`datalove-worldgen` generates random worldfiles that typecheck.
+`coverage_tests.rs` asks whether they cover the language, and takes its
+checklist from the compiler rather than from a list: every variant of
+`Statement`, `ExprFunKind`, `BinOp`, `UnaryOp`, `ParamMode` and datalit's
+`TypeHint`, rolled and matched by one macro with an exhaustive match, so a new
+variant is a compile error until someone says whether the generator writes it.
+Generated worldfiles are parsed with the real parser and walked -- counting with
+regular expressions over the text was tried first and was wrong in both
+directions. Anything never reached must be named in `NOT_YET_GENERATED` with a
+reason, and anything named there that *is* reached fails too, so the list
+cannot rot either way. `ALL_SHAPES` is a hand-written list for forms that are
+one variant with a field present or absent (`loop` and `loop while`, `if` with
+and without `else`), and can go stale.
+
+What it does not tell you:
+
+- **Generated is not exercised.** `test_1000_seeds_typecheck` only typechecks,
+  and is `#[ignore]`d. Only `worldgen_dual_tests` runs ownership analysis and
+  executes anything, and it skips unless `WORLDGEN_DUAL_TEST=1`
+  (`WORLDGEN_DUAL_SEED` reproduces a run).
+- **It counts single node kinds, not combinations.** Every bug the generator
+  has found was at an intersection -- a generic over a map at `data`, a tensor
+  of a tuple holding a heap value -- and a roll of node kinds calls all of
+  those covered.
+- **Rarity is ambiguous.** Statement generators that cannot proceed fall back
+  to `gen_let` silently, so a construct can be rare because it keeps failing to
+  build rather than because it was weighted that way.
 
 ### Worldfile Format
 
@@ -1471,12 +1848,12 @@ The three `module-change-*` kinds drive the memoization tests.
 |------|----------|
 | `compiler/src/lib.rs` | `Database`, `DbClone` impl, module exports |
 | `compiler/src/compile.rs` | `compile_modules()`, `ModuleCompilationOutput` |
-| `compiler/src/module_graph.rs` | `IncrementalModuleWorld`, parsing pipeline, rider interface construction |
+| `compiler/src/module_graph.rs` | Parsing pipeline, rider interface construction |
 | `compiler/src/tracked_lower.rs` | `lower_module_graph_with_evaluator()`, `compute_func_id_map()`, three-phase lowering |
 | `compiler/src/tracked_ownership_analysis.rs` | Salsa-tracked ownership analysis |
 | `compiler/src/tracked_script_lower.rs` | Script lowering, `collect_const_graph()` |
 | `compiler/src/tracked_script_ownership.rs` | Script ownership analysis |
-| `compiler/src/specialize.rs` | Const parameter specialization, `build_dispatch_blocks()` |
+| `compiler/src/specialize.rs` | Const parameter specialization: `collect_instantiations_into()`, `monomorphize_function()`, `rewrite_comptime_calls()`, `specialize_script_unit()` |
 | `sema/src/lib.rs` | `AnalysisError`, `DropSchedule`, `TrackingCategory`, `ExprTypes` |
 | `ownership/src/lib.rs` | Drop/ownership analysis |
 | `lower/src/func.rs` | `lower_function_for_module()` |
@@ -1494,8 +1871,13 @@ The three `module-change-*` kinds drive the memoization tests.
 | `datafun/src/pipeline/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
 | `datafun/src/pipeline/rider_load.rs` | `register_linked_natives`, `load_rider_library`, the C ABI bridge |
 | `cli/src/main.rs` | `register_natives()`, which wires both the interpreter table and the JIT |
-| `stdlib/build.rs` | Embeds `sys/` and builds and embeds the native component |
-| `stdlib/src/lib.rs` | `system_library()`, `native_component_staticlib()` |
+| `sys/build.rs` | Embeds `sys/` module sources and names each rider's crate and `INTERFACE` |
+| `sys/src/lib.rs` | `system_library()` |
+| `datafun/src/pipeline/compiled_world.rs` | `CompiledWorld` |
+| `datafun/src/incremental.rs` | `IncrementalModuleWorld`, `Roots` |
+| `buildinfo/build.rs` | Decides `BuildInfo` |
+| `rt/src/impls/alloc.rs` | The runtime allocator, `LeakCheckMode` |
+| `bcts/src/parser_util.rs` | Token gluing, `eat_number` |
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |
 | `interp/src/native.rs` | `NativeFunctionTable` |
 | `interp/src/dispatch.rs` | `CallDispatcher`, `DispatchResult` |

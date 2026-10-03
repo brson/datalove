@@ -379,8 +379,8 @@ fn an_edit_that_breaks_a_later_unit_leaves_the_rest_alone() {
 ///
 /// It only checks anything with the leak checker on, which the runtime leaves
 /// off unless asked: `DATALOVE_LEAK_CHECK=panic`, which the justfile sets on
-/// every recipe that runs tests. Without it this passes vacuously. See
-/// `botdocs/plan-leak-check-default.md`.
+/// every recipe that runs tests. Without it this passes vacuously. See "Leak
+/// Checking" in `botdocs/compiler-guide.md`.
 ///
 /// The other tests here happen to cover the same ground, since a `debuglog` of
 /// a string literal allocates too. This one is about nothing else, and says so

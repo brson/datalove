@@ -2,9 +2,8 @@
 
 How the REPL is put together, and the decisions that shaped it.
 
-The UI model it aims at is `mandocs/repl-ui.md`; the semantics it implements
-are `mandocs/script-semantics.md`. How an edit reaches the units that depend on
-it is [script-reactivity-architecture.md](script-reactivity-architecture.md).
+How an edit reaches the units that depend on it is
+[script-reactivity-architecture.md](script-reactivity-architecture.md).
 
 ## Crates
 
@@ -156,16 +155,15 @@ is the case where the whole story is visible in front of you and the error
 teaches you something.
 
 The long-term answer to a moved binding is rewind and replay - recompiling
-the earlier unit with the `@` inserted and re-executing from there, which is
-what `mandocs/script-semantics.md` is reaching for. It becomes necessary
-rather than merely nicer when non-cloneable types land, since copying out of
-an earlier unit stops being available.
+the earlier unit with the `@` inserted and re-executing from there. It becomes
+necessary rather than merely nicer when non-cloneable types land, since copying
+out of an earlier unit stops being available.
 
 ## Tests
 
 `crates/datalove-repl/tests/`:
 
-- **engine_tests** - 21 `.repl` fixtures through `Engine::run_source`,
+- **engine_tests** - the `.repl` fixtures through `Engine::run_source`,
   snapshotting the parse, eval, and environment after every input as JSON.
   They run against `datalove_sys_packages::system_library()`, so the suite covers
   the library and the linked riders the binary actually ships.

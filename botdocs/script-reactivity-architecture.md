@@ -7,8 +7,7 @@ and no others. This is the map of the machinery and how it is held to its claim.
 organised by stage and keeping the wrong turns; read it for *why* things are
 shaped this way and what was tried and rejected. This document is what the code
 is. [repl-architecture.md](repl-architecture.md) has the crates, the UI and the
-request/response shape around it. The semantics it aims at are
-`mandocs/script-semantics.md`.
+request/response shape around it.
 
 ## The claim
 
@@ -321,7 +320,7 @@ typechecking is lazy. Ask the units directly when the question is about validity
   a compiler against a module set with errors.
 - **Only pure `fun`s exist**, so the only effect is `debuglog` and skipping a
   unit's execution skips nothing observable beyond it. `proc`s and real I/O need
-  the virtualized I/O `mandocs/script-semantics.md` describes.
+  virtualized I/O, which does not exist yet.
 - **Units copy out of earlier bindings rather than moving from them**, which is
   what makes re-running B safe for C. Non-cloneable types remove that and the
   model will need rethinking -- `repl-architecture.md` says so too.

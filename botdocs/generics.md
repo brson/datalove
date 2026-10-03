@@ -286,10 +286,12 @@ builds, which is ungated and therefore compiled, where every generic fixture
 before it called from the script unit body or from another generic that
 forwards.
 
-A `CallDispatcher` is the one place that still cannot pass them: it is handed
-the arguments and nothing else. The interpreter keeps a shape-taking call to
-itself rather than offering it round, and `bridge::dispatchable` says the same
-thing at the other end so the invariant is local to both.
+A `CallDispatcher` gets them too: the shape descriptors travel on
+`DispatchCallContext::shape_descriptors`, so the interpreter offers a
+shape-taking call to the dispatcher like any other. What the jit still refuses
+is width rather than shape: `bridge::enterable` turns away a function whose
+parameters and descriptors together exceed `MAX_DIRECT_ARGS` words, since
+`call_jit` has no function pointer type to enter it through.
 
 The **inliner** has a related rule, for a different reason. `inline_call_site`
 refuses a callee whose `descriptor_shapes` is non-empty, because its body names

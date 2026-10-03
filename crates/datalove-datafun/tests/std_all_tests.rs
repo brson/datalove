@@ -23,8 +23,8 @@ use datafun::pipeline::{
 ///
 /// One per worker thread rather than one per fixture per backend, which is what
 /// it used to be: 572 compilations of `sys/std` for 534 CPU-seconds. Keeping the
-/// pipeline is what makes the difference -- see
-/// `botdocs/plan-compile-reuse.md`.
+/// pipeline is what makes the difference -- see "Reusing a
+/// Compiled World" in `botdocs/compiler-guide.md`.
 struct Worker {
     descriptor: WorkspaceDescriptor,
     world: datafun::pipeline::CompiledWorld,
