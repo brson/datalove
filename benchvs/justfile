@@ -1,78 +1,60 @@
 default:
     just --list
 
-# Build datalove CLI in release mode
-build:
-    cargo build -p datalove-cli --release
-
-# Path to datalove CLI
+# Path to datalove CLI.
 datalove := "../target/release/datalove"
+
+# Julia from juliaup, or override with `just julia=... run`.
 julia := env_var("HOME") / ".juliaup/bin/julia"
 
-# Run all benchmarks and report
+# The interpreter uv resolves, invoked directly so uv's startup is not timed.
+python := `uv python find`
+
+# AOT executables are built here, outside the timed runs.
+aotdir := "../target/benchvs"
+
+benches := "fib sum primes"
+
+# Build datalove CLI in release mode and AOT-compile every bench.
+build:
+    cargo build -p datalove-cli --release
+    mkdir -p {{aotdir}}
+    for b in {{benches}}; do {{datalove}} aot-compile --link $b.dfs -o {{aotdir}}/$b; done
+
+# Run all benchmarks.
 run: build
-    @echo "=== Fibonacci (fib(40)) ==="
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script fib.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit fib.dfs' \
-        -n 'python' 'uv run fib.py' \
-        -n 'julia' '{{julia}} fib.jl'
+    for b in {{benches}}; do just bench-one $b; done
+
+# Run one benchmark by name.
+bench name: build
+    just bench-one {{name}}
+
+[private]
+bench-one name:
+    @echo "=== {{name}} ==="
+    hyperfine --warmup 1 -N \
+        -n 'datalove-interp' '{{datalove}} script {{name}}.dfs' \
+        -n 'datalove-jit' '{{datalove}} script --jit {{name}}.dfs' \
+        -n 'datalove-aot' '{{aotdir}}/{{name}}' \
+        -n 'python' '{{python}} {{name}}.py' \
+        -n 'julia' '{{julia}} --startup-file=no {{name}}.jl'
     @echo ""
-    @echo "=== Sum (1 to 1,000,000) ==="
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script sum.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit sum.dfs' \
-        -n 'python' 'uv run sum.py' \
-        -n 'julia' '{{julia}} sum.jl'
-    @echo ""
-    @echo "=== Prime count (up to 10,000) ==="
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script primes.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit primes.dfs' \
-        -n 'python' 'uv run primes.py' \
-        -n 'julia' '{{julia}} primes.jl'
 
-# Run individual benchmarks
-fib: build
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script fib.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit fib.dfs' \
-        -n 'python' 'uv run fib.py' \
-        -n 'julia' '{{julia}} fib.jl'
-
-sum: build
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script sum.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit sum.dfs' \
-        -n 'python' 'uv run sum.py' \
-        -n 'julia' '{{julia}} sum.jl'
-
-primes: build
-    hyperfine --warmup 1 \
-        -n 'datalove-interp' '{{datalove}} script primes.dfs' \
-        -n 'datalove-jit' '{{datalove}} script --jit primes.dfs' \
-        -n 'python' 'uv run primes.py' \
-        -n 'julia' '{{julia}} primes.jl'
-
-# Verify all scripts produce correct output
+# Datalove has only `debuglog`, which writes to stderr.
+# Print every implementation's output, failing if any disagree.
 check: build
-    @echo "Checking fib (interp)..."
-    {{datalove}} script fib.dfs
-    @echo "Checking fib (jit)..."
-    {{datalove}} script --jit fib.dfs
-    uv run fib.py
-    {{julia}} fib.jl
-    @echo ""
-    @echo "Checking sum (interp)..."
-    {{datalove}} script sum.dfs
-    @echo "Checking sum (jit)..."
-    {{datalove}} script --jit sum.dfs
-    uv run sum.py
-    {{julia}} sum.jl
-    @echo ""
-    @echo "Checking primes (interp)..."
-    {{datalove}} script primes.dfs
-    @echo "Checking primes (jit)..."
-    {{datalove}} script --jit primes.dfs
-    uv run primes.py
-    {{julia}} primes.jl
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for b in {{benches}}; do
+        outs=(
+            "$({{datalove}} script $b.dfs 2>&1)"
+            "$({{datalove}} script --jit $b.dfs 2>&1)"
+            "$({{aotdir}}/$b 2>&1)"
+            "$({{python}} $b.py)"
+            "$({{julia}} --startup-file=no $b.jl)"
+        )
+        echo "$b: ${outs[*]}"
+        for o in "${outs[@]}"; do
+            [ "$o" = "${outs[0]}" ] || { echo "$b: outputs disagree"; exit 1; }
+        done
+    done

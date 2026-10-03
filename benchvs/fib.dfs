@@ -1,23 +1,14 @@
-// Fibonacci benchmark - compute fib(40) iteratively
-// Uses int (bigint) for the computation.
+// Fibonacci benchmark - compute fib(32) by naive recursion.
+// Uses checked u32 arithmetic, so each call returns a result.
 
 fun fib(n: u32): !u32
   if n .< 2
-    ret ok (n +! 0)
+    ret ok n
   end if
-  var a: u32 = 0
-  var b: u32 = 1
-  var i: u32 = 2
-  loop while i <= n
-    let next = a +! b
-    set a = b
-    set b = next
-    set i = i +! 1
-  end loop
-  ret ok b
+  ret ok (fib(n -! 1)! +! fib(n -! 2)!)
 end fun
 
-let result = fib(40)
+let result = fib(32)
 if result |value|
   debuglog(value)
 else |err|

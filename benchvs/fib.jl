@@ -1,16 +1,13 @@
 #!/usr/bin/env julia
-# Fibonacci benchmark - compute fib(40) iteratively
+# Fibonacci benchmark - compute fib(32) by naive recursion.
+# Uses checked arithmetic to match datalove's checked u32 operators.
 
-function fib(n::Int)::BigInt
+function fib(n::UInt32)::UInt32
     if n < 2
-        return BigInt(n)
+        return n
     end
-    a, b = BigInt(0), BigInt(1)
-    for _ in 2:n
-        a, b = b, a + b
-    end
-    return b
+    return Base.checked_add(fib(Base.checked_sub(n, UInt32(1))), fib(Base.checked_sub(n, UInt32(2))))
 end
 
-result = fib(40)
+result = fib(UInt32(32))
 println(result)
