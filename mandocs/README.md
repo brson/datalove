@@ -93,13 +93,13 @@ strings, lists, maps and sets.
 
 ```datalove
 {
-  title = "Nineteen Eighty-Four",
-  author = "George Orwell",
-  year = 1949,
+  title = "The Dispossessed",
+  author = "Ursula K. Le Guin",
+  year = 1974,
   rating = 4.7,
   available = true,
-  genres = #{ atom Fiction, atom Dystopia },
-  subtitle = none,
+  genres = : #{enum { atom Fiction, atom Utopia }} / #{ atom Fiction, atom Utopia },
+  subtitle = some "An Ambiguous Utopia",
   status = atom InPrint,
   translations = %{ "fr" = true, "de" = true, "jp" = false },
 }
@@ -109,11 +109,11 @@ It includes first-class _tables_ (dataframes / structs-of-arrays),
 and _tensors_ (multidimensional arrays).
 
 ```datalove
-{|
-  title,              author,          year
-  "1984",             "Orwell",        1949
-  "Brave New World",  "Huxley",        1932
-  "Fahrenheit 451",   "Bradbury",      1953
+: {| title: string, author: string, year: i32 |} / {|
+  title,                        author,       year
+  "The Dispossessed",           "Le Guin",    1974
+  "The Player of Games",        "Banks",      1988
+  "A Psalm for the Wild-Built", "Chambers",   2021
 |}
 ```
 
@@ -121,7 +121,7 @@ and _tensors_ (multidimensional arrays).
 [|
   1 0 0,
   0 1 0,
-  0 0 1,
+  0 0 1
 |]
 ```
 
@@ -134,13 +134,16 @@ A simple pure-functional language that feels like an imperative language, built
 on the datalit type system.
 
 ```datalove
+require module sys/std/list
+import list.len
+
 type Book: {
   title: string,
   author: string,
   year: i32,
   rating: f32,
   available: bool,
-  genres: #{enum { atom Fiction, atom Dystopia, atom SciFi }},
+  genres: #{enum { atom Fiction, atom Utopia, atom SciFi }},
   subtitle: ?string,
   status: enum { atom InPrint, atom OutOfPrint },
   translations: %{string = bool},
@@ -148,7 +151,7 @@ type Book: {
 
 fun reserve_book(mut db: [Book], ref title: string): !()
   var i: index = 0
-  loop while i .< db.len
+  loop while i .< len(ref db)
     if db[i]!.title == title
       if db[i]!.available
         set db[i]!.available = false
