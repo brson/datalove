@@ -1510,6 +1510,12 @@ Measured facts worth having before optimizing anything. Release builds; the
 numbers drift, the proportions less so. Open work from these measurements is in
 [issues.md](issues.md).
 
+**The release profile is `opt-level = 2`.** Against `3` it measured the same
+on the interpreter and the JIT, 4% slower on `typecheck-std`, a smaller binary,
+and an 18% faster clean build and 22% faster incremental one. Against `"s"`,
+which it replaced, it is 7-10% faster interpreting and 14% faster compiling
+`sys/`.
+
 **Startup is the standard library.** A process starts in about 3ms and a trivial
 `script --no-sys` finishes in under 4ms; the same script with `sys/` is 55-60ms.
 Narrowing to [roots](#user-content-compiling-from-roots) is what takes a script

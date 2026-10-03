@@ -97,5 +97,5 @@ debug = "line-tables-only"
 overflow-checks = true
 lto = "thin"
 codegen-units = 1
-opt-level = "s"
+opt-level = 2
 
