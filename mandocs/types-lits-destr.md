@@ -27,8 +27,9 @@ square braces `[ ]` are for arrayish types, etc.
 | `index`           | `: index / 0`    | n/a (copy)       |
 | `offset`          | `: offset / 0`   | n/a (copy)       |
 
-Bare integer literals synthesize as `int`.
-Fixed-width integers require a type hint or checking context.
+Bare integer literals synthesize as `int`,
+and bare float literals as `f64`.
+Fixed-width integers and `f32` require a type hint or checking context.
 
 
 
@@ -55,8 +56,8 @@ let a: #{int} = #{ 1, 2, 3 }
 
 // Tables
 let a: {|
-  col1: T1,
-  col2: T2
+  x: int,
+  y: int,
 |} = {|
   x, y
   1, 2
@@ -66,13 +67,13 @@ let a: {|
 // Tensors
 let a: [|int, 2|] = [|
   1 2 3,                // 2x3
-  4 5 6,
+  4 5 6
 |]
 let a: [|int, 3|] = [|
   1 2 3,                // 2x2x3
   4 5 6,,
   1 2 3,
-  4 5 6,,
+  4 5 6
 |]
 ```
 
@@ -177,7 +178,7 @@ let s: Shape = term Rect (3.0, 4.0)
 
 var area: f32 = 0.0
 match s
-case atom Circle
+case atom Point
   set area = 0.0
 case term Rect dims
   set area = dims.0 * dims.1
