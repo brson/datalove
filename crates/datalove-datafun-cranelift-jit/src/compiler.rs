@@ -2,9 +2,10 @@
 
 use std::any::Any;
 use std::collections::{BTreeSet, HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_codegen::isa::TargetIsa;
 use cranelift_codegen::settings::{self, Configurable};
 use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext};
@@ -21,7 +22,7 @@ use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
 use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
 
 use crate::trampoline::{self, EncodedFuncKey};
-use crate::JitError;
+use crate::{FunctionKey, JitError};
 
 /// Size of the contiguous memory arena for JIT code and data.
 ///
@@ -101,6 +102,14 @@ pub struct JitCompiler {
     /// Opaque for the same reason as the interpreter's; see
     /// `NativeFunctionTable::code_owners`.
     code_owners: Mutex<Vec<Arc<dyn Any + Send + Sync>>>,
+    /// Where each function's compiled code is, once it has some.
+    ///
+    /// A stub reads its callee's cell on every call and calls the code directly
+    /// when it is there, so that a call between compiled functions does not go
+    /// through `__jit_dispatch_call`; that round trip was over 80% of the
+    /// jit's time on call-heavy code. The cell's address is emitted into the
+    /// stub, so each is boxed to stay put and none is ever removed.
+    code_cells: rustc_hash::FxHashMap<FunctionKey, Box<AtomicUsize>>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -203,6 +212,7 @@ impl JitCompiler {
             dispatch_func_id,
             native_symbols,
             code_owners: Mutex::new(Vec::new()),
+            code_cells: Default::default(),
         })
     }
 
@@ -220,6 +230,18 @@ impl JitCompiler {
     /// dispatcher has only a shared reference to.
     pub fn hold_code_owner(&self, owner: Arc<dyn Any + Send + Sync>) {
         self.code_owners.lock().expect("jit code owners poisoned").push(owner);
+    }
+
+    /// The address of the cell holding `key`'s compiled code, zero until it has some.
+    fn code_cell(&mut self, key: FunctionKey) -> *const AtomicUsize {
+        &**self.code_cells.entry(key).or_insert_with(|| Box::new(AtomicUsize::new(0)))
+    }
+
+    /// Have every stub for `key` call `code_ptr` directly from now on.
+    pub fn publish(&mut self, key: FunctionKey, code_ptr: *const u8) {
+        let cell = self.code_cell(key);
+        // SAFETY: the cell is boxed and never removed.
+        unsafe { (*cell).store(code_ptr as usize, Ordering::Relaxed) };
     }
 
     /// Compile a function to native code (no calls to other functions).
@@ -315,7 +337,8 @@ impl JitCompiler {
             }
 
             // Create a stub for this callee.
-            let stub_id = self.create_stub_for_callee(&code_ref, &callee_ir)?;
+            let key = FunctionKey::of(&code_ref, ctx.unit());
+            let stub_id = self.create_stub_for_callee(&code_ref, key, &callee_ir)?;
 
             // Register in appropriate map.
             match &code_ref {
@@ -412,6 +435,7 @@ impl JitCompiler {
     fn create_stub_for_callee(
         &mut self,
         code_ref: &CodeRef,
+        key: FunctionKey,
         callee: &IrCodeUnit,
     ) -> Result<FuncId, JitError> {
         // Generate unique stub name.
@@ -428,16 +452,23 @@ impl JitCompiler {
             .map_err(|e| jit_err("declare stub", e))?;
 
         // Define the stub.
-        self.define_stub(stub_id, code_ref, callee, &sig)?;
+        let cell = self.code_cell(key);
+        self.define_stub(stub_id, code_ref, cell, callee, &sig)?;
 
         Ok(stub_id)
     }
 
-    /// Define a stub function body that calls __jit_dispatch_call.
+    /// Define a stub function body.
+    ///
+    /// The stub calls the callee's compiled code if `cell` holds any, and
+    /// otherwise calls __jit_dispatch_call, which counts the call toward
+    /// compiling it and interprets it until then. The stub has the callee's own
+    /// signature, so the direct call passes its parameters through unchanged.
     fn define_stub(
         &mut self,
         stub_id: FuncId,
         code_ref: &CodeRef,
+        cell: *const AtomicUsize,
         callee: &IrCodeUnit,
         sig: &cl_ir::Signature,
     ) -> Result<(), JitError> {
@@ -456,6 +487,21 @@ impl JitCompiler {
 
         // Get function parameters.
         let params: Vec<_> = builder.block_params(entry_block).to_vec();
+
+        let cell_addr = builder.ins().iconst(PTR_TYPE, cell as i64);
+        let code_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::trusted(), cell_addr, 0);
+        let direct_block = builder.create_block();
+        let dispatch_block = builder.create_block();
+        builder.ins().brif(code_ptr, direct_block, &[], dispatch_block, &[]);
+
+        builder.switch_to_block(direct_block);
+        builder.seal_block(direct_block);
+        let sig_ref = builder.import_signature(sig.clone());
+        builder.ins().call_indirect(sig_ref, code_ptr, &params);
+        builder.ins().return_(&[]);
+
+        builder.switch_to_block(dispatch_block);
+        builder.seal_block(dispatch_block);
 
         // rt_handle is always first param.
         let rt_handle = params[0];

@@ -1540,7 +1540,10 @@ perhaps 1% and is open.
 It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, registering every
 runtime symbol) and compiles synchronously at `opt_level = "speed"` in the dispatch
 that crossed the threshold. It counts calls only, so a loop in a function called
-once is never compiled. About a third of stdlib-shaped execution is in the native
+once is never compiled. Compiled code calls each callee through a stub with the
+callee's signature, which calls the callee's code directly once it is compiled
+and goes through `__jit_dispatch_call` until then; going through the dispatcher
+every time had been over 80% of the time on recursive `fib`, 5x slower. About a third of stdlib-shaped execution is in the native
 runtime, which the JIT cannot speed up, so it is near its ceiling of about 1.8x
 there; arithmetic-shaped code is over 90% interpreter, which is where the 85x
 comes from. The interpreter's call path reuses frames from a `FramePool`

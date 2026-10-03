@@ -242,6 +242,7 @@ impl JitEngine {
                     self.stats.per_function_code_size.insert(func.name.clone(), code_size);
 
                     *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
+                    self.compiler.publish(key, code_ptr);
                     Ok(Some((code_ptr, uses_sret)))
                 } else {
                     Ok(None)
@@ -297,6 +298,7 @@ impl JitEngine {
                     self.stats.per_function_code_size.insert(func.name.clone(), code_size);
 
                     *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
+                    self.compiler.publish(key, code_ptr);
                     Ok(Some((code_ptr, uses_sret)))
                 } else {
                     Ok(None)

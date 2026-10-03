@@ -213,9 +213,10 @@ compiled tiers do, each cheap to state and none started.
   the speedup is 1.0x.
 - **No inlining in Cranelift.** Nothing implements
   `cranelift_codegen::inline::Inline` or calls `Context::inline`, so neither the
-  jit nor the cranelift AOT backend inlines. For the jit this is where inlining
-  would pay: every call from compiled code goes through `__jit_dispatch_call`,
-  16.7% of the jit profile.
+  jit nor the cranelift AOT backend inlines. A call between two compiled
+  functions is an indirect call through the callee's stub, which reads the
+  callee's code cell (`JitCompiler::code_cells`); only a call to a function not
+  yet compiled reaches `__jit_dispatch_call`.
 - **The C backend runs `cc -std=c11 -O0 -g`** (`pipeline/c_aot.rs`, and the
   same in `c_dual_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
   number in the jit report. The work is whatever undefined behaviour `-O2` exposes
