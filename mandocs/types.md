@@ -44,19 +44,17 @@ let a: bool = true
 let b: bool = false
 ```
 
-Booleans are used in `if` and `else if` conditions.
+Booleans are used in `if`, `else if`, and `loop while` conditions.
 
 ```datalove
-require sys/core/debug
-
 let a = true
 let b = false
 if a
-  debug.print("a")
+  debuglog "a"
 else if b
-  debug.print("b")
+  debuglog "b"
 else
-  debug.print("other")
+  debuglog "other"
 end if
 ```
 
@@ -66,7 +64,7 @@ Booleans support logic operators `and`, `or`, `xor`, and `not`.
 let a = true
 let b = false
 let c = a or b
-let d = a and  b
+let d = a and b
 let e = a xor b
 let f = not a
 ```
@@ -77,11 +75,11 @@ let f = not a
 ## Fixed integers
 
 Standard fixed integers,
-`u8`, `u16`, `u16`, `u32`, `u64`,
-`i8`, `i16`, `i16`, `i32`, `i64`;
+`u8`, `u16`, `u32`, `u64`,
+`i8`, `i16`, `i32`, `i64`;
 these are efficient and inlineable,
-but because Datalove cares insists on numerical correctness,
-must be used with checked operators to deal with overflow:
+but because Datalove insists on numerical correctness,
+they must be used with checked operators to deal with overflow:
 
 ```datalove
 fun add_result(a: u16, b: u16): !u16
@@ -98,19 +96,36 @@ end fun
 Unsigned fixed integers support
 `+?`, `-?`, `*?` and `/?` checked-option binops, and
 `+!`, `-!`, `*!` and `/!` checked-result binops.
-Signed fixed integers additionally support unary negation,
+Signed fixed integers additionally support checked unary negation,
 `-?` and `-!`.
+Division by zero is treated like overflow.
 
-The "bare" math ops are supported but widen to `int`.
+The "bare" math ops `+`, `-`, `*` and `/`, and bare unary `-`,
+are not defined on fixed integers.
+Instead, operands can be explicitly widened to `int` with the `@` operator,
+which takes its target type from context:
 
 ```datalove
 fun add(a: u16, b: u16): int
-  ret a + b
+  ret a@ + b@
 end fun
 ```
 
 This compromise allows for convenient but inefficient math in the repl and scripts,
 while modules are expected to be more careful with overflow for performance.
+
+Bare integer literals are `int`,
+so fixed integer literals need a type hint or checking context:
+
+```datalove
+let a = : u32 / 42
+let b: i8 = -1
+```
+
+`@` also widens between fixed integers,
+when the target can hold every value of the source:
+`u8` to `u16`, `u8` to `i16`, and so on.
+There is no implicit widening.
 
 
 
@@ -124,11 +139,12 @@ There are no pointers in datafun,
 but the size of collections is constrained by the pointer size.
 
 These have the same representation as `u32` and `i32` by default,
-but their representation is compile-time configurable,
+but their representation is compile-time configurable
+(the `index-64` feature makes them `u64` and `i64`),
 mostly to ensure the compiler is well-factored to support
 reconfiguration.
 
-Their size must be smaller than the pointer size
+Their size must be no larger than the pointer size
 of the interpreter, and of any AOT target;
 and in practice probably the compiler as well
 since it needs to do compile-time evaluation.
@@ -137,13 +153,18 @@ Operations that deal in collection indexes,
 length, and capacity use these types.
 
 ```datalove
+require module sys/std/string
+import string.len
+
 let foo = "test"
-let foo_length: index = len(foo)
+let foo_length: index = len(ref foo)
 ```
 
-Arithmetic operators widen `index` and `offset`
-to `int` like other fixed int types.
-They otherwise do not automatically coerce
+Like other fixed int types,
+`index` and `offset` support the checked and optional operators,
+not the bare ones,
+and widen to `int` with `@`.
+They do not automatically coerce
 to any other types.
 
 
@@ -151,11 +172,66 @@ to any other types.
 
 ## Big integers
 
+`int` is an arbitrary-precision integer,
+and the type of bare integer literals.
+It supports the bare `+`, `-` and `*` operators, and unary `-`,
+none of which can overflow.
+Division can fail on a zero divisor,
+so there is no bare `/`;
+use `/?` or `/!`, which yield `int`.
+Division truncates toward zero.
+
+```datalove
+let a = 123456789012345678901234567890
+let b = a * a - 1
+```
+
+`int` is heap-allocated and so, unlike the fixed integers,
+is moved rather than copied.
+
 ## Floating point numbers
+
+`f32` and `f64` are IEEE 754 floats.
+A literal is a float if it has a point or an exponent,
+and bare float literals are `f64`.
+
+```datalove
+let a = 3.14
+let b: f32 = 1.5
+let c = 6.022e23
+```
+
+Floats support the bare `+`, `-`, `*` and `/` operators,
+yielding the same float type.
+An integer literal is not a float:
+`let x: f32 = 1` is an error,
+except that a hex literal is read as the float's bit pattern.
 
 ## Anonymous tuples
 
+Tuples are ordered, fixed-size, heterogeneous sequences.
+Elements are accessed by position.
+A one-element tuple needs a trailing comma.
+
+```datalove
+let t: (bool, int) = (true, 42)
+let a = t.0
+let one = (1,)
+```
+
 ## Anonymous structs
+
+Structs are sequences of named fields.
+Fields are accessed by name.
+
+```datalove
+let p: { x: f32, y: f32 } = { x = 1.0, y = 2.0 }
+let x = p.x
+```
+
+Field order is significant:
+`{ x: f32, y: f32 }` and `{ y: f32, x: f32 }` are different types,
+and a literal must list its fields in the order of its type.
 
 ## Atoms
 
@@ -210,29 +286,76 @@ type MyEnum: enum {
 // Full enum literal form (requires checking context)
 let a: MyEnum = enum { atom Foo }
 
-// Coercion with @
-let b: MyEnum = atom Foo@
-let c: MyEnum = term Bar 1@
+// Bare atom and term literals check against an enum directly
+let b: MyEnum = atom Foo
+let c: MyEnum = term Bar 1
+
+// Coercion with @, for atom and term values that are not literals
+let foo = atom Foo
+let d: MyEnum = foo@
 ```
 
 Only `atom` and `term` types are allowed in enums.
 The full enum literal form does not synthesize a type;
 it must be in a checking context.
+`@` does not widen one enum to another enum with more variants.
 
 Enums are destructured with `match`; see types-lits-destr.md.
 
 ## Strings
 
+`string` is a UTF-8 string.
+String literals are double-quoted and may contain
+the escapes `\"`, `\\`, `\n`, `\r`, `\t`, `\0`, and `\u{...}`.
+
+```datalove
+let s = "hello\tworld\u{21}"
+```
+
+Strings are heap-allocated, so moved rather than copied.
+Operations are in `sys/std/string`.
+
 ## Lists
 
+`[T]` is a growable, ordered sequence of `T`.
+
+```datalove
+let a: [u32] = [1, 2, 3]
+```
+
+Indexing is by `index` and is fallible:
+`a[i]?` early-returns `none` and `a[i]!` early-returns an error
+when the index is out of bounds.
+Operations are in `sys/std/list`.
+
 ## Maps and sets
+
+`%{K = V}` maps keys to values
+and `#{T}` is a set of unique values.
+Both are ordered by key.
+
+```datalove
+let m: %{string = u32} = %{ "a" = 1, "b" = 2 }
+let s: #{int} = #{ 3, 1, 2 }
+```
+
+Maps are indexed by key, fallibly, like lists: `m["a"]?`.
+Operations are in `sys/std/map` and `sys/std/set`.
 
 
 ## Tensors
 
+Tensors are multi-dimensional arrays.
+The type gives the element type and the rank (number of axes);
+the shape is part of the value.
+
 ```datalove
-let data: [|f32, 2|] = [| 1 2, 3 4 |]
+let t: [|f32, 2|] = [| 1.0 2.0, 3.0 4.0 |]
 ```
+
+In a literal, whitespace separates elements along the innermost axis,
+`,` separates rows, `,,` separates slabs of the third axis, and so on.
+`t[i]?` indexes along the first axis.
 
 
 ## Tables
@@ -241,12 +364,12 @@ Tables, a.k.a. dataframes ala Pandas / Polars / Arrow.
 Tables provide "struct-of-array" memory layout.
 
 ```datalove
-let data: {|
+let tbl: {|
   x: int,
   t: int,
 |} = {|
   x, t       // column names are required
-  1, 2  
+  1, 2
   3, 4
 |}
 ```
@@ -256,18 +379,17 @@ parsing context, one row per line.
 This allows a natural CSV-like presentation for tables,
 taking advantage of Datalove's mixed-mode brace-matched parser.
 
-One call always use manual linebreaks with `;`:
+One can always use manual linebreaks with `;`:
 
-```
 ```datalove
-let data = {|
-  x, t; 1, 2; 3, 4
-|}
+let tbl = {| x, t; 1, 2; 3, 4 |}
 ```
 
 The type reads like a struct;
-the expression is a table each row, each an instance of that struct.
+the expression is a table of rows, each an instance of that struct.
 
+Column projections are not implemented yet;
+a table is currently opaque.
 Table column projections,
 analogous to struct field projections;
 have type "list of field type",
@@ -276,31 +398,72 @@ They can be passed to reference destinations,
 particularly `ref`-mode function arguments.
 
 ```datalove
-let data: {|
+require module sys/std/list
+import list.len
+
+let tbl: {|
   x: int,
   t: int,
 |} = {|
   x, t
-  1, 2  
+  1, 2
   3, 4
 |}
 
-// Binding a column projection to a `ref` slot.
-let ref xs = data.x
-
 // This function can accept a table column projection.
-fun process(ref xs: [int]): u32
-  ret core.list.len(xs)
+fun process(ref xs: [int]): index
+  ret len(ref xs)
 end fun
 
-let p = process(ref xs)
+let p = process(ref tbl.x)
 ```
 
 
 ## Optional types
 
+`?T` is either `some` value of `T` or `none`.
+
+```datalove
+let a: ?int = some 1
+let b: ?int = none
+```
+
+The postfix `?` operator unwraps an option,
+early-returning `none` from the enclosing function if there is no value.
+`if o |v|` binds the value if there is one.
+
 ## Result types
 
-## Existential data types
+`!T` is either `ok` with a value of `T` or `er` with an `error`.
 
-## Existential error types
+```datalove
+let a: !int = ok 1
+let b: !int = er error "oops"
+```
+
+The postfix `!` operator unwraps a result,
+early-returning the error from the enclosing function on failure.
+`if r |v| ... else |e|` binds either the value or the error.
+
+## Dynamic types
+
+`data` can hold a value of any type.
+A value only becomes `data` when explicitly wrapped:
+
+```datalove
+let a: data = data 1
+let b: data = data : u32 / 2
+```
+
+There is not yet any way to inspect or unwrap a `data` value.
+
+`error` is the error type carried by results,
+and like `data` can hold a value of any type,
+most commonly a string.
+
+```datalove
+let e: error = error "oops"
+let r: !int = er error "oops"
+```
+
+There is not yet any way to inspect or unwrap an `error` value.
