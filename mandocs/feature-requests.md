@@ -1,3 +1,18 @@
+## 2026/10/03 Enum subtyping and synthesis
+
+This is ugly:
+
+```datalove
+{
+  genres = : #{enum { atom Fiction, atom Utopia }} / #{ atom Fiction, atom Utopia },
+}
+```
+
+Would be much better to synthesize an enum type,
+but that's probably not viable without subtyping so the synthesized type can be assigned to the 'real' type.
+Synthesis would require unifying entire collections though, expensive.
+
+
 ## 2026/10/02 Bare binops that produce optionals
 
 Would be nice:
