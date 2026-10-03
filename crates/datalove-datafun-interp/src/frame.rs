@@ -90,7 +90,8 @@ pub struct Frame {
     /// projection of a borrowed parameter knows better -- it read the field's
     /// own descriptor off the one the caller supplied -- and this is where it
     /// puts it. Null means the layout's answer was right, which is every value
-    /// outside a generic.
+    /// outside a generic, so it is left empty until one is recorded rather
+    /// than filled with nulls on every call.
     value_tydescs: Vec<*const TyDesc>,
 }
 
@@ -148,7 +149,7 @@ impl Frame {
                     param_initialized: vec![false; param_count],
                     shape_descriptors: Vec::new(),
                     own_shapes,
-                    value_tydescs: vec![std::ptr::null(); value_count],
+                    value_tydescs: Vec::new(),
                 }
             }
             CodeUnitContext::Script(_) => {
@@ -162,7 +163,7 @@ impl Frame {
                     param_initialized: Vec::new(),
                     shape_descriptors: Vec::new(),
                     own_shapes: own_shapes.clone(),
-                    value_tydescs: vec![std::ptr::null(); value_count],
+                    value_tydescs: Vec::new(),
                 }
             }
             CodeUnitContext::Native(ctx) => {
@@ -204,7 +205,7 @@ impl Frame {
         refill(&mut self.param_ptrs, param_count, std::ptr::null_mut());
         refill(&mut self.param_tydescs, param_count, std::ptr::null());
         refill(&mut self.param_initialized, param_count, false);
-        refill(&mut self.value_tydescs, layout.value_offsets.len(), std::ptr::null());
+        self.value_tydescs.clear();
         refill(&mut self.value_initialized, layout.value_offsets.len(), false);
 
         self.shape_descriptors.clear();
@@ -276,8 +277,8 @@ impl Frame {
         // What it points at is whatever the projection that made it found, when
         // it found out; otherwise the ref's own tydesc, which wraps the inner
         // type as a one-field tuple.
-        if !self.value_tydescs[idx].is_null() {
-            return Value { ptr: stored_ptr, tydesc: self.value_tydescs[idx] };
+        if let Some(&found) = self.value_tydescs.get(idx) && !found.is_null() {
+            return Value { ptr: stored_ptr, tydesc: found };
         }
         let inner_tydesc = unsafe {
             let tuple_info = (*tydesc).type_info.tuple;
@@ -288,7 +289,11 @@ impl Frame {
 
     /// Record what a reference points at, where the layout does not say.
     pub fn set_value_tydesc(&mut self, id: ValueId, tydesc: *const TyDesc) {
-        self.value_tydescs[id.0 as usize] = tydesc;
+        let idx = id.0 as usize;
+        if self.value_tydescs.len() <= idx {
+            self.value_tydescs.resize(self.layout.value_offsets.len(), std::ptr::null());
+        }
+        self.value_tydescs[idx] = tydesc;
     }
 
     /// Get destination for a slot.
