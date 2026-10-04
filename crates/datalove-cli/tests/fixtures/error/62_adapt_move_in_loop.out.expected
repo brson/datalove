@@ -6,7 +6,7 @@
  [38;5;240m  │[0m                  [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m value moved inside loop
  [38;5;240m  │[0m 
  [38;5;240m  │[0m [38;5;115mHelp[0m: insert `@` to clone:
-6 |       let x: int = outer@
-  |                         +
+ [38;5;240m  │[0m             let x: int = outer@
+ [38;5;240m  │[0m                               +
 [38;5;246m───╯[0m
 Error: Ownership error

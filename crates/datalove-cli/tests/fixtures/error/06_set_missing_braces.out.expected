@@ -6,6 +6,6 @@
  [38;5;240m  │[0m              [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m no type of this name is in scope
  [38;5;240m  │[0m 
  [38;5;240m  │[0m [38;5;115mNote[0m: a bare name in type position is a type alias, written `type Name: <type>`, or one of the type parameters of the generic function it appears in.
-a set type is written `#{T}`
+ [38;5;240m  │[0m       a set type is written `#{T}`
 [38;5;246m───╯[0m
 Error: Type error

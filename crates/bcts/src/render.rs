@@ -126,11 +126,72 @@ pub fn render_multi_source_diagnostics<'db>(
 }
 
 /// Several lines as one, or nothing where there are none.
+///
+/// Every line after the first is marked with [`CONTINUATION`], for
+/// [`reframe`] to put the frame back in front of.
 fn joined<'db>(db: &'db dyn crate::Db, lines: &[InternedText<'db>]) -> Option<String> {
     match lines.is_empty() {
         true => None,
-        false => Some(lines.iter().map(|l| l.as_str(db)).collect::<Vec<_>>().join("\n")),
+        false => {
+            let lines: Vec<_> = lines.iter().flat_map(|l| l.as_str(db).lines()).collect();
+            Some(lines.join(&fmt!("\n{CONTINUATION}")))
+        }
     }
+}
+
+/// The mark on a line of a note or help that is not its first.
+const CONTINUATION: char = '\u{1}';
+
+/// The width of the `Help: ` and `Note: ` ariadne writes before the text.
+const NOTE_LABEL_WIDTH: usize = 6;
+
+/// A rendered report with its notes' and helps' later lines framed.
+///
+/// ariadne writes a note or help as one row, so the lines of a multi-line
+/// one after the first come out at column zero, outside the frame. Each such
+/// line is given the margin of the row it continues, drawn in the same
+/// characters and colours, and indented to line up under the text.
+fn reframe(report: &str) -> String {
+    let mut out = String::with_capacity(report.len());
+    let mut row = "";
+    for line in report.split_inclusive('\n') {
+        match line.strip_prefix(CONTINUATION) {
+            Some(rest) => {
+                out.push_str(&fmt!("{}{:NOTE_LABEL_WIDTH$}", &row[..label_start(row)], ""));
+                out.push_str(rest);
+            }
+            None => {
+                row = line;
+                out.push_str(line);
+            }
+        }
+    }
+    out
+}
+
+/// Where the `Help` or `Note` begins in the row ariadne wrote it on.
+///
+/// That is the first letter, the margin being bars and spaces, or the
+/// colour escape directly in front of it.
+fn label_start(row: &str) -> usize {
+    let bytes = row.as_bytes();
+    let mut escapes_start = None;
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'\x1b' => {
+                escapes_start.get_or_insert(i);
+                let end = row[i..].find('m').X();
+                i = i.checked_add(end).X().checked_add(1).X();
+            }
+            b if b.is_ascii_alphabetic() => return escapes_start.unwrap_or(i),
+            _ => {
+                escapes_start = None;
+                i = i.checked_add(1).X();
+            }
+        }
+    }
+    panic!("a note or help row with no label: {row:?}");
 }
 
 /// The path as a reader knows it, which is where they are standing.
@@ -178,15 +239,12 @@ impl Sink<'_> {
     }
 
     fn emit<S: ariadne::Span, C: Cache<S::SourceId>>(self, report: Report<'_, S>, cache: C) {
+        let mut bytes = Vec::new();
+        let _ = report.write(cache, &mut bytes);
+        let text = reframe(&String::from_utf8_lossy(&bytes));
         match self {
-            Sink::Stderr => {
-                let _ = report.eprint(cache);
-            }
-            Sink::Text(out) => {
-                let mut bytes = Vec::new();
-                let _ = report.write(cache, &mut bytes);
-                out.push_str(&String::from_utf8_lossy(&bytes));
-            }
+            Sink::Stderr => eprint!("{text}"),
+            Sink::Text(out) => out.push_str(&text),
         }
     }
 }
@@ -310,7 +368,7 @@ fn render_one_multi_source<'db>(
         builder = builder.with_help(helps);
     }
 
-    let _ = builder.finish().eprint(MultiSourceCache { sources });
+    Sink::Stderr.emit(builder.finish(), MultiSourceCache { sources });
 }
 
 /// Several in-memory sources, looked up by the id a label was given.
@@ -331,10 +389,12 @@ impl Cache<String> for MultiSourceCache {
     }
 }
 
-/// A line of source with text inserted into it, under `+` markers.
+/// A line of source with text inserted into it, over `+` markers.
 ///
 /// What a reader has to do to the line is easier to see written out than
-/// described, so the suggestion shows the line as it would be.
+/// described, so the suggestion shows the line as it would be. It carries no
+/// line number or gutter of its own: it is meant for a help, which the
+/// renderer frames, about a span a label already points at.
 pub fn insertion_suggestion(
     source: &str,
     span: &Range<usize>,
@@ -348,23 +408,15 @@ pub fn insertion_suggestion(
         .map(|i| insert_pos.checked_add(i).X())
         .unwrap_or(source.len());
 
-    // Line numbers are what a reader counts from one.
-    let line_num = source[..line_start].matches('\n').count().checked_add(1).X();
     let original_line = &source[line_start..line_end];
     let col = insert_pos.checked_sub(line_start).X();
 
     let mut modified_line = original_line.S();
     modified_line.insert_str(col, insertion);
 
-    let line_num_str = line_num.to_string();
-    let line_num_width = line_num_str.len();
-
-    let code_line = fmt!("{line_num_str} |     {modified_line}");
-    let marker_prefix = fmt!("{:width$} |     ", "", width = line_num_width);
+    let indent = "    ";
     let plus_markers = "+".repeat(insertion.len());
-    let marker_line = fmt!("{marker_prefix}{:col$}{plus_markers}", "", col = col);
-
-    Some(fmt!("{code_line}\n{marker_line}"))
+    Some(fmt!("{indent}{modified_line}\n{indent}{:col$}{plus_markers}", ""))
 }
 
 #[cfg(test)]
@@ -478,6 +530,31 @@ mod tests {
         assert!(out.contains("an angle"), "{out}");
         assert!(out.contains("a length"), "{out}");
         assert!(!out.contains('\u{1b}'), "a string should carry no colour:\n{out}");
+    }
+
+    /// A help of several lines keeps the frame on each of them.
+    ///
+    /// ariadne writes a help as one row, so its later lines came out at
+    /// column zero, under the frame rather than in it.
+    #[test]
+    fn a_multi_line_help_is_framed() {
+        let ref db = crate::Database::default();
+        let src = "let b = a\nlet c = a\n";
+        let source = Input::new(db, src.S());
+        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let suggestion = insertion_suggestion(src, &(8..9), "@").X();
+        let diag = DiagnosticBuilder::error(db, "use of moved value")
+            .primary_label(TextSpan::new(text, 18..19), "used after move")
+            .help(&fmt!("insert `@` to clone:\n{suggestion}"))
+            .build();
+
+        let out = Renderer::new().to_string(db, &diag, Path::new("t.dfs"), Path::new(""));
+        let help: Vec<_> = out.lines().skip_while(|l| !l.contains("Help:")).take(3).collect();
+        assert_eq!(help, [
+            "   | Help: insert `@` to clone:",
+            "   |           let b = a@",
+            "   |                    +",
+        ], "{out}");
     }
 
     /// Every note is printed, not just the last one.
