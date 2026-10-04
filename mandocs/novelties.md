@@ -1,6 +1,6 @@
 # Novelties
 
-Datalove occassionally has unique designs:
+Datalove occasionally has unique designs:
 
 
 
@@ -8,14 +8,16 @@ Datalove occassionally has unique designs:
 ## Matched-brace token-tree lexing
 
 Matched-brace / token-tree lexing:
-all braces are matched (`{ }`, `( )`, `[ ]`, `< >`).
+all braces are matched (`{ }`, `( )`, `[ ]`, `< >`),
+as are the earmuff braces (`{| |}`, `[| |]`)
+and the sigil braces (`%{ }`, `#{ }`).
 Statement oriented, with statements that span multiple lines without statement terminators.
 Pascal, Python, and Rust-influenced syntax.
 
 Rust has token trees, but not for `< >`.
 
-Datalove consequentially has to sacrifice comparison ops and arrows,
-using `.<` and `.>` for comparison.
+Datalove consequentially has to sacrifice comparison ops,
+using `.<` and `.>` for less-than and greater-than.
 
 
 
@@ -23,9 +25,9 @@ using `.<` and `.>` for comparison.
 ## Bimodal parsing — line-oriented to expression-oriented
 
 Datalove leverages token trees to create a novel parser
-that can line-break outside of braces while leaving the inside un-line-breaked.
-
-This is what allows statements without separator tokens:
+that treats line breaks as significant outside of braces
+and ignores them inside.
+This is what allows statements without separator tokens.
 
 ```datalove
 
@@ -38,12 +40,33 @@ fun foo (
 end fun
 ```
 
+In the case of tables though line breaks become significant
+again within braces to create a CSV-like syntax without line terminators.
+
+```datalove
+let csvish = {|
+  name: string, qty: int
+  "coal", 10
+  "iron", 20
+|}
+```
+
+In cases where line breaks are significant,
+`;` can also act as line terminators / statement seperators.
+
+```datalove
+let csvish = {|
+  name: string, qty: int; "coal", 10; "iron", 20
+|}
+```
+
 
 
 
 ## Pervasive prefix type hints
 
-Datalove's type hints have no direct precedent:
+Datalove's type hints work in every expression position
+and have no direct precedent.
 
 ```datalove
 let foo = (
@@ -53,11 +76,11 @@ let foo = (
 )
 ```
 
-Being a prefix is particularly unusualy.
-We do it this we because it matches the "pull" feel of bidirectional typing,
+Being a prefix is particularly unusual.
+We do it this way because it matches the "pull" feel of bidirectional typing,
 where types flow into the goal.
-
-Postfix type annotations are the opposite, less readable.
+Postfix type annotations are deemed less intuitive
+and are also more challenging to parse without disambiguating compromises.
 
 
 
@@ -65,11 +88,20 @@ Postfix type annotations are the opposite, less readable.
 ## Tensors and tables
 
 These two types are pervasive in big niches of modern
-computing but rarely recieve first-class language language support.
+computing but rarely receive first-class language support.
 
 ```datalove
-todo
+let identity: [|f64, 2|] = [| 1.0 0.0, 0.0 1.0 |]
+
+let people: {| name: string, age: u32 |} = {|
+  name, age
+  "Ann", 31
+  "Bob", 27
+|}
 ```
+
+Tensor rank is part of the type;
+the shape is inferred from the literal's separators.
 
 
 
@@ -81,7 +113,11 @@ required for quick iteration and IDE feedback.
 
 Datalove's compilation pipeline is fully memoized
 at the module and script-unit level:
-parsing, typechecking, ownership analysis, lowering.
+parsing, name resolution, typechecking, ownership analysis, lowering.
+It is built on Salsa.
+The exception is const evaluation itself,
+which runs the interpreter and is not memoized;
+the phases either side of it are.
 
 
 
@@ -97,12 +133,15 @@ each of which is a function frame without arguments.
 Script units are typechecked in sequence,
 environment carried from previous to next.
 
-Script units can be _undone_,
+Script units can be edited, inserted, or removed,
+and a session truncated,
 reversing the effects of both typechecking and evaluation.
+An edit re-checks and re-runs only the later units
+that depend on what changed.
 
 For pure functional environment changes between units
-undo is accomplished with memoization.
-(For side-effecting functions this will be done through virtualized I/O).
+this is accomplished with memoization.
+(For side-effecting functions this will be done through virtualized I/O.)
 
 
 
@@ -110,14 +149,33 @@ undo is accomplished with memoization.
 ## Enum variant types
 
 Enum variants are themselves types.
+An atom or term stands alone as a type,
+and an enum is a closed union of them:
+
+```datalove
+type Shape: enum { atom Empty, term Circle f64, term Square f64 }
+
+fun unit_circle(): term Circle f64
+    ret term Circle 1.0
+end fun
+
+let c = unit_circle()     // c: term Circle f64
+let s: Shape = c@         // widened to the enum
+```
 
 
 
 
 ## Worldfiles
 
-
-
-
-
-
+A whole world --
+modules in any number of packages and libraries,
+rider interfaces,
+and a script --
+can be written in a single text file,
+which makes compiler tests self-contained.
+Worldfiles can also describe a sequence of edits to modules,
+for testing incremental recompilation,
+and can be generated randomly (`datalove worldgen`)
+for fuzzing the compiler.
+See [Worlds](worlds.md).
