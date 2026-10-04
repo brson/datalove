@@ -43,6 +43,8 @@ For detail see additional documentation.
 </div>
 
 
+
+
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
@@ -110,6 +112,41 @@ call debug_shape(atom Circle)
 
 
 
+## Variables
+
+Immutable bindings are declared with `let`.
+They must be assigned at declaration.
+Mutable bindings are declared with `var`,
+and reassigned via `set` statements.
+`var`s may be unassigned initially,
+in which case a type annotation is required.
+
+```datalove
+let a = 10.0
+var b = 20.0
+var c: f64
+
+set c = 30.0
+
+debuglog (a, b, c)
+
+set c = 40.0
+
+debuglog (a, b, c)
+```
+
+Shadowing is allowed.
+
+```datalove
+let a = 10.0
+let a = "shady"
+
+debuglog a
+```
+
+
+
+
 ## Functions
 
 Functions have a line-oriented and statement-oriented syntax.
@@ -168,29 +205,137 @@ fun demo_param_modes(
   ref by_ref: int,
   mut by_mut: int,
   out by_out: int,
-)
+): int
   set by_mut = by_value + by_ref
-  set by_out = by_value * by_ref
+  set by_out = by_value - by_ref
+  ret by_value * by_ref
 end fun
 
 let a = 3
 var b = 4
 var c: int
-call demo_param_modes(2, ref a, mut b, out c)
+let d = demo_param_modes(2, ref a, mut b, out c)
 
-debuglog (b, c)
+debuglog (b, c, d)
 ```
 
-Immutable bindings are declared with `let`, mutable with `var`.
-Mutable bindings are reassigned with `set`.
-New bindings may shadow previous bindings.
+All statements begin with a reserved word.
+In statement position functions are called with `call`.
+In expression position they are called by name.
 
 ```datalove
-let a = true
-debuglog a
-let a = 100
-debuglog a
+fun min_value(a: u32, b: u32): u32
+  if a <= b
+    ret a
+  else
+    ret b
+  end if
+end fun
+
+let min = min_value(1, 2)
+
+fun set_min_value(a: u32, b: u32, out target: u32)
+  if a <= b
+    set target = a
+  else
+    set target = b
+  end if
+end fun
+
+var min: u32
+call set_min_value(1, 2, out min)
 ```
+
+
+
+
+## Ownership
+
+Datalove has a linear type system where all values
+are uniquely owned, not reference counted or garbage collected.
+
+Types that do not contain heap allocations are automatically copied when used,
+leaving the original value in place to be reused.
+Types that contain heap allocations are instead moved into their new location,
+statically invalidating the original location.
+
+```datalove
+fun print_copy_values(a: f64, b: f64, c: f64)
+  debuglog (a, b, c)
+end fun
+
+let a = 10.0
+let b = a
+let c = a
+
+call print_copy_values(a, b, c)
+```
+
+The following does not compile because strings
+are non-copyable, thus `let b = a` moves `a` into `b`
+and `let c = a` cannot access `a` because it is moved.
+
+```datalove
+fun print_move_values(a: string, b: string, c: string)
+  debuglog (a, b, c)
+end fun
+
+let a = "ten"
+let b = a
+let c = a
+
+call print_move_values(a, b, c)
+```
+
+Attempting to run the above produces an error:
+
+```
+$ datalove script test.dfs
+[D001] Error: use of moved value: `a`
+   ╭─[test.dfs:7:9]
+   │
+ 6 │ let b = a
+   │         ┬
+   │         ╰── value moved here
+ 7 │ let c = a
+   │         ┬
+   │         ╰── value used after move
+   │
+   │ Help: insert `@` to clone:
+6  │    let b = a@
+   │             +
+───╯
+
+< ... other errors elided ... >
+```
+
+The postfix _adapt_ operator, `@`, produces a _clone_
+of the value, leaving the original in place.
+
+```datalove
+fun print_move_values(a: string, b: string, c: string)
+  debuglog (a, b, c)
+end fun
+
+let a = "ten"
+let b = a@
+let c = a@
+
+call print_move_values(a, b, c)
+```
+
+The adapt operator is a multipurpose tool
+that performs lossless type coercions of various kinds.
+Whereas Datalove in general is strict and explicit
+about data correctness and execution semantics,
+the adapt operator is a singular "magic" operator
+that does whatever is necessary to fit a value
+of one compatible type into another.
+Beyond cloning it also performs widening numeric conversions and more.
+
+When `@` solves a compiler error, the compiler will say exactly where to put it.
+In some cases Datalove can optionally compile in an "auto-adapt" mode
+for increased ergonomics.
 
 
 
