@@ -501,7 +501,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// F026: Invalid operand type for operator.
-    /// Report a field projection that failed, and pass its error on.
+    /// Report a field or index projection that failed, and pass its error on.
     pub fn report_field_error(&mut self, site: crate::FieldErrorSite<'db>, error: TypeError) -> TypeError {
         let (code, message, label, note) = match &error {
             TypeError::FieldNotFound { field_name, ty } => (
@@ -529,7 +529,14 @@ impl<'db> TypeContext<'db> {
                 Some(S("the field's type is not a copy type, so reading it would move it while the \
 aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
-            _ => unreachable!("not a field error: {error:?}"),
+            TypeError::NonCopyIndexProjection { elem_ty } => (
+                "F072",
+                fmt!("an element of type `{elem_ty}` cannot be read out of what holds it"),
+                S("this would move the element out"),
+                Some(S("the element's type is not a copy type, so reading it would move it while the \
+collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
+            ),
+            _ => unreachable!("not a projection error: {error:?}"),
         };
         self.pending_diagnostics.push(PendingDiagnostic::FieldError {
             site,

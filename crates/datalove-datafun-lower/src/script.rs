@@ -22,7 +22,7 @@ use crate::ScriptFunctionAnalyses;
 use super::context::{LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
-use super::stmt::{collect_field_path_from_place, lower_destructure, lower_statement, lower_var};
+use super::stmt::{collect_field_path_from_place, lower_destructure, lower_numbered_statement, lower_var};
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
 
@@ -458,8 +458,9 @@ fn lower_statement_for_script<'db>(
                     _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
                 }
             } else if place.steps.iter().any(|s| matches!(s, ast::PlaceStep::Index(_))) {
-                // Contains index — delegate to the general lowering in stmt.rs.
-                lower_statement(ctx, stmt)
+                // Contains index — delegate to the general lowering in stmt.rs,
+                // under the ID this statement already has.
+                lower_numbered_statement(ctx, stmt, stmt_idx)
             } else {
                 // Pure field projections.
                 let field_path = collect_field_path_from_place(ctx, place)?;

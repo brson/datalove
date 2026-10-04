@@ -1,5 +1,23 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F072",
+      "labels": [
+        {
+          "message": "this would move the element out",
+          "span": [
+            149,
+            153
+          ],
+          "text": "[i]?"
+        }
+      ],
+      "message": "an element of type `string` cannot be read out of what holds it",
+      "notes": [
+        "the element's type is not a copy type, so reading it would move it while the collection still holds it. Borrow it with `ref`, or clone it out with `@`."
+      ]
+    }
+  ],
   "errors": [
     {
       "element_type": "string",

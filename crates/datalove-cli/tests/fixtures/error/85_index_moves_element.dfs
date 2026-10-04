@@ -1,0 +1,9 @@
+// F072 an index that would move a non-copy element out of its collection.
+//
+// The refusal was a bare type error with no diagnostic behind it, printed as
+// `NonCopyIndexProjection { elem_ty: "int" }` -- and not at all when anything
+// later used the binding, since the undefined-name error that followed was the
+// only one rendered.
+let xs: [int] = [1, 2]
+let i: index = 1
+let r = xs[i]!

@@ -1,0 +1,29 @@
+// Indexing a tensor of rank above one, which gives a view into it.
+//
+// The view starts partway through the tensor's buffer, and printing one read
+// the buffer from its start: the second row of this printed as the first.
+//
+// Writing through an index at the top level of a script also crashed the
+// lowering, which numbered the statement twice and so disagreed with the
+// ownership analysis about every statement after it. It did not matter what
+// was indexed; a list did it too.
+let t: [|i32, 2|] = [| 1 2 3, 4 5 6 |]
+let i: index = 1
+let j: index = 2
+debuglog t[i]!
+debuglog t[i]![j]!
+let row: [|i32, 1|] = t[i]!@
+debuglog row
+
+let c: [|i32, 3|] = [| 1 2, 3 4,, 5 6, 7 8 |]
+debuglog c[i]!
+debuglog c[i]![i]!
+
+var u: [|i32, 2|] = [| 1 2 3, 4 5 6 |]
+let z: index = 0
+set u[i]![z]! = 9
+debuglog u
+
+var xs: [string] = ["a", "b"]
+set xs[i]! = "c"
+debuglog xs

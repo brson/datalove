@@ -141,8 +141,20 @@ fn lower_statement_impl<'db>(
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.
     let stmt_idx = ctx.alloc_stmt_id(stmt);
+    lower_numbered_statement(ctx, stmt, stmt_idx)
+}
 
-    // And say that this is the statement being lowered, for as long as it is.
+/// Lower a statement that has already been given its statement ID.
+///
+/// For a caller that numbered the statement itself and then finds it wants
+/// the general lowering, which numbering again would put every statement after
+/// it out of step with ownership analysis's drop schedule.
+pub fn lower_numbered_statement<'db>(
+    ctx: &mut LowerCtx<'db>,
+    stmt: &Statement<'db>,
+    stmt_idx: usize,
+) -> Result<(), LowerError> {
+    // Say that this is the statement being lowered, for as long as it is.
     //
     // The drop schedule is keyed by this id, and everything that reads it --
     // an early return out of the middle of a statement, chiefly -- asks for

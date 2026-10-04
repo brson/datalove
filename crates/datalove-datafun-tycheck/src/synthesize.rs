@@ -1620,9 +1620,10 @@ fn synthesize_place_index_step<'db>(
     // requires ref context (e.g. via @, ref param, or intermediate step).
     if let Type::Datalit(ref dt) = element_ty {
         if !is_copy_type(db, dt) && !ctx.ref_context {
-            return Err(TypeError::NonCopyIndexProjection {
+            let site = crate::FieldErrorSite::Expr(ExprKey::of(db, expr));
+            return Err(ctx.report_field_error(site, TypeError::NonCopyIndexProjection {
                 elem_ty: datalit::tycheck::type_to_string(db, dt),
-            });
+            }));
         }
     }
 

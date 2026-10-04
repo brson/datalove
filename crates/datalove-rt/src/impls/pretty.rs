@@ -768,7 +768,7 @@ unsafe fn pretty_tensor(
             push_str(rt, string_mut, string_tydesc, b"|")?;
             for i in 0..total_elems {
                 push_str(rt, string_mut, string_tydesc, b" ")?;
-                let elem = tensor.ptr_base.add(i * elem_size);
+                let elem = tensor_elem_ptr(tensor, &shape, i, elem_size);
                 pretty_value(rt, elem, elem_ty, string_mut, string_tydesc)?;
             }
             return push_str(rt, string_mut, string_tydesc, b" |]");
@@ -779,11 +779,34 @@ unsafe fn pretty_tensor(
         }
         push_str(rt, string_mut, string_tydesc, b"[| ")?;
         pretty_tensor_group(
-            rt, tensor.ptr_base, elem_ty, elem_size,
+            rt, tensor, elem_ty, elem_size,
             &shape, 0, 0, total_elems,
             string_mut, string_tydesc,
         )?;
         push_str(rt, string_mut, string_tydesc, b" |]")
+    }
+}
+
+/// The element at row-major position `flat` of a tensor of this shape.
+///
+/// Found through the tensor's offset and strides rather than by position in
+/// its buffer, since a view into another tensor starts partway through that
+/// tensor's buffer.
+unsafe fn tensor_elem_ptr(
+    tensor: &rtdt::Tensor,
+    shape: &[usize],
+    flat: usize,
+    elem_size: usize,
+) -> *const u8 {
+    unsafe {
+        let mut rest = flat;
+        let mut linear = tensor.offset_elems.as_usize();
+        for dim in (0..shape.len()).rev() {
+            let index = rest % shape[dim];
+            rest /= shape[dim];
+            linear += index * (*tensor.strides.add(dim)).as_usize();
+        }
+        tensor.ptr_base.add(linear * elem_size)
     }
 }
 
@@ -793,7 +816,7 @@ unsafe fn pretty_tensor(
 /// of them.
 unsafe fn pretty_tensor_group(
     rt: LocalRtHandle,
-    ptr_base: *const u8,
+    tensor: &rtdt::Tensor,
     elem_ty: rtdt::TyDescRef,
     elem_size: usize,
     shape: &[usize],
@@ -812,7 +835,7 @@ unsafe fn pretty_tensor_group(
                 if i > 0 {
                     push_str(rt, string_mut, string_tydesc, b" ")?;
                 }
-                let elem_ptr = ptr_base.add((offset + i) * elem_size);
+                let elem_ptr = tensor_elem_ptr(tensor, shape, offset + i, elem_size);
                 pretty_value(rt, elem_ptr, elem_ty, string_mut, string_tydesc)?;
             }
             return Ok(());
@@ -829,7 +852,7 @@ unsafe fn pretty_tensor_group(
                 push_str(rt, string_mut, string_tydesc, &commas)?;
             }
             pretty_tensor_group(
-                rt, ptr_base, elem_ty, elem_size,
+                rt, tensor, elem_ty, elem_size,
                 shape, dim + 1, offset + i * group_size, group_size,
                 string_mut, string_tydesc,
             )?;
