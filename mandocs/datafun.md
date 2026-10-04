@@ -338,7 +338,7 @@ In some cases Datalove can optionally compile in an "auto-adapt" mode
 for increased ergonomics.
 
 All first-class types in datafun &mdash;
-those that can be accepted as arguments to `fun` functions &mdash;
+those that can be accepted as arguments to functions &mdash;
 are clonable.
 
 The `ref`, `mut` and `out` parameter modes _borrow_ values temporarily
