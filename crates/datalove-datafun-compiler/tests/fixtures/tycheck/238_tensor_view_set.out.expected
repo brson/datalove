@@ -1,5 +1,23 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F073",
+      "labels": [
+        {
+          "message": "indexing a tensor of rank above one gives a view into it",
+          "span": [
+            160,
+            177
+          ],
+          "text": "t[(: index / 0)]?"
+        }
+      ],
+      "message": "a view of type `[|u32, 1|]` cannot be written through",
+      "notes": [
+        "a view shows part of the tensor it indexes, and writing it whole would replace the view rather than the elements it shows. Index down to single elements and write those."
+      ]
+    }
+  ],
   "errors": [
     {
       "kind": "ViewTypeMutBinding",

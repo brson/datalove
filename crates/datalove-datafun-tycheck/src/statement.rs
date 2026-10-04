@@ -772,12 +772,9 @@ fn typecheck_place_for_set<'db>(
     place: &Place<'db>,
     value: ExprFun<'db>,
 ) -> Result<(), TypeError> {
-    let db = ctx.db;
-
     // Start with the root variable type.
-    let mut current_ty = ctx.lookup_variable(place.root).ok_or_else(|| {
-        TypeError::DatalitError(format!("undefined variable: {}", place.root.text(db)))
-    })?;
+    let mut current_ty = ctx.lookup_variable(place.root)
+        .expect("the set statement reported an undefined root before checking its place");
 
     let steps = &place.steps;
     for (i, step) in steps.iter().enumerate() {
@@ -785,7 +782,7 @@ fn typecheck_place_for_set<'db>(
         match step {
             PlaceStep::Field(field) => {
                 current_ty = typecheck_field_step(ctx, &current_ty, field)
-                    .map_err(|e| ctx.report_field_error(crate::FieldErrorSite::Set(stmt.local_index), e))?;
+                    .map_err(|e| ctx.report_place_error(crate::PlaceErrorSite::Set(stmt.local_index), e))?;
             }
             PlaceStep::Index(idx) => {
                 if is_last {
@@ -795,11 +792,16 @@ fn typecheck_place_for_set<'db>(
                 }
                 // Intermediate index — must have error mode.
                 if idx.error_mode.is_none() {
-                    return Err(TypeError::DatalitError(
-                        "bare index (upsert) cannot appear in intermediate set target position".to_string(),
+                    return Err(ctx.report_set_error(
+                        stmt,
+                        "F074",
+                        S("a bare index can only be the last step of a `set` target"),
+                        "an index here needs `?` or `!`",
+                        Some("a bare index inserts into a map, and partway along a target there is \
+nothing to insert into. Write `[k]?` or `[k]!` to step through an element that is already there."),
                     ));
                 }
-                current_ty = typecheck_index_step(ctx, &current_ty, idx)?;
+                current_ty = typecheck_index_step(ctx, stmt, &current_ty, idx)?;
             }
         }
     }
@@ -823,11 +825,12 @@ fn typecheck_field_step<'db>(
 /// Typecheck an intermediate index step, returning the element/value type.
 fn typecheck_index_step<'db>(
     ctx: &mut TypeContext<'db>,
+    stmt: &StmtSet<'db>,
     base_ty: &Type<'db>,
     idx: &PlaceIndex<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let (element_ty, index_type) = crate::synthesize::resolve_index_types(ctx.db, base_ty)
-        .map_err(TypeError::DatalitError)?;
+        .map_err(|msg| report_unindexable(ctx, stmt, msg))?;
 
     if let Err(e) = check_expr(ctx, idx.index, &index_type) {
         ctx.add_error(e);
@@ -861,12 +864,14 @@ fn typecheck_set_index<'db>(
                     }
                 }
                 _ => {
-                    ctx.add_error(TypeError::DatalitError(
-                        format!(
-                            "bare index in set requires map type, got {}; use '?' or '!' for list indexing",
-                            type_to_string(db, base_ty)
-                        ),
-                    ));
+                    let err = ctx.report_set_error(
+                        stmt,
+                        "F074",
+                        fmt!("a bare index can only insert into a map, not `{}`", type_to_string(db, base_ty)),
+                        "this index needs `?` or `!`",
+                        Some("write `[i]?` or `[i]!` to replace an element that is already there"),
+                    );
+                    ctx.add_error(err);
                 }
             }
         }
@@ -874,16 +879,19 @@ fn typecheck_set_index<'db>(
             let (element_ty, index_type) = match crate::synthesize::resolve_index_types(db, base_ty) {
                 Ok(types) => types,
                 Err(msg) => {
-                    ctx.add_error(TypeError::DatalitError(msg));
+                    let err = report_unindexable(ctx, stmt, msg);
+                    ctx.add_error(err);
                     return;
                 }
             };
             // Reject set on view-producing index (e.g. `set t[i]? = new_row`
             // on rank > 1 tensor would replace the view, not the parent data).
             if crate::synthesize::is_view_producing_index(base_ty) {
-                ctx.add_error(TypeError::ViewTypeMutBinding {
-                    view_ty: type_to_string(db, &element_ty),
-                });
+                let err = ctx.report_place_error(
+                    crate::PlaceErrorSite::Set(stmt.local_index),
+                    TypeError::ViewTypeMutBinding { view_ty: type_to_string(db, &element_ty) },
+                );
+                ctx.add_error(err);
                 return;
             }
             if let Err(e) = check_expr(ctx, idx_step.index, &index_type) {
@@ -893,54 +901,46 @@ fn typecheck_set_index<'db>(
                 ctx.add_error(e);
             }
             // Verify function returns Option or Result depending on error_mode.
-            match error_mode {
-                IndexErrorMode::Option => {
-                    if let Err(e) = require_option_return_type_for_set(ctx, stmt) {
-                        ctx.add_error(e);
-                    }
-                }
-                IndexErrorMode::Result => {
-                    if let Err(e) = require_result_return_type_for_set(ctx, stmt) {
-                        ctx.add_error(e);
-                    }
-                }
+            if let Err(e) = require_return_type_for_set(ctx, stmt, error_mode) {
+                ctx.add_error(e);
             }
         }
     }
 }
 
-/// Require function returns Option type for `set a[i]? = v`.
-fn require_option_return_type_for_set<'db>(
+/// Require the function to return what a failed index in `set` returns early.
+///
+/// An option for `set a[i]? = v`, a result for `set a[i]! = v`. F049, as for
+/// the same operators in an expression.
+fn require_return_type_for_set<'db>(
     ctx: &mut TypeContext<'db>,
-    _stmt: &StmtSet<'db>,
+    stmt: &StmtSet<'db>,
+    error_mode: IndexErrorMode,
 ) -> Result<(), TypeError> {
     let expected_return = ctx.expected_return_type.clone()
-        .expect("set with ? used outside function context");
-    match expected_return {
-        Type::Datalit(datalit::tycheck::Type::Option(_)) => Ok(()),
-        _ => Err(TypeError::DatalitError(
-            format!(
-                "set with `?` index requires function to return Option type, got {}",
-                type_to_string(ctx.db, &expected_return)
-            ),
-        )),
+        .expect("a set statement is always inside a function or a script, which returns `!()`");
+    let (fits, operator, expected) = match (&error_mode, &expected_return) {
+        (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, "?", "Option"),
+        (IndexErrorMode::Option, _) => (false, "?", "Option"),
+        (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, "!", "Result"),
+        (IndexErrorMode::Result, _) => (false, "!", "Result"),
+    };
+    if fits {
+        return Ok(());
     }
+    let actual = type_to_string(ctx.db, &expected_return);
+    Err(ctx.report_set_error(
+        stmt,
+        "F049",
+        fmt!("`set` through an index with `{operator}` requires function to return {expected}, found `{actual}`"),
+        "this index can return early",
+        Some(&fmt!("function must return {expected} to use `{operator}`")),
+    ))
 }
 
-/// Require function returns Result type for `set a[i]! = v`.
-fn require_result_return_type_for_set<'db>(
-    ctx: &mut TypeContext<'db>,
-    _stmt: &StmtSet<'db>,
-) -> Result<(), TypeError> {
-    let expected_return = ctx.expected_return_type.clone()
-        .expect("set with ! used outside function context");
-    match expected_return {
-        Type::Datalit(datalit::tycheck::Type::Result(_)) => Ok(()),
-        _ => Err(TypeError::DatalitError(
-            format!(
-                "set with `!` index requires function to return Result type, got {}",
-                type_to_string(ctx.db, &expected_return)
-            ),
-        )),
-    }
+/// Report a `set` target that indexes something that cannot be indexed.
+///
+/// F011, as for the same index in an expression.
+fn report_unindexable<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtSet<'db>, msg: String) -> TypeError {
+    ctx.report_set_error(stmt, "F011", msg, "this cannot be indexed", None)
 }

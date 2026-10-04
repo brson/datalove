@@ -365,10 +365,11 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_set(&mut self) -> ast::Statement<'db> {
-        let ts = self.peek_text_span();
         self.eat_word("set");
-        let local_index = self.record_set_span(ts);
 
+        // The statement's span is its target, which is what every error about
+        // a `set` is about: `xs[i]!` rather than the keyword in front of it.
+        let target_ts = self.peek_text_span();
         let name = match self.eat_name() {
             Some(n) => n,
             None => {
@@ -384,6 +385,7 @@ impl<'db> Parser<'db> {
         // Parse optional field projections and index steps.
         let steps = self.parse_place_steps();
         let target = ast::Place { root: name, steps };
+        let local_index = self.record_set_span(target_ts.with_end(self.last_byte_end()));
 
         // Need `=` sigil.
         if !self.eat_sigil(Sigil::Equals) {

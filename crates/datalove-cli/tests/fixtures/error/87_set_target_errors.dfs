@@ -1,0 +1,31 @@
+// The faults a `set` target can have that a read cannot.
+//
+// Each was a bare type error with no diagnostic behind it, printed as
+// `DatalitError("...")`. They now point at the target, as every error about a
+// `set` does -- which before this pointed at the `set` keyword.
+
+// F074 a bare index partway along, and one into a list.
+var m: %{u32 = [i32]} = %{1 = [1]}
+let k: u32 = 1
+let j: index = 0
+set m[k][j]! = 5
+var xs: [i32] = [1]
+set xs[j] = 5
+
+// F011 an index into something that cannot be indexed, last or partway.
+var n: i32 = 1
+set n[j]! = 5
+set n[j]![j]! = 5
+
+// F049 an index whose early return the function cannot make.
+fun wants_option(mut ys: [i32]): !()
+  let i: index = 0
+  set ys[i]? = 5
+  ret ok ()
+end fun
+
+fun wants_result(mut ys: [i32]): ()
+  let i: index = 0
+  set ys[i]! = 5
+  ret ()
+end fun

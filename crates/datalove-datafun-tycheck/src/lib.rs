@@ -75,10 +75,10 @@ impl Default for RecoveryHint {
 /// module_id is Some and spans are looked up from ParsedModuleGraph. For
 /// non-module-graph paths, module_id is None and spans are looked up from
 /// TypeContext.spans.
-/// Where a field error was found: a projection, or a `set` statement's place.
+/// Where a place error was found: a projection, or a `set` statement's place.
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub enum FieldErrorSite<'db> {
+pub enum PlaceErrorSite<'db> {
     Expr(ExprKey<'db>),
     Set(u32),
 }
@@ -165,9 +165,10 @@ pub enum PendingDiagnostic<'db> {
         message: InternedText<'db>,
         note: InternedText<'db>,
     },
-    /// F067..F070: A field that is not there, or cannot be read from there.
-    FieldError {
-        site: FieldErrorSite<'db>,
+    /// An error about a place: a field or element that is not there, cannot be
+    /// read from there, or cannot be written there. F067..F070, F072..F074.
+    PlaceError {
+        site: PlaceErrorSite<'db>,
         module_id: Option<ModuleId<'db>>,
         code: InternedText<'db>,
         message: InternedText<'db>,

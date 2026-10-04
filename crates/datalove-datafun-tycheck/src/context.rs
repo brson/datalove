@@ -11,7 +11,7 @@ use datalove_datafun_ast::ast::*;
 use datalove_datafun_intrinsics::IntrinsicId;
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
-use crate::{CallTargets, ExprTypes};
+use crate::{CallTargets, ExprTypes, PlaceErrorSite};
 pub use bct::module_graph::ModuleId;
 
 pub use crate::{
@@ -500,9 +500,8 @@ impl<'db> TypeContext<'db> {
         TypeError::ResultRequiresErrorBinding
     }
 
-    /// F026: Invalid operand type for operator.
     /// Report a field or index projection that failed, and pass its error on.
-    pub fn report_field_error(&mut self, site: crate::FieldErrorSite<'db>, error: TypeError) -> TypeError {
+    pub fn report_place_error(&mut self, site: crate::PlaceErrorSite<'db>, error: TypeError) -> TypeError {
         let (code, message, label, note) = match &error {
             TypeError::FieldNotFound { field_name, ty } => (
                 "F067",
@@ -536,9 +535,44 @@ aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.")),
                 Some(S("the element's type is not a copy type, so reading it would move it while the \
 collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             ),
+            TypeError::ViewTypeMutBinding { view_ty } => (
+                "F073",
+                fmt!("a view of type `{view_ty}` cannot be written through"),
+                S("indexing a tensor of rank above one gives a view into it"),
+                Some(S("a view shows part of the tensor it indexes, and writing it whole would \
+replace the view rather than the elements it shows. Index down to single elements and write those.")),
+            ),
             _ => unreachable!("not a projection error: {error:?}"),
         };
-        self.pending_diagnostics.push(PendingDiagnostic::FieldError {
+        self.push_place_error(site, code, message, label, note);
+        error
+    }
+
+    /// Report an error about a `set` statement's target, and pass it on.
+    ///
+    /// For the faults only a write has, which have no `TypeError` of their own
+    /// to word them from.
+    pub fn report_set_error(
+        &mut self,
+        stmt: &StmtSet<'db>,
+        code: &str,
+        message: String,
+        label: &str,
+        note: Option<&str>,
+    ) -> TypeError {
+        self.push_place_error(PlaceErrorSite::Set(stmt.local_index), code, message.C(), S(label), note.map(S));
+        TypeError::DatalitError(message)
+    }
+
+    fn push_place_error(
+        &mut self,
+        site: PlaceErrorSite<'db>,
+        code: &str,
+        message: String,
+        label: String,
+        note: Option<String>,
+    ) {
+        self.pending_diagnostics.push(PendingDiagnostic::PlaceError {
             site,
             module_id: self.current_module_id,
             code: InternedText::new(self.db, code.S()),
@@ -546,7 +580,6 @@ collection still holds it. Borrow it with `ref`, or clone it out with `@`.")),
             label: InternedText::new(self.db, label),
             note: note.map(|n| InternedText::new(self.db, n)),
         });
-        error
     }
 
     /// F065: A literal out of range for the type it is checked against.

@@ -6,7 +6,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
-                    "line 5, col 5: error[F055]: cannot assign to immutable variable `x`",
+                    "line 5, col 9: error[F055]: cannot assign to immutable variable `x`",
                 ],
             ),
             ownership: OwnershipResult(

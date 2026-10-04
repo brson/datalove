@@ -362,10 +362,10 @@ drop the return type.")
                 builder.emit_type();
             }
         }
-        PendingDiagnostic::FieldError { site, module_id: _, code, message, label, note } => {
+        PendingDiagnostic::PlaceError { site, module_id: _, code, message, label, note } => {
             let ts = match site {
-                crate::FieldErrorSite::Expr(key) => spans.lookup_expr(db, *key),
-                crate::FieldErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
+                crate::PlaceErrorSite::Expr(key) => spans.lookup_expr(db, *key),
+                crate::PlaceErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
             };
             if let Some(ts) = ts {
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -746,10 +746,10 @@ fn format_single_diagnostic<'db>(
                 Some(base_msg)
             }
         }
-        PendingDiagnostic::FieldError { site, module_id: _, code, message, label: _, note: _ } => {
+        PendingDiagnostic::PlaceError { site, module_id: _, code, message, label: _, note: _ } => {
             let ts = match site {
-                crate::FieldErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
-                crate::FieldErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
+                crate::PlaceErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
+                crate::PlaceErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
             };
             let loc = format_location(db, &ts);
             Some(format!("{}: error[{}]: {}", loc, code.as_str(db), message.as_str(db)))

@@ -1,0 +1,26 @@
+// F073 a view into a tensor, written through as a whole.
+//
+// Indexing a tensor of rank above one gives a view of part of it. Passing that
+// `mut` or `out`, or assigning to it, would replace the view rather than the
+// elements it shows, and is refused. The refusal was a bare type error with
+// no diagnostic behind it, printed as `ViewTypeMutBinding { view_ty: ... }`.
+fun clear(mut row: [|i32, 1|]): ()
+  ret ()
+end fun
+
+fun fill(out row: [|i32, 1|]): ()
+  set row = [| 7 8 9 |]
+  ret ()
+end fun
+
+fun f(mut t: [|i32, 2|]): !()
+  let i: index = 1
+  fill(out t[i]!)
+  ret ok ()
+end fun
+
+var t: [|i32, 2|] = [| 1 2 3, 4 5 6 |]
+let i: index = 1
+clear(mut t[i]!)
+let row: [|i32, 1|] = [| 7 8 9 |]
+set t[i]! = row

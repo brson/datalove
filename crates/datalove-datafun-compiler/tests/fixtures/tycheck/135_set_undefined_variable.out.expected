@@ -6,10 +6,10 @@
         {
           "message": "variable not defined",
           "span": [
-            15,
-            18
+            19,
+            20
           ],
-          "text": "set"
+          "text": "x"
         }
       ],
       "message": "undefined variable: x",

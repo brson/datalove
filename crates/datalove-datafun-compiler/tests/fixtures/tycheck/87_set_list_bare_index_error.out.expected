@@ -1,9 +1,27 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F074",
+      "labels": [
+        {
+          "message": "this index needs `?` or `!`",
+          "span": [
+            152,
+            156
+          ],
+          "text": "b[i]"
+        }
+      ],
+      "message": "a bare index can only insert into a map, not `[u32]`",
+      "notes": [
+        "write `[i]?` or `[i]!` to replace an element that is already there"
+      ]
+    }
+  ],
   "errors": [
     {
       "kind": "DatalitError",
-      "message": "bare index in set requires map type, got [u32]; use '?' or '!' for list indexing"
+      "message": "a bare index can only insert into a map, not `[u32]`"
     }
   ],
   "judgements": [
