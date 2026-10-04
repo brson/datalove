@@ -77,7 +77,7 @@ pub struct Frame {
     /// Track which values hold something.
     ///
     /// A script frame needs this for `DropTracked`. A function frame needs it
-    /// because `prepare_call_args` destroys an `out` argument's destination
+    /// because `resolve_arg` destroys an `out` argument's destination
     /// before the call, and a destination that has never been written must not
     /// be destroyed. That used to rest on the frame being zeroed, so that the
     /// destroy read a null pointer and did nothing -- which made "uninitialized"

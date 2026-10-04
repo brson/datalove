@@ -83,19 +83,6 @@ use datalove_datafun_ir::{
     IrCodeUnit,
 };
 
-/// Get param mode for argument at index, defaulting to In.
-fn param_mode(callee: &IrCodeUnit, i: usize) -> ParamMode {
-    match &callee.context {
-        datalove_datafun_ir::CodeUnitContext::Function(ctx) => {
-            ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In)
-        }
-        datalove_datafun_ir::CodeUnitContext::Native(ctx) => {
-            ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In)
-        }
-        datalove_datafun_ir::CodeUnitContext::Script(_) => ParamMode::In,
-    }
-}
-
 /// Result of executing a script unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnitCompletion {
@@ -1145,36 +1132,20 @@ impl IrInterpreter {
                 }
             }
             Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
-                let callee = ctx.get_unit(func, registry);
-                if let datalove_datafun_ir::CodeUnitContext::Native(_) = &callee.context {
-                    self.execute_native_call(callee, args, shape_descriptors, *dest, frame, frames)?;
-                } else {
-                    // Build call site info for dispatcher if we have caller context.
-                    let call_site_info = current_func.map(|caller| {
-                        dispatch::CallSiteInfo {
-                            caller: caller.clone(),
-                            caller_unit: ctx.unit(),
-                            call_site_id: *site_id,
-                        }
-                    });
-                    self.execute_call_site(
-                        func, callee, args, shape_descriptors, *dest, call_site_info,
-                        frame, ctx, registry, frames)?;
-                }
+                let call_site_info = current_func.map(|caller| dispatch::CallSiteInfo {
+                    caller: caller.clone(),
+                    caller_unit: ctx.unit(),
+                    call_site_id: *site_id,
+                });
+                self.execute_call(
+                    func, args, shape_descriptors, *dest, call_site_info, frame, ctx, registry, frames)?;
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
-            // only used by the specialization pass. Without specialization, this calls
-            // the original function with original args.
+            // only used by the specialization pass. It has no site id, so the
+            // dynamic inliner does not see it.
             Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
-                let callee = ctx.get_unit(func, registry);
-                if let datalove_datafun_ir::CodeUnitContext::Native(_) = &callee.context {
-                    self.execute_native_call(callee, args, shape_descriptors, *dest, frame, frames)?;
-                } else {
-                    // ComptimeCall doesn't have site_id, so no call_site_info.
-                    self.execute_call_site(
-                        func, callee, args, shape_descriptors, *dest, None,
-                        frame, ctx, registry, frames)?;
-                }
+                self.execute_call(
+                    func, args, shape_descriptors, *dest, None, frame, ctx, registry, frames)?;
             }
             Instruction::ListNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -2199,29 +2170,6 @@ impl IrInterpreter {
     // Call instruction helpers
     // -------------------------------------------------------------------------
 
-    /// Prepare arguments for a function call.
-    ///
-    /// For Out params, gets the destination pointer and destroys any existing value
-    /// (since the callee treats the storage as uninitialized).
-    /// For other params, reads the value normally.
-    fn prepare_call_args(
-        &self,
-        callee: &IrCodeUnit,
-        args: &[Operand],
-        frame: &mut Frame,
-        frames: &FrameStore,
-    ) -> (Vec<Value>, BorrowScratch) {
-        // Somewhere to unpack a borrowed value that has no address of its own.
-        // Boxed one apiece so that filling the vector cannot move what an
-        // argument already points at.
-        let mut scratch: BorrowScratch = Vec::new();
-        let mut arg_vals = Vec::with_capacity(args.len());
-        for (i, op) in args.iter().enumerate() {
-            arg_vals.push(self.resolve_arg(param_mode(callee, i), op, frame, frames, &mut scratch));
-        }
-        (arg_vals, scratch)
-    }
-
     /// Resolve one argument for a parameter passed in `mode`.
     ///
     /// An `out` argument is the place the callee will write, emptied first if
@@ -2319,32 +2267,6 @@ impl IrInterpreter {
         Value { ptr: inner_ptr as *mut u8, tydesc: inner_tydesc }
     }
 
-    /// Mark consumed arguments as dropped after preparing a call.
-    ///
-    /// Ownership rules:
-    /// - Ref/Mut/Out params: borrowed, caller retains ownership
-    /// - In params with Copy types: copied, caller retains ownership
-    /// - In params with non-Copy types: moved, mark as dropped
-    fn mark_consumed_call_args(callee: &IrCodeUnit, args: &[Operand], frame: &mut Frame) {
-        let param_types: &[datalove_datafun_ir::IrType] = match &callee.context {
-            datalove_datafun_ir::CodeUnitContext::Function(ctx) => &ctx.param_types,
-            datalove_datafun_ir::CodeUnitContext::Native(ctx) => &ctx.param_types,
-            datalove_datafun_ir::CodeUnitContext::Script(_) => &[],
-        };
-        for (i, arg) in args.iter().enumerate() {
-            let mode = param_mode(callee, i);
-            if matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out) {
-                continue; // Borrowed, not consumed.
-            }
-            if let Some(param_type) = param_types.get(i) {
-                if param_type.is_copy() {
-                    continue; // Copied, not consumed.
-                }
-            }
-            Self::mark_source_dropped_local(arg, frame);
-        }
-    }
-
     /// Try to dispatch a call via the JIT dispatcher.
     ///
     /// Returns `Some(result)` if the dispatcher handled the call,
@@ -2408,50 +2330,84 @@ impl IrInterpreter {
         dispatcher.as_ref().and_then(|d| d.get_optimized_function(func))
     }
 
-    /// Mark Out param destinations as initialized after a call returns.
-    fn mark_out_params_initialized(callee: &IrCodeUnit, args: &[Operand], frame: &mut Frame) {
-        for (i, arg) in args.iter().enumerate() {
-            if param_mode(callee, i) == ParamMode::Out {
-                match arg {
-                    Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                    Operand::Value(id) => frame.mark_value_live(*id),
-                    _ => {}
-                }
+    /// Execute a call instruction.
+    #[allow(clippy::too_many_arguments)]
+    fn execute_call(
+        &mut self,
+        code_ref: &CodeRef,
+        args: &[Operand],
+        shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        dest: datalove_datafun_ir::ValueId,
+        call_site_info: Option<dispatch::CallSiteInfo>,
+        frame: &mut Frame,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
+        let callee = ctx.get_unit(code_ref, registry);
+        match &callee.context {
+            datalove_datafun_ir::CodeUnitContext::Native(native_ctx) => {
+                self.execute_native_call(native_ctx, args, shape_refs, dest, frame, frames)
             }
+            _ => self.execute_call_site(
+                code_ref, callee, args, shape_refs, dest, call_site_info,
+                frame, ctx, registry, frames),
         }
     }
 
-    /// Call a native function from a call instruction.
+    /// Call a native function.
     ///
-    /// A native has no frame, so its arguments are collected into a list and
-    /// the descriptors for its shapes go after them, as they do at a call to a
-    /// module function.
+    /// A native has no frame, so its arguments are collected into a list, and
+    /// the descriptors for its shapes go after them as they do at a call to a
+    /// module function. Otherwise the arguments are handled as
+    /// `execute_call_site` handles them.
     fn execute_native_call(
         &mut self,
-        callee: &IrCodeUnit,
+        native_ctx: &datalove_datafun_ir::NativeContext,
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context else {
-            panic!("execute_native_call on {}, which is not native", callee.name);
-        };
-        // The scratch is held until the call returns, because a borrowed
-        // argument with no address of its own points into it.
-        let (arg_vals, _borrow_scratch) = self.prepare_call_args(callee, args, frame, frames);
-        let dest_slot = frame.value_dest(dest);
-        Self::mark_consumed_call_args(callee, args, frame);
+        let mode = |i: usize| native_ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+
+        // Held until the call returns, because a borrowed argument with no
+        // address of its own points into it.
+        let mut scratch: BorrowScratch = Vec::new();
+        let arg_vals: Vec<Value> = args.iter().enumerate()
+            .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames, &mut scratch))
+            .collect();
+        for (i, op) in args.iter().enumerate() {
+            if mode(i) == ParamMode::In && !native_ctx.param_types[i].is_copy() {
+                Self::mark_source_dropped_local(op, frame);
+            }
+        }
         let supplied: Vec<*const rtdt::TyDesc> = shape_refs.iter()
             .map(|r| self.resolve_shape_ref(r, frame))
             .collect();
+        let dest_slot = frame.value_dest(dest);
+
         self.native_table.call(
             &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &supplied,
         )?;
+
         frame.mark_value_live(dest);
-        Self::mark_out_params_initialized(callee, args, frame);
+        for (i, op) in args.iter().enumerate() {
+            if mode(i) == ParamMode::Out {
+                Self::mark_out_written(op, frame);
+            }
+        }
         Ok(())
+    }
+
+    /// Note that a call has written an `out` argument.
+    fn mark_out_written(op: &Operand, frame: &mut Frame) {
+        match op {
+            Operand::Slot(id) => frame.mark_slot_initialized(*id),
+            Operand::Value(id) => frame.mark_value_live(*id),
+            _ => {}
+        }
     }
 
     /// Call a function that is not native from a call instruction.
@@ -2512,20 +2468,10 @@ impl IrInterpreter {
             Some(result) => result,
             None => {
                 callee_frame.enter();
-                if let CodeRef::External { unit, .. } = code_ref {
-                    // An external function's own local functions are its
-                    // unit's, not this caller's.
-                    let unit_funcs = registry.unit_functions(*unit)
-                        .unwrap_or_else(|| panic!("external unit {} not found", unit));
-                    let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
-                    self.run_frame(
-                        body, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
-                        Some(code_ref))
-                } else {
-                    self.run_frame(
-                        body, &mut callee_frame, dest_slot, ctx, registry, frames,
-                        Some(code_ref))
-                }
+                let callee_ctx = ctx.for_callee(code_ref, registry);
+                self.run_frame(
+                    body, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
+                    Some(code_ref))
             }
         };
 
@@ -2533,11 +2479,7 @@ impl IrInterpreter {
             frame.mark_value_live(dest);
             for (i, op) in args.iter().enumerate() {
                 if callee_frame.layout().param_modes[i] == ParamMode::Out {
-                    match op {
-                        Operand::Slot(id) => frame.mark_slot_initialized(*id),
-                        Operand::Value(id) => frame.mark_value_live(*id),
-                        _ => {}
-                    }
+                    Self::mark_out_written(op, frame);
                 }
             }
         }

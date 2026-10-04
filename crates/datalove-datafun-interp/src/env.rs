@@ -107,10 +107,11 @@ impl Default for ScriptEnvironment {
 }
 
 /// Execution context holding available functions.
+#[derive(Clone, Copy)]
 pub struct ExecutionContext<'a> {
     /// The script unit these functions belong to.
     ///
-    /// A `CodeRef::Local` names a position in `functions` and says nothing
+    /// A `CodeRef::Local` names one of `functions` by id and says nothing
     /// about whose list that is, so every unit's ids start again at zero.
     /// Anything that remembers a function between calls -- the inliner's
     /// optimized bodies, the JIT's compiled ones -- has to key on this as well,
@@ -134,22 +135,22 @@ impl<'a> ExecutionContext<'a> {
     /// Find a local function by ID.
     ///
     /// Returns None if no local function with this ID exists.
-    pub fn find_local_function(&self, unit_id: CodeUnitId) -> Option<&IrCodeUnit> {
-        self.functions.iter().find(|f| f.id.0 == unit_id.0)
+    /// A function's id is not always its position: compile-time evaluation
+    /// runs with a list that leaves functions out.
+    pub fn find_local_function(&self, id: CodeUnitId) -> Option<&'a IrCodeUnit> {
+        self.functions.iter().find(|f| f.id == id)
     }
 
     /// Look up a function by reference.
     ///
     /// Panics if function not found (compiler bug).
-    pub fn get_unit<'b>(
-        &'b self,
-        code_ref: &CodeRef,
-        registry: &'b FunctionRegistry,
-    ) -> &'b IrCodeUnit {
+    pub fn get_unit<'b>(&self, code_ref: &CodeRef, registry: &'b FunctionRegistry) -> &'b IrCodeUnit
+    where
+        'a: 'b,
+    {
         match code_ref {
             CodeRef::Local(id) => {
-                self.functions.iter()
-                    .find(|f| f.id.0 == id.0)
+                self.find_local_function(*id)
                     .unwrap_or_else(|| panic!("local unit {:?} not found", id))
             }
             CodeRef::External { unit, id } => {
@@ -163,36 +164,25 @@ impl<'a> ExecutionContext<'a> {
         }
     }
 
-    /// Look up a function and get the appropriate context for calling it.
+    /// The context a call to `code_ref` runs its callee in.
     ///
-    /// For local and module functions, returns the current context.
-    /// For external functions, returns a context with that unit's functions.
+    /// A `CodeRef::Local` inside a function means that function's own unit, so
+    /// a function from an earlier script unit runs with that unit's functions
+    /// in scope rather than its caller's. Every other callee shares the
+    /// caller's.
     ///
-    /// Panics if function not found (compiler bug).
-    pub fn get_unit_with_context<'b>(
-        &'b self,
-        code_ref: &CodeRef,
-        registry: &'b FunctionRegistry,
-    ) -> (&'b IrCodeUnit, Option<u32>) {
+    /// Panics if the unit is not registered (compiler bug).
+    pub fn for_callee<'b>(&self, code_ref: &CodeRef, registry: &'b FunctionRegistry) -> ExecutionContext<'b>
+    where
+        'a: 'b,
+    {
         match code_ref {
-            CodeRef::Local(id) => {
-                let func = self.functions.iter()
-                    .find(|f| f.id.0 == id.0)
-                    .unwrap_or_else(|| panic!("local unit {:?} not found", id));
-                (func, None) // Use current context.
+            CodeRef::External { unit, .. } => {
+                let functions = registry.unit_functions(*unit)
+                    .unwrap_or_else(|| panic!("external unit {} not found", unit));
+                ExecutionContext::new(*unit, functions)
             }
-            CodeRef::External { unit, id } => {
-                let callee = registry.get_external_function_as_unit(*unit, *id)
-                    .unwrap_or_else(|| panic!("external unit unit={} id={:?} not found", unit, id));
-                (callee, Some(*unit)) // Need context from this unit.
-            }
-            CodeRef::Module { module, id } => {
-                // Module calls resolve via CodeRef::Module (through registry),
-                // not CodeRef::Local, so they don't use ExecutionContext.
-                let callee = registry.get_module_function_as_unit(*module, *id)
-                    .unwrap_or_else(|| panic!("module unit {:?}::{:?} not found", module, id));
-                (callee, None)
-            }
+            CodeRef::Local(_) | CodeRef::Module { .. } => *self,
         }
     }
 }
