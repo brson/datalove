@@ -25,6 +25,7 @@
 - [Tables: What the Type System Is Missing](design-table-rows.md)
 - [Generics and Specialization](plan-generics.md)
 - [Script Reactivity](plan-script-reactivity.md)
+- [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
