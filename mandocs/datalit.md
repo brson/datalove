@@ -5,7 +5,7 @@ a typed declarative expression language for
 serializing, storing and transmitting
 common data types.
 We often refer to it as _datalit_,
-and its types and datalit types.
+and its types as datalit types.
 
 Datalove Literals is the data sublanguage of Datalove:
 every datalit expression is written the same way in Datalove,
@@ -59,7 +59,7 @@ and syntax of Datalove in general.
     1 2,
     3 4,,
     5 6,
-    7 8,
+    7 8
   |],
   config = some {
     retries = 3,
@@ -110,7 +110,8 @@ Identifiers name struct fields, table columns,
 and atom, term and enum variants.
 An identifier is a run of letters, digits and `_`
 not beginning with a digit.
-Letters are Unicode alphabetic characters, so `café` is an identifier.
+Letters are Unicode alphabetic characters, so `café` is an identifier,
+and digits are Unicode numeric characters, so `x²` is one too.
 
 These words start an expression:
 
@@ -150,8 +151,9 @@ comment        = line_comment | block_comment ;
 line_comment   = "//", { ? any char except newline ? } ;
 block_comment  = "/*", { block_comment | ? any char ? }, "*/" ;
 
-ident          = ident_start, { ident_start | digit } ;
+ident          = ident_start, { ident_start | ident_digit } ;
 ident_start    = ? any Unicode alphabetic character ? | "_" ;
+ident_digit    = ? any Unicode numeric character ? ;
 digit          = "0" .. "9" ;
 hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
 ```
@@ -424,6 +426,7 @@ string_lit     = '"', { string_char }, '"' ;
 string_char    = escape_seq | ? any char except '"' and '\' ? ;
 escape_seq     = "\", ( '"' | "\" | "n" | "r" | "t" | "0"
                       | "u{", hex_digit, { hex_digit }, "}" ) ;
+                      (* 1 to 6 hex digits *)
 ```
 
 A numeric literal contains no whitespace or comments.
@@ -442,7 +445,7 @@ A numeric literal contains no whitespace or comments.
 | tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
 
 Empty collections synthesize with unit element types
-(`[()]`, `#{()}`, `%{() = ()}`),
+(`[()]`, `#{()}`, `%{() = ()}`, and `[|(), 1|]` for `[| |]`),
 but check against any element type:
 `: [u32] / []` is valid.
 
@@ -483,7 +486,8 @@ All keys must have the same type,
 and all values must have the same type.
 Any type may be a key.
 
-A map's entries are kept in the [total ordering] of their keys,
+A map's entries are kept in the [total ordering](#user-content-comparison-and-total-ordering)
+of their keys,
 not in the order they were written:
 `%{ 2 = 0, 1 = 0 }` and `%{ 1 = 0, 2 = 0 }` are the same map.
 A key written more than once keeps the last value written for it.
@@ -531,7 +535,8 @@ Column names in the literal must match the type hint in order.
 Each column is named by exactly one identifier,
 and no two columns share a name.
 Each data row must have exactly as many values as there are columns.
-A table with no rows is written with just its header row.
+A table with no rows is written with just its header row,
+and the table with no columns, of type `{| |}`, is written `{| |}`.
 
 A semicolon is written to go between two rows,
 so one with nothing before it is an error,
@@ -635,12 +640,16 @@ map_type       = "%{", ws, type, ws, "=", ws, type, [ ws, "," ], ws, "}" ;
 set_type       = "#{", ws, type, [ ws, "," ], ws, "}" ;
 table_type     = "{|", ws, [ type_field_list ], ws, "|}" ;
 tensor_type    = "[|", ws, type, ws, ",", ws, rank, [ ws, "," ], ws, "|]" ;
-rank           = nonzero_digit, { digit } ;
+rank           = digit, { digit } ;  (* not zero *)
 
 list_expr      = "[", ws, [ expr_list ], ws, "]" ;
 map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
 set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
-table_expr     = "{|", ws, table_header, table_rows, ws, "|}" ;
+table_expr     = "{|", tbl_ws,
+                 [ table_header,
+                   { ws, row_sep, tbl_ws, table_row },
+                   [ ws, ";" ] ],
+                 tbl_ws, "|}" ;
 tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
 tensor_header  = extent, { ws, extent }, ws, "|", ws ;
 extent         = digit_run ;
@@ -649,18 +658,20 @@ expr_list      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 entry_list     = entry, { ws, ",", ws, entry }, [ ws, "," ] ;
 entry          = full_expr, ws, "=", ws, full_expr ;
 
-table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ], [ row_sep ] ;
-table_rows     = { ws, table_row } ;
-table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ], [ row_sep ] ;
+table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;
+table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
 row_sep        = ";" | newline ;
+tbl_ws         = { ws | newline } ;
 
 tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row } ;
 tensor_row     = full_expr, { ws, full_expr } ;
 comma_run      = ",", { ws, "," } ;
 ```
 
-Within a table, `ws` does not include newlines, which are `row_sep`.
-Some rules for these forms cannot be expressed in EBFN:
+Within a table, outside any brackets nested in it,
+`ws` does not include newlines, which are `row_sep`;
+a newline inside a block comment is not one.
+Some rules for these forms cannot be expressed in EBNF:
 
 - every table row has exactly as many values as the header has columns,
   and the column names match the type hint's in order;
@@ -710,6 +721,8 @@ if they have the same length and element types in the same order.
 Unit `()` is both a type and a value.
 A 1-tuple requires a trailing comma to distinguish it
 from a parenthesized expression.
+Types have no grouping parentheses,
+so in a type `(T)` is the same 1-tuple type as `(T,)`.
 Each element synthesizes its type independently:
 `(true, 42, 3.14)` synthesizes as `(bool, int, f64)`.
 
@@ -955,8 +968,10 @@ and checks only against that type:
 | struct          | struct of field types        | struct of same fields in order, fieldwise |
 | list, set       | of the first element's type  | any element type, elementwise          |
 | empty list, set | element type `()`            | any element type                       |
+| empty map       | key and value types `()`     | any key and value types                |
 | map             | of the first entry's types   | any key and value types, entrywise     |
 | tensor          | first element's type, rank as written | same rank, elementwise        |
+| empty tensor    | element type `()`, rank as written | any element type, same rank      |
 | table           | &mdash;                      | same columns in order, cellwise        |
 | `some e`        | `?T` where `e` synthesizes `T` | `?T`, checking `e` against `T`       |
 | `none`          | &mdash;                      | any `?T`                               |
@@ -970,7 +985,7 @@ and checks only against that type:
 
 So a type hint or context is required for
 `none`, `er`, tables, enum literals,
-fixed-width numbers and `f32`,
+fixed-width numbers, `index`, `offset` and `f32`,
 and empty collections of anything but `()`.
 
 
@@ -1065,8 +1080,5 @@ Will be revisited.
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
 - Need to think harder about float total order and ergonomics.
-
-
-
-
-[total ordering]: #user-content-comparison-and-total-ordering
+- Identifier char range is too wide - x² shouldn't be an ident.
+- Spelling the 1-tuple `(T)` without a trailing `,` seems inconsistent.
