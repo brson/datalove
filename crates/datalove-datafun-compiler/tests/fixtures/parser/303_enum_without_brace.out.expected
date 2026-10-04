@@ -1,0 +1,33 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected '{' after 'enum'"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P071",
+      "labels": [
+        {
+          "message": "expected '{'",
+          "span": [
+            8,
+            12
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "expected '{' after 'enum'"
+    }
+  ]
+}

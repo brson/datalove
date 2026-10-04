@@ -199,11 +199,15 @@ impl<'db> Parser<'db> {
                 let payload = self.parse_payload();
                 return ast::ExprFunKind::Term(ast::ExprTerm { type_hint, name, payload });
             }
-            Some("enum") if self.peek_second_sigil(Sigil::BraceOpen) => {
+            Some("enum") => {
+                let ts = self.peek_text_span();
                 self.eat_word("enum");
-                let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => *inner,
-                    _ => unreachable!("peek_second_sigil said a brace follows"),
+                let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
+                    return self.lit_error(ts,
+                        "expected '{' after 'enum'",
+                        "P071",
+                        "expected '{'",
+                    );
                 };
                 let mut sub = self.sub_parser(inner, None);
                 let variant = sub.parse_expr_full();

@@ -568,13 +568,16 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     )
                                 }
                                 // Enum literal expression: `enum { atom Foo }`.
-                                "enum" if self.peek_second_sigil(Sigil::BraceOpen) => {
+                                "enum" => {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume "enum"
                                     // Parse the inner variant expression in braces.
-                                    let iter = match self.next() {
-                                        Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => *inner,
-                                        _ => unreachable!(),
+                                    let Some(iter) = self.eat_branch(Sigil::BraceOpen) else {
+                                        return self.emit_expr_error(ts,
+                                            "expected '{' after 'enum'",
+                                            "P071",
+                                            "expected '{'"
+                                        );
                                     };
                                     let mut sub = self.sub_parser(iter, None);
                                     let variant = sub.parse_expr_full();

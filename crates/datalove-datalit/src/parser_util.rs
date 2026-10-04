@@ -94,11 +94,9 @@ pub enum NameKind {
 }
 
 /// Words that start an expression, and so cannot be read as a value's name.
-///
-/// `enum` is special only before `{`, so it is left to be a name.
 pub const EXPRESSION_WORDS: &[&str] = &[
     "true", "false", "none", "some", "ok", "er", "data", "error",
-    "atom", "term", "not", "icall",
+    "atom", "term", "enum", "not", "icall",
 ];
 
 /// Words that start a statement, and so cannot be read as the name a call

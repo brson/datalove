@@ -1,0 +1,40 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "enum",
+        "params": [],
+        "return_type": "Int"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`enum` is reserved, since it starts an expression",
+          "span": [
+            4,
+            8
+          ],
+          "text": "enum"
+        }
+      ],
+      "message": "`enum` cannot be declared here"
+    }
+  ]
+}

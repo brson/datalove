@@ -59,7 +59,7 @@ everywhere else.
 
 | Name | Reserved | Why |
 |------|----------|-----|
-| value (`let`, `var`, `const`, `if`/`else`/`case` bindings) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `not` `icall` | they start an expression |
+| value (`let`, `var`, `const`, `if`/`else`/`case` bindings) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `enum` `not` `icall` | they start an expression |
 | parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
 | function | the value words, and `let` `var` `const` `set` `fun` `native` `ret` `if` `match` `loop` `break` `continue` `require` `import` `type` `debuglog` | a call is read like a value, and a call statement starts where a statement does |
 | type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
@@ -74,6 +74,15 @@ so none of them is reserved.
 
 The lists are in `datalove-datalit/src/parser_util.rs`, which both parsers
 read.
+
+**A core principle: a special word is recognized by the word alone.** The
+parser does not look past a word to decide whether it is acting as a keyword
+or as a name. Where a word would collide with a name, the collision is settled
+by reserving the word for that kind of name in the table above, never by a
+lookahead rule that treats it as a keyword in some contexts and a name in
+others. `enum` is reserved for values and functions for this reason, even
+though only `enum {` is an enum literal. New syntax, and new kinds of name,
+follow the same rule: extend the table rather than the parser.
 
 ### 2.2 Literals
 
