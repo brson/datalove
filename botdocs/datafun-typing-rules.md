@@ -650,17 +650,39 @@ the Option forms do not.
 
 ## Type Error Codes
 
+Every code here is rendered as a diagnostic with a source span. F047 and F056
+are unassigned.
+
 ### Expression Errors
 - **F001**: Undefined variable
 - **F002**: Undefined function
-- **F011**: Cannot synthesize type
+- **F011**: Cannot synthesize type; also an index into something that is not a
+  list, map or tensor, whether read or written by `set`
 - **F016**: Type mismatch
 - **F026**: Invalid operand type for operator
 - **F045**: Function arity mismatch
 - **F046**: Result destructuring requires error binding
 - **F048**: Try operator operand type mismatch
-- **F049**: Try operator return type mismatch
+- **F049**: Try operator return type mismatch; also `set a[i]? = v` outside a
+  function returning an option, and `set a[i]! = v` outside one returning a
+  result
+- **F057**: Argument mode marker does not match the parameter's mode
+- **F058**: A const expression names something that is not a const
+- **F065**: Integer or hex literal out of range for its type
 - **F071**: Destructuring pattern does not fit the value
+
+### Place Errors
+Fields and elements read out of an aggregate, and the targets of `set`.
+
+- **F067**: No such field
+- **F068**: Field projection on a type with no fields
+- **F069**: Tuple element index out of range
+- **F070**: A non-copy field read out of the aggregate that holds it
+- **F072**: A non-copy element read out of the collection that holds it
+- **F073**: A view into a tensor of rank above one passed `mut` or `out`, or
+  assigned with `set`
+- **F074**: A bare index (upsert) in a `set` target that is not the last step,
+  or not into a map
 
 ### Match Errors (reported as F016 type mismatches)
 - Non-exhaustive match: missing variant names without default arm
@@ -668,17 +690,37 @@ the Option forms do not.
 - Atom case used for term variant (or vice versa)
 - Match input is not an enum type
 
-### Control Flow Errors
+### Statement and Function Errors
 - **F050** (BreakOutsideLoop): Break statement outside loop
 - **F051** (ContinueOutsideLoop): Continue statement outside loop
+- **F052**: A void function returns a value
+- **F053**: A bare `ret` in a function that returns a value
+- **F054**: `set` on an undefined variable
+- **F055**: `set` on an immutable variable
+- **F063**: A function that can reach the end of its body without returning a
+  value
+
+### Declaration Errors
+- **F059**: A name imported twice
+- **F060**: A type parameter under a collection in a signature, where erasure
+  cannot reach it
+- **F061**: A type parameter used as a set element or map key without
+  `is ord`
+- **F062**: A native function declared where no rider implements it
+- **F064**: Unknown type name
+- **F066**: A type alias defined twice
 
 ### Inherited from Datalit
-- **TypeMismatch**: Expected type doesn't match actual type
-- **CannotSynthesize**: Cannot infer type without context
-- **IntOutOfRange**: Integer literal out of range for target type
-- **ArityMismatch**: Wrong number of tuple/struct fields
-- **FieldOrderMismatch**: Struct fields in wrong order
-- **MissingField/ExtraField**: Struct field errors
+Datalit's own `TypeMismatch`, `CannotSynthesize` and `IntOutOfRange` are
+reported as F016, F011 and F065. The structural ones have no code and no
+diagnostic, and are printed as their `Debug` form:
+
+- **ArityMismatch**: Wrong number of tuple or struct fields
+- **FieldOrderMismatch**: Struct fields in a different order, or with
+  different names, from the type
+
+`ComptimeArgNotConstBinding`, an argument to a const parameter that is not a
+const binding, is datafun's own but likewise has no diagnostic.
 
 ## Operator Type Requirements
 
