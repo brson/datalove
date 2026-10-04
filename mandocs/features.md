@@ -4,22 +4,28 @@
 - Scalar types.
 - Option and result types.
 - List, map, set.
-- Tensors (multi-dimensional arrays).
-- Tables (dataframes).
+- Atoms, terms, and enums.
+- Tensors (multi-dimensional arrays) (literals and first-axis indexing).
+- Tables (dataframes) (literals only).
 - Dynamic types (`data` and `error`).
+- Generic functions (type-erased).
+- Compile-time evaluation and const parameters.
+- Native riders (functions implemented in Rust).
 - Memoized parsing, name resolution,
   typechecking, ownership analysis, and IR lowering (via Salsa).
 - Parallelized parsing, name resolution,
-  typechecking, ownership analysis, and IR lowering.
+  typechecking, ownership analysis, and IR lowering
+  (opt-in, `DATALOVE_PARALLEL=1`).
 - SSA IR.
 - IR-based interpreter.
-- Function-tracing JIT (via Cranelift) (experimental).
-- AOT (via Cranelift)
-- AOT to statically-linked executables.
+- Per-function JIT of hot functions (via Cranelift).
+- AOT (via Cranelift).
+- AOT via C.
+- AOT to executables, with the runtime and riders statically linked.
 - Incremental compilation and evaluation.
-- Script undo/redo.
+- Script unit editing.
 - REPL.
-- WASM-compatible compiler and interpreter.
+- WASM-compatible build.
 
 
 
@@ -30,11 +36,9 @@
 - No interior mutability.
 - Pure functions - deterministic, no side effects.
 - Almost-total functions:
-  Infinite loops are possible;
-  we may be able to prove termination in some cases.
+  Infinite loops and recursion are possible.
 - Whole program compilation.
 - In / out / ref / mut argument modes.
-  Could enable bidirectionality ala Mercury?
 
 
 
@@ -42,7 +46,6 @@
 ## Capabilities Potentially Enabled by Restrictions
 
 - Termination proofs.
-- Compile-time evaluation.
 - Refinement types.
 - Bidirectionality.
 - Globally-unioned type-variable instantiations
@@ -51,3 +54,5 @@
 - Session types.
 - Guaranteed explicit drops.
 - Rewind and replay.
+- Bidirectionality ala Mercury.
+- Choice points and logic programming.
