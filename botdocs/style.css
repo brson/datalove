@@ -23,7 +23,7 @@
     --font-size-code: 1rem;
     --font-size-header-scale: 1.0;
     --line-height: 2.0;
-    --line-height-code: 1.6;
+    --line-height-code: 1;
     --baseline: 2.2rem;
 
     /* Lakeside palette */
@@ -344,7 +344,7 @@ ul, ol {
 }
 
 li {
-    margin: 0.5rem 0;
+    margin: 0 0;
     list-style-position: outside;
 }
 
