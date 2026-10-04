@@ -4,6 +4,8 @@
 
 Unconditional loops are spelled `loop`.
 They require a `break` or `ret` to exit.
+`break` exits the innermost loop,
+and `continue` jumps to its next iteration.
 
 ```datalove
 var x = 0
@@ -27,9 +29,9 @@ Conditional loops with `loop while`:
 var x = 0
 
 loop while x != 10
-  if x = 0
+  if x == 0
     set x = 1
-  else if x = 10
+  else if x == 10
     set x = 11
   else
     set x = x + 1
@@ -44,6 +46,8 @@ debuglog x
 
 Uninitialized vars can be initialized in branches,
 but must be initialized in all branches if read afterward.
+Only `var` may be declared without a value;
+`let` always needs one.
 
 ```datalove
 var result: i32
