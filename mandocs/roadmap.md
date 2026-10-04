@@ -63,13 +63,18 @@ Thorough compiler architecture, bare language.
 
 Focus on ergonomic REPL experience.
 
+- [ ] UX
 - [ ] module and script compile reactivity
 - [ ] script interpreter reactivity
 - [ ] script unit undo/redo
-- [ ] assert statements - needed for std_tests?
-- [ ] int auto-clones
+- [ ] assert statements
+- [ ] auto-adapt and other conveniences
 - [ ] type sythesis for all literal forms
 - [ ] enum subtyping
+- [ ] module-qualified calls
+- [ ] filesystem workspaces
+- [ ] multiple concurrent interactive scripts
+- [ ] std docs, in-repl docs, generated docs
 
 
 
@@ -80,7 +85,6 @@ Focus on ergonomic REPL experience.
 - doc generator and std docs
 - multiple scripts
 - pipeline tools
-- analysis caching
 - simple multithreading
 - testable docs
 - tree-sitter
