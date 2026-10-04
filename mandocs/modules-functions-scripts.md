@@ -28,29 +28,36 @@ end fun
 ```
 
 Within a script
-name resolution is one-directional.
-Names may only refer to previous declarations.
+name resolution is mostly one-directional.
+Names may only refer to previous declarations,
+except that functions are visible throughout the script,
+so they too may be called before their definition and be mutually recursive.
+A function may use type aliases declared later in the script,
+but cannot see the script's `let` and `var` bindings at all.
 
 ```datalove
 // Pretend this is a script.
 
-// In scripts, `is_odd` must be defined before `is_even` can call it.
-
-fun is_odd(n: u32): !bool
-    if n == 0
-        ret ok false
-    else
-        ret is_even(n -! 1)  // ERROR: `is_even` not yet defined.
-    end if
-end fun
+debuglog is_even(7)!  // OK: functions are visible throughout.
 
 fun is_even(n: u32): !bool
     if n == 0
         ret ok true
     else
-        ret is_odd(n -! 1)  // OK: `is_odd` already defined.
+        ret is_odd(n -! 1)  // OK: forward reference to a function.
     end if
 end fun
+
+fun is_odd(n: u32): !bool
+    if n == 0
+        ret ok false
+    else
+        ret is_even(n -! 1)
+    end if
+end fun
+
+let a = b             // ERROR: `b` not yet defined.
+let b: u32 = 1
 ```
 
 
@@ -58,7 +65,9 @@ end fun
 
 ### Function return types
 
-Functions with return types require `ret` with value.
+Functions with return types require `ret` with value,
+on every path out of the body.
+Reaching the end of the body without one is an error.
 
 ```datalove
 fun choose(a: u32): bool
@@ -92,8 +101,13 @@ end fun
 
 Four argument modes: `in`, `out`, `ref`, `mut`
 
+- `in` - the callee takes ownership and may consume the value
+- `ref` - the caller keeps ownership; the callee only reads
+- `mut` - the caller keeps ownership; the callee may modify it
+- `out` - the callee initializes it; the caller receives the value
+
 ```datalove
-fun (
+fun f(
   a: int,     // default `in`
   out b: int,
   ref c: int,
@@ -103,6 +117,16 @@ fun (
   set b = a
   set d = c + d
 end fun
+```
+
+Call sites repeat the mode of every non-`in` argument,
+so borrowing and mutation are visible where the call is written:
+
+```datalove
+var b: int
+let c: int = 2
+var d: int = 3
+f(1, out b, ref c, mut d)
 ```
 
 
