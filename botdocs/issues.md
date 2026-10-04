@@ -20,7 +20,7 @@ home here.
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
 - [The jit cannot see a loop, and the C backend is built at -O0](#user-content-the-jit-cannot-see-a-loop-and-the-c-backend-is-built-at--o0)
 - [A script const that calls through a second function panics](#user-content-a-script-const-that-calls-through-a-second-function-panics)
-- [A map upsert at script top level panics the lowerer](#user-content-a-map-upsert-at-script-top-level-panics-the-lowerer)
+- [A `let` that fails to typecheck leaves its name undefined](#user-content-a-let-that-fails-to-typecheck-leaves-its-name-undefined)
 - [A failed `set m[k]!` on a map says "index out of bounds"](#user-content-a-failed-set-mk-on-a-map-says-index-out-of-bounds)
 - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
 - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
@@ -250,22 +250,30 @@ A second crash, also reproduced: `!` in a *script-level* const panics the lowere
 (`lower/src/context.rs`, "early return requires function context"), where the
 same const in a module is refused with F049 as botspec says it should be.
 
-## A map upsert at script top level panics the lowerer
+## A `let` that fails to typecheck leaves its name undefined
 
-**Reproduced** with the debug cli. An upsert into a map at script top level,
-followed by any further statement, panics:
+**Reproduced** with the debug cli. When a `let` or `var` initializer fails to
+typecheck, the binding is never added, so every later use of the name reports a
+second error, F001 "cannot find value", under the real one:
 
 ```datalove
-var m: %{string = u32} = %{"a" = 1}
-set m["a"] = 2
-let v = m["a"]!     // stmt_id mismatch (lower/src/context.rs)
+let s: (string, i32) = ("a", 1)
+let r = s.0       // F070, a non-copy field read out
+debuglog r        // F001 cannot find value `r`
 ```
 
-Ownership analysis and lowering disagree about which statement they are on:
-ownership records the `set` under one `StmtKey` and lowering looks it up under
-another. The same code inside a function works, so it is the script path's
-statement numbering for `set` with a map target that is off. Not investigated
-further.
+The cause is `check_variable_decl` in `tycheck/src/statement.rs`: it calls
+`bind_pattern` only when the value checked or synthesized, and on failure adds
+the error and stops. It applies to every kind of failure, not just F070 and
+F072.
+
+Fixing it in part is easy: when the declaration has a type hint, the hint is the
+binding's type whether or not the value fits it, so the name can be bound
+anyway. Without a hint there is no type to give it, so the full fix needs a type
+that stands for "already reported", one that every check accepts silently, so
+uses of the name neither fail nor report again. The typechecker has no such
+type: `datalit::tycheck::Type::Error` is the language's `error` type, not a
+poison type.
 
 ## A failed `set m[k]!` on a map says "index out of bounds"
 
