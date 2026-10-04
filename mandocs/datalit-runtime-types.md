@@ -2,8 +2,9 @@
 
 Most datalit types are value types and stored inline.
 
-Datalit array sizes and capacities are limited to `u32`
-for multi-arch compatibility.
+Datalit array sizes and capacities are `index`,
+which is `u32` by default for multi-arch compatibility
+(`u64` with the `index-64` feature).
 
 
 
@@ -11,8 +12,7 @@ for multi-arch compatibility.
 ## Unit
 
 `()`.
-Zero-sized.
-TODO: In the runtime pointers to ZSTs are represented as ...
+Zero-sized (as are `{}` and atoms).
 
 
 
@@ -20,10 +20,12 @@ TODO: In the runtime pointers to ZSTs are represented as ...
 ## Scalars
 
 `bool`,
-`u8`, `u32`, `u64`, `u128`,
-`i8`, `i32`, `i64`, `i128`,
+`u8`, `u16`, `u32`, `u64`,
+`i8`, `i16`, `i32`, `i64`,
+`index`, `offset`,
 `f32`, and `f64`
 have their obvious machine representation.
+`bool` is one byte.
 
 
 
@@ -32,7 +34,7 @@ have their obvious machine representation.
 
 Int uses a simple gmp-inspired representation:
 a pointer to u32 "limb" data plus
-size, sign and capacity
+size, sign and capacity.
 
 ```rust
 #[repr(C)]
@@ -43,6 +45,6 @@ pub struct Int {
     // sign(size_and_sign) == sign of self
     pub size_and_sign: i32,
     // Limbs allocated.
-    pub capacity: u32,
+    pub capacity: Index,
 }
 ```

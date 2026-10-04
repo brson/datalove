@@ -1,3 +1,11 @@
+## 2026/10/04 Decide how zsts are represented
+
+There is no single convention yet:
+the interpreter gives a zero-sized buffer a non-null address
+equal to its alignment, never dereferenced or freed,
+and an empty list's data pointer is null.
+
+
 ## 2026/10/03 All vars have tracking bytes
 
 Only vars that aren't initialized in their declaration actually need them.
