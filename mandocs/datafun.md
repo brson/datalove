@@ -116,26 +116,22 @@ Functions have a line-oriented and statement-oriented syntax.
 
 ```datalove
 require module sys/std/string
-import string.len
-import string.find_char
-import string.starts_with
-import string.slice_from
 
 fun count_substrings(s: string, ref needle: string): ?int
   var haystack = s
   var count = 0
   loop
-    if len(ref haystack) == 0
+    if string.len(ref haystack) == 0
       break
     end if
 
-    if starts_with(ref haystack, ref needle)
+    if string.starts_with(ref haystack, ref needle)
       set count = count + 1
     end if
 
-    let next_char_index = find_char(ref haystack, 1)
+    let next_char_index = string.find_char(ref haystack, 1)
     if next_char_index |index|
-      set haystack = slice_from(ref haystack, index)?
+      set haystack = string.slice_from(ref haystack, index)?
     else
       set haystack = ""
     end if
@@ -207,8 +203,6 @@ Basic conditional control flow is performed with `if`.
 ```datalove
 require module sys/std/int
 
-import int.rem_checked
-
 var counter = 10
 var evens = 0
 var odds = 0
@@ -216,7 +210,7 @@ var odds = 0
 loop
   if counter == 0
     break
-  else if rem_checked(counter@, 2) == some 0
+  else if int.rem_checked(counter@, 2) == some 0
     set evens = evens + 1
   else
     set odds = odds + 1
@@ -232,14 +226,12 @@ Conditional loops are written with `loop while`.
 ```datalove
 require module sys/std/int
 
-import int.rem_checked
-
 var counter = 10
 var evens = 0
 var odds = 0
 
 loop while counter != 0
-  if rem_checked(counter@, 2) == some 0
+  if int.rem_checked(counter@, 2) == some 0
     set evens = evens + 1
   else
     set odds = odds + 1
@@ -373,18 +365,15 @@ through destructuring `if` statements.
 ```datalove
 require module sys/std/u32
 
-import u32.add_checked
-import u32.max_value
-
 fun add_saturating(self: u32, other: u32): u32
-  if add_checked(self, other) |value|
+  if u32.add_checked(self, other) |value|
     ret value
   else
-    ret max_value()
+    ret u32.max_value()
   end if
 end fun
 
-debuglog(add_saturating(: u32 / 100, max_value()))
+debuglog(add_saturating(: u32 / 100, u32.max_value()))
 ```
 
 The postfix `?` and `!` operators propagate
@@ -393,11 +382,9 @@ option and result return types.
 ```datalove
 require module sys/std/u32
 
-import u32.add_checked
-
 fun add_twice(self: u32, other: u32): ?u32
-  let once: u32 = add_checked(self, other)?
-  let twice: u32 = add_checked(once, other)?
+  let once: u32 = u32.add_checked(self, other)?
+  let twice: u32 = u32.add_checked(once, other)?
   ret some twice
 end fun
 
@@ -410,12 +397,9 @@ With the result type, `!`:
 require module sys/std/u32
 require module sys/std/option
 
-import u32.add_checked
-import option.ok_or
-
 fun add_twice(self: u32, other: u32): !u32
-  let once: u32 = ok_or(add_checked(self, other), error "overflow")!
-  let twice: u32 = ok_or(add_checked(once, other), error "overflow")!
+  let once: u32 = option.ok_or(u32.add_checked(self, other), error "overflow")!
+  let twice: u32 = option.ok_or(u32.add_checked(once, other), error "overflow")!
   ret ok twice
 end fun
 
@@ -489,10 +473,8 @@ Lossy conversions are performed with type-specific library functions.
 ```datalove
 require module sys/std/u8
 
-import u8.from_u64
-
-let fits: ?u8 = from_u64(100)
-let dontfits: ?u8 = from_u64(1000)
+let fits: ?u8 = u8.from_u64(100)
+let dontfits: ?u8 = u8.from_u64(1000)
 
 debuglog (fits, dontfits)
 ```
@@ -533,9 +515,7 @@ wrapping and saturating versions are provided as library functions.
 ```datalove
 require module sys/std/u8
 
-import u8.add_wrapping
-
-let v = add_wrapping(255, 1)
+let v = u8.add_wrapping(255, 1)
 
 debuglog(v)
 ```

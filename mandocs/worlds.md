@@ -78,8 +78,7 @@ scriptunit-fragment
 ----------
 
 require module local/geo/point
-import point.manhattan
-debuglog manhattan((3, 4))
+debuglog point.manhattan((3, 4))
 ```
 
 Section headers:

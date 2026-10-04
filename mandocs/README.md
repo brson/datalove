@@ -134,7 +134,6 @@ on the datalit type system.
 
 ```datalove
 require module sys/std/list
-import list.len
 
 type Book: {
   title: string,
@@ -150,7 +149,7 @@ type Book: {
 
 fun reserve_book(mut db: [Book], ref title: string): !()
   var i: index = 0
-  loop while i .< len(ref db)
+  loop while i .< list.len(ref db)
     if db[i]!.title == title
       if db[i]!.available
         set db[i]!.available = false

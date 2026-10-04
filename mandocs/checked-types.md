@@ -35,14 +35,13 @@ constructs an `er` `result` variant out of an `error` value.
 
 ```datalove
 require module sys/std/u32
-import u32.min_value
 
 let a: ?u32 = some 3
-let b: ?u32 = some min_value()
+let b: ?u32 = some u32.min_value()
 let c: ?u32 = none
 
 let a: !u32 = ok 3
-let b: !u32 = ok min_value()
+let b: !u32 = ok u32.min_value()
 let c: !u32 = er error "oops"
 ```
 

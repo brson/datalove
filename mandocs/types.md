@@ -154,10 +154,9 @@ length, and capacity use these types.
 
 ```datalove
 require module sys/std/string
-import string.len
 
 let foo = "test"
-let foo_length: index = len(ref foo)
+let foo_length: index = string.len(ref foo)
 ```
 
 Like other fixed int types,
@@ -399,7 +398,6 @@ particularly `ref`-mode function arguments.
 
 ```datalove
 require module sys/std/list
-import list.len
 
 let tbl: {|
   x: int,
@@ -412,7 +410,7 @@ let tbl: {|
 
 // This function can accept a table column projection.
 fun process(ref xs: [int]): index
-  ret len(ref xs)
+  ret list.len(ref xs)
 end fun
 
 let p = process(ref tbl.x)
