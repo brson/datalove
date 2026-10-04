@@ -1570,9 +1570,22 @@ of line in a caller that size until they were `#[inline(always)]`, and
 `read_operand` keeps only the three common operand kinds inline for the same
 reason. A copy of a runtime-sized value is a call to `memcpy` unless the size
 is matched to a constant first (`copy_bytes`). Together these took primes from
-3.6s to 1.6s, sum from 135ms to 87ms and fib from 1.32s to 1.0s; fib is left
-paying for calls, a third of it in `call_in_context_with_shapes`, frame reset
-and argument preparation.
+3.6s to 1.6s, sum from 135ms to 87ms and fib from 1.32s to 1.0s.
+
+**A call resolves its arguments into the callee's frame.** `execute_call_site`
+takes the frame from the pool (`FramePool::take`, which only empties the
+parameter lists), pushes each argument straight into it, offers the dispatcher
+the frame's parameters as they stand, and only if it declines makes the rest of
+the frame ready (`Frame::enter`). The parameters are one `Value` apiece so that
+they are the slice a dispatcher is handed, and until `enter` they carry the
+caller's descriptors, which is what a dispatcher has always been shown; `enter`
+gives owned ones the callee's. What every call needs to know about a parameter
+-- its mode, and whether the argument is moved, which meant walking its type --
+is in the cached `IrLayout`. Before this a call built an argument `Vec`,
+nulled three parameter vectors only to overwrite them, cloned a list of shapes
+nothing read, and asked each parameter's mode three times; fib went from 0.98s
+to 0.83s. Natives have no frame and still take a list, as does the public
+`call_in_context`.
 
 ## Entry Points
 

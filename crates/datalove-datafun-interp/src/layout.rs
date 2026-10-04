@@ -8,7 +8,7 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{IrCodeUnit, IrType};
+use datalove_datafun_ir::{IrCodeUnit, IrType, ParamMode};
 
 use crate::dispatch::FuncIdentity;
 use crate::tydesc::IrTyDescTable;
@@ -41,6 +41,14 @@ pub struct IrLayout {
     pub param_tydescs: Vec<*const TyDesc>,
     /// TyDesc for what the function returns. `None` for a script unit.
     pub return_tydesc: Option<*const TyDesc>,
+    /// How each parameter is passed. Empty for a script unit.
+    pub param_modes: Vec<ParamMode>,
+    /// Whether each argument is moved into the call, so that the caller has to
+    /// stop owning it: an `in` parameter of a type that is not copied.
+    ///
+    /// Asked at every call, and walking the type to find out was a visible part
+    /// of a call's cost, so it is answered once per body here.
+    pub param_moves: Vec<bool>,
     /// Total frame size.
     pub frame_size: u32,
     /// Frame alignment.
@@ -107,9 +115,29 @@ impl IrLayout {
             slot_tydescs,
             param_tydescs,
             return_tydesc,
+            param_modes: Vec::new(),
+            param_moves: Vec::new(),
             frame_size,
             frame_align: max_align,
         }
+    }
+
+    /// Compute the layout of a code unit, with what its calls need to know about
+    /// its parameters.
+    pub fn of_unit(unit: &IrCodeUnit, tydesc_table: &mut IrTyDescTable) -> Self {
+        let Some(ctx) = unit.function_context() else {
+            return Self::compute(&unit.value_types, &unit.slot_types, &[], None, tydesc_table);
+        };
+        let mut layout = Self::compute(
+            &unit.value_types, &unit.slot_types, &ctx.param_types, Some(&ctx.return_type),
+            tydesc_table);
+        layout.param_modes = (0..ctx.param_types.len())
+            .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
+            .collect();
+        layout.param_moves = layout.param_modes.iter().zip(&ctx.param_types)
+            .map(|(mode, ty)| *mode == ParamMode::In && !ty.is_copy())
+            .collect();
+        layout
     }
 }
 
@@ -162,12 +190,7 @@ impl LayoutCache {
             }
         }
 
-        let (param_types, return_type) = match unit.function_context() {
-            Some(ctx) => (&ctx.param_types[..], Some(&ctx.return_type)),
-            None => (&[][..], None),
-        };
-        let layout = Rc::new(IrLayout::compute(
-            &unit.value_types, &unit.slot_types, param_types, return_type, tydesc_table));
+        let layout = Rc::new(IrLayout::of_unit(unit, tydesc_table));
         self.entries.insert(key, CachedLayout {
             value_count,
             slot_count,

@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ValueId, SlotId, ParamId};
+use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
@@ -33,14 +33,32 @@ impl FramePool {
         Self::default()
     }
 
-    /// A frame for `unit`, reusing one if the pool has any.
-    pub fn take(&mut self, unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Frame {
+    /// A function frame for the body `layout` describes, reusing one if the
+    /// pool has any, ready to have its arguments pushed.
+    ///
+    /// Nothing else about it is ready until `Frame::enter`. The arguments come
+    /// first because a dispatcher is offered them before anything is decided
+    /// about running the body here, and one that takes the call leaves the rest
+    /// of the frame unused.
+    pub fn take(&mut self, layout: Rc<IrLayout>) -> Frame {
         match self.free.pop() {
             Some(mut frame) => {
-                frame.reset(unit, layout);
+                frame.params.clear();
+                frame.param_initialized.clear();
+                frame.shape_descriptors.clear();
+                frame.layout = layout;
                 frame
             }
-            None => Frame::new(unit, layout),
+            None => Frame {
+                data: AlignedBuffer::uninit(0, 1),
+                layout,
+                value_initialized: Vec::new(),
+                slot_initialized: Vec::new(),
+                params: Vec::new(),
+                param_initialized: Vec::new(),
+                shape_descriptors: Vec::new(),
+                value_tydescs: Vec::new(),
+            },
         }
     }
 
@@ -68,10 +86,11 @@ pub struct Frame {
     value_initialized: Vec<bool>,
     /// Track which slots are initialized.
     slot_initialized: Vec<bool>,
-    /// Pointers to caller's data for each parameter.
-    param_ptrs: Vec<*mut u8>,
-    /// Type descriptors for each parameter.
-    param_tydescs: Vec<*const TyDesc>,
+    /// Each parameter: a pointer to the caller's data and its descriptor.
+    ///
+    /// One `Value` apiece, so that the arguments as a caller pushed them are a
+    /// slice a dispatcher can be handed without building another.
+    params: Vec<Value>,
     /// Track which params are initialized (Out params start uninitialized).
     param_initialized: Vec<bool>,
     /// Descriptors handed over for this function's declared shapes, in order.
@@ -79,9 +98,6 @@ pub struct Frame {
     /// A shape has no value to carry a descriptor with, so unlike everything
     /// else here it arrives on its own.
     shape_descriptors: Vec<*const TyDesc>,
-    /// The shapes this function declared, so a call site inside it can tell
-    /// which of them a callee's need matches.
-    own_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
     /// What a reference points at, where the layout's descriptor for it is a
     /// lie.
     ///
@@ -106,91 +122,47 @@ impl Frame {
         self.shape_descriptors.get(index as usize).copied()
     }
 
-    /// The shapes this function declared.
-    pub fn own_shapes(&self) -> &[datalove_datafun_ir::DescriptorShape] {
-        &self.own_shapes
+    /// The layout this frame was taken for.
+    pub fn layout(&self) -> &IrLayout {
+        &self.layout
     }
 
-    /// The descriptor this function's own signature gives for parameter `i`.
-    pub fn param_tydesc(&self, i: usize) -> *const TyDesc {
-        self.layout.param_tydescs[i]
+    /// Hand over the next argument, as the caller has it.
+    pub fn push_param(&mut self, value: Value) {
+        self.params.push(value);
     }
 
-    /// Create a new frame for code unit execution.
-    ///
-    /// A function frame and a script frame differ only in their parameters: a
-    /// script unit has none and a function's are pointers into its caller.
-    /// Both track which values hold something.
-    pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
-        let slot_count = layout.slot_offsets.len();
-        // Uninitialized, not zeroed: what has been written is tracked, and
-        // reading what has not is a bug rather than a value worth defining.
-        let data = AlignedBuffer::uninit(
-            layout.frame_size as usize,
-            layout.frame_align as usize,
-        );
-
-        let own_shapes = match &unit.context {
-            CodeUnitContext::Function(ctx) => ctx.descriptor_shapes.clone(),
-            _ => Vec::new(),
-        };
-
-        let value_count = layout.value_offsets.len();
-        match &unit.context {
-            CodeUnitContext::Function(ctx) => {
-                let param_count = ctx.params.len();
-                Self {
-                    data,
-                    layout,
-                    value_initialized: vec![false; value_count],
-                    slot_initialized: vec![false; slot_count],
-                    param_ptrs: vec![std::ptr::null_mut(); param_count],
-                    param_tydescs: vec![std::ptr::null(); param_count],
-                    param_initialized: vec![false; param_count],
-                    shape_descriptors: Vec::new(),
-                    own_shapes,
-                    value_tydescs: Vec::new(),
-                }
-            }
-            CodeUnitContext::Script(_) => {
-                Self {
-                    data,
-                    layout,
-                    value_initialized: vec![false; value_count],
-                    slot_initialized: vec![false; slot_count],
-                    param_ptrs: Vec::new(),
-                    param_tydescs: Vec::new(),
-                    param_initialized: Vec::new(),
-                    shape_descriptors: Vec::new(),
-                    own_shapes: own_shapes.clone(),
-                    value_tydescs: Vec::new(),
-                }
-            }
-            CodeUnitContext::Native(ctx) => {
-                panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
-            }
-        }
+    /// Hand over the descriptor for the next shape the function declared.
+    pub fn push_shape_descriptor(&mut self, tydesc: *const TyDesc) {
+        self.shape_descriptors.push(tydesc);
     }
 
-    /// Point a frame that has been returned to the pool at a new body.
+    /// The arguments as pushed, before `enter` gives owned ones the callee's
+    /// own descriptors.
+    pub fn params(&self) -> &[Value] {
+        &self.params
+    }
+
+    /// The shape descriptors as pushed.
+    pub fn shape_descriptors(&self) -> &[*const TyDesc] {
+        &self.shape_descriptors
+    }
+
+    /// Make a frame taken from the pool ready to run its body, once every
+    /// argument has been pushed.
     ///
-    /// Every buffer it holds is reused: the data block if it is large enough and
-    /// aligned well enough, and the capacity of each side table either way. A
-    /// function frame is five to seven separate allocations, and allocating them
-    /// per call was the largest thing in the interpreter's profile after the
-    /// instruction loop.
-    ///
-    /// Only function frames are pooled. A script unit's frame outlives its unit,
-    /// because a later unit reads the bindings it holds, so it goes to the
-    /// `FrameStore` rather than coming back here.
-    fn reset(&mut self, unit: &IrCodeUnit, layout: Rc<IrLayout>) {
-        let ctx = match &unit.context {
-            CodeUnitContext::Function(ctx) => ctx,
-            CodeUnitContext::Script(_) => panic!("script frames are not pooled"),
-            CodeUnitContext::Native(ctx) => {
-                panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
-            }
-        };
+    /// A parameter the callee owns gets the callee's own descriptor: the caller
+    /// has already converted it into the shape the callee was compiled for. A
+    /// borrowed one keeps the descriptor it came with, because a generic
+    /// function was compiled with `data` where its type parameter stood and the
+    /// value at that pointer is whatever the caller actually has; for a function
+    /// that is not generic the two agree anyway. An `out` parameter starts
+    /// uninitialized, since the callee writes it first.
+    pub fn enter(&mut self) {
+        let layout = &*self.layout;
+        assert_eq!(self.params.len(), layout.param_modes.len(),
+            "a call handed over {} arguments for {} parameters",
+            self.params.len(), layout.param_modes.len());
 
         let size = layout.frame_size as usize;
         let align = layout.frame_align as usize;
@@ -199,20 +171,46 @@ impl Frame {
         } else {
             self.data = AlignedBuffer::uninit(size, align);
         }
-
-        let param_count = ctx.params.len();
         refill(&mut self.slot_initialized, layout.slot_offsets.len(), false);
-        refill(&mut self.param_ptrs, param_count, std::ptr::null_mut());
-        refill(&mut self.param_tydescs, param_count, std::ptr::null());
-        refill(&mut self.param_initialized, param_count, false);
-        self.value_tydescs.clear();
         refill(&mut self.value_initialized, layout.value_offsets.len(), false);
+        self.value_tydescs.clear();
 
-        self.shape_descriptors.clear();
-        self.own_shapes.clear();
-        self.own_shapes.extend_from_slice(&ctx.descriptor_shapes);
-        self.layout = layout;
+        for (i, mode) in layout.param_modes.iter().enumerate() {
+            if matches!(mode, ParamMode::In | ParamMode::Out) {
+                self.params[i].tydesc = layout.param_tydescs[i];
+            }
+            self.param_initialized.push(*mode != ParamMode::Out);
+        }
     }
+
+    /// Create the frame for a script unit.
+    ///
+    /// A script unit has no parameters, and its frame outlives it in the
+    /// `FrameStore` rather than going back to a pool. Function frames come from
+    /// `FramePool::take`.
+    pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
+        if let CodeUnitContext::Native(ctx) = &unit.context {
+            panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
+        }
+        assert!(unit.function_context().is_none(), "function frames come from the pool");
+        // Uninitialized, not zeroed: what has been written is tracked, and
+        // reading what has not is a bug rather than a value worth defining.
+        let data = AlignedBuffer::uninit(
+            layout.frame_size as usize,
+            layout.frame_align as usize,
+        );
+        Self {
+            data,
+            value_initialized: vec![false; layout.value_offsets.len()],
+            slot_initialized: vec![false; layout.slot_offsets.len()],
+            layout,
+            params: Vec::new(),
+            param_initialized: Vec::new(),
+            shape_descriptors: Vec::new(),
+            value_tydescs: Vec::new(),
+        }
+    }
+
 
     /// Mark a value as holding something.
     #[inline(always)]
@@ -354,18 +352,6 @@ impl Frame {
         }
     }
 
-    /// Set a parameter with pointer to caller's data.
-    ///
-    /// `initialized`: true for In/Ref/Mut (data exists), false for Out (callee must write first).
-    pub fn set_param(&mut self, id: ParamId, ptr: *mut u8, tydesc: *const TyDesc, initialized: bool) {
-        let idx = id.0 as usize;
-        if idx < self.param_ptrs.len() {
-            self.param_ptrs[idx] = ptr;
-            self.param_tydescs[idx] = tydesc;
-            self.param_initialized[idx] = initialized;
-        }
-    }
-
     /// Read param (dereferences pointer to caller's data).
     ///
     /// Returns None if param is not initialized.
@@ -373,31 +359,28 @@ impl Frame {
     #[inline(always)]
     pub fn param(&self, id: ParamId) -> Option<Value> {
         let idx = id.0 as usize;
-        let ptr = self.param_ptrs[idx];
-        if ptr.is_null() || !self.param_initialized[idx] {
+        let param = self.params[idx];
+        if param.ptr.is_null() || !self.param_initialized[idx] {
             return None;
         }
-        let tydesc = self.param_tydescs[idx];
-        Some(Value { ptr, tydesc })
+        Some(param)
     }
 
     /// Get mutable destination for Mut/Out params.
     ///
     /// Panics if param ID is out of bounds or param not set up (compiler bug).
     pub fn param_dest(&self, id: ParamId) -> Destination {
-        let idx = id.0 as usize;
-        let ptr = self.param_ptrs[idx];
-        assert!(!ptr.is_null(), "param_dest called on null param {:?}", id);
-        let tydesc = self.param_tydescs[idx];
-        Destination { ptr, tydesc }
+        let param = self.params[id.0 as usize];
+        assert!(!param.ptr.is_null(), "param_dest called on null param {:?}", id);
+        Destination { ptr: param.ptr, tydesc: param.tydesc }
     }
 
     /// Mark param as dropped (for In params after consuming).
     #[inline]
     pub fn mark_param_dropped(&mut self, id: ParamId) {
         let idx = id.0 as usize;
-        if idx < self.param_ptrs.len() {
-            self.param_ptrs[idx] = std::ptr::null_mut();
+        if idx < self.params.len() {
+            self.params[idx].ptr = std::ptr::null_mut();
             self.param_initialized[idx] = false;
         }
     }

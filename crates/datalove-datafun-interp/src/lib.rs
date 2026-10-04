@@ -386,9 +386,6 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let func_ctx = func.function_context()
-            .expect("call_in_context requires a function code unit");
-
         // The layout is the same at every call to the same body, so it is
         // remembered rather than recomputed. A caller with no reference to name
         // the callee by -- the jit's trampoline, and compile-time evaluation --
@@ -398,54 +395,36 @@ impl IrInterpreter {
                 let key = dispatch::FuncIdentity::of(code_ref, ctx.unit());
                 self.layout_cache.get_or_compute(key, func, &mut self.tydesc_table)
             }
-            None => Rc::new(IrLayout::compute(
-                &func.value_types, &func.slot_types, &func_ctx.param_types,
-                Some(&func_ctx.return_type), &mut self.tydesc_table)),
+            None => Rc::new(IrLayout::of_unit(func, &mut self.tydesc_table)),
         };
 
-        // Take a frame from the pool rather than allocating one. A function
-        // frame is five to seven allocations and a call is not the place for
-        // them.
-        let mut frame = self.frame_pool.take(func, layout);
-        frame.set_shape_descriptors(shape_descriptors);
-
-        // Set up parameters as pointers to caller's data.
-        // All params store pointers - mode determines ownership semantics.
-        for (i, &param_id) in func_ctx.params.iter().enumerate() {
-            if i < args.len() {
-                let src = &args[i];
-                let mode = func_ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-
-                // A borrowed parameter keeps the descriptor it came with. The
-                // callee's own type for it can be less than the whole truth:
-                // a generic function was compiled with `data` where its type
-                // parameter stood, and the value at that pointer is whatever
-                // the caller actually has. Nothing is converted at the
-                // boundary, so the accurate descriptor is the caller's, and
-                // for a function that is not generic the two agree anyway.
-                //
-                // A parameter the callee owns is different: the caller has
-                // already converted it into the shape the callee was compiled
-                // for, so the callee's own type is the one that describes it.
-                let tydesc = match mode {
-                    ParamMode::Ref | ParamMode::Mut => src.tydesc,
-                    ParamMode::In | ParamMode::Out => frame.param_tydesc(i),
-                };
-
-                // Initialized: true for In/Ref/Mut (data exists), false for Out (callee writes first).
-                let initialized = !matches!(mode, ParamMode::Out);
-
-                frame.set_param(param_id, src.ptr, tydesc, initialized);
-            }
+        let mut frame = self.frame_pool.take(layout);
+        for arg in args {
+            frame.push_param(arg);
         }
-
-        // Execute blocks, writing return value directly to ret_dest.
-        // Functions use ret_dest for Return, not expr_dest.
-        let result = self.execute_blocks(&func.blocks, &UnitTypes::of(func), &mut frame, ret_dest, None, ctx, registry, frames, code_ref.as_ref());
+        frame.set_shape_descriptors(shape_descriptors);
+        frame.enter();
+        let result = self.run_frame(func, &mut frame, ret_dest, ctx, registry, frames, code_ref.as_ref());
         self.frame_pool.give_back(frame);
+        result
+    }
 
-        // Convert UnitCompletion to () - functions always complete normally.
-        result.map(|_| ())
+    /// Run a function body in a frame that `Frame::enter` has made ready.
+    #[allow(clippy::too_many_arguments)]
+    fn run_frame(
+        &mut self,
+        func: &IrCodeUnit,
+        frame: &mut Frame,
+        ret_dest: Destination,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+        code_ref: Option<&CodeRef>,
+    ) -> Result<(), InterpError> {
+        // Functions write their result to ret_dest, and always complete
+        // normally.
+        self.execute_blocks(&func.blocks, &UnitTypes::of(func), frame, ret_dest, None, ctx, registry, frames, code_ref)
+            .map(|_| ())
     }
 
     /// Execute a script unit with access to previous units' values.
@@ -505,14 +484,7 @@ impl IrInterpreter {
             .expect("execute_script_unit_in_env requires a script code unit");
 
         // Compute layout.
-        let layout = Rc::new(IrLayout::compute(
-            &unit.value_types,
-            &unit.slot_types,
-            // A script unit takes no parameters and returns nothing.
-            &[],
-            None,
-            &mut self.tydesc_table,
-        ));
+        let layout = Rc::new(IrLayout::of_unit(unit, &mut self.tydesc_table));
 
         // Create frame with live value tracking for script cleanup.
         let mut frame = Frame::new(unit, layout);
@@ -1174,26 +1146,8 @@ impl IrInterpreter {
             }
             Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
-                // The scratch is held until the call returns, because a
-                // borrowed argument with no address of its own points into it.
-                let (arg_vals, _borrow_scratch) =
-                    self.prepare_call_args(callee, args, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                Self::mark_consumed_call_args(callee, args, frame);
-
-                // What to hand over was worked out when the shape sets
-                // settled; this only turns each answer into a descriptor.
-                let supplied: Vec<*const rtdt::TyDesc> = shape_descriptors.iter()
-                    .map(|r| self.resolve_shape_ref(r, frame))
-                    .collect();
-
-                if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
-                    // Native function dispatch. The descriptors go after the
-                    // arguments, as they do at a call to a module function.
-                    self.native_table.call(
-                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot,
-                        &supplied,
-                    )?;
+                if let datalove_datafun_ir::CodeUnitContext::Native(_) = &callee.context {
+                    self.execute_native_call(callee, args, shape_descriptors, *dest, frame, frames)?;
                 } else {
                     // Build call site info for dispatcher if we have caller context.
                     let call_site_info = current_func.map(|caller| {
@@ -1203,63 +1157,24 @@ impl IrInterpreter {
                             call_site_id: *site_id,
                         }
                     });
-
-                    let call_result = if let Some(result) = self.try_dispatch_call(
-                        func, callee, &arg_vals, &supplied, dest_slot, ctx, registry, frames,
-                        call_site_info,
-                    ) {
-                        result
-                    } else {
-                        self.execute_call_with_shapes(
-                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
-                    };
-                    call_result?;
+                    self.execute_call_site(
+                        func, callee, args, shape_descriptors, *dest, call_site_info,
+                        frame, ctx, registry, frames)?;
                 }
-
-                frame.mark_value_live(*dest);
-                Self::mark_out_params_initialized(callee, args, frame);
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
             Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
                 let callee = ctx.get_unit(func, registry);
-                // The scratch is held until the call returns, because a
-                // borrowed argument with no address of its own points into it.
-                let (arg_vals, _borrow_scratch) =
-                    self.prepare_call_args(callee, args, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                Self::mark_consumed_call_args(callee, args, frame);
-
-                // A comptime callee may be generic as well, so the descriptors
-                // are handed over the way `Call` hands them over.
-                let supplied: Vec<*const rtdt::TyDesc> = shape_descriptors.iter()
-                    .map(|r| self.resolve_shape_ref(r, frame))
-                    .collect();
-
-                if let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context {
-                    // Native function dispatch. The descriptors go after the
-                    // arguments, as they do at a call to a module function.
-                    self.native_table.call(
-                        &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &supplied,
-                    )?;
+                if let datalove_datafun_ir::CodeUnitContext::Native(_) = &callee.context {
+                    self.execute_native_call(callee, args, shape_descriptors, *dest, frame, frames)?;
                 } else {
-                    // Try dispatcher first, fall back to interpreter.
                     // ComptimeCall doesn't have site_id, so no call_site_info.
-                    //
-                    let call_result = if let Some(result) = self.try_dispatch_call(
-                        func, callee, &arg_vals, &supplied, dest_slot, ctx, registry, frames, None,
-                    ) {
-                        result
-                    } else {
-                        self.execute_call_with_shapes(
-                            callee, func, arg_vals, supplied, dest_slot, ctx, registry, frames)
-                    };
-                    call_result?;
+                    self.execute_call_site(
+                        func, callee, args, shape_descriptors, *dest, None,
+                        frame, ctx, registry, frames)?;
                 }
-
-                frame.mark_value_live(*dest);
-                Self::mark_out_params_initialized(callee, args, frame);
             }
             Instruction::ListNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -2302,44 +2217,59 @@ impl IrInterpreter {
         let mut scratch: BorrowScratch = Vec::new();
         let mut arg_vals = Vec::with_capacity(args.len());
         for (i, op) in args.iter().enumerate() {
-            let mode = param_mode(callee, i);
-            if mode == ParamMode::Out {
-                // Out param: the callee writes over whatever is there, so what
-                // is there has to be destroyed first -- unless nothing is. A
-                // destination that has never been written holds no value to
-                // free, and one already passed on as an out parameter was
-                // cleared by whoever called this function.
-                //
-                // This used to ask the memory rather than the frame, and rested
-                // on the frame being zeroed so that destroying a place that had
-                // never been written read a null pointer and did nothing. That
-                // made "uninitialized" and "empty" indistinguishable, which is
-                // the invariant the compiled backends carry a tracking byte for
-                // rather than assume.
-                let val = self.get_operand_dest(op, frame);
-                if Self::out_dest_holds_value(op, frame, frames) {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(
-                            self.runtime.handle(),
-                            val.ptr,
-                            val.tydesc,
-                        );
-                    }
-                    Self::mark_out_dest_cleared(op, frame);
-                }
-                arg_vals.push(val);
-            } else {
-                let mut val = self.read_operand(op, frame, frames);
-                // A container of a type parameter travels wrapped once it is
-                // owned, and a borrowed parameter wants the container itself
-                // with a descriptor beside it. Both are inside the wrapper.
-                if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
-                    val = Self::borrow_through_wrapper(val, &mut scratch);
-                }
-                arg_vals.push(val);
-            }
+            arg_vals.push(self.resolve_arg(param_mode(callee, i), op, frame, frames, &mut scratch));
         }
         (arg_vals, scratch)
+    }
+
+    /// Resolve one argument for a parameter passed in `mode`.
+    ///
+    /// An `out` argument is the place the callee will write, emptied first if
+    /// it holds anything. Any other is the value as the caller has it, read
+    /// through a wrapper when it is borrowed.
+    fn resolve_arg(
+        &self,
+        mode: ParamMode,
+        op: &Operand,
+        frame: &mut Frame,
+        frames: &FrameStore,
+        scratch: &mut BorrowScratch,
+    ) -> Value {
+        if mode == ParamMode::Out {
+            // Out param: the callee writes over whatever is there, so what
+            // is there has to be destroyed first -- unless nothing is. A
+            // destination that has never been written holds no value to
+            // free, and one already passed on as an out parameter was
+            // cleared by whoever called this function.
+            //
+            // This used to ask the memory rather than the frame, and rested
+            // on the frame being zeroed so that destroying a place that had
+            // never been written read a null pointer and did nothing. That
+            // made "uninitialized" and "empty" indistinguishable, which is
+            // the invariant the compiled backends carry a tracking byte for
+            // rather than assume.
+            let val = self.get_operand_dest(op, frame);
+            if Self::out_dest_holds_value(op, frame, frames) {
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        val.ptr,
+                        val.tydesc,
+                    );
+                }
+                Self::mark_out_dest_cleared(op, frame);
+            }
+            val
+        } else {
+            let mut val = self.read_operand(op, frame, frames);
+            // A container of a type parameter travels wrapped once it is
+            // owned, and a borrowed parameter wants the container itself
+            // with a descriptor beside it. Both are inside the wrapper.
+            if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
+                val = Self::borrow_through_wrapper(val, scratch);
+            }
+            val
+        }
     }
 
     /// The descriptor a `DescriptorRef` names.
@@ -2491,38 +2421,128 @@ impl IrInterpreter {
         }
     }
 
-    /// Execute a function call via the interpreter.
+    /// Call a native function from a call instruction.
     ///
-    /// Uses `code_ref` to look up optimized versions and to identify the function
-    /// for call site tracking. External functions need a context with that unit's
-    /// local functions; local and module functions use the current context.
-    #[allow(clippy::too_many_arguments)]
-    fn execute_call_with_shapes(
+    /// A native has no frame, so its arguments are collected into a list and
+    /// the descriptors for its shapes go after them, as they do at a call to a
+    /// module function.
+    fn execute_native_call(
         &mut self,
         callee: &IrCodeUnit,
+        args: &[Operand],
+        shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        dest: datalove_datafun_ir::ValueId,
+        frame: &mut Frame,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
+        let datalove_datafun_ir::CodeUnitContext::Native(native_ctx) = &callee.context else {
+            panic!("execute_native_call on {}, which is not native", callee.name);
+        };
+        // The scratch is held until the call returns, because a borrowed
+        // argument with no address of its own points into it.
+        let (arg_vals, _borrow_scratch) = self.prepare_call_args(callee, args, frame, frames);
+        let dest_slot = frame.value_dest(dest);
+        Self::mark_consumed_call_args(callee, args, frame);
+        let supplied: Vec<*const rtdt::TyDesc> = shape_refs.iter()
+            .map(|r| self.resolve_shape_ref(r, frame))
+            .collect();
+        self.native_table.call(
+            &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &supplied,
+        )?;
+        frame.mark_value_live(dest);
+        Self::mark_out_params_initialized(callee, args, frame);
+        Ok(())
+    }
+
+    /// Call a function that is not native from a call instruction.
+    ///
+    /// The arguments are resolved straight into the callee's frame rather than
+    /// into a list for the frame to copy: the frame's parameters are where they
+    /// end up, and a dispatcher is offered them there. Only if it declines is
+    /// the rest of the frame made ready, so a call the jit takes does not pay
+    /// for it.
+    ///
+    /// The body is chosen before the dispatcher is asked, so that the frame is
+    /// taken for the body that will run. An inlining the dispatcher performs
+    /// during this call is used from the next one, which is the same program.
+    #[allow(clippy::too_many_arguments)]
+    fn execute_call_site(
+        &mut self,
         code_ref: &CodeRef,
-        arg_vals: Vec<Value>,
-        shape_descriptors: Vec<*const rtdt::TyDesc>,
-        dest: Destination,
+        callee: &IrCodeUnit,
+        args: &[Operand],
+        shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        dest: datalove_datafun_ir::ValueId,
+        call_site_info: Option<dispatch::CallSiteInfo>,
+        frame: &mut Frame,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        let optimized = self.get_optimized_function(
-            dispatch::FuncIdentity::of(code_ref, ctx.unit()));
-        let func_to_use = optimized.as_deref().unwrap_or(callee);
-        if let CodeRef::External { unit, .. } = code_ref {
-            let unit_funcs = registry.unit_functions(*unit)
-                .unwrap_or_else(|| panic!("external unit {} not found", unit));
-            let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
-            self.call_in_context_with_shapes(
-                func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
-                dest, &callee_ctx, registry, frames)
-        } else {
-            self.call_in_context_with_shapes(
-                func_to_use, Some(code_ref.clone()), arg_vals, shape_descriptors,
-                dest, ctx, registry, frames)
+        let identity = dispatch::FuncIdentity::of(code_ref, ctx.unit());
+        let optimized = self.get_optimized_function(identity);
+        let body = optimized.as_deref().unwrap_or(callee);
+        let layout = self.layout_cache.get_or_compute(identity, body, &mut self.tydesc_table);
+        let mut callee_frame = self.frame_pool.take(layout);
+
+        // Held until the call returns, because a borrowed argument with no
+        // address of its own points into it.
+        let mut scratch: BorrowScratch = Vec::new();
+        for (i, op) in args.iter().enumerate() {
+            let mode = callee_frame.layout().param_modes[i];
+            let val = self.resolve_arg(mode, op, frame, frames, &mut scratch);
+            callee_frame.push_param(val);
         }
+        // After every argument is read, in case one place is passed twice.
+        for (i, op) in args.iter().enumerate() {
+            if callee_frame.layout().param_moves[i] {
+                Self::mark_source_dropped_local(op, frame);
+            }
+        }
+        for r in shape_refs {
+            let tydesc = self.resolve_shape_ref(r, frame);
+            callee_frame.push_shape_descriptor(tydesc);
+        }
+        let dest_slot = frame.value_dest(dest);
+
+        let dispatched = self.try_dispatch_call(
+            code_ref, callee, callee_frame.params(), callee_frame.shape_descriptors(),
+            dest_slot, ctx, registry, frames, call_site_info);
+        let result = match dispatched {
+            Some(result) => result,
+            None => {
+                callee_frame.enter();
+                if let CodeRef::External { unit, .. } = code_ref {
+                    // An external function's own local functions are its
+                    // unit's, not this caller's.
+                    let unit_funcs = registry.unit_functions(*unit)
+                        .unwrap_or_else(|| panic!("external unit {} not found", unit));
+                    let callee_ctx = ExecutionContext::new(*unit, unit_funcs);
+                    self.run_frame(
+                        body, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
+                        Some(code_ref))
+                } else {
+                    self.run_frame(
+                        body, &mut callee_frame, dest_slot, ctx, registry, frames,
+                        Some(code_ref))
+                }
+            }
+        };
+
+        if result.is_ok() {
+            frame.mark_value_live(dest);
+            for (i, op) in args.iter().enumerate() {
+                if callee_frame.layout().param_modes[i] == ParamMode::Out {
+                    match op {
+                        Operand::Slot(id) => frame.mark_slot_initialized(*id),
+                        Operand::Value(id) => frame.mark_value_live(*id),
+                        _ => {}
+                    }
+                }
+            }
+        }
+        self.frame_pool.give_back(callee_frame);
+        result
     }
 
     #[inline(always)]
