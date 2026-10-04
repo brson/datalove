@@ -1017,6 +1017,16 @@ the unit for this, and the JIT keys its table and its code cells on
 Fixture: `interp/947_crossunit_local_id_reuse`, which the tuned and chaos
 dispatcher suites run against the plain interpreter.
 
+The same goes for anything that carries a reference out of the body it was
+written in. A JIT stub encodes its callee's `FuncIdentity`, resolved when the
+stub is built, because compiled code from one unit calls compiled code from an
+earlier one directly and the trampoline cannot know whose code a `Local` came
+from. And the dynamic inliner rewrites an earlier unit's callee's local calls
+to `External` ones (`with_calls_into_unit`) before moving its body into a later
+unit's function. Both are covered by the last units of
+`interp/999_inline_caller_in_earlier_unit`, which the plain jit suite and both
+dispatcher suites get wrong without them.
+
 ### IrCodeUnit
 
 One type represents functions, script units and native functions. The `context`

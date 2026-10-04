@@ -202,7 +202,7 @@ impl Default for DynamicInliner {
 impl CallDispatcher for DynamicInliner {
     fn dispatch_call(
         &mut self,
-        _code_ref: &CodeRef,
+        code_ref: &CodeRef,
         func: &IrCodeUnit,
         _args: &[Value],
         _ret_dest: Destination,
@@ -232,7 +232,18 @@ impl CallDispatcher for DynamicInliner {
             };
 
             if let Some(caller) = caller {
-                self.perform_inlining(&call_site_info, caller, func);
+                // A callee from an earlier unit calls its own unit's functions
+                // by local reference, which in the caller's body would mean the
+                // caller's unit.
+                match code_ref {
+                    CodeRef::External { unit, .. } => {
+                        let callee = datalove_datafun_inline::with_calls_into_unit(func, *unit);
+                        self.perform_inlining(&call_site_info, caller, &callee);
+                    }
+                    CodeRef::Local(_) | CodeRef::Module { .. } => {
+                        self.perform_inlining(&call_site_info, caller, func);
+                    }
+                }
             }
         }
 

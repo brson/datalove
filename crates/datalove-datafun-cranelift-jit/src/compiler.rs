@@ -296,7 +296,7 @@ impl JitCompiler {
 
             // Create a stub for this callee.
             let key = FuncIdentity::of(&code_ref, ctx.unit());
-            let stub_id = self.create_stub_for_callee(&code_ref, key, &callee_ir)?;
+            let stub_id = self.create_stub_for_callee(key, &callee_ir)?;
 
             // Register in appropriate map.
             match &code_ref {
@@ -392,7 +392,6 @@ impl JitCompiler {
     /// __jit_dispatch_call with the encoded function key.
     fn create_stub_for_callee(
         &mut self,
-        code_ref: &CodeRef,
         key: FuncIdentity,
         callee: &IrCodeUnit,
     ) -> Result<FuncId, JitError> {
@@ -411,7 +410,7 @@ impl JitCompiler {
 
         // Define the stub.
         let cell = self.code_cell(key);
-        self.define_stub(stub_id, code_ref, cell, callee, &sig)?;
+        self.define_stub(stub_id, key, cell, callee, &sig)?;
 
         Ok(stub_id)
     }
@@ -425,7 +424,7 @@ impl JitCompiler {
     fn define_stub(
         &mut self,
         stub_id: FuncId,
-        code_ref: &CodeRef,
+        key: FuncIdentity,
         cell: *const AtomicUsize,
         callee: &IrCodeUnit,
         sig: &cl_ir::Signature,
@@ -528,7 +527,7 @@ impl JitCompiler {
         };
 
         // Encode function key.
-        let encoded_key = EncodedFuncKey::from_code_ref(code_ref);
+        let encoded_key = EncodedFuncKey::from_identity(key);
         let encoded_key_val = builder.ins().iconst(cl_types::I64, encoded_key.as_u64() as i64);
 
         // Get return destination pointer.

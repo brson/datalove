@@ -39,3 +39,66 @@ scriptunit-expr
 ----------
 
 total
+
+----------
+scriptunit-fragment
+----------
+
+// The rest checks that compiled code from one unit calling compiled code from
+// an earlier one, which then calls its own unit's function for the first time,
+// reaches that function and not the one at the same id in the calling unit.
+//
+// Unit 3 defines `helper`, local id 0, and `relay`, which calls it for one
+// argument only, so that it is never called often enough to be compiled or
+// inlined and the first call to it from compiled `relay` goes through the
+// trampoline.
+
+fun helper(x: int): int
+    ret x + 1
+end fun
+
+fun relay(x: int): int
+    if x == 150
+        ret helper(x)
+    end if
+    ret x
+end fun
+
+debuglog relay(0)
+
+----------
+scriptunit-fragment
+----------
+
+// Unit 4 defines `decoy` at local id 0 too, which `helper(x)` inside `relay`
+// would reach if it were resolved against this unit. `drive` is called often
+// enough to be compiled, and so is `relay` from it, so by the time `relay` sees
+// 150 both are compiled and the call from one to the other is direct.
+//
+// The same call has to survive `relay` being inlined into `drive`, which the
+// dispatchers do: moved into a unit 4 body, `relay`'s call to its unit's
+// function 0 must still mean unit 3's.
+
+fun decoy(x: int): int
+    ret x + 7
+end fun
+
+fun drive(x: int): int
+    ret relay(x)
+end fun
+
+var j: int = 0
+var relayed: int = 0
+loop while j .< 200
+    set relayed = relayed + drive(j@)
+    set j = j + 1
+end loop
+
+let relayed_total = relayed
+debuglog relayed_total
+
+----------
+scriptunit-expr
+----------
+
+relayed_total

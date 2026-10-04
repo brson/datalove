@@ -1079,6 +1079,27 @@ impl RemapContext {
     }
 }
 
+/// `callee`, with its calls to its own unit's functions named so that they
+/// still reach them from code in a later unit.
+///
+/// A `CodeRef::Local` means a function of whichever unit's code it is in. A
+/// body from script unit `unit` inlined into a later unit's function would
+/// otherwise call the later unit's function of the same id, so before it is
+/// moved its local calls become `CodeRef::External` calls into `unit`.
+pub fn with_calls_into_unit(callee: &IrCodeUnit, unit: u32) -> IrCodeUnit {
+    let mut callee = callee.clone();
+    for block in &mut callee.blocks {
+        for instr in &mut block.instructions {
+            if let Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } = instr {
+                if let CodeRef::Local(id) = *func {
+                    *func = CodeRef::External { unit, id };
+                }
+            }
+        }
+    }
+    callee
+}
+
 /// Inline a single call site in a function.
 ///
 /// Returns the new function with the call inlined, or None if inlining failed.

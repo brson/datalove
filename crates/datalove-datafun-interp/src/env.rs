@@ -8,6 +8,7 @@
 
 use std::sync::Arc;
 use datalove_datafun_ir::{IrCodeUnit, CodeUnitId, CodeRef, IrModuleId, ValueId, SlotId};
+use crate::dispatch::FuncIdentity;
 use crate::frame::{Frame, FrameStore};
 
 // Re-export registry types from the IR crate.
@@ -162,6 +163,32 @@ impl<'a> ExecutionContext<'a> {
                     .unwrap_or_else(|| panic!("module unit {:?}::{:?} not found", module, id))
             }
         }
+    }
+
+    /// Find the function `func` names: the context it runs in, a reference to
+    /// it from that context, and its body.
+    ///
+    /// A function of this context's own unit is found here, because the unit
+    /// that is running is not registered until it finishes. One of an earlier
+    /// unit is found in the registry and runs with that unit's functions in
+    /// scope.
+    ///
+    /// Panics if it is not there (compiler bug).
+    pub fn resolve_identity<'b>(
+        &self,
+        func: FuncIdentity,
+        registry: &'b FunctionRegistry,
+    ) -> (ExecutionContext<'b>, CodeRef, &'b IrCodeUnit)
+    where
+        'a: 'b,
+    {
+        let code_ref = match func {
+            FuncIdentity::Unit { unit, id } if unit == self.unit => CodeRef::Local(id),
+            FuncIdentity::Unit { unit, id } => CodeRef::External { unit, id },
+            FuncIdentity::Module { module, id } => CodeRef::Module { module, id },
+        };
+        let callee = self.get_unit(&code_ref, registry);
+        (self.for_callee(&code_ref, registry), code_ref, callee)
     }
 
     /// The context a call to `code_ref` runs its callee in.
