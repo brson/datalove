@@ -23,7 +23,7 @@ Then add I/O to it &mdash; carefully.
 
 > **Latest news**: [Native riders](posts.html) &middot; updated 2026-03-27.
 
-> **Roadmap**: [18 of 21 complete](roadmap.md) &middot; updated 2026-09-16.
+> **Roadmap**: [18 of 19 complete](roadmap.md) &middot; updated 2026-10-02.
 
 
 
@@ -49,9 +49,8 @@ Then add I/O to it &mdash; carefully.
   <div class="thing-box">
     <p>With an <em>interactive scripting environment</em>
        for <em>rapid script iteration</em>,
-       with incremental typechecking and evaluation,
-       and a <em>fully-reversible REPL</em>
-       where undo rewinds both the typechecker and the evaluator.</p>
+       with incremental re-typechecking and re-evaluation,
+       and a <em>reversible</em> REPL.
   </div>
   <div class="thing-box">
     <p>With a modern compilation and execution architecture with
