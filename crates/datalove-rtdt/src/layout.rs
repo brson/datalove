@@ -186,6 +186,7 @@ pub fn compute_enum_layout(tydesc: TyDescRef) -> EnumLayout {
 /// 1. A tag (u8) indicating None or Some
 /// 2. Padding to align the payload
 /// 3. Space for the inner type T (if Some)
+#[inline]
 pub fn compute_option_layout(tydesc: TyDescRef) -> OptionLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Option);
 
@@ -222,6 +223,7 @@ pub fn compute_option_layout(tydesc: TyDescRef) -> OptionLayout {
 /// 3. Space for max(T, Error) - whichever is larger
 ///
 /// The Ok variant contains T, the Err variant contains Error.
+#[inline]
 pub fn compute_result_layout(tydesc: TyDescRef) -> ResultLayout {
     debug_assert_eq!(tydesc.type_tag(), TyTag::Result);
 

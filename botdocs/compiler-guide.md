@@ -1557,6 +1557,23 @@ comes from. The interpreter's call path reuses frames from a `FramePool`
 which together made it 1.5-1.8x faster on call-heavy code and turned inlining
 under the interpreter from a regression into roughly break-even.
 
+**The interpreter's dispatch is mostly call overhead.** `execute_instruction` is
+one `match` over every instruction, and its prologue and epilogue -- six saved
+registers and a frame sized for the largest arm -- were a third of its time,
+paid once per IR instruction. `execute_hot` handles the dozen instructions most
+time goes to (constants, copies, arithmetic, slot loads and stores, intrinsics,
+option and result wrapping) inlined into the block loop, and everything else
+falls through. Moving an arm there is the lever: it took benchvs primes from
+3.6s to 2.0s. The other lesson is that `#[inline]` is not enough for the
+accessors that loop calls -- `read_operand`, `Frame::value` and kin stayed out
+of line in a caller that size until they were `#[inline(always)]`, and
+`read_operand` keeps only the three common operand kinds inline for the same
+reason. A copy of a runtime-sized value is a call to `memcpy` unless the size
+is matched to a constant first (`copy_bytes`). Together these took primes from
+3.6s to 1.6s, sum from 135ms to 87ms and fib from 1.32s to 1.0s; fib is left
+paying for calls, a third of it in `call_in_context_with_shapes`, frame reset
+and argument preparation.
+
 ## Entry Points
 
 ### Module Compilation

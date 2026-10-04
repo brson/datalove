@@ -588,7 +588,9 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                self.execute_instruction(instr, unit_types, frame, ctx, registry, frames, current_func)?;
+                if !self.execute_hot(instr, frame, frames) {
+                    self.execute_instruction(instr, unit_types, frame, ctx, registry, frames, current_func)?;
+                }
             }
 
             // Handle terminator.
@@ -668,6 +670,7 @@ impl IrInterpreter {
     ///
     /// Each block param has a pre-allocated frame location. This function
     /// moves values INTO those locations - the previous contents are overwritten.
+    #[inline(always)]
     fn pass_block_args(
         &mut self,
         blocks: &[IrBlock],
@@ -676,9 +679,22 @@ impl IrInterpreter {
         frame: &mut Frame,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
+        // Most jumps carry nothing, and should not pay for a call to say so.
         if args.is_empty() {
             return Ok(());
         }
+        self.pass_block_args_nonempty(blocks, target, args, frame, frames)
+    }
+
+    #[inline(never)]
+    fn pass_block_args_nonempty(
+        &mut self,
+        blocks: &[IrBlock],
+        target: BlockId,
+        args: &[Operand],
+        frame: &mut Frame,
+        frames: &mut FrameStore,
+    ) -> Result<(), InterpError> {
 
         // Direct indexing: blocks are renumbered so blocks[i].id.0 == i.
         let target_block = &blocks[target.0 as usize];
@@ -695,17 +711,14 @@ impl IrInterpreter {
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn execute_instruction(
-        &mut self,
-        instr: &Instruction,
-        unit_types: &UnitTypes<'_>,
-        frame: &mut Frame,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
-        frames: &mut FrameStore,
-        current_func: Option<&CodeRef>,
-    ) -> Result<(), InterpError> {
+    /// Execute `instr` if it is one of the few instructions most of a program's
+    /// time is spent in, and say whether it was.
+    ///
+    /// Inlined into the block loop so those instructions do not pay for
+    /// entering `execute_instruction`, whose frame is sized for all of the rest:
+    /// its prologue and epilogue alone were about a third of its time.
+    #[inline(always)]
+    fn execute_hot(&mut self, instr: &Instruction, frame: &mut Frame, frames: &mut FrameStore) -> bool {
         match instr {
             Instruction::Const { dest, value } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -749,7 +762,11 @@ impl IrInterpreter {
                     SlotDest::Local(slot_id) => {
                         // Destroy old value if slot was already initialized.
                         // This happens when reassigning copy types (no Drop emitted for them).
-                        if frame.is_slot_initialized(*slot_id) {
+                        // A scalar has nothing to destroy, and is most of what
+                        // a loop reassigns.
+                        if frame.is_slot_initialized(*slot_id)
+                            && !is_scalar_tag(unsafe { (*frame.slot_dest(*slot_id).tydesc).type_tag })
+                        {
                             let old_val = frame.slot(*slot_id).unwrap();
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
@@ -772,6 +789,84 @@ impl IrInterpreter {
                         );
                     }
                 }
+            }
+            Instruction::SlotLoadCopy { dest, slot } => {
+                let slot_val = frame.slot(*slot).unwrap();
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.copy_value(&slot_val, dest_slot); }
+                frame.mark_value_live(*dest);
+            }
+            Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
+                // Execute checked arithmetic and set overflow flag.
+                let lhs_val = self.read_operand(lhs, frame, frames);
+                let rhs_val = self.read_operand(rhs, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                let overflow_slot = frame.value_dest(*overflow);
+                self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot);
+                frame.mark_value_live(*dest);
+                frame.mark_value_live(*overflow);
+            }
+            Instruction::Intrinsic { dest, intrinsic, args } => {
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames);
+                frame.mark_value_live(*dest);
+            }
+            Instruction::WrapSome { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_some(&inner_val, dest_slot);
+                frame.mark_value_live(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::UnwrapOption { dest, is_some, src } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                let is_some_slot = frame.value_dest(*is_some);
+                self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
+                frame.mark_value_live(*dest);
+                frame.mark_value_live(*is_some);
+            }
+            Instruction::WrapOk { dest, inner } => {
+                let inner_val = self.read_operand(inner, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                self.execute_wrap_ok(&inner_val, dest_slot);
+                frame.mark_value_live(*dest);
+                Self::mark_source_dropped_local(inner, frame);
+            }
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let ok_slot = frame.value_dest(*ok_dest);
+                let err_slot = frame.value_dest(*err_dest);
+                let is_ok_slot = frame.value_dest(*is_ok);
+                self.execute_unwrap_result(&src_val, ok_slot, err_slot, is_ok_slot);
+                frame.mark_value_live(*ok_dest);
+                frame.mark_value_live(*err_dest);
+                frame.mark_value_live(*is_ok);
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn execute_instruction(
+        &mut self,
+        instr: &Instruction,
+        unit_types: &UnitTypes<'_>,
+        frame: &mut Frame,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+        current_func: Option<&CodeRef>,
+    ) -> Result<(), InterpError> {
+        match instr {
+            Instruction::Const { .. } | Instruction::Copy { .. } | Instruction::Move { .. }
+            | Instruction::BinOp { .. } | Instruction::UnaryOp { .. }
+            | Instruction::SlotStoreCopy { .. } | Instruction::SlotLoadCopy { .. }
+            | Instruction::BinOpChecked { .. } | Instruction::Intrinsic { .. }
+            | Instruction::WrapSome { .. } | Instruction::UnwrapOption { .. }
+            | Instruction::WrapOk { .. } | Instruction::UnwrapResult { .. } => {
+                unreachable!("{:?} is executed by execute_hot", instr)
             }
             Instruction::SlotStoreMove { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames);
@@ -902,12 +997,6 @@ impl IrInterpreter {
                 }
                 Self::mark_source_dropped_local(value, frame);
             }
-            Instruction::SlotLoadCopy { dest, slot } => {
-                let slot_val = frame.slot(*slot).unwrap();
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { self.copy_value(&slot_val, dest_slot); }
-                frame.mark_value_live(*dest);
-            }
             Instruction::SlotLoadMove { dest, slot } => {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
                 // Slot is not marked dropped - destroy_live_values skips untracked slots,
@@ -973,16 +1062,6 @@ impl IrInterpreter {
                     _ => unreachable!("Unpack requires tuple or struct type, got {:?}", tag),
                 }
             }
-            Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
-                // Execute checked arithmetic and set overflow flag.
-                let lhs_val = self.read_operand(lhs, frame, frames);
-                let rhs_val = self.read_operand(rhs, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                let overflow_slot = frame.value_dest(*overflow);
-                self.execute_binop_checked(*op, &lhs_val, &rhs_val, dest_slot, overflow_slot);
-                frame.mark_value_live(*dest);
-                frame.mark_value_live(*overflow);
-            }
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 // Execute checked unary op and set overflow flag.
                 let operand_val = self.read_operand(operand, frame, frames);
@@ -991,13 +1070,6 @@ impl IrInterpreter {
                 self.execute_unaryop_checked(*op, &operand_val, dest_slot, overflow_slot);
                 frame.mark_value_live(*dest);
                 frame.mark_value_live(*overflow);
-            }
-            Instruction::WrapSome { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_some(&inner_val, dest_slot);
-                frame.mark_value_live(*dest);
-                Self::mark_source_dropped_local(inner, frame);
             }
             Instruction::WrapNone { dest } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -1030,37 +1102,12 @@ impl IrInterpreter {
                 // Consumes src.
                 Self::mark_source_dropped_local(src, frame);
             }
-            Instruction::UnwrapOption { dest, is_some, src } => {
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                let is_some_slot = frame.value_dest(*is_some);
-                self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
-                frame.mark_value_live(*dest);
-                frame.mark_value_live(*is_some);
-            }
-            Instruction::WrapOk { dest, inner } => {
-                let inner_val = self.read_operand(inner, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_wrap_ok(&inner_val, dest_slot);
-                frame.mark_value_live(*dest);
-                Self::mark_source_dropped_local(inner, frame);
-            }
             Instruction::WrapErr { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 self.execute_wrap_err(&inner_val, dest_slot);
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
-            }
-            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
-                let src_val = self.read_operand(src, frame, frames);
-                let ok_slot = frame.value_dest(*ok_dest);
-                let err_slot = frame.value_dest(*err_dest);
-                let is_ok_slot = frame.value_dest(*is_ok);
-                self.execute_unwrap_result(&src_val, ok_slot, err_slot, is_ok_slot);
-                frame.mark_value_live(*ok_dest);
-                frame.mark_value_live(*err_dest);
-                frame.mark_value_live(*is_ok);
             }
             Instruction::ErrorFrom { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames);
@@ -2009,11 +2056,6 @@ impl IrInterpreter {
                 frame.mark_param_initialized(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
-            Instruction::Intrinsic { dest, intrinsic, args } => {
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_intrinsic(*intrinsic, args, dest_slot, frame, frames);
-                frame.mark_value_live(*dest);
-            }
             // Slot tracking variants - these track SLOT state, not value state.
             Instruction::SlotStoreCopyTracked { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames);
@@ -2140,6 +2182,12 @@ impl IrInterpreter {
         }
     }
 
+    /// Read an operand.
+    ///
+    /// Inlined everywhere, which is most of the instructions there are, so the
+    /// three kinds an operand nearly always is are read here and the rest out of
+    /// line.
+    #[inline(always)]
     pub(crate) fn read_operand(
         &self,
         op: &Operand,
@@ -2148,14 +2196,24 @@ impl IrInterpreter {
     ) -> Value {
         match op {
             Operand::Value(id) => frame.value(*id),
+            Operand::Slot(id) => frame.slot(*id).expect("read of an empty slot"),
+            Operand::Param(id) => frame.param(*id).expect("read of an absent param"),
+            _ => Self::read_operand_rare(op, frame, frames),
+        }
+    }
+
+    #[inline(never)]
+    fn read_operand_rare(op: &Operand, frame: &Frame, frames: &FrameStore) -> Value {
+        match op {
             Operand::ValueRef(id) => frame.value_deref(*id),
-            Operand::Slot(id) => frame.slot(*id).unwrap(),
-            Operand::Param(id) => frame.param(*id).unwrap(),
             Operand::ExternalValue { unit, value } => {
                 frames.external_value(*unit, *value).unwrap()
             }
             Operand::ExternalSlot { unit, slot } => {
                 frames.external_slot(*unit, *slot).unwrap()
+            }
+            Operand::Value(_) | Operand::Slot(_) | Operand::Param(_) => {
+                unreachable!("read_operand reads these itself")
             }
         }
     }
@@ -2467,6 +2525,7 @@ impl IrInterpreter {
         }
     }
 
+    #[inline(always)]
     fn write_const(&mut self, value: &ConstValue, dest: Destination) {
         unsafe {
             match value {
@@ -3011,6 +3070,7 @@ impl IrInterpreter {
         (current_ptr, current_tydesc)
     }
 
+    #[inline(always)]
     unsafe fn copy_value(&self, src: &Value, dest: Destination) {
         unsafe {
             let tag = (*src.tydesc).type_tag;
@@ -3034,17 +3094,16 @@ impl IrInterpreter {
             );
 
             // Shallow copy for copyable types.
-            let size = (*src.tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
+            copy_bytes(src.ptr, dest.ptr, (*src.tydesc).size as usize);
         }
     }
 
+    #[inline(always)]
     unsafe fn move_value(&self, src: &Value, dest: Destination) {
         unsafe {
             // Move is always a shallow copy - ownership transfers to dest.
             // The source should be marked as dropped so it won't be destroyed.
-            let size = (*src.tydesc).size as usize;
-            std::ptr::copy_nonoverlapping(src.ptr, dest.ptr, size);
+            copy_bytes(src.ptr, dest.ptr, (*src.tydesc).size as usize);
         }
     }
 
@@ -3066,3 +3125,28 @@ impl Default for IrInterpreter {
     }
 }
 
+
+/// Copy `size` bytes, without a call into `memcpy` for the sizes a scalar has.
+///
+/// The size is only known at run time, so a plain `copy_nonoverlapping` is a
+/// call, and most of what the interpreter copies is one to eight bytes.
+#[inline]
+unsafe fn copy_bytes(src: *const u8, dest: *mut u8, size: usize) {
+    unsafe {
+        match size {
+            0 => {}
+            1 => std::ptr::copy_nonoverlapping(src, dest, 1),
+            2 => std::ptr::copy_nonoverlapping(src, dest, 2),
+            4 => std::ptr::copy_nonoverlapping(src, dest, 4),
+            8 => std::ptr::copy_nonoverlapping(src, dest, 8),
+            _ => std::ptr::copy_nonoverlapping(src, dest, size),
+        }
+    }
+}
+
+/// Whether a value of this tag owns nothing, so destroying it does nothing.
+#[inline]
+fn is_scalar_tag(tag: rtdt::TyTag) -> bool {
+    use rtdt::TyTag::*;
+    matches!(tag, Bool | U8 | U16 | U32 | U64 | I8 | I16 | I32 | I64 | Index | Offset | F32 | F64)
+}

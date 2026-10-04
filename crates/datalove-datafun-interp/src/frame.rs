@@ -215,6 +215,7 @@ impl Frame {
     }
 
     /// Mark a value as holding something.
+    #[inline(always)]
     pub fn mark_value_live(&mut self, id: ValueId) {
         let idx = id.0 as usize;
         if idx < self.value_initialized.len() {
@@ -223,6 +224,7 @@ impl Frame {
     }
 
     /// Mark a value as holding nothing, having been moved or destroyed.
+    #[inline(always)]
     pub fn mark_value_dropped(&mut self, id: ValueId) {
         let idx = id.0 as usize;
         if idx < self.value_initialized.len() {
@@ -238,6 +240,7 @@ impl Frame {
     /// Get destination for a value.
     ///
     /// Panics if the value ID is out of bounds.
+    #[inline(always)]
     pub fn value_dest(&mut self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
         let offset = self.layout.value_offsets[idx] as usize;
@@ -252,6 +255,7 @@ impl Frame {
     /// returns the stored pointer. Use `value_deref` to dereference refs.
     ///
     /// Panics if value ID is out of bounds (compiler bug).
+    #[inline(always)]
     pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
         let offset = self.layout.value_offsets[idx] as usize;
@@ -266,6 +270,7 @@ impl Frame {
     /// returns the data it points to with the inner type's tydesc.
     ///
     /// Panics if value ID is out of bounds (compiler bug).
+    #[inline]
     pub fn value_deref(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
         let offset = self.layout.value_offsets[idx] as usize;
@@ -299,6 +304,7 @@ impl Frame {
     /// Get destination for a slot.
     ///
     /// Panics if slot ID is out of bounds (compiler bug).
+    #[inline(always)]
     pub fn slot_dest(&mut self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
         let offset = self.layout.slot_offsets[idx] as usize;
@@ -311,6 +317,7 @@ impl Frame {
     ///
     /// Returns None if slot is not initialized (moved or not written).
     /// Panics if slot ID is out of bounds (compiler bug).
+    #[inline(always)]
     pub fn slot(&self, id: SlotId) -> Option<Value> {
         let idx = id.0 as usize;
         if !self.slot_initialized[idx] {
@@ -323,6 +330,7 @@ impl Frame {
     }
 
     /// Mark slot as initialized.
+    #[inline(always)]
     pub fn mark_slot_initialized(&mut self, id: SlotId) {
         let idx = id.0 as usize;
         if idx < self.slot_initialized.len() {
@@ -331,12 +339,14 @@ impl Frame {
     }
 
     /// Check if slot is initialized.
+    #[inline(always)]
     pub fn is_slot_initialized(&self, id: SlotId) -> bool {
         let idx = id.0 as usize;
         idx < self.slot_initialized.len() && self.slot_initialized[idx]
     }
 
     /// Mark slot as dropped to prevent double-destroy.
+    #[inline]
     pub fn mark_slot_dropped(&mut self, id: SlotId) {
         let idx = id.0 as usize;
         if idx < self.slot_initialized.len() {
@@ -360,6 +370,7 @@ impl Frame {
     ///
     /// Returns None if param is not initialized.
     /// Panics if param ID is out of bounds (compiler bug).
+    #[inline(always)]
     pub fn param(&self, id: ParamId) -> Option<Value> {
         let idx = id.0 as usize;
         let ptr = self.param_ptrs[idx];
@@ -382,6 +393,7 @@ impl Frame {
     }
 
     /// Mark param as dropped (for In params after consuming).
+    #[inline]
     pub fn mark_param_dropped(&mut self, id: ParamId) {
         let idx = id.0 as usize;
         if idx < self.param_ptrs.len() {

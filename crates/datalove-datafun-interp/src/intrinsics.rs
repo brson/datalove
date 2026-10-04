@@ -771,138 +771,163 @@ impl IrInterpreter {
     }
 
     /// Read a u32 value from an operand.
+    #[inline(always)]
     fn read_u32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u32 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const u32) }
     }
 
     /// Read an i32 value from an operand.
+    #[inline(always)]
     fn read_i32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i32 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const i32) }
     }
 
     /// Write a u32 value to destination.
+    #[inline(always)]
     fn write_u32(&self, value: u32, dest: Destination) {
         unsafe { *(dest.ptr as *mut u32) = value; }
     }
 
     /// Write an i32 value to destination.
+    #[inline(always)]
     fn write_i32(&self, value: i32, dest: Destination) {
         unsafe { *(dest.ptr as *mut i32) = value; }
     }
 
     /// Write a bool value to destination.
+    #[inline(always)]
     fn write_bool(&self, value: bool, dest: Destination) {
         unsafe { *(dest.ptr as *mut u8) = value as u8; }
     }
 
     /// Read an f32 value from an operand.
+    #[inline(always)]
     fn read_f32(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> f32 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const f32) }
     }
 
     /// Write an f32 value to destination.
+    #[inline(always)]
     fn write_f32(&self, value: f32, dest: Destination) {
         unsafe { *(dest.ptr as *mut f32) = value; }
     }
 
     /// Read an f64 value from an operand.
+    #[inline(always)]
     fn read_f64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> f64 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const f64) }
     }
 
     /// Write an f64 value to destination.
+    #[inline(always)]
     fn write_f64(&self, value: f64, dest: Destination) {
         unsafe { *(dest.ptr as *mut f64) = value; }
     }
 
     /// Read a u64 value from an operand.
+    #[inline(always)]
     fn read_u64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u64 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const u64) }
     }
 
     /// Write a u64 value to destination.
+    #[inline(always)]
     fn write_u64(&self, value: u64, dest: Destination) {
         unsafe { *(dest.ptr as *mut u64) = value; }
     }
 
     /// Read an i64 value from an operand.
+    #[inline(always)]
     fn read_i64(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i64 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const i64) }
     }
 
     /// Write an i64 value to destination.
+    #[inline(always)]
     fn write_i64(&self, value: i64, dest: Destination) {
         unsafe { *(dest.ptr as *mut i64) = value; }
     }
 
     /// Read a u8 value from an operand.
+    #[inline(always)]
     fn read_u8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u8 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const u8) }
     }
 
     /// Write a u8 value to destination.
+    #[inline(always)]
     fn write_u8(&self, value: u8, dest: Destination) {
         unsafe { *(dest.ptr as *mut u8) = value; }
     }
 
     /// Read an i8 value from an operand.
+    #[inline(always)]
     fn read_i8(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i8 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const i8) }
     }
 
     /// Write an i8 value to destination.
+    #[inline(always)]
     fn write_i8(&self, value: i8, dest: Destination) {
         unsafe { *(dest.ptr as *mut i8) = value; }
     }
 
     /// Read a u16 value from an operand.
+    #[inline(always)]
     fn read_u16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> u16 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const u16) }
     }
 
     /// Write a u16 value to destination.
+    #[inline(always)]
     fn write_u16(&self, value: u16, dest: Destination) {
         unsafe { *(dest.ptr as *mut u16) = value; }
     }
 
     /// Read an i16 value from an operand.
+    #[inline(always)]
     fn read_i16(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> i16 {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const i16) }
     }
 
     /// Write an i16 value to destination.
+    #[inline(always)]
     fn write_i16(&self, value: i16, dest: Destination) {
         unsafe { *(dest.ptr as *mut i16) = value; }
     }
 
     /// Read a usize value from an operand.
+    #[inline(always)]
     fn read_usize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::IndexRepr {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const datalove_rtdt::IndexRepr) }
     }
 
     /// Write a usize value to destination.
+    #[inline(always)]
     fn write_usize(&self, value: datalove_rtdt::IndexRepr, dest: Destination) {
         unsafe { *(dest.ptr as *mut datalove_rtdt::IndexRepr) = value; }
     }
 
     /// Read an isize value from an operand.
+    #[inline(always)]
     fn read_isize(&self, op: &Operand, frame: &Frame, frames: &FrameStore) -> datalove_rtdt::OffsetRepr {
         let val = self.read_operand(op, frame, frames);
         unsafe { *(val.ptr as *const datalove_rtdt::OffsetRepr) }
     }
 
     /// Write an isize value to destination.
+    #[inline(always)]
     fn write_isize(&self, value: datalove_rtdt::OffsetRepr, dest: Destination) {
         unsafe { *(dest.ptr as *mut datalove_rtdt::OffsetRepr) = value; }
     }
