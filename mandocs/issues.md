@@ -1,3 +1,14 @@
+## 2026/10/03 Revisit prefix op precedence
+
+> Prefix operators bind tighter than postfix operators,
+> so `-x?` is `(-x)?` and `not s.a` is `(not s).a`.
+> The payload keywords `some`, `ok`, `er`, `data` and `error`
+> are the exception, taking postfix operators onto their payload:
+> `some x@` is `some (x@)`.
+
+Seems confusing, especially `(not s).a`.
+
+
 ## 2026/10/02 int.neg_checked is ! instead of ?
 
 looks inconsistent
