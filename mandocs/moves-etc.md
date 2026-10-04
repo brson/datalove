@@ -3,9 +3,15 @@
 
 ## Argument modes and callee expressions
 
-- `argument.clone`
-- `argument.move`
-- `argument.mut`
+Every argument repeats its parameter's mode at the call site:
+
+- `argument@` - clone, for an `in` parameter; the original stays usable
+- `argument` - move, for an `in` parameter (copy types are copied)
+- `ref argument` - immutable borrow, for a `ref` parameter
+- `mut argument` - mutable borrow, for a `mut` parameter
+- `out argument` - the callee initializes it, for an `out` parameter
+
+A marker that disagrees with the parameter's mode is an error.
 
 All binops and unary negation treat their arguments as `ref` arguments.
 They do not move.
@@ -18,15 +24,5 @@ Some bindings can be uninitialized:
 - `out` parameters - caller provides storage, callee must write before return
 - `var x: Type` - declared without initializer, must `set` before use
 
-These use runtime tracking bytes to know if they've been written.
-Reading before init is a compile error.
-At scope exit, uninitialized bindings don't get dropped (nothing to drop).
-
-```datalove
-var x: i32
-set x = 42
-debuglog x
-```
-
-Partial field writes to uninitialized bindings are disallowed
-because tracking is per-binding, not per-field.
+These incur a runtime tracking byte for non-copy types
+to determine whether they need to be dropped at scope exit.

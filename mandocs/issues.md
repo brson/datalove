@@ -1,3 +1,9 @@
+## 2026/10/03 All vars have tracking bytes
+
+Only vars that aren't initialized in their declaration actually need them.
+Others can by precisely analyzed like let bindings.
+
+
 ## 2026/10/03 const evaluation caching
 
 Runs in the interpreter so not memoized.
