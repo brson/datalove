@@ -1,5 +1,5 @@
 [31m[F026] Error:[0m invalid operand type `?T` for operator `==`
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/80_equality_refused_type_param_inside.dfs:4:7[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/80_equality_refused_type_param_inside.dfs:4:7 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201ma[0m[38;5;201m [0m[38;5;201m=[0m[38;5;201m=[0m[38;5;201m [0m[38;5;201mb[0m
  [38;5;240m  │[0m       [38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  

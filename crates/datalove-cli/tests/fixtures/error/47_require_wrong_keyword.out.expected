@@ -1,5 +1,5 @@
 [31m[P005] Error:[0m expected 'module', 'data', or 'rider' after 'require'
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/47_require_wrong_keyword.dfs:1:9[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/47_require_wrong_keyword.dfs:1:9 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;201mf[0m[38;5;201mo[0m[38;5;201mo[0m
  [38;5;240m  │[0m         [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  

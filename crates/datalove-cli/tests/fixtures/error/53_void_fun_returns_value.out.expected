@@ -1,5 +1,5 @@
 [31m[F052] Error:[0m void function cannot return a value
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/53_void_fun_returns_value.dfs:2:5[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/53_void_fun_returns_value.dfs:2:5 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;201mr[0m[38;5;201me[0m[38;5;201mt[0m[38;5;249m [0m[38;5;249m4[0m[38;5;249m2[0m
  [38;5;240m  │[0m     [38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  

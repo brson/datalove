@@ -38,7 +38,7 @@ serde.version = "1"
 serde.features = ["rc"]
 enum-iterator.version = "2"
 salsa.version = "0.28.2"
-ariadne.version = "0.4"
+ariadne.version = "0.6"
 rustc-hash.version = "2"
 
 # The crates of this workspace, by version as well as by path: cargo will not

@@ -1,5 +1,5 @@
 [31m[F001] Error:[0m cannot find value `x` in this scope
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/world_error/06_F016_type_mismatch_in_module.world:4:7[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/world_error/06_F016_type_mismatch_in_module.world:4:7 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m4 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201mx[0m
  [38;5;240m  │[0m       [38;5;201m┬[0m  

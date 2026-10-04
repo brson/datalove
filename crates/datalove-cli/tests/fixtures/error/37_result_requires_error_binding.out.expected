@@ -1,5 +1,5 @@
 [31m[F046] Error:[0m Result destructuring requires an else binding
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/37_result_requires_error_binding.dfs:2:8[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/37_result_requires_error_binding.dfs:2:8 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;201ma[0m[38;5;249m [0m[38;5;249m|[0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249m|[0m
  [38;5;240m  │[0m        [38;5;201m┬[0m  

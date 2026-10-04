@@ -1,5 +1,5 @@
 [31m[F073] Error:[0m a view of type `[|i32, 1|]` cannot be written through
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/86_tensor_view_written.dfs:18:18[38;5;246m][0m
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/86_tensor_view_written.dfs:18:18 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m([0m[38;5;249mo[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mt[0m[38;5;201m[[0m[38;5;201mi[0m[38;5;201m][0m[38;5;201m![0m[38;5;249m)[0m
  [38;5;240m   │[0m                  [38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m  
@@ -8,7 +8,7 @@
  [38;5;240m   │[0m [38;5;115mNote[0m: a view shows part of the tensor it indexes, and writing it whole would replace the view rather than the elements it shows. Index down to single elements and write those.
 [38;5;246m────╯[0m
 [31m[F073] Error:[0m a view of type `[|i32, 1|]` cannot be written through
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/86_tensor_view_written.dfs:24:17[38;5;246m][0m
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/86_tensor_view_written.dfs:24:17 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m24 │[0m [38;5;249mc[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249mc[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m([0m[38;5;249mm[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mt[0m[38;5;155m[[0m[38;5;155mi[0m[38;5;155m][0m[38;5;155m![0m[38;5;249m)[0m
  [38;5;240m   │[0m                 [38;5;155m─[0m[38;5;155m─[0m[38;5;155m┬[0m[38;5;155m─[0m  
@@ -17,7 +17,7 @@
  [38;5;240m   │[0m [38;5;115mNote[0m: a view shows part of the tensor it indexes, and writing it whole would replace the view rather than the elements it shows. Index down to single elements and write those.
 [38;5;246m────╯[0m
 [31m[F073] Error:[0m a view of type `[|i32, 1|]` cannot be written through
-    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/86_tensor_view_written.dfs:26:5[38;5;246m][0m
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/86_tensor_view_written.dfs:26:5 [38;5;246m][0m
     [38;5;246m│[0m
  [38;5;246m26 │[0m [38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;187mt[0m[38;5;187m[[0m[38;5;187mi[0m[38;5;187m][0m[38;5;187m![0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mw[0m
  [38;5;240m   │[0m     [38;5;187m─[0m[38;5;187m─[0m[38;5;187m┬[0m[38;5;187m─[0m[38;5;187m─[0m  

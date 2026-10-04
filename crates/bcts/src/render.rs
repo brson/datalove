@@ -13,8 +13,7 @@ use rmx::std::path::Path;
 
 use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, Label, Report, ReportKind, Source};
 
-use crate::diagnostic::{Diagnostic, LabelStyle, Severity};
-use crate::text::InternedText;
+use crate::diagnostic::{Diagnostic, DiagnosticLabel, LabelStyle, Severity};
 
 /// A run of diagnostics printed together.
 ///
@@ -125,75 +124,6 @@ pub fn render_multi_source_diagnostics<'db>(
     }
 }
 
-/// Several lines as one, or nothing where there are none.
-///
-/// Every line after the first is marked with [`CONTINUATION`], for
-/// [`reframe`] to put the frame back in front of.
-fn joined<'db>(db: &'db dyn crate::Db, lines: &[InternedText<'db>]) -> Option<String> {
-    match lines.is_empty() {
-        true => None,
-        false => {
-            let lines: Vec<_> = lines.iter().flat_map(|l| l.as_str(db).lines()).collect();
-            Some(lines.join(&fmt!("\n{CONTINUATION}")))
-        }
-    }
-}
-
-/// The mark on a line of a note or help that is not its first.
-const CONTINUATION: char = '\u{1}';
-
-/// The width of the `Help: ` and `Note: ` ariadne writes before the text.
-const NOTE_LABEL_WIDTH: usize = 6;
-
-/// A rendered report with its notes' and helps' later lines framed.
-///
-/// ariadne writes a note or help as one row, so the lines of a multi-line
-/// one after the first come out at column zero, outside the frame. Each such
-/// line is given the margin of the row it continues, drawn in the same
-/// characters and colours, and indented to line up under the text.
-fn reframe(report: &str) -> String {
-    let mut out = String::with_capacity(report.len());
-    let mut row = "";
-    for line in report.split_inclusive('\n') {
-        match line.strip_prefix(CONTINUATION) {
-            Some(rest) => {
-                out.push_str(&fmt!("{}{:NOTE_LABEL_WIDTH$}", &row[..label_start(row)], ""));
-                out.push_str(rest);
-            }
-            None => {
-                row = line;
-                out.push_str(line);
-            }
-        }
-    }
-    out
-}
-
-/// Where the `Help` or `Note` begins in the row ariadne wrote it on.
-///
-/// That is the first letter, the margin being bars and spaces, or the
-/// colour escape directly in front of it.
-fn label_start(row: &str) -> usize {
-    let bytes = row.as_bytes();
-    let mut escapes_start = None;
-    let mut i = 0;
-    while i < bytes.len() {
-        match bytes[i] {
-            b'\x1b' => {
-                escapes_start.get_or_insert(i);
-                let end = row[i..].find('m').X();
-                i = i.checked_add(end).X().checked_add(1).X();
-            }
-            b if b.is_ascii_alphabetic() => return escapes_start.unwrap_or(i),
-            _ => {
-                escapes_start = None;
-                i = i.checked_add(1).X();
-            }
-        }
-    }
-    panic!("a note or help row with no label: {row:?}");
-}
-
 /// The path as a reader knows it, which is where they are standing.
 fn display_path(file_path: &Path, cwd: &Path) -> String {
     file_path.strip_prefix(cwd).unwrap_or(file_path).display().S()
@@ -206,6 +136,23 @@ fn report_kind(severity: Severity) -> ReportKind<'static> {
         Severity::Note => ReportKind::Advice,
         Severity::Help => ReportKind::Advice,
     }
+}
+
+/// The labels in the order they are read in the source, each with its colour.
+///
+/// ariadne draws labels in the order they were added, and starts the quoted
+/// source over wherever one points before the last, so a primary label added
+/// ahead of a secondary one earlier in the file had the file quoted twice.
+/// The colours are still handed out in the diagnostic's own order, so the
+/// primary label keeps the first.
+fn in_reading_order<'a, 'db, K: Ord>(
+    labels: &'a [DiagnosticLabel<'db>],
+    colors: &mut ColorGenerator,
+    key: impl Fn(&DiagnosticLabel<'db>) -> K,
+) -> Vec<(&'a DiagnosticLabel<'db>, Color)> {
+    let mut labels: Vec<_> = labels.iter().map(|l| (l, label_color(l.style, colors))).collect();
+    labels.sort_by_key(|(l, _)| key(l));
+    labels
 }
 
 /// The colour a label is drawn in.
@@ -239,12 +186,15 @@ impl Sink<'_> {
     }
 
     fn emit<S: ariadne::Span, C: Cache<S::SourceId>>(self, report: Report<'_, S>, cache: C) {
-        let mut bytes = Vec::new();
-        let _ = report.write(cache, &mut bytes);
-        let text = reframe(&String::from_utf8_lossy(&bytes));
         match self {
-            Sink::Stderr => eprint!("{text}"),
-            Sink::Text(out) => out.push_str(&text),
+            Sink::Stderr => {
+                let _ = report.eprint(cache);
+            }
+            Sink::Text(out) => {
+                let mut bytes = Vec::new();
+                let _ = report.write(cache, &mut bytes);
+                out.push_str(&String::from_utf8_lossy(&bytes));
+            }
         }
     }
 }
@@ -263,7 +213,7 @@ fn render_one<'db>(
     // diagnostic carries none.
     let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
 
-    let mut builder = Report::build(report_kind(diag.severity), &file_name, offset)
+    let mut builder = Report::build(report_kind(diag.severity), (&file_name, offset..offset))
         .with_config(sink.config())
         .with_message(diag.message.as_str(db));
 
@@ -271,7 +221,7 @@ fn render_one<'db>(
         builder = builder.with_code(code.as_str(db));
     }
 
-    for label in &diag.labels {
+    for (label, color) in in_reading_order(&diag.labels, colors, |l| l.span.start) {
         // Always a message, even where there is none to give. ariadne draws a
         // label without one *not at all* -- no underline, nothing -- so a
         // caller that asked for a span to be marked and had nothing to add
@@ -283,20 +233,16 @@ fn render_one<'db>(
         let message = label.message.map(|m| m.as_str(db)).unwrap_or("");
         builder = builder.with_label(
             Label::new((&file_name, label.span.C()))
-                .with_color(label_color(label.style, colors))
+                .with_color(color)
                 .with_message(message),
         );
     }
 
-    // One call each, not one per line. ariadne's report holds a single note
-    // and a single help, so `with_note` in a loop keeps the last and drops
-    // every one before it -- a diagnostic that carefully explained itself in
-    // three notes printed one. Joined, they all arrive.
-    if let Some(notes) = joined(db, &diag.notes) {
-        builder = builder.with_note(notes);
+    for note in &diag.notes {
+        builder = builder.with_note(note.as_str(db));
     }
-    if let Some(helps) = joined(db, &diag.helps) {
-        builder = builder.with_help(helps);
+    for help in &diag.helps {
+        builder = builder.with_help(help.as_str(db));
     }
 
     // Every label is in the one source here, so the first of them says which.
@@ -340,35 +286,40 @@ fn render_one_multi_source<'db>(
         .unwrap_or_else(|| base_file_name.C());
     let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
 
-    let mut builder = Report::build(report_kind(diag.severity), primary_file_id.C(), offset)
+    let mut builder = Report::build(report_kind(diag.severity), (primary_file_id.C(), offset..offset))
         .with_message(diag.message.as_str(db));
 
     if let Some(code) = &diag.code {
         builder = builder.with_code(code.as_str(db));
     }
 
-    for label in &diag.labels {
+    // Sources in the order they were first pointed into, which is how their
+    // ids were numbered.
+    let source_index = |l: &DiagnosticLabel<'db>| {
+        let id = &source_to_id[l.text.as_str(db)];
+        match id.strip_prefix(&fmt!("{base_file_name}:")) {
+            Some(n) => n.parse::<usize>().X(),
+            None => 0,
+        }
+    };
+    let labels = in_reading_order(&diag.labels, colors, |l| (source_index(l), l.span.start));
+    for (label, color) in labels {
         let file_id = source_to_id.get(label.text.as_str(db)).X().C();
-        let mut ariadne_label = Label::new((file_id, label.span.C()))
-            .with_color(label_color(label.style, colors));
+        let mut ariadne_label = Label::new((file_id, label.span.C())).with_color(color);
         if let Some(message) = &label.message {
             ariadne_label = ariadne_label.with_message(message.as_str(db));
         }
         builder = builder.with_label(ariadne_label);
     }
 
-    // One call each, not one per line. ariadne's report holds a single note
-    // and a single help, so `with_note` in a loop keeps the last and drops
-    // every one before it -- a diagnostic that carefully explained itself in
-    // three notes printed one. Joined, they all arrive.
-    if let Some(notes) = joined(db, &diag.notes) {
-        builder = builder.with_note(notes);
+    for note in &diag.notes {
+        builder = builder.with_note(note.as_str(db));
     }
-    if let Some(helps) = joined(db, &diag.helps) {
-        builder = builder.with_help(helps);
+    for help in &diag.helps {
+        builder = builder.with_help(help.as_str(db));
     }
 
-    Sink::Stderr.emit(builder.finish(), MultiSourceCache { sources });
+    let _ = builder.finish().eprint(MultiSourceCache { sources });
 }
 
 /// Several in-memory sources, looked up by the id a label was given.
@@ -379,13 +330,12 @@ struct MultiSourceCache {
 impl Cache<String> for MultiSourceCache {
     type Storage = String;
 
-    fn fetch(&mut self, id: &String) -> Result<&Source<String>, Box<dyn std::fmt::Debug + '_>> {
-        self.sources.get(id)
-            .ok_or_else(|| Box::new(fmt!("Source not found: {id}")) as Box<dyn std::fmt::Debug>)
+    fn fetch(&mut self, id: &String) -> Result<&Source<String>, impl std::fmt::Debug> {
+        self.sources.get(id).ok_or_else(|| fmt!("Source not found: {id}"))
     }
 
-    fn display<'a>(&self, id: &'a String) -> Option<Box<dyn std::fmt::Display + 'a>> {
-        Some(Box::new(id.C()))
+    fn display<'a>(&self, id: &'a String) -> Option<impl std::fmt::Display + 'a> {
+        Some(id)
     }
 }
 

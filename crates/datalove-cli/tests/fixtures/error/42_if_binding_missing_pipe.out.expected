@@ -1,5 +1,5 @@
 [31m[P020] Error:[0m expected '|' after binding name
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/42_if_binding_missing_pipe.dfs:2:12[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/42_if_binding_missing_pipe.dfs:2:12 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mi[0m[38;5;249mf[0m[38;5;249m [0m[38;5;249ma[0m[38;5;249m [0m[38;5;249m|[0m[38;5;249mx[0m
  [38;5;240m  │[0m            [38;5;201m│[0m 

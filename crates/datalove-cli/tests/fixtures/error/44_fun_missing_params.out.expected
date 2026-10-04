@@ -1,12 +1,12 @@
 [31m[P002] Error:[0m expected parameter list
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/44_fun_missing_params.dfs:1:8[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/44_fun_missing_params.dfs:1:8 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m1 │[0m [38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mo[0m[38;5;249mo[0m
  [38;5;240m  │[0m        [38;5;201m│[0m 
  [38;5;240m  │[0m        [38;5;201m╰[0m[38;5;201m─[0m expected '(' to start parameter list
 [38;5;246m───╯[0m
 [31m[P001] Error:[0m unexpected statement
-   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0mtests/fixtures/error/44_fun_missing_params.dfs:2:1[38;5;246m][0m
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/44_fun_missing_params.dfs:2:1 [38;5;246m][0m
    [38;5;246m│[0m
  [38;5;246m2 │[0m [38;5;155me[0m[38;5;155mn[0m[38;5;155md[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249mu[0m[38;5;249mn[0m
  [38;5;240m  │[0m [38;5;155m─[0m[38;5;155m┬[0m[38;5;155m─[0m  
