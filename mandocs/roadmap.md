@@ -69,6 +69,9 @@ Focus on ergonomic REPL experience.
 - [ ] script unit undo/redo
 - [ ] assert statements
 - [ ] auto-adapt and other conveniences
+- [ ] rational numbers
+- [ ] monadic math ops
+- [ ] ?/! polymorphism
 - [ ] type sythesis for all literal forms
 - [ ] enum subtyping
 - [ ] module-qualified calls
