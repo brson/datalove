@@ -243,36 +243,61 @@ end fun
 
 // A new list holding the same elements in order.
 //
-// Insertion sort, which keeps equal elements in the order they came in and
-// asks nothing of the element but the comparison. The list is walked once per
-// element placed.
+// A merge sort, bottom up, which keeps equal elements in the order they came
+// in and asks nothing of the element but the comparison: runs of one element
+// are merged into runs of two, those into runs of four, and so on, each pass
+// reading the last pass's list and building the next. That is n log n
+// comparisons. It was an insertion sort, whose n squared over two -- with every
+// comparison cloning both sides -- was a second and a half for four thousand
+// strings.
 fun sorted<T>(ref self: [T]): [T] with { T is ord, }
-  var out: [T] = []
   let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if list_get(ref self, i) |elem|
-      // Where the first element that sorts after this one is, which is where
-      // this one goes. Past the end when there is none.
-      var at: index = list_len(ref out)
-      var j: index = : index / 0
-      let placed = list_len(ref out)
-      loop while j .< placed
-        if list_get(ref out, j) |existing|
-          let after = greater(ref existing, ref elem)
-          let unwanted_existing = existing
-          if after
-            set at = j
-            break
+  var src: [T] = self@
+  var width: index = : index / 1
+  loop while width .< n
+    var dst: [T] = []
+    var lo: index = : index / 0
+    loop while lo .< n
+      // The runs [lo, mid) and [mid, hi), sized from what remains so that
+      // nothing here can overflow.
+      let mid = icall add_wrapping_index(lo, index.min(width, icall sub_wrapping_index(n, lo)))
+      let hi = icall add_wrapping_index(mid, index.min(width, icall sub_wrapping_index(n, mid)))
+      var i = lo
+      var j = mid
+      loop while i .< mid or j .< hi
+        // Left first on a tie, which keeps the sort stable.
+        var take_left = j >= hi
+        if i .< mid and j .< hi
+          if greater_at(ref src, i, j) |after|
+            set take_left = not after
           end if
         end if
-        set j = icall add_wrapping_index(j, : index / 1)
+        if take_left
+          if list_get(ref src, i) |elem|
+            call list_push(mut dst, elem)
+          end if
+          set i = icall add_wrapping_index(i, : index / 1)
+        else
+          if list_get(ref src, j) |elem|
+            call list_push(mut dst, elem)
+          end if
+          set j = icall add_wrapping_index(j, : index / 1)
+        end if
       end loop
-      let inserted = list_insert(mut out, at, elem)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
+      set lo = hi
+    end loop
+    set src = dst
+    set width = index.mul_saturating(width, : index / 2)
   end loop
-  ret out
+  ret src
+end fun
+
+// Whether `self[i]` sorts after `self[j]`; none when either is out of bounds.
+//
+// Compares the two in place, which reading each out with `list_get` would not:
+// that clones, and `greater` clones both sides again.
+fun greater_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
+  ret some greater(ref self[i]?, ref self[j]?)
 end fun
 
 // Where an element that sorts together with this one is, or none.
