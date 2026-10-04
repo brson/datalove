@@ -8,6 +8,8 @@ use std::rc::Rc;
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
+use datalove_datafun_ir::frame_layout::tracking;
+
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
@@ -44,7 +46,6 @@ impl FramePool {
         match self.free.pop() {
             Some(mut frame) => {
                 frame.params.clear();
-                frame.param_initialized.clear();
                 frame.shape_descriptors.clear();
                 frame.layout = layout;
                 frame
@@ -52,12 +53,11 @@ impl FramePool {
             None => Frame {
                 data: AlignedBuffer::uninit(0, 1),
                 layout,
-                value_initialized: Vec::new(),
-                slot_initialized: Vec::new(),
                 params: Vec::new(),
-                param_initialized: Vec::new(),
                 shape_descriptors: Vec::new(),
                 value_tydescs: Vec::new(),
+                is_script: false,
+                liveness: Liveness { kept: cfg!(debug_assertions), ..Liveness::default() },
             },
         }
     }
@@ -68,31 +68,43 @@ impl FramePool {
     }
 }
 
+/// Which of a frame's bindings hold something, kept for every one of them.
+///
+/// The frame does not need this to run. What the ownership analysis cannot
+/// know statically -- a tracked slot, an `out` parameter -- has a tracking byte
+/// in the frame data, as in compiled code, and everything else is precise:
+/// whether it holds a value is fixed by where the program is. A script frame
+/// keeps this anyway, because the REPL recovers from a unit that fails part way
+/// and has to free what the unit had bound by then, and because later units
+/// read and move its bindings. A function frame keeps it in debug builds only,
+/// as a check on the analysis: reading a binding the flags say is empty, or
+/// passing on a destination the analysis says is full when it is not, panics
+/// there, while a release build pays nothing for it.
+#[derive(Default)]
+struct Liveness {
+    /// Whether these are kept at all; when not, they stay empty.
+    kept: bool,
+    values: Vec<bool>,
+    slots: Vec<bool>,
+    params: Vec<bool>,
+}
+
 /// Execution frame for a function or script unit.
+///
+/// Laid out by `ir::frame_layout::FrameLayout`, as compiled code's frames are:
+/// values, slots and tracking bytes at the same offsets. The parameter
+/// pointers that layout puts first are kept in `params` instead, so that they
+/// are a slice of `Value`s to hand a dispatcher, and their space is unused.
 pub struct Frame {
-    /// Raw frame data with proper alignment (values and slots).
+    /// Raw frame data with proper alignment.
     data: AlignedBuffer,
     /// Layout information.
     layout: Rc<IrLayout>,
-    /// Track which values hold something.
-    ///
-    /// A script frame needs this for `DropTracked`. A function frame needs it
-    /// because `resolve_arg` destroys an `out` argument's destination
-    /// before the call, and a destination that has never been written must not
-    /// be destroyed. That used to rest on the frame being zeroed, so that the
-    /// destroy read a null pointer and did nothing -- which made "uninitialized"
-    /// and "empty" the same thing, and is the one invariant the compiled
-    /// backends carry a tracking byte for rather than assume.
-    value_initialized: Vec<bool>,
-    /// Track which slots are initialized.
-    slot_initialized: Vec<bool>,
     /// Each parameter: a pointer to the caller's data and its descriptor.
     ///
     /// One `Value` apiece, so that the arguments as a caller pushed them are a
     /// slice a dispatcher can be handed without building another.
     params: Vec<Value>,
-    /// Track which params are initialized (Out params start uninitialized).
-    param_initialized: Vec<bool>,
     /// Descriptors handed over for this function's declared shapes, in order.
     ///
     /// A shape has no value to carry a descriptor with, so unlike everything
@@ -109,6 +121,11 @@ pub struct Frame {
     /// outside a generic, so it is left empty until one is recorded rather
     /// than filled with nulls on every call.
     value_tydescs: Vec<*const TyDesc>,
+    /// Whether this is a script unit's frame, whose untracked bindings are
+    /// answered for by `liveness` rather than assumed to hold something.
+    is_script: bool,
+    /// Every binding's liveness, where it is kept; see `Liveness`.
+    liveness: Liveness,
 }
 
 impl Frame {
@@ -171,15 +188,20 @@ impl Frame {
         } else {
             self.data = AlignedBuffer::uninit(size, align);
         }
-        refill(&mut self.slot_initialized, layout.slot_offsets.len(), false);
-        refill(&mut self.value_initialized, layout.value_offsets.len(), false);
+        self.clear_tracking();
         self.value_tydescs.clear();
 
+        let layout = &*self.layout;
         for (i, mode) in layout.param_modes.iter().enumerate() {
             if matches!(mode, ParamMode::In | ParamMode::Out) {
                 self.params[i].tydesc = layout.param_tydescs[i];
             }
-            self.param_initialized.push(*mode != ParamMode::Out);
+        }
+        if self.liveness.kept {
+            refill(&mut self.liveness.values, layout.value_offsets.len(), false);
+            refill(&mut self.liveness.slots, layout.slot_offsets.len(), false);
+            self.liveness.params.clear();
+            self.liveness.params.extend(layout.param_modes.iter().map(|m| *m != ParamMode::Out));
         }
     }
 
@@ -199,40 +221,75 @@ impl Frame {
             layout.frame_size as usize,
             layout.frame_align as usize,
         );
-        Self {
+        let mut frame = Self {
             data,
-            value_initialized: vec![false; layout.value_offsets.len()],
-            slot_initialized: vec![false; layout.slot_offsets.len()],
-            layout,
             params: Vec::new(),
-            param_initialized: Vec::new(),
             shape_descriptors: Vec::new(),
             value_tydescs: Vec::new(),
-        }
+            is_script: true,
+            liveness: Liveness {
+                kept: true,
+                values: vec![false; layout.value_offsets.len()],
+                slots: vec![false; layout.slot_offsets.len()],
+                params: Vec::new(),
+            },
+            layout,
+        };
+        frame.clear_tracking();
+        frame
     }
 
+    /// Set every tracking byte to say its binding has never been written.
+    fn clear_tracking(&mut self) {
+        let offset = self.layout.tracking_offset as usize;
+        let count = self.layout.tracking_count as usize;
+        // SAFETY: the tracking bytes are inside the frame, by the layout.
+        unsafe { std::ptr::write_bytes(self.data.as_mut_ptr().add(offset), tracking::UNINIT, count) };
+    }
+
+    /// The tracking byte at `offset`.
+    #[inline(always)]
+    fn tracking_byte(&self, offset: u32) -> u8 {
+        // SAFETY: a tracking byte offset is inside the frame, by the layout.
+        unsafe { *self.data.as_ptr().add(offset as usize) }
+    }
+
+    #[inline(always)]
+    fn set_tracking_byte(&mut self, offset: u32, state: u8) {
+        // SAFETY: a tracking byte offset is inside the frame, by the layout.
+        unsafe { *self.data.as_mut_ptr().add(offset as usize) = state };
+    }
+
+    /// Whether a value holds something.
+    ///
+    /// A value is precise, so in a function it holds something wherever the
+    /// program asks. A script frame says from its flags, since a unit that
+    /// failed part way may not have reached it.
+    #[inline]
+    pub fn value_is_live(&self, id: ValueId) -> bool {
+        let idx = id.0 as usize;
+        if self.is_script {
+            return self.liveness.values[idx];
+        }
+        debug_assert!(!self.liveness.kept || self.liveness.values[idx],
+            "value {:?} was taken to hold something and does not", id);
+        true
+    }
 
     /// Mark a value as holding something.
     #[inline(always)]
     pub fn mark_value_live(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = true;
+        if self.liveness.kept {
+            self.liveness.values[id.0 as usize] = true;
         }
     }
 
     /// Mark a value as holding nothing, having been moved or destroyed.
     #[inline(always)]
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        let idx = id.0 as usize;
-        if idx < self.value_initialized.len() {
-            self.value_initialized[idx] = false;
+        if self.liveness.kept {
+            self.liveness.values[id.0 as usize] = false;
         }
-    }
-
-    /// Whether a value holds something.
-    pub fn is_value_initialized(&self, id: ValueId) -> bool {
-        self.value_initialized[id.0 as usize]
     }
 
     /// Get destination for a value.
@@ -313,132 +370,150 @@ impl Frame {
 
     /// Get slot value (for reading).
     ///
-    /// Returns None if slot is not initialized (moved or not written).
-    /// Panics if slot ID is out of bounds (compiler bug).
+    /// Panics if slot ID is out of bounds (compiler bug), and in a debug build
+    /// where liveness is kept, if the slot holds nothing.
     #[inline(always)]
-    pub fn slot(&self, id: SlotId) -> Option<Value> {
+    pub fn slot(&self, id: SlotId) -> Value {
         let idx = id.0 as usize;
-        if !self.slot_initialized[idx] {
-            return None;
-        }
+        debug_assert!(!self.liveness.kept || self.liveness.slots[idx], "read of an empty slot {:?}", id);
         let offset = self.layout.slot_offsets[idx] as usize;
         let tydesc = self.layout.slot_tydescs[idx];
         let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Some(Value { ptr, tydesc })
+        Value { ptr, tydesc }
     }
 
-    /// Mark slot as initialized.
-    #[inline(always)]
-    pub fn mark_slot_initialized(&mut self, id: SlotId) {
+    /// Whether a slot holds something to destroy.
+    ///
+    /// A tracked slot says from its tracking byte, and a script frame's
+    /// untracked slot from its flags. An untracked slot in a function is taken
+    /// to hold something, as compiled code takes it: the analysis tracks every
+    /// slot whose state it cannot fix and whose type owns something, so an
+    /// untracked slot either holds a value or is of a type that owns nothing,
+    /// and destroying it is right either way.
+    #[inline]
+    pub fn slot_is_live(&self, id: SlotId) -> bool {
         let idx = id.0 as usize;
-        if idx < self.slot_initialized.len() {
-            self.slot_initialized[idx] = true;
+        match self.layout.slot_tracking[idx] {
+            Some(offset) => {
+                let live = self.tracking_byte(offset) == tracking::LIVE;
+                debug_assert!(!self.liveness.kept || self.liveness.slots[idx] == live,
+                    "slot {:?} is {} by its tracking byte and not by its flags",
+                    id, if live { "live" } else { "empty" });
+                live
+            }
+            None if self.is_script => self.liveness.slots[idx],
+            None => {
+                debug_assert!(
+                    !self.liveness.kept || self.liveness.slots[idx] || self.layout.slot_is_copy[idx],
+                    "untracked slot {:?} owns something and holds nothing", id);
+                true
+            }
         }
     }
 
-    /// Check if slot is initialized.
-    #[inline(always)]
-    pub fn is_slot_initialized(&self, id: SlotId) -> bool {
+    /// Check, in a debug build where liveness is kept, that a slot about to be
+    /// moved into holds nothing, since overwriting what it held would leak it.
+    #[inline]
+    pub fn check_slot_empty(&self, id: SlotId) {
         let idx = id.0 as usize;
-        idx < self.slot_initialized.len() && self.slot_initialized[idx]
+        debug_assert!(!self.liveness.kept || !self.liveness.slots[idx],
+            "move into occupied slot {:?}", id);
     }
 
-    /// Mark slot as dropped to prevent double-destroy.
+    /// Mark slot as holding something.
+    #[inline(always)]
+    pub fn mark_slot_live(&mut self, id: SlotId) {
+        let idx = id.0 as usize;
+        if let Some(offset) = self.layout.slot_tracking[idx] {
+            self.set_tracking_byte(offset, tracking::LIVE);
+        }
+        if self.liveness.kept {
+            self.liveness.slots[idx] = true;
+        }
+    }
+
+    /// Mark slot as holding nothing, having been moved or destroyed.
     #[inline]
     pub fn mark_slot_dropped(&mut self, id: SlotId) {
         let idx = id.0 as usize;
-        if idx < self.slot_initialized.len() {
-            self.slot_initialized[idx] = false;
+        if let Some(offset) = self.layout.slot_tracking[idx] {
+            self.set_tracking_byte(offset, tracking::MOVED);
+        }
+        if self.liveness.kept {
+            self.liveness.slots[idx] = false;
         }
     }
 
     /// Read param (dereferences pointer to caller's data).
     ///
-    /// Returns None if param is not initialized.
-    /// Panics if param ID is out of bounds (compiler bug).
+    /// Panics if param ID is out of bounds (compiler bug), and in a debug build
+    /// where liveness is kept, if the parameter holds nothing.
     #[inline(always)]
-    pub fn param(&self, id: ParamId) -> Option<Value> {
+    pub fn param(&self, id: ParamId) -> Value {
         let idx = id.0 as usize;
-        let param = self.params[idx];
-        if param.ptr.is_null() || !self.param_initialized[idx] {
-            return None;
-        }
-        Some(param)
+        debug_assert!(!self.liveness.kept || self.liveness.params[idx], "read of an absent param {:?}", id);
+        self.params[idx]
     }
 
     /// Get mutable destination for Mut/Out params.
     ///
-    /// Panics if param ID is out of bounds or param not set up (compiler bug).
+    /// Panics if param ID is out of bounds (compiler bug).
     pub fn param_dest(&self, id: ParamId) -> Destination {
         let param = self.params[id.0 as usize];
-        assert!(!param.ptr.is_null(), "param_dest called on null param {:?}", id);
         Destination { ptr: param.ptr, tydesc: param.tydesc }
     }
 
-    /// Mark param as dropped (for In params after consuming).
+    /// Whether a parameter holds something.
+    ///
+    /// An `out` parameter says from its tracking byte. Any other holds what
+    /// the caller passed, wherever the program asks.
     #[inline]
-    pub fn mark_param_dropped(&mut self, id: ParamId) {
+    pub fn param_is_live(&self, id: ParamId) -> bool {
         let idx = id.0 as usize;
-        if idx < self.params.len() {
-            self.params[idx].ptr = std::ptr::null_mut();
-            self.param_initialized[idx] = false;
+        let live = match self.layout.param_tracking[idx] {
+            Some(offset) => self.tracking_byte(offset) == tracking::LIVE,
+            None => true,
+        };
+        debug_assert!(!self.liveness.kept || self.liveness.params[idx] == live,
+            "param {:?} is {} by the frame and not by its flags",
+            id, if live { "live" } else { "empty" });
+        live
+    }
+
+    /// Mark param as holding something (after the first write to an `out` one).
+    #[inline]
+    pub fn mark_param_live(&mut self, id: ParamId) {
+        let idx = id.0 as usize;
+        if let Some(offset) = self.layout.param_tracking[idx] {
+            self.set_tracking_byte(offset, tracking::LIVE);
+        }
+        if self.liveness.kept {
+            self.liveness.params[idx] = true;
         }
     }
 
-    /// Check if param is initialized (for ParamStore to decide whether to destroy old value).
-    pub fn is_param_initialized(&self, id: ParamId) -> bool {
+    /// Mark param as holding nothing, having been moved or destroyed.
+    #[inline]
+    pub fn mark_param_dropped(&mut self, id: ParamId) {
         let idx = id.0 as usize;
-        idx < self.param_initialized.len() && self.param_initialized[idx]
-    }
-
-    /// Mark param as initialized (after first write to Out param).
-    pub fn mark_param_initialized(&mut self, id: ParamId) {
-        let idx = id.0 as usize;
-        if idx < self.param_initialized.len() {
-            self.param_initialized[idx] = true;
+        if let Some(offset) = self.layout.param_tracking[idx] {
+            self.set_tracking_byte(offset, tracking::MOVED);
+        }
+        if self.liveness.kept {
+            self.liveness.params[idx] = false;
         }
     }
 
     /// Destroy initialized unit_end bindings on error cleanup.
     ///
     /// Used when a script unit errors out before being added to FrameStore.
-    /// Uses value_initialized to determine what to destroy.
     pub fn destroy_on_error(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
-        let initialized = &mut self.value_initialized;
-
-        // Destroy unit_end values that were initialized.
-        for &vid in unit_end_values {
-            let idx = vid.0 as usize;
-            if !initialized[idx] {
-                continue;
-            }
-            let offset = self.layout.value_offsets[idx] as usize;
-            let tydesc = self.layout.value_tydescs[idx];
-            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-            unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-            }
-            initialized[idx] = false;
-        }
-
-        // Destroy unit_end slots that were initialized.
-        for &sid in unit_end_slots {
-            let idx = sid.0 as usize;
-            if idx < self.slot_initialized.len() && self.slot_initialized[idx] {
-                let offset = self.layout.slot_offsets[idx] as usize;
-                let tydesc = self.layout.slot_tydescs[idx];
-                let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
-                }
-                self.slot_initialized[idx] = false;
-            }
-        }
+        self.destroy_unit_end_bindings(rt_handle, unit_end_values, unit_end_slots);
     }
 
     /// Destroy unit_end bindings (values/slots) in this frame.
@@ -451,36 +526,26 @@ impl Frame {
         unit_end_values: &[ValueId],
         unit_end_slots: &[SlotId],
     ) {
-        let initialized = &mut self.value_initialized;
-
-        // Destroy unit_end values (persistent let bindings).
         for &vid in unit_end_values {
-            let idx = vid.0 as usize;
-            if !initialized[idx] {
+            if !self.value_is_live(vid) {
                 continue;
             }
-            let offset = self.layout.value_offsets[idx] as usize;
-            let tydesc = self.layout.value_tydescs[idx];
-            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            let val = self.value(vid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, val.tydesc);
             }
-            initialized[idx] = false;
+            self.mark_value_dropped(vid);
         }
 
-        // Destroy unit_end slots (persistent var bindings).
         for &sid in unit_end_slots {
-            let idx = sid.0 as usize;
-            if idx >= self.slot_initialized.len() || !self.slot_initialized[idx] {
+            if !self.slot_is_live(sid) {
                 continue;
             }
-            let offset = self.layout.slot_offsets[idx] as usize;
-            let tydesc = self.layout.slot_tydescs[idx];
-            let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
+            let val = self.slot(sid);
             unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, ptr, tydesc);
+                datalove_rt::c::dtlv_rti_any_destroy_local(rt_handle, val.ptr, val.tydesc);
             }
-            self.slot_initialized[idx] = false;
+            self.mark_slot_dropped(sid);
         }
     }
 }
@@ -601,7 +666,7 @@ impl FrameStore {
     /// Panics if unit not found (compiler bug).
     pub fn external_value(&self, unit: u32, value: ValueId) -> Option<Value> {
         let frame = self.frame(unit);
-        if !frame.is_value_initialized(value) {
+        if !frame.value_is_live(value) {
             return None;
         }
         Some(frame.value(value))
@@ -612,7 +677,11 @@ impl FrameStore {
     /// Returns None if the slot has been moved out or was never written.
     /// Panics if unit not found (compiler bug).
     pub fn external_slot(&self, unit: u32, slot: SlotId) -> Option<Value> {
-        self.frame(unit).slot(slot)
+        let frame = self.frame(unit);
+        if !frame.slot_is_live(slot) {
+            return None;
+        }
+        Some(frame.slot(slot))
     }
 
     /// Write a value to a slot in a previous unit.
@@ -631,7 +700,8 @@ impl FrameStore {
         let frame = self.frame_mut(unit);
 
         // A slot that was moved out of is uninitialized and owns nothing.
-        if let Some(old_val) = frame.slot(slot) {
+        if frame.slot_is_live(slot) {
+            let old_val = frame.slot(slot);
             unsafe {
                 datalove_rt::c::dtlv_rti_any_destroy_local(
                     rt_handle,
@@ -645,7 +715,7 @@ impl FrameStore {
         unsafe {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);
         }
-        frame.mark_slot_initialized(slot);
+        frame.mark_slot_live(slot);
     }
 
     /// Mark an external value as moved out.
@@ -660,7 +730,7 @@ impl FrameStore {
 
     /// Check if an external slot is initialized (not moved).
     pub fn is_external_slot_initialized(&self, unit: u32, slot: SlotId) -> bool {
-        self.frame(unit).is_slot_initialized(slot)
+        self.frame(unit).slot_is_live(slot)
     }
 
     /// Destroy live bindings in all frames.

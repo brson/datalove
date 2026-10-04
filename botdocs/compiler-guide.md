@@ -1583,6 +1583,25 @@ reason. A copy of a runtime-sized value is a call to `memcpy` unless the size
 is matched to a constant first (`copy_bytes`). Together these took primes from
 3.6s to 1.6s, sum from 135ms to 87ms and fib from 1.32s to 1.0s.
 
+**The interpreter's frames are compiled code's frames.** `IrLayout` takes its
+offsets from `ir::frame_layout::FrameLayout`, tracking bytes included, so a value,
+slot or tracking byte is where compiled code for the same body keeps it -- the
+precondition for entering compiled code from the middle of an interpreted loop.
+Liveness works as it does in compiled code: a tracked slot or `out` parameter
+says from its tracking byte, and everything else is taken to hold something --
+either it is precise, or, like an unwritten `var n: u32` passed `out`, its type
+owns nothing and destroying it does nothing, which is why the analysis left it
+untracked. The per-binding
+flags the interpreter used to keep for everything (`Liveness` in `frame.rs`) are
+kept only for script frames, which need them for REPL error recovery and for
+later units' reads, and for function frames in debug builds, where they check
+the precise answers and the reads -- so the suite still panics on reading an
+empty slot, and a release build does not pay for the check. On speed it is
+about even: fib and primes 3% faster, sum 6% slower. Sum's loop runs a tracked
+drop and a tracked store every iteration, and a tracking-byte check is a longer
+chain of dependent loads (frame, layout, tracking table, byte) than the flag it
+replaced: fewer instructions, lower IPC.
+
 **A call resolves its arguments into the callee's frame.** `execute_call_site`
 takes the frame from the pool (`FramePool::take`, which only empties the
 parameter lists), pushes each argument straight into it, offers the dispatcher
@@ -1913,7 +1932,7 @@ The three `module-change-*` kinds drive the memoization tests.
 | `const/src/inline.rs` | `inline_script_consts()`, `inline_module_functions()` |
 | `ir/src/lib.rs` | `IrCodeUnit`, `CodeRef`, `IrType`, `Instruction` |
 | `ir/src/layout.rs` | The layout authority for `IrType` |
-| `ir/src/frame_layout.rs` | Frame layout shared by the cranelift and C backends; the interpreter has its own (`interp/src/layout.rs`) |
+| `ir/src/frame_layout.rs` | Frame layout shared by every backend, the interpreter's `IrLayout` included |
 | `ir/src/registry.rs` | `ModuleFunctionRegistry`, `UnitFunctionRegistry` |
 | `datafun/src/pipeline/mod.rs` | `ModuleCompilationPipeline` re-exports |
 | `datafun/src/pipeline/module_pipeline.rs` | The pipeline itself, `add_native_rider_units()` |

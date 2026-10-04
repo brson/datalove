@@ -8,22 +8,21 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{IrCodeUnit, IrType, ParamMode};
+use datalove_datafun_ir::frame_layout::{FrameLayout, SlotLayout};
+use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId, ParamMode, SlotId};
 
 use crate::dispatch::FuncIdentity;
 use crate::tydesc::IrTyDescTable;
-
-/// Align a value up to the given alignment.
-#[inline]
-pub fn align_up(value: u32, align: u32) -> u32 {
-    (value + align - 1) & !(align - 1)
-}
 
 /// Layout information for a function/unit frame.
 ///
 /// Maps ValueId/SlotId to byte offsets within the frame. Everything a frame can
 /// be told from its code unit alone lives here, so that entering the function
 /// reads it rather than working it out again.
+///
+/// The offsets are `ir::frame_layout::FrameLayout`'s, the layout compiled code
+/// uses, flattened for the interpreter to read, with the descriptors the
+/// interpreter needs beside them.
 pub struct IrLayout {
     /// Offset for each ValueId.
     pub value_offsets: Vec<u32>,
@@ -49,6 +48,19 @@ pub struct IrLayout {
     /// Asked at every call, and walking the type to find out was a visible part
     /// of a call's cost, so it is answered once per body here.
     pub param_moves: Vec<bool>,
+    /// The tracking byte of each slot the analysis could not make precise.
+    pub slot_tracking: Vec<Option<u32>>,
+    /// Whether each slot's type is copied, and so owns nothing to destroy.
+    ///
+    /// An untracked slot of such a type may hold nothing at all: the analysis
+    /// does not track it because destroying it does nothing either way. The
+    /// frame's debug checks need to know which those are.
+    pub slot_is_copy: Vec<bool>,
+    /// The tracking byte of each `out` parameter.
+    pub param_tracking: Vec<Option<u32>>,
+    /// Where the tracking bytes start, and how many there are.
+    pub tracking_offset: u32,
+    pub tracking_count: u32,
     /// Total frame size.
     pub frame_size: u32,
     /// Frame alignment.
@@ -61,64 +73,49 @@ impl IrLayout {
         value_types: &[IrType],
         slot_types: &[IrType],
         param_types: &[IrType],
+        tracked_slots: &[SlotId],
+        tracked_params: &[ParamId],
         return_type: Option<&IrType>,
         tydesc_table: &mut IrTyDescTable,
     ) -> Self {
-        let mut value_offsets = Vec::with_capacity(value_types.len());
-        let mut value_tydescs = Vec::with_capacity(value_types.len());
-        let mut slot_offsets = Vec::with_capacity(slot_types.len());
-        let mut slot_tydescs = Vec::with_capacity(slot_types.len());
+        let frame = FrameLayout::compute(
+            param_types, value_types, slot_types, tracked_slots, tracked_params);
 
-        let mut offset: u32 = 0;
-        let mut max_align: u32 = 1;
+        // The interpreter reads and writes a value by its descriptor's size, so
+        // the descriptor has to agree with the layout the offsets came from.
+        let mut described = |types: &[IrType], places: &[SlotLayout]| -> Vec<*const TyDesc> {
+            types.iter().zip(places).map(|(ty, place)| {
+                let tydesc = tydesc_table.get_or_create(ty);
+                let (size, align) = unsafe { ((*tydesc).size, (*tydesc).align) };
+                assert_eq!((size, align), (place.size, place.align),
+                    "the descriptor of {:?} disagrees with its frame layout", ty);
+                tydesc
+            }).collect()
+        };
+        let value_tydescs = described(value_types, &frame.values);
+        let slot_tydescs = described(slot_types, &frame.slots);
 
-        // Layout values first.
-        for ty in value_types {
-            let tydesc = tydesc_table.get_or_create(ty);
-            let size = unsafe { (*tydesc).size };
-            let align = unsafe { (*tydesc).align };
-
-            offset = align_up(offset, align);
-            value_offsets.push(offset);
-            value_tydescs.push(tydesc);
-            offset += size;
-            max_align = max_align.max(align);
-        }
-
-        // Then slots.
-        for ty in slot_types {
-            let tydesc = tydesc_table.get_or_create(ty);
-            let size = unsafe { (*tydesc).size };
-            let align = unsafe { (*tydesc).align };
-
-            offset = align_up(offset, align);
-            slot_offsets.push(offset);
-            slot_tydescs.push(tydesc);
-            offset += size;
-            max_align = max_align.max(align);
-        }
-
-        // Parameters live in the caller's frame, so they take no space here and
-        // only their descriptors are wanted.
         let param_tydescs = param_types.iter()
             .map(|ty| tydesc_table.get_or_create(ty))
             .collect();
         let return_tydesc = return_type.map(|ty| tydesc_table.get_or_create(ty));
 
-        // Final alignment for frame size.
-        let frame_size = align_up(offset, max_align);
-
         Self {
-            value_offsets,
+            value_offsets: frame.values.iter().map(|v| v.offset).collect(),
             value_tydescs,
-            slot_offsets,
+            slot_offsets: frame.slots.iter().map(|s| s.offset).collect(),
             slot_tydescs,
             param_tydescs,
             return_tydesc,
             param_modes: Vec::new(),
             param_moves: Vec::new(),
-            frame_size,
-            frame_align: max_align,
+            slot_tracking: frame.slots.iter().map(|s| s.tracking_byte).collect(),
+            slot_is_copy: slot_types.iter().map(|ty| ty.is_copy()).collect(),
+            param_tracking: frame.params.iter().map(|p| p.tracking_byte).collect(),
+            tracking_offset: frame.tracking_offset,
+            tracking_count: frame.tracking_count,
+            frame_size: frame.frame_size,
+            frame_align: frame.frame_align,
         }
     }
 
@@ -126,11 +123,13 @@ impl IrLayout {
     /// its parameters.
     pub fn of_unit(unit: &IrCodeUnit, tydesc_table: &mut IrTyDescTable) -> Self {
         let Some(ctx) = unit.function_context() else {
-            return Self::compute(&unit.value_types, &unit.slot_types, &[], None, tydesc_table);
+            return Self::compute(
+                &unit.value_types, &unit.slot_types, &[], &unit.tracked_slots, &[], None,
+                tydesc_table);
         };
         let mut layout = Self::compute(
-            &unit.value_types, &unit.slot_types, &ctx.param_types, Some(&ctx.return_type),
-            tydesc_table);
+            &unit.value_types, &unit.slot_types, &ctx.param_types,
+            &unit.tracked_slots, &ctx.tracked_params, Some(&ctx.return_type), tydesc_table);
         layout.param_modes = (0..ctx.param_types.len())
             .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
             .collect();

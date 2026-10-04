@@ -719,25 +719,11 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        // Destroy old value if slot was already initialized.
-                        // This happens when reassigning copy types (no Drop emitted for them).
-                        // A scalar has nothing to destroy, and is most of what
-                        // a loop reassigns.
-                        if frame.is_slot_initialized(*slot_id)
-                            && !is_scalar_tag(unsafe { (*frame.slot_dest(*slot_id).tydesc).type_tag })
-                        {
-                            let old_val = frame.slot(*slot_id).unwrap();
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
+                        // A copied type owns nothing, so whatever the slot held
+                        // before needs no destroying.
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.copy_value(&src_val, dest_slot); }
-                        frame.mark_slot_initialized(*slot_id);
+                        frame.mark_slot_live(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -750,7 +736,7 @@ impl IrInterpreter {
                 }
             }
             Instruction::SlotLoadCopy { dest, slot } => {
-                let slot_val = frame.slot(*slot).unwrap();
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.copy_value(&slot_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -833,15 +819,11 @@ impl IrInterpreter {
                     SlotDest::Local(slot_id) => {
                         // The compiler emits a Drop before SlotStoreMove, so the
                         // slot is empty; overwriting an occupied one would leak it.
-                        assert!(
-                            !frame.is_slot_initialized(*slot_id),
-                            "SlotStoreMove into occupied slot {:?}",
-                            slot_id,
-                        );
+                        frame.check_slot_empty(*slot_id);
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.move_value(&src_val, dest_slot); }
                         Self::mark_source_dropped_local(value, frame);
-                        frame.mark_slot_initialized(*slot_id);
+                        frame.mark_slot_live(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -873,7 +855,7 @@ impl IrInterpreter {
                 // uninitialized memory. Check tracking byte before destroying.
                 let src_val = self.read_operand(value, frame, frames);
                 let dest_ptr = frame.param_dest(*param);
-                if frame.is_param_initialized(*param) {
+                if frame.param_is_live(*param) {
                     unsafe {
                         datalove_rt::c::dtlv_rti_any_destroy_local(
                             self.runtime.handle(),
@@ -883,7 +865,7 @@ impl IrInterpreter {
                     }
                 }
                 unsafe { self.move_value(&src_val, dest_ptr); }
-                frame.mark_param_initialized(*param);
+                frame.mark_param_live(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::RefStore { dest, value } => {
@@ -930,8 +912,8 @@ impl IrInterpreter {
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 // Mark the destination as initialized.
                 match dest {
-                    Operand::Slot(slot) => frame.mark_slot_initialized(*slot),
-                    Operand::Param(param) => frame.mark_param_initialized(*param),
+                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
+                    Operand::Param(param) => frame.mark_param_live(*param),
                     // Other operand types don't have tracking in the same way.
                     _ => {}
                 }
@@ -949,8 +931,8 @@ impl IrInterpreter {
                 self.write_field(current_ptr, current_tydesc, &value_val);
                 // Mark the destination as initialized.
                 match dest {
-                    Operand::Slot(slot) => frame.mark_slot_initialized(*slot),
-                    Operand::Param(param) => frame.mark_param_initialized(*param),
+                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
+                    Operand::Param(param) => frame.mark_param_live(*param),
                     // Other operand types don't have tracking in the same way.
                     _ => {}
                 }
@@ -960,7 +942,7 @@ impl IrInterpreter {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
                 // Slot is not marked dropped - destroy_live_values skips untracked slots,
                 // and precise slots are explicitly dropped via Drop instructions.
-                let slot_val = frame.slot(*slot).unwrap();
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_value_live(*dest);
@@ -968,7 +950,7 @@ impl IrInterpreter {
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
                 // Mark slot dropped so destroy_live_values skips it.
-                let slot_val = frame.slot(*slot).unwrap();
+                let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_slot_dropped(*slot);
@@ -1100,8 +1082,8 @@ impl IrInterpreter {
                 // the callee is handed an empty `data`: two zero words, which
                 // destroys as a no-op and which the call overwrites.
                 let live = match src {
-                    Operand::Slot(id) => frame.is_slot_initialized(*id),
-                    Operand::Param(id) => frame.is_param_initialized(*id),
+                    Operand::Slot(id) => frame.slot_is_live(*id),
+                    Operand::Param(id) => frame.param_is_live(*id),
                     Operand::ExternalSlot { unit, slot } => {
                         frames.is_external_slot_initialized(*unit, *slot)
                     }
@@ -1232,8 +1214,8 @@ impl IrInterpreter {
                 // Only emitted for Tracked bindings (slots, Out params).
                 // Values are Precise and use Drop instead.
                 let is_initialized = match operand {
-                    Operand::Slot(id) => frame.is_slot_initialized(*id),
-                    Operand::Param(id) => frame.is_param_initialized(*id),
+                    Operand::Slot(id) => frame.slot_is_live(*id),
+                    Operand::Param(id) => frame.param_is_live(*id),
                     Operand::ExternalSlot { unit, slot } => {
                         frames.is_external_slot_initialized(*unit, *slot)
                     }
@@ -1929,7 +1911,7 @@ impl IrInterpreter {
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
                 );
-                if frame.is_param_initialized(*param) {
+                if frame.param_is_live(*param) {
                     unsafe {
                         datalove_rt::c::dtlv_rti_any_destroy_local(
                             self.runtime.handle(),
@@ -1939,7 +1921,7 @@ impl IrInterpreter {
                     }
                 }
                 self.write_field(current_ptr, current_tydesc, &value_val);
-                frame.mark_param_initialized(*param);
+                frame.mark_param_live(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
             // Slot tracking variants - these track SLOT state, not value state.
@@ -1947,8 +1929,8 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id).unwrap();
+                        if frame.slot_is_live(*slot_id) {
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -1959,7 +1941,7 @@ impl IrInterpreter {
                         }
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.copy_value(&src_val, dest_slot); }
-                        frame.mark_slot_initialized(*slot_id);
+                        frame.mark_slot_live(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -1975,8 +1957,8 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        if frame.is_slot_initialized(*slot_id) {
-                            let old_val = frame.slot(*slot_id).unwrap();
+                        if frame.slot_is_live(*slot_id) {
+                            let old_val = frame.slot(*slot_id);
                             unsafe {
                                 datalove_rt::c::dtlv_rti_any_destroy_local(
                                     self.runtime.handle(),
@@ -1988,7 +1970,7 @@ impl IrInterpreter {
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.move_value(&src_val, dest_slot); }
                         Self::mark_source_dropped_local(value, frame);
-                        frame.mark_slot_initialized(*slot_id);
+                        frame.mark_slot_live(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
@@ -2082,8 +2064,8 @@ impl IrInterpreter {
     ) -> Value {
         match op {
             Operand::Value(id) => frame.value(*id),
-            Operand::Slot(id) => frame.slot(*id).expect("read of an empty slot"),
-            Operand::Param(id) => frame.param(*id).expect("read of an absent param"),
+            Operand::Slot(id) => frame.slot(*id),
+            Operand::Param(id) => frame.param(*id),
             _ => Self::read_operand_rare(op, frame, frames),
         }
     }
@@ -2110,9 +2092,9 @@ impl IrInterpreter {
     /// bookkeeping covers and this frame cannot see; those are left as they were.
     fn out_dest_holds_value(op: &Operand, frame: &Frame, frames: &FrameStore) -> bool {
         match op {
-            Operand::Value(id) => frame.is_value_initialized(*id),
-            Operand::Slot(id) => frame.is_slot_initialized(*id),
-            Operand::Param(id) => frame.param(*id).is_some(),
+            Operand::Value(id) => frame.value_is_live(*id),
+            Operand::Slot(id) => frame.slot_is_live(*id),
+            Operand::Param(id) => frame.param_is_live(*id),
             Operand::ExternalValue { unit, value } => {
                 frames.external_value(*unit, *value).is_some()
             }
@@ -2404,7 +2386,7 @@ impl IrInterpreter {
     /// Note that a call has written an `out` argument.
     fn mark_out_written(op: &Operand, frame: &mut Frame) {
         match op {
-            Operand::Slot(id) => frame.mark_slot_initialized(*id),
+            Operand::Slot(id) => frame.mark_slot_live(*id),
             Operand::Value(id) => frame.mark_value_live(*id),
             _ => {}
         }
@@ -3104,11 +3086,4 @@ unsafe fn copy_bytes(src: *const u8, dest: *mut u8, size: usize) {
             _ => std::ptr::copy_nonoverlapping(src, dest, size),
         }
     }
-}
-
-/// Whether a value of this tag owns nothing, so destroying it does nothing.
-#[inline]
-fn is_scalar_tag(tag: rtdt::TyTag) -> bool {
-    use rtdt::TyTag::*;
-    matches!(tag, Bool | U8 | U16 | U32 | U64 | I8 | I16 | I32 | I64 | Index | Offset | F32 | F64)
 }

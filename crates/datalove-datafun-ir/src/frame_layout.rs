@@ -1,11 +1,12 @@
 //! Frame layout of a compiled function.
 //!
-//! Where each parameter, value and slot of a code unit lives in the frame the
-//! compiled backends give it, and where the tracking bytes go. Both the
-//! cranelift and the C backend lay their frames out from this. The interpreter
-//! does not: its `IrLayout` keeps parameters out of the frame and tracks
-//! liveness beside it, so its offsets differ from these. Nothing reads one
-//! function's frame from another's code, so the two need not agree.
+//! Where each parameter, value and slot of a code unit lives in its frame, and
+//! where the tracking bytes go. Every backend lays its frames out from this:
+//! the cranelift and C backends, and the interpreter, whose `IrLayout` takes
+//! its offsets from here and keeps its parameter pointers elsewhere, leaving
+//! their space unused. So a frame the interpreter is running holds its values,
+//! slots and tracking bytes where compiled code for the same body would look
+//! for them.
 //!
 //! Sizes come from `layout::layout_of`, so a value occupies the same bytes here
 //! as it does anywhere else.
