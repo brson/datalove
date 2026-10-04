@@ -156,7 +156,8 @@ pub fn unit_ast<'db>(
     let source = unit.source(db);
     let spans = datalove_datafun_parser::datafun_spans(db, source);
     let kind = if unit.is_expr(db) {
-        ScriptUnitKind::Expr(datalove_datafun_parser::parse_expr(db, source))
+        let parsed = datalove_datafun_parser::parse_expr(db, source);
+        ScriptUnitKind::Expr(parsed.expr, parsed.qualified_calls.clone())
     } else {
         let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
         let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
@@ -302,7 +303,7 @@ pub fn typecheck_script_unit<'db>(
     let mut new_fns = Vec::new();
     let mut new_fn_asts = Vec::new();
     let mut new_module_aliases = Vec::new();
-    let mut imported_modules = Vec::new();
+    let mut imported_modules: Vec<String>;
 
     // Typecheck this unit based on kind.
     match &unit_spec.kind {
@@ -321,6 +322,18 @@ pub fn typecheck_script_unit<'db>(
                 &modules_by_path,
             );
             imported_modules = imports;
+
+            let (qualified, qualified_modules) = resolve_script_qualified_calls(
+                db,
+                &parsed.qualified_calls,
+                &new_module_aliases,
+                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                &modules_by_path,
+            );
+            ctx.qualified = qualified;
+            imported_modules.extend(qualified_modules);
+            imported_modules.sort();
+            imported_modules.dedup();
 
             // Add resolved imports to context and track as new bindings.
             //
@@ -401,8 +414,19 @@ pub fn typecheck_script_unit<'db>(
                 }
             }
         }
-        ScriptUnitKind::Expr(expr) => {
-            // Expression unit - just typecheck the expression.
+        ScriptUnitKind::Expr(expr, qualified_calls) => {
+            let (qualified, qualified_modules) = resolve_script_qualified_calls(
+                db,
+                qualified_calls,
+                &[],
+                |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
+                &modules_by_path,
+            );
+            ctx.qualified = qualified;
+            imported_modules = qualified_modules;
+            imported_modules.sort();
+            imported_modules.dedup();
+
             if let Err(e) = ctx.synthesize_expr(*expr) {
                 ctx.add_error(e);
             }
@@ -520,6 +544,7 @@ pub fn typecheck_module<'db>(
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
     import_errors: Vec<crate::UnresolvedImport>,
+    qualified: crate::QualifiedScope<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
@@ -533,6 +558,7 @@ pub fn typecheck_module<'db>(
     for unresolved in &import_errors {
         ctx.report_unresolved_import(unresolved);
     }
+    ctx.qualified = qualified;
 
     // Add imported functions to context.
     //
@@ -666,12 +692,16 @@ pub fn typecheck_module_graph<'db>(
         let import_resolution = resolve_module_imports(db, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db).C();
         let import_errors = import_resolution.errors(db).C();
+        let qualified = import_resolution.qualified(db).C();
 
         // Use empty spans inside tracked function.
         let spans = DatafunSpans::new(vec![]);
 
         // Call the tracked typecheck function.
-        let result = typecheck_module(db, module, parsed, spans, name_resolution, resolved_imports, import_errors, auto_adapt_mode);
+        let result = typecheck_module(
+            db, module, parsed, spans, name_resolution, resolved_imports, import_errors, qualified,
+            auto_adapt_mode,
+        );
 
         // Collect errors from typecheck result.
         let errors = result.errors(db).C();
@@ -745,10 +775,14 @@ pub fn typecheck_module_graph_parallel<'db>(
         let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db_salsa).C();
         let import_errors = import_resolution.errors(db_salsa).C();
+        let qualified = import_resolution.qualified(db_salsa).C();
 
         // Typecheck (tracked, memoized per module).
         let spans = DatafunSpans::new(vec![]);
-        let _ = typecheck_module(db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors, auto_adapt_mode);
+        let _ = typecheck_module(
+            db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors, qualified,
+            auto_adapt_mode,
+        );
     });
 
     // Delegate to tracked function which aggregates results.
@@ -838,7 +872,7 @@ pub fn resolve_module_imports<'db>(
     }
 
     // Call internal implementation.
-    let (imports, errors) = resolve_module_imports_internal(
+    let (imports, errors, qualified) = resolve_module_imports_internal(
         db,
         module_id,
         parsed,
@@ -849,7 +883,7 @@ pub fn resolve_module_imports<'db>(
 
     log_query("resolve_imports", module_path, QueryPhase::End);
 
-    crate::ModuleImportResolution::new(db, module_id, imports, errors)
+    crate::ModuleImportResolution::new(db, module_id, imports, errors, qualified)
 }
 
 
@@ -866,7 +900,7 @@ fn resolve_module_imports_internal<'db>(
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>) {
+) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>, crate::QualifiedScope<'db>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
     let alias_map: HashMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
@@ -952,7 +986,85 @@ fn resolve_module_imports_internal<'db>(
         }
     }
 
-    (resolved_imports, import_errors)
+    let qualified = resolve_qualified_calls(&parsed.qualified_calls, |alias, name| {
+        if let Some(&module_id) = alias_map.get(&alias) {
+            let func = all_exports.get(&module_id)
+                .and_then(|exports| exports.iter().find(|(n, _)| *n == name))
+                .map(|(_, func_type)| *func_type);
+            return Some(func.map(|func| {
+                let ast = module_function_asts.get(&module_id)
+                    .and_then(|funcs| funcs.iter().find(|(n, _)| *n == name))
+                    .map(|(_, ast)| *ast)
+                    .expect("an exported function has an AST, both coming from its module");
+                (func, ast, module_id)
+            }));
+        }
+        let rider = rider_alias_map.get(&alias)?;
+        let func = rider.functions.iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, func_type)| *func_type);
+        Some(func.map(|func| {
+            let stub = rider.function_stubs.iter()
+                .find(|(n, _)| *n == name)
+                .map(|(_, stub)| *stub)
+                .expect("a rider function has a stub, both coming from its interface");
+            (func, stub, rider.module_id)
+        }))
+    });
+
+    (resolved_imports, import_errors, qualified)
+}
+
+/// Resolve each qualified call a unit writes.
+///
+/// `target` answers for one: `None` when nothing is required under the alias,
+/// otherwise the function the module or rider has under the name, if it has
+/// one.
+fn resolve_qualified_calls<'db>(
+    calls: &[(InternedText<'db>, InternedText<'db>)],
+    mut target: impl FnMut(
+        InternedText<'db>,
+        InternedText<'db>,
+    ) -> Option<Option<(TypeFunction<'db>, StmtFun<'db>, ModuleId<'db>)>>,
+) -> crate::QualifiedScope<'db> {
+    let mut scope = crate::QualifiedScope::default();
+    for &(alias, name) in calls {
+        let Some(found) = target(alias, name) else { continue };
+        if !scope.aliases.contains(&alias) {
+            scope.aliases.push(alias);
+        }
+        if let Some((func, ast, module_id)) = found {
+            scope.functions.push(crate::QualifiedFunction { alias, name, func, ast, module_id });
+        }
+    }
+    scope
+}
+
+/// Resolve each qualified call a script unit writes, through the aliases its
+/// own `require`s give and those of the units before it.
+///
+/// The second return is the path of every module an alias resolved to, found
+/// function or not, for the same reason [`resolve_script_imports`] gives.
+fn resolve_script_qualified_calls<'db>(
+    db: &'db dyn crate::Db,
+    calls: &[(InternedText<'db>, InternedText<'db>)],
+    own_aliases: &[(InternedText<'db>, String)],
+    inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
+    modules_by_path: &HashMap<String, Module<'db>>,
+) -> (crate::QualifiedScope<'db>, Vec<String>) {
+    let mut paths = Vec::new();
+    let scope = resolve_qualified_calls(calls, |alias, name| {
+        let path = own_aliases.iter()
+            .rev()
+            .find(|(own, _)| *own == alias)
+            .map(|(_, path)| path.C())
+            .or_else(|| inherited_alias(alias))?;
+        let module = *modules_by_path.get(&path)?;
+        paths.push(path);
+        Some(module_function(script_module_names(db, module), name)
+            .map(|(func, ast)| (func, ast, module.id(db))))
+    });
+    (scope, paths)
 }
 
 /// The modules an import may name, by the path it names them by.

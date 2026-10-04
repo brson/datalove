@@ -1,0 +1,23 @@
+// Calls qualified by module alias, through every backend: two modules'
+// functions of one name side by side, a generic, and a call in a function.
+require module sys/std/u8
+require module sys/std/i8
+require module sys/std/list
+require module sys/std/set
+
+var xs: [u32] = [10, 20]
+call list.push(mut xs, 30)
+debuglog xs
+
+var s: #{u32} = #{1}
+let added = set.insert(mut s, 2)
+debuglog (s, added)
+
+let a: ?u8 = u8.from_int(ref 5)
+let b: ?i8 = i8.from_int(ref -5)
+debuglog (a, b, u8.max_value(), i8.max_value())
+
+fun f(): u8
+    ret u8.max_value()
+end fun
+debuglog f()

@@ -1,0 +1,92 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "import_space": "sys",
+        "kind": "Require",
+        "module_alias": "u8",
+        "package_alias": "std",
+        "variant": "Module"
+      },
+      {
+        "import_space": "sys",
+        "kind": "Require",
+        "module_alias": "set",
+        "package_alias": "std",
+        "variant": "Module"
+      },
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "args": [],
+            "kind": "FunctionCall",
+            "name": "max_value",
+            "qualifier": "u8"
+          }
+        }
+      },
+      {
+        "expr": {
+          "expr": {
+            "args": [
+              {
+                "expr": {
+                  "kind": "Place",
+                  "root": "s",
+                  "steps": []
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "FunctionCall",
+            "name": "insert",
+            "qualifier": "set"
+          }
+        },
+        "kind": "ExprStatement"
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Some",
+            "payload": {
+              "expr": {
+                "kind": "TryOption",
+                "operand": {
+                  "expr": {
+                    "args": [
+                      {
+                        "expr": {
+                          "kind": "Int",
+                          "type_hint": null,
+                          "value": "3"
+                        }
+                      }
+                    ],
+                    "kind": "FunctionCall",
+                    "name": "from_int",
+                    "qualifier": "u8"
+                  }
+                }
+              }
+            },
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

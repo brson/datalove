@@ -1,0 +1,17 @@
+require module sys/std/u8
+---
+require module sys/std/i8
+---
+u8.max_value()
+---
+let a: ?i8 = i8.from_int(ref 300)
+---
+a
+---
+var xs: [u32] = [1]
+---
+require module sys/std/list
+---
+call list.push(mut xs, 2)
+---
+xs

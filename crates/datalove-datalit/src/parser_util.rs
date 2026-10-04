@@ -91,6 +91,8 @@ pub enum NameKind {
     Function,
     /// A type alias or type parameter.
     Type,
+    /// A module or rider, under the alias `require` gives it.
+    Module,
 }
 
 /// Words that start an expression, and so cannot be read as a value's name.
@@ -123,6 +125,7 @@ pub fn reserved_for(word: &str, kind: NameKind) -> Option<&'static str> {
             Some("it says how a parameter is passed")
         }
         NameKind::Function if expression => Some("it starts an expression"),
+        NameKind::Module if expression => Some("it starts an expression"),
         NameKind::Type if is_type_word(word) => Some("it is a type, or starts one"),
         _ => None,
     }

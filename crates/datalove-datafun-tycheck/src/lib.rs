@@ -416,8 +416,8 @@ pub struct ExprTypecheckResult<'db> {
 pub enum ScriptUnitKind<'db> {
     /// A fragment containing statements and pre-computed name resolution.
     Fragment(ParsedStatements<'db>, CollectedNames<'db>),
-    /// A single expression.
-    Expr(ExprFun<'db>),
+    /// A single expression, and the qualified calls it makes.
+    Expr(ExprFun<'db>, datalove_datafun_ast::ast::QualifiedCalls<'db>),
 }
 
 /// Spec for a single script unit (with pre-parsed content).
@@ -547,6 +547,35 @@ pub struct ModuleImportResolution<'db> {
     /// Imports that name nothing.
     #[returns(ref)]
     pub errors: Vec<UnresolvedImport>,
+
+    /// What the module's qualified calls name.
+    #[returns(ref)]
+    pub qualified: QualifiedScope<'db>,
+}
+
+/// What the qualified calls in one unit of source resolve to.
+///
+/// Only the `alias.function` pairs the source writes are looked up, so a unit
+/// depends on the functions it names and no others, as with imports. A pair
+/// absent here is reported at each call that writes it.
+#[derive(Clone, Default, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct QualifiedScope<'db> {
+    /// Each pair written that names a function.
+    pub functions: Vec<QualifiedFunction<'db>>,
+    /// Each alias written that names a module or rider.
+    pub aliases: Vec<InternedText<'db>>,
+}
+
+/// A function a qualified call names, through the alias it was written with.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct QualifiedFunction<'db> {
+    pub alias: InternedText<'db>,
+    pub name: InternedText<'db>,
+    pub func: TypeFunction<'db>,
+    pub ast: StmtFun<'db>,
+    pub module_id: ModuleId<'db>,
 }
 
 /// An import that names nothing, found before there is a context to report it

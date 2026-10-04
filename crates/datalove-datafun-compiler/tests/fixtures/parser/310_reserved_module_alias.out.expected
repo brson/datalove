@@ -1,0 +1,48 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "import_space": "local",
+        "kind": "Require",
+        "module_alias": "data",
+        "package_alias": "test",
+        "variant": "Module"
+      },
+      {
+        "kind": "Require",
+        "name": "some",
+        "variant": "Rider"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`data` is reserved, since it starts an expression",
+          "span": [
+            26,
+            30
+          ],
+          "text": "data"
+        }
+      ],
+      "message": "`data` cannot be declared here"
+    },
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`some` is reserved, since it starts an expression",
+          "span": [
+            45,
+            49
+          ],
+          "text": "some"
+        }
+      ],
+      "message": "`some` cannot be declared here"
+    }
+  ]
+}

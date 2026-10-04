@@ -110,6 +110,8 @@ pub struct TypeContext<'db> {
     pub(crate) expr_types: ExprTypes<'db>,
     /// Resolved call targets, indexed by ExprFunctionCall ID.
     pub(crate) call_targets: CallTargets<'db>,
+    /// What this unit's qualified calls name.
+    pub(crate) qualified: crate::QualifiedScope<'db>,
     /// Stack of loop depth (for validating break/continue are inside a loop).
     pub(crate) loop_depth: usize,
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
@@ -186,6 +188,7 @@ impl<'db> TypeContext<'db> {
             pending_diagnostics: Vec::new(),
             expr_types: ExprTypes::new(),
             call_targets: CallTargets::new(),
+            qualified: crate::QualifiedScope::default(),
             loop_depth: 0,
             ref_context: false,
             mut_context: false,
@@ -459,10 +462,11 @@ impl<'db> TypeContext<'db> {
         &mut self,
         expr: ExprFun<'db>,
         func_name: InternedText<'db>,
+        func_ast: Option<(StmtFun<'db>, Option<ModuleId<'db>>)>,
         expected: usize,
         actual: usize,
     ) -> TypeError {
-        let (func_local_index, func_module_id) = self.lookup_function_ast(func_name)
+        let (func_local_index, func_module_id) = func_ast
             .map(|(func_ast, mod_id)| (func_ast.local_index(self.db), mod_id))
             .unwrap_or((0, None));
 
@@ -586,6 +590,42 @@ replace the view rather than the elements it shows. Index down to single element
             }
         };
         self.add_error(error);
+    }
+
+    /// The function a qualified call names, reporting the call if it names none.
+    ///
+    /// F078 when nothing is required under the alias, as for an import, with a
+    /// word for the reader who wrote a value there expecting a method; F002 when
+    /// the module or rider has no such function.
+    pub fn lookup_qualified(
+        &mut self,
+        expr: ExprFun<'db>,
+        alias: InternedText<'db>,
+        name: InternedText<'db>,
+    ) -> Result<crate::QualifiedFunction<'db>, TypeError> {
+        if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
+            return Ok(*found);
+        }
+        let site = ErrorSite::Expr(ExprKey::of(self.db, expr));
+        let module = alias.as_str(self.db);
+        let item = name.as_str(self.db);
+        if self.qualified.aliases.contains(&alias) {
+            self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
+            return Err(TypeError::UnresolvedName(fmt!("{module}.{item}")));
+        }
+        let note = if self.variables.contains_key(&alias) {
+            fmt!("`{module}` is a value here, and a value has no functions to call: pass it as an argument instead")
+        } else {
+            S("a qualified call names a module or rider required first, with `require module` or `require rider`")
+        };
+        self.push_coded(
+            site,
+            "F078",
+            fmt!("nothing named `{module}` is required to call into"),
+            S("no such module or rider"),
+            Some(note),
+        );
+        Err(TypeError::UnresolvedName(fmt!("module {module}")))
     }
 
     /// Report a diagnostic worded by the caller, at `site`.

@@ -1,0 +1,183 @@
+[
+  {
+    "input": "require module sys/std/u8",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/u8"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "require module sys/std/i8",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/i8"
+      }
+    },
+    "eval": "Nothing",
+    "environment": []
+  },
+  {
+    "input": "u8.max_value()",
+    "parse": {
+      "Command": {
+        "Expression": "u8.max_value()"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "u8",
+        "value": "255"
+      }
+    },
+    "environment": []
+  },
+  {
+    "input": "let a: ?i8 = i8.from_int(ref 300)",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a: ?i8 = i8.from_int(ref 300)"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "a",
+            "ty": "option<i8>",
+            "value": "none"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      }
+    ]
+  },
+  {
+    "input": "a",
+    "parse": {
+      "Command": {
+        "Expression": "a"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "option<i8>",
+        "value": "none"
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      }
+    ]
+  },
+  {
+    "input": "var xs: [u32] = [1]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var xs: [u32] = [1]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "xs",
+            "ty": "list<u32>",
+            "value": "[1]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      },
+      {
+        "name": "xs",
+        "ty": "list<u32>",
+        "value": "[1]"
+      }
+    ]
+  },
+  {
+    "input": "require module sys/std/list",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "require module sys/std/list"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      },
+      {
+        "name": "xs",
+        "ty": "list<u32>",
+        "value": "[1]"
+      }
+    ]
+  },
+  {
+    "input": "call list.push(mut xs, 2)",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "call list.push(mut xs, 2)"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      },
+      {
+        "name": "xs",
+        "ty": "list<u32>",
+        "value": "[1, 2]"
+      }
+    ]
+  },
+  {
+    "input": "xs",
+    "parse": {
+      "Command": {
+        "Expression": "xs"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "list<u32>",
+        "value": "[1, 2]"
+      }
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "option<i8>",
+        "value": "none"
+      },
+      {
+        "name": "xs",
+        "ty": "list<u32>",
+        "value": "[1, 2]"
+      }
+    ]
+  }
+]

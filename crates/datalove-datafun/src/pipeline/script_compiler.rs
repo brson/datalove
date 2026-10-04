@@ -704,14 +704,20 @@ impl<'db> ScriptCompiler<'db> {
         let db = self.db;
         let mut used: Vec<String> =
             output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect();
-        if let ScriptUnitKind::Fragment(parsed, _) =
-            &unit_ast(db, self.scripts[index].unit(db)).kind
-        {
-            for statement in parsed.statements.iter() {
-                if let Statement::Import(import) = statement {
-                    used.push(import.module_name.as_str(db).S());
+        let qualified_calls = match &unit_ast(db, self.scripts[index].unit(db)).kind {
+            ScriptUnitKind::Fragment(parsed, _) => {
+                for statement in parsed.statements.iter() {
+                    if let Statement::Import(import) = statement {
+                        used.push(import.module_name.as_str(db).S());
+                    }
                 }
+                &parsed.qualified_calls
             }
+            ScriptUnitKind::Expr(_, qualified_calls) => qualified_calls,
+        };
+        // A qualified call uses its alias the way an import does.
+        for (alias, _) in qualified_calls.iter() {
+            used.push(alias.as_str(db).S());
         }
         used
     }
@@ -871,7 +877,7 @@ impl<'db> ScriptCompiler<'db> {
             ScriptUnitKind::Fragment(parsed, _) => {
                 ParsedUnit::Fragment { stmts: parsed.statements.to_vec() }
             }
-            ScriptUnitKind::Expr(expr) => ParsedUnit::Expr(*expr),
+            ScriptUnitKind::Expr(expr, _) => ParsedUnit::Expr(*expr),
         }
     }
 

@@ -1,0 +1,34 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Place",
+            "root": "f",
+            "steps": []
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "a call's arguments are written against what is called",
+          "span": [
+            10,
+            13
+          ],
+          "text": "(1)"
+        }
+      ],
+      "message": "this `(` is written apart from what it calls"
+    }
+  ]
+}

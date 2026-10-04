@@ -1,0 +1,20 @@
+----------
+module local/test/base
+----------
+
+fun add_one(x: int): int
+    ret x + :int/1
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/base
+
+fun main(x: int): int
+    let a = base.add_two(x)
+    let b = nothing.add_one(x)
+    let c = x.add_one(x)
+    ret base.add_one(x, x)
+end fun

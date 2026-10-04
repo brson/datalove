@@ -94,6 +94,26 @@ impl<'db> ParseSpanEntry<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ParsedStatements<'db> {
     pub statements: std::sync::Arc<Vec<Statement<'db>>>,
+    /// Every `alias.function` a qualified call names, once each, in the order
+    /// first written.
+    ///
+    /// Gathered while parsing so that resolving them, which is what makes a
+    /// unit depend on the module an alias names, asks for only the functions
+    /// the source mentions rather than walking it again or taking every
+    /// function of every required module.
+    pub qualified_calls: QualifiedCalls<'db>,
+}
+
+/// The `(alias, function)` pairs a source's qualified calls name.
+pub type QualifiedCalls<'db> = std::sync::Arc<Vec<(InternedText<'db>, InternedText<'db>)>>;
+
+/// Result of parsing a source text as a single expression.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ParsedExpr<'db> {
+    pub expr: ExprFun<'db>,
+    /// As [`ParsedStatements::qualified_calls`].
+    pub qualified_calls: QualifiedCalls<'db>,
 }
 
 /// Parse result containing parsed statements and span side tables.
@@ -750,6 +770,11 @@ pub struct ExprFunctionCall<'db> {
     /// Sequential index within the function (identity key).
     #[returns(copy)]
     pub local_index: u32,
+    /// Module alias the call is qualified with: `u8` in `u8.max_value()`.
+    ///
+    /// `None` for an unqualified call, which names a function in scope.
+    #[returns(copy)]
+    pub qualifier: Option<InternedText<'db>>,
     #[returns(copy)]
     pub name: InternedText<'db>,
     #[returns(ref)]

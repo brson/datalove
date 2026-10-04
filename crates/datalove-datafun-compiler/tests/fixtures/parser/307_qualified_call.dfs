@@ -1,0 +1,6 @@
+require module sys/std/u8
+require module sys/std/set
+
+let a = u8.max_value()
+call set.insert(mut s, 1)
+let b = some u8.from_int(ref 3)?

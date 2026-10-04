@@ -99,6 +99,8 @@ pub(super) struct Parser<'db> {
     import_spans: Vec<SpanEntry>,
     /// Accumulated spans of bare names in type position, indexed by local_index.
     alias_spans: Vec<SpanEntry>,
+    /// Accumulated `(alias, function)` pairs of qualified calls, as written.
+    qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)>,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -142,6 +144,7 @@ impl<'db> Parser<'db> {
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
             alias_spans: Vec::new(),
+            qualified_calls: Vec::new(),
             branch_context: None,
             current_fn_name: None,
             expr_counter: counters.expr,
@@ -212,6 +215,7 @@ impl<'db> Parser<'db> {
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
             alias_spans: Vec::new(),
+            qualified_calls: Vec::new(),
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
@@ -252,6 +256,7 @@ impl<'db> Parser<'db> {
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
             alias_spans: Vec::new(),
+            qualified_calls: Vec::new(),
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
@@ -459,7 +464,6 @@ impl<'db> Parser<'db> {
         TextSpan::new(self.source_text, end..end)
     }
 
-    /// Create an expression and record its span in the side table.
     /// Read the name a declaration introduces, reporting it if it is
     /// reserved for this kind of declaration.
     ///
@@ -483,6 +487,20 @@ impl<'db> Parser<'db> {
         Some(name)
     }
 
+    /// Where an expression this parser created begins.
+    pub(super) fn expr_span_start(&self, expr: ast::ExprFun<'db>) -> usize {
+        // A parse error carries its own span rather than filing one.
+        if let ast::ExprFunKind::ParseError(error) = expr.expr(self.db) {
+            return error.span.start;
+        }
+        let key = ast::ExprKey::of(self.db, expr);
+        self.expr_spans.iter().rev()
+            .find(|entry| entry.expr_key == key)
+            .map(|entry| entry.span.start)
+            .expect("an expression is given its span when it is created")
+    }
+
+    /// Create an expression and record its span in the side table.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
         let expr = ast::ExprFun::new(
             self.db,
@@ -560,6 +578,17 @@ impl<'db> Parser<'db> {
         self.type_alias_spans.append(&mut sub.type_alias_spans);
         self.import_spans.append(&mut sub.import_spans);
         self.alias_spans.append(&mut sub.alias_spans);
+        self.qualified_calls.append(&mut sub.qualified_calls);
+    }
+
+    /// Note a qualified call, for [`ast::ParsedStatements::qualified_calls`].
+    pub(super) fn record_qualified_call(&mut self, alias: InternedText<'db>, name: InternedText<'db>) {
+        self.qualified_calls.push((alias, name));
+    }
+
+    /// Take the accumulated qualified calls (consumes them).
+    pub(super) fn take_qualified_calls(&mut self) -> Vec<(InternedText<'db>, InternedText<'db>)> {
+        rmx::std::mem::take(&mut self.qualified_calls)
     }
 
     /// Record a break statement span and return its local_index.

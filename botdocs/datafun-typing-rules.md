@@ -177,6 +177,19 @@ for all i: ei <= Ti
 f(e1, e2, ..., en) => R
 ```
 
+### Rule: Syn-QualifiedCall
+```
+m is required as a module or rider whose function f has type (T1, ..., Tn) -> R
+args.len() == n
+for all i: ei <= Ti
+---------------------------------------------------
+m.f(e1, e2, ..., en) => R
+```
+
+**Note**: Only the `m.f` pairs a unit writes are looked up, gathered by the
+parser into `ParsedStatements::qualified_calls`, so a unit depends on the
+functions it calls and not on everything its required modules have.
+
 ### Rule: Syn-TryOption (?)
 ```
 e => Option<T>
@@ -655,8 +668,8 @@ are unassigned.
 
 ### Expression Errors
 - **F001**: Undefined variable
-- **F002**: Undefined function; also an import of a function the module or
-  rider does not have
+- **F002**: Undefined function; also an import or qualified call of a function
+  the module or rider does not have
 - **F011**: Cannot synthesize type; also an index into something that is not a
   list, map or tensor, whether read or written by `set`
 - **F016**: Type mismatch; also an element of an unhinted collection literal
@@ -716,7 +729,8 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F064**: Unknown type name
 - **F066**: A type alias defined twice
 - **F077**: A const parameter whose type is a type parameter
-- **F078**: An import from a name that no `require` brought in
+- **F078**: An import from, or qualified call through, a name that no
+  `require` brought in
 
 ### Inherited from Datalit
 Datalit's own `TypeMismatch`, `CannotSynthesize` and `IntOutOfRange` are
@@ -769,3 +783,5 @@ Function calls store resolved call targets (AST + module ID) for the interpreter
 ### Module Imports
 
 Imported functions are added to the context with their resolved AST and source module ID. The type signature comes from the source module's exports.
+
+Qualified calls resolve the same way, into `TypeContext::qualified` rather than the name table, so `u8.from_int` and `i8.from_int` sit side by side. A module's are resolved with its imports in `resolve_module_imports`; a script unit's in `typecheck_script_unit`, through `module_alias_at` for an alias an earlier unit required, adding the module to the unit's `imported_modules`.

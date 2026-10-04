@@ -316,24 +316,25 @@ The candidate syntaxes considered were a type-testing `if` (`if d is u32 |x|`),
 (`case : u32 |x|`). Unchosen, along with whether the test is structural or
 nominal.
 
-## One function per name, so no prelude
+## One function per name, so no prelude of imports
 
-**Reproduced.** `TypeContext.functions` maps a name to one `TypeFunction`, and
-importing a second function of the same name is F059 ("a name binds one
-function"). There are no qualified calls either: `u8.from_int(5)` is P021, since
-`require module` binds an alias that only `import` uses, and `import` has no
-`as`. Together, one script cannot use both `u8.from_int` and `i8.from_int`.
+**Reproduced; worked around by qualified calls.** `TypeContext.functions` maps
+a name to one `TypeFunction`, and importing a second function of the same name
+is F059 ("a name binds one function"). Qualified calls (botspec Section 9.4)
+now let one script use both `u8.from_int` and `i8.from_int`, each through its
+module's alias, so the collision no longer blocks a program.
 
-The same blocks a REPL prelude: 152 of the 275 distinct function names in
-`sys/std` are defined in more than one module (`min`, `max` and `clamp` in
-fifteen, `from_int` in thirteen), so any prelude naming more than one numeric
-type collides with itself.
+It still blocks a prelude made of imports: 152 of the 275 distinct function
+names in `sys/std` are defined in more than one module (`min`, `max` and
+`clamp` in fifteen, `from_int` in thirteen), so any prelude importing from more
+than one numeric type collides with itself. A prelude that requires modules
+and leaves their functions to be called qualified does not.
 
-What it would take is either fix. Exact-match overloading is cheaper than its
-reputation here, because datalove has no implicit conversions to rank: a call
-resolves to the one candidate whose parameters match, in the typechecker, and
-nothing below it changes. Qualified calls (`f64.sqrt(2.0)`) and `import ... as`
-are each smaller still and also remove the collision.
+What it would take to import both is exact-match overloading or
+`import ... as`. Overloading is cheaper than its reputation here, because
+datalove has no implicit conversions to rank: a call resolves to the one
+candidate whose parameters match, in the typechecker, and nothing below it
+changes.
 
 ## Borrowed enum payloads and tables inside a generic were never probed
 

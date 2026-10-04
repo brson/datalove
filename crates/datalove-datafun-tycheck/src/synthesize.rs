@@ -905,9 +905,19 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     let name = call.name(db);
     let args = call.args(db);
 
-    // F002: Undefined function.
-    let func_type = ctx.lookup_function(name)
-        .ok_or_else(|| ctx.error_undefined_function(expr, name))?;
+    // F002: Undefined function. A qualified call is looked for in the module
+    // its alias names, and an unqualified one among the functions in scope.
+    let (func_type, func_ast) = match call.qualifier(db) {
+        Some(alias) => {
+            let found = ctx.lookup_qualified(expr, alias, name)?;
+            (found.func, Some((found.ast, Some(found.module_id))))
+        }
+        None => {
+            let func_type = ctx.lookup_function(name)
+                .ok_or_else(|| ctx.error_undefined_function(expr, name))?;
+            (func_type, ctx.lookup_function_ast(name))
+        }
+    };
 
     let param_types = func_type.param_types(db);
     let param_modes = func_type.param_modes(db);
@@ -916,7 +926,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
 
     // F045: Function arity mismatch.
     if args.len() != param_types.len() {
-        return Err(ctx.error_arity_mismatch(expr, name, param_types.len(), args.len()));
+        return Err(ctx.error_arity_mismatch(expr, name, func_ast, param_types.len(), args.len()));
     }
 
     // Collect comptime parameter indices.
@@ -1015,7 +1025,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     // Store resolved call target for interpreter.
     // A bound says which types its parameter may be, and this is where that is
     // settled: the call site is what picks one.
-    if let Some((func_ast, _)) = ctx.lookup_function_ast(name) {
+    if let Some((func_ast, _)) = func_ast {
         let bounds = func_ast.type_bounds(db);
         for (i, param) in func_ast.type_params(db).iter().enumerate() {
             let Some(Some(bound)) = bounds.get(i) else { continue };
@@ -1030,7 +1040,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
         }
     }
 
-    if let Some((func_ast, module_id)) = ctx.lookup_function_ast(name) {
+    if let Some((func_ast, module_id)) = func_ast {
         // What the type parameters were bound to, which lowering needs in order
         // to say what descriptors the callee gets.
         //

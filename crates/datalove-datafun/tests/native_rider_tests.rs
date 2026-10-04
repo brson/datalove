@@ -13,7 +13,7 @@ use datalove_datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 #[test]
 fn test_native_rider_int_add() {
-    let worldfile = r#"
+    let result = run_main_with_int_add(r#"
 ----------
 rider testlib
 ----------
@@ -28,8 +28,33 @@ import testlib.int_add
 fun main(): i32
     ret int_add(3, 4)
 end fun
-"#;
+"#);
+    assert_eq!(result, 7, "int_add(3, 4) should return 7");
+}
 
+#[test]
+fn test_native_rider_qualified_call() {
+    let result = run_main_with_int_add(r#"
+----------
+rider testlib
+----------
+native fun int_add(a: i32, b: i32): i32
+
+----------
+module local/test/main
+----------
+require rider testlib
+
+fun main(): i32
+    ret testlib.int_add(3, 4)
+end fun
+"#);
+    assert_eq!(result, 7, "testlib.int_add(3, 4) should return 7");
+}
+
+/// Compile a worldfile whose `local/test/main` has an `i32` `main`, and run it
+/// with the rider's `int_add` registered.
+fn run_main_with_int_add(worldfile: &str) -> i32 {
     let mut db = datafun::Database::default();
 
     // Parse the worldfile into sections.
@@ -101,8 +126,8 @@ end fun
 
     // Read the result.
     let result = unsafe { *(ret_buffer.as_ptr() as *const i32) };
-    assert_eq!(result, 7, "int_add(3, 4) should return 7");
 
     // Cleanup.
     env.destroy_live_values(interp.runtime_handle());
+    result
 }

@@ -1,0 +1,108 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "only a function can be called"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "only a function can be called"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "only a function can be called"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "only a function can be called"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P072",
+      "labels": [
+        {
+          "message": "this is not a function, or a function in a module",
+          "span": [
+            8,
+            11
+          ],
+          "text": "p.0"
+        }
+      ],
+      "message": "only a function can be called"
+    },
+    {
+      "code": "P072",
+      "labels": [
+        {
+          "message": "this is not a function, or a function in a module",
+          "span": [
+            23,
+            29
+          ],
+          "text": "xs[0]?"
+        }
+      ],
+      "message": "only a function can be called"
+    },
+    {
+      "code": "P072",
+      "labels": [
+        {
+          "message": "this is not a function, or a function in a module",
+          "span": [
+            41,
+            45
+          ],
+          "text": "f(1)"
+        }
+      ],
+      "message": "only a function can be called"
+    },
+    {
+      "code": "P072",
+      "labels": [
+        {
+          "message": "this is not a function, or a function in a module",
+          "span": [
+            57,
+            62
+          ],
+          "text": "a.b.c"
+        }
+      ],
+      "message": "only a function can be called"
+    }
+  ]
+}

@@ -1,0 +1,112 @@
+{
+  "diagnostics": [
+    {
+      "code": "F002",
+      "labels": [
+        {
+          "message": "no such function",
+          "span": [
+            67,
+            79
+          ],
+          "text": "base.add_two"
+        }
+      ],
+      "message": "`base` has no function `add_two`"
+    },
+    {
+      "code": "F078",
+      "labels": [
+        {
+          "message": "no such module or rider",
+          "span": [
+            95,
+            110
+          ],
+          "text": "nothing.add_one"
+        }
+      ],
+      "message": "nothing named `nothing` is required to call into"
+    },
+    {
+      "code": "F078",
+      "labels": [
+        {
+          "message": "no such module or rider",
+          "span": [
+            126,
+            135
+          ],
+          "text": "x.add_one"
+        }
+      ],
+      "message": "nothing named `x` is required to call into"
+    },
+    {
+      "code": "F045",
+      "labels": [
+        {
+          "message": "expected 1 argument",
+          "span": [
+            147,
+            159
+          ],
+          "text": "base.add_one"
+        },
+        {
+          "message": "function `add_one` defined here with 1 parameter",
+          "span": [
+            1,
+            4
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "this function takes 1 argument but 2 were supplied"
+    }
+  ],
+  "modules": {
+    "base": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "add_one",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        }
+      ]
+    },
+    "main": {
+      "errors": [
+        {
+          "kind": "UnresolvedName",
+          "name": "base.add_two"
+        },
+        {
+          "kind": "UnresolvedName",
+          "name": "module nothing"
+        },
+        {
+          "kind": "UnresolvedName",
+          "name": "module x"
+        },
+        {
+          "actual": 2,
+          "expected": 1,
+          "kind": "ArityMismatch"
+        }
+      ],
+      "functions": [
+        {
+          "name": "main",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        }
+      ]
+    }
+  }
+}

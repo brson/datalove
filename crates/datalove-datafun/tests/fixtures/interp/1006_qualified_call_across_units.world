@@ -1,0 +1,37 @@
+----------
+module local/test/meters
+----------
+
+fun scale(x: int): int
+    ret x * :int/100
+end fun
+
+----------
+module local/test/feet
+----------
+
+fun scale(x: int): int
+    ret x * :int/3
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// The aliases come from one unit, and the calls through them from later ones.
+require module local/test/meters
+require module local/test/feet
+
+----------
+scriptunit-fragment
+----------
+
+let a = meters.scale(:int/2)
+let b = feet.scale(:int/5)
+debuglog (a, b)
+
+----------
+scriptunit-expr
+----------
+
+meters.scale(:int/1) + feet.scale(:int/1)

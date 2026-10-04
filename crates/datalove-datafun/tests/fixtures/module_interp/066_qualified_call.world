@@ -1,0 +1,28 @@
+----------
+module local/test/meters
+----------
+
+fun scale(x: int): int
+    ret x * :int/100
+end fun
+
+----------
+module local/test/feet
+----------
+
+fun scale(x: int): int
+    ret x * :int/3
+end fun
+
+----------
+module local/test/main
+----------
+
+// Two functions of one name, each called through the module that has it,
+// which importing both by name could not do.
+require module local/test/meters
+require module local/test/feet
+
+fun main(): int
+    ret meters.scale(:int/2) + feet.scale(:int/5)
+end fun

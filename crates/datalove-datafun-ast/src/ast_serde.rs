@@ -342,6 +342,8 @@ pub struct ExprBinOp {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprFunctionCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qualifier: Option<String>,
     pub name: String,
     pub args: Vec<ExprFun>,
 }
@@ -962,6 +964,7 @@ impl ExprBinOp {
 impl ExprFunctionCall {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: crate::ast::ExprFunctionCall<'db>) -> Self {
         ExprFunctionCall {
+            qualifier: ast.qualifier(db).map(|q| q.as_str(db).to_string()),
             name: ast.name(db).as_str(db).to_string(),
             args: ast.args(db).iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
         }

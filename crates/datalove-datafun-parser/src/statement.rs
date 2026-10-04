@@ -782,7 +782,7 @@ impl<'db> Parser<'db> {
                 }
                 self.eat_sigil(Sigil::SlashForward);
 
-                let module_alias = match self.eat_name() {
+                let module_alias = match self.eat_declared_name(NameKind::Module) {
                     Some(n) => n,
                     None => {
                         let ts = self.error_span();
@@ -835,7 +835,7 @@ impl<'db> Parser<'db> {
             Some("rider") => {
                 self.eat_word("rider");
 
-                let name = match self.eat_name() {
+                let name = match self.eat_declared_name(NameKind::Module) {
                     Some(n) => n,
                     None => {
                         let ts = self.peek_text_span();

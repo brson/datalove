@@ -104,6 +104,10 @@ impl<'db> Parser<'db> {
     /// can be decomposed into a root name + field steps, produces
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
     pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
+        // Where the whole chain begins. A postfix operator's own expression is
+        // spanned from the operator, but a call names what it calls from the
+        // start: all of `u8.max_value`.
+        let chain_start = self.expr_span_start(expr);
         loop {
             // A postfix operator is written against what it operates on, so
             // one with a space before it is not attached to this expression.
@@ -166,6 +170,9 @@ impl<'db> Parser<'db> {
                         }
                         _ => break,
                     }
+                }
+                Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
+                    expr = self.parse_postfix_call(expr, chain_start);
                 }
                 Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                     // Index access: expr[index_expr]
@@ -241,6 +248,52 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a field selector (name or index) after a dot.
+    /// Parse a call written against an expression that is not a bare name.
+    ///
+    /// The only such call is one qualified by a module alias, `u8.max_value()`,
+    /// which until the `(` reads as a projection of a field from a value named
+    /// `u8`. Nothing else can be called, as no value is a function.
+    fn parse_postfix_call(&mut self, base: ast::ExprFun<'db>, start: usize) -> ast::ExprFun<'db> {
+        let text = self.source_text();
+        let callee_end = self.last_byte_end();
+        let (args_iter, open_span) = match self.next() {
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
+                (*inner, TextSpan::new(self.source_text(), open.span()))
+            }
+            _ => unreachable!("the caller saw a `(`"),
+        };
+        let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
+        let callee = TextSpan::new(text, start..callee_end);
+
+        let qualified = match base.expr(self.db) {
+            ast::ExprFunKind::Place(place) => match place.steps.as_slice() {
+                [ast::PlaceStep::Field(ast::FieldSelector::Name(name))] => Some((place.root, *name)),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some((qualifier, name)) = qualified else {
+            return self.emit_expr_error(callee,
+                "only a function can be called",
+                "P072",
+                "this is not a function, or a function in a module"
+            );
+        };
+
+        self.record_qualified_call(qualifier, name);
+        let call = ast::ExprFunctionCall::new(
+            self.db,
+            self.module_id(),
+            self.current_fn_name(),
+            self.next_call_index(),
+            Some(qualifier),
+            name,
+            args,
+            arg_modes,
+        );
+        self.create_expr(ast::ExprFunKind::FunctionCall(call), callee)
+    }
+
     pub(super) fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
         match self.peek_word() {
             Some(word) => {
@@ -323,6 +376,12 @@ impl<'db> Parser<'db> {
     /// spaced, which is worth saying rather than reporting the operator as a
     /// token nobody expected.
     pub(super) fn lopsided_operator(&self) -> Option<(String, String)> {
+        if self.peek_sigil(Sigil::ParenOpen) && !self.glued_left() {
+            return Some((
+                S("this `(` is written apart from what it calls"),
+                S("a call's arguments are written against what is called"),
+            ));
+        }
         let Some(TreeToken::Token(token)) = self.peek() else {
             return None;
         };
@@ -656,8 +715,9 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     self.next(); // consume the token
                                     let name = InternedText::new(self.db, word.S());
 
-                                    // Check if followed by parentheses (function call).
-                                    if let Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) = self.peek() {
+                                    // A `(` written against the name makes it a call. One
+                                    // written apart is left for the caller to refuse.
+                                    if self.peek_sigil(Sigil::ParenOpen) && self.glued_left() {
                                         // It's a function call.
                                         let (args_iter, open_span) = match self.next() {
                                             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
@@ -673,6 +733,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             self.module_id(),
                                             self.current_fn_name(),
                                             self.next_call_index(),
+                                            None,
                                             name,
                                             args,
                                             arg_modes,

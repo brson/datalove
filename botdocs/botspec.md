@@ -14,7 +14,8 @@
   - [8.4 Const Parameters](#user-content-84-const-parameters)
   - [8.5 Generic Functions](#user-content-85-generic-functions)
 - [9. Module System](#user-content-9-module-system)
-  - [9.4 Native Riders](#user-content-94-native-riders)
+  - [9.4 Qualified Calls](#user-content-94-qualified-calls)
+  - [9.5 Native Riders](#user-content-95-native-riders)
 - [10. Numeric Widening](#user-content-10-numeric-widening)
 - [11. Ownership Analysis](#user-content-11-ownership-analysis)
 - [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
@@ -62,11 +63,12 @@ everywhere else.
 | parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
 | function | the value words | a call is read like a value |
 | type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
-| module, field, column, variant | nothing | no word means anything else there |
+| module or rider (the alias `require` gives it) | the value words | a qualified call is read like a value |
+| field, column, variant | nothing | no word means anything else there |
 
 So a value may be called `type` or `list`, a function `set` or `match`, a type
-alias `table` or `Error`, and a module `u8` -- the standard library's modules
-are named after the types they serve.
+alias `table` or `Error`, and a module `u8` or `set` -- the standard library's
+modules are named after the types they serve.
 
 Every statement begins with its own keyword, a call made for its effect
 included (`call`, Section 8.9), so no name is ever read at the start of a
@@ -198,6 +200,7 @@ a-b            // subtraction
 a -b           // `a`, then `-b`: two expressions, not one
 p . 0          // error: a postfix operator is written against the expression before it
 x ?            // error: likewise
+f (1)          // error: a call's `(` is written against what is called, as a postfix operator is
 a--b           // `a - (-b)`
 ```
 
@@ -1578,7 +1581,37 @@ imported into a given scope. In a session the imports arrive on separate
 lines and the rule is the same across them; importing the same function
 again is redundant rather than ambiguous, and allowed.
 
-### 9.4 Native Riders
+### 9.4 Qualified Calls
+
+A function may be called through the alias of the module or rider that has
+it, without importing it:
+
+```datalove
+require module sys/std/u8
+require module sys/std/i8
+require module sys/std/list
+
+let a: ?u8 = u8.from_int(ref 200)
+let b: ?i8 = i8.from_int(ref 200)
+call list.push(mut xs, 30)
+```
+
+This is how two functions of one name are used in one scope, which importing
+both cannot do (Section 9.3). An alias required in an earlier unit of a
+session serves a qualified call in a later one, as it serves an import.
+
+`a.f(...)` is read as a field projection `a.f` until the `(`. A `(` written
+against a projection of one named field from a bare name makes the whole a
+call qualified by that name; against anything else -- `p.0(...)`,
+`a.b.c(...)`, `xs[i]?(...)`, `f(x)(...)` -- it is P072, since no value is a
+function. The name before the dot is always an alias, even where a value of
+the same name is in scope: a value has no functions to call.
+
+A qualified call names nothing when nothing is required under the alias (F078)
+or when the module or rider has no function of that name (F002), the same two
+errors an import gets.
+
+### 9.5 Native Riders
 
 A **rider** is a Rust crate that provides native functions to a package's
 modules. Each package has at most one rider. The system library uses the
@@ -1623,7 +1656,8 @@ Symbol naming convention: `dlr_{rider_name}__{function_name}`.
 
 #### Using Riders
 
-Modules use `require rider` to access native functions:
+Modules use `require rider` to access native functions, by import or by
+qualified call:
 
 ```datalove
 require rider std

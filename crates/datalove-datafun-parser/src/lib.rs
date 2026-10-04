@@ -21,6 +21,7 @@ use bct::{
 };
 
 use datalove_datafun_ast::ast;
+use bct::text::InternedText;
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use state::{Parser, ScriptCounters};
@@ -55,11 +56,11 @@ pub fn parse_with_module_id<'db>(
 }
 
 /// Parse a Source as a single expression.
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(ref))]
 pub fn parse_expr<'db>(
     db: &'db dyn Db,
     source: Source,
-) -> ast::ExprFun<'db> {
+) -> ast::ParsedExpr<'db> {
     let chunk = source_map::basic_source_map(db, source);
     let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
@@ -73,12 +74,24 @@ fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
     source_text: bct::text::Text<'db>,
-) -> ast::ExprFun<'db> {
+) -> ast::ParsedExpr<'db> {
     // Expressions don't have module context.
     let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
     let expr = parser.parse_expr_full();
     parser.error_if_not_exhausted();
-    expr
+    let qualified_calls = each_once(parser.take_qualified_calls());
+    ast::ParsedExpr { expr, qualified_calls }
+}
+
+/// Qualified calls as written, each pair kept at its first appearance.
+fn each_once<'db>(calls: Vec<(InternedText<'db>, InternedText<'db>)>) -> ast::QualifiedCalls<'db> {
+    let mut once = Vec::with_capacity(calls.len());
+    for call in calls {
+        if !once.contains(&call) {
+            once.push(call);
+        }
+    }
+    std::sync::Arc::new(once)
 }
 
 /// Emit parse diagnostics for bracer errors (unclosed, mismatched, or stray braces).
@@ -140,8 +153,11 @@ fn parse_bracer<'db>(
     }
 
     let lines = split::nonempty_groups(groups).into_iter();
-    let (statements, spans) = parse_statements(db, lines, source_text, module_id);
-    let parsed = ast::ParsedStatements { statements: std::sync::Arc::new(statements) };
+    let (statements, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id);
+    let parsed = ast::ParsedStatements {
+        statements: std::sync::Arc::new(statements),
+        qualified_calls: each_once(qualified_calls),
+    };
     ast::ParseResult {
         parsed,
         expr_spans: spans.expr_spans,
@@ -177,8 +193,9 @@ fn parse_statements<'db>(
     lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
     source_text: bct::text::Text<'db>,
     module_id: Option<ModuleId<'db>>,
-) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>) {
+) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
     let mut statements = vec![];
+    let mut qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)> = vec![];
     let mut all_expr_spans = vec![];
     let mut all_break_spans = vec![];
     let mut all_continue_spans = vec![];
@@ -205,6 +222,7 @@ fn parse_statements<'db>(
         all_type_alias_spans.extend(parser.take_type_alias_spans());
         all_import_spans.extend(parser.take_import_spans());
         all_alias_spans.extend(parser.take_alias_spans());
+        qualified_calls.extend(parser.take_qualified_calls());
     }
 
     let spans = ParsedSpans {
@@ -218,7 +236,7 @@ fn parse_statements<'db>(
         import_spans: all_import_spans,
         alias_spans: all_alias_spans,
     };
-    (statements, spans)
+    (statements, spans, qualified_calls)
 }
 
 /// Tracked wrapper for parser tests that only need the ParsedStatements.
