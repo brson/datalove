@@ -4,7 +4,7 @@
 //! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
 use datalove_datafun_interp::{Destination, Value};
-use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId};
+use datalove_datafun_ir::{IrCodeUnit, ParamId};
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
@@ -58,7 +58,6 @@ pub unsafe fn call_jit(
     rt_handle: LocalRtHandle,
     args: &[Value],
     ret_dest: Destination,
-    _return_type: &IrType,
     descriptor_params: &[ParamId],
     shape_descriptors: &[*const rtdt::TyDesc],
 ) {

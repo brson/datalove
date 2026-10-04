@@ -17,12 +17,10 @@
 mod compiler;
 pub(crate) mod bridge;
 pub(crate) mod trampoline;
-pub mod chaos;
 pub mod optimizing;
 pub mod metrics;
 
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
-pub use chaos::ChaosDispatcher;
 pub use optimizing::{OptimizingDispatcher, DispatcherConfig, DispatcherMode};
 pub use metrics::{MetricsCollector, FunctionMetrics, AggregateMetrics, ExecutionMode};
 
@@ -32,8 +30,11 @@ use std::collections::HashMap;
 use rustc_hash::FxHashMap;
 use std::time::{Duration, Instant};
 
-use datalove_datafun_ir::{CodeUnitId, CodeRef, IrCodeUnit, IrModuleId, IrType};
-use datalove_datafun_interp::{CallDispatcher, DispatchCallContext, Destination, DispatchResult, InterpError, Value};
+use datalove_datafun_ir::{CodeRef, IrCodeUnit};
+use datalove_datafun_interp::{
+    CallDispatcher, DispatchCallContext, Destination, DispatchResult, ExecutionContext, FuncIdentity,
+    FunctionRegistry, InterpError, Value,
+};
 use datalove_rt::c::LocalRtHandle;
 
 use compiler::JitCompiler;
@@ -61,63 +62,6 @@ impl std::fmt::Display for JitError {
 }
 
 impl std::error::Error for JitError {}
-
-/// Key for identifying functions in the dispatch table.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
-pub struct FunctionKey {
-    /// Module ID (None for local or external unit functions).
-    pub module_id: Option<IrModuleId>,
-    /// Code unit ID within the module or unit.
-    pub unit_id: CodeUnitId,
-    /// Script unit number (for external unit functions).
-    pub unit: Option<u32>,
-}
-
-impl FunctionKey {
-    /// Create a key for a local function.
-    pub fn local(unit_id: CodeUnitId) -> Self {
-        Self {
-            module_id: None,
-            unit_id,
-            unit: None,
-        }
-    }
-
-    /// Create a key for a module function.
-    pub fn module(module_id: IrModuleId, unit_id: CodeUnitId) -> Self {
-        Self {
-            module_id: Some(module_id),
-            unit_id,
-            unit: None,
-        }
-    }
-
-    /// Create a key for an external unit function.
-    pub fn external(unit: u32, unit_id: CodeUnitId) -> Self {
-        Self {
-            module_id: None,
-            unit_id,
-            unit: Some(unit),
-        }
-    }
-}
-
-impl FunctionKey {
-    /// Key the function a reference reaches.
-    ///
-    /// `scope_unit` is the script unit whose local functions are in scope. A
-    /// `CodeRef::Local` is a position in that unit's list and means a different
-    /// function in every other unit, so it is resolved against the unit here
-    /// rather than kept as-is; that also makes it agree with the
-    /// `CodeRef::External` a later unit would use for the same function.
-    pub fn of(code_ref: &CodeRef, scope_unit: u32) -> Self {
-        match code_ref {
-            CodeRef::Local(id) => FunctionKey::external(scope_unit, *id),
-            CodeRef::Module { module, id } => FunctionKey::module(*module, *id),
-            CodeRef::External { unit, id } => FunctionKey::external(*unit, *id),
-        }
-    }
-}
 
 /// Tracks function execution state for JIT compilation decisions.
 pub enum FunctionState {
@@ -163,7 +107,7 @@ pub struct JitEngine {
     ///
     /// `FxHashMap` because this is probed on every call that reaches the
     /// dispatcher and again on every call out of compiled code.
-    pub(crate) states: FxHashMap<FunctionKey, FunctionState>,
+    pub(crate) states: FxHashMap<FuncIdentity, FunctionState>,
     /// Cranelift JIT compiler.
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
@@ -209,148 +153,154 @@ impl JitEngine {
         self.threshold
     }
 
-    /// Record a function call and trigger compilation if threshold reached.
+    /// Count a call to `func`, compiling it once it is hot.
     ///
-    /// This version compiles functions without call support. Use `record_call_with_context`
-    /// for functions that call other functions.
-    ///
-    /// Returns the compiled code pointer if the function was just compiled
-    /// or was already compiled.
+    /// `ctx` is the context `func` runs in, which is where the callees its
+    /// stubs name are looked up. A function the backend declines, or one too
+    /// wide to be entered from the interpreter, is marked so that it is not
+    /// asked about again. An error is a compilation that went wrong, not one
+    /// that was declined.
     pub fn record_call(
         &mut self,
-        key: FunctionKey,
+        key: FuncIdentity,
         func: &IrCodeUnit,
-    ) -> Result<Option<(*const u8, bool)>, JitError> {
-        let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
-
-        match state {
-            FunctionState::Interpreted { call_count } => {
-                // Use saturating_add to avoid overflow. u32::MAX indicates permanently
-                // interpreted (e.g., function uses unsupported features).
-                *call_count = call_count.saturating_add(1);
-                if *call_count >= self.threshold && *call_count != u32::MAX {
-                    // Compile the function with timing.
-                    let start = Instant::now();
-                    let (code_ptr, uses_sret, code_size) = self.compiler.compile_function(func)?;
-                    let compile_time = start.elapsed();
-
-                    // Update stats.
-                    self.stats.compiled_count += 1;
-                    self.stats.total_compile_time += compile_time;
-                    self.stats.total_code_size += code_size;
-                    self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
-                    self.stats.per_function_code_size.insert(func.name.clone(), code_size);
-
-                    *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
-                    self.compiler.publish(key, code_ptr);
-                    Ok(Some((code_ptr, uses_sret)))
-                } else {
-                    Ok(None)
-                }
-            }
-            FunctionState::Compiled { code_ptr, uses_sret, .. } => {
-                Ok(Some((*code_ptr, *uses_sret)))
-            }
-        }
-    }
-
-    /// Record a function call with context for mixed-mode execution.
-    ///
-    /// This version creates stubs for all callees, enabling JIT code to call
-    /// back to the interpreter for non-compiled functions.
-    ///
-    /// Returns the compiled code pointer if the function was just compiled
-    /// or was already compiled.
-    pub fn record_call_with_context<'a>(
-        &mut self,
-        key: FunctionKey,
-        func: &IrCodeUnit,
-        ctx: &datalove_datafun_interp::ExecutionContext<'a>,
-        registry: &datalove_datafun_interp::FunctionRegistry,
-    ) -> Result<Option<(*const u8, bool)>, JitError> {
+        ctx: &ExecutionContext<'_>,
+        registry: &FunctionRegistry,
+    ) -> Result<Recorded, JitError> {
         // A function too wide to be entered is one there is no point compiling.
         // Asked here rather than at the call, so that every way in agrees and
         // agrees before the work is done: finding out at the call meant a
         // program that ran under the interpreter failed under the jit.
         if !bridge::enterable(func) {
             self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-            return Ok(None);
+            return Ok(Recorded::Interpret);
         }
 
         let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
-
-        match state {
-            FunctionState::Interpreted { call_count } => {
-                // Use saturating_add to avoid overflow. u32::MAX indicates permanently
-                // interpreted (e.g., function uses unsupported features).
-                *call_count = call_count.saturating_add(1);
-                if *call_count >= self.threshold && *call_count != u32::MAX {
-                    // Compile the function with context and timing.
-                    let start = Instant::now();
-                    let (code_ptr, uses_sret, code_size) = self.compiler.compile_function_with_context(func, ctx, registry)?;
-                    let compile_time = start.elapsed();
-
-                    // Update stats.
-                    self.stats.compiled_count += 1;
-                    self.stats.total_compile_time += compile_time;
-                    self.stats.total_code_size += code_size;
-                    self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
-                    self.stats.per_function_code_size.insert(func.name.clone(), code_size);
-
-                    *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
-                    self.compiler.publish(key, code_ptr);
-                    Ok(Some((code_ptr, uses_sret)))
-                } else {
-                    Ok(None)
-                }
-            }
+        let call_count = match state {
             FunctionState::Compiled { code_ptr, uses_sret, .. } => {
-                Ok(Some((*code_ptr, *uses_sret)))
+                return Ok(Recorded::Compiled {
+                    code_ptr: *code_ptr,
+                    uses_sret: *uses_sret,
+                    compiled_now: None,
+                });
             }
+            FunctionState::Interpreted { call_count } => call_count,
+        };
+        // u32::MAX means permanently interpreted.
+        *call_count = call_count.saturating_add(1);
+        if *call_count < self.threshold || *call_count == u32::MAX {
+            return Ok(Recorded::Interpret);
+        }
+
+        let start = Instant::now();
+        match self.compiler.compile_function(func, ctx, registry) {
+            Ok((code_ptr, uses_sret, code_size)) => {
+                let compile_time = start.elapsed();
+                self.stats.compiled_count += 1;
+                self.stats.total_compile_time += compile_time;
+                self.stats.total_code_size += code_size;
+                self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
+                self.stats.per_function_code_size.insert(func.name.clone(), code_size);
+
+                *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
+                self.compiler.publish(key, code_ptr);
+                Ok(Recorded::Compiled { code_ptr, uses_sret, compiled_now: Some(code_size) })
+            }
+            Err(JitError::Unsupported(_)) => {
+                // Not a failure: the function is left to the interpreter, and
+                // asking again at every call would recompile it every time.
+                *state = FunctionState::Interpreted { call_count: u32::MAX };
+                self.stats.refused_count += 1;
+                Ok(Recorded::Interpret)
+            }
+            Err(e) => Err(e),
         }
     }
 
-    /// Get compiled code for a function if available.
-    pub fn get_compiled(&self, key: &FunctionKey) -> Option<(*const u8, bool)> {
-        match self.states.get(key) {
-            Some(FunctionState::Compiled { code_ptr, uses_sret, .. }) => {
-                Some((*code_ptr, *uses_sret))
-            }
-            _ => None,
-        }
-    }
-
-    /// Record that the backend declined a function, for stats tracking.
-    pub fn record_refusal(&mut self) {
-        self.stats.refused_count += 1;
-    }
-
-    /// Call a JIT-compiled function.
+    /// Offer a call the interpreter is making to compiled code.
     ///
-    /// Bridges between interpreter's Value/Destination and native calling convention.
-    ///
-    /// # Safety
-    ///
-    /// code_ptr must be a valid JIT-compiled function. args must match the function's signature.
-    pub unsafe fn call_jit(
-        &self,
-        code_ptr: *const u8,
-        uses_sret: bool,
-        rt_handle: LocalRtHandle,
+    /// Counts the call, compiles the function if it is now hot, and runs it if
+    /// it is compiled and `use_compiled` agrees. Every dispatcher goes through
+    /// here, so they agree on the context a callee is compiled and run in and
+    /// on what a refusal means; they differ only in whether they ask and
+    /// whether they then use what they get.
+    #[allow(clippy::too_many_arguments)]
+    pub fn dispatch_with(
+        &mut self,
+        code_ref: &CodeRef,
+        func: &IrCodeUnit,
         args: &[Value],
         ret_dest: Destination,
-        return_type: &IrType,
-        descriptor_params: &[datalove_datafun_ir::ParamId],
-        shape_descriptors: &[*const datalove_rtdt::TyDesc],
-    ) {
-        // SAFETY: caller guarantees code_ptr and args are valid.
-        unsafe {
-            bridge::call_jit(
-                code_ptr, uses_sret, rt_handle, args, ret_dest, return_type,
-                descriptor_params, shape_descriptors,
-            )
+        rt_handle: LocalRtHandle,
+        call_ctx: DispatchCallContext<'_, '_>,
+        use_compiled: impl FnOnce() -> bool,
+    ) -> JitDispatch {
+        let key = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
+        let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
+        match self.record_call(key, func, &callee_ctx, call_ctx.registry) {
+            Err(e) => JitDispatch {
+                result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
+                compiled_now: None,
+            },
+            Ok(Recorded::Interpret) => JitDispatch {
+                result: DispatchResult::NotHandled,
+                compiled_now: None,
+            },
+            Ok(Recorded::Compiled { code_ptr, uses_sret, compiled_now }) => {
+                if !use_compiled() {
+                    return JitDispatch { result: DispatchResult::NotHandled, compiled_now };
+                }
+                let descriptor_params = &func.function_context()
+                    .expect("a compiled function is a function")
+                    .descriptor_params;
+                let shape_descriptors = call_ctx.shape_descriptors;
+                // What the code's stubs call back into the interpreter with,
+                // for the length of the call.
+                let mut dispatch_ctx = DispatchContext {
+                    jit_engine: self,
+                    interp: call_ctx.interp,
+                    exec_ctx: &callee_ctx,
+                    registry: call_ctx.registry,
+                    frames: call_ctx.frames,
+                };
+                // SAFETY: the context outlives the call, and is cleared after it.
+                unsafe { set_dispatch_context(&mut dispatch_ctx) };
+                // SAFETY: code_ptr is compiled code for `func`, whose arguments
+                // these are.
+                unsafe {
+                    bridge::call_jit(
+                        code_ptr, uses_sret, rt_handle, args, ret_dest,
+                        descriptor_params, shape_descriptors,
+                    )
+                };
+                clear_dispatch_context();
+                JitDispatch { result: DispatchResult::Handled(Ok(())), compiled_now }
+            }
         }
     }
+}
+
+/// What recording a call found out about the function.
+pub enum Recorded {
+    /// Run it in the interpreter: it has not been called often enough yet, or
+    /// it cannot be compiled.
+    Interpret,
+    /// Run its compiled code.
+    Compiled {
+        code_ptr: *const u8,
+        uses_sret: bool,
+        /// The size of the code, when this call is the one that compiled it.
+        compiled_now: Option<usize>,
+    },
+}
+
+/// What `JitEngine::dispatch_with` did with a call.
+pub struct JitDispatch {
+    /// What to tell the interpreter.
+    pub result: DispatchResult,
+    /// The size of the code, when this call is the one that compiled it.
+    pub compiled_now: Option<usize>,
 }
 
 #[cfg(test)]
@@ -422,6 +372,15 @@ mod tests {
         )
     }
 
+    /// Record one call to `func`, a function with nothing to call, as unit 0's
+    /// function 0.
+    fn record(jit: &mut JitEngine, func: &IrCodeUnit) -> Recorded {
+        let ctx = ExecutionContext::new(0, std::slice::from_ref(func));
+        let registry = FunctionRegistry::new();
+        let key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(0) };
+        jit.record_call(key, func, &ctx, &registry).expect("compilation failed")
+    }
+
     #[test]
     fn test_jit_engine_creation() {
         let jit = JitEngine::new(100);
@@ -432,37 +391,34 @@ mod tests {
     fn test_call_counting() {
         let mut jit = JitEngine::new(3).unwrap();
         let func = make_test_function();
-        let key = FunctionKey::local(CodeUnitId(0));
 
         // First two calls should not trigger compilation.
-        assert!(jit.record_call(key, &func).unwrap().is_none());
-        assert!(jit.record_call(key, &func).unwrap().is_none());
+        assert!(matches!(record(&mut jit, &func), Recorded::Interpret));
+        assert!(matches!(record(&mut jit, &func), Recorded::Interpret));
 
         // Third call should trigger compilation.
-        let result = jit.record_call(key, &func);
-        match result {
-            Ok(Some((ptr, _))) => {
-                assert!(!ptr.is_null(), "compiled code pointer should not be null");
+        match record(&mut jit, &func) {
+            Recorded::Compiled { code_ptr, compiled_now, .. } => {
+                assert!(!code_ptr.is_null(), "compiled code pointer should not be null");
+                assert!(compiled_now.is_some(), "this call compiled it");
             }
-            Ok(None) => panic!("expected compilation at threshold"),
-            Err(e) => panic!("compilation failed: {}", e),
+            Recorded::Interpret => panic!("expected compilation at threshold"),
         }
+        // And the fourth finds it compiled.
+        assert!(matches!(record(&mut jit, &func), Recorded::Compiled { compiled_now: None, .. }));
     }
 
     #[test]
     fn test_compilation_produces_code() {
         let mut jit = JitEngine::new(1).unwrap(); // Compile immediately
         let func = make_test_function();
-        let key = FunctionKey::local(CodeUnitId(0));
 
-        let result = jit.record_call(key, &func);
-        match result {
-            Ok(Some((ptr, uses_sret))) => {
-                assert!(!ptr.is_null());
+        match record(&mut jit, &func) {
+            Recorded::Compiled { code_ptr, uses_sret, .. } => {
+                assert!(!code_ptr.is_null());
                 assert!(uses_sret, "all non-Unit returns use sret");
             }
-            Ok(None) => panic!("expected immediate compilation"),
-            Err(e) => panic!("compilation failed: {}", e),
+            Recorded::Interpret => panic!("expected immediate compilation"),
         }
     }
 
@@ -473,10 +429,11 @@ mod tests {
 
         let mut jit = JitEngine::new(1).unwrap();
         let func = make_test_function();
-        let key = FunctionKey::local(CodeUnitId(0));
 
         // Compile the function.
-        let (code_ptr, uses_sret) = jit.record_call(key, &func).unwrap().unwrap();
+        let Recorded::Compiled { code_ptr, uses_sret, .. } = record(&mut jit, &func) else {
+            panic!("expected immediate compilation");
+        };
         assert!(uses_sret, "all non-Unit returns use sret");
 
         // Runtime is already created.
@@ -490,9 +447,8 @@ mod tests {
         };
 
         // Call the JIT code. Result written to ret_dest via sret.
-        let return_type = IrType::I32;
         unsafe {
-            jit.call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[]);
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[], &[]);
         }
 
         // Extract i32 from the buffer.
@@ -658,11 +614,13 @@ mod tests {
         let mut jit = JitEngine::new(1).expect("JitEngine creation failed");
 
         // Compile main() with context (creates stub for identity()).
-        let main_key = FunctionKey::local(CodeUnitId(1));
-        let (code_ptr, uses_sret) = jit
-            .record_call_with_context(main_key, &main_fn, &ctx, &registry)
+        let main_key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(1) };
+        let Recorded::Compiled { code_ptr, uses_sret, .. } = jit
+            .record_call(main_key, &main_fn, &ctx, &registry)
             .expect("compilation failed")
-            .expect("should compile on first call");
+        else {
+            panic!("should compile on first call");
+        };
 
         assert!(uses_sret, "all non-Unit returns use sret");
 
@@ -703,9 +661,8 @@ mod tests {
         // 5. Dispatcher calls interpreter to execute identity()
         // 6. Result flows back through the chain
         // SAFETY: code_ptr is valid JIT code.
-        let return_type = IrType::I32;
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &return_type, &[], &[]);
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[], &[]);
         }
 
         // Clear dispatch context.
@@ -726,81 +683,7 @@ impl CallDispatcher for JitEngine {
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
-        use datalove_datafun_interp::ExecutionContext;
-
-        let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
-
-        // For external functions, we need to use the callee's unit's context to find
-        // its local functions. For local/module functions, use the caller's context.
-        // _callee_ctx_owned keeps the context alive for the duration of this function.
-        let _callee_ctx_owned: Option<ExecutionContext>;
-        let compile_ctx = match code_ref {
-            CodeRef::External { unit, .. } => {
-                // External function - get context from callee's unit.
-                match call_ctx.registry.unit_functions(*unit) {
-                    Some(unit_funcs) => {
-                        _callee_ctx_owned = Some(ExecutionContext::new(*unit, unit_funcs));
-                        _callee_ctx_owned.as_ref().unwrap()
-                    }
-                    None => {
-                        // Unit not found, fall back to interpreter.
-                        return DispatchResult::NotHandled;
-                    }
-                }
-            }
-            _ => {
-                // Local or module function - use caller's context.
-                _callee_ctx_owned = None;
-                call_ctx.exec_ctx
-            }
-        };
-
-        // Use record_call_with_context to enable JIT for functions with calls.
-        // This creates stubs for callees so JIT code can call back to interpreter.
-        match self.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
-            Ok(Some((code_ptr, uses_sret))) => {
-                // JIT code available - set up dispatch context and call it.
-                // The trampoline needs this context to route calls back to the interpreter.
-                // Use the callee's context for runtime dispatch as well.
-                let mut dispatch_ctx = DispatchContext {
-                    jit_engine: self,
-                    interp: call_ctx.interp,
-                    exec_ctx: compile_ctx,
-                    registry: call_ctx.registry,
-                    frames: call_ctx.frames,
-                };
-
-                // SAFETY: context is valid for duration of call.
-                unsafe { set_dispatch_context(&mut dispatch_ctx) };
-
-                // SAFETY: code_ptr is a valid JIT-compiled function for this signature.
-                unsafe {
-                    bridge::call_jit(
-                        code_ptr, uses_sret, rt_handle, args, ret_dest,
-                        func.return_type().expect("JIT dispatch requires function return type"),
-                        func.function_context().map_or(&[][..], |c| &c.descriptor_params),
-                        call_ctx.shape_descriptors,
-                    )
-                };
-
-                // Clear dispatch context.
-                clear_dispatch_context();
-
-                DispatchResult::Handled(Ok(()))
-            }
-            Ok(None) => {
-                // Not yet compiled, fall through to interpreter.
-                DispatchResult::NotHandled
-            }
-            Err(JitError::Unsupported(_)) => {
-                // Not a failure: the function is left to the interpreter, and
-                // asking again at every call would recompile it every time.
-                self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-                self.record_refusal();
-                DispatchResult::NotHandled
-            }
-            Err(e) => DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
-        }
+        self.dispatch_with(code_ref, func, args, ret_dest, rt_handle, call_ctx, || true).result
     }
 
     fn as_any(&self) -> &dyn Any {

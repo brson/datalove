@@ -6,9 +6,10 @@
 //!
 //! # Architecture
 //!
-//! Each call site in JIT code goes through a stub function. The stub calls
-//! `dispatch_call` with the target function info. `dispatch_call` routes to
-//! either JIT code or the interpreter based on compilation status.
+//! Compiled code calls each callee through a stub with the callee's own
+//! signature. Once the callee is compiled the stub calls its code directly;
+//! until then it calls `__jit_dispatch_call`, which counts the call toward
+//! compiling the callee and otherwise runs it in the interpreter.
 //!
 //! # Thread-local Context
 //!
@@ -26,7 +27,7 @@ use datalove_datafun_interp::{
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
-use crate::{FunctionKey, JitEngine};
+use crate::{JitEngine, Recorded};
 
 /// Context available during JIT execution for dispatch.
 pub struct DispatchContext<'a> {
@@ -143,14 +144,16 @@ impl From<&CodeRef> for EncodedFuncKey {
     }
 }
 
-/// Dispatch a call from JIT code to either JIT-compiled code or interpreter.
+/// Run a call from compiled code to a callee with no compiled code yet.
 ///
-/// This is called by stub functions generated for each call site.
+/// Called by the callee's stub. The call is counted, which may compile the
+/// callee, in which case this call runs the new code and later ones reach it
+/// from the stub directly; otherwise the interpreter runs it.
 ///
 /// # Arguments
 ///
 /// * `rt_handle` - Runtime handle for memory operations
-/// * `encoded_key` - Encoded FunctionKey identifying the target
+/// * `encoded_key` - The callee's `CodeRef`, encoded by `EncodedFuncKey`
 /// * `ret_dest` - Pointer to return value destination (NULL for void)
 /// * `_ret_is_sret` - Non-zero if return uses sret convention (unused, info in ir_func)
 /// * `arg_count` - Number of arguments
@@ -187,9 +190,8 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Decode target function.
     let code_ref = EncodedFuncKey::from_u64(encoded_key).to_code_ref();
-    let func_key = FunctionKey::of(&code_ref, ctx.exec_ctx.unit());
-
-    // Look up the function IR using ExecutionContext (handles Local, Module, External).
+    let key = FuncIdentity::of(&code_ref, ctx.exec_ctx.unit());
+    let callee_ctx = ctx.exec_ctx.for_callee(&code_ref, ctx.registry);
     let ir_unit = ctx.exec_ctx.get_unit(&code_ref, ctx.registry);
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
@@ -197,10 +199,8 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // What describes this callee's parameters and return is fixed by its
     // signature, so it is read off the layout the interpreter already keeps for
     // the function rather than looked up a type at a time. Every call out of
-    // compiled code arrives here, and looking each one up was the second largest
-    // entry in the jit's profile after this function itself.
-    let layout = ctx.interp.layout_for(
-        FuncIdentity::of(&code_ref, ctx.exec_ctx.unit()), ir_unit);
+    // compiled code to a function not yet compiled arrives here.
+    let layout = ctx.interp.layout_for(key, ir_unit);
 
     // Build argument Values.
     //
@@ -232,38 +232,34 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .map(|k| unsafe { *descriptors.add(shape_start + k) })
         .collect();
 
-    // Build return destination.
     let dest = Destination {
         ptr: ret_dest,
         tydesc: layout.return_tydesc.expect("a jit callee is a function"),
     };
 
-    // Try to JIT compile the target function (or get existing compiled code).
-    // This triggers compilation when the call count threshold is reached.
-    match ctx.jit_engine.record_call_with_context(func_key, &ir_unit, ctx.exec_ctx, ctx.registry) {
-        Ok(Some((code_ptr, uses_sret))) => {
-            // Call JIT code directly.
-            // SAFETY: code_ptr is valid JIT code.
+    // Count the call, which may compile the callee. Once it is compiled its
+    // stubs call it directly and no longer come here.
+    match ctx.jit_engine.record_call(key, ir_unit, &callee_ctx, ctx.registry) {
+        Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
+            // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
                     code_ptr, uses_sret, rt_handle, &arg_vals, dest,
-                    &func_ctx.return_type, &func_ctx.descriptor_params, &shape_descriptors,
+                    &func_ctx.descriptor_params, &shape_descriptors,
                 )
             }
         }
-        Ok(None) | Err(_) => {
-            // Not yet compiled or compilation failed - fall back to interpreter.
-            // For In-mode non-copy args, interpreter takes ownership and destroys them.
-            // JIT caller must not access these args after the call returns.
-            // Note: We pass None for func_unit since JIT trampolines don't track unit context.
-            // This means dynamic inlining won't apply to JIT->interpreter callbacks.
+        Ok(Recorded::Interpret) => {
+            // An `in` argument that is not copied belongs to the interpreter
+            // now, which destroys it; the compiled caller does not touch it
+            // after the call.
             let result = ctx.interp.call_in_context_with_shapes(
                 ir_unit,
-                None,
+                Some(code_ref.clone()),
                 arg_vals,
                 shape_descriptors,
                 dest,
-                ctx.exec_ctx,
+                &callee_ctx,
                 ctx.registry,
                 ctx.frames,
             );
@@ -271,6 +267,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
                 panic!("JIT dispatch: interpreter call failed: {:?}", e);
             }
         }
+        Err(e) => panic!("JIT dispatch: compiling {} failed: {}", ir_unit.name, e),
     }
 }
 

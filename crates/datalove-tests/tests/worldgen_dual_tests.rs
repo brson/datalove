@@ -23,7 +23,7 @@ use rand::Rng;
 use datalove_worldgen::{WorldGenConfig, gen_worldfile_seeded};
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
-use datalove_datafun_cranelift_jit::ChaosDispatcher;
+use datalove_datafun_cranelift_jit::{DispatcherConfig, OptimizingDispatcher};
 use datalove_datafun_cranelift_aot::AotCompiler;
 use datalove_datafun_ir::FunctionRegistry;
 use datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
@@ -95,15 +95,20 @@ fn run_with_chaos_interp(
         }
     }
 
-    // Create chaos dispatcher: 75% JIT probability, compile after 1 call.
-    let chaos = match ChaosDispatcher::new(seed, 75, 1) {
+    // Chaos dispatch without inlining: compile 75% of calls on the first one
+    // offered, and use the compiled code for 1% of calls from interpreted code.
+    // Most compiled code is then reached from other compiled code, through the
+    // stubs, with the interpreter in between wherever a callee is not compiled.
+    let mut config = DispatcherConfig::chaos_with_probabilities(seed, 75, 1, 0);
+    config.inlining_enabled = false;
+    let chaos = match OptimizingDispatcher::with_config(config) {
         Ok(c) => c,
         Err(e) => {
             return RunResult {
                 compiled: false,
                 debuglog: String::new(),
                 success: false,
-                error: Some(format!("Failed to create ChaosDispatcher: {}", e)),
+                error: Some(format!("Failed to create the chaos dispatcher: {}", e)),
             };
         }
     };

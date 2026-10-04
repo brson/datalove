@@ -12,19 +12,16 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::rc::Rc;
 use std::hash::{Hash, Hasher};
-use std::time::Instant;
 
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, DispatchResult, Destination,
-    DynamicInliner, DynamicInlinerConfig, FuncIdentity, InterpError, Value,
+    DynamicInliner, DynamicInlinerConfig, FuncIdentity, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
-use crate::bridge;
 use crate::metrics::{ExecutionMode, MetricsCollector, MetricsConfig};
-use crate::trampoline::{set_dispatch_context, clear_dispatch_context, DispatchContext};
-use crate::{FunctionKey, FunctionState, JitEngine, JitError};
+use crate::{JitEngine, JitError};
 
 /// Execution mode for the dispatcher.
 #[derive(Clone, Debug)]
@@ -185,10 +182,50 @@ pub struct OptimizingDispatcher {
     metrics: Option<MetricsCollector>,
     /// Configuration.
     config: DispatcherConfig,
-    /// Random state for chaos mode (xorshift64).
-    rng_state: u64,
-    /// Call counter for chaos mode RNG.
+    /// The probabilities of chaos mode, or `None` in tuned mode.
+    chaos: Option<ChaosProbabilities>,
+    /// Random decisions for chaos mode.
+    rng: ChaosRng,
+}
+
+/// The pseudo-random decisions chaos mode makes, seeded for reproducibility.
+///
+/// Its own type so that a decision can be drawn while the JIT engine beside
+/// it is borrowed: whether to use compiled code is decided after the call has
+/// been recorded and the code compiled.
+struct ChaosRng {
+    /// xorshift64 state.
+    state: u64,
+    /// Mixed into each draw so that a zero state still moves.
     call_counter: u64,
+}
+
+/// The probabilities, in percent, of chaos mode's three decisions.
+struct ChaosProbabilities {
+    compile: u32,
+    use_jit: u32,
+    inline: u32,
+}
+
+impl ChaosRng {
+    /// A pseudo-random number in [0, 100).
+    fn percent(&mut self) -> u32 {
+        self.call_counter += 1;
+        let mut x = self.state.wrapping_add(self.call_counter);
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.state = x;
+        (x % 100) as u32
+    }
+
+    /// Whether to go ahead, given a probability in percent; always, given none.
+    fn roll(&mut self, probability: Option<u32>) -> bool {
+        match probability {
+            Some(p) => self.percent() < p,
+            None => true,
+        }
+    }
 }
 
 impl OptimizingDispatcher {
@@ -209,6 +246,17 @@ impl OptimizingDispatcher {
             }
         };
 
+        let chaos = match &config.mode {
+            DispatcherMode::Chaos { compile_probability, use_jit_probability, inline_probability, .. } => {
+                Some(ChaosProbabilities {
+                    compile: *compile_probability,
+                    use_jit: *use_jit_probability,
+                    inline: *inline_probability,
+                })
+            }
+            DispatcherMode::Tuned { .. } => None,
+        };
+
         let inliner = DynamicInliner::with_config(DynamicInlinerConfig {
             threshold: if config.inlining_enabled { inline_threshold } else { u32::MAX },
         });
@@ -223,9 +271,9 @@ impl OptimizingDispatcher {
             inliner,
             jit,
             metrics,
+            chaos,
             config,
-            rng_state,
-            call_counter: 0,
+            rng: ChaosRng { state: rng_state, call_counter: 0 },
         })
     }
 
@@ -254,55 +302,29 @@ impl OptimizingDispatcher {
         &self.config
     }
 
-    /// Generate a pseudo-random number in [0, 100) for chaos mode.
+    /// A pseudo-random number in [0, 100) from the chaos generator.
+    #[cfg(test)]
     fn random_percent(&mut self) -> u32 {
-        // Simple xorshift64 PRNG.
-        self.call_counter += 1;
-        let mut x = self.rng_state.wrapping_add(self.call_counter);
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.rng_state = x;
-        (x % 100) as u32
+        self.rng.percent()
     }
 
-    /// Decide whether to try compilation in chaos mode.
+    /// Decide whether to record the call and compile in chaos mode.
     fn chaos_should_compile(&mut self) -> bool {
-        let prob = if let DispatcherMode::Chaos { compile_probability, .. } = &self.config.mode {
-            Some(*compile_probability)
-        } else {
-            None
-        };
-        match prob {
-            Some(p) => self.random_percent() < p,
-            None => true,
-        }
+        let p = self.chaos.as_ref().map(|c| c.compile);
+        self.rng.roll(p)
     }
 
-    /// Decide whether to use JIT code in chaos mode.
+    /// Decide whether to use compiled code in chaos mode.
+    #[cfg(test)]
     fn chaos_should_use_jit(&mut self) -> bool {
-        let prob = if let DispatcherMode::Chaos { use_jit_probability, .. } = &self.config.mode {
-            Some(*use_jit_probability)
-        } else {
-            None
-        };
-        match prob {
-            Some(p) => self.random_percent() < p,
-            None => true,
-        }
+        let p = self.chaos.as_ref().map(|c| c.use_jit);
+        self.rng.roll(p)
     }
 
     /// Decide whether to perform inlining in chaos mode.
     fn chaos_should_inline(&mut self) -> bool {
-        let prob = if let DispatcherMode::Chaos { inline_probability, .. } = &self.config.mode {
-            Some(*inline_probability)
-        } else {
-            None
-        };
-        match prob {
-            Some(p) => self.random_percent() < p,
-            None => true,
-        }
+        let p = self.chaos.as_ref().map(|c| c.inline);
+        self.rng.roll(p)
     }
 
     /// Check if we have an inlined version of a function.
@@ -310,108 +332,6 @@ impl OptimizingDispatcher {
         self.inliner.get_inlined_function(func).is_some()
     }
 
-    /// Try to execute via JIT if compiled.
-    ///
-    /// Returns Some(result) if JIT execution was attempted, None to fall back.
-    fn try_jit_execution(
-        &mut self,
-        code_ref: &CodeRef,
-        func: &IrCodeUnit,
-        args: &[Value],
-        ret_dest: Destination,
-        rt_handle: LocalRtHandle,
-        shape_descriptors: &[*const datalove_rtdt::TyDesc],
-        call_ctx: &mut DispatchCallContext<'_, '_>,
-        start_time: Option<Instant>,
-        is_inlined: bool,
-    ) -> Option<DispatchResult> {
-        use datalove_datafun_interp::ExecutionContext;
-
-        let key = FunctionKey::of(code_ref, call_ctx.exec_ctx.unit());
-        let func_id = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
-
-        // For external functions, get context from callee's unit.
-        let _callee_ctx_owned: Option<ExecutionContext>;
-        let compile_ctx = match code_ref {
-            CodeRef::External { unit, .. } => {
-                match call_ctx.registry.unit_functions(*unit) {
-                    Some(unit_funcs) => {
-                        _callee_ctx_owned = Some(ExecutionContext::new(*unit, unit_funcs));
-                        _callee_ctx_owned.as_ref().unwrap()
-                    }
-                    None => {
-                        return None;
-                    }
-                }
-            }
-            _ => {
-                _callee_ctx_owned = None;
-                call_ctx.exec_ctx
-            }
-        };
-
-        // Try to get or compile JIT code.
-        match self.jit.record_call_with_context(key, func, compile_ctx, call_ctx.registry) {
-            Ok(Some((code_ptr, uses_sret))) => {
-                // Record JIT compilation in metrics if this was a new compilation.
-                if let Some(metrics) = &mut self.metrics {
-                    if let Some(FunctionState::Compiled { code_size, .. }) = self.jit.states.get(&key) {
-                        metrics.record_jit_compile(func_id, *code_size);
-                    }
-                }
-
-                // Set up dispatch context for potential callbacks.
-                let mut dispatch_ctx = DispatchContext {
-                    jit_engine: &mut self.jit,
-                    interp: call_ctx.interp,
-                    exec_ctx: compile_ctx,
-                    registry: call_ctx.registry,
-                    frames: call_ctx.frames,
-                };
-
-                // SAFETY: context is valid for duration of call.
-                unsafe { set_dispatch_context(&mut dispatch_ctx) };
-
-                // Execute JIT code.
-                // SAFETY: code_ptr is a valid JIT-compiled function.
-                let func_ctx = func.function_context()
-                    .expect("JIT function must have function context");
-                unsafe {
-                    bridge::call_jit(
-                        code_ptr, uses_sret, rt_handle, args, ret_dest,
-                        &func_ctx.return_type, &func_ctx.descriptor_params,
-                        shape_descriptors,
-                    )
-                };
-
-                clear_dispatch_context();
-
-                // Record execution in metrics.
-                if let Some(metrics) = &mut self.metrics {
-                    let mode = if is_inlined {
-                        ExecutionMode::InlinedJit
-                    } else {
-                        ExecutionMode::Jit
-                    };
-                    metrics.record_call(func_id, mode, start_time);
-                }
-
-                Some(DispatchResult::Handled(Ok(())))
-            }
-            Ok(None) => {
-                // Not yet compiled, fall through to interpreter.
-                None
-            }
-            Err(JitError::Unsupported(_)) => {
-                // Not a failure: the function is left to the interpreter, and
-                // asking again at every call would recompile it every time.
-                self.jit.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
-                self.jit.record_refusal();
-                None
-            }
-            Err(e) => Some(DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string())))),
-        }
-    }
 }
 
 impl Default for OptimizingDispatcher {
@@ -428,11 +348,8 @@ impl CallDispatcher for OptimizingDispatcher {
         args: &[Value],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
-        mut call_ctx: DispatchCallContext<'_, '_>,
+        call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
-        // Taken before the context is borrowed mutably below.
-        let shape_descriptors = call_ctx.shape_descriptors;
-
         // Start timing if metrics enabled.
         let start_time = self.metrics.as_mut().and_then(|m| m.start_call());
 
@@ -471,45 +388,40 @@ impl CallDispatcher for OptimizingDispatcher {
             }
         }
 
-        // Step 2: Check if we have an inlined version.
-        let is_inlined = self.has_inlined_version(
-            FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit()));
+        let func_id = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
 
-        // Determine whether to attempt JIT based on mode.
-        let should_try_jit = self.config.jit_enabled && self.chaos_should_compile();
+        // Step 2-4: Offer the call to the JIT, which counts it, may compile
+        // it, and runs compiled code. The inliner modifies the caller, not the
+        // callee, so the callee IR is the same either way. In chaos mode,
+        // compiling and using what was compiled are separate draws, so that
+        // functions are compiled and then entered from interpreted code only
+        // sometimes, which is what mixed-mode execution needs exercised.
+        if self.config.jit_enabled && self.chaos_should_compile() {
+            let is_inlined = self.has_inlined_version(func_id);
+            let use_probability = self.chaos.as_ref().map(|c| c.use_jit);
+            let rng = &mut self.rng;
+            let dispatch = self.jit.dispatch_with(
+                code_ref, func, args, ret_dest, rt_handle, call_ctx,
+                || rng.roll(use_probability));
 
-        // Step 3-4: Try JIT execution.
-        // Note: We always pass the original function to JIT. The inliner modifies
-        // the caller, not the callee, so the callee IR is the same either way.
-        if should_try_jit {
-            // In chaos mode, we may also decide not to use the JIT even if compiled.
-            let use_jit_if_compiled = self.chaos_should_use_jit();
-
-            if use_jit_if_compiled {
-                if let Some(result) = self.try_jit_execution(
-                    code_ref,
-                    func,
-                    args,
-                    ret_dest,
-                    rt_handle,
-                    shape_descriptors,
-                    &mut call_ctx,
-                    start_time,
-                    is_inlined,
-                ) {
-                    return result;
+            if let Some(metrics) = &mut self.metrics {
+                if let Some(code_size) = dispatch.compiled_now {
+                    metrics.record_jit_compile(func_id, code_size);
                 }
+                if matches!(dispatch.result, DispatchResult::Handled(Ok(()))) {
+                    let mode = if is_inlined { ExecutionMode::InlinedJit } else { ExecutionMode::Jit };
+                    metrics.record_call(func_id, mode, start_time);
+                }
+            }
+            if let DispatchResult::Handled(result) = dispatch.result {
+                return DispatchResult::Handled(result);
             }
         }
 
         // Step 5: Fall back to interpreter.
         // Record interpreted execution in metrics.
         if let Some(metrics) = &mut self.metrics {
-            metrics.record_call(
-                FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit()),
-                ExecutionMode::Interpreted,
-                start_time,
-            );
+            metrics.record_call(func_id, ExecutionMode::Interpreted, start_time);
         }
 
         DispatchResult::NotHandled

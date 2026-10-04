@@ -141,7 +141,7 @@ something behind -- an inlined body in the dispatcher, a JIT entry -- and then
 errors is never registered, and the next unit takes the index it was using.
 Anything remembered under that index is then the wrong unit's.
 
-`FuncIdentity` and `FunctionKey::of` key on the unit a local reference belongs
+`FuncIdentity` keys on the unit a local reference belongs
 to, and take it from the registry's count, which is the index the running unit
 will have. That is the same number the compiler uses for a later unit's
 `CodeRef::External`, so the two agree -- as long as a failed unit does not

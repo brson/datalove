@@ -1012,7 +1012,8 @@ one REPL line was executed in place of a different function at the same id in
 the next. `FuncIdentity` (interp `dispatch.rs`) is what those key on now: it
 resolves `Local` against the scope unit, which also makes it agree with the
 `External` a later unit uses for the same function. `ExecutionContext` carries
-the unit for this, and `FunctionKey::of` does the same for the JIT's table.
+the unit for this, and the JIT keys its table and its code cells on
+`FuncIdentity` too.
 Fixture: `interp/947_crossunit_local_id_reuse`, which the tuned and chaos
 dispatcher suites run against the plain interpreter.
 

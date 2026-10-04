@@ -14,7 +14,7 @@ use cranelift_module::{FuncId, Linkage, Module};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId};
-use datalove_datafun_interp::{ExecutionContext, FunctionRegistry};
+use datalove_datafun_interp::{ExecutionContext, FuncIdentity, FunctionRegistry};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::CraneliftError;
 use datalove_datafun_cranelift::runtime::RuntimeImports;
@@ -22,7 +22,7 @@ use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
 use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
 
 use crate::trampoline::{self, EncodedFuncKey};
-use crate::{FunctionKey, JitError};
+use crate::JitError;
 
 /// Size of the contiguous memory arena for JIT code and data.
 ///
@@ -109,7 +109,7 @@ pub struct JitCompiler {
     /// through `__jit_dispatch_call`; that round trip was over 80% of the
     /// jit's time on call-heavy code. The cell's address is emitted into the
     /// stub, so each is boxed to stay put and none is ever removed.
-    code_cells: rustc_hash::FxHashMap<FunctionKey, Box<AtomicUsize>>,
+    code_cells: rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -233,68 +233,26 @@ impl JitCompiler {
     }
 
     /// The address of the cell holding `key`'s compiled code, zero until it has some.
-    fn code_cell(&mut self, key: FunctionKey) -> *const AtomicUsize {
+    fn code_cell(&mut self, key: FuncIdentity) -> *const AtomicUsize {
         &**self.code_cells.entry(key).or_insert_with(|| Box::new(AtomicUsize::new(0)))
     }
 
     /// Have every stub for `key` call `code_ptr` directly from now on.
-    pub fn publish(&mut self, key: FunctionKey, code_ptr: *const u8) {
+    pub fn publish(&mut self, key: FuncIdentity, code_ptr: *const u8) {
         let cell = self.code_cell(key);
         // SAFETY: the cell is boxed and never removed.
         unsafe { (*cell).store(code_ptr as usize, Ordering::Relaxed) };
     }
 
-    /// Compile a function to native code (no calls to other functions).
+    /// Compile a function to native code.
+    ///
+    /// Each callee gets a stub that calls its compiled code once it has some
+    /// and goes through the trampoline to the interpreter until then. `ctx` is
+    /// the context the function runs in, which is where its callees are looked
+    /// up.
     ///
     /// Returns (code_ptr, uses_sret, code_size).
-    pub fn compile_function(&mut self, func: &IrCodeUnit) -> Result<(*const u8, bool, usize), JitError> {
-        // Emit TyDescs for all types in this function.
-        let mut types = BTreeSet::new();
-        tydesc_emit::collect_types_from_code_unit(func, &mut types);
-
-        self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| codegen_err("tydesc emit", e))?;
-
-        // Build a FunctionCompiler for this function.
-        let compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
-            func,
-            self.isa.as_ref(),
-            &mut self.jit_module,
-            self.runtime.clone(),
-            self.tydesc_emitter.clone(),
-            None, // No registry for now - single function compilation.
-        );
-
-        // Compile and get the Cranelift FuncId.
-        let cl_func_id = compiler.compile_as(&unique_symbol(func))
-            .map_err(|e| codegen_err("compile", e))?;
-
-        // Finalize to get executable code.
-        self.jit_module.finalize_definitions()
-            .map_err(|e| jit_err("finalize", e))?;
-
-        // Get the code pointer and size.
-        let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
-
-        // Estimate code size from IR function (Cranelift doesn't expose compiled size directly).
-        // Use a heuristic: ~10 bytes per instruction + 20 per block for control flow.
-        let code_size = estimate_code_size(func);
-
-        // Determine if function uses sret.
-        let func_ctx = func.function_context()
-            .expect("function must be a function code unit");
-        let sret = uses_sret(&func_ctx.return_type);
-
-        Ok((code_ptr, sret, code_size))
-    }
-
-    /// Compile a function that may call other functions.
-    ///
-    /// Creates stub functions for all callees that dispatch through the trampoline.
-    /// This enables mixed-mode execution where JIT code can call interpreted functions.
-    ///
-    /// Returns (code_ptr, uses_sret, code_size).
-    pub fn compile_function_with_context<'a>(
+    pub fn compile_function<'a>(
         &mut self,
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
@@ -337,7 +295,7 @@ impl JitCompiler {
             }
 
             // Create a stub for this callee.
-            let key = FunctionKey::of(&code_ref, ctx.unit());
+            let key = FuncIdentity::of(&code_ref, ctx.unit());
             let stub_id = self.create_stub_for_callee(&code_ref, key, &callee_ir)?;
 
             // Register in appropriate map.
@@ -435,7 +393,7 @@ impl JitCompiler {
     fn create_stub_for_callee(
         &mut self,
         code_ref: &CodeRef,
-        key: FunctionKey,
+        key: FuncIdentity,
         callee: &IrCodeUnit,
     ) -> Result<FuncId, JitError> {
         // Generate unique stub name.

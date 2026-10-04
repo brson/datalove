@@ -97,8 +97,8 @@ at a time and only `External` swaps it. What is not fine is *remembering* a
 function between calls by a `Local` alone: the dynamic inliner's optimized
 bodies and the JIT's compiled ones both did, and a hot function in one REPL line
 was executed in place of a different function at the same id in the next.
-Anything that caches keys on a resolved identity instead -- `FuncIdentity` in
-the interpreter, `FunctionKey::of` for the JIT.
+Anything that caches keys on a resolved identity instead -- `FuncIdentity`,
+which the interpreter and the JIT share.
 
 ## 3. Types
 
