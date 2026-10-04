@@ -1,0 +1,129 @@
+// Word frequency benchmark - count the words of a generated text and report the
+// most frequent.
+//
+// Datalove has no I/O, so the text is generated: a 32-bit LCG picks words from
+// a vocabulary of 4096 three-syllable words, smaller indices more often, with
+// about one word in ten in upper case and a newline every twelfth. Every
+// implementation generates the same text from the same seed. The text is then
+// split, lowercased and counted in a map, and the counts sorted.
+//
+// Prints (words, distinct words, checksum of the top 20 by count).
+
+require module sys/std/string
+require module sys/std/list
+require module sys/std/map
+require module sys/std/ord
+require module sys/std/index
+require module sys/std/u32
+
+const WORDS: u32 = 2000000
+const TOP: u32 = 20
+
+// Advance the generator and return 16 well-mixed bits of it.
+fun next(mut state: u32): u32
+  set state = icall add_wrapping_u32(icall mul_wrapping_u32(state, : u32 / 1664525), : u32 / 1013904223)
+  ret icall shr_u32(state, : u32 / 16)
+end fun
+
+// The 4096 words: three syllables each, named by the index's three hex digits.
+fun vocabulary(): ![string]
+  let syllables: [string] = ["ka", "lo", "mi", "ra", "te", "su", "no", "vi",
+                             "de", "pa", "zu", "ri", "go", "ne", "ba", "to"]
+  var vocab: [string] = []
+  var i: u32 = 0
+  loop while i .< 4096
+    var word = string.new()
+    call string.push_str(mut word, ref syllables[index.from_u32(icall bitand_u32(i, : u32 / 15))]!)
+    call string.push_str(mut word, ref syllables[index.from_u32(icall bitand_u32(icall shr_u32(i, : u32 / 4), : u32 / 15))]!)
+    call string.push_str(mut word, ref syllables[index.from_u32(icall shr_u32(i, : u32 / 8))]!)
+    call list.push(mut vocab, word)
+    set i = i +! 1
+  end loop
+  ret ok vocab
+end fun
+
+// The text: WORDS words drawn from the vocabulary.
+fun generate(ref vocab: [string]): !string
+  var text = string.new()
+  var state: u32 = 12345
+  var i: u32 = 0
+  loop while i .< WORDS
+    // The smaller of two draws, so that the counts fall off with the index.
+    let a = icall rem_u32(next(mut state), : u32 / 4096)
+    let b = icall rem_u32(next(mut state), : u32 / 4096)
+    let w = index.from_u32(u32.min(a, b))
+    if icall rem_u32(next(mut state), : u32 / 10) == 0
+      let upper = string.to_ascii_uppercase(ref vocab[w]!)
+      call string.push_str(mut text, ref upper)
+    else
+      call string.push_str(mut text, ref vocab[w]!)
+    end if
+    if icall rem_u32(i, : u32 / 12) == 11
+      call string.push_str(mut text, ref "\n")
+    else
+      call string.push_str(mut text, ref " ")
+    end if
+    set i = i +! 1
+  end loop
+  ret ok text
+end fun
+
+// How many times each lowercased word appears.
+fun count(ref text: string): !%{string = u32}
+  let words = string.split_whitespace(ref text)
+  var counts: %{string = u32} = %{}
+  var i: index = 0
+  loop while i .< list.len(ref words)
+    let lower = string.to_ascii_lowercase(ref words[i]!)
+    let seen = map.get_or(ref counts, ref lower, : u32 / 0)
+    call map.insert(mut counts, lower, seen +! 1)
+    set i = i +! 1
+  end loop
+  ret ok counts
+end fun
+
+// Fold the top entries, by count and then by word, into one number: each
+// count and then each byte of its word, in rank order.
+fun top_checksum(ref counts: %{string = u32}): !u32
+  let words = map.keys(ref counts)
+  let seen = map.values(ref counts)
+  // Sorting ascending on the count's complement puts the largest first, with
+  // ties in the order of the words.
+  var ranked: [(u32, string)] = []
+  var i: index = 0
+  loop while i .< list.len(ref words)
+    call list.push(mut ranked, (u32.max_value() -! seen[i]!, words[i]!@))
+    set i = i +! 1
+  end loop
+  let sorted = ord.sorted(ref ranked)
+
+  var sum: u32 = 0
+  var r: index = 0
+  loop while r .< index.from_u32(TOP)
+    set sum = icall add_wrapping_u32(icall mul_wrapping_u32(sum, : u32 / 31), u32.max_value() -! sorted[r]!.0)
+    var j: index = 0
+    loop while j .< string.len(ref sorted[r]!.1)
+      if string.get_byte(ref sorted[r]!.1, j) |byte|
+        let wide: u32 = byte@
+        set sum = icall add_wrapping_u32(icall mul_wrapping_u32(sum, : u32 / 31), wide)
+      end if
+      set j = j +! 1
+    end loop
+    set r = r +! 1
+  end loop
+  ret ok sum
+end fun
+
+fun run(): !(u32, index, u32)
+  let vocab = vocabulary()!
+  let text = generate(ref vocab)!
+  let counts = count(ref text)!
+  ret ok (WORDS, map.len(ref counts), top_checksum(ref counts)!)
+end fun
+
+let result = run()
+if result |summary|
+  debuglog(summary)
+else |err|
+  debuglog(err)
+end if

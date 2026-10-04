@@ -13,7 +13,7 @@ python := `uv python find`
 # AOT executables are built here, outside the timed runs.
 aotdir := "../target/benchvs"
 
-benches := "fib sum primes"
+benches := "fib sum primes wordfreq"
 
 # Build datalove CLI in release mode and AOT-compile every bench.
 build:
