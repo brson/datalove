@@ -42,7 +42,7 @@ end fun
 
 // Drop every element.
 fun clear<T>(mut self: #{T}) with { T is ord, }
-  set_clear(mut self)
+  call set_clear(mut self)
 end fun
 
 // The element at a position in sort order, or none past the end.
@@ -62,7 +62,7 @@ fun to_list<T>(ref self: #{T}): [T] with { T is ord, }
   var i: index = : index / 0
   loop while i .< n
     if get(ref self, i) |elem|
-      list_push(mut built, elem)
+      call list_push(mut built, elem)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop

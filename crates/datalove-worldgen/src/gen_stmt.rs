@@ -38,7 +38,7 @@ pub fn gen_generic_call_stmt<'db, R: Rng>(
 
     match result {
         // Nothing comes back, so the call is a statement on its own.
-        None => lines.push(format!("{}{}", indent, call)),
+        None => lines.push(format!("{}call {}", indent, call)),
         Some(result_type) => {
             let name = format!("v{}", *var_counter);
             *var_counter += 1;

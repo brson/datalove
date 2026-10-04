@@ -18,25 +18,25 @@ fun take_out<T>(out x: T, src: T)
 end fun
 
 fun forward_out<T>(out x: T, src: T)
-  take_out(out x, src)
+  call take_out(out x, src)
 end fun
 
 var word: string = "before"
-take_out(out word, "after")
+call take_out(out word, "after")
 debuglog word
 
 var forwarded: string = "before"
-forward_out(out forwarded, "after")
+call forward_out(out forwarded, "after")
 debuglog forwarded
 
 // Into a field rather than a whole binding, which is the other place an out
 // parameter is allowed to point.
 var pair = ("a", "b")
-take_out(out pair.1, "z")
+call take_out(out pair.1, "z")
 debuglog pair
 
 var counter: u32 = 0
-forward_out(out counter, 42)
+call forward_out(out counter, 42)
 debuglog counter
 
 // A destination that holds nothing yet, through a concrete function.
@@ -45,21 +45,21 @@ fun take_out_string(out x: string, src: string)
 end fun
 
 var fresh: string
-take_out_string(out fresh, "written")
+call take_out_string(out fresh, "written")
 debuglog fresh
 
 // One never read, so the drop at the end of the unit is the only thing that
 // frees what the call wrote, and it asks the tracking byte the call has to set.
 var unread: string
-take_out_string(out unread, "dropped")
+call take_out_string(out unread, "dropped")
 
 // Forwarded through a second out parameter, still starting from nothing.
 fun forward_out_string(out x: string, src: string)
-  take_out_string(out x, src)
+  call take_out_string(out x, src)
 end fun
 
 var fresh_forwarded: string
-forward_out_string(out fresh_forwarded, "relayed")
+call forward_out_string(out fresh_forwarded, "relayed")
 debuglog fresh_forwarded
 
 // And through a generic, which is the harder half: a generic erases its
@@ -67,18 +67,18 @@ debuglog fresh_forwarded
 // that the call destroys what was there. A destination holding nothing has
 // nothing to erase, and reading it anyway read the frame's own poison.
 var generic_fresh: string
-take_out(out generic_fresh, "erased")
+call take_out(out generic_fresh, "erased")
 debuglog generic_fresh
 
 var generic_unread: string
-take_out(out generic_unread, "erased and dropped")
+call take_out(out generic_unread, "erased and dropped")
 
 var generic_forwarded: string
-forward_out(out generic_forwarded, "erased and relayed")
+call forward_out(out generic_forwarded, "erased and relayed")
 debuglog generic_forwarded
 
 // A copy type through the same path, where the erased shape is packed into
 // the wrapper's own words rather than pointed at.
 var generic_narrow: u32
-take_out(out generic_narrow, 7)
+call take_out(out generic_narrow, 7)
 debuglog generic_narrow

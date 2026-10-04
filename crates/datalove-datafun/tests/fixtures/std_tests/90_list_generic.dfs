@@ -22,11 +22,11 @@ let reads = (get(ref nums, (: index / 1)), get(ref strs, (: index / 0)))
 let past_end = get(ref nums, (: index / 9))
 
 var growing: [u32] = [1]
-push(mut growing, 2)
+call push(mut growing, 2)
 let grown = len(ref growing)
 
 var words: [string] = ["first"]
-push(mut words, "second")
+call push(mut words, "second")
 let taken = pop(mut words)
 let left = len(ref words)
 

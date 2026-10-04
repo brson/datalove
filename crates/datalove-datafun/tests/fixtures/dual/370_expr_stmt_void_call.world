@@ -9,5 +9,5 @@ end fun
 
 var n: int = 42
 debuglog n
-reset(mut n)
+call reset(mut n)
 debuglog n

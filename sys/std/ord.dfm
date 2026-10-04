@@ -328,7 +328,7 @@ fun deduped<T>(ref self: [T]): [T] with { T is ord, }
         end if
       end if
       if keep
-        list_push(mut out, elem@)
+        call list_push(mut out, elem@)
       end if
       set previous = some elem
     end if

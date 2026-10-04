@@ -15,12 +15,12 @@ end fun
 
 fun f(mut t: [|i32, 2|]): !()
   let i: index = 1
-  fill(out t[i]!)
+  call fill(out t[i]!)
   ret ok ()
 end fun
 
 var t: [|i32, 2|] = [| 1 2 3, 4 5 6 |]
 let i: index = 1
-clear(mut t[i]!)
+call clear(mut t[i]!)
 let row: [|i32, 1|] = [| 7 8 9 |]
 set t[i]! = row

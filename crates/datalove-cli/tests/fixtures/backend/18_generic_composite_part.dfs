@@ -64,7 +64,7 @@ debuglog got
 debuglog via_call(ref s)
 
 var m: {q: {a: u8, b: u32}, c: u32} = {q = {a = 1, b = 7}, c = 5}
-set_q(mut m, {a = 2, b = 9})
+call set_q(mut m, {a = 2, b = 9})
 debuglog m
 
 let xs: [{a: u8, b: u32}] = [{a = 1, b = 7}, {a = 2, b = 9}]

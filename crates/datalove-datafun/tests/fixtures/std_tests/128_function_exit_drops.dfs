@@ -52,24 +52,24 @@ fun loops_then_ends(rounds: index)
 end fun
 
 // A heap type is the one that shows, because dropping a `u32` frees nothing.
-ignores("a string")
-ignores([: u32 / 1, : u32 / 2])
-ignores(12345678901234567890)
-ignores(: u32 / 5)
+call ignores("a string")
+call ignores([: u32 / 1, : u32 / 2])
+call ignores(12345678901234567890)
+call ignores(: u32 / 5)
 
-binds_and_leaves("a string")
-binds_and_leaves([: u32 / 3])
+call binds_and_leaves("a string")
+call binds_and_leaves([: u32 / 3])
 
-ignores_two("one", [: u32 / 1])
-ignores_two(: u8 / 1, "two")
+call ignores_two("one", [: u32 / 1])
+call ignores_two(: u8 / 1, "two")
 
-makes_a_local("a string")
+call makes_a_local("a string")
 
-keeps_a_var(true)
-keeps_a_var(false)
+call keeps_a_var(true)
+call keeps_a_var(false)
 
-loops_then_ends(: index / 3)
-loops_then_ends(: index / 0)
+call loops_then_ends(: index / 3)
+call loops_then_ends(: index / 0)
 
 // Something to show, so the unit has a result.
 let evidence: [string] = ["still here"]

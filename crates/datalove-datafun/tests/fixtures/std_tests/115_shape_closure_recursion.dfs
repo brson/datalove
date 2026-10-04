@@ -15,7 +15,7 @@ import list.len
 fun make_a<T>(x: T, n: u32): [T]
   if n == (: u32 / 0)
     var out: [T] = []
-    push(mut out, x)
+    call push(mut out, x)
     ret out
   else
     ret make_b(x, icall sub_wrapping_u32(n, : u32 / 1))
@@ -37,7 +37,7 @@ end fun
 
 fun inner<T>(x: T): [T]
   var out: [T] = []
-  push(mut out, x)
+  call push(mut out, x)
   ret out
 end fun
 

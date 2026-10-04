@@ -43,7 +43,7 @@ end fun
 
 // Append an element.
 fun push<T>(mut self: [T], elem: T)
-  list_push(mut self, elem)
+  call list_push(mut self, elem)
 end fun
 
 // The first element, or none if there are none.
@@ -109,7 +109,7 @@ end fun
 // A list holding just one element.
 fun of<T>(elem: T): [T]
   var built: [T] = []
-  push(mut built, elem)
+  call push(mut built, elem)
   ret built
 end fun
 
@@ -118,7 +118,7 @@ fun repeated<T>(ref elem: T, n: index): [T]
   var built: [T] = []
   var i: index = : index / 0
   loop while i .< n
-    push(mut built, elem@)
+    call push(mut built, elem@)
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
   ret built
@@ -130,7 +130,7 @@ fun take<T>(ref self: [T], n: index): [T]
   var i: index = : index / 0
   loop while i .< n
     if get(ref self, i) |elem|
-      push(mut built, elem)
+      call push(mut built, elem)
     else
       break
     end if
@@ -146,7 +146,7 @@ fun skip<T>(ref self: [T], n: index): [T]
   var i: index = n
   loop while i .< total
     if get(ref self, i) |elem|
-      push(mut built, elem)
+      call push(mut built, elem)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -167,14 +167,14 @@ fun extend<T>(mut self: [T], other: [T])
   var back: [T] = []
   loop
     if pop(mut src) |elem|
-      push(mut back, elem)
+      call push(mut back, elem)
     else
       break
     end if
   end loop
   loop
     if pop(mut back) |elem|
-      push(mut self, elem)
+      call push(mut self, elem)
     else
       break
     end if
@@ -188,7 +188,7 @@ fun flattened<T>(ref self: [[T]]): [T]
   let n = len(ref self)
   loop while i .< n
     if get(ref self, i) |inner|
-      extend(mut built, inner)
+      call extend(mut built, inner)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -205,7 +205,7 @@ fun zip<A, B>(ref self: [A], ref other: [B]): [(A, B)]
   var i: index = : index / 0
   loop while i .< n
     if zip_option(get(ref self, i), get(ref other, i)) |pair|
-      push(mut built, pair)
+      call push(mut built, pair)
     else
       break
     end if
@@ -234,7 +234,7 @@ fun reversed<T>(ref self: [T]): [T]
   var src: [T] = self@
   loop
     if pop(mut src) |elem|
-      push(mut out, elem)
+      call push(mut out, elem)
     else
       break
     end if
@@ -249,7 +249,7 @@ fun concat<T>(ref self: [T], ref other: [T]): [T]
   var i: index = : index / 0
   loop while i .< n
     if get(ref other, i) |elem|
-      push(mut out, elem)
+      call push(mut out, elem)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -258,12 +258,12 @@ end fun
 
 // Make room for at least n more elements.
 fun reserve<T>(mut self: [T], n: index)
-  list_reserve(mut self, n)
+  call list_reserve(mut self, n)
 end fun
 
 // Drop every element, leaving an empty list.
 fun clear<T>(mut self: [T])
-  list_clear(mut self)
+  call list_clear(mut self)
 end fun
 
 // Take the last element off, or none if there are none.

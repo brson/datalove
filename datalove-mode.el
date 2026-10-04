@@ -33,7 +33,7 @@
   "Syntax table for `datalove-mode'.")
 
 (defconst datalove-mode--keywords
-  '("let" "var" "const" "set"
+  '("let" "var" "const" "set" "call"
     "fun" "ret" "native"
     "require" "module" "import" "rider"
     "if" "else" "end"

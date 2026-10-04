@@ -60,11 +60,11 @@ var d: u32 = 0
 var e: u32 = 0
 var f: u32 = 0
 
-write_then_end(out a)
-writes_after(out b, true)
-writes_after(out c, false)
-writes_in_both(out d, true)
-writes_in_loop(out e)
-writes_in_match(out f, atom Right)
+call write_then_end(out a)
+call writes_after(out b, true)
+call writes_after(out c, false)
+call writes_in_both(out d, true)
+call writes_in_loop(out e)
+call writes_in_match(out f, atom Right)
 
 let output = (a, b, c, d, e, f)

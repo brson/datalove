@@ -12,7 +12,7 @@ fun set_twenty(mut x: int)
 end fun
 
 var a: int = 0
-set_ten(mut a)
+call set_ten(mut a)
 debuglog a
-set_twenty(mut a)
+call set_twenty(mut a)
 debuglog a

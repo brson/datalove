@@ -104,7 +104,7 @@ fun debug_shape(my_shape: Shape)
   debuglog my_shape
 end fun
 
-debug_shape(atom Circle)
+call debug_shape(atom Circle)
 ```
 
 
@@ -180,7 +180,7 @@ end fun
 let a = 3
 var b = 4
 var c: int
-demo_param_modes(2, ref a, mut b, out c)
+call demo_param_modes(2, ref a, mut b, out c)
 
 debuglog (b, c)
 ```

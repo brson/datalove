@@ -23,7 +23,7 @@ let ins_oob = insert(mut words, (: index / 99), "nope")
 let taken = remove(mut words, (: index / 0))
 let taken_oob = remove(mut words, (: index / 50))
 
-reserve(mut nums, (: index / 16))
+call reserve(mut nums, (: index / 16))
 
 let output = ((set_ok, set_oob), first(ref nums), last(ref nums),
               (ins_ok, ins_end, ins_oob),

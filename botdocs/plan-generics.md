@@ -374,7 +374,7 @@ The fifth is where it stops. Moving the parameter into a local:
 ```datalove
 fun grow<T>(xs: [T], v: T): index
   var ys = xs
-  push(mut ys, v)
+  call push(mut ys, v)
   ret len(ref ys)
 end fun
 ```

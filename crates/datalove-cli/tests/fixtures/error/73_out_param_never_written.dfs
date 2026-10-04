@@ -8,5 +8,5 @@ fun never_writes(out n: u32)
 end fun
 
 var slot: u32 = 0
-never_writes(out slot)
+call never_writes(out slot)
 let output = slot

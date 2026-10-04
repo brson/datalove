@@ -1,3 +1,0 @@
-fun set(x: int)
-    debuglog x
-end fun

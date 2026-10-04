@@ -16,7 +16,7 @@ let no_ends = (first(ref empty), last(ref empty))
 
 var doomed: [string] = ["a", "b", "c"]
 let before = len(ref doomed)
-clear(mut doomed)
+call clear(mut doomed)
 let after = len(ref doomed)
 
 let output = (ends, no_ends, before, after)

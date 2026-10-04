@@ -21,26 +21,26 @@ import list.get
 // element type by another route.
 
 fun push_through<T>(mut self: [T], elem: T)
-  push(mut self, elem)
+  call push(mut self, elem)
 end fun
 
 // Two levels, so the second call forwards a parameter that reached it through
 // the first rather than one the caller supplied directly.
 fun push_through_twice<T>(mut self: [T], elem: T)
-  push_through(mut self, elem)
+  call push_through(mut self, elem)
 end fun
 
 var numbers: [u32] = [1, 2, 3]
-push_through(mut numbers, 4)
-push_through_twice(mut numbers, 5)
+call push_through(mut numbers, 4)
+call push_through_twice(mut numbers, 5)
 
 let counted = len(ref numbers)
 let last = get(ref numbers, 4)
 
 // A move type, where a lost level faults rather than reading wrong.
 var words: [string] = ["a"]
-push_through(mut words, "b")
-push_through_twice(mut words, "c")
+call push_through(mut words, "b")
+call push_through_twice(mut words, "c")
 
 // A borrowed collection forwarded on without anything being pushed, which is
 // the descriptor travelling a second hop on its own.

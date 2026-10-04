@@ -68,7 +68,7 @@ debuglog wrap(TWO, "s")
 debuglog pick(ONE, : u32 / 3, : u32 / 4)
 debuglog wrap_one(: u32 / 9)
 
-announce(ONE, "spoken")
+call announce(ONE, "spoken")
 
 let kept = pick(ONE, "kept", "dropped")
 

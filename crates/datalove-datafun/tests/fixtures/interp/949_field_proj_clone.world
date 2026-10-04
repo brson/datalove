@@ -60,17 +60,17 @@ fun fill(out x: int)
 end fun
 
 var w: (int, u32) = (: int / 10, : u32 / 2)
-bump(mut w.0)
+call bump(mut w.0)
 debuglog w.0
-fill(out w.0)
+call fill(out w.0)
 debuglog w.0
 set w.0 = :int/50
 debuglog w.0
 
 var s: {a: int, b: u32} = {a = :int/10, b = :u32/2}
-bump(mut s.a)
+call bump(mut s.a)
 debuglog s.a
-fill(out s.a)
+call fill(out s.a)
 debuglog s.a
 set s.a = :int/50
 debuglog s.a

@@ -22,13 +22,13 @@ import list.pop
 
 fun singleton<T>(x: T): [T]
   var out: [T] = []
-  push(mut out, x)
+  call push(mut out, x)
   ret out
 end fun
 
 fun two_of<T>(a: T, b: T): [T]
   var out: [T] = singleton(a)
-  push(mut out, b)
+  call push(mut out, b)
   ret out
 end fun
 
@@ -42,7 +42,7 @@ fun reversed<T>(ref xs: [T]): [T]
   var src: [T] = xs@
   loop
     if pop(mut src) |elem|
-      push(mut out, elem)
+      call push(mut out, elem)
     else
       break
     end if

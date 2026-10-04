@@ -13,14 +13,14 @@ end fun
 
 fun from_call(n: i32): !()
   let held: string = "held"
-  take("x", n +! 1)
-  take(held, 0)
+  call take("x", n +! 1)
+  call take(held, 0)
   ret ok ()
 end fun
 
 fun from_call_moving(n: i32): !()
   let held: string = "held"
-  take(held, n +! 1)
+  call take(held, n +! 1)
   ret ok ()
 end fun
 

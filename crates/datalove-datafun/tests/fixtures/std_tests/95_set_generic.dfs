@@ -28,7 +28,7 @@ let w2 = insert(mut words, "beta")
 let w3 = insert(mut words, "alpha")
 let word_count = len(ref words)
 let seen = contains(ref words, ref beta)
-clear(mut words)
+call clear(mut words)
 let cleared = len(ref words)
 
 let output = ((added, again), has, (dropped, missing), counted,

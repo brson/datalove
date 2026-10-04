@@ -47,14 +47,14 @@ let as_set = to_list(ref from_list(zip(ref names, ref nums)))
 // `concat` cannot do; `flattened` is written in terms of it.
 var acc: [string] = ["x"]
 let more: [string] = ["y", "z"]
-extend(mut acc, more)
+call extend(mut acc, more)
 
 let nested: [[u32]] = [[1, 2], [3], []]
 let flat = flattened(ref nested)
 
 var cut: [u32] = [1, 2, 3, 4]
-truncate(mut cut, 2)
+call truncate(mut cut, 2)
 let short = cut@
-truncate(mut cut, 9)
+call truncate(mut cut, 9)
 
 let output = (zipped, listed, looked_up, as_set, acc, flat, short, cut)

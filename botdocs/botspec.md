@@ -52,22 +52,27 @@ In syntax descriptions, the following conventions apply:
 ### 2.1 Reserved Words
 
 Datalove has no words reserved everywhere. A word is special in a position --
-the start of an expression, the start of a statement, a type -- and is reserved
-only for the names that are read in that position, where it would mean
-something else. It is refused where such a name is declared (P064), and free
+the start of an expression, a type -- and is reserved only for the names that
+are read in that position, where it would mean something else. It is refused where such a name is declared (P064), and free
 everywhere else.
 
 | Name | Reserved | Why |
 |------|----------|-----|
 | value (`let`, `var`, `const`, `if`/`else`/`case` bindings) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `enum` `not` `icall` | they start an expression |
 | parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
-| function | the value words, and `let` `var` `const` `set` `fun` `native` `ret` `if` `match` `loop` `break` `continue` `require` `import` `type` `debuglog` | a call is read like a value, and a call statement starts where a statement does |
+| function | the value words | a call is read like a value |
 | type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
 | module, field, column, variant | nothing | no word means anything else there |
 
-So a value may be called `type` or `list`, a type alias `table` or `Error`, and
-a module `u8` -- the standard library's modules are named after the types they
-serve. `and`, `or` and `xor` are read only after an operand, and the words
+So a value may be called `type` or `list`, a function `set` or `match`, a type
+alias `table` or `Error`, and a module `u8` -- the standard library's modules
+are named after the types they serve.
+
+Every statement begins with its own keyword, a call made for its effect
+included (`call`, Section 8.9), so no name is ever read at the start of a
+statement and the statement words are reserved for nothing. A new statement
+keyword therefore never takes a name away from existing code.
+`and`, `or` and `xor` are read only after an operand, and the words
 inside constructs (`else`, `end`, `case`, `default`, `with`, `is`, `while`
 after `loop`, `module` and `rider` after `require`) only where a name cannot be,
 so none of them is reserved.
@@ -870,7 +875,7 @@ context (`let`, `ret`, `in` param), linear fields require explicit `@` clone:
 let t = (1, 2)
 let x = t.0                   // error: int is linear
 let x = t.0@                  // ok: explicit clone
-foo(ref t.0)                   // ok: borrow
+call foo(ref t.0)                   // ok: borrow
 ```
 
 Copy-type fields (bool, fixed integers, floats) are freely extracted.
@@ -1138,7 +1143,7 @@ in the callee's signature. `in` is written by omitting the marker:
 ```datalove
 fun mixed(a: u32, ref b: u32, mut c: u32): u32
 
-mixed(x, ref y, mut z)
+call mixed(x, ref y, mut z)
 ```
 
 A marker that disagrees with the declared mode is an error (F057), including
@@ -1227,8 +1232,8 @@ the parameter has a type parameter, whatever the argument has in that position
 is what it stands for:
 
 ```datalove
-unwrap_or(some (: u32 / 7), : u32 / 0)      // T is u32
-unwrap_or(some "hello", "fallback")         // T is string
+call unwrap_or(some (: u32 / 7), : u32 / 0)      // T is u32
+call unwrap_or(some "hello", "fallback")         // T is string
 ```
 
 The first argument to reach a type parameter fixes it, and the rest are checked
@@ -1236,7 +1241,7 @@ against the result, so a disagreement is a type mismatch rather than a
 reinterpretation:
 
 ```datalove
-pick_first(: u32 / 1, "not a u32")          // error: expected u32, found string
+call pick_first(: u32 / 1, "not a u32")          // error: expected u32, found string
 ```
 
 An argument that cannot say what it is on its own binds nothing, and is checked
@@ -1244,7 +1249,7 @@ afterwards against whatever another argument fixed. So `none` is usable where
 something else determines the type:
 
 ```datalove
-unwrap_or(none, "fallback")                 // T is string, from the second
+call unwrap_or(none, "fallback")                 // T is string, from the second
 ```
 
 Because the first argument fixes it, argument order decides which type a
@@ -1526,16 +1531,17 @@ It accepts an expression of any type, and borrows rather than consumes it, so
 a linear value may be logged and then used. That is why a projection of a
 linear field may be written under it without a `@` (Section 3.2).
 
-### 8.9 Expression Statements
+### 8.9 Call Statements
 
-An expression may stand alone as a statement only when it is a function call:
+A function called for its effect is written after `call`:
 
 ```datalove
-bump(mut v)
+call bump(mut v)
 ```
 
-Anything else in statement position is P031, since a value computed and
-discarded is more likely a mistake than an intention.
+`call` takes only a function call. Anything else after it is P031, since a
+value computed and discarded is more likely a mistake than an intention. A
+line that begins with no statement keyword at all is P001.
 
 ## 9. Module System
 
@@ -1747,12 +1753,12 @@ parameter being forwarded.
 fun bump(mut x: u32)
 
 var v: u32 = 1
-bump(mut v)            // ok
-bump(mut v.0)          // ok for a var aggregate
+call bump(mut v)            // ok
+call bump(mut v.0)          // ok for a var aggregate
 
 let w: u32 = 1
-bump(mut w)            // error: `w` is immutable
-bump(mut compute())    // error: the write would be discarded
+call bump(mut w)            // error: `w` is immutable
+call bump(mut compute())    // error: the write would be discarded
 ```
 
 An `in` parameter is not assignable either, and a `ref` parameter reports the
@@ -1768,7 +1774,7 @@ either is `mut` or `out`:
 fun grow(mut self: string, ref other: string)
 
 var s: string = "hi"
-grow(mut s, ref s)    // error: aliased mutable argument
+call grow(mut s, ref s)    // error: aliased mutable argument
 ```
 
 Two `ref` arguments are permitted, as are two reads of a copy value:
@@ -1801,7 +1807,7 @@ If a value is moved in one branch, it must be moved in all branches:
 
 ```datalove
 if cond
-    consume(x)     // moves x
+    call consume(x)     // moves x
 else
     // error: x not moved here
 end if

@@ -49,8 +49,8 @@ end fun
 // And one built in the body rather than borrowed from a callee.
 fun twice<T>(const n: int, a: T, b: T): [T]
   var out: [T] = []
-  push(mut out, a)
-  push(mut out, b)
+  call push(mut out, a)
+  call push(mut out, b)
   ret out
 end fun
 
@@ -113,9 +113,9 @@ debuglog len(ref built)
 
 debuglog rev_last(ref words, ONE)
 
-announce(ONE, "said")
-announce(ONE, : u32 / 5)
+call announce(ONE, "said")
+call announce(ONE, : u32 / 5)
 
 var got: string = ""
-first_out(ONE, "written", out got)
+call first_out(ONE, "written", out got)
 debuglog got

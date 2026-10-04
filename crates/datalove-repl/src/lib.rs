@@ -113,7 +113,7 @@ pub(crate) fn classify_input(input: &str) -> InputKind {
     let is_repl_command = !starts_a_comment(input.trim())
         && input.trim().starts_with(REPL_COMMAND_SIGIL);
     let is_oneline_statement_keyword = parse_ident(code).map(|ident| match ident {
-        "let" | "var" | "const" | "set" | "require" | "import" => true,
+        "let" | "var" | "const" | "set" | "call" | "require" | "import" => true,
         _ => false
     }).unwrap_or(false);
     let is_multiline_statement_keyword = parse_ident(code).map(|ident| match ident {

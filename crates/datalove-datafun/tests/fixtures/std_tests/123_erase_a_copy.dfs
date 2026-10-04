@@ -22,7 +22,7 @@ fun count_up(n: index): index
   var built: [index] = []
   var i: index = : index / 0
   loop while i .< n
-    push(mut built, i)
+    call push(mut built, i)
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
   ret len(ref built)
@@ -32,7 +32,7 @@ end fun
 fun erase_then_read(): index
   var built: [index] = []
   var i: index = : index / 5
-  push(mut built, i)
+  call push(mut built, i)
   ret i
 end fun
 
@@ -51,7 +51,7 @@ end fun
 fun erase_a_tuple(): (u32, u32)
   var built: [(u32, u32)] = []
   let pair: (u32, u32) = (: u32 / 1, : u32 / 2)
-  push(mut built, pair)
+  call push(mut built, pair)
   ret pair
 end fun
 

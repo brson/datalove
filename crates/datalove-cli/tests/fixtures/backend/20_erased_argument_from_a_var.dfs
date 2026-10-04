@@ -36,19 +36,19 @@ end fun
 
 // The var the callee takes away.
 var built: [string] = []
-push(mut built, "a")
-push(mut built, "b")
+call push(mut built, "a")
+call push(mut built, "b")
 debuglog size(built)
 
 // And again through a local inside the callee, which is what first showed it.
 var again: [string] = []
-push(mut again, "a")
+call push(mut again, "a")
 debuglog last_of(again)
 
 // A literal, which always worked, and a concrete callee, which never converts.
 debuglog size(["x", "y", "z"])
 var third: [string] = []
-push(mut third, "c")
+call push(mut third, "c")
 debuglog concrete_size(third)
 
 // A copy-typed var handed to a generic twice over: erasing it does not take it

@@ -3,39 +3,21 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected parameter list"
-      },
-      {
-        "kind": "ParseError",
         "message": "unexpected statement"
       }
     ]
   },
   "diagnostics": [
     {
-      "code": "P002",
-      "labels": [
-        {
-          "message": "expected '(' to start parameter list",
-          "span": [
-            7,
-            7
-          ],
-          "text": ""
-        }
-      ],
-      "message": "expected parameter list"
-    },
-    {
       "code": "P001",
       "labels": [
         {
           "message": "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'",
           "span": [
-            8,
-            11
+            0,
+            4
           ],
-          "text": "end"
+          "text": "push"
         }
       ],
       "message": "unexpected statement"

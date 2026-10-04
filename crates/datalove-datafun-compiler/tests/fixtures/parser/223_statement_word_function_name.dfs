@@ -1,0 +1,8 @@
+// A statement word names a function freely, since every statement
+// starts with its own keyword and a call statement starts with `call`.
+fun set(x: int)
+    debuglog x
+end fun
+
+call set(1)
+let y = set(2)

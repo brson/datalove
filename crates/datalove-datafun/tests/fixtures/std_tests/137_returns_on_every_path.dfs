@@ -78,7 +78,7 @@ end fun
 fun owes_nothing(ref n: u32)
 end fun
 
-owes_nothing(ref : u32 / 1)
+call owes_nothing(ref : u32 / 1)
 
 let output = (both_branches(true), both_branches(false),
               nested_branches(true, false), nested_branches(false, false),

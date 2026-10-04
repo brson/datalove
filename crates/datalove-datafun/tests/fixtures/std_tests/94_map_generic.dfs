@@ -17,8 +17,8 @@ let k_missing = "missing"
 let k_zz = "zz"
 
 var scores: %{string = u32} = %{"a" = (: u32 / 1)}
-insert(mut scores, "b", (: u32 / 2))
-insert(mut scores, "c", (: u32 / 3))
+call insert(mut scores, "b", (: u32 / 2))
+call insert(mut scores, "c", (: u32 / 3))
 
 let looked_up = (get(ref scores, ref k_b), get(ref scores, ref k_missing))
 let present = (contains_key(ref scores, ref k_a), contains_key(ref scores, ref k_zz))
@@ -34,10 +34,10 @@ let k1 = : u32 / 1
 let k2 = : u32 / 2
 var names: %{u32 = string} = %{}
 let started_empty = is_empty(ref names)
-insert(mut names, k1, "one")
-insert(mut names, k2, "two")
+call insert(mut names, k1, "one")
+call insert(mut names, k2, "two")
 let name = get(ref names, ref k2)
-clear(mut names)
+call clear(mut names)
 let cleared = len(ref names)
 
 let output = (looked_up, present, counted, after_remove, started_empty, name, cleared)

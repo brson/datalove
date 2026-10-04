@@ -9,7 +9,7 @@ Prism.languages.datalove = {
     'boolean': /\b(?:true|false)\b/,
     'variant': /\b(?:ok|er|some|none)\b/,
     'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|index|offset|int|f32|f64|string|list|tensor|table|data|error|tuple|atom|term|enum)\b/,
-    'keyword': /\b(?:ret|let|var|set|require|import|default|and|or|xor|not|icall|debuglog|data)\b/,
+    'keyword': /\b(?:ret|let|var|set|call|require|import|default|and|or|xor|not|icall|debuglog|data)\b/,
     'binding-modifier': /\b(?:ref|mut|out)\b/,
     'item-keyword': /\b(?:type|fun|end fun)\b/,
     'control-flow': /\b(?:if|else|end if|break|continue|loop|end loop|while|for|end for|match|end match|case)\b/,

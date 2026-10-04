@@ -1,0 +1,3 @@
+let x = 1
+call x
+call 1 + 2

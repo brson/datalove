@@ -55,7 +55,7 @@ debuglog count(e)
 // Mutated through the wrapper, so what push writes lands inside it.
 fun grow<T>(xs: [T], v: T): index
   var ys = xs
-  push(mut ys, v)
+  call push(mut ys, v)
   ret len(ref ys)
 end fun
 

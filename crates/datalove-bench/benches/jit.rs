@@ -306,7 +306,7 @@ fun build(n: int): [int]
     var out: [int] = []
     var i: int = 0
     loop while i .< n
-      push(mut out, n - i)
+      call push(mut out, n - i)
       set i = i + 1
     end loop
     ret out
@@ -343,7 +343,7 @@ fun build(n: int): [int]
     var out: [int] = []
     var i: int = 0
     loop while i .< n
-      push(mut out, 1)
+      call push(mut out, 1)
       set i = i + 1
     end loop
     ret out

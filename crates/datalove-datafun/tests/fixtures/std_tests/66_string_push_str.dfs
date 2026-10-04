@@ -5,9 +5,9 @@ import string.push_str
 import string.len
 
 var s = new()
-push_str(mut s, ref "hello")
+call push_str(mut s, ref "hello")
 let len1 = len(ref s)
-push_str(mut s, ref " world")
+call push_str(mut s, ref " world")
 let len2 = len(ref s)
 
 let output = (s, len1, len2)

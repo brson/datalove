@@ -1,0 +1,56 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      },
+      {
+        "kind": "ParseError",
+        "message": "`call` takes a function call"
+      },
+      {
+        "kind": "ParseError",
+        "message": "`call` takes a function call"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P031",
+      "labels": [
+        {
+          "message": "not a function call",
+          "span": [
+            16,
+            16
+          ],
+          "text": ""
+        }
+      ],
+      "message": "`call` takes a function call"
+    },
+    {
+      "code": "P031",
+      "labels": [
+        {
+          "message": "not a function call",
+          "span": [
+            27,
+            27
+          ],
+          "text": ""
+        }
+      ],
+      "message": "`call` takes a function call"
+    }
+  ]
+}

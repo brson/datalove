@@ -126,7 +126,7 @@ so borrowing and mutation are visible where the call is written:
 var b: int
 let c: int = 2
 var d: int = 3
-f(1, out b, ref c, mut d)
+call f(1, out b, ref c, mut d)
 ```
 
 

@@ -4,7 +4,7 @@ import string.insert_char
 import string.insert_str
 
 var s = "ad"
-insert_char(mut s, : index / 1, : u32 / 98)
-insert_str(mut s, : index / 2, ref "c")
+call insert_char(mut s, : index / 1, : u32 / 98)
+call insert_str(mut s, : index / 2, ref "c")
 
 let output = s

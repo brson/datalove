@@ -99,13 +99,6 @@ pub const EXPRESSION_WORDS: &[&str] = &[
     "atom", "term", "enum", "not", "icall",
 ];
 
-/// Words that start a statement, and so cannot be read as the name a call
-/// statement begins with.
-pub const STATEMENT_WORDS: &[&str] = &[
-    "let", "var", "const", "set", "fun", "native", "ret", "if", "match",
-    "loop", "break", "continue", "require", "import", "type", "debuglog",
-];
-
 /// Words written before a parameter's name to say how it is passed.
 pub const PARAMETER_MODE_WORDS: &[&str] = &["mut", "out", "ref", "const"];
 
@@ -130,7 +123,6 @@ pub fn reserved_for(word: &str, kind: NameKind) -> Option<&'static str> {
             Some("it says how a parameter is passed")
         }
         NameKind::Function if expression => Some("it starts an expression"),
-        NameKind::Function if STATEMENT_WORDS.contains(&word) => Some("it starts a statement"),
         NameKind::Type if is_type_word(word) => Some("it is a type, or starts one"),
         _ => None,
     }

@@ -45,7 +45,7 @@
       "code": "P001",
       "labels": [
         {
-          "message": "expected 'let', 'var', 'const', 'set', 'fun', 'ret', 'require', 'import', 'if', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'",
+          "message": "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'",
           "span": [
             62,
             66

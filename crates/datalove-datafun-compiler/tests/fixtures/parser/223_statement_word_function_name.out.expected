@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "DebugLog",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "x",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "set",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "x",
+            "type_hint": "Int"
+          }
+        ],
+        "return_type": null
+      },
+      {
+        "expr": {
+          "expr": {
+            "args": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "FunctionCall",
+            "name": "set"
+          }
+        },
+        "kind": "ExprStatement"
+      },
+      {
+        "kind": "Let",
+        "name": "y",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "args": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "FunctionCall",
+            "name": "set"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

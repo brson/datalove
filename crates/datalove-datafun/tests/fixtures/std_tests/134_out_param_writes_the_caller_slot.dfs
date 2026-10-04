@@ -18,18 +18,18 @@ end fun
 
 // Forwarding one `out` into another, which is the case that always worked.
 fun forward(out n: u32)
-  fill(out n)
+  call fill(out n)
 end fun
 
 fun in_a_function(): u32
   var slot: u32
-  fill(out slot)
+  call fill(out slot)
   ret slot
 end fun
 
 fun forwarded(): u32
   var slot: u32
-  forward(out slot)
+  call forward(out slot)
   ret slot
 end fun
 
@@ -40,7 +40,7 @@ end fun
 // C backend freed whatever the stack had left.
 fun heap_slot(): string
   var text: string
-  fill_string(out text)
+  call fill_string(out text)
   ret text
 end fun
 
@@ -49,12 +49,12 @@ end fun
 // tracking byte, and the call has to have set it.
 fun heap_slot_unread(): u32
   var text: string
-  fill_string(out text)
+  call fill_string(out text)
   ret 1
 end fun
 
 // At script level as well as inside a function.
 var top_level: u32
-fill(out top_level)
+call fill(out top_level)
 
 let output = (in_a_function(), forwarded(), heap_slot(), heap_slot_unread(), top_level)

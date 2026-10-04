@@ -284,8 +284,8 @@ end fun
 
 // A call is an expression, and a call to one of these -- which gives nothing
 // back to bind -- is a statement.
-do_nothing()
-maybe_early(5)
+call do_nothing()
+call maybe_early(5)
 
 
 // =========================================================================
@@ -326,7 +326,7 @@ end fun
 
 // A call that returns nothing is a statement on its own.
 var to_fill: u32
-fill(out to_fill)
+call fill(out to_fill)
 
 var to_bump: u32 = 10
 let bumped = bump(mut to_bump)
@@ -717,7 +717,7 @@ fun tally(ref words: [string]): !%{string = u32}
   loop while i .< n
     if get(ref words, i) |word|
       let seen = get_or(ref counts, ref word, : u32 / 0)
-      insert(mut counts, word, seen +! : u32 / 1)
+      call insert(mut counts, word, seen +! : u32 / 1)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop

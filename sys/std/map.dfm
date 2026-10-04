@@ -44,7 +44,7 @@ end fun
 
 // Insert an entry, replacing any value already under the key.
 fun insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
-  map_insert(mut self, key, value)
+  call map_insert(mut self, key, value)
 end fun
 
 // Remove the entry under a key, if there is one.
@@ -55,13 +55,13 @@ end fun
 // through a removal is to have made another first.
 fun remove<K, V>(mut self: %{K = V}, ref key: K): ?V with { K is ord, }
   let taken = map_get(ref self, ref key)
-  map_remove(mut self, ref key)
+  call map_remove(mut self, ref key)
   ret taken
 end fun
 
 // Drop every entry.
 fun clear<K, V>(mut self: %{K = V}) with { K is ord, }
-  map_clear(mut self)
+  call map_clear(mut self)
 end fun
 
 // The value under a key, or a default if there is none.
@@ -81,7 +81,7 @@ fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool with { K 
   if contains_key(ref self, ref key)
     ret false
   else
-    insert(mut self, key, value)
+    call insert(mut self, key, value)
     ret true
   end if
 end fun
@@ -111,7 +111,7 @@ fun keys<K, V>(ref self: %{K = V}): [K] with { K is ord, }
   var i: index = : index / 0
   loop while i .< n
     if key_at(ref self, i) |k|
-      list_push(mut built, k)
+      call list_push(mut built, k)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -125,7 +125,7 @@ fun values<K, V>(ref self: %{K = V}): [V] with { K is ord, }
   var i: index = : index / 0
   loop while i .< n
     if value_at(ref self, i) |v|
-      list_push(mut built, v)
+      call list_push(mut built, v)
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -144,7 +144,7 @@ fun entries<K, V>(ref self: %{K = V}): [(K, V)] with { K is ord, }
   var i: index = : index / 0
   loop while i .< n
     if zip_option(key_at(ref self, i), value_at(ref self, i)) |pair|
-      list_push(mut built, pair)
+      call list_push(mut built, pair)
     else
       break
     end if
@@ -162,7 +162,7 @@ fun from_entries<K, V>(entries: [(K, V)]): %{K = V} with { K is ord, }
   var src: [(K, V)] = entries
   loop
     if list_pop(mut src) |pair|
-      insert(mut out, pair.0@, pair.1@)
+      call insert(mut out, pair.0@, pair.1@)
     else
       break
     end if

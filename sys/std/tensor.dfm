@@ -72,7 +72,7 @@ fun to_list<T>(ref self: [|T, 1|]): [T]
   var i: index = : index / 0
   loop while i .< n
     if get(ref self, i) |elem|
-      push(mut built, elem)
+      call push(mut built, elem)
     else
       break
     end if
