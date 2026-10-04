@@ -357,9 +357,8 @@ pub fn typecheck_script_unit<'db>(
                 new_fn_asts.push((item_name, func_ast, source_module_id));
             }
 
-            // Add import errors to context.
-            for error in import_errors {
-                ctx.add_error(error);
+            for unresolved in &import_errors {
+                ctx.report_unresolved_import(unresolved);
             }
 
             // Second pass: typecheck all statements.
@@ -520,7 +519,7 @@ pub fn typecheck_module<'db>(
     spans: DatafunSpans<'db>,
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
-    import_errors: Vec<TypeError>,
+    import_errors: Vec<crate::UnresolvedImport>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
@@ -531,9 +530,8 @@ pub fn typecheck_module<'db>(
     // Create type context for this module with module_id for pending diagnostics.
     let mut ctx = TypeContext::with_options(db, spans, Some(module_id), auto_adapt_mode);
 
-    // Add import errors to context.
-    for err in import_errors {
-        ctx.add_error(err);
+    for unresolved in &import_errors {
+        ctx.report_unresolved_import(unresolved);
     }
 
     // Add imported functions to context.
@@ -868,7 +866,7 @@ fn resolve_module_imports_internal<'db>(
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
-) -> (Vec<ResolvedImportData<'db>>, Vec<TypeError>) {
+) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
     let alias_map: HashMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
@@ -907,14 +905,19 @@ fn resolve_module_imports_internal<'db>(
                             (item_name, func_type, func_ast, source_module_id, import.local_index),
                         );
                     } else {
-                        import_errors.push(TypeError::UnresolvedName(
-                            format!("{}.{}", module_name.as_str(db), item_name.as_str(db))
-                        ));
+                        import_errors.push(crate::UnresolvedImport {
+                            local_index: import.local_index,
+                            module: module_name.as_str(db).S(),
+                            item: Some(item_name.as_str(db).S()),
+                        });
                     }
                 } else {
-                    import_errors.push(TypeError::UnresolvedName(
-                        format!("module {} (exports not found)", module_name.as_str(db))
-                    ));
+                    // A required module that exports nothing.
+                    import_errors.push(crate::UnresolvedImport {
+                        local_index: import.local_index,
+                        module: module_name.as_str(db).S(),
+                        item: Some(item_name.as_str(db).S()),
+                    });
                 }
             } else if let Some(rider) = rider_alias_map.get(&module_name) {
                 // Rider import path.
@@ -933,14 +936,18 @@ fn resolve_module_imports_internal<'db>(
                         (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
                     );
                 } else {
-                    import_errors.push(TypeError::UnresolvedName(
-                        format!("{}.{} (not found in rider)", module_name.as_str(db), item_name.as_str(db))
-                    ));
+                    import_errors.push(crate::UnresolvedImport {
+                        local_index: import.local_index,
+                        module: module_name.as_str(db).S(),
+                        item: Some(item_name.as_str(db).S()),
+                    });
                 }
             } else {
-                import_errors.push(TypeError::UnresolvedName(
-                    format!("module {} (not required)", module_name.as_str(db))
-                ));
+                import_errors.push(crate::UnresolvedImport {
+                    local_index: import.local_index,
+                    module: module_name.as_str(db).S(),
+                    item: None,
+                });
             }
         }
     }
@@ -1062,7 +1069,7 @@ fn resolve_script_imports<'db>(
     modules_by_path: &HashMap<String, Module<'db>>,
 ) -> (
     Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>,
-    Vec<TypeError>,
+    Vec<crate::UnresolvedImport>,
     Vec<String>,
 ) {
     // Resolve import statements.
@@ -1096,14 +1103,18 @@ fn resolve_script_imports<'db>(
                         (item_name, func_ty, func_ast, Some(module.id(db)), import.local_index),
                     );
                 } else {
-                    errors.push(TypeError::UnresolvedName(
-                        format!("{}.{}", module_path, item_name.as_str(db))
-                    ));
+                    errors.push(crate::UnresolvedImport {
+                        local_index: import.local_index,
+                        module: module_path.S(),
+                        item: Some(item_name.as_str(db).S()),
+                    });
                 }
             } else {
-                errors.push(TypeError::UnresolvedName(
-                    format!("module {}", module_path)
-                ));
+                errors.push(crate::UnresolvedImport {
+                    local_index: import.local_index,
+                    module: module_path.S(),
+                    item: None,
+                });
             }
         }
     }

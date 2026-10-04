@@ -911,7 +911,7 @@ impl<'db> Parser<'db> {
             }
         };
 
-        let local_index = self.record_import_span(ts);
+        let local_index = self.record_import_span(ts.with_end(self.last_byte_end()));
         ast::Statement::Import(
             ast::StmtImport {
                 module_name,

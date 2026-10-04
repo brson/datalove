@@ -68,6 +68,20 @@ impl Default for RecoveryHint {
     }
 }
 
+/// Where a coded diagnostic points.
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum ErrorSite<'db> {
+    /// An expression.
+    Expr(ExprKey<'db>),
+    /// A `set` statement's target, by its span index.
+    Set(u32),
+    /// A function's signature, by its span index.
+    Fun(u32),
+    /// An `import` statement, by its span index.
+    Import(u32),
+}
+
 /// Pending diagnostic for unified diagnostic emission.
 ///
 /// All type errors are collected as pending diagnostics during typechecking,
@@ -75,14 +89,6 @@ impl Default for RecoveryHint {
 /// module_id is Some and spans are looked up from ParsedModuleGraph. For
 /// non-module-graph paths, module_id is None and spans are looked up from
 /// TypeContext.spans.
-/// Where a place error was found: a projection, or a `set` statement's place.
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub enum PlaceErrorSite<'db> {
-    Expr(ExprKey<'db>),
-    Set(u32),
-}
-
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum PendingDiagnostic<'db> {
@@ -165,10 +171,12 @@ pub enum PendingDiagnostic<'db> {
         message: InternedText<'db>,
         note: InternedText<'db>,
     },
-    /// An error about a place: a field or element that is not there, cannot be
-    /// read from there, or cannot be written there. F067..F070, F072..F074.
-    PlaceError {
-        site: PlaceErrorSite<'db>,
+    /// A diagnostic worded where it was found, with its code.
+    ///
+    /// For errors that need nothing at emission time but a span: the place
+    /// errors F067..F070 and F072..F074, and F002, F075..F078.
+    Coded {
+        site: ErrorSite<'db>,
         module_id: Option<ModuleId<'db>>,
         code: InternedText<'db>,
         message: InternedText<'db>,
@@ -536,9 +544,23 @@ pub struct ModuleImportResolution<'db> {
     #[returns(ref)]
     pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>, u32)>,
 
-    /// Import resolution errors.
+    /// Imports that name nothing.
     #[returns(ref)]
-    pub errors: Vec<TypeError>,
+    pub errors: Vec<UnresolvedImport>,
+}
+
+/// An import that names nothing, found before there is a context to report it
+/// in.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct UnresolvedImport {
+    /// Where the import's span is filed.
+    pub local_index: u32,
+    /// The module or rider the import names, as the import has it.
+    pub module: String,
+    /// The function asked for, or `None` when nothing by `module` is there to
+    /// ask.
+    pub item: Option<String>,
 }
 
 /// Result of typechecking a single module.

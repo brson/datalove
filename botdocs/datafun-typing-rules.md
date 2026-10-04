@@ -655,10 +655,12 @@ are unassigned.
 
 ### Expression Errors
 - **F001**: Undefined variable
-- **F002**: Undefined function
+- **F002**: Undefined function; also an import of a function the module or
+  rider does not have
 - **F011**: Cannot synthesize type; also an index into something that is not a
   list, map or tensor, whether read or written by `set`
-- **F016**: Type mismatch
+- **F016**: Type mismatch; also an element of an unhinted collection literal
+  that differs from the first
 - **F026**: Invalid operand type for operator
 - **F045**: Function arity mismatch
 - **F046**: Result destructuring requires error binding
@@ -670,6 +672,10 @@ are unassigned.
 - **F058**: A const expression names something that is not a const
 - **F065**: Integer or hex literal out of range for its type
 - **F071**: Destructuring pattern does not fit the value
+- **F075**: A tuple, struct, table or tensor literal whose shape does not fit
+  its type: the wrong number of elements, fields or columns, fields or
+  columns out of order, or the wrong rank
+- **F076**: An argument to a const parameter that is not a const binding
 
 ### Place Errors
 Fields and elements read out of an aggregate, and the targets of `set`.
@@ -709,18 +715,13 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F062**: A native function declared where no rider implements it
 - **F064**: Unknown type name
 - **F066**: A type alias defined twice
+- **F077**: A const parameter whose type is a type parameter
+- **F078**: An import from a name that no `require` brought in
 
 ### Inherited from Datalit
 Datalit's own `TypeMismatch`, `CannotSynthesize` and `IntOutOfRange` are
-reported as F016, F011 and F065. The structural ones have no code and no
-diagnostic, and are printed as their `Debug` form:
-
-- **ArityMismatch**: Wrong number of tuple or struct fields
-- **FieldOrderMismatch**: Struct fields in a different order, or with
-  different names, from the type
-
-`ComptimeArgNotConstBinding`, an argument to a const parameter that is not a
-const binding, is datafun's own but likewise has no diagnostic.
+reported as F016, F011 and F065, and its structural `ArityMismatch` and
+`FieldOrderMismatch` as F075.
 
 ## Operator Type Requirements
 

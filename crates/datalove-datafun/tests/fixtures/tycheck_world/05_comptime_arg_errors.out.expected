@@ -1,5 +1,76 @@
 {
-  "diagnostics": [],
+  "diagnostics": [
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            252,
+            257
+          ],
+          "text": "three"
+        }
+      ],
+      "message": "`three` is not a const binding"
+    },
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            531,
+            532
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "the argument to a const parameter must name a const"
+    },
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            656,
+            661
+          ],
+          "text": "2 + 3"
+        }
+      ],
+      "message": "the argument to a const parameter must name a const"
+    },
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            933,
+            939
+          ],
+          "text": "factor"
+        }
+      ],
+      "message": "`factor` is not a const binding"
+    },
+    {
+      "code": "F077",
+      "labels": [
+        {
+          "message": "a const parameter's type must be known before the function is specialized",
+          "span": [
+            1423,
+            1426
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "const parameter `x` has a type that depends on a type parameter"
+    }
+  ],
   "modules": {
     "comptime": {
       "errors": [

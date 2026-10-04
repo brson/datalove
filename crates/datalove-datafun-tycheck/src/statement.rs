@@ -282,6 +282,14 @@ pub fn check_statement<'db>(
                         Some(Type::Datalit(ty))
                             if datalove_datafun_common::generics::contains_type_param(ty));
                     if generic {
+                        ctx.push_coded(
+                            crate::ErrorSite::Fun(stmt.local_index(db)),
+                            "F077",
+                            fmt!("const parameter `{}` has a type that depends on a type parameter", param.name.as_str(db)),
+                            S("a const parameter's type must be known before the function is specialized"),
+                            Some(S("specialization substitutes const values and erasure replaces type \
+parameters, and neither can see through the other. Give the const parameter a concrete type.")),
+                        );
                         ctx.add_error(TypeError::ComptimeParamOfGenericType {
                             func_name: name.as_str(db).to_string(),
                             param_name: param.name.as_str(db).to_string(),
@@ -782,7 +790,7 @@ fn typecheck_place_for_set<'db>(
         match step {
             PlaceStep::Field(field) => {
                 current_ty = typecheck_field_step(ctx, &current_ty, field)
-                    .map_err(|e| ctx.report_place_error(crate::PlaceErrorSite::Set(stmt.local_index), e))?;
+                    .map_err(|e| ctx.report_place_error(crate::ErrorSite::Set(stmt.local_index), e))?;
             }
             PlaceStep::Index(idx) => {
                 if is_last {
@@ -888,7 +896,7 @@ fn typecheck_set_index<'db>(
             // on rank > 1 tensor would replace the view, not the parent data).
             if crate::synthesize::is_view_producing_index(base_ty) {
                 let err = ctx.report_place_error(
-                    crate::PlaceErrorSite::Set(stmt.local_index),
+                    crate::ErrorSite::Set(stmt.local_index),
                     TypeError::ViewTypeMutBinding { view_ty: type_to_string(db, &element_ty) },
                 );
                 ctx.add_error(err);

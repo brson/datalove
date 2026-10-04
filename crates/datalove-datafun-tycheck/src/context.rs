@@ -11,7 +11,7 @@ use datalove_datafun_ast::ast::*;
 use datalove_datafun_intrinsics::IntrinsicId;
 
 pub use datalove_datafun_ast::spans::DatafunSpans;
-use crate::{CallTargets, ExprTypes, PlaceErrorSite};
+use crate::{CallTargets, ExprTypes, ErrorSite};
 pub use bct::module_graph::ModuleId;
 
 pub use crate::{
@@ -501,7 +501,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Report a field or index projection that failed, and pass its error on.
-    pub fn report_place_error(&mut self, site: crate::PlaceErrorSite<'db>, error: TypeError) -> TypeError {
+    pub fn report_place_error(&mut self, site: crate::ErrorSite<'db>, error: TypeError) -> TypeError {
         let (code, message, label, note) = match &error {
             TypeError::FieldNotFound { field_name, ty } => (
                 "F067",
@@ -544,7 +544,7 @@ replace the view rather than the elements it shows. Index down to single element
             ),
             _ => unreachable!("not a projection error: {error:?}"),
         };
-        self.push_place_error(site, code, message, label, note);
+        self.push_coded(site, code, message, label, note);
         error
     }
 
@@ -560,19 +560,44 @@ replace the view rather than the elements it shows. Index down to single element
         label: &str,
         note: Option<&str>,
     ) -> TypeError {
-        self.push_place_error(PlaceErrorSite::Set(stmt.local_index), code, message.C(), S(label), note.map(S));
+        self.push_coded(ErrorSite::Set(stmt.local_index), code, message.C(), S(label), note.map(S));
         TypeError::DatalitError(message)
     }
 
-    fn push_place_error(
+    /// Report an import that names nothing. F002 for a missing function, F078
+    /// for a missing module or rider.
+    pub fn report_unresolved_import(&mut self, unresolved: &crate::UnresolvedImport) {
+        let site = ErrorSite::Import(unresolved.local_index);
+        let module = &unresolved.module;
+        let error = match &unresolved.item {
+            Some(item) => {
+                self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
+                TypeError::UnresolvedName(fmt!("{module}.{item}"))
+            }
+            None => {
+                self.push_coded(
+                    site,
+                    "F078",
+                    fmt!("nothing named `{module}` is required to import from"),
+                    S("no such module or rider"),
+                    Some(S("an import names a module or rider required first, with `require module` or `require rider`")),
+                );
+                TypeError::UnresolvedName(fmt!("module {module}"))
+            }
+        };
+        self.add_error(error);
+    }
+
+    /// Report a diagnostic worded by the caller, at `site`.
+    pub fn push_coded(
         &mut self,
-        site: PlaceErrorSite<'db>,
+        site: ErrorSite<'db>,
         code: &str,
         message: String,
         label: String,
         note: Option<String>,
     ) {
-        self.pending_diagnostics.push(PendingDiagnostic::PlaceError {
+        self.pending_diagnostics.push(PendingDiagnostic::Coded {
             site,
             module_id: self.current_module_id,
             code: InternedText::new(self.db, code.S()),

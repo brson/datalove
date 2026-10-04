@@ -20,6 +20,7 @@ Analysis(
             typecheck: TypecheckResult(
                 status: "Error",
                 errors: [
+                    "line 3, col 1: error[F078]: nothing named `base` is required to import from",
                     "line 6, col 9: error[F002]: cannot find function `double` in this scope",
                 ],
             ),

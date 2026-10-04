@@ -117,7 +117,7 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::Table(table_ty)) => {
                     refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check rows against expected column types.
-                    check_table_rows(ctx, &table_expr.header, &table_expr.rows, table_ty)?;
+                    check_table_rows(ctx, expr, &table_expr.header, &table_expr.rows, table_ty)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -190,7 +190,7 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::Tensor(_)) => {
                     refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check shape and elements against expected type.
-                    check_tensor_shape_and_elements(ctx, tensor_expr.C(), &expected)?;
+                    check_tensor_shape_and_elements(ctx, expr, tensor_expr.C(), &expected)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -208,7 +208,7 @@ pub fn check_expr<'db>(
             match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
                     // Check elements against expected field types.
-                    check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
+                    check_tuple_elements(ctx, expr, &tuple_expr.elements, &expected)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -226,7 +226,7 @@ pub fn check_expr<'db>(
             match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonTuple(_)) => {
                     // Check elements against expected field types.
-                    check_tuple_elements(ctx, &tuple_expr.elements, &expected)?;
+                    check_tuple_elements(ctx, expr, &tuple_expr.elements, &expected)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -244,7 +244,7 @@ pub fn check_expr<'db>(
             match expected {
                 Type::Datalit(datalit::tycheck::Type::AnonStruct(_)) => {
                     // Check fields against expected field types.
-                    check_struct_fields(ctx, &struct_expr.fields, &expected)?;
+                    check_struct_fields(ctx, expr, &struct_expr.fields, &expected)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -718,6 +718,7 @@ pub fn check_map_entries<'db>(
 /// Check tensor shape and elements against expected type.
 pub fn check_tensor_shape_and_elements<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     tensor_expr: ExprTensor<'db>,
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
@@ -730,7 +731,7 @@ pub fn check_tensor_shape_and_elements<'db>(
 
     // Extract tensor type info.
     // Callers ensure expected_ty is a Tensor type before calling.
-    let (elem_type, expected_rank) = match inner_ty {
+    let (elem_type, expected_rank) = match &inner_ty {
         Type::Datalit(datalit::tycheck::Type::Tensor(tensor_ty)) => {
             (tensor_ty.element_type.clone(), tensor_ty.rank)
         }
@@ -740,14 +741,25 @@ pub fn check_tensor_shape_and_elements<'db>(
     // Check rank matches type hint.
     let actual_rank = shape.len() as u32;
     if actual_rank != expected_rank {
-        return Err(TypeError::ArityMismatch {
-            expected: expected_rank as usize,
-            actual: actual_rank as usize,
-        });
+        let ty = type_to_string(db, &inner_ty);
+        return Err(shape_error(
+            ctx, expr,
+            fmt!("this tensor has rank {actual_rank}, and `{ty}` has rank {expected_rank}"),
+            None,
+            TypeError::ArityMismatch { expected: expected_rank as usize, actual: actual_rank as usize },
+        ));
     }
 
     // Check element count matches shape product.
-    datalit::tycheck::check_tensor_element_count(shape, elements.len())?;
+    if let Err(e) = datalit::tycheck::check_tensor_element_count(shape, elements.len()) {
+        let held = shape.iter().map(|&d| d as usize).product::<usize>();
+        return Err(shape_error(
+            ctx, expr,
+            fmt!("this tensor's shape holds {held} elements, and {} are written", elements.len()),
+            None,
+            e.into(),
+        ));
+    }
 
     // Check each element against expected element type.
     let expected_elem = Type::Datalit(*elem_type);
@@ -761,6 +773,7 @@ pub fn check_tensor_shape_and_elements<'db>(
 /// Check tuple elements against expected type.
 pub fn check_tuple_elements<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     elements: &[ExprFun<'db>],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
@@ -771,7 +784,7 @@ pub fn check_tuple_elements<'db>(
 
     // Extract the field types from the tuple type.
     // Callers ensure expected_ty is a Tuple type before calling.
-    let expected_fields = match inner_ty {
+    let expected_fields = match &inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonTuple(tuple_ty)) => {
             tuple_ty.fields.C()
         }
@@ -780,10 +793,13 @@ pub fn check_tuple_elements<'db>(
 
     // Check arity.
     if elements.len() != expected_fields.len() {
-        return Err(TypeError::ArityMismatch {
-            expected: expected_fields.len(),
-            actual: elements.len(),
-        });
+        let ty = type_to_string(db, &inner_ty);
+        return Err(shape_error(
+            ctx, expr,
+            fmt!("this tuple has {} elements, and `{ty}` has {}", elements.len(), expected_fields.len()),
+            None,
+            TypeError::ArityMismatch { expected: expected_fields.len(), actual: elements.len() },
+        ));
     }
 
     // Check each element against expected field type using bidirectional checking.
@@ -799,6 +815,7 @@ pub fn check_tuple_elements<'db>(
 /// Check struct fields against expected type.
 pub fn check_struct_fields<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     fields: &[ExprStructField<'db>],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
@@ -809,7 +826,7 @@ pub fn check_struct_fields<'db>(
 
     // Extract the field types from the struct type.
     // Callers ensure expected_ty is a Struct type before calling.
-    let expected_fields = match inner_ty {
+    let expected_fields = match &inner_ty {
         Type::Datalit(datalit::tycheck::Type::AnonStruct(struct_ty)) => {
             struct_ty.fields.C()
         }
@@ -818,17 +835,26 @@ pub fn check_struct_fields<'db>(
 
     // Check arity.
     if fields.len() != expected_fields.len() {
-        return Err(TypeError::ArityMismatch {
-            expected: expected_fields.len(),
-            actual: fields.len(),
-        });
+        let ty = type_to_string(db, &inner_ty);
+        return Err(shape_error(
+            ctx, expr,
+            fmt!("this struct has {} fields, and `{ty}` has {}", fields.len(), expected_fields.len()),
+            None,
+            TypeError::ArityMismatch { expected: expected_fields.len(), actual: fields.len() },
+        ));
     }
 
     // Check each field against expected field type.
     for (field, expected_field) in fields.iter().zip(expected_fields.iter()) {
         // Check field name matches.
         if field.name != expected_field.name {
-            return Err(TypeError::FieldOrderMismatch);
+            let ty = type_to_string(db, &inner_ty);
+            return Err(shape_error(
+                ctx, expr,
+                fmt!("field `{}` where `{ty}` has `{}`", field.name.as_str(db), expected_field.name.as_str(db)),
+                Some("a struct's fields are written in the order its type declares them"),
+                TypeError::FieldOrderMismatch,
+            ));
         }
 
         let expected_field_ty = Type::Datalit(*expected_field.ty.clone());
@@ -842,6 +868,7 @@ pub fn check_struct_fields<'db>(
 /// Check table rows against expected table type.
 pub fn check_table_rows<'db>(
     ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
     header: &[bct::text::InternedText<'db>],
     rows: &[ExprTableRow<'db>],
     table_ty: &datalit::tycheck::TypeTable<'db>,
@@ -850,27 +877,37 @@ pub fn check_table_rows<'db>(
     let expected_columns = &table_ty.columns;
 
     // Validate column count matches.
+    let ty = || type_to_string(db, &Type::Datalit(datalit::tycheck::Type::Table(table_ty.clone())));
     if header.len() != expected_columns.len() {
-        return Err(TypeError::ArityMismatch {
-            expected: expected_columns.len(),
-            actual: header.len(),
-        });
+        return Err(shape_error(
+            ctx, expr,
+            fmt!("this table has {} columns, and `{}` has {}", header.len(), ty(), expected_columns.len()),
+            None,
+            TypeError::ArityMismatch { expected: expected_columns.len(), actual: header.len() },
+        ));
     }
 
     // Validate column names match (in order).
     for (h, c) in header.iter().zip(expected_columns.iter()) {
         if h.as_str(db) != c.name.as_str(db) {
-            return Err(TypeError::FieldOrderMismatch);
+            return Err(shape_error(
+                ctx, expr,
+                fmt!("column `{}` where `{}` has `{}`", h.as_str(db), ty(), c.name.as_str(db)),
+                Some("a table's columns are written in the order its type declares them"),
+                TypeError::FieldOrderMismatch,
+            ));
         }
     }
 
     // Check each row's elements against column types.
     for row in rows {
         if row.elements.len() != expected_columns.len() {
-            return Err(TypeError::ArityMismatch {
-                expected: expected_columns.len(),
-                actual: row.elements.len(),
-            });
+            return Err(shape_error(
+                ctx, expr,
+                fmt!("a row of {} elements, where `{}` has {} columns", row.elements.len(), ty(), expected_columns.len()),
+                None,
+                TypeError::ArityMismatch { expected: expected_columns.len(), actual: row.elements.len() },
+            ));
         }
 
         for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
@@ -904,4 +941,18 @@ fn refuse_building_over_a_type_param<'db>(
          be taken, stored, passed on and returned, because it arrives with a \
          descriptor saying what it holds; one made here would have none",
     )))
+}
+
+/// Report a literal whose shape does not fit the type it is checked against,
+/// and pass its error on. F075.
+pub(crate) fn shape_error<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+    message: String,
+    note: Option<&str>,
+    error: TypeError,
+) -> TypeError {
+    let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, expr));
+    ctx.push_coded(site, "F075", message, S("does not fit the type"), note.map(S));
+    error
 }

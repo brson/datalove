@@ -1,0 +1,27 @@
+// Errors that had no diagnostic behind them, and printed as their Debug form.
+//
+// Each now points at what it is about: the literal, the argument, the
+// signature, the import, or the element that differs.
+require module sys/std/list
+import list.nope
+import nothere.f
+
+// F075 a literal whose shape does not fit its type.
+let t: (i32, i32) = (1, 2, 3)
+let s: {a: i32, b: i32} = {b = 1, a = 2}
+let r: [|i32, 2|] = [| 1 2 3 |]
+
+// F016 an unhinted collection whose elements differ.
+let xs = [1, "a"]
+
+// F076 an argument to a const parameter that is not a const binding.
+fun scale(const n: i32): i32
+  ret n
+end fun
+let a: i32 = 1
+let b = scale(a)
+
+// F077 a const parameter whose type is a type parameter.
+fun pick<T>(const n: T): i32
+  ret 1
+end fun

@@ -1140,6 +1140,19 @@ fn mode_name(mode: ParamMode) -> &'static str {
     }
 }
 
+/// Report an argument to a const parameter that is not a const binding. F076.
+fn report_comptime_arg<'db>(ctx: &mut TypeContext<'db>, arg: ExprFun<'db>, message: String) {
+    let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, arg));
+    ctx.push_coded(
+        site,
+        "F076",
+        message,
+        S("a const parameter takes a const binding"),
+        Some(S("bind the value with `const` and pass its name, so the compiler holds it when it \
+specializes the function")),
+    );
+}
+
 /// Validate that a comptime argument is the name of a const binding.
 ///
 /// Not a literal, and not an expression. A const parameter's value has to be
@@ -1165,11 +1178,13 @@ fn validate_comptime_arg<'db>(
             // Must be a const binding, not a let/var/parameter.
             if !ctx.is_const_binding(name) {
                 let reason = format!("'{}' is not a const binding", name.as_str(db));
+                report_comptime_arg(ctx, arg, fmt!("`{}` is not a const binding", name.as_str(db)));
                 ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
             }
         }
         _ => {
             let reason = "comptime argument must be a const binding name".to_string();
+            report_comptime_arg(ctx, arg, S("the argument to a const parameter must name a const"));
             ctx.add_error(TypeError::ComptimeArgNotConstBinding { param_idx, reason });
         }
     }
@@ -1387,7 +1402,7 @@ fn synthesize_index_common<'db>(
 
     // Reject view-producing index in mut/out context.
     if ctx.mut_context && is_view_producing_index(&base_ty) {
-        let site = crate::PlaceErrorSite::Expr(ExprKey::of(ctx.db, expr));
+        let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, expr));
         return Err(ctx.report_place_error(site, TypeError::ViewTypeMutBinding {
             view_ty: type_to_string(ctx.db, &element_ty),
         }));
@@ -1578,7 +1593,7 @@ fn synthesize_place_field_step<'db>(
     field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    let site = crate::PlaceErrorSite::Expr(ExprKey::of(db, expr));
+    let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
     let field_ty = resolve_field_type(db, base_ty, field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
@@ -1612,7 +1627,7 @@ fn synthesize_place_index_step<'db>(
 
     // Reject view-producing index in mut/out context.
     if ctx.mut_context && is_view_producing_index(base_ty) {
-        let site = crate::PlaceErrorSite::Expr(ExprKey::of(db, expr));
+        let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
         return Err(ctx.report_place_error(site, TypeError::ViewTypeMutBinding {
             view_ty: type_to_string(ctx.db, &element_ty),
         }));
@@ -1622,7 +1637,7 @@ fn synthesize_place_index_step<'db>(
     // requires ref context (e.g. via @, ref param, or intermediate step).
     if let Type::Datalit(ref dt) = element_ty {
         if !is_copy_type(db, dt) && !ctx.ref_context {
-            let site = crate::PlaceErrorSite::Expr(ExprKey::of(db, expr));
+            let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
             return Err(ctx.report_place_error(site, TypeError::NonCopyIndexProjection {
                 elem_ty: datalit::tycheck::type_to_string(db, dt),
             }));
@@ -1647,7 +1662,7 @@ fn synthesize_field_proj<'db>(
     // Synthesize base type.
     let base_ty = ctx.synthesize_expr(proj.base)?;
 
-    let site = crate::PlaceErrorSite::Expr(ExprKey::of(db, expr));
+    let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
     let field_ty = resolve_field_type(db, &base_ty, &proj.field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
@@ -1674,7 +1689,6 @@ fn synthesize_inline_list<'db>(
     _expr: ExprFun<'db>,
     list_expr: &ExprList<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
     let elements = &list_expr.elements;
 
     if elements.is_empty() {
@@ -1692,7 +1706,7 @@ fn synthesize_inline_list<'db>(
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, &first_ty, &elem_ty)?;
+        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
@@ -1707,7 +1721,6 @@ fn synthesize_inline_set<'db>(
     _expr: ExprFun<'db>,
     set_expr: &ExprSet<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
     let elements = &set_expr.elements;
 
     if elements.is_empty() {
@@ -1724,7 +1737,7 @@ fn synthesize_inline_set<'db>(
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, &first_ty, &elem_ty)?;
+        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
@@ -1739,7 +1752,6 @@ fn synthesize_inline_map<'db>(
     _expr: ExprFun<'db>,
     map_expr: &ExprMap<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
     let entries = &map_expr.entries;
 
     if entries.is_empty() {
@@ -1762,8 +1774,8 @@ fn synthesize_inline_map<'db>(
     for entry in &entries[1..] {
         let key_ty = ctx.synthesize_expr(entry.key)?;
         let value_ty = ctx.synthesize_expr(entry.value)?;
-        check_element_compatible(db, &first_key_ty, &key_ty)?;
-        check_element_compatible(db, &first_value_ty, &value_ty)?;
+        check_like_first(ctx, entry.key, &first_key_ty, &key_ty, "differs from the first key")?;
+        check_like_first(ctx, entry.value, &first_value_ty, &value_ty, "differs from the first value")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
@@ -1778,7 +1790,6 @@ fn synthesize_inline_tensor<'db>(
     _expr: ExprFun<'db>,
     tensor_expr: &ExprTensor<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
     let shape = &tensor_expr.shape;
     let elements = &tensor_expr.elements;
 
@@ -1799,7 +1810,7 @@ fn synthesize_inline_tensor<'db>(
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
         let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_element_compatible(db, &first_ty, &elem_ty)?;
+        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
@@ -1820,10 +1831,9 @@ fn synthesize_inline_tensor<'db>(
 /// an empty list's elements do.
 fn synthesize_inline_table<'db>(
     ctx: &mut TypeContext<'db>,
-    _expr: ExprFun<'db>,
+    expr: ExprFun<'db>,
     table_expr: &ExprTable<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
     let header = &table_expr.header;
     let rows = &table_expr.rows;
 
@@ -1831,10 +1841,12 @@ fn synthesize_inline_table<'db>(
     match rows.first() {
         Some(first) => {
             if first.elements.len() != header.len() {
-                return Err(TypeError::ArityMismatch {
-                    expected: header.len(),
-                    actual: first.elements.len(),
-                });
+                return Err(crate::check::shape_error(
+                ctx, expr,
+                fmt!("a row of {} elements, where the header has {} columns", first.elements.len(), header.len()),
+                None,
+                TypeError::ArityMismatch { expected: header.len(), actual: first.elements.len() },
+            ));
             }
             for element in &first.elements {
                 let ty = ctx.synthesize_expr(*element)?;
@@ -1850,14 +1862,16 @@ fn synthesize_inline_table<'db>(
 
     for row in rows.iter().skip(1) {
         if row.elements.len() != header.len() {
-            return Err(TypeError::ArityMismatch {
-                expected: header.len(),
-                actual: row.elements.len(),
-            });
+            return Err(crate::check::shape_error(
+                ctx, expr,
+                fmt!("a row of {} elements, where the header has {} columns", row.elements.len(), header.len()),
+                None,
+                TypeError::ArityMismatch { expected: header.len(), actual: row.elements.len() },
+            ));
         }
         for (element, column_ty) in row.elements.iter().zip(column_types.iter()) {
             let element_ty = ctx.synthesize_expr(*element)?;
-            check_element_compatible(db, column_ty, &element_ty)?;
+            check_like_first(ctx, *element, column_ty, &element_ty, "differs from the first row")?;
         }
     }
 
@@ -1960,4 +1974,20 @@ fn synthesize_inline_err<'db>(
     // Error synthesizes to Type::Error (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Error);
     Ok(ty)
+}
+
+/// Check an element of an unhinted collection against the type its first one
+/// set, reporting F016 at the element that differs.
+fn check_like_first<'db>(
+    ctx: &mut TypeContext<'db>,
+    elem: ExprFun<'db>,
+    first_ty: &Type<'db>,
+    elem_ty: &Type<'db>,
+    label: &str,
+) -> Result<(), TypeError> {
+    check_element_compatible(ctx.db, first_ty, elem_ty).map_err(|_| {
+        let expected = type_to_string(ctx.db, first_ty);
+        let actual = type_to_string(ctx.db, elem_ty);
+        ctx.error_type_mismatch(elem, &expected, &actual, label)
+    })
 }

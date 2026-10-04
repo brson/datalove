@@ -362,10 +362,12 @@ drop the return type.")
                 builder.emit_type();
             }
         }
-        PendingDiagnostic::PlaceError { site, module_id: _, code, message, label, note } => {
+        PendingDiagnostic::Coded { site, module_id: _, code, message, label, note } => {
             let ts = match site {
-                crate::PlaceErrorSite::Expr(key) => spans.lookup_expr(db, *key),
-                crate::PlaceErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
+                crate::ErrorSite::Expr(key) => spans.lookup_expr(db, *key),
+                crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
+                crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index),
+                crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index),
             };
             if let Some(ts) = ts {
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -746,10 +748,12 @@ fn format_single_diagnostic<'db>(
                 Some(base_msg)
             }
         }
-        PendingDiagnostic::PlaceError { site, module_id: _, code, message, label: _, note: _ } => {
+        PendingDiagnostic::Coded { site, module_id: _, code, message, label: _, note: _ } => {
             let ts = match site {
-                crate::PlaceErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
-                crate::PlaceErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
+                crate::ErrorSite::Expr(key) => spans.lookup_expr(db, *key)?,
+                crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
+                crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index)?,
+                crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index)?,
             };
             let loc = format_location(db, &ts);
             Some(format!("{}: error[{}]: {}", loc, code.as_str(db), message.as_str(db)))
@@ -792,17 +796,17 @@ fn format_single_diagnostic<'db>(
         PendingDiagnostic::BreakOutsideLoop { local_index, module_id: _ } => {
             let ts = spans.lookup_break(db, *local_index)?;
             let loc = format_location(db, &ts);
-            Some(format!("{}: error[F041]: `break` outside of a loop", loc))
+            Some(format!("{}: error[F050]: `break` outside of a loop", loc))
         }
         PendingDiagnostic::ContinueOutsideLoop { local_index, module_id: _ } => {
             let ts = spans.lookup_continue(db, *local_index)?;
             let loc = format_location(db, &ts);
-            Some(format!("{}: error[F042]: `continue` outside of a loop", loc))
+            Some(format!("{}: error[F051]: `continue` outside of a loop", loc))
         }
         PendingDiagnostic::FunctionRequiresReturnValue { local_index, module_id: _ } => {
             let ts = spans.lookup_ret(db, *local_index)?;
             let loc = format_location(db, &ts);
-            Some(format!("{}: error[F043]: non-void function requires a return value", loc))
+            Some(format!("{}: error[F053]: non-void function requires a return value", loc))
         }
         PendingDiagnostic::UndefinedVariableSet { local_index, module_id: _, name } => {
             let ts = spans.lookup_set(db, *local_index)?;
@@ -817,7 +821,7 @@ fn format_single_diagnostic<'db>(
         PendingDiagnostic::VoidFunctionReturnsValue { local_index, module_id: _ } => {
             let ts = spans.lookup_ret(db, *local_index)?;
             let loc = format_location(db, &ts);
-            Some(format!("{}: error[F044]: void function cannot return a value", loc))
+            Some(format!("{}: error[F052]: void function cannot return a value", loc))
         }
         PendingDiagnostic::TryReturnTypeMismatch { expr_key, module_id: _, operator, expected, actual } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

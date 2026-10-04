@@ -7,9 +7,9 @@
           "message": "a name binds one function",
           "span": [
             295,
-            301
+            314
           ],
-          "text": "import"
+          "text": "import second.value"
         }
       ],
       "message": "`value` is imported already, from `sys/std/first`"
