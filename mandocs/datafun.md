@@ -48,10 +48,9 @@ For detail see additional documentation.
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
-which are structural and linear.
-They are in brief:
+which are structural and linear. They are in brief:
 
-Primitives:
+_Primitives_
 
 | Type              | Literal          |
 |-------------------|------------------|
@@ -65,7 +64,7 @@ Primitives:
 | `index`           | `: index / 0`    |
 | `offset`          | `: offset / 0`   |
 
-Collections:
+_Collections_
 
 | Name   | Type                             | Literal                          |
 |--------|----------------------------------|----------------------------------|
@@ -75,7 +74,7 @@ Collections:
 | table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
 | tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
 
-Aggregates:
+_Aggregates_
 
 | Name    | Type                          | Literal                       |
 |---------|-------------------------------|-------------------------------|
@@ -120,6 +119,7 @@ Mutable bindings are declared with `var`,
 and reassigned via `set` statements.
 `var`s may be unassigned initially,
 in which case a type annotation is required.
+Static analysis ensures that values are written to all bindings before they are read.
 
 ```datalove
 let a = 10.0
@@ -311,10 +311,14 @@ $ datalove script test.dfs
 
 The postfix _adapt_ operator, `@`, produces a _clone_
 of the value, leaving the original in place.
+All first-class types in datafun &mdash;
+those that can be accepted as arguments to functions &mdash;
+are clonable.
+
 
 ```datalove
 fun print_move_values(a: string, b: string, c: string)
-
+  debuglog (a, b, c)
 end fun
 
 let a = "ten"
@@ -336,10 +340,6 @@ Beyond cloning it also performs widening numeric conversions and more.
 When `@` solves a compiler error, the compiler will say exactly where to write it.
 In some cases Datalove can optionally compile in an "auto-adapt" mode
 for increased ergonomics.
-
-All first-class types in datafun &mdash;
-those that can be accepted as arguments to functions &mdash;
-are clonable.
 
 The `ref`, `mut` and `out` parameter modes _borrow_ values temporarily
 instead of moving them.
@@ -364,6 +364,25 @@ let d = concat_borrow(ref a, ref b, ref c)
 // Can still access a, b and c
 debuglog (a, b, c, d)
 ```
+
+Borrowed values in Datalove are not first class types
+and cannot be e.g. named as fields of structs.
+Values can not be moved out of borrowed locations;
+they must be cloned to obtain a movable instance.
+
+```datalove
+fun print_ref_values(ref a: string, ref b: string, ref c: string)
+  // Putting these strings into a tuple requires a clone
+  debuglog (a@, b@, c@)
+end fun
+
+let a = "ten"
+let b = a@
+let c = a@
+
+call print_ref_values(ref a, ref b, ref c)
+```
+
 
 
 
