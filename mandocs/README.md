@@ -49,7 +49,7 @@ Then add I/O to it &mdash; carefully.
   <div class="thing-box">
     <p>With an <em>interactive scripting environment</em>
        for <em>rapid script iteration</em>,
-       with incremental re-typechecking and re-evaluation,
+       with incremental recompilation and reevaluation,
        and a <em>reversible</em> REPL.
   </div>
   <div class="thing-box">

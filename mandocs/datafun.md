@@ -4,8 +4,7 @@ _Datalove Functions_ is the side-effect-free sublanguage of Datalove.
 We often refer to it as _datafun_.
 On top of the data types defined by [Datalove Literals](datalit.md) it adds:
 
-- Pure and (nearly) total functions
-  that cannot perform I/O and have no exceptional control-flow.
+- Pure functions that cannot perform I/O and have no exceptional control-flow.
 - Constants with full compile-time function evaluation.
 - A simple acyclic module system.
 - Reactive script units that may be chained together, and that incrementally
@@ -44,35 +43,49 @@ For detail see additional documentation.
 </div>
 
 
-
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
 which are structural and linear.
 They are in brief:
 
-Primitives: `bool`, `int`, `f64`, `f32`, `string`,
-`u8` .. `u64`, `i8` .. `i64`, `index`, `offset`.
+Primitives:
+
+| Type              | Literal          |
+|-------------------|------------------|
+| `bool`            | `true`, `false`  |
+| `int`             | `42`             |
+| `f64`             | `3.14`, `1.0e10` |
+| `f32`             | `: f32 / 3.14`   |
+| `string`          | `"hello"`        |
+| `u8` .. `u64`     | `: u32 / 42`     |
+| `i8` .. `i64`     | `: i32 / -1`     |
+| `index`           | `: index / 0`    |
+| `offset`          | `: offset / 0`   |
 
 Collections:
 
-- list, `[T]`
-- map, `%{ K = V }`
-- set, `#{ K }`
-- tables `{\| col1: T1, col2: T2 \|}`
-- tensor, `[\|T, N\|]`
+| Name   | Type                             | Literal                          |
+|--------|----------------------------------|----------------------------------|
+| list   | `[T]`                            | `[1, 2, 3]`                      |
+| map    | `%{ K = V }`                     | `%{ 0 = 5, 1 = 2 }`              |
+| set    | `#{ K }`                         | `#{ 1, 2, 3 }`                   |
+| table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
+| tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
 
 Aggregates:
 
-- unit, `()`
-- 1-tuple, `(T1,)`
-- n-tuple, `(T1, T2)`
-- struct, `{ x: T1, y: T2}`
-- option, `?T`
-- result, `!T`
-- atom, `atom Foo`
-- term, `term Foo T`
-- enum, `enum { atom A, term B T }`
+| Name    | Type                          | Literal                       |
+|---------|-------------------------------|-------------------------------|
+| unit    | `()`                          | `()`                          |
+| 1-tuple | `(T1,)`                       | `(true,)`                     |
+| n-tuple | `(T1, T2)`                    | `(true, 42)`                  |
+| struct  | `{ x: T1, y: T2 }`            | `{ x = 1, y = 2 }`            |
+| option  | `?T`                          | `some 1` <br> `none`          |
+| result  | `!T`                          | `ok 1` <br> `er error 2`      |
+| atom    | `atom Foo`                    | `atom Foo`                    |
+| term    | `term Foo T`                  | `term Foo 1`                  |
+| enum    | `enum { atom A, term B T }`   | `enum { atom A }`             |
 
 As well as the dynamic types, `data` and `error`.
 
