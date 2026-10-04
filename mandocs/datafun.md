@@ -302,7 +302,7 @@ $ datalove script test.dfs
    │         ╰── value used after move
    │
    │ Help: insert `@` to clone:
-6  │    let b = a@
+ 6 │    let b = a@
    │             +
 ───╯
 
@@ -314,7 +314,7 @@ of the value, leaving the original in place.
 
 ```datalove
 fun print_move_values(a: string, b: string, c: string)
-  debuglog (a, b, c)
+
 end fun
 
 let a = "ten"
@@ -333,10 +333,37 @@ that does whatever is necessary to fit a value
 of one compatible type into another.
 Beyond cloning it also performs widening numeric conversions and more.
 
-When `@` solves a compiler error, the compiler will say exactly where to put it.
+When `@` solves a compiler error, the compiler will say exactly where to write it.
 In some cases Datalove can optionally compile in an "auto-adapt" mode
 for increased ergonomics.
 
+All first-class types in datafun &mdash;
+those that can be accepted as arguments to `fun` functions &mdash;
+are clonable.
+
+The `ref`, `mut` and `out` parameter modes _borrow_ values temporarily
+instead of moving them.
+
+```datalove
+require module sys/std/string
+
+fun concat_borrow(ref a: string, ref b: string, ref c: string): string
+  var all = ""
+  call string.push_str(mut all, ref a)
+  call string.push_str(mut all, ref b)
+  call string.push_str(mut all, ref c)
+  ret all
+end fun
+
+let a = "a"
+let b = "b"
+let c = "c"
+
+let d = concat_borrow(ref a, ref b, ref c)
+
+// Can still access a, b and c
+debuglog (a, b, c, d)
+```
 
 
 
