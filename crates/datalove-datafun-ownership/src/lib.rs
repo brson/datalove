@@ -1393,7 +1393,14 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             }
             Statement::ExprStatement(stmt) => {
                 // Expression statement consumes its args via the function call.
+                let may_early_return = ctx.expr_may_early_return(stmt.expr);
                 ctx.analyze_expr_moves(stmt.expr, true);
+                if may_early_return {
+                    let drops = early_return_drops(ctx, stmt_id);
+                    if !drops.is_empty() {
+                        ctx.schedule.before_try_return.insert(stmt_id, drops);
+                    }
+                }
             }
             Statement::Require(_) | Statement::Import(_) | Statement::NativeFun(_) | Statement::ParseError(_) => {
                 // No drops.
@@ -1412,7 +1419,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_id
     // Check for early return operators AFTER analyzing moves.
     // This ensures bindings consumed by the expression itself aren't dropped.
     if may_early_return {
-        let drops = ctx.live_bindings_for_return();
+        let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1460,7 +1467,7 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
 
     // Check for early return operators AFTER analyzing moves.
     if may_early_return {
-        let drops = ctx.live_bindings_for_return();
+        let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1483,7 +1490,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
 
         // Check for early return operators AFTER analyzing moves.
         if may_early_return {
-            let drops = ctx.live_bindings_for_return();
+            let drops = early_return_drops(ctx, stmt_idx);
             if !drops.is_empty() {
                 ctx.schedule.before_try_return.insert(stmt_idx, drops);
             }
@@ -1529,7 +1536,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(idx) if idx.error_mode.is_some())
     });
     if may_early_return {
-        let drops = ctx.live_bindings_for_return();
+        let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
         }
@@ -1543,7 +1550,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     // Check for early return operators in the RHS expression AFTER analyzing
     // moves. This ensures bindings consumed by the expression aren't dropped.
     if ctx.expr_may_early_return(expr) {
-        let drops = ctx.live_bindings_for_return();
+        let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1587,6 +1594,15 @@ fn check_out_params_initialized<'db>(
         if info.param_mode == Some(ParamMode::Out) {
             let id = BindingId(idx as u32);
             if ctx.get_out_param_init(id) != Some(OutParamInitState::Initialized) {
+                // The diagnostic carries no location, so a second exit missing
+                // the same parameter would only repeat it.
+                let reported = ctx.errors.iter().any(|e| matches!(
+                    e,
+                    AnalysisError::OutParamNotInitialized { name, .. } if *name == info.name
+                ));
+                if reported {
+                    continue;
+                }
                 let name = info.name.C();
                 ctx.errors.push(AnalysisError::OutParamNotInitialized {
                     ret_stmt_idx,
@@ -1595,6 +1611,16 @@ fn check_out_params_initialized<'db>(
             }
         }
     }
+}
+
+/// Settle an early return from a `?`, a `!` or a checked operator in statement
+/// `stmt_idx`, returning what the function still owns there.
+///
+/// It leaves the function like a `ret`, so every out parameter must have been
+/// written by then: the caller treats its argument as initialized either way.
+fn early_return_drops<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt_idx: usize) -> Vec<BindingId> {
+    check_out_params_initialized(ctx, Some(stmt_idx));
+    ctx.live_bindings_for_return()
 }
 
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
@@ -1642,7 +1668,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // `?` in it, or a checked overflow -- and what the function still owns has
     // to go with it.
     if condition_may_leave {
-        let drops = ctx.live_bindings_for_return();
+        let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1815,8 +1841,16 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
 }
 
 fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
-    // Match consumes its input.
+    // Match consumes its input, which can leave the function before any arm
+    // is reached.
+    let input_may_leave = ctx.expr_may_early_return(stmt.input);
     ctx.analyze_expr_moves(stmt.input, true);
+    if input_may_leave {
+        let drops = early_return_drops(ctx, stmt_idx);
+        if !drops.is_empty() {
+            ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
+    }
 
     // Save state before match arms.
     let state_before = ctx.scope_stack.last()
@@ -1954,7 +1988,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         let condition_may_leave = ctx.expr_may_early_return(condition);
         ctx.analyze_expr_moves(condition, false);
         if condition_may_leave {
-            let drops = ctx.live_bindings_for_return();
+            let drops = early_return_drops(ctx, stmt_idx);
             if !drops.is_empty() {
                 ctx.schedule.before_try_return.insert(stmt_idx, drops);
             }

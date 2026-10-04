@@ -1,0 +1,16 @@
+// D006 an out parameter left unwritten by a checked operator's early return.
+//
+// A `+!` that overflows leaves the function as surely as a `ret` does, and
+// the caller treats its `out` argument as written either way. Only `ret` and
+// the end of the body were checked, so this compiled, and when the addition
+// overflowed the caller dropped whatever its slot held: the interpreter
+// panicked freeing an allocation that was never made.
+fun g(n: i32, out s: string): !()
+  let m = n +! 1
+  set s = "written"
+  ret ok ()
+end fun
+
+var x: string
+let r = g(2147483647, out x)
+debuglog r

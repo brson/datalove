@@ -1,0 +1,2 @@
+error[D006]: out parameter not initialized: `s`
+Error: Ownership error

@@ -1,0 +1,47 @@
+// What a function owns, dropped when a call statement or a match input leaves
+// it early.
+//
+// Every other statement that can leave through a `?`, a `!` or a checked
+// operator scheduled drops for the bindings still held there. An expression
+// statement and a `match` input did not, so leaving through either leaked
+// them all.
+type C: enum { atom A, atom B }
+
+fun take(s: string, n: i32): ()
+  ret ()
+end fun
+
+fun from_call(n: i32): !()
+  let held: string = "held"
+  take("x", n +! 1)
+  take(held, 0)
+  ret ok ()
+end fun
+
+fun from_call_moving(n: i32): !()
+  let held: string = "held"
+  take(held, n +! 1)
+  ret ok ()
+end fun
+
+fun from_match(xs: [C], i: index): !()
+  let held: string = "held"
+  match xs[i]!
+    case atom A
+      debuglog held
+    case default
+      debuglog held
+  end match
+  ret ok ()
+end fun
+
+let a = from_call(2147483647)
+debuglog a
+let b = from_call(1)
+debuglog b
+let c = from_call_moving(2147483647)
+debuglog c
+let d = from_match([atom A], 5)
+debuglog d
+let e = from_match([atom A], 0)
+debuglog e
