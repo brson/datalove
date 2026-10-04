@@ -74,7 +74,6 @@ Focus on ergonomic REPL experience.
 - [ ] ?/! polymorphism
 - [ ] type sythesis for all literal forms
 - [ ] enum subtyping
-- [ ] module-qualified calls
 - [ ] filesystem workspaces
 - [ ] multiple concurrent interactive scripts
 - [ ] std docs, in-repl docs, generated docs
