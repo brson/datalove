@@ -24,7 +24,7 @@ For detail see additional documentation.
 
 ## Contents
 
-<div class="toc toc-repeat-9">
+<div class="toc toc-repeat-8">
 
 - [A first script](#user-content-a-first-script)
 - [Data types](#user-content-data-types)
@@ -37,7 +37,7 @@ For detail see additional documentation.
 - [Collections and indexing](#user-content-collections-and-indexing)
 - [Numerics](#user-content-numerics)
 - [Comparison and equality](#user-content-comparison-and-equality)
-- [Modules, packages, libraries, and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
+- [Modules, packages, libraries and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
 - [Generics](#user-content-generics)
 - [Scripts and interactive units](#user-content-scripts-and-interactive-units)
