@@ -257,13 +257,59 @@ today, and is what stack overflow, a native's error and, later, any trap need.
    `resolve_ref_descriptors`.
 2. `FrameStack`; `Frame` as a handle; the pool and the vectors go; the size cap.
    Callers write arguments into the callee's frame. Measure.
-3. The bytecode loop without recursion. Measure.
+3. The bytecode loop without recursion. Measure. (Steps 1-3 done; see below.)
 4. A depth guard at the crossings; spawn `--jit` and the REPL worker with large
    stacks. With 2, deep recursion fails as an error.
 5. Unwinding (part 3).
 
 Each step is useful alone. Steps 1-3 are the speed; 2, 4 and 5 are the stack
 overflow issue.
+
+## What was built
+
+Steps 1-3. Instruction counts (`perf stat`), the bytecode, before and after:
+
+| | before | parts 1 and 2 | |
+|---|---|---|---|
+| fib(32) | 5.21G | 4.62G | -11% |
+| a call to a two-argument function, each | ~440 | ~425 | |
+| sum | 1.09G | 1.10G | |
+| primes | 6.35G | 6.51G | +2.5% |
+| wordfreq | 29.5G | 29.1G | -1.5% |
+
+Bytecode recursion goes a million levels deep, where it aborted at about nine
+thousand; running out of frame stack, at about ten million, is
+`InterpError::StackOverflow`.
+
+**Part 1 alone was slightly slower** (fib +3%): the frame header and the
+offset lookups cost a little more than the pool's boxes. It was what part 2
+needed, not a gain of its own.
+
+**Part 2, first attempts, were much slower**, and how is worth knowing:
+
+- *One loop with the registers mutable* -- `pc`, the ops, the frame's base
+  changing at calls and returns -- ran about a quarter more instructions per
+  op. The cause was not register pressure, as it looked, but `pc += 1`: the
+  release profile checks overflow, and the check's panic path was enough to
+  push the loop's registers onto the stack. `pc.wrapping_add(1)` fixed it;
+  the loop with mutable registers runs as many instructions as the old one.
+- *Not recursing does not itself save much.* Removing `run_bytecode`'s
+  prologue and epilogue is one pair per call, and the activation the loop
+  saves instead (fifteen words in, fifteen out) costs about as much. What
+  made calls cheaper was what not recursing made possible: a **planned call**.
+  A call site's cache keeps, for a statically typed call to a bytecode body in
+  the same unit or a module, the callee's layout, its bytecode and each
+  parameter's final descriptor (`Plan`). A planned call checks that the callee
+  is still that body, bumps the frame, writes the arguments, clears the
+  tracking bytes and switches; there is no `Frame::enter`, no dispatcher lookup
+  beyond a flag, no cache borrow, no bytecode lookup.
+
+What a planned call still costs, about 425 instructions: pushing the frame
+(the header, the chunk check, the layout's reference count), building and
+pushing the activation, checking the plan, and on return popping both. The
+activation could shrink (a context that did not change need not be saved, nor
+an empty scratch vector), and could live in the frame's header rather than a
+vector. Primes is 2.5% slower, from layout of the loop rather than any one op.
 
 ## Open questions
 

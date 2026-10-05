@@ -356,7 +356,8 @@ impl Frame {
     }
 
     /// Set every tracking byte to say its binding has never been written.
-    fn clear_tracking(&mut self) {
+    #[inline]
+    pub(crate) fn clear_tracking(&mut self) {
         let layout = self.layout();
         // A byte at a time: there are a handful at most, and `write_bytes` of a
         // length only known at run time is a call into `memset`, which was most

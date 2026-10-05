@@ -1632,6 +1632,17 @@ descriptors; before the boxing it moved a 192-byte struct by value, two
 Script frames are `ScriptFrame`s, which own their bytes and live in the
 `FrameStore`.
 
+**Bytecode calls do not recurse.** A call from one bytecode body to another
+pushes the callee's frame and carries on in the same loop (`run_body` in
+`bytecode.rs`), saving the caller's registers in an `Activation`; a return
+restores them. A call site that resolves to a statically typed bytecode body
+keeps a `Plan` -- the callee's layout, bytecode and final parameter
+descriptors -- so that the call is a check, a push, the arguments and a
+switch. Two things learned doing it: `pc += 1` in a release build with
+overflow checks costs the loop its registers (the panic path is enough), so
+the loop uses `wrapping_add`; and not recursing saves little by itself -- the
+saving is in what a loop that owns its frames can skip.
+
 **A call resolves its arguments into the callee's frame.** `execute_call_site`
 pushes the callee's frame (`FrameStack::push`), sets each argument straight
 into it, offers the dispatcher

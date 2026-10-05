@@ -33,7 +33,7 @@ home here.
 - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
 - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
 - [Every REPL line is a new salsa input](#user-content-every-repl-line-is-a-new-salsa-input)
-- [Deep recursion aborts the process, in every engine](#user-content-deep-recursion-aborts-the-process-in-every-engine)
+- [Deep recursion aborts the process, in every engine but the bytecode](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 
 ## Nothing but a test inlines
@@ -468,17 +468,26 @@ nothing, since identical text is a different input. Nothing replays today --
 old one -- so that half only matters if recovery is ever meant to keep the
 session. Holding a stable `Source` per unit for appends too would fix both.
 
-## Deep recursion aborts the process, in every engine
+## Deep recursion aborts the process, in every engine but the bytecode
 
-**Reproduced.** Every engine runs datalove calls on the native stack, and
-nothing limits the depth, checks for overflow or recovers from it. A trivial
-recursive function, `down(n)` returning `down(n - 1) + 1`, on a release build:
+**Reproduced.** Every engine but the bytecode runs datalove calls on the
+native stack, and nothing limits the depth, checks for overflow or recovers
+from it. A trivial recursive function, `down(n)` returning `down(n - 1) + 1`,
+on a release build:
 
 | engine | stack | deepest that ran |
 |---|---|---|
 | IR walker | main thread, 8 MiB | ~7,450 |
-| bytecode (`DATALOVE_INTERP=bc`) | main thread, 8 MiB | ~9,300 |
 | JIT (`script --jit`) | spawned thread, 2 MiB | ~14,400 |
+
+The bytecode (`DATALOVE_INTERP=bc`) makes calls from one bytecode body to
+another without recursing on the Rust stack (`plan-frame-stack.md`), so it ran
+a million deep, and ten million fails as `InterpError::StackOverflow` when the
+frame stack reaches its limit; `deep_recursion_tests` checks both. What it
+leaves on the Rust stack is calls it hands to the general path -- any call made
+while a dispatcher is installed, and calls the fast path does not suit -- and
+what is left of the issue applies to chains of those. Its error does not
+destroy what the unwound frames owned, as no error does yet.
 
 Past that, `fatal runtime error: stack overflow, aborting`: the whole process
 goes, the REPL included, whose `catch_unwind` cannot catch it. A debug build of
@@ -493,7 +502,8 @@ Where the stack goes:
   is on the interpreter's own `FrameStack`; only control nests. Running out of
   that stack is an `InterpError::StackOverflow`, but at the default limit the
   Rust stack runs out long before it.
-- **Bytecode**: `run_bytecode` and `fast_call`, about 0.9 KB a call.
+- **Bytecode**: nothing for a call between bytecode bodies; a call through the
+  general path nests `run_bytecode` again, as the IR walker nests.
 - **JIT**: a stack slot of the shared frame layout per function, and a call
   through a per-callee stub, so two machine frames a call. A call from JIT code
   to a function not compiled yet goes through `__jit_dispatch_call` back into
