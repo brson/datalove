@@ -896,7 +896,13 @@ pub(crate) fn emit_fallible_index_check(
     ctx.start_block(early_return_block);
     match error_mode {
         ast::IndexErrorMode::Option => ctx.emit_early_return_none(true),
-        ast::IndexErrorMode::Result => ctx.emit_early_return_err_message("index out of bounds", true),
+        ast::IndexErrorMode::Result => {
+            let msg = match collection_type {
+                IrType::Map(_, _) => "key not found",
+                _ => "index out of bounds",
+            };
+            ctx.emit_early_return_err_message(msg, true)
+        }
     }
 
     ctx.start_block(continue_block);

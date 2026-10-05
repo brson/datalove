@@ -1,0 +1,26 @@
+----------
+scriptunit-fragment
+----------
+
+// A missing map key is "key not found" whichever way the index is lowered:
+// read as a value, borrowed for a clone, or written as a `set` target.
+fun read(m: %{string = u32}, k: string): !u32
+    ret ok (m[k]!)
+end fun
+
+fun cloned(m: %{string = string}, k: string): !string
+    ret ok (m[k]!@)
+end fun
+
+fun written(m: %{string = u32}, k: string): !%{string = u32}
+    var out = m
+    set out[k]! = 2
+    ret ok out
+end fun
+
+fun listed(xs: [string], i: index): !string
+    ret ok (xs[i]!@)
+end fun
+
+debuglog (read(%{ "a" = 1 }, "b"), cloned(%{ "a" = "x" }, "b"))
+debuglog (written(%{ "a" = 1 }, "b"), listed(["x"], 3))

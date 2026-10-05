@@ -883,6 +883,10 @@ call foo(ref t.0)                   // ok: borrow
 
 Copy-type fields (bool, fixed integers, floats) are freely extracted.
 
+A borrow of a value being built does not reach its parts. The elements of a
+tuple, struct, collection or constructor are moved into it, so
+`debuglog (p.name,)` needs `p.name@` though `debuglog p.name` does not.
+
 ### 7.3 Fallible Indexing
 
 The `[]` operator on lists, maps, and tensors is fallible: the index may be
@@ -901,8 +905,8 @@ Bare `a[i]` without `?` or `!` is a type error in read context. There is no
 infallible/panicking index variant.
 
 The error that `!` returns is a fixed string: `error "index out of bounds"`
-for lists and tensors, `error "key not found"` for maps. (A failed `!` step
-in a `set` target currently reports `"index out of bounds"` for maps too.)
+for lists and tensors, `error "key not found"` for maps, in a `set` target
+as anywhere else.
 
 The enclosing function's return type determines which variant is valid: `?`
 requires the function to return `?R`, `!` requires `!R`.

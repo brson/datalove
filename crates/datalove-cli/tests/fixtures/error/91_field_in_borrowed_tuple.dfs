@@ -1,0 +1,5 @@
+// `debuglog` borrows its argument, but a tuple built there takes its
+// elements, so a string field put in one has to be cloned. Taking it without
+// a clone used to free the string the struct still held.
+let p = { name = "ada", age = 36 }
+debuglog (p.name,)

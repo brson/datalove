@@ -29,6 +29,15 @@ pub fn check_expr<'db>(
     let db = ctx.db;
     let expr_kind = expr.expr(db);
 
+    // See `builds_from_parts`: a borrow of what is built is not a borrow of
+    // its parts.
+    if ctx.ref_context && crate::synthesize::builds_from_parts(&expr_kind) {
+        ctx.ref_context = false;
+        let result = check_expr(ctx, expr, expected);
+        ctx.ref_context = true;
+        return result;
+    }
+
     // A hint says what the expression is, and it has to be what is expected.
     // Nothing converts on the way from one to the other: a `: u8 / 1` where a
     // `u32` is wanted is a mismatch, as a `u8` variable would be, and not a

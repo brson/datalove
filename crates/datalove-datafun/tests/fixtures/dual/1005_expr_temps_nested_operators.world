@@ -24,7 +24,7 @@ fun through_checked(a: u8, b: u8): ?bool
 end fun
 
 fun through_index(xs: [int], i: index): ?bool
-    ret some (("abc", 1) == ("abc", xs[i]?))
+    ret some (("abc", 1) == ("abc", xs[i]?@))
 end fun
 
 debuglog (negated(1), inverted(true))

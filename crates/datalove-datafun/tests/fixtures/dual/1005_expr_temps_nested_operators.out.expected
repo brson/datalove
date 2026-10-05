@@ -122,22 +122,24 @@ DualAnalysis(
                         v1 = const 1int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = const "abc"
-                        v4, v5 = listget p0[p1]
-                        branch v5, block2, block1
+                        v4 = listboundscheck p0[p1]
+                        branch v4, block2, block1
                     block1:
-                        v6 = none
+                        v5 = none
                         drop v2
                         drop v3
                         drop p0
-                        return v6
+                        return v5
                     block2:
-                        v7 = pack Tuple2 {v3, v4}
-                        v8 = eq v2, v7
+                        v6 = listelementref p0[p1]
+                        v7 = clone *v6
+                        v8 = pack Tuple2 {v3, v7}
+                        v9 = eq v2, v8
                         drop v2
-                        drop v7
-                        v9 = some v8
+                        drop v8
+                        v10 = some v9
                         drop p0
-                        return v9
+                        return v10
                 """,
             ),
             aot_lowering: LoweringResult(
@@ -254,22 +256,24 @@ DualAnalysis(
                         v1 = const 1int
                         v2 = pack Tuple2 {v0, v1}
                         v3 = const "abc"
-                        v4, v5 = listget p0[p1]
-                        branch v5, block2, block1
+                        v4 = listboundscheck p0[p1]
+                        branch v4, block2, block1
                     block1:
-                        v6 = none
+                        v5 = none
                         drop v2
                         drop v3
                         drop p0
-                        return v6
+                        return v5
                     block2:
-                        v7 = pack Tuple2 {v3, v4}
-                        v8 = eq v2, v7
+                        v6 = listelementref p0[p1]
+                        v7 = clone *v6
+                        v8 = pack Tuple2 {v3, v7}
+                        v9 = eq v2, v8
                         drop v2
-                        drop v7
-                        v9 = some v8
+                        drop v8
+                        v10 = some v9
                         drop p0
-                        return v9
+                        return v10
                 """,
             ),
             ir_match: true,

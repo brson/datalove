@@ -1,0 +1,10 @@
+[31m[F070] Error:[0m a field of type `string` cannot be read out of what holds it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/91_field_in_borrowed_tuple.dfs:5:12 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m5 │[0m [38;5;249md[0m[38;5;249me[0m[38;5;249mb[0m[38;5;249mu[0m[38;5;249mg[0m[38;5;249ml[0m[38;5;249mo[0m[38;5;249mg[0m[38;5;249m [0m[38;5;249m([0m[38;5;249mp[0m[38;5;201m.[0m[38;5;201mn[0m[38;5;201ma[0m[38;5;201mm[0m[38;5;201me[0m[38;5;249m,[0m[38;5;249m)[0m
+ [38;5;240m  │[0m            [38;5;201m─[0m[38;5;201m─[0m[38;5;201m┬[0m[38;5;201m─[0m[38;5;201m─[0m  
+ [38;5;240m  │[0m              [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m[38;5;201m─[0m this would move the field out
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: the field's type is not a copy type, so reading it would move it while the aggregate still holds it. Borrow it with `ref`, or clone it out with `@`.
+[38;5;246m───╯[0m
+Error: Type error

@@ -144,6 +144,12 @@ pub fn synthesize_expr<'db>(
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
+    if ctx.ref_context && builds_from_parts(&expr.expr(db)) {
+        ctx.ref_context = false;
+        let result = synthesize_expr(ctx, expr);
+        ctx.ref_context = true;
+        return result;
+    }
     if let Some(type_hint) = expr.expr(db).type_hint().cloned() {
         let expected = ctx.convert_hint(type_hint)?;
         check_expr(ctx, expr, &expected)?;
@@ -151,6 +157,35 @@ pub fn synthesize_expr<'db>(
         return Ok(expected);
     }
     synthesize_unhinted(ctx, expr)
+}
+
+/// Whether an expression builds a value out of the expressions inside it.
+///
+/// The parts are moved into what is built, whatever the context the whole is
+/// in: `debuglog (p.name,)` borrows the tuple, and the tuple takes `p.name`.
+/// So a borrowing context ends at one of these, and a non-copy field or
+/// element inside it has to be cloned out with `@` like anywhere else it is
+/// consumed. It used to carry on into the parts, which let the field be
+/// taken without a clone, and dropping the tuple then freed what `p` still
+/// held.
+pub(crate) fn builds_from_parts(kind: &ExprFunKind<'_>) -> bool {
+    matches!(
+        kind,
+        ExprFunKind::Tuple(_)
+            | ExprFunKind::AnonTuple(_)
+            | ExprFunKind::AnonStruct(_)
+            | ExprFunKind::List(_)
+            | ExprFunKind::Set(_)
+            | ExprFunKind::Map(_)
+            | ExprFunKind::Tensor(_)
+            | ExprFunKind::Table(_)
+            | ExprFunKind::Some(_)
+            | ExprFunKind::Ok(_)
+            | ExprFunKind::Er(_)
+            | ExprFunKind::Data(_)
+            | ExprFunKind::Error(_)
+            | ExprFunKind::Term(_)
+    )
 }
 
 /// Synthesize a type for an expression from what it is, leaving aside any
