@@ -24,19 +24,18 @@ would help readers who paste examples.
 The structure is now sound, and the first script, Variables, Functions and
 Ownership read well in sequence. The largest remaining gap is that Ownership
 never says which types are copied and which are moved, and `int` -- the
-default integer type -- is moved. Two statements in Option and result
-handling contradict the compiler. The table of contents no longer matches
-the headings.
+default integer type -- is moved. Option and result handling understates
+what a result's `else` needs. The table of contents no longer matches the
+headings.
+
+The draft's rule that destructuring `if`s take no part in `else if` chains was
+not enforced when this review was first refreshed. The parser now enforces it
+(P073), so the text is right as written.
 
 ## Errors
 
 These say something the implementation does not do.
 
-- **`else if` after an option `if`.** "These forms disallow `else`-`if`
-  chains" is not what the compiler does: `if o |v| ... else if true ... else
-  ... end if` with `o = none` compiles and runs the `else if` branch. Either
-  the text or the parser is wrong; if the restriction is intended, it is not
-  enforced.
 - **The result `if` needs an error binding, not just an `else`.** "In the
   result case the `else` branch is required" understates it: `else` without
   `|e|` is F046, "Result destructuring requires an else binding". Say that
