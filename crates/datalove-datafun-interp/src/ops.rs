@@ -11,7 +11,7 @@ use crate::value::{Destination, Value};
 use crate::IrInterpreter;
 
 /// Trait for checked integer operations (overflow detection).
-trait CheckedIntOps: Sized + Default {
+pub(crate) trait CheckedIntOps: Sized + Default {
     fn overflowing_add_impl(self, rhs: Self) -> (Self, bool);
     fn overflowing_sub_impl(self, rhs: Self) -> (Self, bool);
     fn overflowing_mul_impl(self, rhs: Self) -> (Self, bool);

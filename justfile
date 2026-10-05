@@ -27,6 +27,13 @@ test:
 test-sys-riders:
     DATALOVE_BUILD_SYS_RIDERS=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
+# Run the interpreter-driven suites with function bodies on the bytecode engine.
+#
+# Their expected output is the IR walker's, so this is a differential test of
+# the bytecode against it. See botdocs/plan-bytecode.md.
+test-bc:
+    DATALOVE_INTERP=bc DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun -p datalove-datafun-interp -p datalove-tests -p datalove-cli
+
 # Run tests with 64-bit collection indexes.
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64

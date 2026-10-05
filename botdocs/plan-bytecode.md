@@ -13,9 +13,11 @@ loads, an operation and a store. Build it as a prototype function by function,
 falling back to the IR walker for any body it cannot lower, and check it against
 the IR walker on every fixture from the first day.
 
-> **This is a plan, not a description.** Nothing here is built. It records the
-> reasoning and the facts it rests on as of October 2026, so that the prototype
-> can be judged against what was expected of it.
+> **This is a plan, and a prototype of it.** The prototype is in
+> `crates/datalove-datafun-interp/src/bytecode.rs`, off by default and turned on
+> with `DATALOVE_INTERP=bc`; [What the prototype found](#user-content-what-the-prototype-found)
+> says how it went. The rest records the reasoning and the facts it rests on as
+> of October 2026.
 
 ## Contents
 
@@ -37,6 +39,7 @@ the IR walker on every fixture from the first day.
 - [Testing](#user-content-testing)
 - [Measuring](#user-content-measuring)
 - [Order of work](#user-content-order-of-work)
+- [What the prototype found](#user-content-what-the-prototype-found)
 - [Risks and open questions](#user-content-risks-and-open-questions)
 - [Things the survey turned up](#user-content-things-the-survey-turned-up)
 - [Prior art](#user-content-prior-art)
@@ -468,6 +471,82 @@ Later, and only on evidence: quickening for generic bodies (specialize a `data`
 operation on the descriptor it first sees, guarded by a pointer comparison),
 superinstructions from the histogram, and on-stack replacement into the JIT from
 a bytecode loop header, which the shared frame layout makes possible.
+
+## What the prototype found
+
+The prototype is `bytecode.rs` in the interpreter crate, run with
+`DATALOVE_INTERP=bc` (and `DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP`
+to print each body's ops). `just test-bc` runs the interpreter-driven suites --
+interpreter, module and std fixtures, both dispatcher suites, the JIT, the
+cross-backend std suite and the CLI tests -- on it, against the IR walker's
+expected output, with leak checking on. They pass.
+
+**Fallback is per instruction, not per function.** The plan had a body the
+lowering could not handle fall back to the IR walker whole. Because the two
+engines share the frame byte for byte, an instruction with no op becomes an
+`Ir` op instead, which runs that one instruction on the IR walker against the
+same frame. Every body lowers from the start and coverage grows an op at a
+time, which made the plan's `bc-strict` mode and declined-body cache
+unnecessary. Block edges whose arguments need the IR walker's bookkeeping (a
+parallel move, a slot or parameter argument) and returns of anything but a
+value take the same route.
+
+**What is lowered**: scalar constants, copies and moves of values and untracked
+slots, checked add, sub and mul and comparisons for 32- and 64-bit integers
+(and `index`, `offset`, `u8`, `bool` equality), the hot `u32` intrinsics,
+option and result wrapping and unwrapping, jumps, branches, switches, returns,
+and calls. Operands are frame offsets, direct or through a pointer (parameters,
+references); parameter pointers go in the frame's parameter region on `enter`.
+Ops are a 24-byte enum dispatched by a `match`.
+
+**Results** (release build, benchvs, medians):
+
+| | IR walker | bytecode | | on the IR walker |
+|---|---|---|---|---|
+| primes | 1639ms | 578ms | 2.8x | 0 of 48 ops |
+| fib(32) | 698ms | 369ms | 1.9x | 11 of 38 (error paths) |
+| sum | 90ms | 84ms | 1.07x | 12 of 24 |
+| wordfreq | 3968ms | 3626ms | 1.09x | 250 of 612 |
+
+Primes now runs in half CPython's time (1.16s with its JIT off); fib is about
+twice CPython's 177ms. Sum and wordfreq are as expected: their time is in big
+integer arithmetic, tracked slots and the runtime, none of which the prototype
+lowers yet.
+
+**What made the difference**, in order:
+
+1. Typed ops over resolved offsets: primes 1.6s to 0.87s on their own.
+2. Three standard lowering optimizations: a `Goto` into the next block is no
+   op; scalar constants defined in a loop are written once, by a prologue that
+   runs on entry (a value is defined once and owns its bytes, so this is safe
+   unless something else writes it -- an `out` argument or a reference store --
+   and hoisting constants outside loops only adds work to every call); and a
+   comparison whose only use is the branch on it fuses into the branch. Primes
+   to 0.63s.
+3. A call op. First straight into the call path, skipping the IR walker's
+   dispatch; then, for a call whose arguments are all SSA values, a fast path
+   with the arguments' places and descriptors resolved and the callee's layout
+   cached at the call site by body address. It takes the general path whenever
+   a dispatcher is installed, so the JIT and the inliner see every call.
+4. **Boxing the pooled frames**, which helped both engines: `FramePool` moved a
+   192-byte `Frame` by value into and out of the pool, two `memcpy` calls per
+   call. Fib on the IR walker went from 848ms to 655ms with that alone, and on
+   the bytecode from 622ms to 358ms.
+
+**What it does not do**:
+
+- **Debug liveness checks.** A frame the bytecode runs stops keeping liveness
+  flags, since the bytecode keeps none for values and untracked slots. The IR
+  walker remains the checked engine; the bytecode is checked against it by the
+  differential suites.
+- Tracked slots and parameters, drops, big integers, collections, aggregates,
+  generics and calls with anything but values as arguments are still IR walker
+  instructions. Steps 4 to 7 of the order of work are what is left.
+- The call is still recursive on the Rust stack, and ops are 24 bytes rather
+  than 16. Neither has been measured as worth changing yet.
+
+**What is left in fib** is the call itself: about a quarter of the time in the
+fast call, a tenth in taking and entering the frame, the rest in the loop.
 
 ## Risks and open questions
 

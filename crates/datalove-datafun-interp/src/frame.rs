@@ -26,7 +26,10 @@ fn refill<T: Clone>(v: &mut Vec<T>, len: usize, value: T) {
 /// frame handed back is free for the next call at that depth.
 #[derive(Default)]
 pub struct FramePool {
-    free: Vec<Frame>,
+    /// Boxed, so that taking one and handing it back moves a pointer rather
+    /// than the frame: by value it was two `memcpy`s of the whole struct per
+    /// call.
+    free: Vec<Box<Frame>>,
 }
 
 impl FramePool {
@@ -42,7 +45,7 @@ impl FramePool {
     /// first because a dispatcher is offered them before anything is decided
     /// about running the body here, and one that takes the call leaves the rest
     /// of the frame unused.
-    pub fn take(&mut self, layout: Rc<IrLayout>) -> Frame {
+    pub fn take(&mut self, layout: Rc<IrLayout>) -> Box<Frame> {
         match self.free.pop() {
             Some(mut frame) => {
                 frame.params.clear();
@@ -50,7 +53,7 @@ impl FramePool {
                 frame.layout = layout;
                 frame
             }
-            None => Frame {
+            None => Box::new(Frame {
                 data: AlignedBuffer::uninit(0, 1),
                 layout,
                 params: Vec::new(),
@@ -58,12 +61,12 @@ impl FramePool {
                 value_tydescs: Vec::new(),
                 is_script: false,
                 liveness: Liveness { kept: cfg!(debug_assertions), ..Liveness::default() },
-            },
+            }),
         }
     }
 
     /// Hand a frame back for the next call to use.
-    pub fn give_back(&mut self, frame: Frame) {
+    pub fn give_back(&mut self, frame: Box<Frame>) {
         self.free.push(frame);
     }
 }
@@ -144,6 +147,25 @@ impl Frame {
         &self.layout
     }
 
+    /// The layout this frame was taken for, shared.
+    pub(crate) fn layout_rc(&self) -> Rc<IrLayout> {
+        Rc::clone(&self.layout)
+    }
+
+    /// Where the frame's data starts.
+    pub(crate) fn base_ptr(&mut self) -> *mut u8 {
+        self.data.as_mut_ptr()
+    }
+
+    /// Stop keeping liveness flags for a frame the bytecode runs.
+    ///
+    /// The bytecode keeps no flags for values and untracked slots -- a release
+    /// build keeps none either -- so the debug checks that read them would
+    /// fire on what it never wrote. The IR walker remains the checked engine.
+    pub(crate) fn stop_keeping_liveness(&mut self) {
+        self.liveness.kept = false;
+    }
+
     /// Hand over the next argument, as the caller has it.
     pub fn push_param(&mut self, value: Value) {
         self.params.push(value);
@@ -196,6 +218,11 @@ impl Frame {
             if matches!(mode, ParamMode::In | ParamMode::Out) {
                 self.params[i].tydesc = layout.param_tydescs[i];
             }
+            // The pointer goes where compiled code keeps it too, which is
+            // where the bytecode reads a parameter through.
+            let at = layout.param_offsets[i] as usize;
+            // SAFETY: the parameter region is inside the frame, by the layout.
+            unsafe { (self.data.as_mut_ptr().add(at) as *mut *mut u8).write_unaligned(self.params[i].ptr) };
         }
         if self.liveness.kept {
             refill(&mut self.liveness.values, layout.value_offsets.len(), false);
@@ -243,8 +270,13 @@ impl Frame {
     fn clear_tracking(&mut self) {
         let offset = self.layout.tracking_offset as usize;
         let count = self.layout.tracking_count as usize;
-        // SAFETY: the tracking bytes are inside the frame, by the layout.
-        unsafe { std::ptr::write_bytes(self.data.as_mut_ptr().add(offset), tracking::UNINIT, count) };
+        // A byte at a time: there are a handful at most, and `write_bytes` of a
+        // length only known at run time is a call into `memset`, which was most
+        // of what entering a function cost.
+        for i in 0..count {
+            // SAFETY: the tracking bytes are inside the frame, by the layout.
+            unsafe { *self.data.as_mut_ptr().add(offset + i) = tracking::UNINIT };
+        }
     }
 
     /// The tracking byte at `offset`.

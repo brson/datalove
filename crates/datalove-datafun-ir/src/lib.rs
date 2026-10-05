@@ -1978,6 +1978,111 @@ impl Instruction {
     }
 }
 
+impl Instruction {
+    /// Visit every operand the instruction names: the ones it reads, and the
+    /// ones it writes through (a reference store's destination).
+    ///
+    /// A destination it defines (`dest`, a `SlotDest`, a parameter it stores
+    /// to) is not an operand and is not visited. `DropViaRef`'s reference, a
+    /// value the instruction reads, is visited as `Operand::Value`.
+    pub fn for_each_operand(&self, mut f: impl FnMut(&Operand)) {
+        use Instruction as I;
+        match self {
+            I::Const { .. } | I::WrapNone { .. } | I::SlotLoadCopy { .. }
+            | I::SlotLoadMove { .. } | I::SlotLoadMoveTracked { .. } | I::Nop => {}
+            I::Copy { src, .. } | I::Move { src, .. } | I::Widen { src, .. }
+            | I::WidenFixed { src, .. } | I::Clone { src, .. } | I::Unpack { src, .. }
+            | I::GetField { src, .. } | I::GetFieldRef { src, .. } | I::DataBorrow { src, .. }
+            | I::EnumDiscriminant { src, .. } | I::EnumPayload { src, .. }
+            | I::UnwrapOption { src, .. } | I::UnwrapResult { src, .. } | I::Erase { src, .. }
+            | I::EraseTracked { src, .. } | I::Reify { src, .. } => f(src),
+            I::WrapSome { inner, .. } | I::WrapOk { inner, .. } | I::WrapErr { inner, .. }
+            | I::ErrorFrom { inner, .. } | I::DataFrom { inner, .. } => f(inner),
+            I::UnaryOp { operand, .. } | I::UnaryOpChecked { operand, .. }
+            | I::Drop { operand } | I::DropTracked { operand } | I::UnitEndDrop { operand }
+            | I::UnitEndDropTracked { operand } | I::DebugLog { operand } => f(operand),
+            I::BinOp { lhs, rhs, .. } | I::BinOpChecked { lhs, rhs, .. } => {
+                f(lhs);
+                f(rhs);
+            }
+            I::Call { args, .. } | I::ComptimeCall { args, .. } | I::Intrinsic { args, .. } => {
+                args.iter().for_each(f)
+            }
+            I::Pack { fields, .. } => fields.iter().for_each(f),
+            I::EnumVariant { payload, .. } => payload.iter().for_each(f),
+            I::ListNew { elements, .. } | I::SetNew { elements, .. } | I::TensorNew { elements, .. } => {
+                elements.iter().for_each(f)
+            }
+            I::MapNew { entries, .. } => {
+                for (k, v) in entries {
+                    f(k);
+                    f(v);
+                }
+            }
+            I::TableNew { rows, .. } => rows.iter().for_each(f),
+            I::SlotStoreCopy { value, .. } | I::SlotStoreCopyTracked { value, .. }
+            | I::SlotStoreMove { value, .. } | I::SlotStoreMoveTracked { value, .. }
+            | I::SetField { value, .. } | I::SetFieldTracked { value, .. }
+            | I::ParamStore { value, .. } | I::ParamStoreTracked { value, .. }
+            | I::ParamSetField { value, .. } | I::ParamSetFieldTracked { value, .. } => f(value),
+            I::RefStore { dest, value } | I::RefSetField { dest, value, .. }
+            | I::RefStoreTracked { dest, value } | I::RefSetFieldTracked { dest, value, .. } => {
+                f(dest);
+                f(value);
+            }
+            I::DropViaRef { ref_value } => f(&Operand::Value(*ref_value)),
+            I::ListGet { list, index, .. } | I::ListBoundsCheck { list, index, .. }
+            | I::ListElementRef { list, index, .. } => {
+                f(list);
+                f(index);
+            }
+            I::ListSet { list, index, value } => {
+                f(list);
+                f(index);
+                f(value);
+            }
+            I::MapGet { map, key, .. } | I::MapContainsKey { map, key, .. }
+            | I::MapValueRef { map, key, .. } => {
+                f(map);
+                f(key);
+            }
+            I::MapSetValue { map, key, value } | I::MapUpsert { map, key, value } => {
+                f(map);
+                f(key);
+                f(value);
+            }
+            I::TensorGet { tensor, index, .. } | I::TensorBoundsCheck { tensor, index, .. }
+            | I::TensorIndexRef { tensor, index, .. } => {
+                f(tensor);
+                f(index);
+            }
+            I::TensorSet { tensor, index, value } => {
+                f(tensor);
+                f(index);
+                f(value);
+            }
+        }
+    }
+}
+
+impl Terminator {
+    /// Visit every operand the terminator reads: a condition, a
+    /// discriminant, a returned value, and the arguments of every edge.
+    pub fn for_each_operand(&self, mut f: impl FnMut(&Operand)) {
+        match self {
+            Terminator::Goto { args, .. } => args.iter().for_each(f),
+            Terminator::Branch { cond, then_args, else_args, .. } => {
+                f(cond);
+                then_args.iter().for_each(&mut f);
+                else_args.iter().for_each(f);
+            }
+            Terminator::Switch { discriminant, .. } => f(discriminant),
+            Terminator::Return { value } | Terminator::UnitEnd { result: value } => value.iter().for_each(f),
+            Terminator::UnitEarlyReturn { value } => f(value),
+        }
+    }
+}
+
 /// Block terminator - how control leaves a basic block.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Terminator {

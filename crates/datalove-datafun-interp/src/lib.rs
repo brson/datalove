@@ -51,6 +51,7 @@ mod dynamic;
 mod intrinsics;
 mod ctfe;
 mod native;
+mod bytecode;
 
 #[cfg(test)]
 mod tests;
@@ -128,6 +129,10 @@ pub struct IrInterpreter {
     temp_view_tensors: Vec<Box<rtdt::Tensor>>,
     /// Native function dispatch table for rider functions.
     native_table: NativeFunctionTable,
+    /// Whether function bodies run as bytecode (`DATALOVE_INTERP=bc`).
+    use_bytecode: bool,
+    /// What the bytecode lowering has done, for `DATALOVE_BC_STATS`.
+    bc_stats: bytecode::BcStats,
 }
 
 /// The types a code unit gives its values and slots.
@@ -189,6 +194,8 @@ impl IrInterpreter {
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
+            use_bytecode: std::env::var("DATALOVE_INTERP").is_ok_and(|v| v == "bc"),
+            bc_stats: bytecode::BcStats::default(),
         }
     }
 
@@ -408,10 +415,34 @@ impl IrInterpreter {
         frames: &mut FrameStore,
         code_ref: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
+        if self.use_bytecode {
+            let layout = frame.layout_rc();
+            let bc = self.bytecode_for(&layout, func);
+            frame.stop_keeping_liveness();
+            return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);
+        }
         // Functions write their result to ret_dest, and always complete
         // normally.
         self.execute_blocks(&func.blocks, &UnitTypes::of(func), frame, ret_dest, None, ctx, registry, frames, code_ref)
             .map(|_| ())
+    }
+
+    /// The bytecode for `func`, lowered against `layout` the first time.
+    fn bytecode_for(&mut self, layout: &IrLayout, func: &IrCodeUnit) -> Rc<bytecode::BcFunction> {
+        let address = func as *const IrCodeUnit as usize;
+        if let Some((lowered_from, bc)) = layout.bytecode.get() && *lowered_from == address {
+            return Rc::clone(bc);
+        }
+        let (bc, escapes) = bytecode::lower(func, layout);
+        self.bc_stats.record(&bc, escapes);
+        if std::env::var_os("DATALOVE_BC_DUMP").is_some() {
+            eprintln!("{}:\n{}", func.name, bc.dump());
+        }
+        let bc = Rc::new(bc);
+        // A layout already holding another body's bytecode keeps it; this one
+        // is lowered again next time, which only a replaced body pays for.
+        let _ = layout.bytecode.set((address, Rc::clone(&bc)));
+        bc
     }
 
     /// Execute a script unit with access to previous units' values.

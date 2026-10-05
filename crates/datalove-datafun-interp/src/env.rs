@@ -136,10 +136,14 @@ impl<'a> ExecutionContext<'a> {
     /// Find a local function by ID.
     ///
     /// Returns None if no local function with this ID exists.
-    /// A function's id is not always its position: compile-time evaluation
-    /// runs with a list that leaves functions out.
+    /// A function's id is usually its position, which is tried first; but not
+    /// always, since compile-time evaluation runs with a list that leaves
+    /// functions out, so the search by id remains.
     pub fn find_local_function(&self, id: CodeUnitId) -> Option<&'a IrCodeUnit> {
-        self.functions.iter().find(|f| f.id == id)
+        match self.functions.get(id.0 as usize) {
+            Some(f) if f.id == id => Some(f),
+            _ => self.functions.iter().find(|f| f.id == id),
+        }
     }
 
     /// Look up a function by reference.

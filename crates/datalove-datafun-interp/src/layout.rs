@@ -11,6 +11,7 @@ use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::frame_layout::{FrameLayout, SlotLayout};
 use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId, ParamMode, SlotId};
 
+use crate::bytecode::BcFunction;
 use crate::dispatch::FuncIdentity;
 use crate::tydesc::IrTyDescTable;
 
@@ -58,6 +59,15 @@ pub struct IrLayout {
     pub slot_is_copy: Vec<bool>,
     /// The tracking byte of each `out` parameter.
     pub param_tracking: Vec<Option<u32>>,
+    /// Where each parameter's pointer goes in the frame's parameter region.
+    pub param_offsets: Vec<u32>,
+    /// The body lowered to bytecode, once something has asked for it, with
+    /// the address of the body it was lowered from.
+    ///
+    /// The address is checked on the way out, so that a body replaced under
+    /// the same layout -- which the cache keys by identity and value counts,
+    /// not by body -- is lowered again rather than run as the old one.
+    pub(crate) bytecode: std::cell::OnceCell<(usize, Rc<BcFunction>)>,
     /// Where the tracking bytes start, and how many there are.
     pub tracking_offset: u32,
     pub tracking_count: u32,
@@ -112,6 +122,8 @@ impl IrLayout {
             slot_tracking: frame.slots.iter().map(|s| s.tracking_byte).collect(),
             slot_is_copy: slot_types.iter().map(|ty| ty.is_copy()).collect(),
             param_tracking: frame.params.iter().map(|p| p.tracking_byte).collect(),
+            param_offsets: frame.params.iter().map(|p| p.offset).collect(),
+            bytecode: std::cell::OnceCell::new(),
             tracking_offset: frame.tracking_offset,
             tracking_count: frame.tracking_count,
             frame_size: frame.frame_size,

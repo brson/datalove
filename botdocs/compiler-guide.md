@@ -1602,6 +1602,10 @@ drop and a tracked store every iteration, and a tracking-byte check is a longer
 chain of dependent loads (frame, layout, tracking table, byte) than the flag it
 replaced: fewer instructions, lower IPC.
 
+**Pooled frames are boxed.** `FramePool` handed out and took back `Frame` by
+value, a 192-byte struct, which compiled to two `memcpy` calls per call; boxing
+them makes those pointer moves, and took recursive fib from 848ms to 655ms.
+
 **A call resolves its arguments into the callee's frame.** `execute_call_site`
 takes the frame from the pool (`FramePool::take`, which only empties the
 parameter lists), pushes each argument straight into it, offers the dispatcher
