@@ -207,8 +207,8 @@ impl AotCompiler {
                 // Native function: declare as import with C ABI signature.
                 let sig = codegen::build_native_signature(ctx, self.isa.as_ref());
                 let cl_func_id = obj_module
-                    .declare_function(&ctx.symbol, Linkage::Import, &sig)
-                    .map_err(|e| AotError::Module(format!("declare native import {}: {}", ctx.symbol, e)))?;
+                    .declare_function(ctx.symbol(), Linkage::Import, &sig)
+                    .map_err(|e| AotError::Module(format!("declare native import {}: {}", ctx.symbol(), e)))?;
                 module_funcs.insert((module_id, func_id), cl_func_id);
                 continue;
             }

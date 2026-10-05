@@ -2838,8 +2838,10 @@ pub struct ScriptContext {
 
 /// Context for a native function implemented in Rust.
 ///
-/// Has a signature and linker symbol but no blocks. The interpreter panics
-/// on native calls until step 3 (native dispatch) is implemented.
+/// Has a signature and linker symbol but no blocks. Built with
+/// [`NativeContext::new`], which is what names the symbol: the compiler says
+/// which rider function is meant, and how that is spelled to a linker is the
+/// native ABI's business, decided here once for every backend.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NativeContext {
     /// Parameter modes (In, Out, Ref, Mut).
@@ -2849,7 +2851,10 @@ pub struct NativeContext {
     /// Return type.
     pub return_type: IrType,
     /// Linker symbol, e.g. "dlr_std__list_push".
-    pub symbol: String,
+    ///
+    /// Kept rather than spelled out per call, because the interpreter looks a
+    /// native up by it on every call.
+    symbol: String,
     /// Descriptors the call site has to hand over, after the arguments.
     ///
     /// A native reads a type off a descriptor that came with a value. A type
@@ -2860,6 +2865,39 @@ pub struct NativeContext {
     /// A native makes no calls, so unlike a function's this never grows in the
     /// closure: it is what the signature says and nothing more.
     pub descriptor_shapes: Vec<DescriptorShape>,
+}
+
+impl NativeContext {
+    /// The native `function` of the rider required as `rider`.
+    pub fn new(
+        rider: &str,
+        function: &str,
+        param_modes: Vec<ParamMode>,
+        param_types: Vec<IrType>,
+        return_type: IrType,
+        descriptor_shapes: Vec<DescriptorShape>,
+    ) -> Self {
+        Self {
+            param_modes,
+            param_types,
+            return_type,
+            symbol: native_symbol(rider, function),
+            descriptor_shapes,
+        }
+    }
+
+    /// The linker symbol the native is called by.
+    pub fn symbol(&self) -> &str {
+        &self.symbol
+    }
+}
+
+/// The linker symbol of the native `function` in the rider required as `rider`.
+///
+/// `dlr_{rider}__{function}`; see `botdocs/native-abi.md`. A rider defines
+/// its functions under these names, and every backend calls them by them.
+pub fn native_symbol(rider: &str, function: &str) -> String {
+    format!("dlr_{}__{}", rider, function)
 }
 
 /// Context determining how a code unit executes.

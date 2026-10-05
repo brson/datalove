@@ -239,7 +239,7 @@ impl Frame {
     /// `FramePool::take`.
     pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
         if let CodeUnitContext::Native(ctx) = &unit.context {
-            panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol)
+            panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol())
         }
         assert!(unit.function_context().is_none(), "function frames come from the pool");
         // Uninitialized, not zeroed: what has been written is tracked, and

@@ -130,12 +130,10 @@ fn prepare(source: &str, config: Config) -> Prepared {
     // process, so both tables are filled whether the jit is on or not. The cli
     // does this only for a bare `JitEngine`; an `OptimizingDispatcher` holds
     // its engine behind `jit()` and nothing in the tree hands it the symbols.
-    let native_fn_ptrs = rider_load::register_linked_natives(
-        &compiled.native_symbols(),
-        &sys.natives,
-        executor.native_table_mut(),
-    )
-    .expect("linked natives must resolve");
+    let natives = std::sync::Arc::new(rider_load::RiderNatives::linked(&sys.natives));
+    let native_fn_ptrs = rider_load::register_natives(&natives, compiled, &mut executor)
+        .expect("linked natives must resolve")
+        .native_fn_ptrs;
     if let Some(dispatcher) = executor.take_dispatcher() {
         if let Some(opt) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
             for (symbol, ptr) in &native_fn_ptrs {

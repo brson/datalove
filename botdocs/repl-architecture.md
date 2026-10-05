@@ -57,10 +57,11 @@ what lets the tests drive the state machine with a scripted mock.
 
 `Engine::new(db, sys)` takes a `SystemLibrary` rather than going looking for
 one, and compiles it. The library carries the addresses of the native rider
-functions alongside the sources, so `register_linked_natives` can point the
-interpreter at them and a session can `require module sys/std/string` and call
-into it. The engine keeps the library and the descriptor it built, so a crash
-reset rebuilds the compiler and executor from them.
+functions alongside the sources, which become a `RiderNatives` given to both the
+pipeline, for consts, and the executor, so a session can
+`require module sys/std/string` and call into it. The engine keeps the pipeline,
+the descriptor and the natives, so a crash reset rebuilds the compiler and
+executor from them without building or loading a rider again.
 
 `ThreadedExecutor::spawn` takes `fn() -> SystemLibrary` instead of a value:
 those addresses are raw pointers and so not `Send`, and the worker thread

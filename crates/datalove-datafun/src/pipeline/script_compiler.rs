@@ -176,9 +176,12 @@ impl<'db> CompiledModules<'db> {
         db: &'db dyn salsa::Database,
     ) -> Option<ScriptCompiler<'db>> {
         // Use CTFE evaluator with module registry for cross-module const function calls.
-        let evaluator = Rc::new(RefCell::new(
-            InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.clone())
-        ));
+        let evaluator = InterpCtfeEvaluator::with_module_registry(self.shared.module_registry.clone());
+        let evaluator = match &self.natives {
+            Some(natives) => evaluator.with_native_resolver(natives.clone()),
+            None => evaluator,
+        };
+        let evaluator = Rc::new(RefCell::new(evaluator));
         self.script_compiler(db, evaluator)
     }
 

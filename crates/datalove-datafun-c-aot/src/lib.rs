@@ -633,5 +633,5 @@ fn native_declaration(ctx: &datalove_datafun_ir::NativeContext) -> String {
     for i in 0..ctx.descriptor_shapes.len() {
         params.push_str(&format!(", const dtlv_tydesc_t* s{i}"));
     }
-    format!("extern uint8_t {}({});", ctx.symbol, params)
+    format!("extern uint8_t {}({});", ctx.symbol(), params)
 }

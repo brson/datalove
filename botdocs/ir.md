@@ -320,12 +320,14 @@ pub struct NativeContext {
     pub param_modes: Vec<ParamMode>,
     pub param_types: Vec<IrType>,
     pub return_type: IrType,
-    pub symbol: String,               // e.g. "dlr_std__list_push"
+    symbol: String,                   // e.g. "dlr_std__list_push", read by symbol()
     pub descriptor_shapes: Vec<DescriptorShape>,
 }
 ```
 
-A native function has a signature and a linker symbol and no blocks. Its
+A native function has a signature and a linker symbol and no blocks. It is
+built with `NativeContext::new(rider, function, ...)`, which spells the symbol
+by `native_symbol`, so nothing outside the IR crate knows the format. Its
 `descriptor_shapes` never grows in the shape closure, since a native makes no
 calls: it is what the signature says and nothing more. See
 [the native ABI](native-abi.md).
@@ -728,7 +730,16 @@ pub trait CtfeEvaluator {
 
 The interpreter implements it; `NoopCtfeEvaluator` is what a minimal
 compilation context gets, and it fails every call. The registry is what lets a
-const expression call a function in another module.
+const expression call a function in another module, and it holds the riders'
+native units as well, so a const can call a native.
+
+Calling one needs its code, which the evaluator's interpreter finds through a
+`NativeResolver` (`InterpCtfeEvaluator::with_native_resolver`). The pipeline is
+given one with `set_natives` and builds every evaluator with it. A driver gives
+it a `RiderNatives`, the same one it later registers the executor's natives
+from: built riders are compiled and loaded the first time either asks for a
+symbol, and only then, and the riders linked into the binary are the special
+case that looks the address up instead.
 
 Around it sit the memoization types: `ConstStmtId` numbers const statements in
 source order, `GlobalConstId` pairs one with a script unit, `ConstBindingInfo`

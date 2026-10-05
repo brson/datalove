@@ -5,25 +5,42 @@ use rmx::std::path::PathBuf;
 
 mod render;
 
+/// Give a pipeline the natives its workspace's modules call.
+///
+/// The pipeline needs them before it compiles anything, since a const can call
+/// a native, and the executor needs the same ones after; see
+/// [`register_natives`]. Built riders are built at most once between the two.
+fn attach_natives(
+    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
+    sys: &datalove_datafun::pipeline::SystemLibrary,
+    pipeline: &mut datalove_datafun::pipeline::ModuleCompilationPipeline,
+) -> std::sync::Arc<datalove_datafun::pipeline::rider_load::RiderNatives> {
+    use datalove_datafun::pipeline::rider_load::RiderNatives;
+
+    let natives = std::sync::Arc::new(RiderNatives::for_workspace(descriptor, &sys.natives));
+    pipeline.set_natives(natives.clone());
+    natives
+}
+
 /// Point an executor at the native functions the script calls.
 ///
 /// The interpreter calls them through its native table, and the JIT calls
 /// them directly, so it needs the addresses as well; a script that reaches a
 /// native call with a JIT that has not been told about it aborts the process.
 ///
-/// Hands back the libraries that were loaded. The executor's table and the jit
-/// hold their own share of each, so this is not what keeps them mapped; it is
-/// returned because a caller wanting to hand a share to anything else needs it.
+/// Hands back what the natives were registered from. The executor's table and
+/// the jit hold their own share of it, so this is not what keeps any library
+/// mapped; it is returned because a caller wanting to hand a share to anything
+/// else needs it.
 fn register_natives(
-    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
+    natives: &std::sync::Arc<datalove_datafun::pipeline::rider_load::RiderNatives>,
     compiled: &datalove_datafun::pipeline::CompiledModules,
-    sys: &datalove_datafun::pipeline::SystemLibrary,
     executor: &mut datalove_datafun::pipeline::ScriptExecutor,
 ) -> AnyResult<datalove_datafun::pipeline::rider_load::RegisteredNatives> {
     use datalove_datafun_cranelift_jit::JitEngine;
 
     let registered = datalove_datafun::pipeline::rider_load::register_natives(
-        descriptor, compiled, &sys.natives, executor)?;
+        natives, compiled, executor)?;
 
     if let Some(dispatcher) = executor.take_dispatcher() {
         if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
@@ -497,6 +514,7 @@ impl ScriptCommand {
 
         // Create pipeline from descriptor and compile.
         let mut pipeline = descriptor.to_pipeline(&db);
+        let natives = attach_natives(&descriptor, &sys, &mut pipeline);
         // Compile only what the script reaches. A program that requires two
         // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
         // refuses when a require does not resolve, leaving the whole world for
@@ -526,7 +544,7 @@ impl ScriptCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, call_dispatcher)
             .expect("script_executor should succeed after error check");
 
-        let _natives = register_natives(&descriptor, &compiled, &sys, &mut executor)?;
+        let _natives = register_natives(&natives, &compiled, &mut executor)?;
 
         // Compile the script as a fragment.
         let compiled_unit = compiler.compile_fragment(&script_source);
@@ -592,6 +610,7 @@ impl ScriptIrCommand {
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
         let mut pipeline = descriptor.to_pipeline(&db);
+        attach_natives(&descriptor, &sys, &mut pipeline);
         // Compile only what the script reaches. A program that requires two
         // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
         // refuses when a require does not resolve, leaving the whole world for
@@ -717,6 +736,7 @@ impl AotCompileCommand {
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
         let mut pipeline = descriptor.to_pipeline(&db);
+        attach_natives(&descriptor, &sys, &mut pipeline);
         // Compile only what the script reaches. A program that requires two
         // stdlib modules should not pay for two dozen; `narrow_roots_to_script`
         // refuses when a require does not resolve, leaving the whole world for
@@ -871,6 +891,7 @@ impl ScriptWorldCommand {
         let descriptor = sys_descriptor.merge(&worldfile_descriptor)
             .with_work_dir(datalove_paths::work_dir()?);
         let mut pipeline = descriptor.to_pipeline(&db);
+        let natives = attach_natives(&descriptor, &sys, &mut pipeline);
 
         // Compile only what the script section reaches, the same as `script`
         // does. The worldfile's own modules are in the world alongside the
@@ -920,7 +941,7 @@ impl ScriptWorldCommand {
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Stderr, None)
             .expect("script_executor should succeed after error check");
 
-        let _natives = register_natives(&descriptor, &compiled, &sys, &mut executor)?;
+        let _natives = register_natives(&natives, &compiled, &mut executor)?;
 
         // Compile and execute the script section.
         let script_section = script_sections[0];
@@ -988,6 +1009,7 @@ impl TypecheckStdCommand {
         let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
 
         let mut pipeline = descriptor.to_pipeline(&db);
+        attach_natives(&descriptor, &sys, &mut pipeline);
         let compiled = pipeline.compile_fresh(&db);
 
         if let Some(err) = &compiled.resolution_error {

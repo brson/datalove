@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstF32, ConstF64, ConstValue, CtfeError, CtfeEvaluator, IrCodeUnit, IrType};
-use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry};
+use crate::{IrInterpreter, ScriptEnvironment, UnitCompletion, Destination, ModuleFunctionRegistry, NativeResolver};
 
 /// CTFE evaluator backed by the IR interpreter.
 pub struct InterpCtfeEvaluator {
@@ -31,6 +31,15 @@ impl InterpCtfeEvaluator {
             interp: IrInterpreter::new(),
             module_registry: Some(module_registry),
         }
+    }
+
+    /// Let const expressions call natives, found through `resolver`.
+    ///
+    /// Without one, a const that reaches a native call panics, there being
+    /// nothing registered to call.
+    pub fn with_native_resolver(mut self, resolver: Arc<dyn NativeResolver>) -> Self {
+        self.interp.native_table_mut().set_resolver(resolver);
+        self
     }
 }
 

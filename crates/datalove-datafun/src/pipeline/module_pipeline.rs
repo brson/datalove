@@ -19,22 +19,21 @@
 //! ```
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, HashMap};
+use rmx::std::collections::BTreeMap;
 use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
-use datalove_datafun_ir::{IrModuleId, FuncId};
 use datalove_datafun_compiler::compile::{
     ModuleCompilationInput, ModuleCompilationOutput,
     compile_modules as compiler_compile_modules,
 };
 use datalove_datafun_compiler::tracked_lower::{
-    func_id_lookup, lower_module_graph_with_evaluator,
+    add_native_rider_units, func_id_lookup, lower_module_graph_with_evaluator,
     ModuleGraphLoweringResult,
 };
 use datalove_datafun_tycheck::ParsedModuleGraph;
 use datalove_datafun_ir::CtfeEvaluator;
-use datalove_datafun_interp::InterpCtfeEvaluator;
+use datalove_datafun_interp::{InterpCtfeEvaluator, NativeResolver};
 use std::cell::RefCell;
 use std::rc::Rc;
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
@@ -64,6 +63,11 @@ pub struct ModuleCompilationPipeline {
     /// `Roots::All` by default, which is the whole world and what every caller
     /// wanted before there was a choice. See [`Roots`].
     roots: Roots,
+    /// Where evaluating a const finds the natives it calls.
+    ///
+    /// `None` for a pipeline whose consts call none, where reaching one is a
+    /// panic. See [`set_natives`](Self::set_natives).
+    natives: Option<Arc<dyn NativeResolver>>,
 }
 
 impl ModuleCompilationPipeline {
@@ -74,7 +78,27 @@ impl ModuleCompilationPipeline {
             options,
             rider_sources: Vec::new(),
             roots: Roots::All,
+            natives: None,
         }
+    }
+
+    /// Let consts call natives, found through `natives`.
+    ///
+    /// Asked for a native only when a const's evaluation reaches it, which for
+    /// built riders is what builds them; see
+    /// [`RiderNatives`](super::rider_load::RiderNatives). The compiled modules
+    /// carry it on, to the evaluator a script compiles its consts with.
+    pub fn set_natives(&mut self, natives: Arc<dyn NativeResolver>) {
+        self.natives = Some(natives);
+    }
+
+    /// The evaluator to run consts with when the caller does not give one.
+    fn ctfe_evaluator(&self) -> Rc<RefCell<dyn CtfeEvaluator>> {
+        let evaluator = match &self.natives {
+            Some(natives) => InterpCtfeEvaluator::new().with_native_resolver(natives.clone()),
+            None => InterpCtfeEvaluator::new(),
+        };
+        Rc::new(RefCell::new(evaluator))
     }
 
     /// Create a pipeline from worldfile sections.
@@ -300,7 +324,7 @@ impl ModuleCompilationPipeline {
         db: &'db dyn DbClone,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let evaluator = self.ctfe_evaluator();
         self.compile_fresh_with_mode_and_evaluator(db, mode, evaluator)
     }
 
@@ -335,7 +359,7 @@ impl ModuleCompilationPipeline {
         db: &'db mut D,
         mode: ParallelMode,
     ) -> (CompiledModules<'db>, &'db D) {
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let evaluator = self.ctfe_evaluator();
         self.compile_with_mode_and_evaluator(db, mode, evaluator)
     }
 
@@ -469,6 +493,7 @@ impl ModuleCompilationPipeline {
             ownership_errors: output.ownership_errors,
             lowering_errors,
             module_ir_dumps,
+            natives: self.natives.clone(),
         }
     }
 }
@@ -532,85 +557,6 @@ fn module_code_units<'db>(
             .map(|unit| (unit.id, Arc::clone(unit)))
             .collect(),
     )
-}
-
-/// Create native IrCodeUnits for rider functions and add them to the registry.
-///
-/// Linker symbols are generated here at the backend boundary, not in the compiler core.
-fn add_native_rider_units<'db>(
-    db: &'db dyn salsa::Database,
-    parsed_graph: ParsedModuleGraph<'db>,
-    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
-    registry: &mut ModuleFunctionRegistry,
-) {
-    use datalove_datafun_ir::{IrType, CodeUnitId, NativeContext};
-    use datalove_datafun_compiler::IrTypeExt;
-    use std::collections::BTreeSet;
-
-    let mut seen_riders: BTreeSet<String> = BTreeSet::new();
-
-    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
-        for (alias, rider) in riders {
-            let alias_str = alias.text(db);
-            if !seen_riders.insert(alias_str.S()) {
-                continue; // Already processed this rider.
-            }
-
-            let synthetic_module_id = rider.module_id;
-
-            for (func_name, func_type) in &rider.functions {
-                let name = func_name.text(db).S();
-                let symbol = format!("dlr_{}__{}", alias_str, name);
-
-                // Look up the assigned IrModuleId and FuncId.
-                let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
-                    continue;
-                };
-
-                // Convert types from tycheck to IR.
-                let param_types: Vec<IrType> = func_type.param_types(db)
-                    .iter()
-                    .map(|ty| IrType::from_tycheck(db, ty))
-                    .collect();
-                // Convert AST ParamMode to IR ParamMode.
-                let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
-                    .iter()
-                    .map(|m| match m {
-                        datalove_datafun_ast::ast::ParamMode::In => datalove_datafun_ir::ParamMode::In,
-                        datalove_datafun_ast::ast::ParamMode::Out => datalove_datafun_ir::ParamMode::Out,
-                        datalove_datafun_ast::ast::ParamMode::Ref => datalove_datafun_ir::ParamMode::Ref,
-                        datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
-                    })
-                    .collect();
-                let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
-
-                // What the shape closure was told this native needs, said
-                // the same way here so that the two cannot disagree about
-                // the trailing arguments. A native makes no calls, so its
-                // set is exactly what its signature says.
-                let descriptor_shapes = rider.generic_functions.iter()
-                    .find(|(n, _)| *n == *func_name)
-                    .map(|(_, generics)| generics.undetermined.iter()
-                        .map(|i| datalove_datafun_ir::DescriptorShape::Param(*i))
-                        .collect())
-                    .unwrap_or_default();
-
-                let native_ctx = NativeContext {
-                    param_modes,
-                    param_types,
-                    return_type,
-                    symbol,
-                    descriptor_shapes,
-                };
-                let code_unit = datalove_datafun_ir::IrCodeUnit::native(
-                    CodeUnitId(func_id.0),
-                    name,
-                    native_ctx,
-                );
-                registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
-            }
-        }
-    }
 }
 
 impl Default for ModuleCompilationPipeline {

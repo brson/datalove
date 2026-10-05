@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
-use datalove_datafun_interp::{IrInterpreter, Value, Destination};
+use datalove_datafun_interp::{IrInterpreter, NativeFnImpl, NativeResolver, Value, Destination};
 use datalove_datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 #[test]
@@ -52,9 +52,100 @@ end fun
     assert_eq!(result, 7, "testlib.int_add(3, 4) should return 7");
 }
 
+/// A module-level const calling a native, evaluated while the module compiles.
+#[test]
+fn test_native_rider_module_const() {
+    let result = run_main(r#"
+----------
+rider testlib
+----------
+native fun int_add(a: i32, b: i32): i32
+
+----------
+module local/test/main
+----------
+require rider testlib
+import testlib.int_add
+
+const SEVEN: i32 = int_add(3, 4)
+
+fun main(): i32
+    ret SEVEN
+end fun
+"#, Some(Arc::new(IntAddResolver)));
+    assert_eq!(result, Ok(7), "SEVEN should be int_add(3, 4)");
+}
+
+/// A native that cannot be found fails the const, not the compiler.
+#[test]
+fn test_native_rider_module_const_unresolved() {
+    let result = run_main(r#"
+----------
+rider testlib
+----------
+native fun int_add(a: i32, b: i32): i32
+
+----------
+module local/test/main
+----------
+require rider testlib
+import testlib.int_add
+
+const SEVEN: i32 = int_add(3, 4)
+
+fun main(): i32
+    ret SEVEN
+end fun
+"#, Some(Arc::new(FailingResolver)));
+    let errors = result.expect_err("an unresolvable native should fail compilation");
+    assert!(errors.contains("the rider would not build"), "unexpected errors: {}", errors);
+}
+
+/// Resolves `int_add`, as a built rider would.
+struct IntAddResolver;
+
+impl NativeResolver for IntAddResolver {
+    fn resolve(&self, symbol: &str) -> Result<NativeFnImpl, String> {
+        assert_eq!(symbol, "dlr_testlib__int_add");
+        Ok(int_add_impl())
+    }
+}
+
+/// Resolves nothing, as a rider failing to build does.
+struct FailingResolver;
+
+impl NativeResolver for FailingResolver {
+    fn resolve(&self, _symbol: &str) -> Result<NativeFnImpl, String> {
+        Err("the rider would not build".S())
+    }
+}
+
+/// The test rider's `int_add`.
+fn int_add_impl() -> NativeFnImpl {
+    Box::new(
+        |_rt: datalove_rt::c::LocalRtHandle, args: &[Value], dest: Destination,
+         _supplied: &[*const datalove_rtdt::TyDesc]| {
+            unsafe {
+                let a = *(args[0].ptr as *const i32);
+                let b = *(args[1].ptr as *const i32);
+                *(dest.ptr as *mut i32) = a + b;
+            }
+            Ok(())
+        }
+    )
+}
+
 /// Compile a worldfile whose `local/test/main` has an `i32` `main`, and run it
 /// with the rider's `int_add` registered.
 fn run_main_with_int_add(worldfile: &str) -> i32 {
+    run_main(worldfile, None).expect("compilation failed")
+}
+
+/// Compile a worldfile whose `local/test/main` has an `i32` `main`, giving its
+/// consts `natives`, and run it with the rider's `int_add` registered.
+///
+/// Errs with the compilation errors, if any.
+fn run_main(worldfile: &str, natives: Option<Arc<dyn NativeResolver>>) -> Result<i32, String> {
     let mut db = datafun::Database::default();
 
     // Parse the worldfile into sections.
@@ -62,18 +153,18 @@ fn run_main_with_int_add(worldfile: &str) -> i32 {
 
     // Build pipeline from sections.
     let mut pipeline = ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
+    if let Some(natives) = natives {
+        pipeline.set_natives(natives);
+    }
 
     assert!(pipeline.contains_module("local", "test", "main"));
 
     // Compile.
     let (compiled, db) = pipeline.compile(&mut db);
 
-    // Check for errors.
-    let all_errors = compiled.all_typecheck_errors();
-    assert!(all_errors.is_empty(), "typecheck errors: {:?}", all_errors);
-
-    let lowering_errors = compiled.all_lowering_errors();
-    assert!(lowering_errors.is_empty(), "lowering errors: {:?}", lowering_errors);
+    if compiled.has_errors() {
+        return Err(compiled.all_errors().join("\n"));
+    }
 
     // Find main function.
     let main_module_id = compiled.shared.module_graph.iter_modules(db)
@@ -94,18 +185,7 @@ fn run_main_with_int_add(worldfile: &str) -> i32 {
     let mut interp = IrInterpreter::new();
 
     // Register the native int_add implementation.
-    interp.native_table_mut().register("dlr_testlib__int_add", Box::new(
-        |_rt: datalove_rt::c::LocalRtHandle, args: &[Value], dest: Destination,
-         _supplied: &[*const datalove_rtdt::TyDesc]| {
-            unsafe {
-                let a = *(args[0].ptr as *const i32);
-                let b = *(args[1].ptr as *const i32);
-                let result = a + b;
-                *(dest.ptr as *mut i32) = result;
-            }
-            Ok(())
-        }
-    ));
+    interp.native_table_mut().register("dlr_testlib__int_add", int_add_impl());
 
     // Allocate return buffer.
     let mut tydesc_table = datalove_datafun_interp::IrTyDescTable::new();
@@ -129,5 +209,5 @@ fn run_main_with_int_add(worldfile: &str) -> i32 {
 
     // Cleanup.
     env.destroy_live_values(interp.runtime_handle());
-    result
+    Ok(result)
 }

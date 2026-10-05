@@ -602,10 +602,90 @@ fn ctfe_module_units<'db>(
     )
 }
 
+/// Create native IrCodeUnits for rider functions and add them to the registry.
+///
+/// Here rather than at the backend boundary, because consts call natives while
+/// the modules are still lowering. What a native's symbol is called is left to
+/// [`NativeContext::new`](datalove_datafun_ir::NativeContext::new).
+pub fn add_native_rider_units<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    registry: &mut ModuleFunctionRegistry,
+) {
+    use datalove_datafun_ir::NativeContext;
+    use std::collections::BTreeSet;
+
+    let mut seen_riders: BTreeSet<String> = BTreeSet::new();
+
+    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+        for (alias, rider) in riders {
+            let alias_str = alias.text(db);
+            if !seen_riders.insert(alias_str.S()) {
+                continue; // Already processed this rider.
+            }
+
+            let synthetic_module_id = rider.module_id;
+
+            for (func_name, func_type) in &rider.functions {
+                let name = func_name.text(db).S();
+
+                // Look up the assigned IrModuleId and FuncId.
+                let Some(&(ir_module_id, func_id)) = func_id_map.get(&(synthetic_module_id, name.clone())) else {
+                    continue;
+                };
+
+                // Convert types from tycheck to IR.
+                let param_types: Vec<IrType> = func_type.param_types(db)
+                    .iter()
+                    .map(|ty| IrType::from_tycheck(db, ty))
+                    .collect();
+                // Convert AST ParamMode to IR ParamMode.
+                let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
+                    .iter()
+                    .map(|m| match m {
+                        datalove_datafun_ast::ast::ParamMode::In => datalove_datafun_ir::ParamMode::In,
+                        datalove_datafun_ast::ast::ParamMode::Out => datalove_datafun_ir::ParamMode::Out,
+                        datalove_datafun_ast::ast::ParamMode::Ref => datalove_datafun_ir::ParamMode::Ref,
+                        datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
+                    })
+                    .collect();
+                let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+
+                // What the shape closure was told this native needs, said
+                // the same way here so that the two cannot disagree about
+                // the trailing arguments. A native makes no calls, so its
+                // set is exactly what its signature says.
+                let descriptor_shapes = rider.generic_functions.iter()
+                    .find(|(n, _)| *n == *func_name)
+                    .map(|(_, generics)| generics.undetermined.iter()
+                        .map(|i| datalove_datafun_ir::DescriptorShape::Param(*i))
+                        .collect())
+                    .unwrap_or_default();
+
+                let native_ctx = NativeContext::new(
+                    alias_str,
+                    &name,
+                    param_modes,
+                    param_types,
+                    return_type,
+                    descriptor_shapes,
+                );
+                let code_unit = datalove_datafun_ir::IrCodeUnit::native(
+                    CodeUnitId(func_id.0),
+                    name,
+                    native_ctx,
+                );
+                registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
+            }
+        }
+    }
+}
+
 /// Build a module function registry from lowered functions.
 ///
 /// This creates a registry for CTFE to use when evaluating const expressions
-/// that call functions from other modules.
+/// that call functions from other modules, or natives.
 ///
 /// Tracked, because it is built from what phase 5a produced and both const
 /// phases want one: keyed on the handles it is a memo, and an unchanged
@@ -614,6 +694,7 @@ fn ctfe_module_units<'db>(
 #[salsa::tracked(returns(ref))]
 fn ctfe_module_registry<'db>(
     db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
     modules: LoweredModules<'db>,
     func_id_map: FuncIdMap<'db>,
 ) -> Arc<ModuleFunctionRegistry> {
@@ -633,6 +714,7 @@ fn ctfe_module_registry<'db>(
         };
         registry.set_module_code_units(ir_module_id, Arc::clone(ctfe_module_units(db, *lowered)));
     }
+    add_native_rider_units(db, parsed_graph, func_id_lookup(db, func_id_map), &mut registry);
     Arc::new(registry)
 }
 
@@ -1271,6 +1353,7 @@ pub fn evaluate_all_module_consts<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
 ) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
@@ -1325,7 +1408,7 @@ pub fn evaluate_all_module_consts<'db>(
                     if let Statement::Const(const_stmt) = func_body_stmt {
                         match evaluate_single_const(
                             db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
-                            funcs, &func_map, func_return_type.clone(), func_id_map,
+                            funcs, callable, &func_map, func_return_type.clone(), func_id_map,
                             &deferred,
                         ) {
                             Ok(None) => {
@@ -1363,23 +1446,18 @@ pub fn evaluate_all_module_consts<'db>(
     result
 }
 
-/// Evaluate a single const statement.
+/// The first function a const expression calls that the evaluator cannot.
 ///
-/// Returns the evaluated const or an error message describing what went wrong.
-///
-/// The `lowered_functions` are used when const expressions call functions.
-/// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
-/// The `func_id_map` enables cross-module function calls in const expressions.
-/// The first function a const expression calls that is not lowered yet.
-///
-/// `Module` references reach the module's own functions, which is where a cycle
-/// between a const and a function shows up. Local and external references are
-/// resolved against units the caller already holds, so they cannot be missing.
+/// `callable` is what the evaluator calls through: every function lowered so
+/// far, and the riders' natives. A function missing from it is waiting on a
+/// module const, which is where a cycle between a const and a function shows
+/// up. Local and external references are resolved against units the caller
+/// already holds, so they cannot be missing.
 fn first_uncallable_target(
     unit: &IrCodeUnit,
-    lowered_functions: &[Arc<IrCodeUnit>],
+    callable: &ModuleFunctionRegistry,
 ) -> Option<String> {
-    use datalove_datafun_ir::{CodeRef, Instruction};
+    use datalove_datafun_ir::Instruction;
 
     for block in &unit.blocks {
         for instr in &block.instructions {
@@ -1387,8 +1465,8 @@ fn first_uncallable_target(
                 Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } => func,
                 _ => continue,
             };
-            if let CodeRef::Module { id, .. } = func {
-                if !lowered_functions.iter().any(|f| f.id.0 == id.0) {
+            if let CodeRef::Module { module, id } = func {
+                if callable.get_module_function_as_unit(*module, *id).is_none() {
                     return Some(format!("module function #{}", id.0));
                 }
             }
@@ -1450,6 +1528,7 @@ fn evaluate_module_level_consts<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
 ) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> {
@@ -1476,7 +1555,7 @@ fn evaluate_module_level_consts<'db>(
                 // const parameters for it to name.
                 match evaluate_single_const(
                     db, const_stmt, expr_types, call_targets, &consts, evaluator,
-                    funcs, &func_map, None, func_id_map,
+                    funcs, callable, &func_map, None, func_id_map,
                     &std::collections::BTreeSet::new(),
                 ) {
                     Ok(None) => {}
@@ -1496,6 +1575,14 @@ fn evaluate_module_level_consts<'db>(
     result
 }
 
+/// Evaluate a single const statement.
+///
+/// Returns the evaluated const or an error message describing what went wrong.
+///
+/// The `lowered_functions` are used when const expressions call functions, and
+/// `callable` is what the evaluator can reach of them and the natives.
+/// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
+/// The `func_id_map` enables cross-module function calls in const expressions.
 fn evaluate_single_const<'db>(
     db: &'db dyn salsa::Database,
     const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
@@ -1504,6 +1591,7 @@ fn evaluate_single_const<'db>(
     resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered_functions: &[Arc<IrCodeUnit>],
+    callable: &ModuleFunctionRegistry,
     func_name_to_id: &HashMap<String, FuncId>,
     func_return_type: Option<IrType>,
     func_id_map: &FuncIdLookup<'db>,
@@ -1555,7 +1643,7 @@ fn evaluate_single_const<'db>(
             // interpreter has nothing to call and panics looking for it. A
             // module const whose evaluation needs a function that is itself
             // waiting on a module const is a cycle, and this is where it shows.
-            if let Some(missing) = first_uncallable_target(&unit, lowered_functions) {
+            if let Some(missing) = first_uncallable_target(&unit, callable) {
                 return Err(format!(
                     "const '{}': depends on a function that is not available yet, \
                      which means it and that function depend on each other: {}",
@@ -1641,11 +1729,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
     } else {
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
-        let module_registry = ctfe_module_registry(db_salsa, lowered_modules.clone(), func_id_map);
+        let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
         evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
         evaluate_module_level_consts(
-            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, func_ids,
-            &mut module_const_errors,
+            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, module_registry,
+            func_ids, &mut module_const_errors,
         )
     };
 
@@ -1694,10 +1782,13 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
-        let module_registry = ctfe_module_registry(db_salsa, lowered_modules.clone(), func_id_map);
+        let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
         evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
 
-        evaluate_all_module_consts(db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions, func_ids, &module_consts)
+        evaluate_all_module_consts(
+            db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions,
+            module_registry, func_ids, &module_consts,
+        )
     };
 
     // Module const failures have to reach the lowering result, or a module
@@ -1828,6 +1919,7 @@ fn evaluate_instantiation_consts<'db>(
     call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
     lowered: &[Arc<IrCodeUnit>],
+    callable: &ModuleFunctionRegistry,
     func_name_to_id: &HashMap<String, FuncId>,
     func_id_map: &FuncIdLookup<'db>,
     module_level: &HashMap<String, (IrType, ConstValue)>,
@@ -1855,7 +1947,7 @@ fn evaluate_instantiation_consts<'db>(
         // const that still cannot be evaluated is an error rather than a wait.
         match evaluate_single_const(
             db, const_stmt, expr_types, call_targets, &seeded, evaluator,
-            lowered, func_name_to_id, func_return_type.clone(), func_id_map,
+            lowered, callable, func_name_to_id, func_return_type.clone(), func_id_map,
             &std::collections::BTreeSet::new(),
         ) {
             Ok(Some((name, ir_type, value))) => {
@@ -1921,8 +2013,13 @@ fn specialize_module_graph<'db>(
         return (modules, Vec::new());
     }
 
+    // What the instantiations' consts can call. The same memo phase 5b asked
+    // for, when it ran, and given to the evaluator in case it did not.
+    let callable = ctfe_module_registry(db, parsed_graph, modules.clone(), func_id_map);
+    evaluator.borrow_mut().set_module_registry(Arc::clone(callable));
+
     let (lowered_functions, errors) = specialize_comptime_functions(
-        db, parsed_graph, typecheck_result, evaluator, func_id_lookup(db, func_id_map),
+        db, parsed_graph, typecheck_result, evaluator, callable, func_id_lookup(db, func_id_map),
         module_consts, ir_map(db, &modules),
     );
 
@@ -1951,6 +2048,7 @@ fn specialize_comptime_functions<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>>,
     mut lowered_functions: HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
@@ -2058,6 +2156,7 @@ fn specialize_comptime_functions<'db>(
                             single_typecheck.call_targets(db),
                             evaluator,
                             &module_funcs.functions,
+                            callable,
                             &module_funcs.func_name_to_id.iter().cloned().collect(),
                             func_id_map,
                             &module_consts.get(module_id).cloned().unwrap_or_default(),

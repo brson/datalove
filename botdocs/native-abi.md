@@ -49,7 +49,10 @@ The `uint8_t` the function returns is an `RtStatus`: `1` is ok, anything else
 is a failure, and on failure nothing was written to `result_out`.
 
 The symbol is `dlr_{rider}__{function}` --- the rider's name as written in
-`require rider`, two underscores, the function's name.
+`require rider`, two underscores, the function's name. It is spelled in one
+place, `datalove_datafun_ir::native_symbol`, which `NativeContext::new` uses;
+the compiler names the rider and the function and never the symbol, and every
+backend reads it back with `NativeContext::symbol`.
 
 ## Where the type comes from
 

@@ -325,8 +325,11 @@ Both are tracked. The CTFE one is keyed on phase 5a's handles. The pipeline's,
 keyed on the `ModuleGraphLoweringResult`, which is a tracked struct whose
 identity is the per-module results it holds -- so it is a word to hash and it
 moves exactly when some module's assembled IR does. The native rider units go
-in there with it; they stay in the pipeline crate because the linker symbols
-belong at the backend boundary rather than in the compiler core.
+in both, by `add_native_rider_units` in `tracked_lower.rs`: a const can call a
+native, directly or through a function, so the CTFE registry needs them too.
+The compiler core still never spells a linker symbol; `NativeContext::new`
+takes the rider and function names and the IR crate's `native_symbol` does the
+spelling, which is the native ABI's business. See [the native ABI](native-abi.md).
 
 **The pipeline's is capped at `lru = 4`.** Its key moves on every edit, so the
 memo for the key before it is of no use to anyone, and uncapped it grew the

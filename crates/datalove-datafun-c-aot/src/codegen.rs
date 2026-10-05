@@ -2149,7 +2149,7 @@ impl<'a> FunctionCodegenContext<'a> {
         if let CodeRef::Module { module, id } = func {
             if let Some(unit) = self.registry.get_module_function_as_unit(*module, *id) {
                 if let Some(native) = unit.native_context() {
-                    let symbol = native.symbol.clone();
+                    let symbol = native.symbol().to_string();
                     let param_modes = native.param_modes.clone();
                     return self.emit_native_call(
                         out, dest, &symbol, args, &param_modes, shape_descriptors);

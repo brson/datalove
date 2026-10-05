@@ -800,7 +800,7 @@ impl fmt::Display for IrCodeUnit {
                 Ok(())
             }
             CodeUnitContext::Native(ctx) => {
-                writeln!(f, "native fn {} -> symbol {}", self.name, ctx.symbol)
+                writeln!(f, "native fn {} -> symbol {}", self.name, ctx.symbol())
             }
         }
     }

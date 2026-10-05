@@ -284,10 +284,10 @@ impl JitCompiler {
             if let Some(native_ctx) = callee_ir.native_context() {
                 let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
                 let addr = self.native_symbols.lock().unwrap()
-                    .get(&native_ctx.symbol)
+                    .get(native_ctx.symbol())
                     .map(|p| p.0 as u64)
-                    .unwrap_or_else(|| panic!("native symbol not registered: {}", native_ctx.symbol));
-                let func_id = self.create_native_trampoline(&native_ctx.symbol, &sig, addr)?;
+                    .unwrap_or_else(|| panic!("native symbol not registered: {}", native_ctx.symbol()));
+                let func_id = self.create_native_trampoline(native_ctx.symbol(), &sig, addr)?;
                 if let CodeRef::Module { module, id } = &code_ref {
                     module_funcs.insert((*module, CodeUnitId(id.0)), func_id);
                 }

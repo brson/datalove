@@ -8,7 +8,7 @@ use rmx::std::collections::BTreeMap;
 use std::sync::Arc;
 
 use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
-use datalove_datafun_interp::ModuleFunctionRegistry;
+use datalove_datafun_interp::{ModuleFunctionRegistry, NativeResolver};
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
 use datalove_datafun_resolve::resolve_all_names;
 use datalove_datafun_compiler::module_graph::{
@@ -44,6 +44,8 @@ pub struct CompiledModules<'db> {
     pub ownership_errors: BTreeMap<String, Vec<String>>,
     pub lowering_errors: BTreeMap<String, Vec<String>>,
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
+    /// Where the modules' consts found their natives, and a script's will.
+    pub natives: Option<Arc<dyn NativeResolver>>,
 }
 
 impl<'db> CompiledModules<'db> {
@@ -128,7 +130,7 @@ impl<'db> CompiledModules<'db> {
         let mut symbols = Vec::new();
         for unit in self.shared.module_registry.iter_module_code_units() {
             if let Some(ctx) = unit.native_context() {
-                symbols.push(ctx.symbol.clone());
+                symbols.push(ctx.symbol().to_string());
             }
         }
         symbols

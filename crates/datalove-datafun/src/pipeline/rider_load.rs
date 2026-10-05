@@ -8,46 +8,117 @@ use rmx::std::path::{Path, PathBuf};
 
 use std::any::Any;
 use std::collections::HashMap;
-use std::sync::{Arc, LazyLock, Mutex, Weak};
+use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
 use datalove_datafun_interp::{NativeFunctionTable, Value, Destination, InterpError};
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
-use super::{CompiledModules, ScriptExecutor, WorkspaceDescriptor, rider_build};
+use super::{CompiledModules, RiderCrate, ScriptExecutor, WorkspaceDescriptor, rider_build};
 
-/// Build a workspace's native component and register its symbols with an executor.
+/// Where the natives a workspace's modules call are found.
 ///
-/// The executor's native table takes a share of the loaded library as the
-/// symbols are registered, so the returned riders are the caller's copy rather
-/// than what keeps the code mapped.
-pub fn build_and_load_riders(
-    descriptor: &WorkspaceDescriptor,
-    compiled: &CompiledModules,
-    executor: &mut ScriptExecutor,
-) -> AnyResult<Vec<LoadedRider>> {
-    let rider_crates = descriptor.rider_crates();
-    if rider_crates.is_empty() {
-        return Ok(Vec::new());
+/// One per workspace, shared by everything that calls them: the evaluator
+/// running consts while the modules compile, and the executor running the
+/// program after. That is what makes the riders build once. Nor do they build
+/// before something needs them, so a compile whose consts call no native runs
+/// no cargo, and one that does gets the library its program runs against.
+///
+/// Built riders are the general case: [`RiderNatives::built`]. The riders
+/// `sys` carries are linked into this binary, and [`RiderNatives::linked`]
+/// takes those addresses rather than building anything; see
+/// [`build_sys_riders`] for choosing between the two.
+pub struct RiderNatives {
+    source: NativesSource,
+}
+
+enum NativesSource {
+    /// The workspace's rider crates, compiled into one library on first use.
+    Built {
+        work_dir: Option<PathBuf>,
+        riders: Vec<RiderCrate>,
+        /// The error kept as text, since every later caller is told it too.
+        library: OnceLock<Result<Arc<LoadedLibrary>, String>>,
+    },
+    /// Linked into this binary.
+    Linked(LinkedNatives),
+}
+
+/// The addresses of natives linked into this binary, by symbol.
+struct LinkedNatives(Vec<(String, *const ())>);
+
+// Addresses of code in this binary, which any thread may call and which
+// nothing ever unmaps.
+unsafe impl Send for LinkedNatives {}
+unsafe impl Sync for LinkedNatives {}
+
+impl RiderNatives {
+    /// Build `descriptor`'s riders when one of their natives is first wanted.
+    pub fn built(descriptor: &WorkspaceDescriptor) -> Self {
+        Self {
+            source: NativesSource::Built {
+                work_dir: descriptor.work_dir.clone(),
+                riders: descriptor.rider_crates(),
+                library: OnceLock::new(),
+            },
+        }
     }
 
-    let work_dir = descriptor.work_dir.as_ref()
+    /// Take the natives linked into this binary, as
+    /// [`SystemLibrary::natives`](super::SystemLibrary::natives) lists them.
+    pub fn linked(natives: &[(String, *const ())]) -> Self {
+        Self { source: NativesSource::Linked(LinkedNatives(natives.to_vec())) }
+    }
+
+    /// The natives for `descriptor`, for a driver carrying the `linked` ones.
+    ///
+    /// Linked unless [`build_sys_riders`] says to build them.
+    pub fn for_workspace(descriptor: &WorkspaceDescriptor, linked: &[(String, *const ())]) -> Self {
+        if build_sys_riders() {
+            Self::built(descriptor)
+        } else {
+            Self::linked(linked)
+        }
+    }
+
+    /// The address of the native the compiler calls `symbol`.
+    ///
+    /// The first call for built riders builds and loads them.
+    pub fn address(&self, symbol: &str) -> AnyResult<*const ()> {
+        match &self.source {
+            NativesSource::Built { work_dir, riders, library } => {
+                let library = library
+                    .get_or_init(|| build_and_load(work_dir.as_deref(), riders).map_err(|e| fmt!("{:#}", e)))
+                    .as_ref()
+                    .map_err(|e| anyhow!("{}", e))?;
+                unsafe { library.symbol(symbol) }
+            }
+            NativesSource::Linked(LinkedNatives(natives)) => {
+                let (_, fn_ptr) = natives.iter().find(|(name, _)| name == symbol)
+                    .ok_or_else(|| anyhow!("native function '{}' is not linked into this binary", symbol))?;
+                Ok(*fn_ptr)
+            }
+        }
+    }
+}
+
+impl datalove_datafun_interp::NativeResolver for RiderNatives {
+    fn resolve(&self, symbol: &str) -> Result<datalove_datafun_interp::NativeFnImpl, String> {
+        let fn_ptr = self.address(symbol).map_err(|e| fmt!("{:#}", e))?;
+        Ok(bridge(symbol, fn_ptr))
+    }
+}
+
+/// Build riders into one library and load it.
+fn build_and_load(work_dir: Option<&Path>, riders: &[RiderCrate]) -> AnyResult<Arc<LoadedLibrary>> {
+    if riders.is_empty() {
+        bail!("a native was called, and the workspace has no riders to build");
+    }
+    let work_dir = work_dir
         .ok_or_else(|| anyhow!("workspace has riders but no work dir"))?;
-    let dylib = rider_build::build_rider_dylib(work_dir, &rider_crates)
+    let dylib = rider_build::build_rider_dylib(work_dir, riders)
         .map_err(|e| anyhow!("{}", e))?;
-
-    let native_symbols = compiled.native_symbols();
-    if native_symbols.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let loaded = load_rider_library(
-        &dylib,
-        "native-component",
-        &native_symbols,
-        executor.native_table_mut(),
-    )?;
-    Ok(vec![loaded])
+    open_library(&dylib, "native-component")
 }
 
 /// Whether to drive `sys` riders the way every other rider goes.
@@ -72,52 +143,46 @@ pub struct RegisteredNatives {
     /// interpreter's table.
     pub native_fn_ptrs: Vec<(String, *const u8)>,
 
-    /// The libraries the registered pointers lead into.
-    ///
-    /// Empty when the riders were linked in, there being nothing loaded. The
-    /// interpreter's table holds its own share of each, so this is no longer
-    /// what keeps them: it is here for a caller that wants to hand the same
-    /// share to something else, which is what `code_owners` is for.
-    pub loaded: Vec<LoadedRider>,
+    /// Where the addresses came from, which holds any library they lead into.
+    pub natives: Arc<RiderNatives>,
 }
 
 impl RegisteredNatives {
-    /// A share of every library these natives came out of.
+    /// A share of whatever these natives' code lives in.
     ///
     /// For whatever else took the raw addresses and has to outlive them --- the
     /// JIT, which emits them into compiled code. The interpreter's table was
     /// given its share when the symbols were registered.
     pub fn code_owners(&self) -> Vec<Arc<dyn Any + Send + Sync>> {
-        self.loaded.iter()
-            .map(|rider| rider.library.clone() as Arc<dyn Any + Send + Sync>)
-            .collect()
+        vec![self.natives.clone()]
     }
 }
 
 /// Point an executor at the native functions the compiled modules call.
 ///
-/// Both ways in, chosen by [`build_sys_riders`]. A driver that skips this and
-/// registers nothing does not fail until a script reaches a native call, and
-/// under the JIT that is a panic inside compilation rather than an error.
+/// Takes the same `natives` the modules were compiled with, so riders a const
+/// already needed are not built or loaded a second time. A driver that skips
+/// this and registers nothing does not fail until a script reaches a native
+/// call, and under the JIT that is a panic inside compilation rather than an
+/// error.
 pub fn register_natives(
-    descriptor: &WorkspaceDescriptor,
+    natives: &Arc<RiderNatives>,
     compiled: &CompiledModules,
-    linked: &[(String, *const ())],
     executor: &mut ScriptExecutor,
 ) -> AnyResult<RegisteredNatives> {
-    let symbols = compiled.native_symbols();
+    let table = executor.native_table_mut();
+    let mut native_fn_ptrs = Vec::new();
 
-    if !build_sys_riders() {
-        let native_fn_ptrs = register_linked_natives(
-            &symbols, linked, executor.native_table_mut())?;
-        return Ok(RegisteredNatives { native_fn_ptrs, loaded: Vec::new() });
+    for symbol in compiled.native_symbols() {
+        let fn_ptr = natives.address(&symbol)?;
+        native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
+        table.register(symbol.clone(), bridge(&symbol, fn_ptr));
     }
 
-    let loaded = build_and_load_riders(descriptor, compiled, executor)?;
-    let native_fn_ptrs = loaded.iter()
-        .flat_map(|rider| rider.native_fn_ptrs.iter().cloned())
-        .collect();
-    Ok(RegisteredNatives { native_fn_ptrs, loaded })
+    // The table now holds pointers into whatever the natives loaded.
+    table.hold_code_owner(natives.clone());
+
+    Ok(RegisteredNatives { native_fn_ptrs, natives: natives.clone() })
 }
 
 /// Refuse a library built against a different runtime interface.
@@ -265,7 +330,7 @@ pub fn load_rider_library(
         // Save raw pointer for JIT registration.
         native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
 
-        register_native(symbol, fn_ptr, native_table);
+        native_table.register(symbol.clone(), bridge(symbol, fn_ptr));
     }
 
     // The table now holds pointers into this library, so it holds the library.
@@ -280,44 +345,12 @@ pub fn load_rider_library(
     })
 }
 
-/// Register rider functions that are linked into this binary.
-///
-/// `natives` is the whole table the binary carries, as
-/// [`SystemLibrary::natives`](super::SystemLibrary::natives); `symbols` names
-/// the subset the compiled modules actually call. Returns the raw pointers,
-/// which the JIT needs to call natives directly.
-pub fn register_linked_natives(
-    symbols: &[String],
-    natives: &[(String, *const ())],
-    native_table: &mut NativeFunctionTable,
-) -> AnyResult<Vec<(String, *const u8)>> {
-    let mut native_fn_ptrs = Vec::new();
-
-    for symbol in symbols {
-        let (_, fn_ptr) = natives.iter().find(|(name, _)| name == symbol)
-            .ok_or_else(|| anyhow!("native function '{}' is not linked into this binary", symbol))?;
-
-        native_fn_ptrs.push((symbol.clone(), *fn_ptr as *const u8));
-
-        register_native(symbol, *fn_ptr, native_table);
-    }
-
-    Ok(native_fn_ptrs)
-}
-
-/// Register one native function under the symbol the compiler calls it by.
-fn register_native(
-    symbol: &str,
-    fn_ptr: *const (),
-    native_table: &mut NativeFunctionTable,
-) {
+/// The interpreter's way to call the native at `fn_ptr`.
+fn bridge(symbol: &str, fn_ptr: *const ()) -> datalove_datafun_interp::NativeFnImpl {
     let symbol_name = symbol.to_string();
-    let bridge: datalove_datafun_interp::NativeFnImpl =
-        Box::new(move |rt, args, dest, supplied| {
-            call_native_bridge(fn_ptr, rt, args, dest, supplied, &symbol_name)
-        });
-
-    native_table.register(symbol.to_string(), bridge);
+    Box::new(move |rt, args, dest, supplied| {
+        call_native_bridge(fn_ptr, rt, args, dest, supplied, &symbol_name)
+    })
 }
 
 /// Bridge from interpreter values to the rider C ABI.

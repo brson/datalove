@@ -65,7 +65,7 @@ pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, Sc
 pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
-pub use native::{NativeFunctionTable, NativeFnImpl};
+pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver};
 
 /// Room to unpack borrowed values that have no address of their own.
 ///
@@ -2484,7 +2484,7 @@ impl IrInterpreter {
         let dest_slot = frame.value_dest(dest);
 
         self.native_table.call(
-            &native_ctx.symbol, self.runtime.handle(), &arg_vals, dest_slot, &supplied,
+            native_ctx.symbol(), self.runtime.handle(), &arg_vals, dest_slot, &supplied,
         )?;
 
         frame.mark_value_live(dest);

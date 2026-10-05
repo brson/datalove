@@ -4,6 +4,7 @@
 //! The interpreter calls through this table when executing `NativeContext` code units.
 
 use std::any::Any;
+use std::cell::RefCell;
 use std::sync::Arc;
 use datalove_rt::c::LocalRtHandle;
 use crate::value::{Value, Destination};
@@ -28,12 +29,40 @@ pub type NativeFnImpl = Box<
     ) -> Result<(), InterpError>,
 >;
 
+/// Where a table finds the natives nobody registered with it.
+///
+/// For an interpreter that cannot know ahead of time which natives it will
+/// call. The one compile-time evaluation runs is the case in point: it is made
+/// before the program it evaluates for is compiled, and the riders it might
+/// call may not even be built yet. A resolver lets that wait until a call
+/// actually needs one.
+///
+/// Unwind safe because the compiled modules carry one, and callers run code
+/// against those under `catch_unwind`. A resolver only adds what it finds, so
+/// a panic partway through leaves nothing broken for the next caller.
+pub trait NativeResolver: Send + Sync + std::panic::RefUnwindSafe {
+    /// The implementation of the native the compiler calls `symbol`.
+    ///
+    /// Asked at most once per symbol per table, which keeps what it returns.
+    /// An error is the call failing, not the program being wrong: the rider
+    /// would not build, or did not define the function its interface said.
+    fn resolve(&self, symbol: &str) -> Result<NativeFnImpl, String>;
+}
+
 /// Table of registered native function implementations.
 ///
 /// Keyed by linker symbol (e.g. `dlr_testlib__int_add`).
 pub struct NativeFunctionTable {
     /// Looked up by name at every call, so hashed with Fx rather than SipHash.
-    table: rustc_hash::FxHashMap<String, NativeFnImpl>,
+    ///
+    /// In a cell because a call can fill it in from the resolver.
+    table: RefCell<rustc_hash::FxHashMap<String, NativeFnImpl>>,
+    /// Asked for a symbol missing from the table. Without one a missing symbol
+    /// is a bug in whoever filled the table, and panics.
+    ///
+    /// Held, as `code_owners` are, for whatever the code it resolves to lives
+    /// in.
+    resolver: Option<Arc<dyn NativeResolver>>,
     /// Whatever the registered implementations' code lives in.
     ///
     /// A native taken out of a loaded library is a pointer into mapped code,
@@ -51,12 +80,17 @@ pub struct NativeFunctionTable {
 impl NativeFunctionTable {
     /// Create an empty table.
     pub fn new() -> Self {
-        Self { table: Default::default(), code_owners: Vec::new() }
+        Self { table: Default::default(), resolver: None, code_owners: Vec::new() }
     }
 
     /// Register a native function implementation.
     pub fn register(&mut self, symbol: impl Into<String>, f: NativeFnImpl) {
-        self.table.insert(symbol.into(), f);
+        self.table.get_mut().insert(symbol.into(), f);
+    }
+
+    /// Resolve the natives not registered here through `resolver`.
+    pub fn set_resolver(&mut self, resolver: Arc<dyn NativeResolver>) {
+        self.resolver = Some(resolver);
     }
 
     /// Hold what a registered native's code lives in for as long as this table.
@@ -76,14 +110,22 @@ impl NativeFunctionTable {
         dest: Destination,
         supplied: &[*const datalove_rtdt::TyDesc],
     ) -> Result<(), InterpError> {
-        let f = self.table.get(symbol)
-            .unwrap_or_else(|| panic!("native function not registered: {}", symbol));
+        if !self.table.borrow().contains_key(symbol) {
+            let resolver = self.resolver.as_ref()
+                .unwrap_or_else(|| panic!("native function not registered: {}", symbol));
+            let f = resolver.resolve(symbol).map_err(InterpError::RuntimeError)?;
+            self.table.borrow_mut().insert(symbol.to_string(), f);
+        }
+        // Borrowed across the call, which cannot reach this table again: a
+        // native is handed the runtime and its arguments, not the interpreter.
+        let table = self.table.borrow();
+        let f = &table[symbol];
         f(rt, args, dest, supplied)
     }
 
     /// Check if a symbol is registered.
     pub fn contains(&self, symbol: &str) -> bool {
-        self.table.contains_key(symbol)
+        self.table.borrow().contains_key(symbol)
     }
 }
 

@@ -1,0 +1,25 @@
+// A const whose evaluation calls a native rider function.
+//
+// Consts are evaluated while the program compiles, by an interpreter of their
+// own, and that interpreter had no natives: every const reaching one panicked
+// with the native not registered. `string.len` is a native, so each of these
+// did. The value is computed at compile time and embedded, so the backends
+// that compile ahead of time see only the result.
+require module sys/std/string
+import string.len
+import string.to_uppercase
+
+const N: index = len(ref "hello")
+debuglog N
+
+// A string the native builds, which the const has to carry out of the
+// evaluator's runtime and into the program's.
+const LOUD: string = to_uppercase(ref "quiet")
+debuglog LOUD
+
+fun width(): index
+  const W: index = len(ref "four")
+  ret W
+end fun
+
+debuglog width()

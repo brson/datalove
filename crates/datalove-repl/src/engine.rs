@@ -3,11 +3,12 @@
 use rmx::prelude::*;
 use salsa::Setter as _;
 use serde::Serialize;
+use std::sync::Arc;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
 use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
-use datafun::pipeline::rider_load::{RegisteredNatives, register_natives};
+use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
 /// The engine, which owns the database the session is compiled in.
@@ -22,10 +23,7 @@ use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 /// `botdocs/plan-script-reactivity.md`.
 pub struct Engine {
     db: datafun::Database,
-    /// The system library the session compiles against, kept so the engine can
-    /// rebuild its session and executor after a crash reset.
-    sys: SystemLibrary,
-    /// The workspace built from `sys`.
+    /// The workspace the session compiles against.
     workspace: WorkspaceDescriptor,
     /// The pipeline that compiled the modules, kept rather than rebuilt.
     ///
@@ -43,13 +41,14 @@ pub struct Engine {
     script: Option<ScriptSession>,
     /// Script executor for running compiled units.
     executor: ScriptExecutor,
-    /// The rider libraries `executor`'s native table points into.
+    /// The natives `executor`'s native table points to, which `pipeline` was
+    /// given too.
     ///
-    /// Only non-empty when the riders were built rather than taken from this
-    /// binary; see `rider_load::build_sys_riders`. Holding it here no longer
-    /// decides anything: the table and the jit each took a share of every
-    /// library when its symbols were registered, so neither can be reached
-    /// after its code has gone whatever order these two fields go in.
+    /// Kept so a reset registers the same ones again: riders already built and
+    /// loaded stay that way. Holding it here decides nothing about lifetimes:
+    /// the table and the jit each took a share when the symbols were
+    /// registered, so neither can be reached after its code has gone whatever
+    /// order these fields go in.
     natives: RegisteredNatives,
 }
 
@@ -82,9 +81,8 @@ pub struct EnvBinding {
 struct Started {
     script: ScriptSession,
     executor: ScriptExecutor,
-    /// Rider libraries the executor's native table points into. The table
-    /// holds its own share of each, so this is the caller's copy rather than
-    /// what keeps them.
+    /// What the executor's natives were registered from. The table holds its
+    /// own share, so this is the caller's copy rather than what keeps them.
     natives: RegisteredNatives,
 }
 
@@ -93,8 +91,7 @@ impl Started {
     fn compile(
         db: &datafun::Database,
         pipeline: &mut ModuleCompilationPipeline,
-        workspace: &WorkspaceDescriptor,
-        sys: &SystemLibrary,
+        natives: &Arc<RiderNatives>,
     ) -> AnyResult<Started> {
         let compiled = pipeline.compile_fresh(db);
 
@@ -109,8 +106,7 @@ impl Started {
             .into_session();
         let mut executor = compiled.script_executor(datafun::DebugOutputMode::Disabled, None)
             .expect("script_executor should succeed after error check");
-        let natives = register_natives(
-            workspace, &compiled, &sys.natives, &mut executor)?;
+        let natives = register_natives(natives, &compiled, &mut executor)?;
 
         Ok(Started { script, executor, natives })
     }
@@ -144,11 +140,14 @@ impl Engine {
 
         let db = datafun::Database::default();
         let mut pipeline = workspace.to_pipeline(&db);
-        let started = Started::compile(&db, &mut pipeline, &workspace, &sys)?;
+        // The same natives for the life of the pipeline, so that a reset
+        // neither rebuilds riders nor reloads them.
+        let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
+        pipeline.set_natives(natives.clone());
+        let started = Started::compile(&db, &mut pipeline, &natives)?;
 
         Ok(Engine {
             db,
-            sys,
             workspace,
             pipeline,
             script: Some(started.script),
@@ -162,7 +161,7 @@ impl Engine {
         self.executor.destroy_live_values();
         // The library compiled at startup and has not changed since, so this is
         // salsa verifying what it has rather than compiling it again.
-        let started = Started::compile(&self.db, &mut self.pipeline, &self.workspace, &self.sys)
+        let started = Started::compile(&self.db, &mut self.pipeline, &self.natives.natives)
             .expect("system library compiled successfully at startup");
         self.script = Some(started.script);
         self.executor = started.executor;

@@ -1794,7 +1794,7 @@ impl IrInterpreter {
                 heap = (0..n).map(|i| read(self, i, mode(i), frame)).collect();
                 &heap
             };
-            self.native_table.call(&native.symbol, self.runtime.handle(), args, dest, &shapes)?;
+            self.native_table.call(native.symbol(), self.runtime.handle(), args, dest, &shapes)?;
             return Ok(true);
         };
 
