@@ -383,22 +383,30 @@ fn call_native_bridge(
     supplied: &[*const rtdt::TyDesc],
     _symbol: &str,
 ) -> Result<(), InterpError> {
-    let mut c_args: Vec<usize> = Vec::with_capacity(1 + args.len() * 2 + 2 + supplied.len());
-    c_args.push(rt as usize);
-    for arg in args {
-        c_args.push(arg.ptr as usize);
-        c_args.push(arg.tydesc as usize);
+    // On the stack: a list per call was an allocation per call. The words
+    // past the arity the call has are never read.
+    const MAX_WORDS: usize = 13;
+    let len = 1 + args.len() * 2 + 2 + supplied.len();
+    if len > MAX_WORDS {
+        todo!("native functions with {} C args not yet supported", len);
     }
-    c_args.push(dest.ptr as usize);
-    c_args.push(dest.tydesc as usize);
-    for tydesc in supplied {
-        c_args.push(*tydesc as usize);
+    let mut c_args = [0usize; MAX_WORDS];
+    c_args[0] = rt as usize;
+    for (i, arg) in args.iter().enumerate() {
+        c_args[1 + 2 * i] = arg.ptr as usize;
+        c_args[2 + 2 * i] = arg.tydesc as usize;
+    }
+    let at = 1 + 2 * args.len();
+    c_args[at] = dest.ptr as usize;
+    c_args[at + 1] = dest.tydesc as usize;
+    for (i, tydesc) in supplied.iter().enumerate() {
+        c_args[at + 2 + i] = *tydesc as usize;
     }
 
     /// Transmute to a function of `n` pointer arguments and call it.
     macro_rules! arity {
         ($($n:literal => $($i:literal),+ ;)+) => {
-            match c_args.len() {
+            match len {
                 $($n => {
                     let f: extern "C-unwind" fn($(arity!(@ptr $i)),+) -> u8 =
                         std::mem::transmute(fn_ptr);

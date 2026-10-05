@@ -592,6 +592,86 @@ another tenth; the runtime (map comparisons and inserts, strings, allocation)
 most of the rest. Cheaper calls, or inlining the wrappers when the body is
 lowered, is what would move it next.
 
+## Calls
+
+Calls are now most of what the bytecode costs in library-heavy code. Wordfreq
+makes about 44 million a run -- 20 million into bytecode bodies, 16 million
+into natives, 12 million of the first being one-line wrappers that pass their
+parameters on to a native (`string.push_str`, `list.len`, `map.get`, ...) --
+and they are about half of its 37 billion instructions.
+
+**Measured** with microbenchmarks in a loop of 20 million (counting
+instructions with `perf stat`, since wall time on a shared machine is noisy,
+and single-stepping one call in gdb to see where they go):
+
+| | instructions | time |
+|---|---|---|
+| a loop iteration alone | ~125 | ~8ns |
+| plus a call to a two-parameter bytecode function | +~440 | +~28ns |
+| plus `list.len`: a generic wrapper and a native | +~930 | +~60ns |
+
+One bytecode call, stepped through, is about 380 instructions: 90 in
+`Frame::enter` (clearing tracking bytes, giving owned parameters the callee's
+descriptors, writing the parameter pointers, clearing the reference
+descriptors), 40 taking and returning the pooled frame (popping the box,
+clearing its two vectors, swapping its layout `Rc`), 25 pushing the
+parameters, 60 in the call function's own prologue, epilogue and lookups, and
+about 100 in the callee's `run_bytecode` around its two ops. One native call
+was 550, of which the native itself was a dozen: the bridge built its C
+arguments in a `Vec`, an allocation per call, with an iterator chain (130, now
+plain indexing on the stack, and 120 fewer); the native was found by hashing
+its symbol (50); the arguments read through a closure and
+`borrow_through_wrapper` (50); `fast_call` itself (120).
+
+**Tried and not worth it alone**: a lane for the commonest call, statically
+typed arguments into a bytecode body, with the body, layout and bytecode
+cached at the call site so that it skips the lookups and `bytecode_for`. It
+saved 60 instructions a call, 3% of wordfreq: the lookups are not where the
+cost is. The cost is in what a call builds -- a `Frame` with its vectors and
+`Rc`, the parameter `Value`s, a fresh `run_bytecode` activation -- not in
+finding what to build.
+
+**What would make a real difference**, roughly in order of payoff for effort:
+
+1. **A frame that is its bytes.** Put everything a frame keeps beside its data
+   into the data: each parameter's descriptor next to its pointer in the
+   parameter region the layout already has, and a word per reference value for
+   the descriptor a projection found (now `Frame::value_tydescs`). A frame is
+   then a base pointer and a layout, frames for function bodies come off one
+   contiguous stack by bumping a pointer, and `FramePool`, the boxed `Frame`,
+   its vectors and the `Rc` go. Both engines get it. Script frames, which
+   outlive their unit and keep liveness flags, stay as they are. A call should
+   cost about what writing its arguments' pointers and clearing its tracking
+   bytes costs.
+2. **No recursion for bytecode-to-bytecode calls.** CPython 3.11 does this:
+   a call pushes a frame and switches the loop's `ops`, `base` and `pc`; a
+   return pops it and copies the result to where the caller asked. That
+   removes the call function's and `run_bytecode`'s prologues and epilogues,
+   about 160 instructions, and the Rust stack depth limit on recursion. It
+   wants (1) first, since the loop cannot hold a `Frame` per activation.
+3. **Calls through forwarding wrappers.** A body that is one call passing its
+   parameters in order to a native, and returns what that returns, is
+   recognized when the call site is first resolved, and the site calls the
+   native directly: the arguments as the wrapper would have passed them (an
+   owned one with the wrapper's descriptor, a borrowed one with the
+   caller's), the result into the caller's destination with the wrapper's
+   descriptor for it. 12 of wordfreq's 44 million calls go.
+4. **A native call that is a function pointer.** Resolve the symbol to the
+   rider's function pointer once per call site, keyed by body and a table
+   generation, and build the C words straight from resolved places, rather
+   than a boxed closure looked up by hashing its name, a `Value` slice, and a
+   bridge that lays them out again.
+5. **Inlining small leaf bodies** at lowering -- `next`, `u32.min`,
+   `index.from_u32`: no calls, no ops that need the IR walker -- with their
+   frame appended to the caller's and their parameters' pointers written by
+   the caller. It wants a guard against the body being replaced, which (3)
+   wants too: a module registry swap must invalidate bytecode lowered against
+   the old one.
+
+(1) and (2) are the structural change and most of the gain: fib, which is
+nothing but calls, is where CPython is still twice as fast, and that is the
+call. (3)-(5) are cheaper and independent.
+
 ## Risks and open questions
 
 - **Two interpreters to maintain.** Every new IR instruction needs a bytecode
