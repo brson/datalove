@@ -439,7 +439,7 @@ impl IrInterpreter {
         let (bc, escapes) = bytecode::lower(func, layout);
         self.bc_stats.record(&bc, escapes);
         if std::env::var_os("DATALOVE_BC_DUMP").is_some() {
-            eprintln!("{}:\n{}", func.name, bc.dump());
+            eprintln!("{}:\n{}", func.name, bc.dump(func));
         }
         let bc = Rc::new(bc);
         // A layout already holding another body's bytecode keeps it; this one
@@ -584,7 +584,7 @@ impl IrInterpreter {
                 if !self.execute_hot(instr, frame, frames)
                     && !self.execute_warm(instr, unit_types, frame, frames)
                 {
-                    self.execute_instruction(instr, unit_types, frame, ctx, registry, frames, current_func)?;
+                    self.execute_instruction(instr, frame, ctx, registry, frames, current_func)?;
                 }
             }
 
@@ -1340,7 +1340,6 @@ impl IrInterpreter {
     fn execute_instruction(
         &mut self,
         instr: &Instruction,
-        unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,

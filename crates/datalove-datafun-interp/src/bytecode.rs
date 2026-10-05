@@ -16,7 +16,7 @@
 
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{
-    BinOp, BlockId, CodeRef, CodeUnitContext, ConstValue, Instruction, IrCodeUnit, IrType, Operand,
+    BinOp, BlockId, UnaryOp, CodeRef, CodeUnitContext, ConstValue, Instruction, IrCodeUnit, IrType, Operand,
     ParamMode, SlotDest, Terminator, ValueId,
 };
 use datalove_datafun_intrinsics::IntrinsicId;
@@ -115,8 +115,8 @@ pub(crate) enum Op {
     /// Make the call that is instruction `index` of block `block`, straight
     /// into the call path rather than through the IR walker's dispatch.
     Call { block: u32, index: u32 },
-    /// Make the call described by `calls[site]`, whose arguments are all SSA
-    /// values, without the general call path. Takes the general one whenever
+    /// Make the call described by `calls[site]`, whose arguments are all in
+    /// this frame, without the general call path. Takes the general one whenever
     /// a dispatcher is installed, so the JIT and the inliner see every call.
     CallFast { site: u32 },
 
@@ -124,6 +124,8 @@ pub(crate) enum Op {
     Const4 { dst: Loc, imm: u32 },
     /// Copy `len` bytes of the constant pool from `at`.
     ConstPool { dst: Loc, at: u32, len: u32 },
+    /// A new string of `len` bytes of the constant pool from `at`.
+    ConstString { dst: Loc, at: u32, len: u32, desc: u32 },
 
     Copy1 { dst: Loc, src: Loc },
     Copy4 { dst: Loc, src: Loc },
@@ -156,6 +158,29 @@ pub(crate) enum Op {
     ShrU32 { dst: Loc, a: Loc, b: Loc },
     ShlU32 { dst: Loc, a: Loc, b: Loc },
     AndU32 { dst: Loc, a: Loc, b: Loc },
+    AddWrapIndex { dst: Loc, a: Loc, b: Loc },
+    SubWrapIndex { dst: Loc, a: Loc, b: Loc },
+    U64ToIndex { dst: Loc, src: Loc },
+    ZextU8U32 { dst: Loc, src: Loc },
+    ZextU8U64 { dst: Loc, src: Loc },
+    ZextU32U64 { dst: Loc, src: Loc },
+    NotBool { dst: Loc, src: Loc },
+
+    /// Whether `index` is inside the list at `list`.
+    ListBoundsCheck { dst: Loc, list: Loc, index: Loc },
+    /// A reference to element `index` of the list at `list`, whose elements
+    /// are `size` bytes.
+    ListElementRef { dst: Loc, list: Loc, index: Loc, size: u32 },
+    /// The same, for a list whose descriptor is known only at run time,
+    /// which value `dest` records what it points at by: `rt[at]` holds the
+    /// destination, the list and the index.
+    ListElementRefRt { dest: u32, at: u32 },
+    /// IR walker routines on resolved operands: `rt[at]` holds the
+    /// destination and the source.
+    EraseRt { at: u32 },
+    ReifyRt { at: u32 },
+    CloneRt { at: u32 },
+    WidenFixedRt { at: u32 },
 
     /// Option and result tags, and payloads at a fixed offset.
     WrapSome { dst: Loc, src: Loc, at: u32, len: u32 },
@@ -200,6 +225,17 @@ pub(crate) enum Op {
     ReturnIr { block: u32 },
 }
 
+/// Where an operand's descriptor is.
+#[derive(Clone, Copy, Debug)]
+enum Desc {
+    /// In the layout, which the lowering read.
+    Static(*const rtdt::TyDesc),
+    /// With parameter `n`, which the caller supplied.
+    Param(u32),
+    /// With what value `n`, a reference, points at.
+    Ref(u32),
+}
+
 /// A switch's cases and default, as op indices.
 struct SwitchTable {
     cases: Vec<(u32, u32)>,
@@ -211,8 +247,8 @@ struct FastCall {
     /// Where the instruction is, for the general path.
     block: u32,
     index: u32,
-    /// Whether each argument is an SSA value, the only kind whose being
-    /// moved into the call the frame need not record. The arguments
+    /// Whether each argument can be moved into the call without the frame
+    /// recording it: whether it has no tracking byte. The arguments
     /// themselves are read as the IR walker reads them, which knows where a
     /// parameter's or a reference's descriptor comes from at run time.
     args: Vec<bool>,
@@ -243,7 +279,7 @@ pub(crate) struct BcFunction {
     /// Descriptors the ops name by index.
     descs: Vec<*const rtdt::TyDesc>,
     /// Operand triples for the ops that hand theirs to an IR walker routine.
-    rt: Vec<[(Loc, *const rtdt::TyDesc); 3]>,
+    rt: Vec<[(Loc, Desc); 3]>,
     ops: Vec<Op>,
     /// Where execution starts: the prologue that writes the hoisted
     /// constants, which ends by jumping to the first block.
@@ -307,7 +343,7 @@ struct Lowering<'a> {
     switches: Vec<SwitchTable>,
     calls: Vec<FastCall>,
     descs: Vec<*const rtdt::TyDesc>,
-    rt: Vec<[(Loc, *const rtdt::TyDesc); 3]>,
+    rt: Vec<[(Loc, Desc); 3]>,
     /// Op indices still naming a block, to be patched to its first op.
     fixups: Vec<(usize, Fixup)>,
     block_start: Vec<u32>,
@@ -339,33 +375,59 @@ enum Fixup {
 }
 
 impl<'a> Lowering<'a> {
-    /// The static type of an operand, where it is the truth about what is
-    /// there: none for anything that reaches another unit, or whose type has a
-    /// `data` in it, or a borrowed parameter, whose descriptor is the caller's.
+    /// The static type of an operand, where its layout and descriptor are the
+    /// truth about what is there.
+    ///
+    /// What the frame holds itself -- values, slots, parameters passed by
+    /// value -- it holds erased, so a `data` in its type is a `data` in its
+    /// bytes. What a borrowed parameter or a reference points at is the
+    /// caller's, as it really is, which inside a generic the static type does
+    /// not say; nor is anything that reaches another unit.
     fn typed(&self, op: &Operand) -> Option<&'a IrType> {
         let func = self.func;
-        let ty = match op {
-            Operand::Value(id) => &func.value_types[id.0 as usize],
-            Operand::Slot(id) => &func.slot_types[id.0 as usize],
+        match op {
+            Operand::Value(id) => Some(&func.value_types[id.0 as usize]),
+            Operand::Slot(id) => Some(&func.slot_types[id.0 as usize]),
             Operand::Param(id) => {
                 let ctx = func.function_context()?;
                 let i = id.0 as usize;
-                if matches!(ctx.param_modes.get(i), Some(ParamMode::Ref | ParamMode::Mut)) {
-                    // The caller's descriptor rides with a borrowed parameter;
-                    // outside a generic it agrees with this type anyway.
-                    if has_data(&ctx.param_types[i]) {
-                        return None;
-                    }
-                }
-                &ctx.param_types[i]
+                let ty = &ctx.param_types[i];
+                let borrowed = matches!(ctx.param_modes.get(i), Some(ParamMode::Ref | ParamMode::Mut));
+                (!borrowed || !has_data(ty)).then_some(ty)
             }
             Operand::ValueRef(id) => match &func.value_types[id.0 as usize] {
-                IrType::Ref(inner) => inner,
-                _ => return None,
+                IrType::Ref(inner) if !has_data(inner) => Some(inner),
+                _ => None,
             },
-            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => return None,
-        };
-        if has_data(ty) { None } else { Some(ty) }
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
+        }
+    }
+
+    /// Where an operand's descriptor comes from: the layout where its static
+    /// type says, otherwise the frame, at run time.
+    fn desc(&self, op: &Operand) -> Option<Desc> {
+        if self.typed(op).is_some() {
+            return Some(Desc::Static(self.desc_of(op)?));
+        }
+        match op {
+            Operand::Param(id) => Some(Desc::Param(id.0)),
+            Operand::ValueRef(id) => Some(Desc::Ref(id.0)),
+            _ => None,
+        }
+    }
+
+    /// An operand's place and descriptor, for an op that hands them to an IR
+    /// walker routine.
+    fn rt_operand(&self, op: &Operand) -> Option<(Loc, Desc)> {
+        Some((self.loc(op)?, self.desc(op)?))
+    }
+
+    /// Record operands for an op that hands them to an IR walker routine.
+    fn rt_push(&mut self, operands: &[(Loc, Desc)]) -> u32 {
+        let mut triple = [(Loc(0), Desc::Static(std::ptr::null())); 3];
+        triple[..operands.len()].copy_from_slice(operands);
+        self.rt.push(triple);
+        (self.rt.len() - 1) as u32
     }
 
     fn loc(&self, op: &Operand) -> Option<Loc> {
@@ -387,14 +449,49 @@ impl<'a> Lowering<'a> {
         self.typed(&Operand::Value(id))
     }
 
-    /// An operand an instruction consumes: only an SSA value, whose being
-    /// consumed the frame need not record. A consumed slot or parameter may
-    /// have a tracking byte to update, which is the IR walker's to do.
+    /// An operand an instruction consumes, where the frame need not record
+    /// its being consumed: anything without a tracking byte, which the frame
+    /// of a body run as bytecode keeps no other record of.
     fn consumed(&self, op: &Operand) -> Option<Loc> {
+        if self.tracking(op).is_some() {
+            return None;
+        }
+        self.loc(op)
+    }
+
+    /// A slot's or parameter's tracking byte, if it has one.
+    fn tracking(&self, op: &Operand) -> Option<u32> {
         match op {
-            Operand::Value(_) => self.loc(op),
+            Operand::Slot(id) => self.layout.slot_tracking[id.0 as usize],
+            Operand::Param(id) => self.layout.param_tracking[id.0 as usize],
             _ => None,
         }
+    }
+
+    /// Whether a read of an operand leaves it where it was.
+    fn is_copy(&self, op: &Operand) -> bool {
+        let func = self.func;
+        let ty = match op {
+            Operand::Value(id) | Operand::ValueRef(id) => func.value_types.get(id.0 as usize),
+            Operand::Slot(id) => func.slot_types.get(id.0 as usize),
+            Operand::Param(id) => func.function_context().and_then(|c| c.param_types.get(id.0 as usize)),
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
+        };
+        ty.is_some_and(|t| t.is_copy())
+    }
+
+    /// A routine from destination `dest` and source `src`, where the source
+    /// is left behind or consumed without a record of it.
+    fn lower_rt_unary(&mut self, dest: ValueId, src: &Operand, op: fn(u32) -> Op) -> bool {
+        if !self.is_copy(src) && self.consumed(src).is_none() {
+            return false;
+        }
+        let (Some(d), Some(s)) = (self.rt_operand(&Operand::Value(dest)), self.rt_operand(src)) else {
+            return false;
+        };
+        let at = self.rt_push(&[d, s]);
+        self.emit(op(at));
+        true
     }
 
     /// The descriptor of what an operand holds, from the layout.
@@ -493,10 +590,81 @@ impl<'a> Lowering<'a> {
                 true
             }
             Instruction::Move { dest, src } => {
-                let (Some(ty), Some(src)) = (self.typed(src), self.consumed(src)) else { return false };
-                if let Some(op) = Self::copy(self.value_loc(*dest), src, layout_of(ty).size) {
+                let (Some(ty), Some(s)) = (self.typed(src), self.loc(src)) else { return false };
+                let (dst, len) = (self.value_loc(*dest), layout_of(ty).size);
+                match self.tracking(src) {
+                    Some(track) => self.emit(Op::LoadMoveTracked { dst, src: s, track, len }),
+                    None => if let Some(op) = Self::copy(dst, s, len) {
+                        self.emit(op);
+                    },
+                }
+                true
+            }
+            Instruction::ParamStore { param, value } => {
+                // A `mut` parameter always holds something, which goes first.
+                let p = Operand::Param(*param);
+                let (Some(ty), Some(dst), Some(desc), Some(src)) =
+                    (self.typed(&p), self.loc(&p), self.desc_of(&p), self.consumed(value)) else { return false };
+                if self.typed(value).is_none() {
+                    return false;
+                }
+                if !ty.is_copy() {
+                    let desc = self.desc_index(desc);
+                    self.emit(Op::Drop { src: dst, desc });
+                }
+                if let Some(op) = Self::copy(dst, src, layout_of(ty).size) {
                     self.emit(op);
                 }
+                true
+            }
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                let (Some(l), Some(i)) = (self.loc(list), self.loc(index)) else { return false };
+                self.emit(Op::ListBoundsCheck { dst: self.value_loc(*is_valid), list: l, index: i });
+                true
+            }
+            Instruction::ListElementRef { dest, list, index } => {
+                let Some(i) = self.loc(index) else { return false };
+                if let (Some(IrType::List(elem)), Some(l)) = (self.typed(list), self.loc(list)) {
+                    let size = layout_of(elem).size;
+                    self.emit(Op::ListElementRef { dst: self.value_loc(*dest), list: l, index: i, size });
+                    return true;
+                }
+                let (Some(d), Some(l)) = (self.rt_operand(&Operand::Value(*dest)), self.rt_operand(list)) else {
+                    return false;
+                };
+                let at = self.rt_push(&[d, l, (i, Desc::Static(std::ptr::null()))]);
+                self.emit(Op::ListElementRefRt { dest: dest.0, at });
+                true
+            }
+            Instruction::Erase { dest, src } => self.lower_rt_unary(*dest, src, |at| Op::EraseRt { at }),
+            Instruction::Reify { dest, src } => self.lower_rt_unary(*dest, src, |at| Op::ReifyRt { at }),
+            // The source is borrowed.
+            Instruction::Clone { dest, src } => {
+                let (Some(d), Some(s)) = (self.rt_operand(&Operand::Value(*dest)), self.rt_operand(src)) else {
+                    return false;
+                };
+                let at = self.rt_push(&[d, s]);
+                self.emit(Op::CloneRt { at });
+                true
+            }
+            Instruction::WidenFixed { dest, src } => {
+                let (Some(from), Some(to), Some(s)) = (self.typed(src), self.value_type(*dest), self.loc(src)) else {
+                    return false;
+                };
+                let dst = self.value_loc(*dest);
+                match (from, to) {
+                    (IrType::U8, IrType::U32) => self.emit(Op::ZextU8U32 { dst, src: s }),
+                    (IrType::U8, IrType::U64) => self.emit(Op::ZextU8U64 { dst, src: s }),
+                    (IrType::U32, IrType::U64) => self.emit(Op::ZextU32U64 { dst, src: s }),
+                    _ => return self.lower_rt_unary(*dest, src, |at| Op::WidenFixedRt { at }),
+                }
+                true
+            }
+            Instruction::UnaryOp { dest, op: UnaryOp::Not | UnaryOp::LogicNot, operand } => {
+                let (Some(IrType::Bool), Some(src)) = (self.typed(operand), self.loc(operand)) else {
+                    return false;
+                };
+                self.emit(Op::NotBool { dst: self.value_loc(*dest), src });
                 true
             }
             Instruction::SlotLoadCopy { dest, slot } | Instruction::SlotLoadMove { dest, slot } => {
@@ -603,12 +771,16 @@ impl<'a> Lowering<'a> {
                 // body never names.
                 let fast: Option<Vec<_>> = args.iter().map(|arg| {
                     self.loc(arg)?;
-                    Some(matches!(arg, Operand::Value(_)))
+                    Some(self.consumed(arg).is_some())
                 }).collect();
                 let resolved: Option<Vec<_>> = match instr {
                     Instruction::Call { shape_descriptors, .. } if shape_descriptors.is_empty() => {
+                        // A `data` handed to a borrowed parameter is read
+                        // through its wrapper, which the general lane does.
                         args.iter().map(|arg| {
-                            self.typed(arg)?;
+                            if has_data(self.typed(arg)?) {
+                                return None;
+                            }
                             Some((self.loc(arg)?, self.desc_of(arg)?))
                         }).collect()
                     }
@@ -638,13 +810,16 @@ impl<'a> Lowering<'a> {
                 true
             }
             Instruction::Drop { operand } => {
-                // A copied type owns nothing, and a value whose drop the frame
-                // records is the IR walker's.
+                // A copied type owns nothing. What has a tracking byte holds
+                // something, as at any `drop`, so checking it costs nothing.
                 let (Some(ty), Some(src), Some(desc)) =
-                    (self.typed(operand), self.consumed(operand), self.desc_of(operand)) else { return false };
+                    (self.typed(operand), self.loc(operand), self.desc_of(operand)) else { return false };
                 if !ty.is_copy() {
                     let desc = self.desc_index(desc);
-                    self.emit(Op::Drop { src, desc });
+                    match self.tracking(operand) {
+                        Some(track) => self.emit(Op::DropTracked { src, track, desc }),
+                        None => self.emit(Op::Drop { src, desc }),
+                    }
                 }
                 true
             }
@@ -743,6 +918,13 @@ impl<'a> Lowering<'a> {
             ConstValue::Index(n) => n.to_ne_bytes().to_vec(),
             ConstValue::Offset(n) => n.to_ne_bytes().to_vec(),
             // Anything that owns memory is built fresh at every execution.
+            ConstValue::String(text) => {
+                let at = self.pool.len() as u32;
+                self.pool.extend_from_slice(text.as_bytes());
+                let desc = self.desc_index(self.layout.value_tydescs[dest.0 as usize]);
+                self.emit(Op::ConstString { dst, at, len: text.len() as u32, desc });
+                return true;
+            }
             _ => return false,
         };
         let at = self.pool.len() as u32;
@@ -785,14 +967,10 @@ impl<'a> Lowering<'a> {
     /// resolved, for the types no typed op covers.
     fn lower_binop_rt(&mut self, dest: ValueId, op: BinOp, lhs: &Operand, rhs: &Operand) -> bool {
         let d = Operand::Value(dest);
-        let mut triple = [(Loc(0), std::ptr::null()); 3];
-        for (k, operand) in [&d, lhs, rhs].into_iter().enumerate() {
-            let (Some(_), Some(loc), Some(desc)) =
-                (self.typed(operand), self.loc(operand), self.desc_of(operand)) else { return false };
-            triple[k] = (loc, desc);
-        }
-        self.rt.push(triple);
-        self.emit(Op::BinOpRt { op, at: (self.rt.len() - 1) as u32 });
+        let (Some(d), Some(a), Some(b)) =
+            (self.rt_operand(&d), self.rt_operand(lhs), self.rt_operand(rhs)) else { return false };
+        let at = self.rt_push(&[d, a, b]);
+        self.emit(Op::BinOpRt { op, at });
         true
     }
 
@@ -838,6 +1016,11 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_intrinsic(&mut self, dest: ValueId, intrinsic: IntrinsicId, args: &[Operand]) -> bool {
+        if let ([x], IntrinsicId::U64ToIndex) = (args, intrinsic) {
+            let Some(src) = self.loc(x) else { return false };
+            self.emit(Op::U64ToIndex { dst: self.value_loc(dest), src });
+            return true;
+        }
         let [x, y] = args else { return false };
         let (Some(a), Some(b)) = (self.loc(x), self.loc(y)) else { return false };
         let dst = self.value_loc(dest);
@@ -849,6 +1032,8 @@ impl<'a> Lowering<'a> {
             IntrinsicId::ShrU32 => Op::ShrU32 { dst, a, b },
             IntrinsicId::ShlU32 => Op::ShlU32 { dst, a, b },
             IntrinsicId::BitandU32 => Op::AndU32 { dst, a, b },
+            IntrinsicId::AddWrappingIndex => Op::AddWrapIndex { dst, a, b },
+            IntrinsicId::SubWrappingIndex => Op::SubWrapIndex { dst, a, b },
             _ => return false,
         };
         self.emit(op);
@@ -1095,6 +1280,23 @@ unsafe fn wr<T>(base: *mut u8, loc: Loc, v: T) {
     unsafe { std::ptr::write_unaligned(loc.at(base) as *mut T, v) }
 }
 
+/// An operand an op hands to an IR walker routine.
+#[inline(always)]
+unsafe fn rt_value(frame: &Frame, base: *mut u8, (loc, desc): (Loc, Desc)) -> crate::value::Value {
+    let tydesc = match desc {
+        Desc::Static(tydesc) => tydesc,
+        Desc::Param(n) => frame.param(datalove_datafun_ir::ParamId(n)).tydesc,
+        Desc::Ref(n) => frame.value_deref(ValueId(n)).tydesc,
+    };
+    crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc }
+}
+
+#[inline(always)]
+unsafe fn rt_dest(frame: &Frame, base: *mut u8, operand: (Loc, Desc)) -> Destination {
+    let val = unsafe { rt_value(frame, base, operand) };
+    Destination { ptr: val.ptr, tydesc: val.tydesc }
+}
+
 #[inline(always)]
 unsafe fn checked<T: Copy + CheckedIntOps>(
     base: *mut u8,
@@ -1148,7 +1350,7 @@ impl IrInterpreter {
                             && !self.execute_warm(instr, &unit_types, frame, frames)
                         {
                             self.execute_instruction(
-                                instr, &unit_types, frame, ctx, registry, frames, code_ref)?;
+                                instr, frame, ctx, registry, frames, code_ref)?;
                         }
                     }
                     Op::Call { block, index } => {
@@ -1230,6 +1432,27 @@ impl IrInterpreter {
                     Op::ShrU32 { dst, a, b } => wr(base, dst, rd::<u32>(base, a).wrapping_shr(rd(base, b))),
                     Op::ShlU32 { dst, a, b } => wr(base, dst, rd::<u32>(base, a).wrapping_shl(rd(base, b))),
                     Op::AndU32 { dst, a, b } => wr(base, dst, rd::<u32>(base, a) & rd::<u32>(base, b)),
+                    Op::AddWrapIndex { dst, a, b } => {
+                        wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_add(rd(base, b)))
+                    }
+                    Op::SubWrapIndex { dst, a, b } => {
+                        wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_sub(rd(base, b)))
+                    }
+                    Op::U64ToIndex { dst, src } => wr(base, dst, rd::<u64>(base, src) as rtdt::IndexRepr),
+                    Op::ZextU8U32 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u32),
+                    Op::ZextU8U64 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u64),
+                    Op::ZextU32U64 { dst, src } => wr(base, dst, rd::<u32>(base, src) as u64),
+                    Op::NotBool { dst, src } => wr(base, dst, rd::<u8>(base, src) == 0),
+
+                    Op::ListBoundsCheck { dst, list, index } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        wr(base, dst, rd::<rtdt::IndexRepr>(base, index) < list.size.0);
+                    }
+                    Op::ListElementRef { dst, list, index, size } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        let i = rd::<rtdt::IndexRepr>(base, index) as usize;
+                        wr(base, dst, (list.data as *mut u8).add(i * size as usize));
+                    }
 
                     Op::WrapSome { dst, src, at, len } => {
                         let d = dst.at(base);
@@ -1287,15 +1510,10 @@ impl IrInterpreter {
                         copy_bytes(src.at(base), dst.at(base), len as usize);
                         *base.add(track as usize) = tracking::MOVED;
                     }
-                    Op::Widen { dst, src, src_desc } => {
-                        let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[src_desc as usize] };
-                        self.widen_to_int(&val, &mut *(dst.at(base) as *mut rtdt::Int));
-                    }
-                    Op::BinOpRt { op, at } => {
-                        let [(d, dd), (a, ad), (b, bd)] = bc.rt[at as usize];
-                        let lhs = crate::value::Value { ptr: a.at(base), tydesc: ad };
-                        let rhs = crate::value::Value { ptr: b.at(base), tydesc: bd };
-                        self.execute_binop(op, &lhs, &rhs, Destination { ptr: d.at(base), tydesc: dd });
+                    Op::ConstString { .. } | Op::ListElementRefRt { .. } | Op::EraseRt { .. }
+                    | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
+                    | Op::Widen { .. } | Op::BinOpRt { .. } => {
+                        self.run_routine_op(*ops.get_unchecked(pc), bc, frame, base)
                     }
                     Op::Jump { to } => {
                         pc = to as usize;
@@ -1375,10 +1593,67 @@ impl IrInterpreter {
 }
 
 impl IrInterpreter {
+    /// Run an op that hands its operands to an IR walker routine.
+    ///
+    /// Out of the loop, since the routines do the work and the arms for
+    /// them made the loop's own code worse: primes, which runs none of
+    /// them, was 7% slower with them inline.
+    #[inline(never)]
+    unsafe fn run_routine_op(&mut self, op: Op, bc: &BcFunction, frame: &mut Frame, base: *mut u8) {
+        unsafe {
+            match op {
+                Op::ConstString { dst, at, len, desc } => {
+                    let bytes = if len == 0 { std::ptr::null() } else { bc.pool.as_ptr().add(at as usize) };
+                    datalove_rt::c::dtlv_rti_string_from_bytes(
+                        self.runtime.handle(), bytes, len as rtdt::IndexRepr, dst.at(base), bc.descs[desc as usize]);
+                }
+                Op::ListElementRefRt { dest, at } => {
+                    let [(dst, _), l, (index, _)] = bc.rt[at as usize];
+                    let list_val = rt_value(frame, base, l);
+                    let (list, element_tydesc, size) = crate::list_element_info(&list_val);
+                    let i = rd::<rtdt::IndexRepr>(base, index) as usize;
+                    wr(base, dst, (list.data as *mut u8).add(i * size));
+                    frame.set_value_tydesc(ValueId(dest), element_tydesc);
+                }
+                Op::EraseRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_erase(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::ReifyRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_reify(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::CloneRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    let (src, dest) = (rt_value(frame, base, s), rt_dest(frame, base, d));
+                    datalove_rt::c::dtlv_rti_clone_erased_local(
+                        self.runtime.handle(), src.ptr, src.tydesc, dest.ptr, dest.tydesc);
+                }
+                Op::WidenFixedRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.widen_fixed(&rt_value(frame, base, s), &rt_dest(frame, base, d));
+                }
+                Op::Widen { dst, src, src_desc } => {
+                    let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[src_desc as usize] };
+                    self.widen_to_int(&val, &mut *(dst.at(base) as *mut rtdt::Int));
+                }
+                Op::BinOpRt { op, at } => {
+                    let [d, a, b] = bc.rt[at as usize];
+                    let (lhs, rhs) = (rt_value(frame, base, a), rt_value(frame, base, b));
+                    self.execute_binop(op, &lhs, &rhs, rt_dest(frame, base, d));
+                }
+                op => unreachable!("{:?} is not a routine op", op),
+            }
+        }
+    }
+}
+
+impl IrInterpreter {
     /// Make a fast call, or say the general path has to.
     ///
-    /// Does what `execute_call_site` does for a call whose arguments are SSA
-    /// values with no `out` parameter among them, and none of what it would
+    /// Does what `execute_call_site` does for a call whose arguments are in
+    /// this frame, with no `out` parameter among them and none moved that the
+    /// frame would have to record, and none of what it would
     /// skip: no dispatcher is installed, so there is nothing to offer the call
     /// to and no optimized body to run instead.
     #[allow(clippy::too_many_arguments)]
@@ -1427,9 +1702,9 @@ impl IrInterpreter {
                     let (layout, suits) = match &callee.context {
                         CodeUnitContext::Native(native) => {
                             let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                            let suits = call.args.iter().enumerate().all(|(i, &is_value)| match mode(i) {
+                            let suits = call.args.iter().enumerate().all(|(i, &movable)| match mode(i) {
                                 ParamMode::Out => false,
-                                ParamMode::In => is_value || native.param_types[i].is_copy(),
+                                ParamMode::In => movable || native.param_types[i].is_copy(),
                                 ParamMode::Ref | ParamMode::Mut => true,
                             });
                             (None, suits)
@@ -1437,10 +1712,10 @@ impl IrInterpreter {
                         _ => {
                             let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
                             let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
-                            let suits = call.args.iter().enumerate().all(|(i, &is_value)| {
+                            let suits = call.args.iter().enumerate().all(|(i, &movable)| {
                                 match layout.param_modes[i] {
                                     ParamMode::Out => false,
-                                    ParamMode::In => is_value || !layout.param_moves[i],
+                                    ParamMode::In => movable || !layout.param_moves[i],
                                     ParamMode::Ref | ParamMode::Mut => true,
                                 }
                             });
@@ -1538,16 +1813,24 @@ impl IrInterpreter {
             &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
         self.frame_pool.give_back(callee_frame);
         drop(scratch);
-        // The caller's frame keeps no flags for values, the only arguments
-        // that can be moved into a fast call.
+        // The caller's frame keeps no record of an argument moved into a fast
+        // call: those with tracking bytes do not suit it.
         result.map(|()| true)
     }
 }
 
 impl BcFunction {
     /// The ops, one per line, for reading.
-    pub(crate) fn dump(&self) -> String {
-        self.ops.iter().enumerate().map(|(i, op)| format!("  {i:3}: {op:?}\n")).collect()
+    pub(crate) fn dump(&self, func: &IrCodeUnit) -> String {
+        self.ops.iter().enumerate().map(|(i, op)| match op {
+            Op::Ir { block, index } | Op::Call { block, index } => format!(
+                "  {i:3}: {op:?} {:?}\n", func.blocks[*block as usize].instructions[*index as usize]),
+            Op::CallFast { site } => {
+                let call = &self.calls[*site as usize];
+                format!("  {i:3}: {op:?} {:?}\n", func.blocks[call.block as usize].instructions[call.index as usize])
+            }
+            _ => format!("  {i:3}: {op:?}\n"),
+        }).collect()
     }
 }
 

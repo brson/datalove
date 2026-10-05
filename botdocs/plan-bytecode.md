@@ -497,8 +497,11 @@ slots, checked add, sub and mul and comparisons for 32- and 64-bit integers
 option and result wrapping and unwrapping, tracked slot stores, loads and
 drops (the tracking byte's offset baked in), drops of values, widening to
 `int` and binary operations no typed op covers (big integers, floats, string
-equality -- these call the IR walker's routines with operands resolved), jumps,
-branches, switches, returns, and calls. Operands are frame offsets, direct or through a pointer (parameters,
+equality -- these call the IR walker's routines with operands resolved), string
+constants, parameter stores, list bounds checks and element references, the
+`data` operations of generic code (erase, reify, clone, fixed widening), moves
+and drops of parameters, the wrapping `index` intrinsics, jumps, branches,
+switches, returns, and calls. Operands are frame offsets, direct or through a pointer (parameters,
 references); parameter pointers go in the frame's parameter region on `enter`.
 Ops are a 24-byte enum dispatched by a `match`.
 
@@ -506,15 +509,15 @@ Ops are a 24-byte enum dispatched by a `match`.
 
 | | IR walker | bytecode | |
 |---|---|---|---|
-| primes | 1594ms | 565ms | 2.8x |
-| fib(32) | 661ms | 369ms | 1.8x |
-| sum | 88ms | 55ms | 1.6x |
-| wordfreq | 3759ms | 2775ms | 1.35x |
+| primes | 1604ms | 577ms | 2.8x |
+| fib(32) | 661ms | 376ms | 1.75x |
+| sum | 92ms | 56ms | 1.6x |
+| wordfreq | 3824ms | 2430ms | 1.6x |
 
 (The IR walker's own numbers fell during the work too, from shared changes:
 fib was 848ms and wordfreq 3968ms before them.) Primes runs in half CPython's
 time (1.16s with its JIT off); fib is about twice CPython's 177ms; wordfreq is
-three times CPython's 945ms, where it was four.
+two and a half times CPython's 945ms, where it was four.
 
 **What made the difference**, in order:
 
@@ -548,6 +551,24 @@ three times CPython's 945ms, where it was four.
    192-byte `Frame` by value into and out of the pool, two `memcpy` calls per
    call. Fib on the IR walker went from 848ms to 655ms with that alone, and on
    the bytecode from 622ms to 358ms.
+7. Lowering what generic and library code does, which took wordfreq from
+   2775ms to 2430ms and its instructions run on the IR walker from about
+   twenty million to ten thousand. The key was that **only borrowed parameters
+   and references have descriptors the layout does not know**: what a frame
+   holds itself -- values, slots, parameters passed by value -- it holds
+   erased, so a `data` in its static type is a `data` in its bytes, and the
+   layout's descriptor is the truth. Ops over those are as static as any.
+   Borrowed parameters and references inside a generic get their descriptor
+   at run time (`Desc::Param`, `Desc::Ref`), for the ops that hand operands to
+   IR walker routines. Two things the fast call learned on the way: a `data`
+   handed to a borrowed parameter still has to be read through its wrapper, so
+   it keeps off the resolved lane; and an argument moved into a call needs no
+   record if it has no tracking byte, so a wrapper passing its own parameters
+   on to a native (`list.push`, `map.insert`) suits the fast call too.
+
+   The arms for the ops that call routines are out of the dispatch loop, in
+   `run_routine_op`: inline, they made the loop's code worse enough to cost
+   primes, which runs none of them, 7%. Out of line, about 2%.
 
 **What it does not do**:
 
@@ -555,18 +576,21 @@ three times CPython's 945ms, where it was four.
   flags, since the bytecode keeps none for values and untracked slots. The IR
   walker remains the checked engine; the bytecode is checked against it by the
   differential suites.
-- Collections, aggregates, the `data` operations of generic code (erase,
-  reify, field projections) and calls with `out` arguments are still IR walker
-  instructions, reached through `execute_hot` and `execute_warm`. In wordfreq
-  those run about twenty million times; lowering them is the remaining work of
-  steps 4, 6 and 7.
+- Collection construction, aggregates (pack, unpack, field projections),
+  error construction and calls with `out` arguments are still IR walker
+  instructions, reached through `execute_hot` and `execute_warm`. None is hot
+  in the benchmarks.
 - The call is still recursive on the Rust stack, and ops are 24 bytes rather
   than 16. Neither has been measured as worth changing yet.
 
-**What is left** in fib is the call itself: about a quarter of the time in the
-fast call, a tenth in taking and entering the frame, the rest in the loop. In
-wordfreq the interpreter is still about 60% of the time, the runtime (maps,
-comparisons, strings, allocation) about 30%.
+**What is left** is the call itself. In fib about a quarter of the time is in
+the fast call, a tenth in taking and entering the frame, the rest in the loop.
+In wordfreq, which makes about twenty calls a word, most of them to small
+library wrappers and natives, the fast call alone is a quarter of the time
+(about 14ns a call), the loop a fifth, entering frames and calling natives
+another tenth; the runtime (map comparisons and inserts, strings, allocation)
+most of the rest. Cheaper calls, or inlining the wrappers when the body is
+lowered, is what would move it next.
 
 ## Risks and open questions
 
