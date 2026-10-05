@@ -760,6 +760,175 @@ debuglog (v)
 
 ## Comparison and equality
 
+Values are compared with six operators,
+all of which produce a `bool`.
+
+| Operator | Meaning                  |
+|----------|--------------------------|
+| `==`     | equal                    |
+| `!=`     | not equal                |
+| `.<`     | less than                |
+| `.>`     | greater than             |
+| `<=`     | less than or equal       |
+| `>=`     | greater than or equal    |
+
+Less-than and greater-than are spelled `.<` and `.>`
+because `<` and `>` are brackets in Datalove,
+as in the type parameters of a generic function.
+
+```datalove
+let a = 3
+let b = 4
+
+debuglog (
+  a == b,
+  a != b,
+  a .< b,
+  a .> b,
+  a <= b,
+  a >= b
+)
+```
+
+Both operands must have the same type.
+As with arithmetic, there is no implicit widening,
+so a narrower number is widened explicitly with `@`.
+
+```datalove
+let small: u8 = 200
+let large: u32 = 200
+
+debuglog small@ == large
+```
+
+Comparison reads its operands rather than moving them,
+so comparing a string leaves it in place.
+
+```datalove
+let name = "datalove"
+let same = name == "datalove"
+
+// Comparing reads its operands rather than moving them.
+debuglog (name, same)
+```
+
+Comparisons do not chain:
+`a == b == c` is a parse error.
+Parenthesize the comparison being compared,
+or join two comparisons with `and`.
+
+The ordering operators, `.<`, `.>`, `<=` and `>=`,
+work only on numbers.
+Other types are ordered with library functions,
+described below.
+
+Equality, `==` and `!=`, works on numbers, `bool`, `string`, unit and atoms,
+and on options, tuples, structs, terms and enums made of those.
+These are compared structurally, part by part.
+
+```datalove
+type Shape: enum {
+  atom Circle,
+  term Rect (f64, f64),
+}
+
+let a: Shape = term Rect (1.0, 2.0)
+let b: Shape = term Rect (1.0, 2.0)
+
+let p = { name = "origin", at = (0, 0) }
+let q = { name = "origin", at = (0, 0) }
+
+debuglog (a == b, p == q, a == atom Circle)
+```
+
+Lists, sets, maps, tables, tensors, results, `data`, `error` and functions
+have no equality operator,
+nor does a type parameter, or anything containing one.
+These are compared with library functions too.
+
+A constructor written without a type of its own,
+like `none` or `some 7`,
+takes the type of the other operand.
+When the constructor comes first it must be parenthesized,
+since otherwise the comparison would be read as part of its payload.
+
+```datalove
+let found: ?u32 = some 7
+
+debuglog (found == none, found == some 7, (some 7) == found)
+```
+
+Floats compare according to IEEE 754:
+`NaN` is not equal to anything, itself included,
+and positive and negative zero are equal.
+This holds inside options, tuples and the other aggregates as well.
+
+```datalove
+require module sys/std/f64
+
+let nan = f64.nan()
+let zero = 0.0
+let negative_zero = -0.0
+
+debuglog (nan == nan, zero == negative_zero, (some nan) == some nan)
+```
+
+Beyond the operators,
+every value in Datalove has a _total order_,
+the same order sets and maps keep their keys in.
+The `sys/std/ord` module exposes it through functions:
+`compare`, `equal`, `less` and the other comparisons,
+`min`, `max` and `clamp`,
+and functions over lists such as
+`sorted`, `contains`, `index_of`, `binary_search` and `deduped`.
+These work on every type, including the ones the operators refuse.
+
+```datalove
+require module sys/std/ord
+require module sys/std/f64
+
+let xs = [3, 1, 2]
+let ys = [3, 1, 2]
+
+debuglog (ord.equal(ref xs, ref ys), ord.sorted(ref xs), ord.max(4, 9))
+
+let apple = "apple"
+let banana = "banana"
+
+debuglog ord.less(ref apple, ref banana)
+
+let nan = f64.nan()
+let zero = 0.0
+let negative_zero = -0.0
+
+debuglog (ord.equal(ref nan, ref nan), ord.equal(ref zero, ref negative_zero))
+```
+
+The total order agrees with the operators everywhere but floats,
+where it follows IEEE 754 `totalOrder`:
+`NaN` is equal to itself and has a place in the order,
+and the two zeros are different.
+
+A generic function compares values of a type parameter
+by bounding it with `is ord`,
+which every type satisfies.
+Generics are described in [Generics](#user-content-generics).
+
+```datalove
+require module sys/std/ord
+
+fun largest<T>(ref items: [T]): ?T with { T is ord, }
+  ret ord.greatest(ref items)
+end fun
+
+let words = ["pear", "fig", "plum"]
+
+debuglog largest(ref words)
+```
+
+
+
+
 ## Modules, packages, libraries and the workspace
 
 While scripts are the entry point to all Datalove programs,
