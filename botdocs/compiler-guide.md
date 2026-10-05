@@ -1602,6 +1602,14 @@ drop and a tracked store every iteration, and a tracking-byte check is a longer
 chain of dependent loads (frame, layout, tracking table, byte) than the flag it
 replaced: fewer instructions, lower IPC.
 
+**Three tiers of instruction.** `execute_hot` (inlined into the block loop: the
+dozen instructions arithmetic spends its time in), `execute_warm` (not inlined
+but small: the instructions generic and library code is full of -- erase and
+reify, parameter stores, list bounds and element references, drops, clones)
+and `execute_instruction` (everything else, calls included). Entering
+`execute_instruction` costs a frame sized for its biggest arm, so an
+instruction that runs often belongs in one of the other two.
+
 **Pooled frames are boxed.** `FramePool` handed out and took back `Frame` by
 value, a 192-byte struct, which compiled to two `memcpy` calls per call; boxing
 them makes those pointer moves, and took recursive fib from 848ms to 655ms.

@@ -581,7 +581,9 @@ impl IrInterpreter {
 
             // Execute instructions.
             for instr in &block.instructions {
-                if !self.execute_hot(instr, frame, frames) {
+                if !self.execute_hot(instr, frame, frames)
+                    && !self.execute_warm(instr, unit_types, frame, frames)
+                {
                     self.execute_instruction(instr, unit_types, frame, ctx, registry, frames, current_func)?;
                 }
             }
@@ -854,26 +856,22 @@ impl IrInterpreter {
         true
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn execute_instruction(
+    /// Execute `instr` if it is one of the instructions common enough in
+    /// generic and library code to want a cheaper way in than
+    /// `execute_instruction`, and say whether it was.
+    ///
+    /// Not inlined, unlike `execute_hot`, but small: `execute_instruction`'s
+    /// frame is sized for every arm it has, and entering it was most of what
+    /// these cost. Holds nothing that calls, so it needs no context.
+    #[inline(never)]
+    fn execute_warm(
         &mut self,
         instr: &Instruction,
         unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
-        ctx: &ExecutionContext,
-        registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        current_func: Option<&CodeRef>,
-    ) -> Result<(), InterpError> {
+    ) -> bool {
         match instr {
-            Instruction::Const { .. } | Instruction::Copy { .. } | Instruction::Move { .. }
-            | Instruction::BinOp { .. } | Instruction::UnaryOp { .. }
-            | Instruction::SlotStoreCopy { .. } | Instruction::SlotLoadCopy { .. }
-            | Instruction::BinOpChecked { .. } | Instruction::Intrinsic { .. }
-            | Instruction::WrapSome { .. } | Instruction::UnwrapOption { .. }
-            | Instruction::WrapOk { .. } | Instruction::UnwrapResult { .. } => {
-                unreachable!("{:?} is executed by execute_hot", instr)
-            }
             Instruction::SlotStoreMove { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
@@ -944,68 +942,6 @@ impl IrInterpreter {
                 }
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::RefSetField { dest, field_path, value } => {
-                // Store to a field through a reference operand. Used after inlining mut params.
-                let value_val = self.read_operand(value, frame, frames);
-                let dest_ptr = self.get_operand_dest(dest, frame);
-                // Navigate to the field.
-                let (current_ptr, current_tydesc) = self.navigate_field_path(
-                    dest_ptr.ptr, dest_ptr.tydesc, field_path
-                );
-                // Destroy old value and store new value.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        current_ptr,
-                        current_tydesc,
-                    );
-                }
-                self.write_field(current_ptr, current_tydesc, &value_val);
-                Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::RefStoreTracked { dest, value } => {
-                // Store through a reference operand with tracking. Used after inlining out params.
-                // The destination was uninitialized, so don't destroy old value.
-                let src_val = self.read_operand(value, frame, frames);
-                let dest_val = self.get_operand_dest(dest, frame);
-                let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
-                unsafe { self.move_value(&src_val, dest_ptr); }
-                // Mark the destination as initialized.
-                match dest {
-                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
-                    Operand::Param(param) => frame.mark_param_live(*param),
-                    // Other operand types don't have tracking in the same way.
-                    _ => {}
-                }
-                Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::RefSetFieldTracked { dest, field_path, value } => {
-                // Store to a field through a reference operand with tracking. Used after inlining out params.
-                let value_val = self.read_operand(value, frame, frames);
-                let dest_ptr = self.get_operand_dest(dest, frame);
-                // Navigate to the field.
-                let (current_ptr, current_tydesc) = self.navigate_field_path(
-                    dest_ptr.ptr, dest_ptr.tydesc, field_path
-                );
-                // Don't destroy old value (was uninitialized), just store new value.
-                self.write_field(current_ptr, current_tydesc, &value_val);
-                // Mark the destination as initialized.
-                match dest {
-                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
-                    Operand::Param(param) => frame.mark_param_live(*param),
-                    // Other operand types don't have tracking in the same way.
-                    _ => {}
-                }
-                Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::SlotLoadMove { dest, slot } => {
-                // Precise slot load: ownership analysis guarantees slot is occupied.
-                let slot_val = frame.slot(*slot);
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { self.move_value(&slot_val, dest_slot); }
-                frame.mark_value_live(*dest);
-                frame.mark_slot_dropped(*slot);
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
@@ -1174,6 +1110,347 @@ impl IrInterpreter {
                     Self::mark_source_dropped_local(src, frame);
                 }
             }
+            Instruction::Drop { operand } => {
+                // Precise drop: ownership analysis guarantees value exists.
+                let val = self.read_operand(operand, frame, frames);
+                self.execute_drop(&val);
+                Self::mark_source_dropped_local(operand, frame);
+            }
+            Instruction::DropTracked { operand } => {
+                // Tracked drop: check initialization first, skip if not present.
+                // Only emitted for Tracked bindings (slots, Out params).
+                // Values are Precise and use Drop instead.
+                let is_initialized = match operand {
+                    Operand::Slot(id) => frame.slot_is_live(*id),
+                    Operand::Param(id) => frame.param_is_live(*id),
+                    Operand::ExternalSlot { unit, slot } => {
+                        frames.is_external_slot_initialized(*unit, *slot)
+                    }
+                    // Values are Precise, never Tracked.
+                    Operand::Value(_) | Operand::ValueRef(_) | Operand::ExternalValue { .. } => {
+                        unreachable!("DropTracked emitted for Precise binding")
+                    }
+                };
+                if !is_initialized {
+                    // Already dropped or moved, skip.
+                    return true;
+                }
+                let val = self.read_operand(operand, frame, frames);
+                self.execute_drop(&val);
+                Self::mark_source_dropped_local(operand, frame);
+            }
+            Instruction::DropViaRef { ref_value } => {
+                // Drop through a reference value (e.g., from GetFieldRef).
+                // The reference value contains a pointer to what we want to destroy.
+                let val = frame.value_deref(*ref_value);
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        val.ptr,
+                        val.tydesc,
+                    );
+                }
+                // Note: we don't mark the ref_value as dropped - it's just a reference.
+                // The underlying storage still exists but is now uninitialized.
+            }
+            Instruction::ListBoundsCheck { is_valid, list, index } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
+                let list_size = list_struct.size.0;
+
+                let valid = idx < list_size;
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
+                frame.mark_value_live(*is_valid);
+            }
+            Instruction::ListElementRef { dest, list, index } => {
+                let list_val = self.read_operand(list, frame, frames);
+                let idx_val = self.read_operand(index, frame, frames);
+                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
+
+                let (list_struct, element_tydesc, element_size) =
+                    unsafe { list_element_info(&list_val) };
+
+                // Compute element pointer.
+                let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
+
+                // Store pointer in dest (ref value stores pointer, not data).
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    *(dest_slot.ptr as *mut *mut u8) = element_ptr;
+                }
+                // And what it points at. The stride was already read off the
+                // list's own descriptor; the element's descriptor was read with
+                // it and then thrown away, which is what left a reference into
+                // an erased container saying `data` about a string.
+                frame.set_value_tydesc(*dest, element_tydesc);
+                frame.mark_value_live(*dest);
+            }
+            Instruction::Widen { dest, src } => {
+                // Widen a fixed-width integer to Int.
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                // Cast dest to Int buffer and call widen_to_int.
+                unsafe {
+                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
+                    self.widen_to_int(&src_val, int_buf);
+                }
+                frame.mark_value_live(*dest);
+                // Source is borrowed (read), not consumed.
+            }
+            Instruction::WidenFixed { dest, src } => {
+                // Widen a fixed-width integer to a larger fixed-width integer.
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                unsafe {
+                    self.widen_fixed(&src_val, &dest_slot);
+                }
+                frame.mark_value_live(*dest);
+                // Source is borrowed (read), not consumed.
+            }
+            Instruction::Clone { dest, src } => {
+                // Clone a linear value (deep copy for @ operator).
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                // The source's descriptor says what is really there, which
+                // inside a generic its static type does not, and the
+                // destination's says what shape the clone has to arrive in.
+                // Where those differ the value is wrapped on the way, and the
+                // runtime decides that rather than the four backends each
+                // deciding it.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_clone_erased_local(
+                        self.runtime.handle(),
+                        src_val.ptr,
+                        src_val.tydesc,
+                        dest_slot.ptr,
+                        dest_slot.tydesc,
+                    );
+                }
+                frame.mark_value_live(*dest);
+                // Source is borrowed (read), not consumed.
+            }
+            Instruction::Nop => {}
+            Instruction::GetField { dest, src, field_index } => {
+                let src_val = self.read_operand(src, frame, frames);
+                let dest_slot = frame.value_dest(*dest);
+                // The offsets come from the descriptor of what is really there,
+                // and so does the decision about whether the field wants
+                // packing on the way out: a destination the static type calls a
+                // `data` holding something that is not one is a generic asking
+                // for a field it cannot name. Both are the runtime's, so that
+                // this and the three compiled backends give one answer.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_field_read_local(
+                        self.runtime.handle(),
+                        dest_slot.ptr,
+                        dest_slot.tydesc,
+                        src_val.ptr,
+                        src_val.tydesc,
+                        *field_index,
+                    );
+                }
+                frame.mark_value_live(*dest);
+            }
+            Instruction::DataBorrow { dest, src } => {
+                // Point at the container the wrapper holds, and carry the
+                // descriptor it holds it under. A container is never packed
+                // into the two words, so the scratch goes unused.
+                let src_val = self.read_operand(src, frame, frames);
+                let mut scratch = [0u8; 16];
+                let mut value_ptr: *const u8 = std::ptr::null();
+                let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_data_borrow(
+                        src_val.ptr, scratch.as_mut_ptr(), &mut value_ptr, &mut tydesc)
+                };
+                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "DataBorrow failed");
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { *(dest_slot.ptr as *mut *const u8) = value_ptr; }
+                frame.set_value_tydesc(*dest, tydesc);
+                frame.mark_value_live(*dest);
+            }
+            Instruction::SlotStoreCopyTracked { dest, value } => {
+                let src_val = self.read_operand(value, frame, frames);
+                match dest {
+                    SlotDest::Local(slot_id) => {
+                        if frame.slot_is_live(*slot_id) {
+                            let old_val = frame.slot(*slot_id);
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
+                        let dest_slot = frame.slot_dest(*slot_id);
+                        unsafe { self.copy_value(&src_val, dest_slot); }
+                        frame.mark_slot_live(*slot_id);
+                    }
+                    SlotDest::External { unit, slot } => {
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        );
+                    }
+                }
+            }
+            Instruction::SlotStoreMoveTracked { dest, value } => {
+                let src_val = self.read_operand(value, frame, frames);
+                match dest {
+                    SlotDest::Local(slot_id) => {
+                        if frame.slot_is_live(*slot_id) {
+                            let old_val = frame.slot(*slot_id);
+                            unsafe {
+                                datalove_rt::c::dtlv_rti_any_destroy_local(
+                                    self.runtime.handle(),
+                                    old_val.ptr,
+                                    old_val.tydesc,
+                                );
+                            }
+                        }
+                        let dest_slot = frame.slot_dest(*slot_id);
+                        unsafe { self.move_value(&src_val, dest_slot); }
+                        Self::mark_source_dropped_local(value, frame);
+                        frame.mark_slot_live(*slot_id);
+                    }
+                    SlotDest::External { unit, slot } => {
+                        frames.write_external_slot(
+                            self.runtime.handle(),
+                            *unit,
+                            *slot,
+                            &src_val,
+                        );
+                        Self::mark_source_dropped_local(value, frame);
+                    }
+                }
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn execute_instruction(
+        &mut self,
+        instr: &Instruction,
+        unit_types: &UnitTypes<'_>,
+        frame: &mut Frame,
+        ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+        current_func: Option<&CodeRef>,
+    ) -> Result<(), InterpError> {
+        match instr {
+            Instruction::Erase { .. }
+            | Instruction::Reify { .. }
+            | Instruction::ParamStore { .. }
+            | Instruction::ParamStoreTracked { .. }
+            | Instruction::ListBoundsCheck { .. }
+            | Instruction::ListElementRef { .. }
+            | Instruction::WidenFixed { .. }
+            | Instruction::Widen { .. }
+            | Instruction::Drop { .. }
+            | Instruction::DropTracked { .. }
+            | Instruction::Clone { .. }
+            | Instruction::GetField { .. }
+            | Instruction::EnumDiscriminant { .. }
+            | Instruction::EnumPayload { .. }
+            | Instruction::EnumVariant { .. }
+            | Instruction::WrapErr { .. }
+            | Instruction::WrapNone { .. }
+            | Instruction::ErrorFrom { .. }
+            | Instruction::DataFrom { .. }
+            | Instruction::EraseTracked { .. }
+            | Instruction::SlotStoreCopyTracked { .. }
+            | Instruction::SlotStoreMoveTracked { .. }
+            | Instruction::SlotLoadMoveTracked { .. }
+            | Instruction::SlotStoreMove { .. }
+            | Instruction::Pack { .. }
+            | Instruction::Unpack { .. }
+            | Instruction::UnaryOpChecked { .. }
+            | Instruction::DataBorrow { .. }
+            | Instruction::RefStore { .. }
+            | Instruction::DropViaRef { .. }
+            | Instruction::Nop => {
+                unreachable!("{:?} is executed by execute_warm", instr)
+            }
+            Instruction::Const { .. } | Instruction::Copy { .. } | Instruction::Move { .. }
+            | Instruction::BinOp { .. } | Instruction::UnaryOp { .. }
+            | Instruction::SlotStoreCopy { .. } | Instruction::SlotLoadCopy { .. }
+            | Instruction::BinOpChecked { .. } | Instruction::Intrinsic { .. }
+            | Instruction::WrapSome { .. } | Instruction::UnwrapOption { .. }
+            | Instruction::WrapOk { .. } | Instruction::UnwrapResult { .. } => {
+                unreachable!("{:?} is executed by execute_hot", instr)
+            }
+            Instruction::RefSetField { dest, field_path, value } => {
+                // Store to a field through a reference operand. Used after inlining mut params.
+                let value_val = self.read_operand(value, frame, frames);
+                let dest_ptr = self.get_operand_dest(dest, frame);
+                // Navigate to the field.
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    dest_ptr.ptr, dest_ptr.tydesc, field_path
+                );
+                // Destroy old value and store new value.
+                unsafe {
+                    datalove_rt::c::dtlv_rti_any_destroy_local(
+                        self.runtime.handle(),
+                        current_ptr,
+                        current_tydesc,
+                    );
+                }
+                self.write_field(current_ptr, current_tydesc, &value_val);
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::RefStoreTracked { dest, value } => {
+                // Store through a reference operand with tracking. Used after inlining out params.
+                // The destination was uninitialized, so don't destroy old value.
+                let src_val = self.read_operand(value, frame, frames);
+                let dest_val = self.get_operand_dest(dest, frame);
+                let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
+                unsafe { self.move_value(&src_val, dest_ptr); }
+                // Mark the destination as initialized.
+                match dest {
+                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
+                    Operand::Param(param) => frame.mark_param_live(*param),
+                    // Other operand types don't have tracking in the same way.
+                    _ => {}
+                }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::RefSetFieldTracked { dest, field_path, value } => {
+                // Store to a field through a reference operand with tracking. Used after inlining out params.
+                let value_val = self.read_operand(value, frame, frames);
+                let dest_ptr = self.get_operand_dest(dest, frame);
+                // Navigate to the field.
+                let (current_ptr, current_tydesc) = self.navigate_field_path(
+                    dest_ptr.ptr, dest_ptr.tydesc, field_path
+                );
+                // Don't destroy old value (was uninitialized), just store new value.
+                self.write_field(current_ptr, current_tydesc, &value_val);
+                // Mark the destination as initialized.
+                match dest {
+                    Operand::Slot(slot) => frame.mark_slot_live(*slot),
+                    Operand::Param(param) => frame.mark_param_live(*param),
+                    // Other operand types don't have tracking in the same way.
+                    _ => {}
+                }
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::SlotLoadMove { dest, slot } => {
+                // Precise slot load: ownership analysis guarantees slot is occupied.
+                let slot_val = frame.slot(*slot);
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { self.move_value(&slot_val, dest_slot); }
+                frame.mark_value_live(*dest);
+                frame.mark_slot_dropped(*slot);
+            }
             Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
                 let call_site_info = current_func.map(|caller| dispatch::CallSiteInfo {
                     caller: caller.clone(),
@@ -1263,49 +1540,6 @@ impl IrInterpreter {
                 for row in rows {
                     Self::mark_source_dropped_local(row, frame);
                 }
-            }
-            Instruction::Drop { operand } => {
-                // Precise drop: ownership analysis guarantees value exists.
-                let val = self.read_operand(operand, frame, frames);
-                self.execute_drop(&val);
-                Self::mark_source_dropped_local(operand, frame);
-            }
-            Instruction::DropTracked { operand } => {
-                // Tracked drop: check initialization first, skip if not present.
-                // Only emitted for Tracked bindings (slots, Out params).
-                // Values are Precise and use Drop instead.
-                let is_initialized = match operand {
-                    Operand::Slot(id) => frame.slot_is_live(*id),
-                    Operand::Param(id) => frame.param_is_live(*id),
-                    Operand::ExternalSlot { unit, slot } => {
-                        frames.is_external_slot_initialized(*unit, *slot)
-                    }
-                    // Values are Precise, never Tracked.
-                    Operand::Value(_) | Operand::ValueRef(_) | Operand::ExternalValue { .. } => {
-                        unreachable!("DropTracked emitted for Precise binding")
-                    }
-                };
-                if !is_initialized {
-                    // Already dropped or moved, skip.
-                    return Ok(());
-                }
-                let val = self.read_operand(operand, frame, frames);
-                self.execute_drop(&val);
-                Self::mark_source_dropped_local(operand, frame);
-            }
-            Instruction::DropViaRef { ref_value } => {
-                // Drop through a reference value (e.g., from GetFieldRef).
-                // The reference value contains a pointer to what we want to destroy.
-                let val = frame.value_deref(*ref_value);
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        val.ptr,
-                        val.tydesc,
-                    );
-                }
-                // Note: we don't mark the ref_value as dropped - it's just a reference.
-                // The underlying storage still exists but is now uninitialized.
             }
             Instruction::UnitEndDrop { operand: _ } => {
                 // No-op: script-level bindings persist for subsequent REPL units.
@@ -1404,19 +1638,6 @@ impl IrInterpreter {
                 }
                 // If invalid, dest is uninitialized — caller must not use it.
             }
-            Instruction::ListBoundsCheck { is_valid, list, index } => {
-                let list_val = self.read_operand(list, frame, frames);
-                let idx_val = self.read_operand(index, frame, frames);
-                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
-
-                let list_struct = unsafe { &*(list_val.ptr as *const rtdt::List) };
-                let list_size = list_struct.size.0;
-
-                let valid = idx < list_size;
-                let is_valid_dest = frame.value_dest(*is_valid);
-                unsafe { *(is_valid_dest.ptr as *mut bool) = valid; }
-                frame.mark_value_live(*is_valid);
-            }
             Instruction::ListSet { list, index, value } => {
                 let list_val = self.read_operand(list, frame, frames);
                 let idx_val = self.read_operand(index, frame, frames);
@@ -1444,29 +1665,6 @@ impl IrInterpreter {
 
                 // Mark value operand as consumed (moved into list).
                 Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::ListElementRef { dest, list, index } => {
-                let list_val = self.read_operand(list, frame, frames);
-                let idx_val = self.read_operand(index, frame, frames);
-                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
-
-                let (list_struct, element_tydesc, element_size) =
-                    unsafe { list_element_info(&list_val) };
-
-                // Compute element pointer.
-                let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
-
-                // Store pointer in dest (ref value stores pointer, not data).
-                let dest_slot = frame.value_dest(*dest);
-                unsafe {
-                    *(dest_slot.ptr as *mut *mut u8) = element_ptr;
-                }
-                // And what it points at. The stride was already read off the
-                // list's own descriptor; the element's descriptor was read with
-                // it and then thrown away, which is what left a reference into
-                // an erased container saying `data` about a string.
-                frame.set_value_tydesc(*dest, element_tydesc);
-                frame.mark_value_live(*dest);
             }
             Instruction::MapGet { dest, is_valid, map, key } => {
                 let map_val = self.read_operand(map, frame, frames);
@@ -1779,90 +1977,6 @@ impl IrInterpreter {
                 }
                 frame.mark_value_live(*dest);
             }
-            Instruction::Widen { dest, src } => {
-                // Widen a fixed-width integer to Int.
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                // Cast dest to Int buffer and call widen_to_int.
-                unsafe {
-                    let int_buf = &mut *(dest_slot.ptr as *mut datalove_rtdt::Int);
-                    self.widen_to_int(&src_val, int_buf);
-                }
-                frame.mark_value_live(*dest);
-                // Source is borrowed (read), not consumed.
-            }
-            Instruction::WidenFixed { dest, src } => {
-                // Widen a fixed-width integer to a larger fixed-width integer.
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                unsafe {
-                    self.widen_fixed(&src_val, &dest_slot);
-                }
-                frame.mark_value_live(*dest);
-                // Source is borrowed (read), not consumed.
-            }
-            Instruction::Clone { dest, src } => {
-                // Clone a linear value (deep copy for @ operator).
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                // The source's descriptor says what is really there, which
-                // inside a generic its static type does not, and the
-                // destination's says what shape the clone has to arrive in.
-                // Where those differ the value is wrapped on the way, and the
-                // runtime decides that rather than the four backends each
-                // deciding it.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_clone_erased_local(
-                        self.runtime.handle(),
-                        src_val.ptr,
-                        src_val.tydesc,
-                        dest_slot.ptr,
-                        dest_slot.tydesc,
-                    );
-                }
-                frame.mark_value_live(*dest);
-                // Source is borrowed (read), not consumed.
-            }
-            Instruction::Nop => {}
-            Instruction::GetField { dest, src, field_index } => {
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                // The offsets come from the descriptor of what is really there,
-                // and so does the decision about whether the field wants
-                // packing on the way out: a destination the static type calls a
-                // `data` holding something that is not one is a generic asking
-                // for a field it cannot name. Both are the runtime's, so that
-                // this and the three compiled backends give one answer.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_field_read_local(
-                        self.runtime.handle(),
-                        dest_slot.ptr,
-                        dest_slot.tydesc,
-                        src_val.ptr,
-                        src_val.tydesc,
-                        *field_index,
-                    );
-                }
-                frame.mark_value_live(*dest);
-            }
-            Instruction::DataBorrow { dest, src } => {
-                // Point at the container the wrapper holds, and carry the
-                // descriptor it holds it under. A container is never packed
-                // into the two words, so the scratch goes unused.
-                let src_val = self.read_operand(src, frame, frames);
-                let mut scratch = [0u8; 16];
-                let mut value_ptr: *const u8 = std::ptr::null();
-                let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
-                let status = unsafe {
-                    datalove_rt::c::dtlv_rti_data_borrow(
-                        src_val.ptr, scratch.as_mut_ptr(), &mut value_ptr, &mut tydesc)
-                };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "DataBorrow failed");
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { *(dest_slot.ptr as *mut *const u8) = value_ptr; }
-                frame.set_value_tydesc(*dest, tydesc);
-                frame.mark_value_live(*dest);
-            }
             Instruction::GetFieldRef { dest, src, field_index } => {
                 // Get a reference (pointer) to a field within an aggregate.
                 // Unlike GetField, this stores the field pointer instead of copying.
@@ -1977,64 +2091,6 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(value, frame);
             }
             // Slot tracking variants - these track SLOT state, not value state.
-            Instruction::SlotStoreCopyTracked { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames);
-                match dest {
-                    SlotDest::Local(slot_id) => {
-                        if frame.slot_is_live(*slot_id) {
-                            let old_val = frame.slot(*slot_id);
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
-                        let dest_slot = frame.slot_dest(*slot_id);
-                        unsafe { self.copy_value(&src_val, dest_slot); }
-                        frame.mark_slot_live(*slot_id);
-                    }
-                    SlotDest::External { unit, slot } => {
-                        frames.write_external_slot(
-                            self.runtime.handle(),
-                            *unit,
-                            *slot,
-                            &src_val,
-                        );
-                    }
-                }
-            }
-            Instruction::SlotStoreMoveTracked { dest, value } => {
-                let src_val = self.read_operand(value, frame, frames);
-                match dest {
-                    SlotDest::Local(slot_id) => {
-                        if frame.slot_is_live(*slot_id) {
-                            let old_val = frame.slot(*slot_id);
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
-                        let dest_slot = frame.slot_dest(*slot_id);
-                        unsafe { self.move_value(&src_val, dest_slot); }
-                        Self::mark_source_dropped_local(value, frame);
-                        frame.mark_slot_live(*slot_id);
-                    }
-                    SlotDest::External { unit, slot } => {
-                        frames.write_external_slot(
-                            self.runtime.handle(),
-                            *unit,
-                            *slot,
-                            &src_val,
-                        );
-                        Self::mark_source_dropped_local(value, frame);
-                    }
-                }
-            }
             Instruction::SetFieldTracked { slot, field_path, value } => {
                 let value_val = self.read_operand(value, frame, frames);
                 let slot_info = match slot {

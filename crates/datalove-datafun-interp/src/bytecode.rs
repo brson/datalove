@@ -1144,7 +1144,9 @@ impl IrInterpreter {
                         if self.bc_stats.counting {
                             self.bc_stats.count(|| variant(instr));
                         }
-                        if !self.execute_hot(instr, frame, frames) {
+                        if !self.execute_hot(instr, frame, frames)
+                            && !self.execute_warm(instr, &unit_types, frame, frames)
+                        {
                             self.execute_instruction(
                                 instr, &unit_types, frame, ctx, registry, frames, code_ref)?;
                         }
@@ -1502,10 +1504,22 @@ impl IrInterpreter {
             // A native: no frame, just the arguments as a list.
             let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
             let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-            let args: Vec<crate::value::Value> = (0..call.args.len())
-                .map(|i| read(self, i, mode(i), frame))
-                .collect();
-            self.native_table.call(&native.symbol, self.runtime.handle(), &args, dest, &shapes)?;
+            // On the stack when there are few, which is nearly always: a list
+            // per call was an allocation per call.
+            const ON_STACK: usize = 8;
+            let n = call.args.len();
+            let mut stack = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; ON_STACK];
+            let heap: Vec<crate::value::Value>;
+            let args: &[crate::value::Value] = if n <= ON_STACK {
+                for (i, slot) in stack.iter_mut().enumerate().take(n) {
+                    *slot = read(self, i, mode(i), frame);
+                }
+                &stack[..n]
+            } else {
+                heap = (0..n).map(|i| read(self, i, mode(i), frame)).collect();
+                &heap
+            };
+            self.native_table.call(&native.symbol, self.runtime.handle(), args, dest, &shapes)?;
             return Ok(true);
         };
 
