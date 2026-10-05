@@ -1,5 +1,3 @@
-## 2026/10/04 Why can't native riders be ctfe?
-
 ## 2026/10/04 Decide how zsts are represented
 
 There is no single convention yet:
