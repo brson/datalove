@@ -4,7 +4,7 @@ use rmx::prelude::*;
 use crate::app::{ReplExecutor, WorkerResponse};
 use crate::{Input, Command};
 use datalove_datafun as datafun;
-use datafun::pipeline::SystemLibrary;
+use datafun::pipeline::{PackageLibrary, SystemLibrary};
 use crate::engine::Engine;
 use std::sync::mpsc::{channel, Sender, Receiver, TryRecvError};
 use std::thread;
@@ -36,14 +36,16 @@ impl ThreadedExecutor {
     ///
     /// The system library is built on the worker thread rather than handed to
     /// it, because the addresses of its native functions are not `Send`.
-    pub fn spawn(sys: fn() -> SystemLibrary) -> Self {
+    ///
+    /// `local` is the workspace's own library, if it has one.
+    pub fn spawn(sys: fn() -> SystemLibrary, local: Option<PackageLibrary>) -> Self {
         let (main_tx, worker_rx) = channel();
         let (worker_tx, main_rx) = channel();
 
         thread::spawn(move || {
             // The engine owns the database it compiles in, and lives for the
             // thread's lifetime.
-            match start_engine(sys()) {
+            match start_engine(sys(), local) {
                 Ok(engine) => {
                     let _ = worker_tx.send(WorkerResponse::EngineReady);
                     worker_thread(engine, worker_rx, worker_tx);
@@ -66,9 +68,9 @@ impl ThreadedExecutor {
 ///
 /// Startup compiles the whole system library, which is where a bad stdlib
 /// shows up.
-fn start_engine(sys: SystemLibrary) -> Result<Engine, String> {
+fn start_engine(sys: SystemLibrary, local: Option<PackageLibrary>) -> Result<Engine, String> {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Engine::new(sys)
+        Engine::with_local(sys, local)
     }));
 
     match result {

@@ -1,0 +1,6 @@
+// A script finds the local library beside it.
+require module local/app/greet
+import greet.greeting
+
+let name = "world"
+debuglog (greeting(ref name), greet.answer())

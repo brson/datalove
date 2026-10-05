@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use crate::{Command, ReplCommand, Eval, EvalBinding, EvalExpr, InputParse, Input};
 use datalove_datafun as datafun;
-use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, SystemLibrary, WorkspaceDescriptor};
+use datafun::pipeline::{ScriptCompiler, ScriptExecutor, ScriptSession, ModuleCompilationPipeline, PackageLibrary, SystemLibrary, WorkspaceDescriptor};
 use datafun::pipeline::rider_load::{RegisteredNatives, RiderNatives, register_natives};
 use datalove_datafun_ir::{ExportBinding, IrCodeUnit};
 
@@ -115,6 +115,16 @@ impl Started {
 impl Engine {
     pub fn new(sys: SystemLibrary) -> AnyResult<Engine> {
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        Engine::with_workspace(sys, workspace)
+    }
+
+    /// The same, with the workspace's own library, if it has one.
+    pub fn with_local(sys: SystemLibrary, local: Option<PackageLibrary>) -> AnyResult<Engine> {
+        let workspace = WorkspaceDescriptor::from_system_library(&sys);
+        let workspace = match local {
+            Some(local) => workspace.with_user_library(local),
+            None => workspace,
+        };
         Engine::with_workspace(sys, workspace)
     }
 
@@ -644,11 +654,14 @@ impl Engine {
     }
 
     /// Execute a script file and print one JSON result per input.
+    ///
+    /// `local` is the workspace's own library, if it has one.
     pub fn run_script(
         sys: SystemLibrary,
+        local: Option<PackageLibrary>,
         script_path: &std::path::Path,
     ) -> AnyResult<()> {
-        let mut engine = Self::new(sys)?;
+        let mut engine = Self::with_local(sys, local)?;
         let contents = std::fs::read_to_string(script_path)
             .context("failed to read script file")?;
 

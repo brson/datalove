@@ -1,0 +1,4 @@
+// So is a parse error, which used to be reported as nothing at all.
+require module local/broken/syntax
+
+debuglog syntax.unclosed()

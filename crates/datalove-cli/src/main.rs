@@ -59,6 +59,85 @@ fn register_natives(
     Ok(registered)
 }
 
+/// The workspace a command compiles in.
+///
+/// The system library unless `no_sys`, and the `local` library that
+/// [`find_local_library`](datalove_datafun::pipeline::find_local_library)
+/// finds for `script`, or in the current directory for a command given none.
+fn command_workspace(
+    sys: &datalove_datafun::pipeline::SystemLibrary,
+    no_sys: bool,
+    script: Option<&rmx::std::path::Path>,
+) -> AnyResult<datalove_datafun::pipeline::WorkspaceDescriptor> {
+    use datalove_datafun::pipeline::WorkspaceDescriptor;
+
+    let descriptor = if no_sys {
+        WorkspaceDescriptor::empty()
+    } else {
+        WorkspaceDescriptor::from_system_library(sys)
+    };
+    Ok(match command_local_library(script)? {
+        Some(local) => descriptor.with_user_library(local),
+        None => descriptor,
+    })
+}
+
+/// The `local` library a command compiles against, if it finds one.
+///
+/// See [`command_workspace`].
+fn command_local_library(
+    script: Option<&rmx::std::path::Path>,
+) -> AnyResult<Option<datalove_datafun::pipeline::PackageLibrary>> {
+    use datalove_datafun::pipeline::{find_local_library, load_local_library};
+
+    let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
+    find_local_library(script, &cwd)
+        .map(|dir| load_local_library(&dir))
+        .transpose()
+}
+
+/// Report what stopped the modules compiling, and fail, if anything did.
+///
+/// Parse and type errors are framed against the file each module was read
+/// from. Ownership and lowering errors carry no spans yet and are printed as
+/// they are.
+fn bail_on_module_errors<'db>(
+    db: &'db datalove_datafun::Database,
+    compiled: &datalove_datafun::pipeline::CompiledModules<'db>,
+    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
+    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
+    script_path: &rmx::std::path::Path,
+) -> AnyResult<()> {
+    if !compiled.has_errors() {
+        return Ok(());
+    }
+    let cwd = rmx::std::env::current_dir().unwrap_or_default();
+
+    let files: std::collections::HashMap<bct::input::Source, PathBuf> = descriptor.module_files()
+        .into_iter()
+        .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)))
+        .collect();
+    let locate = |text: bct::text::Text<'db>| files.get(&text.source(db)).cloned();
+
+    let parse = compiled.get_module_parse_diagnostics(db);
+    let types = compiled.get_module_type_diagnostics(db);
+    render::render_module_diagnostics(db, &parse, &types, &locate, script_path, &cwd);
+
+    let unrendered: Vec<String> = compiled.all_ownership_errors().into_iter()
+        .chain(compiled.all_lowering_errors())
+        .collect();
+    for error in &unrendered {
+        eprintln!("{error}");
+    }
+    // Nothing above says what went wrong, so the errors say it however they can.
+    if parse.is_empty() && types.is_empty() && unrendered.is_empty() {
+        for error in compiled.all_errors() {
+            eprintln!("{error}");
+        }
+    }
+    bail!("Module compilation error");
+}
+
 /// The failure for a type error, saying what it was when nothing else did.
 ///
 /// A diagnostic carries a span and renders itself. An error without one - a
@@ -167,7 +246,7 @@ struct LitOpCommand {
 
 #[derive(clap::Args)]
 struct ReplCommand {
-    /// Path to a script file (.dls) to execute in non-interactive mode.
+    /// Path to a script file (.dfs) to execute in non-interactive mode.
     #[arg(long)]
     script: Option<PathBuf>,
 }
@@ -470,9 +549,11 @@ impl LitOpCommand {
 impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
-            datalove_repl::Engine::run_script(datalove_sys_packages::system_library(), script_path)
+            let local = command_local_library(Some(script_path))?;
+            datalove_repl::Engine::run_script(datalove_sys_packages::system_library(), local, script_path)
         } else {
-            datalove_repl_rat::run(datalove_sys_packages::system_library)
+            let local = command_local_library(None)?;
+            datalove_repl_rat::run(datalove_sys_packages::system_library, local)
         }
     }
 }
@@ -494,7 +575,6 @@ impl ScriptCommand {
 
     fn run_impl(file_path: &PathBuf, no_sys: bool, jit: bool) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::WorkspaceDescriptor;
 
         let db = datafun::Database::default();
 
@@ -502,11 +582,8 @@ impl ScriptCommand {
         // is used: with `DATALOVE_BUILD_SYS_RIDERS` set the riders are built
         // rather than taken from this binary, and that is where they build.
         let sys = datalove_sys_packages::system_library();
-        let descriptor = if no_sys {
-            WorkspaceDescriptor::empty()
-        } else {
-            WorkspaceDescriptor::from_system_library(&sys)
-        }.with_work_dir(datalove_paths::work_dir()?);
+        let descriptor = command_workspace(&sys, no_sys, Some(file_path))?
+            .with_work_dir(datalove_paths::work_dir()?);
 
         // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -521,12 +598,7 @@ impl ScriptCommand {
         // resolution to report on.
         pipeline.narrow_roots_to_script(&db, &script_source, &[]);
         let compiled = pipeline.compile_fresh(&db);
-
-        // Check for errors using consolidated helper methods.
-        if compiled.has_errors() {
-            let errors = compiled.all_errors();
-            bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
-        }
+        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
 
         // Create JIT engine if --jit flag is set (threshold=1 compiles on first call).
         let call_dispatcher: Option<Box<dyn datalove_datafun_interp::CallDispatcher>> = if jit {
@@ -593,17 +665,12 @@ impl ScriptCommand {
 impl ScriptIrCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::WorkspaceDescriptor;
 
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
         let sys = datalove_sys_packages::system_library();
-        let descriptor = if self.no_sys {
-            WorkspaceDescriptor::empty()
-        } else {
-            WorkspaceDescriptor::from_system_library(&sys)
-        };
+        let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?;
 
                 // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -617,12 +684,7 @@ impl ScriptIrCommand {
         // resolution to report on.
         pipeline.narrow_roots_to_script(&db, &script_source, &[]);
         let compiled = pipeline.compile_fresh(&db);
-
-        // Check for errors.
-        if compiled.has_errors() {
-            let errors = compiled.all_errors();
-            bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
-        }
+        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
 
         // Create script compiler.
         // Safe to unwrap since we checked has_errors() above.
@@ -717,7 +779,7 @@ impl AotCompileCommand {
 
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove_datafun as datafun;
-        use datafun::pipeline::{WorkspaceDescriptor, aot, rider_build};
+        use datafun::pipeline::{aot, rider_build};
 
         let db = datafun::Database::default();
 
@@ -725,11 +787,8 @@ impl AotCompileCommand {
         // component the emitted program links gets built.
         let work_dir = datalove_paths::work_dir()?;
         let sys = datalove_sys_packages::system_library();
-        let descriptor = if self.no_sys {
-            WorkspaceDescriptor::empty()
-        } else {
-            WorkspaceDescriptor::from_system_library(&sys)
-        }.with_work_dir(&work_dir);
+        let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?
+            .with_work_dir(&work_dir);
 
                 // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
@@ -745,12 +804,7 @@ impl AotCompileCommand {
 
         // Compile modules (typecheck, drop analysis, lower to IR).
         let compiled = pipeline.compile_fresh(&db);
-
-        // Check for errors.
-        if compiled.has_errors() {
-            let errors = compiled.all_errors();
-            bail!("Compilation failed with {} error(s):\n{}", errors.len(), errors.join("\n"));
-        }
+        bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
 
         // Create script compiler and get registry for AOT.
         // Safe to unwrap since we checked has_errors() above.

@@ -203,16 +203,15 @@ impl ModuleCompilationPipeline {
         &self.roots
     }
 
-    /// Narrow the roots to the modules a script requires, plus `also`, if that is
-    /// safe.
+    /// Narrow the roots to the modules a script requires, plus `also`.
     ///
-    /// Returns whether it narrowed. **It refuses, leaving the roots alone, when a
-    /// `require` names a module the world does not have.** A program whose
-    /// requires do not resolve is not understood well enough to prune on: pruning
-    /// would drop the module the diagnostic is about and report nothing. Handing
-    /// resolution the whole world instead means it says what is wrong with the
-    /// program exactly as it did before there was a choice, which is what the
-    /// `error` fixtures expect of it.
+    /// **A `require` naming a module the world does not have is skipped.** The
+    /// script's own typecheck reports it, at the require, as F079. This used to
+    /// refuse to narrow at all, compiling the whole world instead, from before
+    /// that diagnostic existed, when pruning would have left nothing to report.
+    /// With a workspace's own library in the world that answer stopped being
+    /// harmless: a mistyped require reported every broken module in the
+    /// workspace, and not the mistyped require.
     ///
     /// A script that requires nothing narrows to nothing, and compiles no modules
     /// at all. That is the intended answer and not an edge case: a program using
@@ -239,7 +238,7 @@ impl ModuleCompilationPipeline {
         db: &dyn salsa::Database,
         script: &str,
         also: &[String],
-    ) -> bool {
+    ) {
         use datalove_datafun_ast::ast::{Statement, StmtRequire};
 
         let source = bct::input::Source::new(db, script.S());
@@ -257,14 +256,12 @@ impl ModuleCompilationPipeline {
                 require.package_alias.as_str(db),
                 require.module_alias.as_str(db),
             );
-            if !self.world.contains(&path) {
-                return false;
+            if self.world.contains(&path) {
+                roots.insert(path);
             }
-            roots.insert(path);
         }
 
         self.roots = Roots::From(roots);
-        true
     }
 
 
@@ -273,6 +270,14 @@ impl ModuleCompilationPipeline {
     pub fn contains_module(&self, library: &str, package: &str, module: &str) -> bool {
         let path = format!("{}/{}/{}", library, package, module);
         self.world.contains(&path)
+    }
+
+    /// The source a module is compiled from, by its path.
+    ///
+    /// What a diagnostic's text came from, for finding which module, and so
+    /// which file, it points into.
+    pub fn module_source(&self, path: &str) -> Option<bct::input::Source> {
+        self.world.sources().get(path).copied()
     }
 
     /// The text a module currently holds.

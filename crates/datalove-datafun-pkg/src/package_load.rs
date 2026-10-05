@@ -90,6 +90,11 @@ pub async fn load_world(
     })
 }
 
+/// Load one library from its directory: every package directory in it.
+pub fn load_library_dir(dir: &PathBuf) -> AnyResult<BTreeMap<PackageName, Package>> {
+    block_on(load_library(dir))
+}
+
 async fn load_library(
     dir: &PathBuf,
 ) -> AnyResult<BTreeMap<PackageName, Package>> {

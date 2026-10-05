@@ -136,6 +136,16 @@ impl<'db> CompiledModules<'db> {
         symbols
     }
 
+    /// Get module parse diagnostics with spans for rendering.
+    pub fn get_module_parse_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::ParseDiagnostic> {
+        let graph = self.shared.parsed_graph.graph(db);
+        graph.iter_modules(db)
+            .flat_map(|module| {
+                datalove_datafun_parser::parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, module)
+            })
+            .collect()
+    }
+
     /// Get module type diagnostics with spans for rendering.
     pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
         // Recompute resolve results (memoized, will be cache hits).

@@ -281,14 +281,14 @@ fn the_whole_world_is_parsed_when_the_roots_are_the_world() {
 // ============================================================================
 
 /// Compile the fixture with roots narrowed to `script`, and report how many
-/// modules were typechecked and whether narrowing happened at all.
-fn compiled_for_script(script: &str, also: &[String]) -> (bool, usize) {
+/// modules were typechecked.
+fn compiled_for_script(script: &str, also: &[String]) -> usize {
     let recorder = QueryRecorder::new();
     let db = datafun::Database::recording(&recorder);
     let mut pipeline = ModuleCompilationPipeline::default();
     add_fixture(&db, &mut pipeline);
 
-    let narrowed = pipeline.narrow_roots_to_script(&db, script, also);
+    pipeline.narrow_roots_to_script(&db, script, also);
     recorder.clear();
 
     let compiled = pipeline.compile_fresh(&db);
@@ -298,50 +298,45 @@ fn compiled_for_script(script: &str, also: &[String]) -> (bool, usize) {
     let count = recorder.take().iter()
         .filter(|e| e.query == "typecheck_module")
         .count();
-    (narrowed, count)
+    count
 }
 
 /// A script's `require`s are its roots, and they pull in what they reach.
 #[test]
 fn a_script_is_compiled_against_what_it_requires() {
-    let (narrowed, modules) = compiled_for_script(
+    let modules = compiled_for_script(
         "require module local/test/top\nimport top.top_fn\n\ndebuglog top_fn()\n", &[]);
-    assert!(narrowed);
     assert_eq!(modules, 3, "`top` reaches `mid` reaches `base`; the islands do not");
 }
 
 /// A script that requires nothing is compiled against nothing.
 #[test]
 fn a_script_requiring_nothing_compiles_no_modules() {
-    let (narrowed, modules) = compiled_for_script("debuglog 42\n", &[]);
-    assert!(narrowed);
+    let modules = compiled_for_script("debuglog 42\n", &[]);
     assert_eq!(modules, 0, "a program using only builtins needs no library");
 }
 
-/// **Narrowing refuses when a require does not resolve.**
+/// **A require that does not resolve is skipped.**
 ///
-/// Pruning on a program whose requires are wrong would drop the very module the
-/// diagnostic is about. The whole world goes to resolution instead, so it reports
-/// what is wrong exactly as it did before there was a choice -- which is what the
-/// CLI's `error` fixtures expect.
+/// The script's typecheck reports it at the require (F079). Narrowing used to
+/// refuse here and compile the whole world, which with a workspace's library in
+/// it reported every broken module there instead of the require.
 #[test]
-fn a_require_that_does_not_resolve_refuses_to_narrow() {
-    let (narrowed, modules) = compiled_for_script(
+fn a_require_that_does_not_resolve_is_skipped() {
+    let modules = compiled_for_script(
         "require module local/test/nosuchmodule\n\ndebuglog 1\n", &[]);
-    assert!(!narrowed, "it must refuse rather than prune on a program it cannot read");
-    assert_eq!(modules, MODULES, "and leave the whole world for resolution to judge");
+    assert_eq!(modules, 0, "the world is not compiled to find out what is missing");
 }
 
-/// One bad require refuses even when the others are fine.
+/// The others still narrow beside it.
 #[test]
-fn one_unresolvable_require_refuses_for_the_whole_script() {
-    let (narrowed, modules) = compiled_for_script(
+fn one_unresolvable_require_leaves_the_others() {
+    let modules = compiled_for_script(
         "require module local/test/mid\n\
          require module local/test/nosuchmodule\n\
          \n\
          debuglog 1\n", &[]);
-    assert!(!narrowed);
-    assert_eq!(modules, MODULES);
+    assert_eq!(modules, 2, "`mid` reaches `base`");
 }
 
 /// Modules named in `also` are roots whether the script reaches them or not.
@@ -351,12 +346,11 @@ fn one_unresolvable_require_refuses_for_the_whole_script() {
 /// if the script ignores it. A library module gets no such treatment.
 #[test]
 fn modules_the_artifact_defines_are_roots_regardless() {
-    let (narrowed, modules) = compiled_for_script(
+    let modules = compiled_for_script(
         "debuglog 42\n", &["local/test/zz_island0".S()]);
-    assert!(narrowed);
     assert_eq!(modules, 1, "the script reaches nothing, but the island was named");
 
-    let (_, modules) = compiled_for_script(
+    let modules = compiled_for_script(
         "require module local/test/mid\nimport mid.mid_fn\n\ndebuglog mid_fn(1)\n",
         &["local/test/zz_island0".S(), "local/test/zz_island1".S()]);
     assert_eq!(modules, 4, "`mid` and `base` from the script, plus the two islands");
@@ -369,8 +363,7 @@ fn modules_the_artifact_defines_are_roots_regardless() {
 /// is not there simply is not a root.
 #[test]
 fn an_also_that_is_not_in_the_world_is_dropped() {
-    let (narrowed, modules) = compiled_for_script(
+    let modules = compiled_for_script(
         "debuglog 42\n", &["local/test/nosuchmodule".S(), "local/test/zz_island0".S()]);
-    assert!(narrowed);
     assert_eq!(modules, 1);
 }

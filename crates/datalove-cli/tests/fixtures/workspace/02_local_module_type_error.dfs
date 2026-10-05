@@ -1,0 +1,4 @@
+// An error in a local module is framed against that module's file.
+require module local/broken/types
+
+debuglog types.wrong()

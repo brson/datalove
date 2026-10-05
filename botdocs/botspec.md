@@ -1561,6 +1561,19 @@ A **library** is a directory of packages (e.g. `sys/`, `local/`).
 A **package** is a directory of modules (e.g. `sys/std/`).
 A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`).
 
+The `sys` library is compiled into the `datalove` binary. The `local` library
+is a workspace's own, read from disk by the command line (`script`,
+`script-ir`, `aot-compile`, `repl`) from a directory named `local`:
+
+- beside the script, when there is one;
+- else, for a script in a directory named `scripts`, beside that directory;
+- else, with no script (the interactive REPL), in the current directory.
+
+A command given a script never looks in the current directory, and nothing
+further up the tree is looked at. There is no workspace manifest. The pipeline
+itself takes whatever libraries it is given; the rule is the command line's.
+A package in `local` may not have a rider yet.
+
 ### 9.2 Require
 
 `require` loads a module or rider:

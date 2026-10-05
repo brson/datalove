@@ -70,3 +70,8 @@ harness = false
 [[test]]
 name = "backend_tests"
 harness = false
+
+[[test]]
+name = "workspace_tests"
+path = "tests/workspace_tests.rs"
+harness = false

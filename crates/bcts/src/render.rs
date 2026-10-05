@@ -9,11 +9,12 @@ use rmx::prelude::*;
 
 use rmx::std::collections::HashMap;
 use rmx::std::ops::Range;
-use rmx::std::path::Path;
+use rmx::std::path::{Path, PathBuf};
 
 use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, Label, Report, ReportKind, Source};
 
 use crate::diagnostic::{Diagnostic, DiagnosticLabel, LabelStyle, Severity};
+use crate::text::Text;
 
 /// A run of diagnostics printed together.
 ///
@@ -77,7 +78,23 @@ impl Renderer {
         file_path: &Path,
         cwd: &Path,
     ) {
-        render_one_multi_source(db, diag, file_path, cwd, &mut self.colors);
+        render_one_multi_source(db, diag, file_path, &|_| None, cwd, &mut self.colors);
+    }
+
+    /// Print one diagnostic whose labels may point into several files.
+    ///
+    /// `locate` names the file a label's text came from; one it does not know
+    /// is taken to be part of `file_path`, as for
+    /// [`Renderer::multi_source_diagnostic`].
+    pub fn located_diagnostic<'db>(
+        &mut self,
+        db: &'db dyn crate::Db,
+        diag: &Diagnostic<'db>,
+        file_path: &Path,
+        locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
+        cwd: &Path,
+    ) {
+        render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors);
     }
 }
 
@@ -109,6 +126,22 @@ pub fn render_diagnostics_to_string<'db>(
         out.push_str(&renderer.to_string(db, &diagnostic, file_path, cwd));
     }
     out
+}
+
+/// Print diagnostics whose labels may point into more than one file.
+///
+/// See [`Renderer::located_diagnostic`].
+pub fn render_located_diagnostics<'db>(
+    db: &'db dyn crate::Db,
+    diagnostics: impl IntoIterator<Item = Diagnostic<'db>>,
+    file_path: &Path,
+    locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
+    cwd: &Path,
+) {
+    let mut renderer = Renderer::new();
+    for diagnostic in diagnostics {
+        renderer.located_diagnostic(db, &diagnostic, file_path, locate, cwd);
+    }
 }
 
 /// Print diagnostics whose labels may point into more than one source.
@@ -255,23 +288,34 @@ fn render_one_multi_source<'db>(
     db: &'db dyn crate::Db,
     diag: &Diagnostic<'db>,
     file_path: &Path,
+    locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
     cwd: &Path,
     colors: &mut ColorGenerator,
 ) {
     let base_file_name = display_path(file_path, cwd);
 
-    // One id per source, numbered after the first, since several of them
-    // came out of the same file.
+    // One id per source: the file `locate` names, or else one numbered after
+    // the first, since several sources came out of the same file.
     let mut source_to_id: HashMap<String, String> = HashMap::new();
+    let mut source_order: HashMap<String, usize> = HashMap::new();
     let mut sources: HashMap<String, Source<String>> = HashMap::new();
+    let mut unlocated = 0usize;
 
     for label in &diag.labels {
         let source_text = label.text.as_str(db).S();
         if !source_to_id.contains_key(&source_text) {
-            let file_id = match source_to_id.len() {
-                0 => base_file_name.C(),
-                n => fmt!("{base_file_name}:{n}"),
+            let file_id = match locate(label.text) {
+                Some(path) => display_path(&path, cwd),
+                None => {
+                    let id = match unlocated {
+                        0 => base_file_name.C(),
+                        n => fmt!("{base_file_name}:{n}"),
+                    };
+                    unlocated += 1;
+                    id
+                }
             };
+            source_order.insert(source_text.C(), source_order.len());
             source_to_id.insert(source_text.C(), file_id.C());
             sources.insert(file_id, Source::from(source_text));
         }
@@ -293,15 +337,8 @@ fn render_one_multi_source<'db>(
         builder = builder.with_code(code.as_str(db));
     }
 
-    // Sources in the order they were first pointed into, which is how their
-    // ids were numbered.
-    let source_index = |l: &DiagnosticLabel<'db>| {
-        let id = &source_to_id[l.text.as_str(db)];
-        match id.strip_prefix(&fmt!("{base_file_name}:")) {
-            Some(n) => n.parse::<usize>().X(),
-            None => 0,
-        }
-    };
+    // Sources in the order they were first pointed into.
+    let source_index = |l: &DiagnosticLabel<'db>| source_order[l.text.as_str(db)];
     let labels = in_reading_order(&diag.labels, colors, |l| (source_index(l), l.span.start));
     for (label, color) in labels {
         let file_id = source_to_id.get(label.text.as_str(db)).X().C();

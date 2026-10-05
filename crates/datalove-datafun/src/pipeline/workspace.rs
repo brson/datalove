@@ -11,7 +11,7 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load::{PackageWorld, Package};
@@ -402,7 +402,85 @@ impl WorkspaceDescriptor {
 // Iteration helpers
 // ---------------------------------------------------------------------------
 
+/// The directory a command takes the `local` library from, if it has one.
+///
+/// A command given a script looks beside the script, and then, for a script
+/// in a directory named `scripts`, beside that directory. One given no script
+/// looks in `cwd`. A command given a script does not look in `cwd`, so what a
+/// script means does not depend on where it is run from.
+///
+/// Nothing further up is looked at. With no manifest to say where a workspace
+/// begins, a walk to the root would find directories that are not workspaces
+/// -- `/usr` has a `local` -- so this looks only where a workspace laid out
+/// as documented puts its library.
+///
+/// This is the command line's rule. The pipeline itself takes whatever library
+/// it is given.
+pub fn find_local_library(script: Option<&Path>, cwd: &Path) -> Option<PathBuf> {
+    let Some(script) = script else {
+        let here = cwd.join("local");
+        return here.is_dir().then_some(here);
+    };
+    let script = cwd.join(script);
+    let dir = script.parent()?;
+    let beside = dir.join("local");
+    if beside.is_dir() {
+        return Some(beside);
+    }
+    if dir.file_name()? != "scripts" {
+        return None;
+    }
+    let above = dir.parent()?.join("local");
+    above.is_dir().then_some(above)
+}
+
+/// Load the `local` library from `dir`.
+///
+/// A package in it may not have a rider yet. Building one means building a
+/// Rust crate when the script runs, and the natives of this binary's own
+/// riders and those of a built one cannot yet be used together.
+pub fn load_local_library(dir: &Path) -> AnyResult<PackageLibrary> {
+    let packages = datalove_datafun_pkg::package_load::load_library_dir(&dir.to_path_buf())
+        .with_context(|| fmt!("failed to load the local library at {}", dir.display()))?;
+    for (name, package) in &packages {
+        if package.rider_source.is_some() || package.rider_crate_dir.is_some() {
+            bail!(
+                "package `{name}` in {} has a rider, and riders in the local library \
+                 are not supported yet",
+                dir.display(),
+            );
+        }
+    }
+    Ok(package_library_from_map("local", &packages))
+}
+
 impl WorkspaceDescriptor {
+    /// Add a user library, as [`load_local_library`] gives.
+    pub fn with_user_library(self, library: PackageLibrary) -> Self {
+        let other = WorkspaceDescriptor {
+            system_library: None,
+            user_libraries: vec![library],
+            options: self.options.clone(),
+            work_dir: None,
+        };
+        self.merge(&other)
+    }
+
+    /// The file each module is read from, by module path, for diagnostics.
+    ///
+    /// A module with no file on disk, like one of the system library compiled
+    /// into this binary, is named by where it sits in its library, as
+    /// `sys/std/string.dfm`.
+    pub fn module_files(&self) -> BTreeMap<ModulePath, PathBuf> {
+        self.all_modules()
+            .map(|(path, module)| {
+                let file = module.origin.clone()
+                    .unwrap_or_else(|| PathBuf::from(fmt!("{path}.dfm")));
+                (path, file)
+            })
+            .collect()
+    }
+
     /// Iterate all libraries (system first, then user).
     pub fn libraries(&self) -> impl Iterator<Item = &PackageLibrary> {
         self.system_library.iter().chain(self.user_libraries.iter())
@@ -732,5 +810,111 @@ mod tests {
         let mut db = crate::Database::default();
         let mut pipeline = before.to_pipeline(&db);
         delta.apply_to_pipeline(&mut pipeline, &mut db);
+    }
+}
+
+#[cfg(test)]
+mod local_library_tests {
+    use super::*;
+    use std::fs;
+
+    /// A directory to lay a workspace out in, with `dirs` made inside it.
+    fn layout(dirs: &[&str]) -> rmx::tempfile::TempDir {
+        let root = rmx::tempfile::tempdir().unwrap();
+        for dir in dirs {
+            fs::create_dir_all(root.path().join(dir)).unwrap();
+        }
+        root
+    }
+
+    #[test]
+    fn local_beside_the_script() {
+        let ws = layout(&["local"]);
+        let found = find_local_library(Some(&ws.path().join("s.dfs")), Path::new("/"));
+        assert_eq!(found, Some(ws.path().join("local")));
+    }
+
+    #[test]
+    fn local_beside_a_scripts_directory() {
+        let ws = layout(&["local", "scripts"]);
+        let script = ws.path().join("scripts").join("s.dfs");
+        assert_eq!(find_local_library(Some(&script), Path::new("/")), Some(ws.path().join("local")));
+    }
+
+    #[test]
+    fn local_beside_the_script_comes_first() {
+        let ws = layout(&["local", "scripts/local"]);
+        let script = ws.path().join("scripts").join("s.dfs");
+        let found = find_local_library(Some(&script), Path::new("/"));
+        assert_eq!(found, Some(ws.path().join("scripts").join("local")));
+    }
+
+    #[test]
+    fn only_a_directory_named_scripts_is_looked_above() {
+        let ws = layout(&["local", "tools"]);
+        let script = ws.path().join("tools").join("s.dfs");
+        assert_eq!(find_local_library(Some(&script), Path::new("/")), None);
+    }
+
+    #[test]
+    fn nothing_further_up() {
+        let ws = layout(&["local", "a/scripts"]);
+        let script = ws.path().join("a").join("scripts").join("s.dfs");
+        assert_eq!(find_local_library(Some(&script), Path::new("/")), None);
+    }
+
+    #[test]
+    fn a_script_is_found_relative_to_cwd() {
+        let ws = layout(&["local"]);
+        let found = find_local_library(Some(Path::new("s.dfs")), ws.path());
+        assert_eq!(found, Some(ws.path().join("local")));
+    }
+
+    #[test]
+    fn a_script_does_not_look_in_cwd() {
+        let ws = layout(&["local", "elsewhere"]);
+        let script = ws.path().join("elsewhere").join("s.dfs");
+        assert_eq!(find_local_library(Some(&script), ws.path()), None);
+    }
+
+    #[test]
+    fn without_a_script_cwd() {
+        let ws = layout(&["local"]);
+        assert_eq!(find_local_library(None, ws.path()), Some(ws.path().join("local")));
+        let empty = layout(&[]);
+        assert_eq!(find_local_library(None, empty.path()), None);
+    }
+
+    #[test]
+    fn a_file_named_local_is_not_a_library() {
+        let ws = layout(&[]);
+        fs::write(ws.path().join("local"), "").unwrap();
+        assert_eq!(find_local_library(Some(&ws.path().join("s.dfs")), Path::new("/")), None);
+    }
+
+    #[test]
+    fn local_library_loads_its_packages() {
+        let ws = layout(&["local/app"]);
+        let module = ws.path().join("local/app/greet.dfm");
+        fs::write(&module, "fun answer(): int\n  ret 42\nend fun\n").unwrap();
+
+        let library = load_local_library(&ws.path().join("local")).unwrap();
+        assert_eq!(library.name, "local");
+        let greet = &library.packages["app"].modules["greet"];
+        assert_eq!(greet.origin.as_deref(), Some(module.as_path()));
+    }
+
+    #[test]
+    fn local_library_refuses_a_rider() {
+        let ws = layout(&["local/app/rider"]);
+        fs::write(ws.path().join("local/app/m.dfm"), "").unwrap();
+        fs::write(ws.path().join("local/app/rider/rider.dli"), "native fun f(): int\n").unwrap();
+        fs::write(
+            ws.path().join("local/app/manifest.toml"),
+            "[rider]\nname = \"app-rider\"\nversion = \"0.1.0\"\n",
+        ).unwrap();
+
+        let error = load_local_library(&ws.path().join("local")).unwrap_err();
+        assert!(fmt!("{error:#}").contains("riders in the local library are not supported yet"), "{error:#}");
     }
 }

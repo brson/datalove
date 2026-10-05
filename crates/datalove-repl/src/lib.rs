@@ -14,7 +14,7 @@ mod executor_threaded;
 pub use executor_threaded::ThreadedExecutor;
 
 // The system library a driver supplies to the engine.
-pub use datalove_datafun::pipeline::SystemLibrary;
+pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
 
 const REPL_COMMAND_SIGIL: char = '/';
 

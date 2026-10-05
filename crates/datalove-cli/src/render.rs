@@ -48,6 +48,24 @@ pub fn render_module_type_diagnostics<'db>(
     render::render_multi_source_diagnostics(db, diagnostics, worldfile_path, cwd);
 }
 
+/// Render the diagnostics that stopped modules compiling.
+///
+/// Each is framed against the file `locate` says its text came from, falling
+/// back to `file_path` -- the script, which is what the reader asked to run --
+/// for one it does not know.
+pub fn render_module_diagnostics<'db>(
+    db: &'db dyn salsa::Database,
+    parse: &[&datalove_diagnostic::ParseDiagnostic],
+    types: &[&datalove_diagnostic::TypeDiagnostic],
+    locate: &dyn Fn(Text<'db>) -> Option<rmx::std::path::PathBuf>,
+    file_path: &Path,
+    cwd: &Path,
+) {
+    let diagnostics = parse.iter().map(|d| d.to_diagnostic(db))
+        .chain(types.iter().map(|d| d.to_diagnostic(db)));
+    render::render_located_diagnostics(db, diagnostics, file_path, locate, cwd);
+}
+
 /// Render ownership errors directly from structured AnalysisError and spans.
 ///
 /// This bypasses salsa accumulators since ownership diagnostics are emitted

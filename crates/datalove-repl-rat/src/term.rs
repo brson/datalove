@@ -15,7 +15,7 @@ use ratatui::{
 use std::io;
 use std::fs::File;
 
-use crate::{RatatuiApp, ReplExecutor, SystemLibrary, ThreadedExecutor};
+use crate::{PackageLibrary, RatatuiApp, ReplExecutor, SystemLibrary, ThreadedExecutor};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -43,7 +43,9 @@ impl Drop for TerminalGuard {
 }
 
 /// Run the ratatui-based REPL against the caller's system library.
-pub fn run(sys: fn() -> SystemLibrary) -> AnyResult<()> {
+///
+/// `local` is the workspace's own library, if it has one.
+pub fn run(sys: fn() -> SystemLibrary, local: Option<PackageLibrary>) -> AnyResult<()> {
     // Redirect stderr to a log file in temp directory to avoid corrupting terminal in raw mode.
     let stderr_log_path = std::env::temp_dir().join("datalove-repl.stderr");
     let stderr_file = File::create(&stderr_log_path)
@@ -71,7 +73,7 @@ pub fn run(sys: fn() -> SystemLibrary) -> AnyResult<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app and run it, passing the stderr log path.
-    let executor = ThreadedExecutor::spawn(sys);
+    let executor = ThreadedExecutor::spawn(sys, local);
     let mut app = RatatuiApp::with_stderr_log(executor, stderr_log_path);
     let result = run_app(&mut terminal, &mut app);
 

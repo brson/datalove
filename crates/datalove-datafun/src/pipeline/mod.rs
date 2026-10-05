@@ -74,7 +74,7 @@ pub use module_pipeline::ModuleCompilationPipeline;
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,
     PackageLibrary, PackageDescriptor, ModuleDescriptor,
-    RiderDescriptor, RiderCrate, CompilerOptions,
+    RiderDescriptor, RiderCrate, CompilerOptions, find_local_library, load_local_library,
 };
 
 #[cfg(test)]

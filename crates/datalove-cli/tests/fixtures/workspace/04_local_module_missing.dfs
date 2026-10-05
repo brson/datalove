@@ -1,0 +1,2 @@
+// A local module that is not there is F079, the same as any other.
+require module local/app/nosuch
