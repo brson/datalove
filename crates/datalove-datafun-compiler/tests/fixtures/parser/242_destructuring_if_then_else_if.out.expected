@@ -1,0 +1,72 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "Place",
+            "root": "o",
+            "steps": []
+          }
+        },
+        "else_body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "True",
+                "type_hint": null
+              }
+            },
+            "else_body": null,
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "b",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "a",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "v",
+                "steps": []
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P073",
+      "labels": [
+        {
+          "message": "`else if` after a destructuring `if`",
+          "span": [
+            26,
+            28
+          ],
+          "text": "if"
+        }
+      ],
+      "message": "a destructuring `if` cannot be followed by `else if`"
+    }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "condition": {
+          "expr": {
+            "kind": "False",
+            "type_hint": null
+          }
+        },
+        "else_body": [
+          {
+            "condition": {
+              "expr": {
+                "kind": "Place",
+                "root": "r",
+                "steps": []
+              }
+            },
+            "else_body": [
+              {
+                "kind": "Let",
+                "name": "c",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "e",
+                    "steps": []
+                  }
+                }
+              }
+            ],
+            "kind": "If",
+            "then_body": [
+              {
+                "kind": "Let",
+                "name": "b",
+                "type_hint": null,
+                "value": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "v",
+                    "steps": []
+                  }
+                }
+              }
+            ]
+          }
+        ],
+        "kind": "If",
+        "then_body": [
+          {
+            "kind": "Let",
+            "name": "a",
+            "type_hint": null,
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P073",
+      "labels": [
+        {
+          "message": "destructuring binding in an `else if`",
+          "span": [
+            31,
+            34
+          ],
+          "text": "|v|"
+        }
+      ],
+      "message": "`else if` cannot destructure"
+    }
+  ]
+}

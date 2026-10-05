@@ -1456,6 +1456,11 @@ if opt |value|
 end if
 ```
 
+A result's `else` must bind the error, `else |e|` (F046). A binding `if` takes
+no part in an `else if` chain, on either side (P073): it cannot be followed by
+`else if`, and an `else if` cannot bind. Nest the `if` in an `else` body
+instead. An `else |e|` cannot be followed by `if` either (P066).
+
 **Loop:**
 
 ```datalove

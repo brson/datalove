@@ -920,7 +920,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         self.eat_word("if");
-        match self.parse_if_arm(remaining_lines) {
+        match self.parse_if_arm(remaining_lines, false) {
             Some(stmt) => {
                 self.eat_end_line(remaining_lines, "if");
                 ast::Statement::If(stmt)
@@ -933,13 +933,28 @@ impl<'db> Parser<'db> {
     ///
     /// An `else if` line is parsed as a nested arm that becomes the whole
     /// else body, so a chain shares the single `end if` of its first `if`.
+    /// `chained` says this arm is one of those, after an `else`.
     /// Returns `None` if the input ran out before `end if`.
+    ///
+    /// A destructuring `if` takes no part in a chain, on either side of an
+    /// `else if` (P073): which branch's bindings are in scope where, and what
+    /// an `else |e|` at the end of the chain would bind, are not obvious.
     fn parse_if_arm(
         &mut self,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        chained: bool,
     ) -> Option<ast::StmtIf<'db>> {
         let condition = self.parse_expr_full();
+        let binding_ts = self.peek_text_span();
         let then_binding = self.parse_pipe_binding();
+        if chained && then_binding.is_some() {
+            self.had_error = true;
+            DiagnosticBuilder::error(self.db, "`else if` cannot destructure")
+                .code("P073")
+                .primary_label(binding_ts.with_end(self.last_byte_end()), "destructuring binding in an `else if`")
+                .help("nest this `if` inside an `else` body instead")
+                .emit_parse();
+        }
 
         let mut then_body = vec![];
         let mut found_else = false;
@@ -975,9 +990,17 @@ impl<'db> Parser<'db> {
                         .code("P066")
                         .primary_label(ts, "nest this `if` inside the else body instead")
                         .emit_parse();
+                } else if then_binding.is_some() {
+                    else_sub.had_error = true;
+                    let ts = else_sub.peek_text_span();
+                    DiagnosticBuilder::error(else_sub.db, "a destructuring `if` cannot be followed by `else if`")
+                        .code("P073")
+                        .primary_label(ts, "`else if` after a destructuring `if`")
+                        .help("nest this `if` inside an `else` body instead")
+                        .emit_parse();
                 }
                 else_sub.eat_word("if");
-                let nested = else_sub.parse_if_arm(remaining_lines);
+                let nested = else_sub.parse_if_arm(remaining_lines, true);
                 else_sub.error_if_not_exhausted();
                 self.merge_identity_from(&mut else_sub);
                 (else_binding, Some(vec![ast::Statement::If(nested?)]))

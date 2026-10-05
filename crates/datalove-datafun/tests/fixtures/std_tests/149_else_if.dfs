@@ -11,14 +11,17 @@ fun classify(n: u32): u32
   ret 4
 end fun
 
-// A later arm can bind, and the final `else` covers what no arm took.
+// A destructuring `if` takes no part in a chain (P073), so trying one option
+// after another nests instead.
 fun pick(a: ?u32, b: ?u32): u32
   if a |x|
     ret x
-  else if b |y|
-    ret y
   else
-    ret 0
+    if b |y|
+      ret y
+    else
+      ret 0
+    end if
   end if
 end fun
 

@@ -1,0 +1,7 @@
+if false
+  let a = 1
+else if r |v|
+  let b = v
+else |e|
+  let c = e
+end if

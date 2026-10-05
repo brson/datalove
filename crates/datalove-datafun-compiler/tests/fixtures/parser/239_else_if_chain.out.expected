@@ -49,9 +49,9 @@
                     "type_hint": null,
                     "value": {
                       "expr": {
-                        "kind": "Place",
-                        "root": "v",
-                        "steps": []
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "4"
                       }
                     }
                   }
