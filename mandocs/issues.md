@@ -48,20 +48,6 @@ type X = enum {
 }
 ```
 
-## 2026/01/02 Disallow else-if chains for destructuring
-
-Seems confusing to me:
-
-```datalove
-let a = some 1
-let b = ok 2
-
-if a |x|
-else if b |y|
-else |e|
-end if
-```
-
 # 2026/10/01 There's a fixpoint algorithm to determine tydescs for empty collections
 
 Understand the impact of this.

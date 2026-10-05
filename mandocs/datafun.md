@@ -7,10 +7,11 @@ On top of the data types defined by [Datalove Literals](datalit.md) it adds:
 - Pure functions that cannot perform I/O and have no exceptional control-flow.
 - Constants with full compile-time function evaluation.
 - A simple acyclic module system.
-- Reactive script units that may be chained together, and that incrementally
-  recompile and reevaluate as dependent units and modules are updated.
+- Script units that incrementally recompile and reevaluate when changed.
 
-Datafun scripts may be interpreted directly via lowered IR, optionally with per-function JIT,
+Datafun scripts may be interpreted directly via lowered IR,
+optionally with high-performance bytecode,
+optionally with per-function JIT,
 or may be compiled to statically-linked binaries, either via Cranelift or C.
 The Datalove Functions implementation is self-contained and independent from full Datalove,
 suitable as a constrained embedded application scripting language.
@@ -539,10 +540,18 @@ case term Rect dims
 end match
 ```
 
-Match must be exhaustive;
+`match` must be exhaustive.
 Use `case default` for a catch-all.
 
 ```datalove
+type Shape: enum {
+  atom Point,
+  term Rect (f32, f32),
+}
+
+let s: Shape = term Rect (3.0, 4.0)
+
+var area: f32 = 0.0
 match s
 case atom Point
   set area = 0.0
