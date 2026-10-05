@@ -25,8 +25,7 @@ The structure is now sound, and the first script, Variables, Functions and
 Ownership read well in sequence. The largest remaining gap is that Ownership
 never says which types are copied and which are moved, and `int` -- the
 default integer type -- is moved. Option and result handling understates
-what a result's `else` needs. The table of contents no longer matches the
-headings.
+what a result's `else` needs.
 
 The draft's rule that destructuring `if`s take no part in `else if` chains was
 not enforced when this review was first refreshed. The parser now enforces it
@@ -45,13 +44,6 @@ These say something the implementation does not do.
   fixed line without a line-number gutter (`let b = a@` under `Help:`), not as
   ` 6 │    let b = a@`. Regenerate the transcript before publishing, or say it is
   abridged.
-- **Table of contents.** It lists "The adapt operator: `@`", which is now part
-  of Ownership, and "Scripts" and "Interactive script units", which are now
-  one heading, "Scripts and interactive units". It is missing Variables,
-  Ownership, Collections and indexing, and Generics. It also puts Constants
-  before Modules, which is the reverse of the headings' order. The
-  `[Ownership](#user-content-ownership)` link in the first script resolves,
-  but has no TOC entry to match.
 
 ## Missing topics
 

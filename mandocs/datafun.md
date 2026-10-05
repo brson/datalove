@@ -24,22 +24,24 @@ For detail see additional documentation.
 
 ## Contents
 
-<div class="toc toc-repeat-8">
+<div class="toc toc-repeat-9">
 
 - [A first script](#user-content-a-first-script)
 - [Data types](#user-content-data-types)
+- [Variables](#user-content-variables)
 - [Functions](#user-content-functions)
+- [Ownership](#user-content-ownership)
 - [Control flow](#user-content-control-flow)
 - [Data types and destructuring](#user-content-data-types-and-destructuring)
 - [Option and result handling](#user-content-option-and-result-handling)
+- [Collections and indexing](#user-content-collections-and-indexing)
 - [Numerics](#user-content-numerics)
 - [Comparison and equality](#user-content-comparison-and-equality)
-- [The adapt operator: `@`](#user-content-the-adapt-operator-)
-- [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
 - [Modules, packages, and libraries](#user-content-modules-packages-and-libraries)
+- [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
+- [Generics](#user-content-generics)
 - [The system library and the `std` package](#user-content-the-system-library-and-the-std-package)
-- [Scripts](#user-content-scripts)
-- [Interactive script units](#user-content-interactive-script-units)
+- [Scripts and interactive units](#user-content-scripts-and-interactive-units)
 - [Workspaces](#user-content-workspaces)
 
 </div>
