@@ -8,7 +8,7 @@ Analysis(
             ),
             ownership: OwnershipResult(
                 status: "Error",
-                message: "error[D008]: `inner` moved in then branch but not the other",
+                message: "error[D008]: `inner` is given away in the then branch but not when the `if` is skipped",
             ),
             lowering: LoweringResult(
                 status: "Skipped",

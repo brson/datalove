@@ -332,14 +332,32 @@ pub enum AnalysisError<'db> {
         name: String,
         recovery_hint: OwnershipRecoveryHint,
     },
-    /// Value moved in one branch but not another.
+    /// Branches meeting after an `if` or `match` disagree about whether a
+    /// binding is still held.
+    ///
+    /// Either one gave the binding away and another did not, or, where it was
+    /// already given away, one gave it a value again and another did not.
     /// D008
     InconsistentBranchMove {
-        /// Statement index of the if statement.
+        /// Statement index of the `if` or `match` statement.
         stmt_idx: usize,
+        /// The `if` condition or `match` input.
+        at: ExprKey<'db>,
         name: String,
-        /// Which branch has the move (for error message).
-        moved_in: &'static str,
+        /// Whether the branch that differs gave the binding away, rather than
+        /// giving it a value again.
+        gave_away: bool,
+        /// The branch that differs, e.g. "in the then branch".
+        changed_in: String,
+        /// A branch that does not, e.g. "in the else branch".
+        unchanged_in: String,
+        /// Where to give or move the binding to make the branches agree.
+        fix_in: String,
+        /// Where the differing branch moved or assigned the binding.
+        changed_at: Option<ExprKey<'db>>,
+        /// Where the binding was given away before the branches, when one of
+        /// them gave it a value again.
+        moved_before: Option<ExprKey<'db>>,
     },
     /// Value moved on one way out of a loop and not another.
     ///
@@ -382,6 +400,18 @@ pub enum AnalysisError<'db> {
     },
 }
 
+/// The message for a D008 [`AnalysisError::InconsistentBranchMove`].
+pub fn inconsistent_branch_message(error: &AnalysisError) -> Option<String> {
+    let AnalysisError::InconsistentBranchMove { name, gave_away, changed_in, unchanged_in, .. } = error else {
+        return None;
+    };
+    let what = match gave_away {
+        true => "given away",
+        false => "given a new value",
+    };
+    Some(format!("`{name}` is {what} {changed_in} but not {unchanged_in}"))
+}
+
 /// Format analysis errors for display.
 pub fn format_analysis_errors(errors: &[AnalysisError]) -> String {
     errors.iter()
@@ -420,8 +450,8 @@ fn format_single_error(error: &AnalysisError) -> String {
             let base = format!("error[D007]: cannot move `{}` in loop", name);
             format_with_hint(base, recovery_hint)
         }
-        AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
-            format!("error[D008]: `{}` moved in {} branch but not the other", name, moved_in)
+        AnalysisError::InconsistentBranchMove { .. } => {
+            format!("error[D008]: {}", inconsistent_branch_message(error).expect("is D008"))
         }
         AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {
             format!("error[D014]: `{}` is given away on one way out of this loop and not another", name)

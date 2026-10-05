@@ -1342,6 +1342,10 @@ Tracked bindings: exports, `out` params, conditional moves, mutable slots.
 
 Match arms use `ScopeKind::MatchArm`. Branch consistency (D008) is generalized
 across all match arms: if a value is moved in one arm, it must be moved in all.
+`if` and `match` both check it in `check_branches_agree`, over the branches that
+fall through. Each branch's `BranchEnd` keeps its `moved_at` and `assigned_at`
+sites, so the error can point at the move or `set` that made the branch differ,
+and, for a `set`, at the move before the branches that it undoes.
 
 ### Auto-adapt
 
@@ -1405,7 +1409,7 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
 | D006 | `OutParamNotInitialized` | Return without initializing `out` |
 | D007 | `MoveInLoop` | Moving outer-scoped value in loop |
-| D008 | `InconsistentBranchMove` | Value moved in one branch only |
+| D008 | `InconsistentBranchMove` | Value moved, or `set` again after a move, in one merging branch only |
 | D009 | `OutParamPartialWrite` | Field write to `out` param |
 | D010 | `AliasedMutableArgument` | Two arguments share a place root, one is `mut`/`out` |
 | D011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |

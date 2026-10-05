@@ -1771,7 +1771,7 @@ values.
 | D005 | ReadUninitialized | Reading before initialization |
 | D006 | OutParamNotInitialized | Returning without initializing `out` param |
 | D007 | MoveInLoop | Moving outer-scoped linear value in loop |
-| D008 | InconsistentBranchMove | Moved in one branch but not another |
+| D008 | InconsistentBranchMove | Branches disagree on whether a value is held: moved, or `set` again, in one but not another |
 | D009 | OutParamPartialWrite | Writing fields of `out` param individually |
 | D010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
 | D011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |

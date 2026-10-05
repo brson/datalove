@@ -411,11 +411,40 @@ fn emit_single_ownership_diagnostic<'db>(
                 builder.emit_ownership();
             }
         }
-        AnalysisError::InconsistentBranchMove { stmt_idx: _, name, moved_in } => {
-            // Similar to OutParamNotInitialized, we don't have an expression span.
-            let msg = format!("`{}` moved in {} branch but not the other", name, moved_in);
-            bct::diagnostic::DiagnosticBuilder::error(db, &msg)
-                .code("D008")
+        AnalysisError::InconsistentBranchMove {
+            at, name, gave_away, fix_in, changed_at, moved_before, ..
+        } => {
+            let msg = datalove_datafun_sema::inconsistent_branch_message(error).expect("is D008");
+            let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg).code("D008");
+
+            if let Some(ts) = changed_at.and_then(|key| lookup_expr_span(db, spans, key)) {
+                let label = match gave_away {
+                    true => "given away here",
+                    false => "given a new value here",
+                };
+                builder = builder.primary_label(ts, label);
+            } else if let Some(ts) = lookup_expr_span(db, spans, *at) {
+                builder = builder.primary_label(ts, "the branches of this disagree");
+            }
+            if let Some(ts) = moved_before.and_then(|key| lookup_expr_span(db, spans, key)) {
+                let label = format!("`{}` given away here, before the branches", name);
+                builder = builder.secondary_label(ts, &label);
+            }
+
+            let help = match gave_away {
+                true => format!(
+                    "give `{}` away {} too, or clone it with `@` where it is given away",
+                    name, fix_in,
+                ),
+                false => format!("give `{}` a value {} too", name, fix_in),
+            };
+            builder
+                .note(&format!(
+                    "whether `{}` is held after the branches depends on which one ran, \
+                     and it has to be dropped without knowing",
+                    name,
+                ))
+                .help(&help)
                 .emit_ownership();
         }
         AnalysisError::InconsistentLoopExit { stmt_idx: _, name } => {

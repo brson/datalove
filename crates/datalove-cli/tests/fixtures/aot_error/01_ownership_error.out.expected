@@ -1,2 +1,12 @@
-error[D008]: `x` moved in then branch but not the other
+[D008] Error: `x` is given away in the then branch but not when the `if` is skipped
+    ╭─[ tests/fixtures/aot_error/01_ownership_error.dfs:11:17 ]
+    │
+ 11 │     let taken = x
+    │                 ┬  
+    │                 ╰── given away here
+    │ 
+    │ Help: give `x` away in an else branch too, or clone it with `@` where it is given away
+    │ 
+    │ Note: whether `x` is held after the branches depends on which one ran, and it has to be dropped without knowing
+────╯
 Error: Ownership error

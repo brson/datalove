@@ -164,6 +164,22 @@ struct ScopeFrame<'db> {
     out_param_init: HashMap<BindingId, OutParamInitState>,
     /// Where each binding was moved, for error reporting.
     moved_at: HashMap<BindingId, ExprKey<'db>>,
+    /// Where each binding was last given a value by `set`, for error reporting.
+    ///
+    /// Keyed by the assigned expression, which is what there is a span for.
+    assigned_at: HashMap<BindingId, ExprKey<'db>>,
+}
+
+/// How one branch of an `if` or `match` left the bindings that outlive it.
+struct BranchEnd<'db> {
+    /// Where the branch is, in a diagnostic, e.g. "in the then branch".
+    describe: String,
+    /// Where to make it agree with the others, which is somewhere else when
+    /// the branch is an `else` that was not written.
+    fix_in: String,
+    state: BTreeMap<BindingId, BindingState>,
+    moved_at: HashMap<BindingId, ExprKey<'db>>,
+    assigned_at: HashMap<BindingId, ExprKey<'db>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -317,6 +333,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let moved_at = self.scope_stack.last()
             .map(|f| f.moved_at.C())
             .unwrap_or_default();
+        let assigned_at = self.scope_stack.last()
+            .map(|f| f.assigned_at.C())
+            .unwrap_or_default();
 
         self.scope_stack.push(ScopeFrame {
             bindings: Vec::new(),
@@ -325,6 +344,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             current_state,
             out_param_init,
             moved_at,
+            assigned_at,
         });
     }
 
@@ -379,6 +399,11 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     parent.moved_at.insert(id, expr_id);
                 }
             }
+            for (id, expr_key) in frame.assigned_at {
+                if parent.current_state.contains_key(&id) {
+                    parent.assigned_at.insert(id, expr_key);
+                }
+            }
         }
 
         to_drop
@@ -424,6 +449,19 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             exits.continues.push(state);
         } else {
             exits.breaks.push(state);
+        }
+    }
+
+    /// How the innermost scope has the bindings, for comparing branches.
+    fn branch_end(&self, describe: impl Into<String>) -> BranchEnd<'db> {
+        let frame = self.scope_stack.last().expect("a branch is analyzed inside a scope");
+        let describe = describe.into();
+        BranchEnd {
+            fix_in: describe.C(),
+            describe,
+            state: frame.current_state.C(),
+            moved_at: frame.moved_at.C(),
+            assigned_at: frame.assigned_at.C(),
         }
     }
 
@@ -1562,6 +1600,9 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         let name = place.root.text(ctx.db);
         if let Some(id) = ctx.lookup(name) {
             ctx.set_state(id, BindingState::Live);
+            if let Some(frame) = ctx.scope_stack.last_mut() {
+                frame.assigned_at.insert(id, ExprKey::of(ctx.db, expr));
+            }
             if ctx.get_out_param_init(id).is_some() {
                 ctx.set_out_param_init(id, OutParamInitState::Initialized);
             }
@@ -1681,6 +1722,10 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     let out_param_init_before = ctx.scope_stack.last()
         .map(|f| f.out_param_init.C())
         .unwrap_or_default();
+    let before = BranchEnd {
+        fix_in: "in an else branch".S(),
+        ..ctx.branch_end("when the `if` is skipped")
+    };
 
     // Analyze then branch.
     ctx.enter_scope(ScopeKind::IfThen);
@@ -1699,6 +1744,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     }
 
     analyze_statements(ctx, &stmt.then_body);
+    let then_end = ctx.branch_end("in the then branch");
     let then_drops = ctx.exit_scope();
     let state_after_then = ctx.scope_stack.last()
         .map(|f| f.current_state.C())
@@ -1714,6 +1760,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     }
 
     // Analyze else branch.
+    let mut else_end = None;
     let (state_after_else, out_param_init_after_else) = if let Some(else_body) = &stmt.else_body {
         ctx.enter_scope(ScopeKind::IfElse);
 
@@ -1726,6 +1773,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
         }
 
         analyze_statements(ctx, else_body);
+        else_end = Some(ctx.branch_end("in the else branch"));
         let else_drops = ctx.exit_scope();
 
         if !else_drops.is_empty() {
@@ -1768,19 +1816,9 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // for every owned `s` live at the `ret`, which is to say most guard
     // clauses anyone writes.
     if !then_leaves && !else_leaves {
-        for (&id, &then_state) in &state_after_then {
-            let else_state = state_after_else.get(&id).copied().unwrap_or(BindingState::Live);
-
-            if then_state != else_state && !ctx.bindings[id.0 as usize].ty.is_copy() {
-                let name = ctx.bindings[id.0 as usize].name.C();
-                let moved_in = if then_state == BindingState::Moved { "then" } else { "else" };
-                ctx.errors.push(AnalysisError::InconsistentBranchMove {
-                    stmt_idx,
-                    name,
-                    moved_in,
-                });
-            }
-        }
+        let else_end = else_end.as_ref().unwrap_or(&before);
+        let at = ExprKey::of(ctx.db, stmt.condition);
+        check_branches_agree(ctx, stmt_idx, at, &before, &[&then_end, else_end]);
     }
 
     // Schedule scope exit drops for bindings created in the branches.
@@ -1840,6 +1878,60 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     }
 }
 
+/// Report each binding the branches meeting after an `if` or `match` disagree about.
+///
+/// Whether such a binding is still held after them depends on which branch
+/// ran, and its drop has to be placed without knowing. `before` is how things
+/// stood on entering the branches; `at` is the condition or input, pointed at
+/// when nothing in the branch itself can be.
+fn check_branches_agree<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    stmt_idx: usize,
+    at: ExprKey<'db>,
+    before: &BranchEnd<'db>,
+    merging: &[&BranchEnd<'db>],
+) {
+    for (&id, &state_before) in &before.state {
+        if ctx.bindings[id.0 as usize].ty.is_copy() {
+            continue;
+        }
+        let state_of = |end: &BranchEnd<'db>| end.state.get(&id).copied().unwrap_or(BindingState::Live);
+        let Some(changed) = merging.iter().find(|end| state_of(end) != state_before) else {
+            continue;
+        };
+        let Some(unchanged) = merging.iter().find(|end| state_of(end) == state_before) else {
+            continue;
+        };
+
+        // Only one thing changes a binding's state in each direction: a move
+        // gives it away, a `set` gives it a value again. A site the branch
+        // inherited from before it is not the one that did it.
+        let gave_away = state_before == BindingState::Live;
+        let (sites, sites_before) = match gave_away {
+            true => (&changed.moved_at, &before.moved_at),
+            false => (&changed.assigned_at, &before.assigned_at),
+        };
+        let changed_at = sites.get(&id).copied()
+            .filter(|site| sites_before.get(&id) != Some(site));
+        let moved_before = match gave_away {
+            true => None,
+            false => before.moved_at.get(&id).copied(),
+        };
+
+        ctx.errors.push(AnalysisError::InconsistentBranchMove {
+            stmt_idx,
+            at,
+            name: ctx.bindings[id.0 as usize].name.C(),
+            gave_away,
+            changed_in: changed.describe.C(),
+            unchanged_in: unchanged.describe.C(),
+            fix_in: unchanged.fix_in.C(),
+            changed_at,
+            moved_before,
+        });
+    }
+}
+
 fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
     // Match consumes its input, which can leave the function before any arm
     // is reached.
@@ -1856,8 +1948,9 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
     let state_before = ctx.scope_stack.last()
         .map(|f| f.current_state.C())
         .unwrap_or_default();
+    let before = ctx.branch_end("before the `match`");
 
-    let mut arm_states: Vec<BTreeMap<BindingId, BindingState>> = Vec::new();
+    let mut arm_ends: Vec<BranchEnd<'db>> = Vec::new();
     // Whether each arm, in the same order, leaves rather than merging after the
     // `match`.
     let mut arm_leaves: Vec<bool> = Vec::new();
@@ -1895,16 +1988,16 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         }
 
         analyze_statements(ctx, &case.body);
+        let case_name = match &case.kind {
+            MatchCaseKind::Atom { name } | MatchCaseKind::Term { name, .. } => name.text(ctx.db),
+        };
+        arm_ends.push(ctx.branch_end(format!("in the `{}` arm", case_name)));
         let arm_drops = ctx.exit_scope();
 
         if !arm_drops.is_empty() {
             ctx.schedule.match_arm_exit.insert((stmt_idx, arm_idx), arm_drops);
         }
 
-        let state_after = ctx.scope_stack.last()
-            .map(|f| f.current_state.C())
-            .unwrap_or_default();
-        arm_states.push(state_after);
         arm_leaves.push(!body_completes(&case.body));
     }
 
@@ -1918,52 +2011,38 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         let default_arm_idx = stmt.cases.len();
         ctx.enter_scope(ScopeKind::MatchArm);
         analyze_statements(ctx, default_body);
+        arm_ends.push(ctx.branch_end("in the default arm"));
         let arm_drops = ctx.exit_scope();
 
         if !arm_drops.is_empty() {
             ctx.schedule.match_arm_exit.insert((stmt_idx, default_arm_idx), arm_drops);
         }
 
-        let state_after = ctx.scope_stack.last()
-            .map(|f| f.current_state.C())
-            .unwrap_or_default();
-        arm_states.push(state_after);
         arm_leaves.push(!body_completes(default_body));
     }
 
     // Only the arms that fall through meet after the `match`, so only they can
     // disagree, and only their state describes what follows. An arm that left
     // has its state accounted for where it went.
-    let merging: Vec<&BTreeMap<BindingId, BindingState>> = arm_states.iter()
+    let merging: Vec<&BranchEnd<'db>> = arm_ends.iter()
         .zip(&arm_leaves)
         .filter(|(_, leaves)| !**leaves)
-        .map(|(state, _)| state)
+        .map(|(end, _)| end)
         .collect();
 
-    // Check consistency across the arms that merge.
-    if let Some(first_state) = merging.first() {
-        for arm_state in merging.iter().skip(1) {
-            for (&id, &first_s) in first_state.iter() {
-                let other_s = arm_state.get(&id).copied().unwrap_or(BindingState::Live);
-                if first_s != other_s && !ctx.bindings[id.0 as usize].ty.is_copy() {
-                    let name = ctx.bindings[id.0 as usize].name.C();
-                    let moved_in = if first_s == BindingState::Moved { "first match arm" } else { "other match arm" };
-                    ctx.errors.push(AnalysisError::InconsistentBranchMove {
-                        stmt_idx,
-                        name,
-                        moved_in,
-                    });
-                }
-            }
-        }
-    }
+    let at = ExprKey::of(ctx.db, stmt.input);
+    check_branches_agree(ctx, stmt_idx, at, &before, &merging);
 
     // Update state after match convergence. With every arm leaving, nothing
     // after the `match` runs and any of them will do.
-    match merging.first().copied().or_else(|| arm_states.first()) {
-        Some(state_after) => {
+    match merging.first().copied().or_else(|| arm_ends.first()) {
+        Some(arm_end) => {
             if let Some(frame) = ctx.scope_stack.last_mut() {
-                for (&id, &state) in state_after {
+                // The arm's own bindings ended with it.
+                for (&id, &state) in &arm_end.state {
+                    if !state_before.contains_key(&id) {
+                        continue;
+                    }
                     frame.current_state.insert(id, state);
                 }
             }

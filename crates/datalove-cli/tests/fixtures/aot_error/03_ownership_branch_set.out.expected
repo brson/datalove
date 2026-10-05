@@ -1,0 +1,16 @@
+[D008] Error: `s` is given a new value in the then branch but not in the else branch
+   ╭─[ tests/fixtures/aot_error/03_ownership_branch_set.dfs:9:13 ]
+   │
+ 6 │   let taken = s
+   │               ┬  
+   │               ╰── `s` given away here, before the branches
+   │ 
+ 9 │     set s = "b"
+   │             ─┬─  
+   │              ╰─── given a new value here
+   │ 
+   │ Help: give `s` a value in the else branch too
+   │ 
+   │ Note: whether `s` is held after the branches depends on which one ran, and it has to be dropped without knowing
+───╯
+Error: Ownership error

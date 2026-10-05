@@ -1,0 +1,16 @@
+// One branch of an `if` gives a moved binding a value again and the other does
+// not. The error is about the `set`, not a move in the other branch, and points
+// at both the `set` and the move it undoes.
+fun pick(flag: bool): string
+  var s = "a"
+  let taken = s
+  debuglog taken
+  if flag
+    set s = "b"
+  else
+    debuglog "kept"
+  end if
+  ret "other"
+end fun
+
+let output = pick(true)

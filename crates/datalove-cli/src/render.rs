@@ -70,9 +70,6 @@ pub fn render_ownership_errors_direct<'db>(
                 AnalysisError::OutParamNotInitialized { name, .. } => {
                     eprintln!("error[D006]: out parameter not initialized: `{name}`");
                 }
-                AnalysisError::InconsistentBranchMove { name, moved_in, .. } => {
-                    eprintln!("error[D008]: `{name}` moved in {moved_in} branch but not the other");
-                }
                 AnalysisError::InconsistentLoopExit { name, .. } => {
                     eprintln!("error[D014]: `{name}` is given away on one way out of this loop and not another");
                     eprintln!("  note: the move cannot happen twice, so it is not the problem. \
@@ -262,9 +259,51 @@ fn ownership_diagnostic<'db>(
                 .build(),
             )
         }
+        AnalysisError::InconsistentBranchMove {
+            at, name, gave_away, fix_in, changed_at, moved_before, ..
+        } => {
+            let message = datalove_datafun_sema::inconsistent_branch_message(error)
+                .expect("is D008");
+            let mut builder = DiagnosticBuilder::error(db, &message).code("D008");
+
+            // The branch's own move or `set` is what to look at; the condition
+            // only says which `if` or `match` it was.
+            builder = match changed_at.and_then(|key| lookup_expr_span(db, spans, key)) {
+                Some((text, span)) => {
+                    let label = match gave_away {
+                        true => "given away here",
+                        false => "given a new value here",
+                    };
+                    builder.primary_label(TextSpan::new(text, span), label)
+                }
+                None => {
+                    let (text, span) = lookup_expr_span(db, spans, *at)?;
+                    builder.primary_label(TextSpan::new(text, span), "the branches of this disagree")
+                }
+            };
+            if let Some((text, span)) = moved_before.and_then(|key| lookup_expr_span(db, spans, key)) {
+                builder = builder.secondary_label(
+                    TextSpan::new(text, span),
+                    &fmt!("`{name}` given away here, before the branches"),
+                );
+            }
+
+            let help = match gave_away {
+                true => fmt!("give `{name}` away {fix_in} too, or clone it with `@` where it is given away"),
+                false => fmt!("give `{name}` a value {fix_in} too"),
+            };
+            Some(
+                builder
+                    .note(&fmt!(
+                        "whether `{name}` is held after the branches depends on which one ran, \
+                         and it has to be dropped without knowing"
+                    ))
+                    .help(&help)
+                    .build(),
+            )
+        }
         // These carry no expression to point at.
         AnalysisError::OutParamNotInitialized { .. }
-        | AnalysisError::InconsistentBranchMove { .. }
         | AnalysisError::InconsistentLoopExit { .. } => None,
     }
 }

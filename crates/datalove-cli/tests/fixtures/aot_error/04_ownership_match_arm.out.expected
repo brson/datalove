@@ -1,0 +1,12 @@
+[D008] Error: `s` is given away in the `Circle` arm but not in the `Square` arm
+   ╭─[ tests/fixtures/aot_error/04_ownership_match_arm.dfs:8:17 ]
+   │
+ 8 │     let taken = s
+   │                 ┬  
+   │                 ╰── given away here
+   │ 
+   │ Help: give `s` away in the `Square` arm too, or clone it with `@` where it is given away
+   │ 
+   │ Note: whether `s` is held after the branches depends on which one ran, and it has to be dropped without knowing
+───╯
+Error: Ownership error
