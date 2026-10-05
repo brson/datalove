@@ -8,7 +8,7 @@ and has an efficient compiler pipeline.
 Datalove is built around one core idea:
 first let us define a simple but complete language
 for writing, typing, serializing, and transforming a sufficient variety
-of modern pure data types.
+of modern data types.
 Do that really well.
 Then add I/O to it &mdash; carefully.
 
@@ -91,18 +91,17 @@ strings, lists, maps and sets.
 ```datalove
 {
   title = "The Dispossessed",
-  author = "Ursula K. Le Guin",
-  year = 1974,
+  author = { name = "Ursula K. Le Guin", born = 1929 },
+  published = 1974,
   rating = 4.7,
-  available = true,
-  genres = : #{ enum {
-    atom Fiction, atom NonFiction, atom SciFi,
-  } } / #{
-    atom Fiction, atom SciFi,
-  },
   subtitle = some "An Ambiguous Utopia",
+  tags = #{ "utopia", "anarchism", "physics" },
   status = atom InPrint,
-  translations = %{ "fr" = true, "de" = true, "jp" = false },
+  translations = %{
+    "fr" = "Les Dépossédés",
+    "de" = "Planet der Habenichtse"
+  },
+  on_loan = false,
 }
 ```
 
@@ -110,19 +109,20 @@ It includes first-class _tables_ (dataframes),
 and _tensors_ (multidimensional arrays).
 
 ```datalove
-: {| title: string, author: string, year: i32 |} / {|
-  title,                        author,       year
-  "The Dispossessed",           "Le Guin",    1974
-  "The Player of Games",        "Banks",      1988
-  "A Psalm for the Wild-Built", "Chambers",   2021
+: {| title: string, author: string, published: i32 |} / {|
+  title,                        author,      published
+  "The Dispossessed",           "Le Guin",   1974
+  "The Player of Games",        "Banks",     1988
+  "A Psalm for the Wild-Built", "Chambers",  2021
 |}
 ```
 
 ```datalove
+// Loans per month at each branch, January to April.
 [|
-  1 0 0,
-  0 1 0,
-  0 0 1
+  12  15   9  22,
+   8   7  14  11,
+  30  28  31  26
 |]
 ```
 
@@ -131,39 +131,65 @@ and _tensors_ (multidimensional arrays).
 
 ### [| 2, Datalove Functions |]
 
-A simple pure-functional language that feels like an imperative language, built
-on the datalit type system.
+A simple pure-functional language that feels like an imperative language,
+built on the Datalove Literals type system.
+Strongly and statically typed, structural and linear,
+it includes constants with full compile-time function evaluation,
+a simple acyclic module system, and reactive script units that incrementally
+recompile and reevaluate when changed.
 
 ```datalove
 require module sys/std/list
+require module sys/std/u32
 
 type Book: {
   title: string,
   author: string,
-  year: i32,
-  rating: f32,
-  available: bool,
-  genres: #{ enum { atom Fiction, atom NonFiction, atom SciFi } },
-  subtitle: ?string,
-  status: enum { atom InPrint, atom OutOfPrint },
-  translations: %{string = bool},
+  price_cents: u32,
+  on_loan: bool,
 }
 
-fun reserve_book(mut db: [Book], ref title: string): !()
+// Lend a book out, or say why it can't be.
+fun lend(mut shelf: [Book], ref title: string): !()
   var i: index = 0
-  loop while i .< list.len(ref db)
-    if db[i]!.title == title
-      if db[i]!.available
-        set db[i]!.available = false
-        ret ok ()
-      else
-        ret er error atom BookNotAvailable
+  loop while i .< list.len(ref shelf)
+    if shelf[i]!.title == title
+      if shelf[i]!.on_loan
+        ret er error "already on loan"
       end if
+      set shelf[i]!.on_loan = true
+      ret ok ()
     end if
     set i = i +! 1
   end loop
-  ret er error atom BookNotFound
+  ret er error "not in the catalog"
 end fun
+
+// A quarter a day, but never more than the book is worth.
+fun fine_cents(days_late: u32, price_cents: u32): u32
+  ret u32.min(u32.mul_saturating(days_late, 25), price_cents)
+end fun
+
+var shelf: [Book] = [
+  {
+    title = "The Dispossessed",
+    author = "Ursula K. Le Guin",
+    price_cents = 1599,
+    on_loan = false,
+  },
+  {
+    title = "The Player of Games",
+    author = "Iain M. Banks",
+    price_cents = 1299,
+    on_loan = true,
+  },
+]
+
+debuglog lend(mut shelf, ref "The Dispossessed")
+debuglog lend(mut shelf, ref "The Player of Games")
+debuglog lend(mut shelf, ref "Dune")
+
+debuglog (fine_cents(3, 1599), fine_cents(400, 1599))
 ```
 
 
