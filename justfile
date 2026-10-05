@@ -133,8 +133,8 @@ test-miri-module-interp *ARGS='':
         cargo +nightly miri test -p datalove-datafun --test module_interp_tests {{ARGS}}
 
 test-miri-interp-all *ARGS='':
-    just test-miri-interp3 {{ARGS}}
-    just test-miri-module-interp3 {{ARGS}}
+    just test-miri-interp {{ARGS}}
+    just test-miri-module-interp {{ARGS}}
 
 # Install the `datalove` binary from this working copy.
 install:

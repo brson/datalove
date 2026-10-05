@@ -497,26 +497,38 @@ a bytecode loop header, which the shared frame layout makes possible.
 
 ## Things the survey turned up
 
-Found while surveying the interpreter for this plan. None is caused by it; each
-wants a decision of its own, and the bytecode's differential tests will trip over
-the ones that differ between engines.
+Found while surveying the interpreter for this plan, and dealt with before the
+prototype so that it had one contract to follow.
 
-- `Unpack`, `GetField`, `UnwrapOption`, `UnwrapResult` and `SlotLoadMove` consume
-  their source in the IR's description but never mark it dropped.
-- `ListSet`, `MapSetValue`, `MapUpsert` and `TensorSet` mark their consumed value
-  dropped only when it is an `Operand::Value`.
-- `SetField` and `SetFieldTracked` behave identically: a raw copy, no `reify`, no
-  source marking, no tracking update, unlike the parameter and reference field
-  stores.
-- `pass_block_args` moves block arguments one at a time (the parallel move hazard
-  under [control flow](#user-content-control-flow)).
+Fixed:
+
+- `Unpack`, `UnwrapOption`, `UnwrapResult`, `SlotLoadMove` and `Move` (from a
+  local source) consumed their source without marking it dropped, and `ListSet`,
+  `MapSetValue`, `MapUpsert` and `TensorSet` marked a consumed value only when it
+  was an `Operand::Value`. Each now marks whatever it consumes, value, slot or
+  parameter. None of it was reachable as a double free -- the lowering loads a
+  slot into a fresh value (marking the slot moved) before any of these consume
+  it -- so the effect was on the debug liveness checks and on what a second engine
+  could rely on.
+- `SetField` and `SetFieldTracked` did not mark their value consumed, and
+  `SetFieldTracked` did not mark the slot live as the IR documents and the
+  compiled backends do.
+- `pass_block_args` moved block arguments one at a time, so a jump whose
+  arguments read the target block's own parameters read values it had just
+  overwritten. It is now a parallel move; `test_block_args_are_a_parallel_move`
+  builds the case, which the lowering does not produce today.
+- `GetField`'s IR doc said it consumes its source; it borrows it, since only a
+  field of a copy type is read that way (F070).
+- `just test-miri-interp-all` named two recipes that do not exist.
+
+Left as they are:
+
 - `temp_view_tensors` (rank > 1 `TensorIndexRef`) grows and is never cleared.
-- A function frame that returns an error goes back to the pool without destroying
-  its live values.
+- A function frame that returns an error goes back to the pool without
+  destroying its live values. Release function frames keep no liveness flags,
+  so this would need the tracking the frame model gave up, or unwinding drops.
 - The JIT trampoline's interpreted callbacks run with no dispatcher, because the
   dispatcher is taken out of the interpreter while it runs.
-- `just test-miri-interp-all` calls a `test-miri-interp3` recipe that does not
-  exist.
 
 ## Prior art
 

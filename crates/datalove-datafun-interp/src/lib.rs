@@ -658,14 +658,43 @@ impl IrInterpreter {
         // Direct indexing: blocks are renumbered so blocks[i].id.0 == i.
         let target_block = &blocks[target.0 as usize];
 
-        // Pass each argument to the corresponding block parameter.
-        for (param_id, arg) in target_block.params.iter().zip(args.iter()) {
+        // The arguments are a parallel move: each parameter gets what its
+        // argument held before the jump. Moved one at a time, an argument that
+        // reads another of the same block's parameters -- a loop passing its
+        // carried values round, say -- would read the value just written in
+        // its place, and one that passes a parameter to itself would end up
+        // marked dropped. So where an argument names a parameter of the block
+        // being jumped to, every argument is read out before any is written.
+        let reads_target = args.iter().any(|arg| match arg {
+            Operand::Value(id) | Operand::ValueRef(id) => target_block.params.contains(id),
+            _ => false,
+        });
+
+        if !reads_target {
+            for (param_id, arg) in target_block.params.iter().zip(args.iter()) {
+                let src_val = self.read_operand(arg, frame, frames);
+                let dest_slot = frame.value_dest(*param_id);
+                // Block args use move semantics.
+                unsafe { self.move_value(&src_val, dest_slot); }
+                frame.mark_value_live(*param_id);
+                Self::mark_source_dropped_all(arg, frame, frames);
+            }
+            return Ok(());
+        }
+
+        let mut held: Vec<Vec<u8>> = Vec::with_capacity(args.len());
+        for arg in args {
             let src_val = self.read_operand(arg, frame, frames);
-            let dest_slot = frame.value_dest(*param_id);
-            // Block args use move semantics.
-            unsafe { self.move_value(&src_val, dest_slot); }
-            frame.mark_value_live(*param_id);
+            let size = unsafe { (*src_val.tydesc).size as usize };
+            held.push(unsafe { std::slice::from_raw_parts(src_val.ptr, size) }.to_vec());
+        }
+        for arg in args {
             Self::mark_source_dropped_all(arg, frame, frames);
+        }
+        for (param_id, bytes) in target_block.params.iter().zip(&held) {
+            let dest_slot = frame.value_dest(*param_id);
+            unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), dest_slot.ptr, bytes.len()) };
+            frame.mark_value_live(*param_id);
         }
         Ok(())
     }
@@ -692,15 +721,11 @@ impl IrInterpreter {
             }
             Instruction::Move { dest, src } => {
                 // Precise move: ownership analysis guarantees source exists.
-                // Mark external sources dropped so destroy_live_values skips them.
-                // (Local sources don't need marking - they're not in unit_end_values.)
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&src_val, dest_slot); }
                 frame.mark_value_live(*dest);
-                if let Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } = src {
-                    Self::mark_source_dropped_all(src, frame, frames);
-                }
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 let lhs_val = self.read_operand(lhs, frame, frames);
@@ -770,6 +795,7 @@ impl IrInterpreter {
                 self.execute_unwrap_option(&src_val, dest_slot, is_some_slot);
                 frame.mark_value_live(*dest);
                 frame.mark_value_live(*is_some);
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::WrapOk { dest, inner } => {
                 let inner_val = self.read_operand(inner, frame, frames);
@@ -787,6 +813,7 @@ impl IrInterpreter {
                 frame.mark_value_live(*ok_dest);
                 frame.mark_value_live(*err_dest);
                 frame.mark_value_live(*is_ok);
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             _ => return false,
         }
@@ -940,12 +967,11 @@ impl IrInterpreter {
             }
             Instruction::SlotLoadMove { dest, slot } => {
                 // Precise slot load: ownership analysis guarantees slot is occupied.
-                // Slot is not marked dropped - destroy_live_values skips untracked slots,
-                // and precise slots are explicitly dropped via Drop instructions.
                 let slot_val = frame.slot(*slot);
                 let dest_slot = frame.value_dest(*dest);
                 unsafe { self.move_value(&slot_val, dest_slot); }
                 frame.mark_value_live(*dest);
+                frame.mark_slot_dropped(*slot);
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
                 // Tracked slot load: slot may have been moved, updates tracking.
@@ -1002,6 +1028,7 @@ impl IrInterpreter {
                     }
                     _ => unreachable!("Unpack requires tuple or struct type, got {:?}", tag),
                 }
+                Self::mark_source_dropped_all(src, frame, frames);
             }
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 // Execute checked unary op and set overflow flag.
@@ -1382,9 +1409,7 @@ impl IrInterpreter {
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListSet failed");
 
                 // Mark value operand as consumed (moved into list).
-                if let Operand::Value(v) = value {
-                    frame.mark_value_dropped(*v);
-                }
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::ListElementRef { dest, list, index } => {
                 let list_val = self.read_operand(list, frame, frames);
@@ -1509,9 +1534,7 @@ impl IrInterpreter {
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapSetValue failed");
 
                 // Mark value operand as consumed (moved into map).
-                if let Operand::Value(v) = value {
-                    frame.mark_value_dropped(*v);
-                }
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::MapValueRef { dest, map, key } => {
                 let map_val = self.read_operand(map, frame, frames);
@@ -1568,12 +1591,8 @@ impl IrInterpreter {
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapUpsert failed");
 
                 // Mark key and value operands as consumed.
-                if let Operand::Value(v) = key {
-                    frame.mark_value_dropped(*v);
-                }
-                if let Operand::Value(v) = value {
-                    frame.mark_value_dropped(*v);
-                }
+                Self::mark_source_dropped_local(key, frame);
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
                 let tensor_val = self.read_operand(tensor, frame, frames);
@@ -1682,9 +1701,7 @@ impl IrInterpreter {
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorSet failed");
 
                 // Mark value operand as consumed.
-                if let Operand::Value(v) = value {
-                    frame.mark_value_dropped(*v);
-                }
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::TensorIndexRef { dest, tensor, index } => {
                 let tensor_val = self.read_operand(tensor, frame, frames);
@@ -1885,6 +1902,7 @@ impl IrInterpreter {
                         size,
                     );
                 }
+                Self::mark_source_dropped_local(value, frame);
             }
             Instruction::ParamSetField { param, field_path, value } => {
                 // Mut params are always initialized - always destroy old field.
@@ -2012,6 +2030,12 @@ impl IrInterpreter {
                         size,
                     );
                 }
+                // The slot holds something once a field of it is written, as the
+                // compiled backends record.
+                if let SlotDest::Local(id) = slot {
+                    frame.mark_slot_live(*id);
+                }
+                Self::mark_source_dropped_local(value, frame);
             }
         }
         Ok(())

@@ -1332,7 +1332,11 @@ pub enum Instruction {
 
     /// Get a single field from a struct/tuple.
     ///
-    /// **Ownership:** Consumes `src`, produces `dest` (field moved out).
+    /// **Ownership:** Borrows `src`, produces `dest`. Only a field of a copy
+    /// type is read this way -- reading one that owns something would move it
+    /// out of an aggregate that still holds it (F070) -- so `dest` is a copy and
+    /// `src` keeps everything it had. Inside a generic, where the destination is
+    /// a `data`, the runtime clones the field into it instead.
     GetField {
         dest: ValueId,
         src: Operand,

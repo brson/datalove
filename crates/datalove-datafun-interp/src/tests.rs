@@ -2676,3 +2676,95 @@ fn test_const_error_with_unit() {
 
     env.destroy_live_values(interp.runtime_handle());
 }
+
+/// A jump whose arguments read the parameters of the block it jumps to is a
+/// parallel move: each parameter gets what its argument held before the jump.
+///
+/// The loop below carries `(a, b)` and swaps them on its back edge, passing
+/// `(b, a)` to its own parameters. Moved one at a time, `a` would be written
+/// with `b` before `b` read it, and both would end up `b`.
+#[test]
+fn test_block_args_are_a_parallel_move() {
+    let swap_once = make_func_unit(
+        0,
+        "swap_once",
+        vec![],
+        vec![],
+        IrType::I64,
+        vec![
+            // a = 1, b = 2, n = 1.
+            IrBlock { id: BlockId(0), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(0), value: ConstValue::I64(1) },
+                    Instruction::Const { dest: ValueId(1), value: ConstValue::I64(2) },
+                    Instruction::Const { dest: ValueId(2), value: ConstValue::U32(1) },
+                ],
+                terminator: Terminator::Goto {
+                    target: BlockId(1),
+                    args: vec![
+                        Operand::Value(ValueId(0)),
+                        Operand::Value(ValueId(1)),
+                        Operand::Value(ValueId(2)),
+                    ],
+                },
+            },
+            // loop(a, b, n): if n == 0 return b, else loop(b, a, 0).
+            IrBlock { id: BlockId(1), params: vec![ValueId(3), ValueId(4), ValueId(5)],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(6), value: ConstValue::U32(0) },
+                    Instruction::BinOp {
+                        dest: ValueId(7),
+                        op: BinOp::Eq,
+                        lhs: Operand::Value(ValueId(5)),
+                        rhs: Operand::Value(ValueId(6)),
+                    },
+                ],
+                terminator: Terminator::Branch {
+                    cond: Operand::Value(ValueId(7)),
+                    then_block: BlockId(2),
+                    then_args: vec![],
+                    else_block: BlockId(3),
+                    else_args: vec![],
+                },
+            },
+            IrBlock { id: BlockId(2), params: vec![],
+                instructions: vec![],
+                terminator: Terminator::Return { value: Some(Operand::Value(ValueId(4))) },
+            },
+            IrBlock { id: BlockId(3), params: vec![],
+                instructions: vec![
+                    Instruction::Const { dest: ValueId(8), value: ConstValue::U32(0) },
+                ],
+                terminator: Terminator::Goto {
+                    target: BlockId(1),
+                    args: vec![
+                        Operand::Value(ValueId(4)),
+                        Operand::Value(ValueId(3)),
+                        Operand::Value(ValueId(8)),
+                    ],
+                },
+            },
+        ],
+        9,
+        vec![
+            IrType::I64, IrType::I64, IrType::U32,
+            IrType::I64, IrType::I64, IrType::U32,
+            IrType::U32, IrType::Bool, IrType::U32,
+        ],
+        0,
+        vec![],
+        0,
+    );
+
+    let functions: Vec<IrCodeUnit> = vec![swap_once.clone()];
+    let ctx = ExecutionContext::new(0, &functions);
+    let mut interp = IrInterpreter::new();
+    let mut result: i64 = 0;
+    let ret_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
+    let ret_dest = Destination { ptr: &mut result as *mut i64 as *mut u8, tydesc: ret_tydesc };
+    let registry = FunctionRegistry::new();
+    let mut frames = FrameStore::new();
+    interp.call_in_context(&swap_once, None, vec![], ret_dest, &ctx, &registry, &mut frames).unwrap();
+
+    assert_eq!(result, 1, "after one swap b holds what a did");
+}
