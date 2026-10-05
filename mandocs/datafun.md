@@ -92,8 +92,8 @@ at least one must be called qualified.
 Modules are covered further in [Modules, packages, and libraries](#user-content-modules-packages-and-libraries).
 
 The `ref` before `greeting` passes the string by reference
-instead of moving it into the function;
-this is described in [Ownership](#user-content-ownership).
+instead of moving it into the function.
+This is described in [Ownership](#user-content-ownership).
 
 
 ## Data types
