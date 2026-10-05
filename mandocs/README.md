@@ -20,7 +20,7 @@ Then add I/O to it &mdash; carefully.
 
 
 
-> **Latest news**: [Native riders](posts.html) &middot; updated 2026-03-27.
+> **Latest news**: [Dogfooding docs](posts.html) &middot; updated 2026-10-05.
 
 > **Roadmap**: [18 of 19 complete](roadmap.md) &middot; updated 2026-10-02.
 
