@@ -127,20 +127,33 @@ fn test_layout_computation() {
     let slot_types = vec![IrType::I64];
     let param_types = vec![IrType::Bool, IrType::I64];
 
+    let extras = |keep_liveness| crate::layout::LayoutExtras {
+        shape_count: 0, described_refs: &[], keep_liveness, is_script: false,
+    };
     let layout = IrLayout::compute(
         &value_types, &slot_types, &param_types, &[SlotId(0)], &[], Some(&IrType::Bool),
-        &mut table);
+        extras(false), &mut table);
 
-    // The frame layout compiled code uses: a pointer per parameter at 0 and 8,
-    // which the interpreter leaves unused, then i64 at 16, bool at 24, i64 at
-    // 32, slot i64 at 40, and the slot's tracking byte at 48.
-    assert_eq!(layout.value_offsets[0], 16);
-    assert_eq!(layout.value_offsets[1], 24);
-    assert_eq!(layout.value_offsets[2], 32);
-    assert_eq!(layout.slot_offsets[0], 40);
-    assert_eq!(layout.slot_tracking[0], Some(48));
+    // The frame layout compiled code uses: i64 at 0, bool at 8, i64 at 16,
+    // slot i64 at 24, and the slot's tracking byte at 32. Then the
+    // interpreter's own: a pointer and a descriptor per parameter, from 40.
+    assert_eq!(layout.value_offsets[0], 0);
+    assert_eq!(layout.value_offsets[1], 8);
+    assert_eq!(layout.value_offsets[2], 16);
+    assert_eq!(layout.slot_offsets[0], 24);
+    assert_eq!(layout.slot_tracking[0], Some(32));
     assert_eq!(layout.tracking_count, 1);
-    assert_eq!(layout.frame_size, 56);
+    assert_eq!(layout.param_offsets, vec![40, 56]);
+    assert_eq!(layout.liveness_offset, None);
+    assert_eq!(layout.frame_size, 72);
+
+    // Liveness bytes, where they are kept, come last: three values, a slot,
+    // two parameters.
+    let kept = IrLayout::compute(
+        &value_types, &slot_types, &param_types, &[SlotId(0)], &[], Some(&IrType::Bool),
+        extras(true), &mut table);
+    assert_eq!(kept.liveness_offset, Some(72));
+    assert_eq!(kept.frame_size, 80);
 
     // A parameter's descriptor is the callee's own for it.
     assert_eq!(layout.param_tydescs.len(), 2);

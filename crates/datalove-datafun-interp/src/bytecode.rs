@@ -36,8 +36,8 @@ use crate::{copy_bytes, IrInterpreter, UnitTypes};
 /// behind a pointer the frame holds at that offset.
 ///
 /// Values and slots are direct. Parameters and references are indirect: a
-/// parameter's pointer is in the frame's parameter region, which
-/// `Frame::enter` fills, and a reference is a value holding a pointer.
+/// parameter's pointer is in the frame's parameter region, where the caller
+/// sets it, and a reference is a value holding a pointer.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct Loc(u32);
 
@@ -421,14 +421,19 @@ impl<'a> Lowering<'a> {
     }
 
     /// Where an operand's descriptor comes from: the layout where its static
-    /// type says, otherwise the frame, at run time.
+    /// type says, otherwise the frame, at run time -- a borrowed parameter's
+    /// from the caller, a reference's from its descriptor word, which only
+    /// the references `resolve_ref_descriptors` names have.
     fn desc(&self, op: &Operand) -> Option<Desc> {
         if self.typed(op).is_some() {
             return Some(Desc::Static(self.desc_of(op)?));
         }
         match op {
             Operand::Param(id) => Some(Desc::Param(id.0)),
-            Operand::ValueRef(id) => Some(Desc::Ref(id.0)),
+            Operand::ValueRef(id) => match self.layout.ref_desc_offsets[id.0 as usize] {
+                Some(_) => Some(Desc::Ref(id.0)),
+                None => Some(Desc::Static(self.desc_of(op)?)),
+            },
             _ => None,
         }
     }
@@ -641,7 +646,10 @@ impl<'a> Lowering<'a> {
             }
             Instruction::ListElementRef { dest, list, index } => {
                 let Some(i) = self.loc(index) else { return false };
-                if let (Some(IrType::List(elem)), Some(l)) = (self.typed(list), self.loc(list)) {
+                // Static only where the reference has no descriptor word to
+                // write.
+                let static_ref = self.layout.ref_desc_offsets[dest.0 as usize].is_none();
+                if let (true, Some(IrType::List(elem)), Some(l)) = (static_ref, self.typed(list), self.loc(list)) {
                     let size = layout_of(elem).size;
                     self.emit(Op::ListElementRef { dst: self.value_loc(*dest), list: l, index: i, size });
                     return true;
@@ -1934,17 +1942,17 @@ impl IrInterpreter {
         // The common case, a function called with statically typed arguments
         // and no shapes, reads nothing but the resolved places.
         if let (Some(resolved), Some(layout)) = (&call.resolved, &layout) {
-            let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(layout));
-            for &(loc, tydesc) in resolved {
+            let mut callee_frame = self.frame_stack.push(std::rc::Rc::clone(layout))?;
+            for (i, &(loc, tydesc)) in resolved.iter().enumerate() {
                 // SAFETY: lowered against this frame's layout.
-                callee_frame.push_param(crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
+                callee_frame.set_param(i, crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
             }
             callee_frame.enter();
             let bc = self.bytecode_for(layout, callee);
             callee_frame.stop_keeping_liveness();
             let result = self.run_bytecode(
                 &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
-            self.frame_pool.give_back(callee_frame);
+            self.frame_stack.pop(callee_frame);
             return result.map(|()| true);
         }
 
@@ -1962,19 +1970,19 @@ impl IrInterpreter {
             return Ok(true);
         };
 
-        let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(&layout));
+        let mut callee_frame = self.frame_stack.push(std::rc::Rc::clone(&layout))?;
         for i in 0..call.args.len() {
-            callee_frame.push_param(read(self, i, layout.param_modes[i], frame));
+            callee_frame.set_param(i, read(self, i, layout.param_modes[i], frame));
         }
-        for tydesc in shapes {
-            callee_frame.push_shape_descriptor(tydesc);
+        for (i, tydesc) in shapes.into_iter().enumerate() {
+            callee_frame.set_shape_descriptor(i, tydesc);
         }
         callee_frame.enter();
         let bc = self.bytecode_for(&layout, callee);
         callee_frame.stop_keeping_liveness();
         let result = self.run_bytecode(
             &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
-        self.frame_pool.give_back(callee_frame);
+        self.frame_stack.pop(callee_frame);
         drop(scratch);
         // The caller's frame keeps no record of an argument moved into a fast
         // call: those with tracking bytes do not suit it.

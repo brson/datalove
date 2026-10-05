@@ -1,8 +1,14 @@
 //! Execution frames and frame storage.
 //!
-//! A `Frame` holds all values and slots for a single function/unit execution.
-//! `FrameStore` accumulates frames from script units for cross-unit value access.
+//! A frame holds all values and slots for a single function or unit
+//! execution, and everything else the interpreter keeps about it, in its bytes,
+//! as `IrLayout` lays them out. Function frames come off the `FrameStack`;
+//! script frames are `ScriptFrame`s, which own their bytes and outlive their
+//! unit in the `FrameStore` for later units to read. Either is worked on
+//! through a `Frame`, a pointer to the bytes and the layout.
 
+use std::alloc::Layout as AllocLayout;
+use std::ptr::NonNull;
 use std::rc::Rc;
 
 use datalove_rt::rust::AlignedBuffer;
@@ -10,185 +16,315 @@ use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
 use datalove_datafun_ir::frame_layout::tracking;
 
+use crate::error::InterpError;
 use crate::layout::IrLayout;
 use crate::value::{Value, Destination};
 
-/// Overwrite `v` with `len` copies of `value`, keeping the allocation it has.
-fn refill<T: Clone>(v: &mut Vec<T>, len: usize, value: T) {
-    v.clear();
-    v.resize(len, value);
-}
-
-/// A supply of frames to reuse, so that a call is not an allocation.
+/// The stack function frames are pushed on.
 ///
 /// Function frames are strictly nested -- a call returns before its caller goes
-/// on -- so one frame per level of call depth is all this ever holds, and a
-/// frame handed back is free for the next call at that depth.
-#[derive(Default)]
-pub struct FramePool {
-    /// Boxed, so that taking one and handing it back moves a pointer rather
-    /// than the frame: by value it was two `memcpy`s of the whole struct per
-    /// call.
-    free: Vec<Box<Frame>>,
+/// on -- so they come off a stack, by bumping a pointer, and a frame never
+/// moves while it is live: a parameter is a pointer into its caller's frame,
+/// and references point into frames anywhere up the stack.
+///
+/// The stack is a list of chunks that are allocated once and kept, so that
+/// nothing moves when it grows; a frame never straddles two. A chunk list
+/// rather than one reserved region of address space, because the interpreter
+/// is the engine for targets that cannot reserve address space, wasm among
+/// them.
+///
+/// Each frame is preceded by a header: where the top was before it, and its
+/// layout, held as a strong reference until the frame is popped, so that a
+/// layout the cache replaces outlives the frames still running on it.
+pub struct FrameStack {
+    chunks: Vec<Chunk>,
+    /// The chunk in use, and the offset of the first free byte in it.
+    current: usize,
+    top: usize,
+    /// How many bytes of chunks may be allocated in all.
+    limit: usize,
+    allocated: usize,
 }
 
-impl FramePool {
-    /// Create an empty pool.
+struct Chunk {
+    ptr: NonNull<u8>,
+    size: usize,
+}
+
+/// What precedes each frame on the stack.
+#[repr(C)]
+struct Header {
+    /// The chunk and offset the top was at before the frame was pushed.
+    prev_chunk: u32,
+    prev_top: u32,
+    /// The frame's layout, from `Rc::into_raw`.
+    layout: *const IrLayout,
+}
+
+const HEADER: usize = std::mem::size_of::<Header>();
+/// Every chunk's alignment, and so the most a frame may ask for.
+const CHUNK_ALIGN: usize = 64;
+const FIRST_CHUNK: usize = 64 * 1024;
+/// The default for how much frame stack there may be in all.
+const DEFAULT_LIMIT: usize = 256 * 1024 * 1024;
+
+impl FrameStack {
+    /// Create an empty stack, with the default limit.
     pub fn new() -> Self {
-        Self::default()
+        Self { chunks: Vec::new(), current: 0, top: 0, limit: DEFAULT_LIMIT, allocated: 0 }
     }
 
-    /// A function frame for the body `layout` describes, reusing one if the
-    /// pool has any, ready to have its arguments pushed.
+    /// Push a frame for the body `layout` describes, ready to have its
+    /// arguments set.
     ///
     /// Nothing else about it is ready until `Frame::enter`. The arguments come
     /// first because a dispatcher is offered them before anything is decided
     /// about running the body here, and one that takes the call leaves the rest
-    /// of the frame unused.
-    pub fn take(&mut self, layout: Rc<IrLayout>) -> Box<Frame> {
-        match self.free.pop() {
-            Some(mut frame) => {
-                frame.params.clear();
-                frame.shape_descriptors.clear();
-                frame.layout = layout;
-                frame
-            }
-            None => Box::new(Frame {
-                data: AlignedBuffer::uninit(0, 1),
+    /// of the frame unused. Every frame pushed is popped, error or not.
+    #[inline]
+    pub fn push(&mut self, layout: Rc<IrLayout>) -> Result<Frame, InterpError> {
+        let size = layout.frame_size as usize;
+        let align = layout.frame_align as usize;
+        debug_assert!(align <= CHUNK_ALIGN, "a frame aligned to {} bytes", align);
+        let (prev_chunk, prev_top) = (self.current, self.top);
+        // An alignment is a power of two, so this is a mask, not a division.
+        let align_up = |n: usize| (n + align - 1) & !(align - 1);
+        let mut start = align_up(self.top + HEADER);
+        if self.chunks.get(self.current).is_none_or(|c| start + size > c.size) {
+            self.next_chunk(HEADER + align + size)?;
+            start = align_up(self.top + HEADER);
+        }
+        let chunk = self.chunks[self.current].ptr.as_ptr();
+        self.top = start + size;
+        let layout = Rc::into_raw(layout);
+        // SAFETY: the header and the frame are inside the chunk, by the check
+        // above, and the header is aligned, `start` being a multiple of at
+        // least a word.
+        unsafe {
+            let base = chunk.add(start);
+            (base.sub(HEADER) as *mut Header).write(Header {
+                prev_chunk: prev_chunk as u32,
+                prev_top: prev_top as u32,
                 layout,
-                params: Vec::new(),
-                shape_descriptors: Vec::new(),
-                value_tydescs: Vec::new(),
-                is_script: false,
-                liveness: Liveness { kept: cfg!(debug_assertions), ..Liveness::default() },
-            }),
+            });
+            if cfg!(debug_assertions) {
+                // So that reading what was never written reads as garbage
+                // rather than as what the last frame here left.
+                std::ptr::write_bytes(base, datalove_rt::rust::POISON, size);
+            }
+            Ok(Frame::at(base, layout))
         }
     }
 
-    /// Hand a frame back for the next call to use.
-    pub fn give_back(&mut self, frame: Box<Frame>) {
-        self.free.push(frame);
+    /// Move on to a chunk with room for `needed` bytes, allocating it if the
+    /// next one is missing or too small.
+    #[cold]
+    fn next_chunk(&mut self, needed: usize) -> Result<(), InterpError> {
+        let next = if self.chunks.is_empty() { 0 } else { self.current + 1 };
+        if self.chunks.get(next).is_some_and(|c| c.size < needed) {
+            let chunk = self.chunks.remove(next);
+            self.allocated -= chunk.size;
+            // SAFETY: allocated by `allocate` with this size, and above the
+            // top, so nothing is in it.
+            unsafe { std::alloc::dealloc(chunk.ptr.as_ptr(), Self::alloc_layout(chunk.size)) };
+        }
+        if self.chunks.get(next).is_none() {
+            let previous = self.chunks.last().map_or(FIRST_CHUNK / 2, |c| c.size);
+            let size = (previous * 2).max(needed.next_power_of_two());
+            if self.allocated + size > self.limit {
+                return Err(InterpError::StackOverflow);
+            }
+            // SAFETY: the size is not zero.
+            let ptr = unsafe { std::alloc::alloc(Self::alloc_layout(size)) };
+            let ptr = NonNull::new(ptr).unwrap_or_else(|| std::alloc::handle_alloc_error(Self::alloc_layout(size)));
+            self.chunks.insert(next, Chunk { ptr, size });
+            self.allocated += size;
+        }
+        self.current = next;
+        self.top = 0;
+        Ok(())
+    }
+
+    fn alloc_layout(size: usize) -> AllocLayout {
+        AllocLayout::from_size_align(size, CHUNK_ALIGN).expect("a frame stack chunk's layout")
+    }
+
+    /// Pop the frame on top, which has to be `frame`.
+    #[inline]
+    pub fn pop(&mut self, frame: Frame) {
+        // SAFETY: `frame` was pushed here, so a header precedes it.
+        let header = unsafe { (frame.base.sub(HEADER) as *const Header).read() };
+        debug_assert_eq!(header.layout, frame.layout, "popped a frame that is not on top");
+        self.current = header.prev_chunk as usize;
+        self.top = header.prev_top as usize;
+        // SAFETY: from `Rc::into_raw` at the push, and released once.
+        drop(unsafe { Rc::from_raw(header.layout) });
     }
 }
 
-/// Which of a frame's bindings hold something, kept for every one of them.
-///
-/// The frame does not need this to run. What the ownership analysis cannot
-/// know statically -- a tracked slot, an `out` parameter -- has a tracking byte
-/// in the frame data, as in compiled code, and everything else is precise:
-/// whether it holds a value is fixed by where the program is. A script frame
-/// keeps this anyway, because the REPL recovers from a unit that fails part way
-/// and has to free what the unit had bound by then, and because later units
-/// read and move its bindings. A function frame keeps it in debug builds only,
-/// as a check on the analysis: reading a binding the flags say is empty, or
-/// passing on a destination the analysis says is full when it is not, panics
-/// there, while a release build pays nothing for it.
-#[derive(Default)]
-struct Liveness {
-    /// Whether these are kept at all; when not, they stay empty.
-    kept: bool,
-    values: Vec<bool>,
-    slots: Vec<bool>,
-    params: Vec<bool>,
+impl Default for FrameStack {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
-/// Execution frame for a function or script unit.
+impl Drop for FrameStack {
+    fn drop(&mut self) {
+        for chunk in &self.chunks {
+            // SAFETY: allocated by `next_chunk` with this size.
+            unsafe { std::alloc::dealloc(chunk.ptr.as_ptr(), Self::alloc_layout(chunk.size)) };
+        }
+    }
+}
+
+/// A frame: where its bytes are, and their layout.
 ///
-/// Laid out by `ir::frame_layout::FrameLayout`, as compiled code's frames are:
-/// values, slots and tracking bytes at the same offsets. The parameter
-/// pointers that layout puts first are kept in `params` instead, so that they
-/// are a slice of `Value`s to hand a dispatcher, and their space is unused.
+/// A handle, copied freely; the bytes belong to the `FrameStack` or to a
+/// `ScriptFrame`. Laid out by `IrLayout`: values, slots and tracking bytes where
+/// compiled code puts them, then the parameters, the shape descriptors, the
+/// descriptors of references and, where they are kept, the liveness bytes.
+#[derive(Clone, Copy)]
 pub struct Frame {
-    /// Raw frame data with proper alignment.
-    data: AlignedBuffer,
-    /// Layout information.
-    layout: Rc<IrLayout>,
-    /// Each parameter: a pointer to the caller's data and its descriptor.
-    ///
-    /// One `Value` apiece, so that the arguments as a caller pushed them are a
-    /// slice a dispatcher can be handed without building another.
-    params: Vec<Value>,
-    /// Descriptors handed over for this function's declared shapes, in order.
-    ///
-    /// A shape has no value to carry a descriptor with, so unlike everything
-    /// else here it arrives on its own.
-    shape_descriptors: Vec<*const TyDesc>,
-    /// What a reference points at, where the layout's descriptor for it is a
-    /// lie.
-    ///
-    /// `value_tydescs` lives in the layout and is computed from static types,
-    /// which inside a generic say `data` where a type parameter stood. A
-    /// projection of a borrowed parameter knows better -- it read the field's
-    /// own descriptor off the one the caller supplied -- and this is where it
-    /// puts it. Null means the layout's answer was right, which is every value
-    /// outside a generic, so it is left empty until one is recorded rather
-    /// than filled with nulls on every call.
-    value_tydescs: Vec<*const TyDesc>,
-    /// Whether this is a script unit's frame, whose untracked bindings are
-    /// answered for by `liveness` rather than assumed to hold something.
-    is_script: bool,
-    /// Every binding's liveness, where it is kept; see `Liveness`.
-    liveness: Liveness,
+    base: *mut u8,
+    layout: *const IrLayout,
+    /// The liveness bytes, while they are being kept; null when not. See
+    /// `IrLayout::liveness_offset`.
+    liveness: *mut u8,
 }
 
 impl Frame {
-    /// Hand this frame the descriptors for the function's declared shapes.
-    pub fn set_shape_descriptors(&mut self, descriptors: Vec<*const TyDesc>) {
-        self.shape_descriptors = descriptors;
+    /// The frame whose bytes start at `base`.
+    ///
+    /// # Safety
+    ///
+    /// `base` has to be `layout.frame_size` bytes of frame, aligned as it says,
+    /// and both have to outlive every use of the handle.
+    unsafe fn at(base: *mut u8, layout: *const IrLayout) -> Self {
+        let liveness = match unsafe { (*layout).liveness_offset } {
+            Some(offset) => unsafe { base.add(offset as usize) },
+            None => std::ptr::null_mut(),
+        };
+        Frame { base, layout, liveness }
     }
 
-    /// The descriptor handed over for the shape declared at `index`.
-    pub fn shape_descriptor(&self, index: u32) -> Option<*const TyDesc> {
-        self.shape_descriptors.get(index as usize).copied()
-    }
-
-    /// The layout this frame was taken for.
-    pub fn layout(&self) -> &IrLayout {
-        &self.layout
-    }
-
-    /// The layout this frame was taken for, shared.
-    pub(crate) fn layout_rc(&self) -> Rc<IrLayout> {
-        Rc::clone(&self.layout)
+    /// The layout this frame was made for.
+    ///
+    /// Not tied to the borrow of the handle: the layout lives as long as the
+    /// frame, which outlives every use of the handle.
+    #[inline(always)]
+    pub fn layout<'a>(&self) -> &'a IrLayout {
+        // SAFETY: held by the frame's header or its `ScriptFrame`.
+        unsafe { &*self.layout }
     }
 
     /// Where the frame's data starts.
-    pub(crate) fn base_ptr(&mut self) -> *mut u8 {
-        self.data.as_mut_ptr()
+    #[inline(always)]
+    pub(crate) fn base_ptr(&self) -> *mut u8 {
+        self.base
     }
 
-    /// Stop keeping liveness flags for a frame the bytecode runs.
+    /// Stop keeping liveness for a frame the bytecode runs.
     ///
     /// The bytecode keeps no flags for values and untracked slots -- a release
     /// build keeps none either -- so the debug checks that read them would
     /// fire on what it never wrote. The IR walker remains the checked engine.
     pub(crate) fn stop_keeping_liveness(&mut self) {
-        self.liveness.kept = false;
+        self.liveness = std::ptr::null_mut();
     }
 
-    /// Hand over the next argument, as the caller has it.
-    pub fn push_param(&mut self, value: Value) {
-        self.params.push(value);
+    #[inline(always)]
+    fn at_offset(&self, offset: u32) -> *mut u8 {
+        // SAFETY: every offset the layout gives is inside the frame.
+        unsafe { self.base.add(offset as usize) }
     }
 
-    /// Hand over the descriptor for the next shape the function declared.
-    pub fn push_shape_descriptor(&mut self, tydesc: *const TyDesc) {
-        self.shape_descriptors.push(tydesc);
+    /// Whether liveness is being kept, and the byte for binding `index` if so:
+    /// values first, then slots, then parameters.
+    #[inline(always)]
+    fn liveness_byte(&self, index: usize) -> Option<*mut bool> {
+        if self.liveness.is_null() {
+            return None;
+        }
+        // SAFETY: the liveness bytes are inside the frame, by the layout.
+        Some(unsafe { self.liveness.add(index) as *mut bool })
     }
 
-    /// The arguments as pushed, before `enter` gives owned ones the callee's
-    /// own descriptors.
+    #[inline(always)]
+    fn kept_live(&self, index: usize) -> Option<bool> {
+        // SAFETY: as `liveness_byte`, and always written before it is read.
+        self.liveness_byte(index).map(|b| unsafe { *b })
+    }
+
+    #[inline(always)]
+    fn set_kept_live(&self, index: usize, live: bool) {
+        if let Some(b) = self.liveness_byte(index) {
+            // SAFETY: as `liveness_byte`.
+            unsafe { *b = live };
+        }
+    }
+
+    fn slot_index(&self, id: SlotId) -> usize {
+        self.layout().value_offsets.len() + id.0 as usize
+    }
+
+    fn param_index(&self, id: ParamId) -> usize {
+        let layout = self.layout();
+        layout.value_offsets.len() + layout.slot_offsets.len() + id.0 as usize
+    }
+
+    /// Hand over argument `index`, as the caller has it.
+    #[inline(always)]
+    pub fn set_param(&mut self, index: usize, value: Value) {
+        let offset = self.layout().param_offsets[index];
+        // SAFETY: a parameter's place is inside the frame and word-aligned.
+        unsafe { (self.at_offset(offset) as *mut Value).write(value) };
+    }
+
+    /// Hand over the descriptor for the shape declared at `index`.
+    #[inline]
+    pub fn set_shape_descriptor(&mut self, index: usize, tydesc: *const TyDesc) {
+        let layout = self.layout();
+        assert!(index < layout.shape_count as usize,
+            "a descriptor for shape {} of {}", index, layout.shape_count);
+        let offset = layout.shape_offset + (index * std::mem::size_of::<usize>()) as u32;
+        // SAFETY: inside the shape region, word-aligned.
+        unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
+    }
+
+    /// The descriptor handed over for the shape declared at `index`.
+    pub fn shape_descriptor(&self, index: u32) -> Option<*const TyDesc> {
+        self.shape_descriptors().get(index as usize).copied()
+    }
+
+    /// The arguments, once every one has been set.
+    ///
+    /// As the caller handed them over until `enter`, which gives the owned
+    /// ones the callee's own descriptors.
     pub fn params(&self) -> &[Value] {
-        &self.params
+        let layout = self.layout();
+        match layout.param_offsets.first() {
+            // SAFETY: the parameters are consecutive `Value`s in the frame,
+            // all set.
+            Some(&first) => unsafe {
+                std::slice::from_raw_parts(self.at_offset(first) as *const Value, layout.param_offsets.len())
+            },
+            None => &[],
+        }
     }
 
-    /// The shape descriptors as pushed.
+    /// The shape descriptors, once every one has been set.
     pub fn shape_descriptors(&self) -> &[*const TyDesc] {
-        &self.shape_descriptors
+        let layout = self.layout();
+        // SAFETY: the shape region is consecutive words in the frame, all set.
+        unsafe {
+            std::slice::from_raw_parts(
+                self.at_offset(layout.shape_offset) as *const *const TyDesc,
+                layout.shape_count as usize)
+        }
     }
 
-    /// Make a frame taken from the pool ready to run its body, once every
-    /// argument has been pushed.
+    /// Make a function frame ready to run its body, once every argument has
+    /// been set.
     ///
     /// A parameter the callee owns gets the callee's own descriptor: the caller
     /// has already converted it into the shape the callee was compiled for. A
@@ -197,85 +333,37 @@ impl Frame {
     /// value at that pointer is whatever the caller actually has; for a function
     /// that is not generic the two agree anyway. An `out` parameter starts
     /// uninitialized, since the callee writes it first.
+    #[inline]
     pub fn enter(&mut self) {
-        let layout = &*self.layout;
-        assert_eq!(self.params.len(), layout.param_modes.len(),
-            "a call handed over {} arguments for {} parameters",
-            self.params.len(), layout.param_modes.len());
-
-        let size = layout.frame_size as usize;
-        let align = layout.frame_align as usize;
-        if self.data.fits(size, align) {
-            self.data.reset_prefix(size);
-        } else {
-            self.data = AlignedBuffer::uninit(size, align);
-        }
-        self.clear_tracking();
-        self.value_tydescs.clear();
-
-        let layout = &*self.layout;
+        let layout = self.layout();
         for (i, mode) in layout.param_modes.iter().enumerate() {
             if matches!(mode, ParamMode::In | ParamMode::Out) {
-                self.params[i].tydesc = layout.param_tydescs[i];
+                let offset = layout.param_offsets[i] + std::mem::size_of::<usize>() as u32;
+                // SAFETY: the descriptor half of a parameter's place.
+                unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(layout.param_tydescs[i]) };
             }
-            // The pointer goes where compiled code keeps it too, which is
-            // where the bytecode reads a parameter through.
-            let at = layout.param_offsets[i] as usize;
-            // SAFETY: the parameter region is inside the frame, by the layout.
-            unsafe { (self.data.as_mut_ptr().add(at) as *mut *mut u8).write_unaligned(self.params[i].ptr) };
         }
-        if self.liveness.kept {
-            refill(&mut self.liveness.values, layout.value_offsets.len(), false);
-            refill(&mut self.liveness.slots, layout.slot_offsets.len(), false);
-            self.liveness.params.clear();
-            self.liveness.params.extend(layout.param_modes.iter().map(|m| *m != ParamMode::Out));
+        self.clear_tracking();
+        if !self.liveness.is_null() {
+            let (values, slots) = (layout.value_offsets.len(), layout.slot_offsets.len());
+            for i in 0..values + slots {
+                self.set_kept_live(i, false);
+            }
+            for (i, mode) in layout.param_modes.iter().enumerate() {
+                self.set_kept_live(values + slots + i, *mode != ParamMode::Out);
+            }
         }
-    }
-
-    /// Create the frame for a script unit.
-    ///
-    /// A script unit has no parameters, and its frame outlives it in the
-    /// `FrameStore` rather than going back to a pool. Function frames come from
-    /// `FramePool::take`.
-    pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
-        if let CodeUnitContext::Native(ctx) = &unit.context {
-            panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol())
-        }
-        assert!(unit.function_context().is_none(), "function frames come from the pool");
-        // Uninitialized, not zeroed: what has been written is tracked, and
-        // reading what has not is a bug rather than a value worth defining.
-        let data = AlignedBuffer::uninit(
-            layout.frame_size as usize,
-            layout.frame_align as usize,
-        );
-        let mut frame = Self {
-            data,
-            params: Vec::new(),
-            shape_descriptors: Vec::new(),
-            value_tydescs: Vec::new(),
-            is_script: true,
-            liveness: Liveness {
-                kept: true,
-                values: vec![false; layout.value_offsets.len()],
-                slots: vec![false; layout.slot_offsets.len()],
-                params: Vec::new(),
-            },
-            layout,
-        };
-        frame.clear_tracking();
-        frame
     }
 
     /// Set every tracking byte to say its binding has never been written.
     fn clear_tracking(&mut self) {
-        let offset = self.layout.tracking_offset as usize;
-        let count = self.layout.tracking_count as usize;
+        let layout = self.layout();
         // A byte at a time: there are a handful at most, and `write_bytes` of a
         // length only known at run time is a call into `memset`, which was most
         // of what entering a function cost.
-        for i in 0..count {
+        for i in 0..layout.tracking_count {
             // SAFETY: the tracking bytes are inside the frame, by the layout.
-            unsafe { *self.data.as_mut_ptr().add(offset + i) = tracking::UNINIT };
+            unsafe { *self.at_offset(layout.tracking_offset + i) = tracking::UNINIT };
         }
     }
 
@@ -283,27 +371,27 @@ impl Frame {
     #[inline(always)]
     fn tracking_byte(&self, offset: u32) -> u8 {
         // SAFETY: a tracking byte offset is inside the frame, by the layout.
-        unsafe { *self.data.as_ptr().add(offset as usize) }
+        unsafe { *self.at_offset(offset) }
     }
 
     #[inline(always)]
     fn set_tracking_byte(&mut self, offset: u32, state: u8) {
         // SAFETY: a tracking byte offset is inside the frame, by the layout.
-        unsafe { *self.data.as_mut_ptr().add(offset as usize) = state };
+        unsafe { *self.at_offset(offset) = state };
     }
 
     /// Whether a value holds something.
     ///
     /// A value is precise, so in a function it holds something wherever the
-    /// program asks. A script frame says from its flags, since a unit that
-    /// failed part way may not have reached it.
+    /// program asks. A script frame says from its liveness bytes, since a unit
+    /// that failed part way may not have reached it.
     #[inline]
     pub fn value_is_live(&self, id: ValueId) -> bool {
         let idx = id.0 as usize;
-        if self.is_script {
-            return self.liveness.values[idx];
+        if self.layout().is_script {
+            return self.kept_live(idx).expect("a script frame keeps liveness");
         }
-        debug_assert!(!self.liveness.kept || self.liveness.values[idx],
+        debug_assert!(self.kept_live(idx) != Some(false),
             "value {:?} was taken to hold something and does not", id);
         true
     }
@@ -311,17 +399,13 @@ impl Frame {
     /// Mark a value as holding something.
     #[inline(always)]
     pub fn mark_value_live(&mut self, id: ValueId) {
-        if self.liveness.kept {
-            self.liveness.values[id.0 as usize] = true;
-        }
+        self.set_kept_live(id.0 as usize, true);
     }
 
     /// Mark a value as holding nothing, having been moved or destroyed.
     #[inline(always)]
     pub fn mark_value_dropped(&mut self, id: ValueId) {
-        if self.liveness.kept {
-            self.liveness.values[id.0 as usize] = false;
-        }
+        self.set_kept_live(id.0 as usize, false);
     }
 
     /// Get destination for a value.
@@ -330,10 +414,8 @@ impl Frame {
     #[inline(always)]
     pub fn value_dest(&mut self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
-        let offset = self.layout.value_offsets[idx] as usize;
-        let tydesc = self.layout.value_tydescs[idx];
-        let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-        Destination { ptr, tydesc }
+        let layout = self.layout();
+        Destination { ptr: self.at_offset(layout.value_offsets[idx]), tydesc: layout.value_tydescs[idx] }
     }
 
     /// Get value (for reading).
@@ -345,47 +427,48 @@ impl Frame {
     #[inline(always)]
     pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        let offset = self.layout.value_offsets[idx] as usize;
-        let tydesc = self.layout.value_tydescs[idx];
-        let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Value { ptr, tydesc }
+        let layout = self.layout();
+        Value { ptr: self.at_offset(layout.value_offsets[idx]), tydesc: layout.value_tydescs[idx] }
     }
 
     /// Dereference a ref value to get the pointed-to data.
     ///
-    /// For values produced by GetFieldRef, reads the stored pointer and
-    /// returns the data it points to with the inner type's tydesc.
+    /// What it points at is described by the reference's descriptor word,
+    /// where it has one, and otherwise by its static type, which wraps the
+    /// referent's as a one-field tuple.
     ///
     /// Panics if value ID is out of bounds (compiler bug).
     #[inline]
     pub fn value_deref(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
-        let offset = self.layout.value_offsets[idx] as usize;
-        let tydesc = self.layout.value_tydescs[idx];
-        let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-
-        // Read the stored pointer.
-        let stored_ptr = unsafe { *(ptr as *const *mut u8) };
-        // What it points at is whatever the projection that made it found, when
-        // it found out; otherwise the ref's own tydesc, which wraps the inner
-        // type as a one-field tuple.
-        if let Some(&found) = self.value_tydescs.get(idx) && !found.is_null() {
-            return Value { ptr: stored_ptr, tydesc: found };
-        }
-        let inner_tydesc = unsafe {
-            let tuple_info = (*tydesc).type_info.tuple;
-            (*tuple_info.fields).tydesc
+        let layout = self.layout();
+        // SAFETY: a reference value holds a pointer.
+        let ptr = unsafe { *(self.at_offset(layout.value_offsets[idx]) as *const *mut u8) };
+        let tydesc = match layout.ref_desc_offsets[idx] {
+            // SAFETY: written by the projection that made the reference.
+            Some(offset) => unsafe { *(self.at_offset(offset) as *const *const TyDesc) },
+            None => static_referent(layout.value_tydescs[idx]),
         };
-        Value { ptr: stored_ptr, tydesc: inner_tydesc }
+        Value { ptr, tydesc }
     }
 
-    /// Record what a reference points at, where the layout does not say.
+    /// Record what a reference points at, as a projection found it.
+    ///
+    /// Only a reference `resolve_ref_descriptors` names has a word for it;
+    /// any other is described by its static type, which the projection's
+    /// finding has to agree with.
+    #[inline]
     pub fn set_value_tydesc(&mut self, id: ValueId, tydesc: *const TyDesc) {
         let idx = id.0 as usize;
-        if self.value_tydescs.len() <= idx {
-            self.value_tydescs.resize(self.layout.value_offsets.len(), std::ptr::null());
+        let layout = self.layout();
+        match layout.ref_desc_offsets[idx] {
+            // SAFETY: the reference's descriptor word.
+            Some(offset) => unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) },
+            None => debug_assert_eq!(
+                unsafe { (*tydesc).size },
+                unsafe { (*static_referent(layout.value_tydescs[idx])).size },
+                "reference {:?} has no descriptor word, and its static type is not what it found", id),
         }
-        self.value_tydescs[idx] = tydesc;
     }
 
     /// Get destination for a slot.
@@ -394,10 +477,8 @@ impl Frame {
     #[inline(always)]
     pub fn slot_dest(&mut self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
-        let offset = self.layout.slot_offsets[idx] as usize;
-        let tydesc = self.layout.slot_tydescs[idx];
-        let ptr = unsafe { self.data.as_mut_ptr().add(offset) };
-        Destination { ptr, tydesc }
+        let layout = self.layout();
+        Destination { ptr: self.at_offset(layout.slot_offsets[idx]), tydesc: layout.slot_tydescs[idx] }
     }
 
     /// Get slot value (for reading).
@@ -407,36 +488,35 @@ impl Frame {
     #[inline(always)]
     pub fn slot(&self, id: SlotId) -> Value {
         let idx = id.0 as usize;
-        debug_assert!(!self.liveness.kept || self.liveness.slots[idx], "read of an empty slot {:?}", id);
-        let offset = self.layout.slot_offsets[idx] as usize;
-        let tydesc = self.layout.slot_tydescs[idx];
-        let ptr = unsafe { (self.data.as_ptr() as *mut u8).add(offset) };
-        Value { ptr, tydesc }
+        debug_assert!(self.kept_live(self.slot_index(id)) != Some(false), "read of an empty slot {:?}", id);
+        let layout = self.layout();
+        Value { ptr: self.at_offset(layout.slot_offsets[idx]), tydesc: layout.slot_tydescs[idx] }
     }
 
     /// Whether a slot holds something to destroy.
     ///
     /// A tracked slot says from its tracking byte, and a script frame's
-    /// untracked slot from its flags. An untracked slot in a function is taken
-    /// to hold something, as compiled code takes it: the analysis tracks every
-    /// slot whose state it cannot fix and whose type owns something, so an
-    /// untracked slot either holds a value or is of a type that owns nothing,
-    /// and destroying it is right either way.
+    /// untracked slot from its liveness byte. An untracked slot in a function
+    /// is taken to hold something, as compiled code takes it: the analysis
+    /// tracks every slot whose state it cannot fix and whose type owns
+    /// something, so an untracked slot either holds a value or is of a type
+    /// that owns nothing, and destroying it is right either way.
     #[inline]
     pub fn slot_is_live(&self, id: SlotId) -> bool {
         let idx = id.0 as usize;
-        match self.layout.slot_tracking[idx] {
+        let layout = self.layout();
+        let kept = self.kept_live(self.slot_index(id));
+        match layout.slot_tracking[idx] {
             Some(offset) => {
                 let live = self.tracking_byte(offset) == tracking::LIVE;
-                debug_assert!(!self.liveness.kept || self.liveness.slots[idx] == live,
+                debug_assert!(kept.is_none_or(|k| k == live),
                     "slot {:?} is {} by its tracking byte and not by its flags",
                     id, if live { "live" } else { "empty" });
                 live
             }
-            None if self.is_script => self.liveness.slots[idx],
+            None if layout.is_script => kept.expect("a script frame keeps liveness"),
             None => {
-                debug_assert!(
-                    !self.liveness.kept || self.liveness.slots[idx] || self.layout.slot_is_copy[idx],
+                debug_assert!(kept != Some(false) || layout.slot_is_copy[idx],
                     "untracked slot {:?} owns something and holds nothing", id);
                 true
             }
@@ -447,33 +527,25 @@ impl Frame {
     /// moved into holds nothing, since overwriting what it held would leak it.
     #[inline]
     pub fn check_slot_empty(&self, id: SlotId) {
-        let idx = id.0 as usize;
-        debug_assert!(!self.liveness.kept || !self.liveness.slots[idx],
-            "move into occupied slot {:?}", id);
+        debug_assert!(self.kept_live(self.slot_index(id)) != Some(true), "move into occupied slot {:?}", id);
     }
 
     /// Mark slot as holding something.
     #[inline(always)]
     pub fn mark_slot_live(&mut self, id: SlotId) {
-        let idx = id.0 as usize;
-        if let Some(offset) = self.layout.slot_tracking[idx] {
+        if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::LIVE);
         }
-        if self.liveness.kept {
-            self.liveness.slots[idx] = true;
-        }
+        self.set_kept_live(self.slot_index(id), true);
     }
 
     /// Mark slot as holding nothing, having been moved or destroyed.
     #[inline]
     pub fn mark_slot_dropped(&mut self, id: SlotId) {
-        let idx = id.0 as usize;
-        if let Some(offset) = self.layout.slot_tracking[idx] {
+        if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
-        if self.liveness.kept {
-            self.liveness.slots[idx] = false;
-        }
+        self.set_kept_live(self.slot_index(id), false);
     }
 
     /// Read param (dereferences pointer to caller's data).
@@ -482,16 +554,19 @@ impl Frame {
     /// where liveness is kept, if the parameter holds nothing.
     #[inline(always)]
     pub fn param(&self, id: ParamId) -> Value {
-        let idx = id.0 as usize;
-        debug_assert!(!self.liveness.kept || self.liveness.params[idx], "read of an absent param {:?}", id);
-        self.params[idx]
+        debug_assert!(self.kept_live(self.param_index(id)) != Some(false), "read of an absent param {:?}", id);
+        let offset = self.layout().param_offsets[id.0 as usize];
+        // SAFETY: a parameter's place, set before the frame was entered.
+        unsafe { (self.at_offset(offset) as *const Value).read() }
     }
 
     /// Get mutable destination for Mut/Out params.
     ///
     /// Panics if param ID is out of bounds (compiler bug).
     pub fn param_dest(&self, id: ParamId) -> Destination {
-        let param = self.params[id.0 as usize];
+        let offset = self.layout().param_offsets[id.0 as usize];
+        // SAFETY: a parameter's place, set before the frame was entered.
+        let param = unsafe { (self.at_offset(offset) as *const Value).read() };
         Destination { ptr: param.ptr, tydesc: param.tydesc }
     }
 
@@ -501,12 +576,11 @@ impl Frame {
     /// the caller passed, wherever the program asks.
     #[inline]
     pub fn param_is_live(&self, id: ParamId) -> bool {
-        let idx = id.0 as usize;
-        let live = match self.layout.param_tracking[idx] {
+        let live = match self.layout().param_tracking[id.0 as usize] {
             Some(offset) => self.tracking_byte(offset) == tracking::LIVE,
             None => true,
         };
-        debug_assert!(!self.liveness.kept || self.liveness.params[idx] == live,
+        debug_assert!(self.kept_live(self.param_index(id)).is_none_or(|k| k == live),
             "param {:?} is {} by the frame and not by its flags",
             id, if live { "live" } else { "empty" });
         live
@@ -515,25 +589,19 @@ impl Frame {
     /// Mark param as holding something (after the first write to an `out` one).
     #[inline]
     pub fn mark_param_live(&mut self, id: ParamId) {
-        let idx = id.0 as usize;
-        if let Some(offset) = self.layout.param_tracking[idx] {
+        if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::LIVE);
         }
-        if self.liveness.kept {
-            self.liveness.params[idx] = true;
-        }
+        self.set_kept_live(self.param_index(id), true);
     }
 
     /// Mark param as holding nothing, having been moved or destroyed.
     #[inline]
     pub fn mark_param_dropped(&mut self, id: ParamId) {
-        let idx = id.0 as usize;
-        if let Some(offset) = self.layout.param_tracking[idx] {
+        if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
-        if self.liveness.kept {
-            self.liveness.params[idx] = false;
-        }
+        self.set_kept_live(self.param_index(id), false);
     }
 
     /// Destroy initialized unit_end bindings on error cleanup.
@@ -582,6 +650,53 @@ impl Frame {
     }
 }
 
+/// What a reference's static type says it points at: its descriptor wraps the
+/// referent's as a one-field tuple.
+#[inline(always)]
+fn static_referent(ref_tydesc: *const TyDesc) -> *const TyDesc {
+    // SAFETY: a reference's descriptor is such a tuple.
+    unsafe { (*(*ref_tydesc).type_info.tuple.fields).tydesc }
+}
+
+/// A script unit's frame, which owns its bytes.
+///
+/// A script unit has no parameters, and its frame outlives it in the
+/// `FrameStore` rather than going on the stack: later units read and move its
+/// bindings, and its address has to stay put for the whole session, which the
+/// buffer's does when the store's list of frames grows.
+pub struct ScriptFrame {
+    data: AlignedBuffer,
+    layout: Rc<IrLayout>,
+}
+
+impl ScriptFrame {
+    /// Create the frame for a script unit.
+    pub fn new(unit: &IrCodeUnit, layout: Rc<IrLayout>) -> Self {
+        if let CodeUnitContext::Native(ctx) = &unit.context {
+            panic!("native functions are dispatched directly, not via Frame: {}", ctx.symbol())
+        }
+        assert!(unit.function_context().is_none(), "function frames come from the stack");
+        assert!(layout.is_script, "a script frame on a function's layout");
+        // Uninitialized, not zeroed: what has been written is tracked, and
+        // reading what has not is a bug rather than a value worth defining.
+        let data = AlignedBuffer::uninit(layout.frame_size as usize, layout.frame_align as usize);
+        let script = Self { data, layout };
+        let mut frame = script.frame();
+        frame.clear_tracking();
+        for i in 0..script.layout.value_offsets.len() + script.layout.slot_offsets.len() {
+            frame.set_kept_live(i, false);
+        }
+        script
+    }
+
+    /// The frame, to work on.
+    pub fn frame(&self) -> Frame {
+        // SAFETY: the buffer is the layout's size and alignment, and both live
+        // as long as this.
+        unsafe { Frame::at(self.data.as_ptr() as *mut u8, Rc::as_ptr(&self.layout)) }
+    }
+}
+
 /// Mutable frame storage for script unit execution.
 ///
 /// Stores frames from previously executed units for external value/slot access.
@@ -589,7 +704,7 @@ impl Frame {
 /// owns it, which is what makes it unreadable afterwards.
 pub struct FrameStore {
     /// Frames from executed units, indexed by unit number.
-    frames: Vec<Frame>,
+    frames: Vec<ScriptFrame>,
     /// Unit-end values for each unit (persistent bindings to destroy).
     unit_end_values: Vec<Vec<ValueId>>,
     /// Unit-end slots for each unit (persistent bindings to destroy).
@@ -609,7 +724,7 @@ impl FrameStore {
     /// Add a completed unit's frame with its persistent bindings.
     pub fn add_frame(
         &mut self,
-        frame: Frame,
+        frame: ScriptFrame,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
@@ -636,7 +751,7 @@ impl FrameStore {
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit: usize,
-        frame: Frame,
+        frame: ScriptFrame,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
     ) {
@@ -647,7 +762,7 @@ impl FrameStore {
         );
         let old_values = std::mem::take(&mut self.unit_end_values[unit]);
         let old_slots = std::mem::take(&mut self.unit_end_slots[unit]);
-        self.frames[unit].destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
+        self.frames[unit].frame().destroy_unit_end_bindings(rt_handle, &old_values, &old_slots);
 
         self.frames[unit] = frame;
         self.unit_end_values[unit] = unit_end_values;
@@ -677,7 +792,7 @@ impl FrameStore {
         for unit in len..self.frames.len() {
             let values = &self.unit_end_values[unit];
             let slots = &self.unit_end_slots[unit];
-            self.frames[unit].destroy_unit_end_bindings(rt_handle, values, slots);
+            self.frames[unit].frame().destroy_unit_end_bindings(rt_handle, values, slots);
         }
         self.frames.truncate(len);
         self.unit_end_values.truncate(len);
@@ -729,7 +844,7 @@ impl FrameStore {
         slot: SlotId,
         value: &Value,
     ) {
-        let frame = self.frame_mut(unit);
+        let mut frame = self.frame(unit);
 
         // A slot that was moved out of is uninitialized and owns nothing.
         if frame.slot_is_live(slot) {
@@ -752,12 +867,12 @@ impl FrameStore {
 
     /// Mark an external value as moved out.
     pub fn mark_external_value_dropped(&mut self, unit: u32, value: ValueId) {
-        self.frame_mut(unit).mark_value_dropped(value);
+        self.frame(unit).mark_value_dropped(value);
     }
 
     /// Mark an external slot as moved out.
     pub fn mark_external_slot_dropped(&mut self, unit: u32, slot: SlotId) {
-        self.frame_mut(unit).mark_slot_dropped(slot);
+        self.frame(unit).mark_slot_dropped(slot);
     }
 
     /// Check if an external slot is initialized (not moved).
@@ -770,21 +885,17 @@ impl FrameStore {
         for i in 0..self.frames.len() {
             let values = &self.unit_end_values[i];
             let slots = &self.unit_end_slots[i];
-            self.frames[i].destroy_unit_end_bindings(rt_handle, values, slots);
+            self.frames[i].frame().destroy_unit_end_bindings(rt_handle, values, slots);
         }
     }
 
     /// The frame of a previous unit.
     ///
     /// Panics if the unit is not in the store (compiler bug).
-    fn frame(&self, unit: u32) -> &Frame {
+    fn frame(&self, unit: u32) -> Frame {
         self.frames.get(unit as usize)
             .unwrap_or_else(|| panic!("external unit {} not found", unit))
-    }
-
-    fn frame_mut(&mut self, unit: u32) -> &mut Frame {
-        self.frames.get_mut(unit as usize)
-            .unwrap_or_else(|| panic!("external unit {} not found", unit))
+            .frame()
     }
 }
 

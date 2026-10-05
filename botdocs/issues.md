@@ -490,7 +490,9 @@ Where the stack goes:
 
 - **IR walker**: `execute_blocks`, `execute_instruction`, `execute_call_site`,
   `run_frame` -- four Rust frames, about 1 KB, per datalove call. Frame data
-  is on the heap, in `FramePool`'s boxes; only control nests.
+  is on the interpreter's own `FrameStack`; only control nests. Running out of
+  that stack is an `InterpError::StackOverflow`, but at the default limit the
+  Rust stack runs out long before it.
 - **Bytecode**: `run_bytecode` and `fast_call`, about 0.9 KB a call.
 - **JIT**: a stack slot of the shared frame layout per function, and a call
   through a per-callee stub, so two machine frames a call. A call from JIT code

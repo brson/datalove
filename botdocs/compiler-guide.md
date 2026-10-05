@@ -1571,10 +1571,10 @@ and goes through `__jit_dispatch_call` until then; going through the dispatcher
 every time had been over 80% of the time on recursive `fib`, 5x slower. About a third of stdlib-shaped execution is in the native
 runtime, which the JIT cannot speed up, so it is near its ceiling of about 1.8x
 there; arithmetic-shaped code is over 90% interpreter, which is where the 85x
-comes from. The interpreter's call path reuses frames from a `FramePool`
-(`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`),
-which together made it 1.5-1.8x faster on call-heavy code and turned inlining
-under the interpreter from a regression into roughly break-even.
+comes from. The interpreter's call path takes frames off a `FrameStack`
+(`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`);
+reusing frames and layouts made it 1.5-1.8x faster on call-heavy code and turned
+inlining under the interpreter from a regression into roughly break-even.
 
 **The interpreter's dispatch is mostly call overhead.** `execute_instruction` is
 one `match` over every instruction, and its prologue and epilogue -- six saved
@@ -1595,13 +1595,18 @@ is matched to a constant first (`copy_bytes`). Together these took primes from
 offsets from `ir::frame_layout::FrameLayout`, tracking bytes included, so a value,
 slot or tracking byte is where compiled code for the same body keeps it -- the
 precondition for entering compiled code from the middle of an interpreted loop.
+What only the interpreter keeps comes after that layout's bytes, in an
+extension compiled code never sees: the parameters as a `[Value]`, the shape
+descriptors, a descriptor word for each reference `resolve_ref_descriptors`
+names, and the liveness bytes where they are kept. A frame is its bytes, and
+`Frame` is a pointer to them and the layout.
 Liveness works as it does in compiled code: a tracked slot or `out` parameter
 says from its tracking byte, and everything else is taken to hold something --
 either it is precise, or, like an unwritten `var n: u32` passed `out`, its type
 owns nothing and destroying it does nothing, which is why the analysis left it
 untracked. The per-binding
-flags the interpreter used to keep for everything (`Liveness` in `frame.rs`) are
-kept only for script frames, which need them for REPL error recovery and for
+flags the interpreter used to keep for everything (liveness bytes, now in the
+frame's extension) are kept only for script frames, which need them for REPL error recovery and for
 later units' reads, and for function frames in debug builds, where they check
 the precise answers and the reads -- so the suite still panics on reading an
 empty slot, and a release build does not pay for the check. On speed it is
@@ -1618,13 +1623,18 @@ and `execute_instruction` (everything else, calls included). Entering
 `execute_instruction` costs a frame sized for its biggest arm, so an
 instruction that runs often belongs in one of the other two.
 
-**Pooled frames are boxed.** `FramePool` handed out and took back `Frame` by
-value, a 192-byte struct, which compiled to two `memcpy` calls per call; boxing
-them makes those pointer moves, and took recursive fib from 848ms to 655ms.
+**Frames come off a stack.** Function frames are bumped onto a `FrameStack`, a
+list of chunks that never move, each frame preceded by a header saying where
+the top was and holding its layout. Before that a `FramePool` handed out boxed
+`Frame` structs with vectors for the parameters, shapes and reference
+descriptors; before the boxing it moved a 192-byte struct by value, two
+`memcpy` calls per call, and boxing took recursive fib from 848ms to 655ms.
+Script frames are `ScriptFrame`s, which own their bytes and live in the
+`FrameStore`.
 
 **A call resolves its arguments into the callee's frame.** `execute_call_site`
-takes the frame from the pool (`FramePool::take`, which only empties the
-parameter lists), pushes each argument straight into it, offers the dispatcher
+pushes the callee's frame (`FrameStack::push`), sets each argument straight
+into it, offers the dispatcher
 the frame's parameters as they stand, and only if it declines makes the rest of
 the frame ready (`Frame::enter`). The parameters are one `Value` apiece so that
 they are the slice a dispatcher is handed, and until `enter` they carry the

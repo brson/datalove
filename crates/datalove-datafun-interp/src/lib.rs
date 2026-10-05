@@ -60,7 +60,7 @@ pub use error::InterpError;
 pub use value::{Value, Destination};
 pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
-pub use frame::{Frame, FramePool, FrameStore};
+pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
@@ -120,7 +120,7 @@ pub struct IrInterpreter {
     /// Frame layouts, kept so that calling a function does not recompute one.
     layout_cache: LayoutCache,
     /// Frames to reuse, so that calling a function does not allocate one.
-    frame_pool: FramePool,
+    frame_stack: FrameStack,
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
@@ -190,7 +190,7 @@ impl IrInterpreter {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
             layout_cache: LayoutCache::new(),
-            frame_pool: FramePool::new(),
+            frame_stack: FrameStack::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
@@ -395,14 +395,16 @@ impl IrInterpreter {
             None => Rc::new(IrLayout::of_unit(func, &mut self.tydesc_table)),
         };
 
-        let mut frame = self.frame_pool.take(layout);
-        for arg in args {
-            frame.push_param(arg);
+        let mut frame = self.frame_stack.push(layout)?;
+        for (i, arg) in args.into_iter().enumerate() {
+            frame.set_param(i, arg);
         }
-        frame.set_shape_descriptors(shape_descriptors);
+        for (i, tydesc) in shape_descriptors.into_iter().enumerate() {
+            frame.set_shape_descriptor(i, tydesc);
+        }
         frame.enter();
         let result = self.run_frame(func, &mut frame, ret_dest, ctx, registry, frames, code_ref.as_ref());
-        self.frame_pool.give_back(frame);
+        self.frame_stack.pop(frame);
         result
     }
 
@@ -419,8 +421,7 @@ impl IrInterpreter {
         code_ref: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
         if self.use_bytecode {
-            let layout = frame.layout_rc();
-            let bc = self.bytecode_for(&layout, func);
+            let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();
             return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);
         }
@@ -508,7 +509,8 @@ impl IrInterpreter {
         let layout = Rc::new(IrLayout::of_unit(unit, &mut self.tydesc_table));
 
         // Create frame with live value tracking for script cleanup.
-        let mut frame = Frame::new(unit, layout);
+        let script_frame = ScriptFrame::new(unit, layout);
+        let mut frame = script_frame.frame();
 
         let ctx = ExecutionContext::new(at, &unit.nested_units);
 
@@ -542,7 +544,7 @@ impl IrInterpreter {
             env.replace_unit(
                 self.runtime.handle(),
                 at,
-                frame,
+                script_frame,
                 unit.nested_units.clone(),
                 script_ctx.unit_end_values.clone(),
                 script_ctx.unit_end_slots.clone(),
@@ -550,7 +552,7 @@ impl IrInterpreter {
         } else {
             // Add this unit's frame and code units to the environment for future units.
             env.add_unit(
-                frame,
+                script_frame,
                 unit.nested_units.clone(),
                 script_ctx.unit_end_values.clone(),
                 script_ctx.unit_end_slots.clone(),
@@ -2534,7 +2536,7 @@ impl IrInterpreter {
         let optimized = self.get_optimized_function(identity);
         let body = optimized.as_deref().unwrap_or(callee);
         let layout = self.layout_cache.get_or_compute(identity, body, &mut self.tydesc_table);
-        let mut callee_frame = self.frame_pool.take(layout);
+        let mut callee_frame = self.frame_stack.push(layout)?;
 
         // Held until the call returns, because a borrowed argument with no
         // address of its own points into it.
@@ -2542,7 +2544,7 @@ impl IrInterpreter {
         for (i, op) in args.iter().enumerate() {
             let mode = callee_frame.layout().param_modes[i];
             let val = self.resolve_arg(mode, op, frame, frames, &mut scratch);
-            callee_frame.push_param(val);
+            callee_frame.set_param(i, val);
         }
         // After every argument is read, in case one place is passed twice.
         for (i, op) in args.iter().enumerate() {
@@ -2550,9 +2552,9 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
-        for r in shape_refs {
+        for (i, r) in shape_refs.iter().enumerate() {
             let tydesc = self.resolve_shape_ref(r, frame);
-            callee_frame.push_shape_descriptor(tydesc);
+            callee_frame.set_shape_descriptor(i, tydesc);
         }
         let dest_slot = frame.value_dest(dest);
 
@@ -2578,7 +2580,7 @@ impl IrInterpreter {
                 }
             }
         }
-        self.frame_pool.give_back(callee_frame);
+        self.frame_stack.pop(callee_frame);
         result
     }
 

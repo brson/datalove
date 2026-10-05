@@ -1,7 +1,8 @@
 //! Frame layout computation.
 //!
 //! Computes byte offsets for values and slots within a frame buffer,
-//! respecting alignment requirements from type descriptors.
+//! respecting alignment requirements from type descriptors, and for what only
+//! the interpreter keeps in a frame.
 
 use std::rc::Rc;
 
@@ -9,7 +10,8 @@ use rustc_hash::FxHashMap;
 
 use datalove_rtdt::TyDesc;
 use datalove_datafun_ir::frame_layout::{FrameLayout, SlotLayout};
-use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId, ParamMode, SlotId};
+use datalove_datafun_ir::layout::align_up;
+use datalove_datafun_ir::{IrCodeUnit, IrType, ParamId, ParamMode, SlotId, ValueId};
 
 use crate::bytecode::BcFunction;
 use crate::dispatch::FuncIdentity;
@@ -21,9 +23,21 @@ use crate::tydesc::IrTyDescTable;
 /// be told from its code unit alone lives here, so that entering the function
 /// reads it rather than working it out again.
 ///
-/// The offsets are `ir::frame_layout::FrameLayout`'s, the layout compiled code
-/// uses, flattened for the interpreter to read, with the descriptors the
-/// interpreter needs beside them.
+/// The offsets of values, slots and tracking bytes are
+/// `ir::frame_layout::FrameLayout`'s, the layout compiled code uses, flattened
+/// for the interpreter to read, with the descriptors the interpreter needs
+/// beside them. After that layout's bytes comes an extension that is the
+/// interpreter's alone, which compiled code neither has nor sees:
+///
+/// - the parameters, a `Value` each: a pointer to the caller's data and its
+///   descriptor, so that the arguments are a slice of the frame;
+/// - a descriptor per shape the function declares;
+/// - a descriptor word for each reference whose referent's static type does
+///   not describe it, as `resolve_ref_descriptors` says, the answer every
+///   backend reads;
+/// - where liveness is kept, a byte per value, slot and parameter.
+///
+/// So a frame is its bytes, and nothing about one lives anywhere else.
 pub struct IrLayout {
     /// Offset for each ValueId.
     pub value_offsets: Vec<u32>,
@@ -59,8 +73,22 @@ pub struct IrLayout {
     pub slot_is_copy: Vec<bool>,
     /// The tracking byte of each `out` parameter.
     pub param_tracking: Vec<Option<u32>>,
-    /// Where each parameter's pointer goes in the frame's parameter region.
+    /// Where each parameter's `Value` is: its pointer, then its descriptor.
+    /// Consecutive, so that the parameters are a `[Value]` from the first.
     pub param_offsets: Vec<u32>,
+    /// Where the descriptors for the declared shapes start, and how many.
+    pub shape_offset: u32,
+    pub shape_count: u32,
+    /// The descriptor word of each reference value that has one: those
+    /// `resolve_ref_descriptors` names. Any other reference points at what its
+    /// static type says.
+    pub ref_desc_offsets: Vec<Option<u32>>,
+    /// Where the liveness bytes start, if this frame keeps them: one per value,
+    /// then one per slot, then one per parameter.
+    pub liveness_offset: Option<u32>,
+    /// Whether this is a script unit's frame, whose untracked bindings say
+    /// from their liveness bytes whether they hold anything.
+    pub is_script: bool,
     /// The body lowered to bytecode, once something has asked for it, with
     /// the address of the body it was lowered from.
     ///
@@ -71,10 +99,22 @@ pub struct IrLayout {
     /// Where the tracking bytes start, and how many there are.
     pub tracking_offset: u32,
     pub tracking_count: u32,
-    /// Total frame size.
+    /// Total frame size, the extension included.
     pub frame_size: u32,
     /// Frame alignment.
     pub frame_align: u32,
+}
+
+/// What a layout is for, beyond its types: what the extension holds.
+pub struct LayoutExtras<'a> {
+    /// How many shapes the function declares.
+    pub shape_count: usize,
+    /// The reference values that get a descriptor word.
+    pub described_refs: &'a [ValueId],
+    /// Whether the frame keeps liveness bytes.
+    pub keep_liveness: bool,
+    /// Whether the frame is a script unit's.
+    pub is_script: bool,
 }
 
 impl IrLayout {
@@ -86,6 +126,7 @@ impl IrLayout {
         tracked_slots: &[SlotId],
         tracked_params: &[ParamId],
         return_type: Option<&IrType>,
+        extras: LayoutExtras,
         tydesc_table: &mut IrTyDescTable,
     ) -> Self {
         let frame = FrameLayout::compute(
@@ -110,6 +151,27 @@ impl IrLayout {
             .collect();
         let return_tydesc = return_type.map(|ty| tydesc_table.get_or_create(ty));
 
+        // The extension, after the shared layout: the words first, then the
+        // liveness bytes.
+        const WORD: u32 = std::mem::size_of::<usize>() as u32;
+        const VALUE: u32 = std::mem::size_of::<crate::value::Value>() as u32;
+        let mut offset = align_up(frame.frame_size, WORD);
+        let param_offsets: Vec<u32> = (0..param_types.len() as u32).map(|i| offset + i * VALUE).collect();
+        offset += param_types.len() as u32 * VALUE;
+        let shape_offset = offset;
+        offset += extras.shape_count as u32 * WORD;
+        let mut ref_desc_offsets = vec![None; value_types.len()];
+        for id in extras.described_refs {
+            ref_desc_offsets[id.0 as usize] = Some(offset);
+            offset += WORD;
+        }
+        let liveness_offset = extras.keep_liveness.then_some(offset);
+        if extras.keep_liveness {
+            offset += (value_types.len() + slot_types.len() + param_types.len()) as u32;
+        }
+        let frame_align = frame.frame_align.max(WORD);
+        let frame_size = align_up(offset, frame_align);
+
         Self {
             value_offsets: frame.values.iter().map(|v| v.offset).collect(),
             value_tydescs,
@@ -121,27 +183,48 @@ impl IrLayout {
             param_moves: Vec::new(),
             slot_tracking: frame.slots.iter().map(|s| s.tracking_byte).collect(),
             slot_is_copy: slot_types.iter().map(|ty| ty.is_copy()).collect(),
-            param_tracking: frame.params.iter().map(|p| p.tracking_byte).collect(),
-            param_offsets: frame.params.iter().map(|p| p.offset).collect(),
+            param_tracking: frame.param_tracking.clone(),
+            param_offsets,
+            shape_offset,
+            shape_count: extras.shape_count as u32,
+            ref_desc_offsets,
+            liveness_offset,
+            is_script: extras.is_script,
             bytecode: std::cell::OnceCell::new(),
             tracking_offset: frame.tracking_offset,
             tracking_count: frame.tracking_count,
-            frame_size: frame.frame_size,
-            frame_align: frame.frame_align,
+            frame_size,
+            frame_align,
         }
     }
 
     /// Compute the layout of a code unit, with what its calls need to know about
     /// its parameters.
     pub fn of_unit(unit: &IrCodeUnit, tydesc_table: &mut IrTyDescTable) -> Self {
+        let described_refs: Vec<ValueId> =
+            datalove_datafun_ir::resolve_ref_descriptors(unit).into_keys().collect();
         let Some(ctx) = unit.function_context() else {
+            // A script frame keeps liveness always: the REPL frees what a unit
+            // that failed part way had bound, and later units read and move
+            // its bindings.
+            let extras = LayoutExtras {
+                shape_count: 0, described_refs: &described_refs, keep_liveness: true, is_script: true,
+            };
             return Self::compute(
                 &unit.value_types, &unit.slot_types, &[], &unit.tracked_slots, &[], None,
-                tydesc_table);
+                extras, tydesc_table);
+        };
+        // A function frame keeps liveness in debug builds only, as a check on
+        // the ownership analysis.
+        let extras = LayoutExtras {
+            shape_count: ctx.descriptor_shapes.len(),
+            described_refs: &described_refs,
+            keep_liveness: cfg!(debug_assertions),
+            is_script: false,
         };
         let mut layout = Self::compute(
             &unit.value_types, &unit.slot_types, &ctx.param_types,
-            &unit.tracked_slots, &ctx.tracked_params, Some(&ctx.return_type), tydesc_table);
+            &unit.tracked_slots, &ctx.tracked_params, Some(&ctx.return_type), extras, tydesc_table);
         layout.param_modes = (0..ctx.param_types.len())
             .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
             .collect();

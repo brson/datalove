@@ -9,4 +9,6 @@ pub enum InterpError {
     DivisionByZero,
     /// Runtime error.
     RuntimeError(String),
+    /// The frame stack reached its limit.
+    StackOverflow,
 }

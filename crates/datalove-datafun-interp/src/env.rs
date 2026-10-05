@@ -9,7 +9,7 @@
 use std::sync::Arc;
 use datalove_datafun_ir::{IrCodeUnit, CodeUnitId, CodeRef, IrModuleId, ValueId, SlotId};
 use crate::dispatch::FuncIdentity;
-use crate::frame::{Frame, FrameStore};
+use crate::frame::{FrameStore, ScriptFrame};
 
 // Re-export registry types from the IR crate.
 pub use datalove_datafun_ir::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry};
@@ -55,7 +55,7 @@ impl ScriptEnvironment {
     /// Add a completed unit's frame and code units.
     pub fn add_unit(
         &mut self,
-        frame: Frame,
+        frame: ScriptFrame,
         code_units: Vec<IrCodeUnit>,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,
@@ -74,7 +74,7 @@ impl ScriptEnvironment {
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
         unit: u32,
-        frame: Frame,
+        frame: ScriptFrame,
         code_units: Vec<IrCodeUnit>,
         unit_end_values: Vec<ValueId>,
         unit_end_slots: Vec<SlotId>,

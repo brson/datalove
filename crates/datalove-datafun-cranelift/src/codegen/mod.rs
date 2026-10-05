@@ -1260,7 +1260,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Get tracking byte offset for a param, if tracked.
     fn param_tracking_byte_offset(&self, pid: ParamId) -> Option<u32> {
-        self.layout.params[pid.0 as usize].tracking_byte
+        self.layout.param_tracking[pid.0 as usize]
     }
 
     /// Mark a tracked param as LIVE after store.

@@ -4,7 +4,7 @@
 
 mod aligned_buffer;
 
-pub use aligned_buffer::AlignedBuffer;
+pub use aligned_buffer::{AlignedBuffer, POISON};
 
 use crate::c::{LocalRtHandle, RtStatus};
 use datalove_rtdt as rtdt;

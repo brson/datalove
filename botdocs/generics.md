@@ -252,9 +252,11 @@ packed is a comparison between two descriptors (`unwraps_the_element`,
 ## What each backend carries
 
 The **interpreter** needs the least: its values are already a pointer and a
-descriptor, and a parameter's is per-frame (`Frame::param_tydescs`). What it
-lacked was anywhere to put one for an SSA value, which is `Frame::value_tydescs`
--- written by the projections, read by `value_deref`.
+descriptor, and a parameter's is per-frame, beside its pointer in the frame's
+parameter region. A reference `resolve_ref_descriptors` names gets a
+descriptor word in the frame (`IrLayout::ref_desc_offsets`), written by its
+projection and read by `value_deref`; any other reference is described by its
+static type, as in the compiled backends.
 
 The **compiled backends** take one extra pointer parameter per entry in
 `descriptor_params`, then one per entry in `descriptor_shapes`, after the

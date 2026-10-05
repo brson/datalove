@@ -1,12 +1,16 @@
 //! Frame layout of a compiled function.
 //!
-//! Where each parameter, value and slot of a code unit lives in its frame, and
-//! where the tracking bytes go. Every backend lays its frames out from this:
-//! the cranelift and C backends, and the interpreter, whose `IrLayout` takes
-//! its offsets from here and keeps its parameter pointers elsewhere, leaving
-//! their space unused. So a frame the interpreter is running holds its values,
+//! Where each value and slot of a code unit lives in its frame, and where the
+//! tracking bytes go. Every backend lays its frames out from this: the
+//! cranelift and C backends, and the interpreter, whose `IrLayout` takes its
+//! offsets from here. So a frame the interpreter is running holds its values,
 //! slots and tracking bytes where compiled code for the same body would look
 //! for them.
+//!
+//! Parameters have no place here, only tracking bytes: compiled code passes
+//! them as SSA values or C arguments, and the interpreter keeps them in a
+//! region of its own after this layout's `frame_size`, with the rest of what
+//! only it needs.
 //!
 //! Sizes come from `layout::layout_of`, so a value occupies the same bytes here
 //! as it does anywhere else.
@@ -44,8 +48,8 @@ pub struct FrameLayout {
     pub values: Vec<SlotLayout>,
     /// Layout for each SlotId (mutable slots).
     pub slots: Vec<SlotLayout>,
-    /// Layout for each ParamId.
-    pub params: Vec<SlotLayout>,
+    /// The tracking byte of each ParamId, for an `out` parameter.
+    pub param_tracking: Vec<Option<u32>>,
     /// Total frame size in bytes.
     pub frame_size: u32,
     /// Frame alignment requirement.
@@ -59,8 +63,8 @@ pub struct FrameLayout {
 impl FrameLayout {
     /// Compute frame layout from IR type arrays.
     ///
-    /// Layout order: params, values, slots, tracking bytes. Tracked slots and
-    /// tracked params each get a tracking byte; values are precise and get none.
+    /// Layout order: values, slots, tracking bytes. Tracked slots and tracked
+    /// params each get a tracking byte; values are precise and get none.
     pub fn compute(
         param_types: &[IrType],
         value_types: &[IrType],
@@ -83,9 +87,7 @@ impl FrameLayout {
             slot
         };
 
-        // A parameter is a pointer to the caller's data, whatever its type.
-        let ptr = layout_of(&IrType::Ref(Box::new(IrType::Unit)));
-        let mut params: Vec<SlotLayout> = param_types.iter().map(|_| place(ptr)).collect();
+        let mut param_tracking: Vec<Option<u32>> = vec![None; param_types.len()];
         let values: Vec<SlotLayout> = value_types.iter().map(|ty| place(layout_of(ty))).collect();
         let mut slots: Vec<SlotLayout> = slot_types.iter().map(|ty| place(layout_of(ty))).collect();
 
@@ -100,7 +102,7 @@ impl FrameLayout {
         // Tracked params' bytes come after the slots'.
         let param_tracking_base = tracking_offset + slot_tracking_count;
         for (i, &pid) in tracked_params.iter().enumerate() {
-            params[pid.0 as usize].tracking_byte = Some(param_tracking_base + i as u32);
+            param_tracking[pid.0 as usize] = Some(param_tracking_base + i as u32);
         }
 
         offset += tracking_count;
@@ -110,7 +112,7 @@ impl FrameLayout {
         let frame_size = align_up(offset, max_align).max(1);
 
         Self {
-            params,
+            param_tracking,
             values,
             slots,
             frame_size,
@@ -130,11 +132,6 @@ impl FrameLayout {
         self.slots[idx as usize].offset
     }
 
-    /// Get the offset for a param by index.
-    pub fn param_offset(&self, idx: u32) -> u32 {
-        self.params[idx as usize].offset
-    }
-
     /// Get the tracking byte offset for a value, if tracked.
     pub fn value_tracking_byte(&self, idx: u32) -> Option<u32> {
         self.values[idx as usize].tracking_byte
@@ -147,7 +144,7 @@ impl FrameLayout {
 
     /// Get the tracking byte offset for a param, if tracked.
     pub fn param_tracking_byte(&self, idx: u32) -> Option<u32> {
-        self.params[idx as usize].tracking_byte
+        self.param_tracking[idx as usize]
     }
 }
 
@@ -183,14 +180,12 @@ mod tests {
     }
 
     #[test]
-    fn test_params_are_pointers() {
-        let layout = FrameLayout::compute(&[IrType::U32, IrType::String], &[], &[], &[], &[]);
-        assert_eq!(layout.params.len(), 2);
-        // All params are pointers (8 bytes each).
-        assert_eq!(layout.params[0].size, 8);
-        assert_eq!(layout.params[1].size, 8);
-        assert_eq!(layout.params[0].offset, 0);
-        assert_eq!(layout.params[1].offset, 8);
+    fn test_params_take_no_space() {
+        let layout = FrameLayout::compute(
+            &[IrType::U32, IrType::String], &[IrType::U32], &[], &[], &[ParamId(1)]);
+        assert_eq!(layout.values[0].offset, 0);
+        assert_eq!(layout.param_tracking, vec![None, Some(4)]);
+        assert_eq!(layout.frame_size, 8);
     }
 
     #[test]
