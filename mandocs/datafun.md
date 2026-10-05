@@ -25,6 +25,7 @@ For detail see additional documentation.
 
 <div class="toc toc-repeat-8">
 
+- [A first script](#user-content-a-first-script)
 - [Data types](#user-content-data-types)
 - [Functions](#user-content-functions)
 - [Control flow](#user-content-control-flow)
@@ -43,6 +44,56 @@ For detail see additional documentation.
 </div>
 
 
+
+## A first script
+
+Datafun programs are either _modules_, `.dfm` files that define functions for others to use,
+or _scripts_, `.dfs` files that also contain top-level statements,
+run in order from top to bottom.
+Every example in this document is a script.
+
+```datalove
+// Load a module from the standard library.
+require module sys/std/string
+
+// Bring one of its functions into scope by name.
+import string.to_uppercase
+
+let greeting = "hello, world"
+let shout = to_uppercase(ref greeting)
+
+// Or call it qualified by the module name, without importing.
+let size = string.len(ref greeting)
+
+debuglog (greeting, shout, size)
+```
+
+Scripts are run with the `datalove` command.
+
+```
+$ datalove script hello.dfs
+("hello, world", "HELLO, WORLD", 12)
+```
+
+Since datafun cannot perform I/O,
+`debuglog` is the only way for a script to produce output.
+It prints any value.
+
+Comments begin with `//` and run to the end of the line.
+
+`require module` loads a module by its path,
+here the `string` module of the `std` package in the `sys` library.
+Its functions are then called either qualified by the module name, as in `string.len`,
+or by bare name after an `import`.
+A name can only be imported once per scope,
+so when two modules export functions of the same name,
+as `u8.from_int` and `i8.from_int`,
+at least one must be called qualified.
+Modules are covered further in [Modules, packages, and libraries](#user-content-modules-packages-and-libraries).
+
+The `ref` before `greeting` passes the string by reference
+instead of moving it into the function;
+this is described in [Ownership](#user-content-ownership).
 
 
 ## Data types
@@ -150,49 +201,43 @@ debuglog a
 ## Functions
 
 Functions have a line-oriented and statement-oriented syntax.
+They are declared with `fun` and closed with `end fun`.
+Parameters and return types are always annotated,
+and values are returned with an explicit `ret`.
 
 ```datalove
-require module sys/std/string
-
-fun count_substrings(s: string, ref needle: string): ?int
-  var haystack = s
-  var count = 0
-  loop
-    if string.len(ref haystack) == 0
-      break
-    end if
-
-    if string.starts_with(ref haystack, ref needle)
-      set count = count + 1
-    end if
-
-    let next_char_index = string.find_char(ref haystack, 1)
-    if next_char_index |index|
-      set haystack = string.slice_from(ref haystack, index)?
-    else
-      set haystack = ""
-    end if
-  end loop
-  ret some count
+fun average(a: f64, b: f64): f64
+  ret (a + b) / 2.0
 end fun
+
+let avg = average(3.0, 4.0)
+
+debuglog avg
 ```
 
 Lines can break freely between matched braces of all kinds
 (`( .. )`, `{ .. }`, `< .. >` and others).
 
 ```datalove
-fun count_substrings(
-  s: string, ref needle: string,
-): ?{
-  count: int, other_flags: u8,
-}
-  // ... etc ...
+require module sys/std/f64
 
-  ret some {
-    count = count,
-    other_flags = 0x00,
+fun average(
+  a: f64, b: f64
+): {
+  mean: f64,
+  stddev: f64,
+}
+  ret {
+    mean = (a + b) / 2.0,
+    stddev = f64.abs(a - b) / 2.0,
   }
 end fun
+
+let avg = average(
+  3.0, 4.0
+)
+
+debuglog avg
 ```
 
 Function arguments are either passed by value, by reference (`ref`),
@@ -596,6 +641,40 @@ end fun
 
 debuglog(add_twice(: u32 / 1, : u32 / 2))
 debuglog(add_twice(: u32 / 1, : u32 / 4000000000))
+```
+
+Putting these together,
+this function counts the occurrences of one string in another,
+propagating `none` with `?` if slicing the string ever fails.
+
+```datalove
+require module sys/std/string
+
+fun count_substrings(s: string, ref needle: string): ?int
+  var haystack = s
+  var count = 0
+  loop
+    if string.len(ref haystack) == 0
+      break
+    end if
+
+    if string.starts_with(ref haystack, ref needle)
+      set count = count + 1
+    end if
+
+    let next_char_index = string.find_char(ref haystack, 1)
+    if next_char_index |index|
+      set haystack = string.slice_from(ref haystack, index)?
+    else
+      set haystack = ""
+    end if
+  end loop
+  ret some count
+end fun
+
+let needle = "an"
+
+debuglog count_substrings("banana", ref needle)
 ```
 
 
