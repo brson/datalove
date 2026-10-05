@@ -1572,7 +1572,14 @@ is a workspace's own, read from disk by the command line (`script`,
 A command given a script never looks in the current directory, and nothing
 further up the tree is looked at. There is no workspace manifest. The pipeline
 itself takes whatever libraries it is given; the rule is the command line's.
-A package in `local` may not have a rider yet.
+
+A package in `local` may have a rider. The system library's riders are linked
+into the binary; a workspace's own are built with cargo into a library the
+first time one of their natives is called, or into the program `aot-compile`
+links, so running one needs a Rust toolchain. A rider is named after its
+package, in `require rider` and in its natives' symbols, and riders are not
+told apart by library: a package with a rider may not share its name with
+another package that has one, such as `local/std` beside `sys/std`.
 
 ### 9.2 Require
 

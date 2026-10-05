@@ -77,7 +77,7 @@ fn command_workspace(
         WorkspaceDescriptor::from_system_library(sys)
     };
     Ok(match command_local_library(script)? {
-        Some(local) => descriptor.with_user_library(local),
+        Some(local) => descriptor.with_user_library(local)?,
         None => descriptor,
     })
 }

@@ -435,35 +435,42 @@ pub fn find_local_library(script: Option<&Path>, cwd: &Path) -> Option<PathBuf> 
 }
 
 /// Load the `local` library from `dir`.
-///
-/// A package in it may not have a rider yet. Building one means building a
-/// Rust crate when the script runs, and the natives of this binary's own
-/// riders and those of a built one cannot yet be used together.
 pub fn load_local_library(dir: &Path) -> AnyResult<PackageLibrary> {
     let packages = datalove_datafun_pkg::package_load::load_library_dir(&dir.to_path_buf())
         .with_context(|| fmt!("failed to load the local library at {}", dir.display()))?;
-    for (name, package) in &packages {
-        if package.rider_source.is_some() || package.rider_crate_dir.is_some() {
-            bail!(
-                "package `{name}` in {} has a rider, and riders in the local library \
-                 are not supported yet",
-                dir.display(),
-            );
-        }
-    }
     Ok(package_library_from_map("local", &packages))
 }
 
 impl WorkspaceDescriptor {
     /// Add a user library, as [`load_local_library`] gives.
-    pub fn with_user_library(self, library: PackageLibrary) -> Self {
+    ///
+    /// A rider is named after its package, in `require rider` and in the
+    /// symbols of its natives alike, and riders are not told apart by
+    /// library. So a package with a rider may not share its name with a
+    /// package already here that has one: `local/std` with a rider would be
+    /// a second `std` rider beside the system library's.
+    pub fn with_user_library(self, library: PackageLibrary) -> AnyResult<Self> {
+        for (name, package) in &library.packages {
+            if package.rider.is_none() {
+                continue;
+            }
+            let clash = self.libraries()
+                .find(|lib| lib.packages.get(name).is_some_and(|p| p.rider.is_some()));
+            if let Some(clash) = clash {
+                bail!(
+                    "package `{}/{name}` has a rider, and so does `{}/{name}`: \
+                     riders are named after their packages, so two cannot share a name",
+                    library.name, clash.name,
+                );
+            }
+        }
         let other = WorkspaceDescriptor {
             system_library: None,
             user_libraries: vec![library],
             options: self.options.clone(),
             work_dir: None,
         };
-        self.merge(&other)
+        Ok(self.merge(&other))
     }
 
     /// The file each module is read from, by module path, for diagnostics.
@@ -513,24 +520,34 @@ impl WorkspaceDescriptor {
 
     /// Collect all rider crate directories as (name, path) pairs.
     pub fn rider_crates(&self) -> Vec<RiderCrate> {
-        let mut riders = Vec::new();
-        for lib in self.libraries() {
-            for pkg in lib.packages.values() {
-                let Some(rider) = &pkg.rider else { continue };
-                // A rider nothing declared is a rider nothing can call. The
-                // manifest is required wherever an interface is, so every
-                // rider a module reaches has a name and a version here.
-                let Some((crate_name, version)) = &rider.crate_spec else { continue };
-                riders.push(RiderCrate {
-                    rider_name: pkg.name.clone(),
-                    crate_name: crate_name.clone(),
-                    version: version.clone(),
-                    dir: rider.crate_dir.clone(),
-                });
-            }
-        }
-        riders
+        rider_crates_of(self.libraries())
     }
+
+    /// The rider crates of the user libraries, which no binary carries.
+    pub fn user_rider_crates(&self) -> Vec<RiderCrate> {
+        rider_crates_of(self.user_libraries.iter())
+    }
+}
+
+/// The rider crates of the packages in `libraries`.
+fn rider_crates_of<'a>(libraries: impl Iterator<Item = &'a PackageLibrary>) -> Vec<RiderCrate> {
+    let mut riders = Vec::new();
+    for lib in libraries {
+        for pkg in lib.packages.values() {
+            let Some(rider) = &pkg.rider else { continue };
+            // A rider nothing declared is a rider nothing can call. The
+            // manifest is required wherever an interface is, so every
+            // rider a module reaches has a name and a version here.
+            let Some((crate_name, version)) = &rider.crate_spec else { continue };
+            riders.push(RiderCrate {
+                rider_name: pkg.name.clone(),
+                crate_name: crate_name.clone(),
+                version: version.clone(),
+                dir: rider.crate_dir.clone(),
+            });
+        }
+    }
+    riders
 }
 
 // ---------------------------------------------------------------------------
@@ -905,7 +922,7 @@ mod local_library_tests {
     }
 
     #[test]
-    fn local_library_refuses_a_rider() {
+    fn local_library_takes_a_rider() {
         let ws = layout(&["local/app/rider"]);
         fs::write(ws.path().join("local/app/m.dfm"), "").unwrap();
         fs::write(ws.path().join("local/app/rider/rider.dli"), "native fun f(): int\n").unwrap();
@@ -914,7 +931,28 @@ mod local_library_tests {
             "[rider]\nname = \"app-rider\"\nversion = \"0.1.0\"\n",
         ).unwrap();
 
-        let error = load_local_library(&ws.path().join("local")).unwrap_err();
-        assert!(fmt!("{error:#}").contains("riders in the local library are not supported yet"), "{error:#}");
+        let library = load_local_library(&ws.path().join("local")).unwrap();
+        assert!(library.packages["app"].rider.is_some());
+        let workspace = WorkspaceDescriptor::empty().with_user_library(library).unwrap();
+        assert_eq!(workspace.user_rider_crates().len(), 1);
+    }
+
+    #[test]
+    fn a_rider_may_not_share_a_name_with_another() {
+        let with_rider = |library: &str| PackageLibrary {
+            name: library.S(),
+            packages: BTreeMap::from([("std".S(), PackageDescriptor {
+                name: "std".S(),
+                modules: BTreeMap::new(),
+                rider: Some(RiderDescriptor {
+                    interface_source: Arc::from(""),
+                    crate_spec: Some(("r".S(), "0.1.0".S())),
+                    crate_dir: None,
+                }),
+            })]),
+        };
+        let workspace = WorkspaceDescriptor::empty().with_user_library(with_rider("sys")).unwrap();
+        let error = workspace.with_user_library(with_rider("local")).unwrap_err();
+        assert!(fmt!("{error}").contains("two cannot share a name"), "{error}");
     }
 }

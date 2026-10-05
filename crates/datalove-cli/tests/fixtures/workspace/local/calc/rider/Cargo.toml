@@ -1,0 +1,10 @@
+[package]
+name = "datalove-test-rider-calc"
+description = "A rider in a workspace's local library, for the CLI's tests."
+version = "0.1.0"
+# Not 2024: the exported functions are written `#[no_mangle]`, which 2024 wants
+# spelled `#[unsafe(no_mangle)]`.
+edition = "2021"
+publish = false
+
+[dependencies]

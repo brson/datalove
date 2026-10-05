@@ -27,21 +27,35 @@ use super::{CompiledModules, RiderCrate, ScriptExecutor, WorkspaceDescriptor, ri
 /// Built riders are the general case: [`RiderNatives::built`]. The riders
 /// `sys` carries are linked into this binary, and [`RiderNatives::linked`]
 /// takes those addresses rather than building anything; see
-/// [`build_sys_riders`] for choosing between the two.
+/// [`build_sys_riders`] for choosing between the two. A workspace with riders
+/// of its own besides has both: the linked ones, and its own built.
 pub struct RiderNatives {
-    source: NativesSource,
+    /// Linked into this binary, looked in first.
+    linked: Option<LinkedNatives>,
+    /// Compiled from rider crates, for every symbol the linked ones lack.
+    built: Option<BuiltNatives>,
 }
 
-enum NativesSource {
-    /// The workspace's rider crates, compiled into one library on first use.
-    Built {
-        work_dir: Option<PathBuf>,
-        riders: Vec<RiderCrate>,
-        /// The error kept as text, since every later caller is told it too.
-        library: OnceLock<Result<Arc<LoadedLibrary>, String>>,
-    },
-    /// Linked into this binary.
-    Linked(LinkedNatives),
+/// Rider crates, compiled into one library on first use.
+struct BuiltNatives {
+    work_dir: Option<PathBuf>,
+    riders: Vec<RiderCrate>,
+    /// The error kept as text, since every later caller is told it too.
+    library: OnceLock<Result<Arc<LoadedLibrary>, String>>,
+}
+
+impl BuiltNatives {
+    fn new(work_dir: Option<PathBuf>, riders: Vec<RiderCrate>) -> Self {
+        BuiltNatives { work_dir, riders, library: OnceLock::new() }
+    }
+
+    fn address(&self, symbol: &str) -> AnyResult<*const ()> {
+        let library = self.library
+            .get_or_init(|| build_and_load(self.work_dir.as_deref(), &self.riders).map_err(|e| fmt!("{:#}", e)))
+            .as_ref()
+            .map_err(|e| anyhow!("{}", e))?;
+        unsafe { library.symbol(symbol) }
+    }
 }
 
 /// The addresses of natives linked into this binary, by symbol.
@@ -56,48 +70,45 @@ impl RiderNatives {
     /// Build `descriptor`'s riders when one of their natives is first wanted.
     pub fn built(descriptor: &WorkspaceDescriptor) -> Self {
         Self {
-            source: NativesSource::Built {
-                work_dir: descriptor.work_dir.clone(),
-                riders: descriptor.rider_crates(),
-                library: OnceLock::new(),
-            },
+            linked: None,
+            built: Some(BuiltNatives::new(descriptor.work_dir.clone(), descriptor.rider_crates())),
         }
     }
 
     /// Take the natives linked into this binary, as
     /// [`SystemLibrary::natives`](super::SystemLibrary::natives) lists them.
     pub fn linked(natives: &[(String, *const ())]) -> Self {
-        Self { source: NativesSource::Linked(LinkedNatives(natives.to_vec())) }
+        Self { linked: Some(LinkedNatives(natives.to_vec())), built: None }
     }
 
     /// The natives for `descriptor`, for a driver carrying the `linked` ones.
     ///
-    /// Linked unless [`build_sys_riders`] says to build them.
+    /// The system library's are linked unless [`build_sys_riders`] says to
+    /// build them. The riders of the workspace's own libraries are built, there
+    /// being nothing of theirs in this binary.
     pub fn for_workspace(descriptor: &WorkspaceDescriptor, linked: &[(String, *const ())]) -> Self {
         if build_sys_riders() {
-            Self::built(descriptor)
-        } else {
-            Self::linked(linked)
+            return Self::built(descriptor);
+        }
+        let own = descriptor.user_rider_crates();
+        Self {
+            linked: Some(LinkedNatives(linked.to_vec())),
+            built: (!own.is_empty()).then(|| BuiltNatives::new(descriptor.work_dir.clone(), own)),
         }
     }
 
     /// The address of the native the compiler calls `symbol`.
     ///
-    /// The first call for built riders builds and loads them.
+    /// The first call for a built rider's native builds and loads them all.
     pub fn address(&self, symbol: &str) -> AnyResult<*const ()> {
-        match &self.source {
-            NativesSource::Built { work_dir, riders, library } => {
-                let library = library
-                    .get_or_init(|| build_and_load(work_dir.as_deref(), riders).map_err(|e| fmt!("{:#}", e)))
-                    .as_ref()
-                    .map_err(|e| anyhow!("{}", e))?;
-                unsafe { library.symbol(symbol) }
+        if let Some(LinkedNatives(natives)) = &self.linked {
+            if let Some((_, fn_ptr)) = natives.iter().find(|(name, _)| name == symbol) {
+                return Ok(*fn_ptr);
             }
-            NativesSource::Linked(LinkedNatives(natives)) => {
-                let (_, fn_ptr) = natives.iter().find(|(name, _)| name == symbol)
-                    .ok_or_else(|| anyhow!("native function '{}' is not linked into this binary", symbol))?;
-                Ok(*fn_ptr)
-            }
+        }
+        match &self.built {
+            Some(built) => built.address(symbol),
+            None => bail!("native function '{}' is not linked into this binary", symbol),
         }
     }
 }

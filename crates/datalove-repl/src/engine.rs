@@ -122,7 +122,7 @@ impl Engine {
     pub fn with_local(sys: SystemLibrary, local: Option<PackageLibrary>) -> AnyResult<Engine> {
         let workspace = WorkspaceDescriptor::from_system_library(&sys);
         let workspace = match local {
-            Some(local) => workspace.with_user_library(local),
+            Some(local) => workspace.with_user_library(local)?,
             None => workspace,
         };
         Engine::with_workspace(sys, workspace)

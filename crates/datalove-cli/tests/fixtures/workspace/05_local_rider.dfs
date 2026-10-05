@@ -1,0 +1,4 @@
+// A local package's rider is built from its crate and called like any other.
+require module local/calc/ops
+
+debuglog ops.triple(: i64 / 14)

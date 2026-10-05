@@ -1,0 +1,4 @@
+# The rider implementing this package's `native fun` declarations.
+[rider]
+name = "datalove-test-rider-calc"
+version = "0.1.0"
