@@ -33,6 +33,8 @@ home here.
 - [Nothing consumes a WorkspaceDelta](#user-content-nothing-consumes-a-workspacedelta)
 - [No batch of scripts against one world](#user-content-no-batch-of-scripts-against-one-world)
 - [Every REPL line is a new salsa input](#user-content-every-repl-line-is-a-new-salsa-input)
+- [Deep recursion aborts the process, in every engine](#user-content-deep-recursion-aborts-the-process-in-every-engine)
+- [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 
 ## Nothing but a test inlines
 
@@ -465,3 +467,84 @@ nothing, since identical text is a different input. Nothing replays today --
 `Engine::reset` after a panic starts an empty session rather than replaying the
 old one -- so that half only matters if recovery is ever meant to keep the
 session. Holding a stable `Source` per unit for appends too would fix both.
+
+## Deep recursion aborts the process, in every engine
+
+**Reproduced.** Every engine runs datalove calls on the native stack, and
+nothing limits the depth, checks for overflow or recovers from it. A trivial
+recursive function, `down(n)` returning `down(n - 1) + 1`, on a release build:
+
+| engine | stack | deepest that ran |
+|---|---|---|
+| IR walker | main thread, 8 MiB | ~7,450 |
+| bytecode (`DATALOVE_INTERP=bc`) | main thread, 8 MiB | ~9,300 |
+| JIT (`script --jit`) | spawned thread, 2 MiB | ~14,400 |
+
+Past that, `fatal runtime error: stack overflow, aborting`: the whole process
+goes, the REPL included, whose `catch_unwind` cannot catch it. A debug build of
+the interpreter spends 14-17 KB of stack a call (`execute_instruction` and
+`run_bytecode` have frames of about 10 KB each), which on a 2 MiB thread is
+about 120 levels.
+
+Where the stack goes:
+
+- **IR walker**: `execute_blocks`, `execute_instruction`, `execute_call_site`,
+  `run_frame` -- four Rust frames, about 1 KB, per datalove call. Frame data
+  is on the heap, in `FramePool`'s boxes; only control nests.
+- **Bytecode**: `run_bytecode` and `fast_call`, about 0.9 KB a call.
+- **JIT**: a stack slot of the shared frame layout per function, and a call
+  through a per-callee stub, so two machine frames a call. A call from JIT code
+  to a function not compiled yet goes through `__jit_dispatch_call` back into
+  the interpreter, so mixed chains interleave both on the one stack.
+- **AOT**: the same, Cranelift stack slots or a `uint8_t __frame[N]` on the C
+  stack.
+- **Natives** are leaves: nothing calls back into datalove code from a native or
+  the runtime. The runtime's destroy, clone and compare do recurse natively in
+  proportion to how deeply a value nests.
+
+Related faults:
+
+- `script --jit` and the REPL worker run on `std::thread::spawn`'s default 2 MiB
+  stack, a quarter of the main thread's.
+- Neither Cranelift backend sets `enable_probestack`; a JIT frame bigger than a
+  page could step past the guard page rather than onto it. Not checked against
+  this Cranelift's default.
+- `__jit_dispatch_call` is `extern "C"`, not `"C-unwind"`, so a panic, or an
+  `InterpError` turned into one, from interpreted code under JIT code aborts.
+- Compile-time evaluation has no depth limit either; see
+  [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits).
+- No test recurses deeper than about 30. `worldgen_dual_tests` works around the
+  interpreter's depth with a 32 MiB thread.
+
+**What is wanted**: the interpreter and the JIT detect overflow and tear down
+safely -- an error that unwinds every frame, destroying what each owns, and
+leaves the REPL and the host running. The AOT backends abort, as compiled code
+does, but with a message rather than a segfault where that is cheap. Detection
+can be a depth count or a check of the stack pointer against a limit at calls
+(both engines cross through a few known places: `execute_call_site`,
+`fast_call`, the JIT's stubs and its dispatch trampoline). Moving bytecode calls
+off the Rust stack (see "Calls" in `plan-bytecode.md`) would make the
+interpreter's own limit a bounds check on its frame stack, but mixed JIT and
+interpreter chains still nest natively and still need the check.
+
+## The C backend's tensor views are static, so not reentrant
+
+**Reasoned about, not reproduced.** Indexing a tensor of rank above 1 by
+reference (`TensorIndexRef`) makes a view tensor and hands out a pointer to it.
+The C backend puts the view in a function-scope `static` buffer
+(`datalove-datafun-c-aot/src/codegen.rs`, the rank-above-1 arm of
+`TensorIndexRef`, `static _Alignas(8) uint8_t __view[...]`), presumably because
+a block-local array would not outlive the block that makes it. A static is
+shared by every activation of the function: a recursive call that indexes
+through the same instruction overwrites the view its caller still holds, and so
+would two threads. The comment beside it says "on C stack as a local variable",
+which it is not.
+
+The Cranelift backends get this right: the view is a stack slot of the
+function (`datalove-datafun-cranelift/src/codegen/tensors.rs`), one per
+activation. The fix is the same for C -- declare the buffer at function scope,
+beside `__frame`, or give it room in the frame layout.
+
+One instruction executed twice in the same activation, in a loop, reuses its
+view in every backend; whether a reference from an earlier iteration can still
+be live then is a separate question, not looked at.
