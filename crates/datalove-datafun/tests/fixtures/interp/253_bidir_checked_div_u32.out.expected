@@ -25,7 +25,7 @@ Analysis(
                         v2, v3 = div.checked v0, v1
                         branch v3, block1, block2
                     block1:
-                        v4 = const "arithmetic overflow"
+                        v4 = const "division by zero"
                         v5 = error_from v4
                         v6 = err v5
                         return v6

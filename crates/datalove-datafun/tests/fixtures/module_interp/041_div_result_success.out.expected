@@ -10,7 +10,7 @@ ModulesAnalysis(
                 v0, v1 = div.checked p0, p1
                 branch v1, block1, block2
             block1:
-                v2 = const "arithmetic overflow"
+                v2 = const "division by zero"
                 v3 = error_from v2
                 v4 = err v3
                 return v4

@@ -44,7 +44,7 @@ DualAnalysis(
                         v4, v5 = div.checked p0, p1
                         branch v5, block4, block5
                     block4:
-                        v6 = const "arithmetic overflow"
+                        v6 = const "division by zero"
                         v7 = error_from v6
                         v8 = err v7
                         return v8
@@ -115,7 +115,7 @@ DualAnalysis(
                         v4, v5 = div.checked p0, p1
                         branch v5, block4, block5
                     block4:
-                        v6 = const "arithmetic overflow"
+                        v6 = const "division by zero"
                         v7 = error_from v6
                         v8 = err v7
                         return v8

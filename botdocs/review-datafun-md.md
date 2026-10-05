@@ -158,9 +158,10 @@ could become a `loop while` that uses `continue`.
 - That checked operators return early from the *enclosing function* is the
   most surprising semantics in the document. Emphasise it, and contrast it
   with Rust's `checked_add`.
-- Say what `/!` produces. Division by zero gives `er error "arithmetic
-  overflow"`, which is an odd message for that case. It may be worth fixing
-  in the compiler rather than documenting.
+- Say what the `!` operators produce: `er error "arithmetic overflow"` for
+  `+!`, `-!` and `*!`, and for `/!` `er error "division by zero"`, or
+  `"division by zero or overflow"` on signed types, where `MIN /! -1` fails
+  too.
 - Conversions: describe the naming conventions rather than one function:
   `from_X` (none when out of range), `from_X_wrapping`, `from_int` on every
   fixed type, `f32`/`f64.from_<fixed>`, `int.from_f64`, conversions between

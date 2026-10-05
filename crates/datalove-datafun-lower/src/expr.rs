@@ -1453,13 +1453,35 @@ fn lower_checked_result_binop<'db>(
     });
 
     // Early return block: create error and return Err.
+    let message = checked_failure_message(op, &operand_type(ctx, &lhs));
     ctx.start_block(early_return_block);
     drop_discarded_checked_result(ctx, dest);
-    ctx.emit_early_return_err_message("arithmetic overflow", false);
+    ctx.emit_early_return_err_message(message, false);
 
     // Continue block: dest already has the computed value.
     ctx.start_block(continue_block);
     Ok(dest)
+}
+
+/// The error a checked `op` on `ty` returns when it fails.
+///
+/// The check reports only that the operation failed, not why, so this says
+/// every way it can. Division fails on a zero divisor for every integer type,
+/// and overflows only for a signed one, at its minimum divided by -1.
+fn checked_failure_message(op: BinOp, ty: &IrType) -> &'static str {
+    match op {
+        BinOp::Add | BinOp::Sub | BinOp::Mul => "arithmetic overflow",
+        BinOp::Div => match ty {
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset => {
+                "division by zero or overflow"
+            }
+            IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index | IrType::Int => {
+                "division by zero"
+            }
+            other => panic!("checked division of {:?}, which typecheck refuses", other),
+        },
+        other => panic!("{:?} as a checked operation; only Add, Sub, Mul and Div can fail", other),
+    }
 }
 
 /// Lower an optional unary operation with early return on overflow.
