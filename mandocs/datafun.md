@@ -712,8 +712,8 @@ with some operations producing `NaN` or +/- infinity.
 
 Because Datalove prioritizes numerical correctness,
 silent overflow and divide-by-zero is not allowed for integers.
-Thus none of the bare math ops work on fixed-sized integers.
-Instead these types must use checked versions of the ops
+Thus none of the bare math operations work on fixed-sized integers.
+Instead these types must use checked versions of the operations
 which early return from their enclosing function with either `none` or `er`.
 
 ```datalove
