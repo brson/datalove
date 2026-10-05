@@ -8,7 +8,7 @@ use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{FunParam, FunSignature, StmtFun};
+use datalove_datafun_ast::ast::{FunParam, FunSignature, ParsedStatements, StmtFun};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -76,7 +76,7 @@ pub fn parse_module_graph<'db>(
 
     // Build RiderInterfaces from rider sources inside this tracked function,
     // where salsa tracked struct creation (TypeFunction) is allowed.
-    let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &graph);
+    let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &statements_only);
 
     ParsedModuleGraph::new(db, graph, statements_only, resolved_requires, module_content_hashes, resolved_riders)
 }
@@ -178,12 +178,18 @@ fn generic_natives<'db>(
 /// Build resolved riders from raw source strings inside a tracked context.
 ///
 /// Parses each rider source, extracts function signatures via name resolution,
-/// then scans module sources for `require rider X` to map riders to modules.
+/// then maps riders to the modules whose `require rider X` statements name them.
+///
+/// The requires are read from the parsed statements. They used to be found by
+/// scanning each module's source a line at a time, which took a trailing
+/// comment for part of the rider's name and so left `require rider std // why`
+/// resolving to nothing.
 fn build_resolved_riders_from_sources<'db>(
     db: &'db dyn salsa::Database,
     rider_sources: &[(String, String)],
-    graph: &ModuleGraph<'db>,
+    statements: &[(ModuleId<'db>, ParsedStatements<'db>)],
 ) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
+    use datalove_datafun_ast::ast::{Statement, StmtRequire};
     use datalove_datafun_common::RiderInterface;
 
     if rider_sources.is_empty() {
@@ -192,22 +198,16 @@ fn build_resolved_riders_from_sources<'db>(
 
     let rider_interfaces = rider_interfaces(db, RiderSources::new(db, rider_sources.to_vec()));
 
-    // Scan each module's source for `require rider X` statements.
     let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let source_text = module.source(db).text(db);
-
-        for line in source_text.lines() {
-            let trimmed = line.trim();
-            if let Some(rider_name) = trimmed.strip_prefix("require rider ") {
-                let rider_name = rider_name.trim();
-                if let Some(interface) = rider_interfaces.get(rider_name) {
-                    let interned_alias = InternedText::new(db, rider_name.to_string());
-                    result.entry(module_id)
-                        .or_default()
-                        .push((interned_alias, interface.clone()));
-                }
+    for (module_id, parsed) in statements {
+        for statement in parsed.statements.iter() {
+            let Statement::Require(StmtRequire::Rider(require)) = statement else {
+                continue;
+            };
+            if let Some(interface) = rider_interfaces.get(require.name.as_str(db)) {
+                result.entry(*module_id)
+                    .or_default()
+                    .push((require.name, interface.clone()));
             }
         }
     }

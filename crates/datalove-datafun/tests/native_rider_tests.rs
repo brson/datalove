@@ -32,6 +32,31 @@ end fun
     assert_eq!(result, 7, "int_add(3, 4) should return 7");
 }
 
+/// A comment after `require rider` is not part of the rider's name.
+///
+/// Riders were found by scanning module source a line at a time, which read
+/// this as a rider named `testlib // the native half` and resolved nothing.
+#[test]
+fn test_native_rider_require_with_comment() {
+    let result = run_main_with_int_add(r#"
+----------
+rider testlib
+----------
+native fun int_add(a: i32, b: i32): i32
+
+----------
+module local/test/main
+----------
+require rider testlib // the native half
+import testlib.int_add
+
+fun main(): i32
+    ret int_add(3, 4)
+end fun
+"#);
+    assert_eq!(result, 7, "int_add(3, 4) should return 7");
+}
+
 #[test]
 fn test_native_rider_qualified_call() {
     let result = run_main_with_int_add(r#"
