@@ -40,7 +40,6 @@ For detail see additional documentation.
 - [Modules, packages, libraries, and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
 - [Generics](#user-content-generics)
-- [The system library and the `std` package](#user-content-the-system-library-and-the-std-package)
 - [Scripts and interactive units](#user-content-scripts-and-interactive-units)
 
 </div>
@@ -795,17 +794,17 @@ sys/
 ```
 
 The `sys` library is always available.
-When distributed as a binary, the `datalove` binary itself contains the `sys` library
+When distributed as a binary, the `datalove` executable itself contains the `sys` library
 and it does not appear on disk.
 
 Datalove is a whole-program compiler and can always see and monitor all inputs
 needed to execute or compile a given script.
-The full set of scripts, modules available to an instance of the compiler
+The full set of scripts and modules available to an instance of the compiler
 is called the _world_.
 
 Additional libraries can be mapped into the world as-needed,
 making them available by chosen name to the `require module` statement.
-By default, a directory named `local` may contain packages and modules
+By default a directory named `local` may contain packages and modules
 specific to the local _workspace_.
 
 Workspace structure is implicit and relative to the script(s)
@@ -844,7 +843,5 @@ though this capability is not yet exposed through any frontend.
 ## Constants and compile-time evaluation
 
 ## Generics
-
-## The system library and the `std` package
 
 ## Scripts and interactive units
