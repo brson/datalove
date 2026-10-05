@@ -47,14 +47,13 @@ Then add I/O to it &mdash; carefully.
   </div>
   <div class="thing-box">
     <p>With an <em>interactive scripting environment</em>
-       for <em>rapid script iteration</em>,
-       with incremental recompilation and reevaluation,
-       and a <em>reversible</em> REPL.
+       for rapid script iteration,
+       with <em>incremental recompilation</em> and <em>incremental reevaluation</em>.
   </div>
   <div class="thing-box">
     <p>With a modern compilation and execution architecture with
        <em>fully memoized and parallelized</em> compilation,
-       an IR-based interpreter with per-function <em>JIT</em>,
+       a bytecode interpreter with per-function <em>JIT</em>,
        optionally compiling to <em>statically-linked binaries</em>.</p>
   </div>
 </div>
@@ -96,14 +95,18 @@ strings, lists, maps and sets.
   year = 1974,
   rating = 4.7,
   available = true,
-  genres = : #{enum { atom Fiction, atom Utopia }} / #{ atom Fiction, atom Utopia },
+  genres = : #{ enum {
+    atom Fiction, atom NonFiction, atom SciFi,
+  } } / #{
+    atom Fiction, atom SciFi,
+  },
   subtitle = some "An Ambiguous Utopia",
   status = atom InPrint,
   translations = %{ "fr" = true, "de" = true, "jp" = false },
 }
 ```
 
-It includes first-class _tables_ (dataframes / structs-of-arrays),
+It includes first-class _tables_ (dataframes),
 and _tensors_ (multidimensional arrays).
 
 ```datalove
@@ -140,7 +143,7 @@ type Book: {
   year: i32,
   rating: f32,
   available: bool,
-  genres: #{enum { atom Fiction, atom Utopia, atom SciFi }},
+  genres: #{ enum { atom Fiction, atom NonFiction, atom SciFi } },
   subtitle: ?string,
   status: enum { atom InPrint, atom OutOfPrint },
   translations: %{string = bool},
