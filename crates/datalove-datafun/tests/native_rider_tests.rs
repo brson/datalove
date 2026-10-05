@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile;
-use datalove_datafun_interp::{IrInterpreter, NativeFnImpl, NativeResolver, Value, Destination};
+use datalove_datafun_interp::{IrInterpreter, NativeFnImpl, NativeResolver, NativeTarget, Value, Destination};
 use datalove_datafun::pipeline::{ModuleCompilationPipeline, CompilerOptions};
 
 #[test]
@@ -130,9 +130,9 @@ end fun
 struct IntAddResolver;
 
 impl NativeResolver for IntAddResolver {
-    fn resolve(&self, symbol: &str) -> Result<NativeFnImpl, String> {
+    fn resolve(&self, symbol: &str) -> Result<NativeTarget, String> {
         assert_eq!(symbol, "dlr_testlib__int_add");
-        Ok(int_add_impl())
+        Ok(NativeTarget::rust(int_add_impl()))
     }
 }
 
@@ -140,7 +140,7 @@ impl NativeResolver for IntAddResolver {
 struct FailingResolver;
 
 impl NativeResolver for FailingResolver {
-    fn resolve(&self, _symbol: &str) -> Result<NativeFnImpl, String> {
+    fn resolve(&self, _symbol: &str) -> Result<NativeTarget, String> {
         Err("the rider would not build".S())
     }
 }

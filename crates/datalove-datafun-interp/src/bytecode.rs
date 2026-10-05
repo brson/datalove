@@ -26,6 +26,7 @@ use crate::env::{ExecutionContext, FunctionRegistry};
 use crate::error::InterpError;
 use crate::frame::{Frame, FrameStore};
 use crate::layout::IrLayout;
+use crate::native::{call_c, NativeTarget, MAX_C_WORDS};
 use crate::ops::CheckedIntOps;
 use crate::value::Destination;
 use datalove_datafun_ir::frame_layout::tracking;
@@ -267,6 +268,10 @@ struct FastCall {
     /// it cannot be freed and its address reused, and the body. Valid while
     /// the call's registry is that one -- module bodies do not change within
     /// a registry -- which saves two ordered-map lookups a call.
+    /// A native callee's target, with the body and the native table's
+    /// generation it was looked up for, which saves hashing its symbol at
+    /// every call.
+    native: std::cell::RefCell<Option<(usize, u64, NativeTarget)>>,
     module_callee: std::cell::RefCell<Option<(
         std::sync::Arc<datalove_datafun_ir::registry::ModuleFunctionRegistry>,
         *const IrCodeUnit,
@@ -797,6 +802,7 @@ impl<'a> Lowering<'a> {
                             dest: self.value_loc(*dest),
                             dest_tydesc: self.layout.value_tydescs[dest.0 as usize],
                             cache: std::cell::RefCell::new(None),
+                            native: std::cell::RefCell::new(None),
                             module_callee: std::cell::RefCell::new(None),
                         });
                         self.emit(Op::CallFast { site });
@@ -1779,10 +1785,47 @@ impl IrInterpreter {
             // A native: no frame, just the arguments as a list.
             let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
             let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+            let n = call.args.len();
+            let target = {
+                let generation = self.native_table.generation();
+                let mut found = call.native.borrow_mut();
+                match &*found {
+                    Some((at, seen, target)) if *at == address && *seen == generation => target.clone(),
+                    _ => {
+                        let target = self.native_table.lookup(native.symbol())?;
+                        *found = Some((address, generation, target.clone()));
+                        target
+                    }
+                }
+            };
+            if let NativeTarget::C(fn_ptr) = target {
+                // The C words straight from the arguments, with no list of
+                // them in between; see `native::c_words`.
+                let len = 1 + 2 * n + 2 + shapes.len();
+                if len > MAX_C_WORDS {
+                    todo!("native functions with {} C args not yet supported", len);
+                }
+                let mut words = [0usize; MAX_C_WORDS];
+                words[0] = self.runtime.handle() as usize;
+                for i in 0..n {
+                    let arg = read(self, i, mode(i), frame);
+                    words[1 + 2 * i] = arg.ptr as usize;
+                    words[2 + 2 * i] = arg.tydesc as usize;
+                }
+                let at = 1 + 2 * n;
+                words[at] = dest.ptr as usize;
+                words[at + 1] = dest.tydesc as usize;
+                for (i, tydesc) in shapes.iter().enumerate() {
+                    words[at + 2 + i] = *tydesc as usize;
+                }
+                // SAFETY: the table registered this as a rider function and
+                // holds its code until its generation changes.
+                unsafe { call_c(fn_ptr, &words[..len]) };
+                return Ok(true);
+            }
             // On the stack when there are few, which is nearly always: a list
             // per call was an allocation per call.
             const ON_STACK: usize = 8;
-            let n = call.args.len();
             let mut stack = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; ON_STACK];
             let heap: Vec<crate::value::Value>;
             let args: &[crate::value::Value] = if n <= ON_STACK {
@@ -1794,7 +1837,8 @@ impl IrInterpreter {
                 heap = (0..n).map(|i| read(self, i, mode(i), frame)).collect();
                 &heap
             };
-            self.native_table.call(native.symbol(), self.runtime.handle(), args, dest, &shapes)?;
+            let NativeTarget::Rust(f) = target else { unreachable!("a C native was called above") };
+            f(self.runtime.handle(), args, dest, &shapes)?;
             return Ok(true);
         };
 

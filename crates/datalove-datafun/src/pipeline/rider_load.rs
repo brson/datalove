@@ -10,9 +10,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, Weak};
 
-use datalove_datafun_interp::{NativeFunctionTable, Value, Destination, InterpError};
-use datalove_rt::c::LocalRtHandle;
-use datalove_rtdt as rtdt;
+use datalove_datafun_interp::{NativeFunctionTable, NativeTarget};
 
 use super::{CompiledModules, RiderCrate, ScriptExecutor, WorkspaceDescriptor, rider_build};
 
@@ -114,9 +112,9 @@ impl RiderNatives {
 }
 
 impl datalove_datafun_interp::NativeResolver for RiderNatives {
-    fn resolve(&self, symbol: &str) -> Result<datalove_datafun_interp::NativeFnImpl, String> {
+    fn resolve(&self, symbol: &str) -> Result<NativeTarget, String> {
         let fn_ptr = self.address(symbol).map_err(|e| fmt!("{:#}", e))?;
-        Ok(bridge(symbol, fn_ptr))
+        Ok(NativeTarget::C(fn_ptr))
     }
 }
 
@@ -187,7 +185,7 @@ pub fn register_natives(
     for symbol in compiled.native_symbols() {
         let fn_ptr = natives.address(&symbol)?;
         native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
-        table.register(symbol.clone(), bridge(&symbol, fn_ptr));
+        table.register_c(symbol.clone(), fn_ptr);
     }
 
     // The table now holds pointers into whatever the natives loaded.
@@ -341,7 +339,7 @@ pub fn load_rider_library(
         // Save raw pointer for JIT registration.
         native_fn_ptrs.push((symbol.clone(), fn_ptr as *const u8));
 
-        native_table.register(symbol.clone(), bridge(symbol, fn_ptr));
+        native_table.register_c(symbol.clone(), fn_ptr);
     }
 
     // The table now holds pointers into this library, so it holds the library.
@@ -354,85 +352,4 @@ pub fn load_rider_library(
         native_fn_ptrs,
         library,
     })
-}
-
-/// The interpreter's way to call the native at `fn_ptr`.
-fn bridge(symbol: &str, fn_ptr: *const ()) -> datalove_datafun_interp::NativeFnImpl {
-    let symbol_name = symbol.to_string();
-    Box::new(move |rt, args, dest, supplied| {
-        call_native_bridge(fn_ptr, rt, args, dest, supplied, &symbol_name)
-    })
-}
-
-/// Bridge from interpreter values to the rider C ABI.
-///
-/// See `botdocs/native-abi.md` for the shape this builds. In short:
-///
-/// ```text
-/// fn(rt, arg0_ptr, arg0_td, ..., out_ptr, out_td, shape_td...) -> u8
-/// ```
-///
-/// Every word is pointer-sized, so the call is made by transmuting to a
-/// function type of the right arity. The arities are listed rather than
-/// generated because there is no variadic form that would keep the C ABI.
-fn call_native_bridge(
-    fn_ptr: *const (),
-    rt: LocalRtHandle,
-    args: &[Value],
-    dest: Destination,
-    supplied: &[*const rtdt::TyDesc],
-    _symbol: &str,
-) -> Result<(), InterpError> {
-    // On the stack: a list per call was an allocation per call. The words
-    // past the arity the call has are never read.
-    const MAX_WORDS: usize = 13;
-    let len = 1 + args.len() * 2 + 2 + supplied.len();
-    if len > MAX_WORDS {
-        todo!("native functions with {} C args not yet supported", len);
-    }
-    let mut c_args = [0usize; MAX_WORDS];
-    c_args[0] = rt as usize;
-    for (i, arg) in args.iter().enumerate() {
-        c_args[1 + 2 * i] = arg.ptr as usize;
-        c_args[2 + 2 * i] = arg.tydesc as usize;
-    }
-    let at = 1 + 2 * args.len();
-    c_args[at] = dest.ptr as usize;
-    c_args[at + 1] = dest.tydesc as usize;
-    for (i, tydesc) in supplied.iter().enumerate() {
-        c_args[at + 2 + i] = *tydesc as usize;
-    }
-
-    /// Transmute to a function of `n` pointer arguments and call it.
-    macro_rules! arity {
-        ($($n:literal => $($i:literal),+ ;)+) => {
-            match len {
-                $($n => {
-                    let f: extern "C-unwind" fn($(arity!(@ptr $i)),+) -> u8 =
-                        std::mem::transmute(fn_ptr);
-                    f($(c_args[$i]),+)
-                })+
-                n => todo!("native functions with {} C args not yet supported", n),
-            }
-        };
-        (@ptr $i:literal) => { usize };
-    }
-
-    let _status: u8 = unsafe {
-        arity! {
-            3  => 0, 1, 2;
-            4  => 0, 1, 2, 3;
-            5  => 0, 1, 2, 3, 4;
-            6  => 0, 1, 2, 3, 4, 5;
-            7  => 0, 1, 2, 3, 4, 5, 6;
-            8  => 0, 1, 2, 3, 4, 5, 6, 7;
-            9  => 0, 1, 2, 3, 4, 5, 6, 7, 8;
-            10 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9;
-            11 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;
-            12 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;
-            13 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12;
-        }
-    };
-
-    Ok(())
 }

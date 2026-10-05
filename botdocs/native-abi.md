@@ -201,9 +201,9 @@ collection entries use it.
 
 ## Arity
 
-The interpreter reaches a native through `call_native_bridge`, which builds a
-flat array of pointer-sized words and transmutes to a function type of the
-right arity. The arities are listed one by one because there is no variadic
+The interpreter reaches a native through `call_c` in its `native` module,
+given a flat array of pointer-sized words (`c_words` lays them out), and
+transmutes to a function type of the right arity. The arities are listed one by one because there is no variadic
 form that would keep the C ABI. A native wider than the widest listed arity
 hits a `todo!()` rather than being called wrongly --- add the next row.
 

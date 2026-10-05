@@ -691,7 +691,8 @@ How it flows through the pipeline:
 Execution:
 
 - **Interpreter**: `NativeFunctionTable` (`interp/src/native.rs`) maps linker
-  symbol to a closure. The `Call` and `ComptimeCall` handlers check it before
+  symbol to the rider's function, called through the C ABI by `call_c` (or to
+  a Rust closure, which tests register). The `Call` and `ComptimeCall` handlers check it before
   the regular dispatcher. Arguments follow the interpreter's own conventions -
   `in` params are moved values, `out` params are destinations, `ref`/`mut` are
   borrowed pointers.
@@ -1958,7 +1959,7 @@ The three `module-change-*` kinds drive the memoization tests.
 | `datafun/src/pipeline/script_compiler.rs` | Script compilation pipeline |
 | `datafun/src/pipeline/workspace.rs` | `WorkspaceDescriptor`, `WorkspaceDelta` |
 | `datafun/src/pipeline/rider_build.rs` | Native component synthesis and cargo build, for riders found on disk |
-| `datafun/src/pipeline/rider_load.rs` | `register_linked_natives`, `load_rider_library`, the C ABI bridge |
+| `datafun/src/pipeline/rider_load.rs` | `register_linked_natives`, `load_rider_library` |
 | `cli/src/main.rs` | `register_natives()`, which wires both the interpreter table and the JIT |
 | `sys/build.rs` | Embeds `sys/` module sources and names each rider's crate and `INTERFACE` |
 | `sys/src/lib.rs` | `system_library()` |
@@ -1968,6 +1969,6 @@ The three `module-change-*` kinds drive the memoization tests.
 | `rt/src/impls/alloc.rs` | The runtime allocator, `LeakCheckMode` |
 | `bcts/src/parser_util.rs` | Token gluing, `eat_number` |
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |
-| `interp/src/native.rs` | `NativeFunctionTable` |
+| `interp/src/native.rs` | `NativeFunctionTable`, the C ABI bridge (`call_c`) |
 | `interp/src/dispatch.rs` | `CallDispatcher`, `DispatchResult` |
 | `cranelift-jit/src/optimizing.rs` | Tiering and dynamic inlining dispatcher |

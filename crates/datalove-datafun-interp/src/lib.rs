@@ -65,7 +65,7 @@ pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, Sc
 pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
 pub use ctfe::InterpCtfeEvaluator;
-pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver};
+pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
 
 /// Room to unpack borrowed values that have no address of their own.
 ///
