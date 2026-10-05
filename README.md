@@ -1,8 +1,6 @@
 # Datalove
 
-A simple interactive scripting language,
-strongly and statically typed,
-for efficient data modeling and transformation.
+An interactive scripting language for efficient data modeling and transformation.
 
 
 ## ☠ Do not contribute; do not use ☠
