@@ -849,13 +849,17 @@ These are compared with library functions too.
 A constructor written without a type of its own,
 like `none` or `some 7`,
 takes the type of the other operand.
-When the constructor comes first it must be parenthesized,
-since otherwise the comparison would be read as part of its payload.
+When the constructor comes first it must be parenthesized
+to make it clear whether the binop is part of the payload or not.
 
 ```datalove
 let found: ?u32 = some 7
 
-debuglog (found == none, found == some 7, (some 7) == found)
+debuglog (
+  found == none,
+  found == some 7,
+  (some 7) == found
+)
 ```
 
 Floats compare according to IEEE 754:
