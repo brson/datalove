@@ -435,6 +435,7 @@ call print_ref_values(ref a, ref b, ref c)
 
 Loops are written with the `loop` keyword, `break` and `continue`.
 Basic conditional control flow is performed with `if`.
+`loop` and `if` are statements, not expressions, and do not yield a value.
 
 ```datalove
 require module sys/std/int
@@ -518,31 +519,8 @@ set b = 200
 debuglog (a, b)
 ```
 
-The option and result types are destructured
-with special `if` statements.
-
-```datalove
-let maybe_label = some "report"
-
-if maybe_label |label_text|
-  debuglog label_text
-else
-  debuglog "no label"
-end if
-
-let report_status = ok "sent"
-
-if report_status |status|
-  debuglog ("report status ok", status)
-else |e|
-  debuglog ("report status error", e)
-end if
-```
-
-These forms disallow `else`-`if` chains.
-In the result case the `else` branch is required.
-
 Enums are destructured with `match`.
+`match` is a statement, not an expression, and does not yield a value.
 
 ```datalove
 type Shape: enum {
@@ -595,22 +573,29 @@ let result_text1: !string = ok "status info"
 let result_text2: !string = er error "failed to load"
 ```
 
-As described previously their payloads are accessed
-through destructuring `if` statements.
+The option and result types are destructured
+with special `if` statements.
 
 ```datalove
-require module sys/std/u32
+let maybe_label = some "report"
 
-fun add_saturating(self: u32, other: u32): u32
-  if u32.add_checked(self, other) |value|
-    ret value
-  else
-    ret u32.max_value()
-  end if
-end fun
+if maybe_label |label_text|
+  debuglog label_text
+else
+  debuglog "no label"
+end if
 
-debuglog(add_saturating(: u32 / 100, u32.max_value()))
+let report_status = ok "sent"
+
+if report_status |status|
+  debuglog ("report status ok", status)
+else |e|
+  debuglog ("report status error", e)
+end if
 ```
+
+These forms disallow `else`-`if` chains.
+In the result case the `else` branch is required.
 
 The postfix `?` and `!` operators propagate
 option and result return types.
@@ -643,39 +628,10 @@ debuglog(add_twice(: u32 / 1, : u32 / 2))
 debuglog(add_twice(: u32 / 1, : u32 / 4000000000))
 ```
 
-Putting these together,
-this function counts the occurrences of one string in another,
-propagating `none` with `?` if slicing the string ever fails.
 
-```datalove
-require module sys/std/string
 
-fun count_substrings(s: string, ref needle: string): ?int
-  var haystack = s
-  var count = 0
-  loop
-    if string.len(ref haystack) == 0
-      break
-    end if
 
-    if string.starts_with(ref haystack, ref needle)
-      set count = count + 1
-    end if
-
-    let next_char_index = string.find_char(ref haystack, 1)
-    if next_char_index |index|
-      set haystack = string.slice_from(ref haystack, index)?
-    else
-      set haystack = ""
-    end if
-  end loop
-  ret some count
-end fun
-
-let needle = "an"
-
-debuglog count_substrings("banana", ref needle)
-```
+## Collections and indexing
 
 
 
@@ -795,20 +751,14 @@ debuglog(v)
 
 ## Comparison and equality
 
-## The adapt operator: `@`
+## Modules, packages, and libraries
 
 ## Constants and compile-time evaluation
 
-## Modules, packages, and libraries
+## Generics
 
 ## The system library and the `std` package
 
-## Scripts
-
-## Interactive script units
+## Scripts and interactive units
 
 ## Workspaces
-
-## Todo
-
-aggregates and collections
