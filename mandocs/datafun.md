@@ -595,7 +595,7 @@ end if
 ```
 
 These forms disallow `else`-`if` chains.
-In the result case the `else` branch is required.
+In the result case the destructuring `else` branch is required.
 
 The postfix `?` and `!` operators propagate
 option and result return types.
@@ -609,7 +609,7 @@ fun add_twice(self: u32, other: u32): ?u32
   ret some twice
 end fun
 
-debuglog(add_twice(: u32 / 1, : u32 / 2))
+debuglog (add_twice(: u32 / 1, : u32 / 2))
 ```
 
 With the result type, `!`:
@@ -624,8 +624,8 @@ fun add_twice(self: u32, other: u32): !u32
   ret ok twice
 end fun
 
-debuglog(add_twice(: u32 / 1, : u32 / 2))
-debuglog(add_twice(: u32 / 1, : u32 / 4000000000))
+debuglog (add_twice(: u32 / 1, : u32 / 2))
+debuglog (add_twice(: u32 / 1, : u32 / 4000000000))
 ```
 
 
@@ -712,17 +712,17 @@ with some operations producing `NaN` or +/- infinity.
 
 Because Datalove prioritizes numerical correctness,
 silent overflow and divide-by-zero is not allowed for integers.
-Thus none of the bare math binops work on fixed-sized integers.
-Instead these types must use checked versions of the binops
+Thus none of the bare math ops work on fixed-sized integers.
+Instead these types must use checked versions of the ops
 which early return from their enclosing function with either `none` or `er`.
 
 ```datalove
-fun do_some_math_opt(a: u32, b: u32, c: u32): ?u32
-  ret some ((a +? b) /? c)
+fun do_some_math_opt(a: i32, b: i32, c: i32): ?i32
+  ret some -?((a +? b) /? c)
 end fun
 
-fun do_some_math_result(a: u32, b: u32, c: u32): !u32
-  ret ok ((a +! b) /! c)
+fun do_some_math_result(a: i32, b: i32, c: i32): !i32
+  ret ok -!((a +! b) /! c)
 end fun
 ```
 
@@ -743,7 +743,7 @@ require module sys/std/u8
 
 let v = u8.add_wrapping(255, 1)
 
-debuglog(v)
+debuglog (v)
 ```
 
 
