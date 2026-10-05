@@ -259,11 +259,9 @@ struct FastCall {
     resolved: Option<Vec<(Loc, *const rtdt::TyDesc)>>,
     dest: Loc,
     dest_tydesc: *const rtdt::TyDesc,
-    /// The callee's layout the last time, the body it was for, and whether
-    /// this call's arguments suit the fast path for it, so that a call need
-    /// not look any of it up again unless the body has changed. No layout for
-    /// a native callee.
-    cache: std::cell::RefCell<Option<(usize, Option<std::rc::Rc<IrLayout>>, bool)>>,
+    /// What the call found out about its callee the last time, so that a
+    /// call need not find it out again unless the body has changed.
+    cache: std::cell::RefCell<Option<CallCache>>,
     /// A module callee, found once: the registry it was found in, held so that
     /// it cannot be freed and its address reused, and the body. Valid while
     /// the call's registry is that one -- module bodies do not change within
@@ -276,6 +274,20 @@ struct FastCall {
         std::sync::Arc<datalove_datafun_ir::registry::ModuleFunctionRegistry>,
         *const IrCodeUnit,
     )>>,
+}
+
+/// What a fast call found out about its callee, kept until the callee's body
+/// changes.
+struct CallCache {
+    /// The body's address.
+    address: usize,
+    /// Its layout; none for a native.
+    layout: Option<std::rc::Rc<IrLayout>>,
+    /// Whether the call's arguments suit the fast path for it.
+    suits: bool,
+    /// The body's bytecode, if it only forwards its parameters to a native;
+    /// see `forwarder`.
+    forward: Option<std::rc::Rc<BcFunction>>,
 }
 
 /// A function body, lowered.
@@ -1655,13 +1667,162 @@ impl IrInterpreter {
 }
 
 impl IrInterpreter {
+    /// The body a call lands on: a module callee from the call site, while
+    /// the registry is the one it was found in.
+    fn resolve_callee<'r>(
+        call: &FastCall,
+        code_ref: &CodeRef,
+        ctx: &ExecutionContext<'r>,
+        registry: &'r FunctionRegistry,
+    ) -> &'r IrCodeUnit {
+        match code_ref {
+            CodeRef::Module { .. } => {
+                let current = registry.module_registry_arc();
+                let mut found = call.module_callee.borrow_mut();
+                match &*found {
+                    // SAFETY: the registry the body is in is held, and is the
+                    // one this call is made against.
+                    Some((held, body)) if std::sync::Arc::ptr_eq(held, current) => unsafe { &**body },
+                    _ => {
+                        let body = ctx.get_unit(code_ref, registry);
+                        *found = Some((std::sync::Arc::clone(current), body as *const IrCodeUnit));
+                        body
+                    }
+                }
+            }
+            _ => ctx.get_unit(code_ref, registry),
+        }
+    }
+
+    /// Whether a call's arguments suit a fast call into a native.
+    fn suits_native(call: &FastCall, native: &datalove_datafun_ir::NativeContext) -> bool {
+        call.args.iter().enumerate().all(|(i, &movable)| {
+            match native.param_modes.get(i).copied().unwrap_or(ParamMode::In) {
+                ParamMode::Out => false,
+                ParamMode::In => movable || native.param_types[i].is_copy(),
+                ParamMode::Ref | ParamMode::Mut => true,
+            }
+        })
+    }
+
+    /// The bytecode of a body that only forwards its parameters to a native,
+    /// if `callee` is one.
+    ///
+    /// A forwarder is one call that passes the parameters in order and has no
+    /// shapes to hand over, then returns what the call returned: most of the
+    /// standard library's wrappers around natives. Calling the native from
+    /// the forwarder's caller saves a frame and a call.
+    fn forwarder(
+        &mut self,
+        layout: &IrLayout,
+        callee: &IrCodeUnit,
+        callee_ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+    ) -> Option<std::rc::Rc<BcFunction>> {
+        let [block] = &callee.blocks[..] else { return None };
+        let [Instruction::Call { func, dest, args, shape_descriptors, .. }] = &block.instructions[..] else {
+            return None;
+        };
+        let in_order = args.len() == layout.param_modes.len()
+            && args.iter().enumerate().all(|(i, a)| matches!(a, Operand::Param(p) if p.0 as usize == i));
+        let returns = match &block.terminator {
+            Terminator::Return { value: None } => true,
+            Terminator::Return { value: Some(Operand::Value(v)) } => v == dest,
+            _ => false,
+        };
+        if !in_order || !returns || !shape_descriptors.is_empty() {
+            return None;
+        }
+        let bc = self.bytecode_for(layout, callee);
+        let [inner] = &bc.calls[..] else { return None };
+        if !matches!(bc.ops.first(), Some(Op::CallFast { site: 0 })) {
+            return None;
+        }
+        let CodeUnitContext::Native(native) = &Self::resolve_callee(inner, func, callee_ctx, registry).context else {
+            return None;
+        };
+        Self::suits_native(inner, native).then_some(bc)
+    }
+
+    /// Call a native from a fast call, with each argument from `arg`.
+    ///
+    /// # Safety
+    ///
+    /// `arg` must give what the native's ABI requires.
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn call_native(
+        &self,
+        call: &FastCall,
+        address: usize,
+        native: &datalove_datafun_ir::NativeContext,
+        dest: Destination,
+        shapes: &[*const rtdt::TyDesc],
+        mut arg: impl FnMut(&Self, usize, ParamMode) -> crate::value::Value,
+    ) -> Result<(), InterpError> {
+        let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+        let n = call.args.len();
+        let target = {
+            let generation = self.native_table.generation();
+            let mut found = call.native.borrow_mut();
+            match &*found {
+                Some((at, seen, target)) if *at == address && *seen == generation => target.clone(),
+                _ => {
+                    let target = self.native_table.lookup(native.symbol())?;
+                    *found = Some((address, generation, target.clone()));
+                    target
+                }
+            }
+        };
+        if let NativeTarget::C(fn_ptr) = target {
+            // The C words straight from the arguments, with no list of them
+            // in between; see `native::c_words`.
+            let len = 1 + 2 * n + 2 + shapes.len();
+            if len > MAX_C_WORDS {
+                todo!("native functions with {} C args not yet supported", len);
+            }
+            let mut words = [0usize; MAX_C_WORDS];
+            words[0] = self.runtime.handle() as usize;
+            for i in 0..n {
+                let a = arg(self, i, mode(i));
+                words[1 + 2 * i] = a.ptr as usize;
+                words[2 + 2 * i] = a.tydesc as usize;
+            }
+            let at = 1 + 2 * n;
+            words[at] = dest.ptr as usize;
+            words[at + 1] = dest.tydesc as usize;
+            for (i, tydesc) in shapes.iter().enumerate() {
+                words[at + 2 + i] = *tydesc as usize;
+            }
+            // SAFETY: the table registered this as a rider function and holds
+            // its code until its generation changes.
+            unsafe { call_c(fn_ptr, &words[..len]) };
+            return Ok(());
+        }
+        // On the stack when there are few, which is nearly always: a list per
+        // call was an allocation per call.
+        const ON_STACK: usize = 8;
+        let mut stack = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; ON_STACK];
+        let heap: Vec<crate::value::Value>;
+        let args: &[crate::value::Value] = if n <= ON_STACK {
+            for (i, slot) in stack.iter_mut().enumerate().take(n) {
+                *slot = arg(self, i, mode(i));
+            }
+            &stack[..n]
+        } else {
+            heap = (0..n).map(|i| arg(self, i, mode(i))).collect();
+            &heap
+        };
+        let NativeTarget::Rust(f) = target else { unreachable!("a C native was called above") };
+        f(self.runtime.handle(), args, dest, shapes)
+    }
+
     /// Make a fast call, or say the general path has to.
     ///
     /// Does what `execute_call_site` does for a call whose arguments are in
     /// this frame, with no `out` parameter among them and none moved that the
-    /// frame would have to record, and none of what it would
-    /// skip: no dispatcher is installed, so there is nothing to offer the call
-    /// to and no optimized body to run instead.
+    /// frame would have to record, and none of what it would skip: no
+    /// dispatcher is installed, so there is nothing to offer the call to and
+    /// no optimized body to run instead.
     #[allow(clippy::too_many_arguments)]
     #[inline(never)]
     unsafe fn fast_call(
@@ -1678,43 +1839,20 @@ impl IrInterpreter {
         if self.call_dispatcher.borrow().is_some() {
             return Ok(false);
         }
-        let Instruction::Call { func: code_ref, .. } =
+        let Instruction::Call { func: code_ref, args: ir_args, shape_descriptors, .. } =
             &caller.blocks[call.block as usize].instructions[call.index as usize] else {
             unreachable!("a fast call is a call")
         };
-        let callee = match code_ref {
-            CodeRef::Module { .. } => {
-                let current = registry.module_registry_arc();
-                let mut found = call.module_callee.borrow_mut();
-                match &*found {
-                    // SAFETY: the registry the body is in is held, and is the
-                    // one this call is made against.
-                    Some((held, body)) if std::sync::Arc::ptr_eq(held, current) => unsafe { &**body },
-                    _ => {
-                        let body = ctx.get_unit(code_ref, registry);
-                        *found = Some((std::sync::Arc::clone(current), body as *const IrCodeUnit));
-                        body
-                    }
-                }
-            }
-            _ => ctx.get_unit(code_ref, registry),
-        };
+        let callee = Self::resolve_callee(call, code_ref, ctx, registry);
+        let callee_ctx = ctx.for_callee(code_ref, registry);
         let address = callee as *const IrCodeUnit as usize;
-        let (layout, suits) = {
+        let (layout, suits, forward) = {
             let mut cache = call.cache.borrow_mut();
             match &*cache {
-                Some((at, layout, suits)) if *at == address => (layout.clone(), *suits),
+                Some(c) if c.address == address => (c.layout.clone(), c.suits, c.forward.clone()),
                 _ => {
-                    let (layout, suits) = match &callee.context {
-                        CodeUnitContext::Native(native) => {
-                            let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                            let suits = call.args.iter().enumerate().all(|(i, &movable)| match mode(i) {
-                                ParamMode::Out => false,
-                                ParamMode::In => movable || native.param_types[i].is_copy(),
-                                ParamMode::Ref | ParamMode::Mut => true,
-                            });
-                            (None, suits)
-                        }
+                    let (layout, suits, forward) = match &callee.context {
+                        CodeUnitContext::Native(native) => (None, Self::suits_native(call, native), None),
                         _ => {
                             let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
                             let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
@@ -1725,11 +1863,12 @@ impl IrInterpreter {
                                     ParamMode::Ref | ParamMode::Mut => true,
                                 }
                             });
-                            (Some(layout), suits)
+                            let forward = self.forwarder(&layout, callee, &callee_ctx, registry);
+                            (Some(layout), suits, forward)
                         }
                     };
-                    *cache = Some((address, layout.clone(), suits));
-                    (layout, suits)
+                    *cache = Some(CallCache { address, layout: layout.clone(), suits, forward: forward.clone() });
+                    (layout, suits, forward)
                 }
             }
         };
@@ -1738,31 +1877,6 @@ impl IrInterpreter {
         }
         let dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };
 
-        // The common case, a function called with statically typed arguments
-        // and no shapes, reads nothing but the resolved places.
-        if let (Some(resolved), Some(layout)) = (&call.resolved, &layout) {
-            let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(layout));
-            for &(loc, tydesc) in resolved {
-                // SAFETY: lowered against this frame's layout.
-                callee_frame.push_param(crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
-            }
-            callee_frame.enter();
-            let callee_ctx = ctx.for_callee(code_ref, registry);
-            let bc = self.bytecode_for(layout, callee);
-            callee_frame.stop_keeping_liveness();
-            let result = self.run_bytecode(
-                &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
-            self.frame_pool.give_back(callee_frame);
-            return result.map(|()| true);
-        }
-
-        let Instruction::Call { args: ir_args, shape_descriptors, .. } =
-            &caller.blocks[call.block as usize].instructions[call.index as usize] else { unreachable!() };
-        let shapes: Vec<*const rtdt::TyDesc> = if shape_descriptors.is_empty() {
-            Vec::new()
-        } else {
-            shape_descriptors.iter().map(|r| self.resolve_shape_ref(r, frame)).collect()
-        };
         // A borrowed argument that arrives wrapped is read through its
         // wrapper, into here if it has no address of its own; held until the
         // call returns.
@@ -1781,64 +1895,70 @@ impl IrInterpreter {
             }
         };
 
-        let Some(layout) = layout else {
-            // A native: no frame, just the arguments as a list.
-            let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
-            let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-            let n = call.args.len();
-            let target = {
-                let generation = self.native_table.generation();
-                let mut found = call.native.borrow_mut();
-                match &*found {
-                    Some((at, seen, target)) if *at == address && *seen == generation => target.clone(),
-                    _ => {
-                        let target = self.native_table.lookup(native.symbol())?;
-                        *found = Some((address, generation, target.clone()));
-                        target
+        if let (Some(wrapper), Some(layout)) = (&forward, &layout) {
+            // The forwarder's own call, made from here: each argument as the
+            // forwarder's frame would hold it -- an owned one with the
+            // forwarder's descriptor, a borrowed one with the one it came
+            // with -- then as its call would read it, and the result where
+            // the forwarder would have copied it, in its shape.
+            let inner = &wrapper.calls[0];
+            let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
+                unreachable!("a forwarder is a call")
+            };
+            let native_body = Self::resolve_callee(inner, inner_ref, &callee_ctx, registry);
+            let CodeUnitContext::Native(native) = &native_body.context else {
+                unreachable!("a forwarder calls a native, and its body is fixed while the registry is")
+            };
+            let mut inner_scratch: crate::BorrowScratch = Vec::new();
+            let inner_dest = Destination { ptr: dest.ptr, tydesc: inner.dest_tydesc };
+            // SAFETY: the arguments are read as the forwarder would read them.
+            unsafe { self.call_native(
+                inner, native_body as *const IrCodeUnit as usize, native, inner_dest, &[],
+                |this, i, mode| {
+                    let mut val = read(this, i, layout.param_modes[i], frame);
+                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out) {
+                        val.tydesc = layout.param_tydescs[i];
                     }
-                }
-            };
-            if let NativeTarget::C(fn_ptr) = target {
-                // The C words straight from the arguments, with no list of
-                // them in between; see `native::c_words`.
-                let len = 1 + 2 * n + 2 + shapes.len();
-                if len > MAX_C_WORDS {
-                    todo!("native functions with {} C args not yet supported", len);
-                }
-                let mut words = [0usize; MAX_C_WORDS];
-                words[0] = self.runtime.handle() as usize;
-                for i in 0..n {
-                    let arg = read(self, i, mode(i), frame);
-                    words[1 + 2 * i] = arg.ptr as usize;
-                    words[2 + 2 * i] = arg.tydesc as usize;
-                }
-                let at = 1 + 2 * n;
-                words[at] = dest.ptr as usize;
-                words[at + 1] = dest.tydesc as usize;
-                for (i, tydesc) in shapes.iter().enumerate() {
-                    words[at + 2 + i] = *tydesc as usize;
-                }
-                // SAFETY: the table registered this as a rider function and
-                // holds its code until its generation changes.
-                unsafe { call_c(fn_ptr, &words[..len]) };
-                return Ok(true);
+                    match &inner.resolved {
+                        Some(resolved) => crate::value::Value { ptr: val.ptr, tydesc: resolved[i].1 },
+                        None if matches!(mode, ParamMode::Ref | ParamMode::Mut) => {
+                            IrInterpreter::borrow_through_wrapper(val, &mut inner_scratch)
+                        }
+                        None => val,
+                    }
+                },
+            ) }?;
+            return Ok(true);
+        }
+
+        // The common case, a function called with statically typed arguments
+        // and no shapes, reads nothing but the resolved places.
+        if let (Some(resolved), Some(layout)) = (&call.resolved, &layout) {
+            let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(layout));
+            for &(loc, tydesc) in resolved {
+                // SAFETY: lowered against this frame's layout.
+                callee_frame.push_param(crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
             }
-            // On the stack when there are few, which is nearly always: a list
-            // per call was an allocation per call.
-            const ON_STACK: usize = 8;
-            let mut stack = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; ON_STACK];
-            let heap: Vec<crate::value::Value>;
-            let args: &[crate::value::Value] = if n <= ON_STACK {
-                for (i, slot) in stack.iter_mut().enumerate().take(n) {
-                    *slot = read(self, i, mode(i), frame);
-                }
-                &stack[..n]
-            } else {
-                heap = (0..n).map(|i| read(self, i, mode(i), frame)).collect();
-                &heap
-            };
-            let NativeTarget::Rust(f) = target else { unreachable!("a C native was called above") };
-            f(self.runtime.handle(), args, dest, &shapes)?;
+            callee_frame.enter();
+            let bc = self.bytecode_for(layout, callee);
+            callee_frame.stop_keeping_liveness();
+            let result = self.run_bytecode(
+                &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
+            self.frame_pool.give_back(callee_frame);
+            return result.map(|()| true);
+        }
+
+        let shapes: Vec<*const rtdt::TyDesc> = if shape_descriptors.is_empty() {
+            Vec::new()
+        } else {
+            shape_descriptors.iter().map(|r| self.resolve_shape_ref(r, frame)).collect()
+        };
+
+        let Some(layout) = layout else {
+            // A native: no frame, just the arguments.
+            let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
+            // SAFETY: the arguments are read from this frame as lowered.
+            unsafe { self.call_native(call, address, native, dest, &shapes, |this, i, mode| read(this, i, mode, frame)) }?;
             return Ok(true);
         };
 
@@ -1850,7 +1970,6 @@ impl IrInterpreter {
             callee_frame.push_shape_descriptor(tydesc);
         }
         callee_frame.enter();
-        let callee_ctx = ctx.for_callee(code_ref, registry);
         let bc = self.bytecode_for(&layout, callee);
         callee_frame.stop_keeping_liveness();
         let result = self.run_bytecode(

@@ -668,6 +668,18 @@ finding what to build.
    wants too: a module registry swap must invalidate bytecode lowered against
    the old one.
 
+**Done since**: (4) and (3). A native is registered as the rider's function
+pointer (`NativeTarget::C`, with Rust closures kept for tests) and called
+through `native::call_c`; a fast call caches the target per call site, keyed
+by the body and the table's generation, and writes the C words straight from
+its arguments. Then a body that only forwards its parameters to a native is
+recognized when a call site first resolves it (`forwarder`), and the site
+calls the native itself, with the arguments as the forwarder's frame and call
+would have read them. A loop calling `list.len` went from about 1050
+instructions an iteration to 930 with the bridge's allocation gone, 800 with
+the cached target and 450 with forwarding; wordfreq from 37.2 to 29.5 billion. (1) and (2) are designed in
+[plan-frame-stack.md](plan-frame-stack.md).
+
 (1) and (2) are the structural change and most of the gain: fib, which is
 nothing but calls, is where CPython is still twice as fast, and that is the
 call. (3)-(5) are cheaper and independent.
