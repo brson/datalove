@@ -11,7 +11,7 @@ On top of the data types defined by [Datalove Literals](datalit.md) it adds:
 
 Datafun scripts may be interpreted directly via lowered IR,
 optionally with high-performance bytecode,
-optionally with per-function JIT,
+optionally with per-function JIT via Cranelift,
 or may be compiled to statically-linked binaries, either via Cranelift or C.
 The Datalove Functions implementation is self-contained and independent from full Datalove,
 suitable as a constrained embedded application scripting language.
