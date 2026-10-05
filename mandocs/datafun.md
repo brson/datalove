@@ -642,6 +642,204 @@ debuglog (add_twice(: u32 / 1, : u32 / 4000000000))
 
 ## Collections and indexing
 
+Datalove has five bult-in collection types:
+lists, maps, sets, tables and tensors.
+Like every value, collections are uniquely owned,
+and copying one is an explicit clone with `@`.
+
+```datalove
+let xs = [10, 20, 30]
+let ages = %{ "ada" = 36, "alan" = 41 }
+let primes = #{ 7, 2, 5, 3, 2 }
+let grid = [| 1 2 3, 4 5 6 |]
+let points = {| x, y; 1, 2; 3, 4 |}
+
+debuglog xs
+debuglog ages
+debuglog primes
+debuglog grid
+debuglog points
+```
+
+Sets and maps keep their elements and keys in order,
+the total order described in [Comparison and equality](#user-content-comparison-and-equality),
+so a set literal with a duplicate holds it once,
+and a map literal with a repeated key keeps the last value.
+
+An empty collection literal has no element type to infer,
+so it needs a type annotation.
+
+```datalove
+let names: [string] = []
+let scores: %{string = u32} = %{}
+let seen: #{u64} = #{}
+
+debuglog (names, scores, seen)
+```
+
+
+Struct fields and tuple elements are read with a dot,
+by name or by position.
+
+```datalove
+let p = { name = "ada", age = 36 }
+let t = (1.5, true)
+
+debuglog p.age
+debuglog t.0
+```
+
+A field of a copy type is simply copied out.
+A field of a non-copy type, like a string,
+may be borrowed where it is, as an operand or a `ref` argument,
+but it cannot be moved out of the aggregate that still holds it.
+Clone it with `@` to get a value of its own.
+
+```datalove
+let p = { name = "ada", age = 36 }
+
+// A string field is borrowed in place...
+debuglog p.name
+
+// ...but moving it out would leave a hole in `p`, so it is cloned.
+let name = p.name@
+
+debuglog (name, p)
+```
+
+
+Lists, maps and tensors are indexed with brackets.
+Lists and tensors are indexed by the `index` type, and maps by their key type.
+
+Indexing can always fail,
+because the index may be out of bounds or the key absent,
+and Datalove has no indexing operation that panics.
+Every index is followed by `?` or `!`,
+which say what happens on failure,
+just like the checked arithmetic operators:
+`?` returns `none` from the enclosing function,
+and `!` returns `er error "index out of bounds"`,
+or `er error "key not found"` for a map.
+The enclosing function must return an option or a result to match.
+
+```datalove
+fun second(xs: [u32]): ?u32
+  ret some (xs[1]?)
+end fun
+
+fun age_of(ages: %{string = u32}, name: string): !u32
+  ret ok (ages[name]!)
+end fun
+
+let ages: %{string = u32} = %{ "ada" = 36, "alan" = 41 }
+
+debuglog (second([5, 6, 7]), second([5]))
+debuglog (age_of(ages@, "ada"), age_of(ages, "grace"))
+```
+
+A script returns a result,
+so at the top level of a script `!` stops the script with the error.
+
+```datalove
+let xs = [10, 20, 30]
+
+debuglog xs[1]!
+debuglog xs[5]!
+debuglog "not reached"
+```
+
+As with fields, an element of a copy type is copied out of its collection,
+and an element of a non-copy type is borrowed or cloned with `@`.
+
+```datalove
+let names = ["ada", "alan"]
+
+let first = names[0]!@
+
+debuglog (first, names)
+```
+
+Indexes and fields chain.
+Each `?` or `!` in a chain is checked in turn, left to right.
+Indexing a tensor of rank 2 or more yields its next-lower rank,
+so a two-dimensional tensor is indexed twice.
+
+```datalove
+let people = [
+  { name = "ada", langs = ["analytical engine"] },
+  { name = "alan", langs = ["ace", "turing machine"] },
+]
+let grid = [| 1 2 3, 4 5 6 |]
+
+debuglog people[1]!.langs[0]!
+debuglog grid[1]![2]!
+```
+
+Sets and tables are not indexed.
+A set is queried with functions from `sys/std/set`.
+
+
+An indexed element of a mutable collection is a place that `set` can write.
+On a map, `set m[k]! = v` updates a key that must already be present,
+while a bare `set m[k] = v` inserts the key or overwrites it.
+A list has no bare form, since its elements must exist to be overwritten.
+
+```datalove
+var xs = [1, 2, 3]
+set xs[0]! = 10
+
+var ages = %{ "ada" = 36 }
+// Update an existing key, failing if it is absent.
+set ages["ada"]! = 37
+// Insert or overwrite.
+set ages["alan"] = 41
+
+debuglog (xs, ages)
+```
+
+Most other work on collections is done by functions
+in the `list`, `map`, `set` and `tensor` modules of `sys/std`.
+Sorting and searching are in `sys/std/ord`.
+
+```datalove
+require module sys/std/list
+require module sys/std/map
+require module sys/std/set
+
+var xs = [1, 2]
+call list.push(mut xs, 3)
+
+var ages = %{ "ada" = 36 }
+call map.insert(mut ages, "alan", 41)
+let who = "ada"
+
+let primes = #{ 2, 3, 5 }
+
+debuglog list.len(ref xs)
+debuglog map.get(ref ages, ref who)
+debuglog set.contains(ref primes, ref 3)
+```
+
+There is no `for` loop.
+A list is walked with `loop while` and an index.
+
+```datalove
+require module sys/std/list
+
+let xs = [3, 1, 4, 1, 5]
+var total = 0
+var i: index = 0
+
+loop while i .< list.len(ref xs)
+  set total = total + xs[i]!
+  set i = i +! 1
+end loop
+
+debuglog total
+```
+
+Tables are a work-in-progress and need further language support to be useful.
+
 
 
 
