@@ -769,8 +769,8 @@ Modules are contained in _packages_, and packages are contained in _libraries_.
 All module dependencies are declared explicitly with the `require module` statement,
 which may appear only within modules and scripts (not within functions).
 They are conventionally the first statements in either,
-though their names will resolve in any position.
-The full module graph is discovered early in the compilation pipeline with minimal parsing.
+though their names will resolve in any top-level position.
+The full module graph is discovered early in the compilation pipeline with minimal effort.
 
 Throughout this document we have used the `std` package in the `sys` library.
 
@@ -798,7 +798,7 @@ The `sys` library is always available.
 When distributed as a binary, the `datalove` binary itself contains the `sys` library
 and it does not appear on disk.
 
-Datalove is as whole-program compiler and can always see and monitor all inputs
+Datalove is a whole-program compiler and can always see and monitor all inputs
 needed to execute or compile a given script.
 The full set of scripts, modules available to an instance of the compiler
 is called the _world_.
@@ -826,6 +826,11 @@ and the workspace root is discovered automatically.
     script3.dfs
     script4.dfs
   local/
+    mypkg1/
+      mymodule1.dfm
+      mymodule2.dfm
+    mypkg2/
+      mymodule3.dfm
 ```
 
 The compiler can compile and execute multiple scripts independently and in parallel
