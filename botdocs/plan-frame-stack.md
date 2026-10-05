@@ -90,8 +90,21 @@ stack, and `Frame` becomes a handle.
 
 ### The layout
 
-`FrameLayout` grows, for the interpreter's use; the compiled backends keep
-ignoring what they ignore now.
+The layout splits in two: a core every backend shares, and an extension that
+is the interpreter's.
+
+**The core** is `FrameLayout`, and holds what every backend uses: values,
+slots, tracking bytes. The Cranelift and C backends read exactly these offsets,
+`frame_size` and `frame_align`. The parameter region moves out of it -- no
+compiled backend reads its offsets, parameters being SSA values or C arguments
+there -- so compiled frames shrink by a pointer per parameter. Nothing in the
+core may point into the extension, so that the core's offsets are the same in
+every engine and every build.
+
+**The extension** is laid out by `IrLayout` after the core's `frame_size`,
+aligned, and the interpreter's frame is the two together. Its regions vary with
+what only the interpreter cares about -- liveness bytes come and go with debug
+builds -- without moving anything the compiled backends see.
 
 - **Parameters are a pointer and a descriptor each**, 16 bytes, laid out as a
   `Value`. With `Value` `#[repr(C)]`, the parameter region *is* a `[Value]`,
@@ -107,6 +120,9 @@ ignoring what they ignore now.
 - **Liveness bytes**, a byte per value, slot and parameter, present where
   liveness is kept: always for script frames, in debug builds for function
   frames. The `Liveness` vectors go.
+
+All four are the extension's; the core is unchanged but for losing the
+parameter region.
 
 ### The stack
 
@@ -227,8 +243,9 @@ today, and is what stack overflow, a native's error and, later, any trap need.
 
 ## Order of work
 
-1. `Value` `#[repr(C)]`; `FrameLayout` with 16-byte parameters, the shape region,
-   reference descriptor words and liveness bytes; `Frame` reading all of them
+1. `Value` `#[repr(C)]`; the parameter region out of `FrameLayout`; `IrLayout`'s
+   extension with 16-byte parameters, the shape region, reference descriptor
+   words and liveness bytes; `Frame` reading all of them
    from its bytes, still in a `Box` from the pool. Every engine's tests pass
    unchanged. This is where the reference-descriptor convention gets tested.
 2. `FrameStack`; `Frame` as a handle; the pool and the vectors go; the size cap.
@@ -251,10 +268,6 @@ overflow issue.
   track descriptors of references in locals of their own (`__rd` in C); a
   16-byte reference in the shared layout, pointer and descriptor together, would
   unify the three, at the cost of every reference in compiled code growing.
-- **Parameter region size.** The compiled backends leave the region unused, so
-  doubling it grows their frames by 8 bytes per parameter for nothing. Either
-  accept it or make the region the interpreter's own, after the shared part of
-  the layout.
 - **Chunk size and the cap.** A first chunk of 64 KiB, doubling, and a default
   cap in the hundreds of megabytes is a guess; the cap probably wants to be a
   per-interpreter setting so that CTFE can be strict and a script lenient.
