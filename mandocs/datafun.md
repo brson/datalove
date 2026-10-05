@@ -37,12 +37,11 @@ For detail see additional documentation.
 - [Collections and indexing](#user-content-collections-and-indexing)
 - [Numerics](#user-content-numerics)
 - [Comparison and equality](#user-content-comparison-and-equality)
-- [Modules, packages, and libraries](#user-content-modules-packages-and-libraries)
+- [Modules, packages, libraries, and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
 - [Generics](#user-content-generics)
 - [The system library and the `std` package](#user-content-the-system-library-and-the-std-package)
 - [Scripts and interactive units](#user-content-scripts-and-interactive-units)
-- [Workspaces](#user-content-workspaces)
 
 </div>
 
@@ -762,7 +761,80 @@ debuglog (v)
 
 ## Comparison and equality
 
-## Modules, packages, and libraries
+## Modules, packages, libraries and the workspace
+
+While scripts are the entry point to all Datalove programs,
+most code is written in _modules_.
+Modules are contained in _packages_, and packages are contained in _libraries_.
+All module dependencies are declared explicitly with the `require module` statement,
+which may appear only within modules and scripts (not within functions).
+They are conventionally the first statements in either,
+though their names will resolve in any position.
+The full module graph is discovered early in the compilation pipeline with minimal parsing.
+
+Throughout this document we have used the `std` package in the `sys` library.
+
+```datalove
+require module sys/std/u8
+```
+
+On-disk, datafun modules have the `.dfm` extension, and scripts have the `.dfs` extension.
+The library/package/module hierarchy is a reflection of the on-disk organization
+of libraries, with the `sys` library's directory layout being &mdash; in part &mdash; as-follows:
+
+```
+sys/
+  std/
+    bool.dfm
+    f32.dfm
+    f64.dfm
+    ...
+    list.dfm
+    map.dfm
+    ...
+```
+
+The `sys` library is always available.
+When distributed as a binary, the `datalove` binary itself contains the `sys` library
+and it does not appear on disk.
+
+Datalove is as whole-program compiler and can always see and monitor all inputs
+needed to execute or compile a given script.
+The full set of scripts, modules available to an instance of the compiler
+is called the _world_.
+
+Additional libraries can be mapped into the world as-needed,
+making them available by chosen name to the `require module` statement.
+By default, a directory named `local` may contain packages and modules
+specific to the local _workspace_.
+
+Workspace structure is implicit and relative to the script(s)
+being interpreted by the compiler,
+or in the case of an interactive session,
+relative to the current working directory the compiler was launched from.
+There is no workspace manifest.
+
+A workspace on disk has the following structure,
+where all files and directories are optional
+and the workspace root is discovered automatically.
+
+```
+<workspace root>/
+  script1.dfs
+  script2.dfs
+  scripts/
+    script3.dfs
+    script4.dfs
+  local/
+```
+
+The compiler can compile and execute multiple scripts independently and in parallel
+from the same instance, sharing the module world and its compilation
+pipeline, with each script having its own isolated callstack and heap,
+though this capability is not yet exposed through any frontend.
+
+
+
 
 ## Constants and compile-time evaluation
 
@@ -771,5 +843,3 @@ debuglog (v)
 ## The system library and the `std` package
 
 ## Scripts and interactive units
-
-## Workspaces
