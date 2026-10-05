@@ -111,12 +111,18 @@ builds -- without moving anything the compiled backends see.
   and `params()` is a slice of the frame. The bytecode keeps reading the
   pointer where it does now; `Desc::Param` reads the word after it.
 - **A shape region**: a descriptor word per declared shape.
-- **A word beside every reference value** for what it points at, replacing
-  `value_tydescs`. Rather than nulls cleared on entry, every instruction that
-  defines a reference writes the word -- the descriptor it found, or the
-  layout's static one -- and a copy, move or block argument of a reference
-  copies it with the pointer. Reading is then one load with no test. (Copying
-  a reference today drops what its projection found; this fixes that too.)
+- **A descriptor word for each reference `resolve_ref_descriptors` names**,
+  replacing `value_tydescs`. That analysis, in the IR crate, is what the
+  Cranelift and C backends already use to decide which references need a
+  descriptor at run time -- those rooted in a borrowed generic parameter or a
+  `DataBorrow`, and projections further in from them -- and every other
+  reference is described by its static type. The interpreter adopts the same
+  answer instead of working out its own: `IrLayout` computes the set once and
+  gives each such value a word; its projection, which always finds the
+  descriptor at run time, always writes the word; and the lowering resolves
+  every other reference to its layout's descriptor, so that it costs no word,
+  no store and no test. Nothing is cleared on entry. The interpreter's own
+  derivations -- the override vector, the bytecode's `Desc::Ref` -- go.
 - **Liveness bytes**, a byte per value, slot and parameter, present where
   liveness is kept: always for script frames, in debug builds for function
   frames. The `Liveness` vectors go.
@@ -247,7 +253,8 @@ today, and is what stack overflow, a native's error and, later, any trap need.
    extension with 16-byte parameters, the shape region, reference descriptor
    words and liveness bytes; `Frame` reading all of them
    from its bytes, still in a `Box` from the pool. Every engine's tests pass
-   unchanged. This is where the reference-descriptor convention gets tested.
+   unchanged. This is where the interpreter changes over to
+   `resolve_ref_descriptors`.
 2. `FrameStack`; `Frame` as a handle; the pool and the vectors go; the size cap.
    Callers write arguments into the callee's frame. Measure.
 3. The bytecode loop without recursion. Measure.
@@ -260,14 +267,14 @@ overflow issue.
 
 ## Open questions
 
-- **The reference descriptor convention.** Writing the word at every definition
-  of a reference is a store at each projection outside generics, where the
-  layout already knows the answer; the alternative, null meaning "the
-  layout's", needs clearing on entry and a test on every read. The store is
-  cheaper for the bytecode; the IR walker does not care. The compiled backends
-  track descriptors of references in locals of their own (`__rd` in C); a
-  16-byte reference in the shared layout, pointer and descriptor together, would
-  unify the three, at the cost of every reference in compiled code growing.
+- **Copies of references.** `resolve_ref_descriptors` follows projections
+  only. A reference copied, moved or passed as a block argument is described
+  by its static type in every engine, the interpreter included (a copy does
+  not carry `value_tydescs` either), so if the IR ever does that with a
+  reference whose descriptor is found at run time, every engine reads it
+  wrongly. Whether the IR produces such copies is not known; a fixture would
+  say, and the fix, if one is needed, is in the analysis, where every engine
+  gets it.
 - **Chunk size and the cap.** A first chunk of 64 KiB, doubling, and a default
   cap in the hundreds of megabytes is a guess; the cap probably wants to be a
   per-interpreter setting so that CTFE can be strict and a script lenient.
