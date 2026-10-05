@@ -59,11 +59,28 @@ impl<'db> Parser<'db> {
     /// Parse a statement from a line of tokens.
     ///
     /// Creates a sub-parser for the line and parses the statement.
+    ///
+    /// Every line parsed this way is inside a block -- the top level is parsed
+    /// line by line in `parse_statements` -- so this is where a `require` or
+    /// `import` written inside one is refused (P074). Only a top-level one is
+    /// ever read, and one anywhere else was silently nothing, leaving the
+    /// calls it was meant to serve to report that nothing was required.
     pub(super) fn parse_line_statement(
         &mut self,
         line: Vec<TreeToken<'db>>,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
+        if let Some(TreeToken::Token(first)) = line.first() {
+            if let Some(word @ ("require" | "import")) = first.word_str(self.db) {
+                self.had_error = true;
+                let ts = self.extract_text_span(&line[0]);
+                DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
+                    .code("P074")
+                    .primary_label(ts, &fmt!("`{word}` is only read at the top level"))
+                    .help(&fmt!("move this `{word}` to the top level of the file"))
+                    .emit_parse();
+            }
+        }
         let mut sub = self.new_sub(line);
         let stmt = sub.parse_statement(remaining_lines);
         self.merge_identity_from(&mut sub);
@@ -729,6 +746,9 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_require(&mut self) -> ast::Statement<'db> {
+        // The whole statement is what a diagnostic about this require points
+        // at, so the span is taken before any of it is consumed.
+        let ts = self.peek_text_span();
         self.eat_word("require");
 
         match self.peek_word() {
@@ -794,11 +814,13 @@ impl<'db> Parser<'db> {
                     }
                 };
 
+                let local_index = self.record_require_span(ts.with_end(self.last_byte_end()));
                 ast::Statement::Require(ast::StmtRequire::Module(
                     ast::StmtRequireModule {
                         import_space,
                         package_alias,
                         module_alias,
+                        local_index,
                     }
                 ))
             }
@@ -847,8 +869,9 @@ impl<'db> Parser<'db> {
                     }
                 };
 
+                let local_index = self.record_require_span(ts.with_end(self.last_byte_end()));
                 ast::Statement::Require(ast::StmtRequire::Rider(
-                    ast::StmtRequireRider { name }
+                    ast::StmtRequireRider { name, local_index }
                 ))
             }
             _ => {

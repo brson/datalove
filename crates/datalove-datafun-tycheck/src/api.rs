@@ -313,6 +313,19 @@ pub fn typecheck_script_unit<'db>(
 
             new_module_aliases = collect_module_aliases(db, parsed);
 
+            let require_errors = check_script_requires(db, parsed, &modules_by_path);
+            for error in &require_errors {
+                ctx.report_require_error(error);
+                // A second module under an alias leaves the first one there.
+                if let crate::RequireErrorKind::AliasTaken { alias, path, .. } = &error.kind {
+                    if let Some(at) = new_module_aliases.iter()
+                        .rposition(|(a, p)| a.as_str(db) == alias && p == path)
+                    {
+                        new_module_aliases.remove(at);
+                    }
+                }
+            }
+
             // Resolve imports using shared helper.
             let (resolved_imports, import_errors, imports) = resolve_script_imports(
                 db,
@@ -370,7 +383,21 @@ pub fn typecheck_script_unit<'db>(
                 new_fn_asts.push((item_name, func_ast, source_module_id));
             }
 
+            // An import through a refused require was reported at the require.
+            let through_failed: std::collections::HashSet<u32> = parsed.statements.iter()
+                .filter_map(|statement| match statement {
+                    Statement::Import(import)
+                        if ctx.failed_aliases.contains(import.module_name.as_str(db)) =>
+                    {
+                        Some(import.local_index)
+                    }
+                    _ => None,
+                })
+                .collect();
             for unresolved in &import_errors {
+                if unresolved.item.is_none() && through_failed.contains(&unresolved.local_index) {
+                    continue;
+                }
                 ctx.report_unresolved_import(unresolved);
             }
 
@@ -544,6 +571,7 @@ pub fn typecheck_module<'db>(
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
     import_errors: Vec<crate::UnresolvedImport>,
+    require_errors: Vec<crate::RequireError>,
     qualified: crate::QualifiedScope<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
@@ -555,7 +583,15 @@ pub fn typecheck_module<'db>(
     // Create type context for this module with module_id for pending diagnostics.
     let mut ctx = TypeContext::with_options(db, spans, Some(module_id), auto_adapt_mode);
 
+    for error in &require_errors {
+        ctx.report_require_error(error);
+    }
+    // An import through a refused require was reported at the require. In a
+    // module an import names its module by alias.
     for unresolved in &import_errors {
+        if unresolved.item.is_none() && ctx.failed_aliases.contains(&unresolved.module) {
+            continue;
+        }
         ctx.report_unresolved_import(unresolved);
     }
     ctx.qualified = qualified;
@@ -692,6 +728,7 @@ pub fn typecheck_module_graph<'db>(
         let import_resolution = resolve_module_imports(db, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db).C();
         let import_errors = import_resolution.errors(db).C();
+        let require_errors = import_resolution.require_errors(db).C();
         let qualified = import_resolution.qualified(db).C();
 
         // Use empty spans inside tracked function.
@@ -699,8 +736,8 @@ pub fn typecheck_module_graph<'db>(
 
         // Call the tracked typecheck function.
         let result = typecheck_module(
-            db, module, parsed, spans, name_resolution, resolved_imports, import_errors, qualified,
-            auto_adapt_mode,
+            db, module, parsed, spans, name_resolution, resolved_imports, import_errors,
+            require_errors, qualified, auto_adapt_mode,
         );
 
         // Collect errors from typecheck result.
@@ -775,13 +812,14 @@ pub fn typecheck_module_graph_parallel<'db>(
         let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
         let resolved_imports = import_resolution.imports(db_salsa).C();
         let import_errors = import_resolution.errors(db_salsa).C();
+        let require_errors = import_resolution.require_errors(db_salsa).C();
         let qualified = import_resolution.qualified(db_salsa).C();
 
         // Typecheck (tracked, memoized per module).
         let spans = DatafunSpans::new(vec![]);
         let _ = typecheck_module(
-            db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors, qualified,
-            auto_adapt_mode,
+            db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors,
+            require_errors, qualified, auto_adapt_mode,
         );
     });
 
@@ -881,9 +919,142 @@ pub fn resolve_module_imports<'db>(
         &dep_function_asts,
     );
 
+    let require_errors = check_module_requires(db, module_id, parsed, &parsed_graph);
+
     log_query("resolve_imports", module_path, QueryPhase::End);
 
-    crate::ModuleImportResolution::new(db, module_id, imports, errors, qualified)
+    crate::ModuleImportResolution::new(db, module_id, imports, errors, require_errors, qualified)
+}
+
+/// Check each `require` a module writes against what resolution made of it.
+///
+/// A require that resolution dropped names either a module the world does not
+/// have or one that leads back here: a cycle is broken by dropping the require
+/// that closes it, so the module it names is still in the graph, reached the
+/// other way round.
+fn check_module_requires<'db>(
+    db: &'db dyn crate::Db,
+    module_id: ModuleId<'db>,
+    parsed: &ParsedStatements<'db>,
+    parsed_graph: &ParsedModuleGraph<'db>,
+) -> Vec<crate::RequireError> {
+    use crate::{RequireError, RequireErrorKind as Kind};
+
+    let graph = parsed_graph.graph(db);
+    let resolved = parsed_graph.get_requires(db, module_id);
+    let riders = parsed_graph.get_riders(db, module_id);
+
+    let mut errors = Vec::new();
+    let mut seen = RequireScope::default();
+    for statement in parsed.statements.iter() {
+        let Statement::Require(require) = statement else {
+            continue;
+        };
+        match require {
+            StmtRequire::Module(req) => {
+                let path = require_path(db, req);
+                let alias = req.module_alias.as_str(db).S();
+                if let Some(kind) = seen.add(&alias, &path) {
+                    errors.push(RequireError { local_index: req.local_index, alias, kind });
+                    continue;
+                }
+                let target = ModuleId::new(db, path.C());
+                if resolved.iter().any(|(_, id)| *id == target) {
+                    continue;
+                }
+                let kind = match graph.get_module(db, target) {
+                    Some(_) => {
+                        let back = require_chain(db, parsed_graph, target, module_id)
+                            .expect("a require dropped for a cycle has a way back");
+                        let mut cycle = vec![module_id.path(db).C()];
+                        cycle.extend(back.iter().map(|id| id.path(db).C()));
+                        Kind::Cycle { cycle }
+                    }
+                    None => Kind::ModuleNotFound { path },
+                };
+                errors.push(RequireError { local_index: req.local_index, alias, kind });
+            }
+            StmtRequire::Rider(req) => {
+                let name = req.name.as_str(db).S();
+                if let Some(kind) = seen.add(&name, &fmt!("rider {name}")) {
+                    errors.push(RequireError { local_index: req.local_index, alias: name, kind });
+                    continue;
+                }
+                if !riders.iter().any(|(alias, _)| *alias == req.name) {
+                    errors.push(RequireError {
+                        local_index: req.local_index,
+                        alias: name.C(),
+                        kind: Kind::RiderNotFound { name },
+                    });
+                }
+            }
+            StmtRequire::Data(_) => {}
+        }
+    }
+    errors
+}
+
+/// The path a `require module` names.
+fn require_path<'db>(db: &'db dyn crate::Db, req: &StmtRequireModule<'db>) -> String {
+    format!(
+        "{}/{}/{}",
+        req.import_space.as_str(db),
+        req.package_alias.as_str(db),
+        req.module_alias.as_str(db),
+    )
+}
+
+/// The modules from `from` to `to` along resolved requires, both ends included.
+fn require_chain<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: &ParsedModuleGraph<'db>,
+    from: ModuleId<'db>,
+    to: ModuleId<'db>,
+) -> Option<Vec<ModuleId<'db>>> {
+    let mut came_from: BTreeMap<ModuleId<'db>, ModuleId<'db>> = BTreeMap::new();
+    let mut queue = std::collections::VecDeque::from([from]);
+    while let Some(id) = queue.pop_front() {
+        if id == to {
+            let mut chain = vec![to];
+            let mut at = to;
+            while at != from {
+                at = came_from[&at];
+                chain.push(at);
+            }
+            chain.reverse();
+            return Some(chain);
+        }
+        for (_, next) in parsed_graph.get_requires(db, id) {
+            if *next != from && !came_from.contains_key(next) {
+                came_from.insert(*next, id);
+                queue.push_back(*next);
+            }
+        }
+    }
+    None
+}
+
+/// The requires one module or script unit has written so far, for refusing the
+/// same one twice and two under one alias.
+#[derive(Default)]
+struct RequireScope {
+    /// What each alias names, by the path or rider it was required as.
+    aliases: HashMap<String, String>,
+}
+
+impl RequireScope {
+    /// Note a require of `what` under `alias`, or say why it is refused.
+    fn add(&mut self, alias: &str, what: &str) -> Option<crate::RequireErrorKind> {
+        use crate::RequireErrorKind as Kind;
+        match self.aliases.get(alias) {
+            Some(first) if first == what => Some(Kind::Duplicate { what: what.S() }),
+            Some(first) => Some(Kind::AliasTaken { alias: alias.S(), first: first.C(), path: what.S() }),
+            None => {
+                self.aliases.insert(alias.S(), what.S());
+                None
+            }
+        }
+    }
 }
 
 
@@ -1150,6 +1321,49 @@ fn collect_module_aliases<'db>(
         }
     }
     aliases
+}
+
+/// Check each `require` a script unit writes.
+///
+/// Within the unit, a module may be required once and an alias name one module.
+/// Across units neither is checked: a later line of a session requiring what
+/// an earlier one did is redundant rather than wrong, as an import is.
+fn check_script_requires<'db>(
+    db: &'db dyn crate::Db,
+    parsed: &ParsedStatements<'db>,
+    modules_by_path: &HashMap<String, Module<'db>>,
+) -> Vec<crate::RequireError> {
+    use crate::{RequireError, RequireErrorKind as Kind};
+
+    let mut errors = Vec::new();
+    let mut seen = RequireScope::default();
+    for statement in parsed.statements.iter() {
+        let Statement::Require(require) = statement else {
+            continue;
+        };
+        match require {
+            StmtRequire::Module(req) => {
+                let path = require_path(db, req);
+                let alias = req.module_alias.as_str(db).S();
+                let kind = match seen.add(&alias, &path) {
+                    Some(kind) => kind,
+                    None if !modules_by_path.contains_key(&path) => Kind::ModuleNotFound { path },
+                    None => continue,
+                };
+                errors.push(RequireError { local_index: req.local_index, alias, kind });
+            }
+            StmtRequire::Rider(req) => {
+                let name = req.name.as_str(db).S();
+                errors.push(RequireError {
+                    local_index: req.local_index,
+                    alias: name.C(),
+                    kind: Kind::RiderInScript { name },
+                });
+            }
+            StmtRequire::Data(_) => {}
+        }
+    }
+    errors
 }
 
 /// Name a module for an error message, or say it has none.

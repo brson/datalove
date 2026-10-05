@@ -1,0 +1,15 @@
+----------
+module local/test/main
+----------
+
+require module local/test/main
+
+fun one(): int
+  ret 1
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

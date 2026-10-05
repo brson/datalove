@@ -35,6 +35,8 @@ pub struct DatafunSpans<'db> {
     pub type_alias_spans: Vec<SpanEntry>,
     /// Import statement spans, indexed by local_index.
     pub import_spans: Vec<SpanEntry>,
+    /// Require statement spans, indexed by local_index.
+    pub require_spans: Vec<SpanEntry>,
     /// Spans of bare names in type position, indexed by local_index.
     ///
     /// A type alias is the one thing in a type hint that the hint cannot
@@ -54,6 +56,7 @@ impl<'db> DatafunSpans<'db> {
             fun_spans: vec![],
             type_alias_spans: vec![],
             import_spans: vec![],
+            require_spans: vec![],
             alias_spans: vec![],
         }
     }
@@ -68,11 +71,12 @@ impl<'db> DatafunSpans<'db> {
         fun_spans: Vec<SpanEntry>,
         type_alias_spans: Vec<SpanEntry>,
         import_spans: Vec<SpanEntry>,
+        require_spans: Vec<SpanEntry>,
         alias_spans: Vec<SpanEntry>,
     ) -> Self {
         Self {
             entries, break_spans, continue_spans, ret_spans, set_spans, fun_spans,
-            type_alias_spans, import_spans, alias_spans,
+            type_alias_spans, import_spans, require_spans, alias_spans,
         }
     }
 
@@ -126,5 +130,10 @@ impl<'db> DatafunSpans<'db> {
     /// Look up span for an import statement by local_index.
     pub fn lookup_import(&self, index: u32) -> Option<&SpanEntry> {
         self.import_spans.get(index as usize)
+    }
+
+    /// Look up span for a require statement by local_index.
+    pub fn lookup_require(&self, index: u32) -> Option<&SpanEntry> {
+        self.require_spans.get(index as usize)
     }
 }

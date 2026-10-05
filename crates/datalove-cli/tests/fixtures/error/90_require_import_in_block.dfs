@@ -1,0 +1,10 @@
+// A require or import is read only at the top level, so one in a block is
+// refused rather than doing nothing.
+fun f(ref s: string): index
+  require module sys/std/string
+  ret string.len(ref s)
+end fun
+
+if true
+  import string.len
+end if

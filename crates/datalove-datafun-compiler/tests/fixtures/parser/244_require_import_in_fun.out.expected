@@ -1,0 +1,56 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "import_space": "sys",
+            "kind": "Require",
+            "module_alias": "string",
+            "package_alias": "std",
+            "variant": "Module"
+          },
+          {
+            "item_name": "len",
+            "kind": "Import",
+            "module_name": "string"
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [],
+        "return_type": null
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`require` is only read at the top level",
+          "span": [
+            10,
+            17
+          ],
+          "text": "require"
+        }
+      ],
+      "message": "`require` inside a block"
+    },
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`import` is only read at the top level",
+          "span": [
+            42,
+            48
+          ],
+          "text": "import"
+        }
+      ],
+      "message": "`import` inside a block"
+    }
+  ]
+}

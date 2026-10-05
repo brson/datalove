@@ -1,0 +1,28 @@
+----------
+module local/test/lib
+----------
+
+fun one(): int
+  ret 1
+end fun
+
+----------
+module local/test/main
+----------
+
+require module local/test/lib
+require module local/test/lib
+require module local/test/nosuch
+require module sys/std/string
+require module local/test/string
+require rider norider
+
+fun f(): int
+  ret lib.one()
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

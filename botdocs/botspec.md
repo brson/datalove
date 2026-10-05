@@ -1570,6 +1570,19 @@ require module sys/std/u32
 require rider std
 ```
 
+A `require` or `import` is read only at the top level of a module or script,
+and one inside a block is P074. Where it stands at the top level does not
+matter: the requires and imports are gathered before anything is resolved, so
+a call above the `require` it goes through is fine.
+
+A `require` is refused where it is written when the module or rider does not
+exist (F079), when the same one is required twice in one module or script
+unit (F080), when its alias is another required module's already (F081), when
+a script requires a rider (F082), and when it closes a cycle (F083): the
+modules of a program may not require each other in a cycle. Across the units
+of a session a repeated require is not checked, and is redundant as a repeated
+import is.
+
 ### 9.3 Import
 
 `import` brings a name into scope from a required module or rider:

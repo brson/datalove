@@ -402,11 +402,9 @@ pub struct CompileRoots<'db> {
 /// `to_module_graph` leaves it out of the requires. The error is the
 /// typechecker's to report, from the import that has nothing to resolve against.
 ///
-/// A cycle yields an empty map, which is also what resolution did -- `validate_graph`
-/// failed and `dependencies_of` returned nothing. That is a poor answer to give a
-/// cyclic program and it is preserved here rather than improved, so that this
-/// change is only about what gets parsed. A cycle among modules the roots do not
-/// reach is no longer seen at all, which follows from reachability.
+/// A cycle is broken by dropping the require that closes it; see
+/// [`break_cycles`]. A cycle among modules the roots do not reach is not seen at
+/// all, which follows from reachability.
 #[salsa::tracked(returns(ref))]
 fn dependencies_from_roots<'db>(
     db: &'db dyn salsa::Database,
@@ -451,14 +449,22 @@ fn dependencies_from_roots<'db>(
         deps.insert(path, targets);
     }
 
-    if has_cycle(&deps) {
-        return BTreeMap::new();
-    }
+    break_cycles(&mut deps);
     deps
 }
 
-/// Whether the dependency graph has a cycle, which a program may not have.
-fn has_cycle(deps: &BTreeMap<String, BTreeSet<String>>) -> bool {
+/// Drop each require that closes a cycle, which a program may not have.
+///
+/// The graph left is acyclic and still reaches every module, so the rest of
+/// the program compiles and typecheck reports the cycle on the require that
+/// was dropped (F083): it names a module that is in the graph and yet did not
+/// resolve. Which require of a cycle that is depends on the walk, which starts
+/// from each module in path order.
+///
+/// This used to give up on the whole graph, an empty map, so a program with a
+/// cycle anywhere had every module's requires go unresolved and said only
+/// that nothing was required under each alias called through.
+fn break_cycles(deps: &mut BTreeMap<String, BTreeSet<String>>) {
     #[derive(Clone, Copy, PartialEq)]
     enum Mark { Open, Done }
 
@@ -466,26 +472,32 @@ fn has_cycle(deps: &BTreeMap<String, BTreeSet<String>>) -> bool {
         path: &str,
         deps: &BTreeMap<String, BTreeSet<String>>,
         marks: &mut BTreeMap<String, Mark>,
-    ) -> bool {
-        match marks.get(path) {
-            Some(Mark::Open) => return true,
-            Some(Mark::Done) => return false,
-            None => {}
+        closing: &mut Vec<(String, String)>,
+    ) {
+        if marks.contains_key(path) {
+            return;
         }
         marks.insert(path.S(), Mark::Open);
         if let Some(targets) = deps.get(path) {
             for target in targets {
-                if visit(target, deps, marks) {
-                    return true;
+                match marks.get(target.as_str()) {
+                    Some(Mark::Open) => closing.push((path.S(), target.C())),
+                    Some(Mark::Done) => {}
+                    None => visit(target, deps, marks, closing),
                 }
             }
         }
         marks.insert(path.S(), Mark::Done);
-        false
     }
 
     let mut marks: BTreeMap<String, Mark> = BTreeMap::new();
-    deps.keys().any(|path| visit(path, deps, &mut marks))
+    let mut closing = Vec::new();
+    for path in deps.keys() {
+        visit(path, deps, &mut marks, &mut closing);
+    }
+    for (from, to) in closing {
+        deps.get_mut(&from).expect("a closing require starts at a walked module").remove(&to);
+    }
 }
 
 /// The dependency graph of an already-imported package world.

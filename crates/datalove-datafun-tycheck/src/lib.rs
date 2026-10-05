@@ -80,6 +80,8 @@ pub enum ErrorSite<'db> {
     Fun(u32),
     /// An `import` statement, by its span index.
     Import(u32),
+    /// A `require` statement, by its span index.
+    Require(u32),
 }
 
 /// Pending diagnostic for unified diagnostic emission.
@@ -548,6 +550,10 @@ pub struct ModuleImportResolution<'db> {
     #[returns(ref)]
     pub errors: Vec<UnresolvedImport>,
 
+    /// Requires refused where they are written.
+    #[returns(ref)]
+    pub require_errors: Vec<RequireError>,
+
     /// What the module's qualified calls name.
     #[returns(ref)]
     pub qualified: QualifiedScope<'db>,
@@ -590,6 +596,38 @@ pub struct UnresolvedImport {
     /// The function asked for, or `None` when nothing by `module` is there to
     /// ask.
     pub item: Option<String>,
+}
+
+/// A `require` refused where it is written, found before there is a context
+/// to report it in.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct RequireError {
+    /// Where the require's span is filed.
+    pub local_index: u32,
+    /// The alias the require would have given, which calls through it should
+    /// not report again.
+    pub alias: String,
+    pub kind: RequireErrorKind,
+}
+
+/// Why a `require` is refused.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum RequireErrorKind {
+    /// F079: No module has the path.
+    ModuleNotFound { path: String },
+    /// F079: The package has no rider of the name.
+    RiderNotFound { name: String },
+    /// F080: The same module or rider required twice in one module or unit.
+    Duplicate { what: String },
+    /// F081: The alias is taken by another module required before.
+    AliasTaken { alias: String, first: String, path: String },
+    /// F082: A script required a rider.
+    RiderInScript { name: String },
+    /// F083: The require closes a cycle, written out from the requiring module
+    /// back to itself.
+    Cycle { cycle: Vec<String> },
 }
 
 /// Result of typechecking a single module.

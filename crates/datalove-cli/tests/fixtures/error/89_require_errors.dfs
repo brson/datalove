@@ -1,0 +1,12 @@
+// Each require is refused where it is written, and a call or import through
+// a refused one says nothing more.
+require module sys/std/string
+require module sys/std/string
+require module local/other/string
+require module sys/std/nosuch
+require rider std
+
+import nosuch.f
+
+let s = "abc"
+debuglog nosuch.g(ref s)

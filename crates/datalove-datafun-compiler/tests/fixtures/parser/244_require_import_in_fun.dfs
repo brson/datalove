@@ -1,0 +1,4 @@
+fun f()
+  require module sys/std/string
+  import string.len
+end fun

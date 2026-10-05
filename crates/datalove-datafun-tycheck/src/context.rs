@@ -112,6 +112,11 @@ pub struct TypeContext<'db> {
     pub(crate) call_targets: CallTargets<'db>,
     /// What this unit's qualified calls name.
     pub(crate) qualified: crate::QualifiedScope<'db>,
+    /// Aliases whose `require` was refused, and reported there.
+    ///
+    /// A call through one would otherwise say again, less helpfully, that
+    /// nothing was required under it.
+    pub(crate) failed_aliases: HashSet<String>,
     /// Stack of loop depth (for validating break/continue are inside a loop).
     pub(crate) loop_depth: usize,
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
@@ -189,6 +194,7 @@ impl<'db> TypeContext<'db> {
             expr_types: ExprTypes::new(),
             call_targets: CallTargets::new(),
             qualified: crate::QualifiedScope::default(),
+            failed_aliases: HashSet::new(),
             loop_depth: 0,
             ref_context: false,
             mut_context: false,
@@ -592,6 +598,57 @@ replace the view rather than the elements it shows. Index down to single element
         self.add_error(error);
     }
 
+    /// Report a `require` refused where it is written.
+    pub fn report_require_error(&mut self, error: &crate::RequireError) {
+        use crate::RequireErrorKind as Kind;
+        self.failed_aliases.insert(error.alias.C());
+        let site = ErrorSite::Require(error.local_index);
+        let (code, message, label, note) = match &error.kind {
+            Kind::ModuleNotFound { path } => (
+                "F079",
+                fmt!("no module `{path}` to require"),
+                S("no such module"),
+                None,
+            ),
+            Kind::RiderNotFound { name } => (
+                "F079",
+                fmt!("no rider `{name}` to require"),
+                S("no such rider"),
+                None,
+            ),
+            Kind::Duplicate { what } => (
+                "F080",
+                fmt!("`{what}` is required twice"),
+                S("required already, above"),
+                None,
+            ),
+            Kind::AliasTaken { alias, first, path } => (
+                "F081",
+                fmt!("`{alias}` already names `{first}`"),
+                fmt!("`{path}` would be called through `{alias}` too"),
+                Some(S("a module is called through the last part of its path, so two modules of one name cannot be required together")),
+            ),
+            Kind::RiderInScript { name } => (
+                "F082",
+                fmt!("a script cannot require a rider, here `{name}`"),
+                S("riders are required by modules"),
+                Some(S("a rider's functions reach a script through a module of its package, which requires the rider")),
+            ),
+            Kind::Cycle { cycle } => {
+                let target = &cycle[1];
+                let path = cycle.iter().map(|p| fmt!("`{p}`")).collect::<Vec<_>>().join(" -> ");
+                (
+                    "F083",
+                    fmt!("requiring `{target}` makes a cycle"),
+                    fmt!("{path}"),
+                    Some(S("modules cannot require each other in a cycle; move what they share into a module each of them requires")),
+                )
+            }
+        };
+        self.push_coded(site, code, message.C(), label, note);
+        self.add_error(TypeError::DatalitError(message));
+    }
+
     /// The function a qualified call names, reporting the call if it names none.
     ///
     /// F078 when nothing is required under the alias, as for an import, with a
@@ -612,6 +669,9 @@ replace the view rather than the elements it shows. Index down to single element
         if self.qualified.aliases.contains(&alias) {
             self.push_coded(site, "F002", fmt!("`{module}` has no function `{item}`"), S("no such function"), None);
             return Err(TypeError::UnresolvedName(fmt!("{module}.{item}")));
+        }
+        if self.failed_aliases.contains(module) {
+            return Err(TypeError::UnresolvedName(fmt!("module {module}")));
         }
         let note = if self.variables.contains_key(&alias) {
             fmt!("`{module}` is a value here, and a value has no functions to call: pass it as an argument instead")

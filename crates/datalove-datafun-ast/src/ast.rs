@@ -136,6 +136,8 @@ pub struct ParseResult<'db> {
     pub type_alias_spans: Vec<SpanEntry>,
     /// Import statement spans, indexed by position among the imports.
     pub import_spans: Vec<SpanEntry>,
+    /// Require statement spans, indexed by position among the requires.
+    pub require_spans: Vec<SpanEntry>,
     /// Spans of bare names in type position, indexed by local_index.
     pub alias_spans: Vec<SpanEntry>,
 }
@@ -415,6 +417,8 @@ pub struct StmtRequireModule<'db> {
     pub import_space: InternedText<'db>,
     pub package_alias: InternedText<'db>,
     pub module_alias: InternedText<'db>,
+    /// Index of this statement's span among the requires.
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -429,6 +433,8 @@ pub struct StmtRequireData<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct StmtRequireRider<'db> {
     pub name: InternedText<'db>,
+    /// Index of this statement's span among the requires.
+    pub local_index: u32,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

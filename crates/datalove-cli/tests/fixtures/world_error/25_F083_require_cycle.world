@@ -1,0 +1,35 @@
+----------
+module local/test/a
+----------
+
+require module local/test/b
+
+fun one(): int
+  ret b.two() - 1
+end fun
+
+----------
+module local/test/b
+----------
+
+require module local/test/c
+
+fun two(): int
+  ret 2
+end fun
+
+----------
+module local/test/c
+----------
+
+require module local/test/a
+
+fun three(): int
+  ret 3
+end fun
+
+----------
+scriptunit-expr
+----------
+
+@0

@@ -68,6 +68,7 @@ pub(super) struct StatementCounters {
     pub fun: u32,
     pub type_alias: u32,
     pub import: u32,
+    pub require: u32,
     /// Bare names in type position, which are not statements but are numbered
     /// and filed the same way.
     pub alias: u32,
@@ -97,6 +98,8 @@ pub(super) struct Parser<'db> {
     /// Accumulated type alias spans, indexed by local_index.
     type_alias_spans: Vec<SpanEntry>,
     import_spans: Vec<SpanEntry>,
+    /// Accumulated require statement spans, indexed by local_index.
+    require_spans: Vec<SpanEntry>,
     /// Accumulated spans of bare names in type position, indexed by local_index.
     alias_spans: Vec<SpanEntry>,
     /// Accumulated `(alias, function)` pairs of qualified calls, as written.
@@ -143,6 +146,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            require_spans: Vec::new(),
             alias_spans: Vec::new(),
             qualified_calls: Vec::new(),
             branch_context: None,
@@ -214,6 +218,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            require_spans: Vec::new(),
             alias_spans: Vec::new(),
             qualified_calls: Vec::new(),
             branch_context: context,
@@ -255,6 +260,7 @@ impl<'db> Parser<'db> {
             fun_spans: Vec::new(),
             type_alias_spans: Vec::new(),
             import_spans: Vec::new(),
+            require_spans: Vec::new(),
             alias_spans: Vec::new(),
             qualified_calls: Vec::new(),
             branch_context: context,
@@ -577,6 +583,7 @@ impl<'db> Parser<'db> {
         self.fun_spans.append(&mut sub.fun_spans);
         self.type_alias_spans.append(&mut sub.type_alias_spans);
         self.import_spans.append(&mut sub.import_spans);
+        self.require_spans.append(&mut sub.require_spans);
         self.alias_spans.append(&mut sub.alias_spans);
         self.qualified_calls.append(&mut sub.qualified_calls);
     }
@@ -628,6 +635,14 @@ impl<'db> Parser<'db> {
 
     pub(super) fn take_import_spans(&mut self) -> Vec<SpanEntry> {
         rmx::std::mem::take(&mut self.import_spans)
+    }
+
+    pub(super) fn record_require_span(&mut self, ts: TextSpan<'db>) -> u32 {
+        self.record_stmt_span(ts, |c| &mut c.require, |p| &mut p.require_spans)
+    }
+
+    pub(super) fn take_require_spans(&mut self) -> Vec<SpanEntry> {
+        rmx::std::mem::take(&mut self.require_spans)
     }
 
     /// File a statement's span under the count for its kind.

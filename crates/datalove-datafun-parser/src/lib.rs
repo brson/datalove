@@ -168,6 +168,7 @@ fn parse_bracer<'db>(
         fun_spans: spans.fun_spans,
         type_alias_spans: spans.type_alias_spans,
         import_spans: spans.import_spans,
+        require_spans: spans.require_spans,
         alias_spans: spans.alias_spans,
     }
 }
@@ -182,6 +183,7 @@ struct ParsedSpans<'db> {
     fun_spans: Vec<bct::diagnostic::SpanEntry>,
     type_alias_spans: Vec<bct::diagnostic::SpanEntry>,
     import_spans: Vec<bct::diagnostic::SpanEntry>,
+    require_spans: Vec<bct::diagnostic::SpanEntry>,
     alias_spans: Vec<bct::diagnostic::SpanEntry>,
 }
 
@@ -204,6 +206,7 @@ fn parse_statements<'db>(
     let mut all_fun_spans = vec![];
     let mut all_type_alias_spans = vec![];
     let mut all_import_spans = vec![];
+    let mut all_require_spans = vec![];
     let mut all_alias_spans = vec![];
     let mut line_iter = lines.enumerate().peekable();
     let mut counters = ScriptCounters::default();
@@ -221,6 +224,7 @@ fn parse_statements<'db>(
         all_fun_spans.extend(parser.take_fun_spans());
         all_type_alias_spans.extend(parser.take_type_alias_spans());
         all_import_spans.extend(parser.take_import_spans());
+        all_require_spans.extend(parser.take_require_spans());
         all_alias_spans.extend(parser.take_alias_spans());
         qualified_calls.extend(parser.take_qualified_calls());
     }
@@ -234,6 +238,7 @@ fn parse_statements<'db>(
         fun_spans: all_fun_spans,
         type_alias_spans: all_type_alias_spans,
         import_spans: all_import_spans,
+        require_spans: all_require_spans,
         alias_spans: all_alias_spans,
     };
     (statements, spans, qualified_calls)
@@ -301,6 +306,7 @@ pub fn datafun_spans<'db>(
         parse_result.fun_spans.C(),
         parse_result.type_alias_spans.C(),
         parse_result.import_spans.C(),
+        parse_result.require_spans.C(),
         parse_result.alias_spans.C(),
     )
 }
@@ -348,6 +354,7 @@ pub fn module_spans<'db>(
         full.fun_spans.clone(),
         full.type_alias_spans.clone(),
         full.import_spans.clone(),
+        full.require_spans.clone(),
         full.alias_spans.clone(),
     )
 }

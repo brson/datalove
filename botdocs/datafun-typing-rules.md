@@ -731,6 +731,17 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F077**: A const parameter whose type is a type parameter
 - **F078**: An import from, or qualified call through, a name that no
   `require` brought in
+- **F079**: A `require` of a module or rider that does not exist
+- **F080**: The same module or rider required twice in one module or script
+  unit
+- **F081**: A module required under an alias another required module already
+  has, since a module is called through the last part of its path
+- **F082**: `require rider` in a script
+- **F083**: A `require` that closes a cycle of modules, a module requiring
+  itself included
+
+A refused `require` is reported where it is written, and an import from or
+qualified call through its alias is not reported again as F078.
 
 ### Inherited from Datalit
 Datalit's own `TypeMismatch`, `CannotSynthesize` and `IntOutOfRange` are

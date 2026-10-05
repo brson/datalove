@@ -36,6 +36,9 @@ pub trait SpanLookup<'db> {
     /// Look up span for an import statement by local_index.
     fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
 
+    /// Look up span for a require statement by local_index.
+    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+
     /// Look up the span of a bare name in type position by local_index.
     fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
 
@@ -104,6 +107,13 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
 
     fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         self.spans.lookup_import(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        self.spans.lookup_require(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -209,6 +219,14 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
     fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
         let spans = self.spans(db, self.module_id)?;
         spans.lookup_import(local_index).map(|entry| {
+            let (text, span) = entry.to_text_and_span(db);
+            TextSpan::new(text, span)
+        })
+    }
+
+    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+        let spans = self.spans(db, self.module_id)?;
+        spans.lookup_require(local_index).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)
         })
@@ -368,6 +386,7 @@ drop the return type.")
                 crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index),
                 crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index),
                 crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index),
+                crate::ErrorSite::Require(local_index) => spans.lookup_require(db, *local_index),
             };
             if let Some(ts) = ts {
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, message.as_str(db))
@@ -754,6 +773,7 @@ fn format_single_diagnostic<'db>(
                 crate::ErrorSite::Set(local_index) => spans.lookup_set(db, *local_index)?,
                 crate::ErrorSite::Fun(local_index) => spans.lookup_fun(db, *local_index)?,
                 crate::ErrorSite::Import(local_index) => spans.lookup_import(db, *local_index)?,
+                crate::ErrorSite::Require(local_index) => spans.lookup_require(db, *local_index)?,
             };
             let loc = format_location(db, &ts);
             Some(format!("{}: error[{}]: {}", loc, code.as_str(db), message.as_str(db)))
