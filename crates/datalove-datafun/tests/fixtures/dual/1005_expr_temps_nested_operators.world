@@ -1,0 +1,33 @@
+----------
+scriptunit-fragment
+----------
+
+// An operator inside an operand drops only the temporaries its own operands
+// made. The left side of `==` here is a temporary holding a string, and the
+// negation on the right used to drop it before the comparison read it.
+fun negated(k: int): bool
+    ret ("abc", -k) == ("abc", -k)
+end fun
+
+fun inverted(b: bool): bool
+    ret ("abc", not b) == ("abc", not b)
+end fun
+
+// An early return from inside the right operand lets go of the left one too,
+// which used to leak: through `?`, a checked operator, and a fallible index.
+fun through_try(o: ?int): ?bool
+    ret some (("abc", 1) == ("abc", o?))
+end fun
+
+fun through_checked(a: u8, b: u8): ?bool
+    ret some (("abc", : u8 / 3) == ("abc", a +? b))
+end fun
+
+fun through_index(xs: [int], i: index): ?bool
+    ret some (("abc", 1) == ("abc", xs[i]?))
+end fun
+
+debuglog (negated(1), inverted(true))
+debuglog (through_try(some 1), through_try(none))
+debuglog (through_checked(1, 2), through_checked(255, 1))
+debuglog (through_index([1], 0), through_index([1], 5))

@@ -873,21 +873,32 @@ impl<'db> LowerCtx<'db> {
         self.body.expr_temps.len()
     }
 
+    /// Emit Drop instructions for every expression temporary, on a path that
+    /// leaves the function.
+    ///
+    /// They stay listed. The path that does not leave still holds them, and
+    /// each is dropped there by the operation that made it, once that
+    /// operation is done with it. An early return from inside an operand --
+    /// a `?`, a checked operator, a fallible index -- leaves the enclosing
+    /// operations unfinished, so what they had made is let go of here or not
+    /// at all.
+    fn emit_exit_expr_temp_drops(&mut self) {
+        for (value, _ty) in self.body.expr_temps.clone() {
+            self.emit(Instruction::Drop { operand: Operand::Value(value) });
+        }
+    }
+
     /// Emit Drop instructions for all expression temporaries and clear the list.
+    ///
+    /// For the end of a statement. Inside an expression, an operation drops
+    /// only the temporaries its own operands made, with
+    /// [`emit_expr_temp_drops_since`](Self::emit_expr_temp_drops_since): any
+    /// before them belong to an enclosing operation that has not yet run.
     pub fn emit_expr_temp_drops(&mut self) {
         let temps = std::mem::take(&mut self.body.expr_temps);
         for (value, _ty) in temps {
             self.emit(Instruction::Drop { operand: Operand::Value(value) });
         }
-    }
-
-    /// The expression temporaries added since `mark`, without taking them.
-    ///
-    /// For an operation that leaves by more than one path and has to let go of
-    /// the same temporaries on each: the list is read once here, dropped in
-    /// every block that leaves, and taken off the list once at the end.
-    pub fn expr_temps_since(&self, mark: usize) -> Vec<(ValueId, IrType)> {
-        self.body.expr_temps[mark..].to_vec()
     }
 
     /// Emit Drop instructions for expression temporaries added since `mark`.
@@ -1491,6 +1502,7 @@ impl<'db> LowerCtx<'db> {
             .expect("early return requires function context");
         let none_value = self.fresh_value(return_type);
         self.emit_wrap_none(none_value);
+        self.emit_exit_expr_temp_drops();
         self.emit_pending_intermediate_drops();
         if set_target_drops {
             self.emit_before_set_target_early_return_drops();
@@ -1523,6 +1535,7 @@ impl<'db> LowerCtx<'db> {
             .expect("early return requires function context");
         let wrapped = self.fresh_value(return_type);
         self.emit_wrap_err(wrapped, err_operand);
+        self.emit_exit_expr_temp_drops();
         self.emit_pending_intermediate_drops();
         if set_target_drops {
             self.emit_before_set_target_early_return_drops();

@@ -1126,6 +1126,7 @@ pub fn lower_expression<'db>(
                 .unwrap_or_else(|| panic!("unknown intrinsic '{}' - typechecker should catch this", name_str));
 
             // Lower arguments.
+            let expr_temp_mark = ctx.expr_temps_mark();
             let args: Result<Vec<_>, _> = icall.args
                 .iter()
                 .map(|arg| lower_operand(ctx, *arg))
@@ -1138,7 +1139,7 @@ pub fn lower_expression<'db>(
             ctx.emit_intrinsic(dest, intrinsic_id, args);
 
             // Drop expression temporaries after the intrinsic completes.
-            ctx.emit_expr_temp_drops();
+            ctx.emit_expr_temp_drops_since(expr_temp_mark);
 
             Ok(dest)
         }
@@ -1261,29 +1262,29 @@ fn lower_binop<'db>(
         ast::BinOp::Xor => BinOp::LogicXor,
         // Checked result ops - emit BinOpChecked with early return on overflow.
         ast::BinOp::AddChecked => {
-            return lower_checked_result_binop(ctx, BinOp::Add, lhs, rhs, dest);
+            return lower_checked_result_binop(ctx, BinOp::Add, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::SubChecked => {
-            return lower_checked_result_binop(ctx, BinOp::Sub, lhs, rhs, dest);
+            return lower_checked_result_binop(ctx, BinOp::Sub, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::MulChecked => {
-            return lower_checked_result_binop(ctx, BinOp::Mul, lhs, rhs, dest);
+            return lower_checked_result_binop(ctx, BinOp::Mul, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::DivChecked => {
-            return lower_checked_result_binop(ctx, BinOp::Div, lhs, rhs, dest);
+            return lower_checked_result_binop(ctx, BinOp::Div, lhs, rhs, dest, expr_temp_mark);
         }
         // Optional ops - emit BinOpChecked with early return on overflow.
         ast::BinOp::AddOptional => {
-            return lower_optional_binop(ctx, BinOp::Add, lhs, rhs, dest);
+            return lower_optional_binop(ctx, BinOp::Add, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::SubOptional => {
-            return lower_optional_binop(ctx, BinOp::Sub, lhs, rhs, dest);
+            return lower_optional_binop(ctx, BinOp::Sub, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::MulOptional => {
-            return lower_optional_binop(ctx, BinOp::Mul, lhs, rhs, dest);
+            return lower_optional_binop(ctx, BinOp::Mul, lhs, rhs, dest, expr_temp_mark);
         }
         ast::BinOp::DivOptional => {
-            return lower_optional_binop(ctx, BinOp::Div, lhs, rhs, dest);
+            return lower_optional_binop(ctx, BinOp::Div, lhs, rhs, dest, expr_temp_mark);
         }
     };
 
@@ -1320,7 +1321,9 @@ fn lower_unaryop<'db>(
         }
     }
 
-    // Use lower_operand for borrowing semantics.
+    // Use lower_operand for borrowing semantics. Only the temps the operand
+    // creates are ours to drop.
+    let expr_temp_mark = ctx.expr_temps_mark();
     let operand = lower_operand(ctx, unary.operand)?;
     let dest = ctx.fresh_value(result_type);
 
@@ -1332,14 +1335,14 @@ fn lower_unaryop<'db>(
                 operand,
             });
             // Drop expression temporaries after borrowing operation completes.
-            ctx.emit_expr_temp_drops();
+            ctx.emit_expr_temp_drops_since(expr_temp_mark);
             Ok(dest)
         }
         ast::UnaryOp::NegOptional => {
-            lower_optional_unaryop(ctx, UnaryOp::Neg, operand, dest)
+            lower_optional_unaryop(ctx, UnaryOp::Neg, operand, dest, expr_temp_mark)
         }
         ast::UnaryOp::NegResult => {
-            lower_checked_result_unaryop(ctx, UnaryOp::Neg, operand, dest)
+            lower_checked_result_unaryop(ctx, UnaryOp::Neg, operand, dest, expr_temp_mark)
         }
         ast::UnaryOp::Not => {
             ctx.emit(Instruction::UnaryOp {
@@ -1347,7 +1350,7 @@ fn lower_unaryop<'db>(
                 op: UnaryOp::LogicNot,
                 operand,
             });
-            ctx.emit_expr_temp_drops();
+            ctx.emit_expr_temp_drops_since(expr_temp_mark);
             Ok(dest)
         }
     }
@@ -1380,6 +1383,7 @@ fn lower_optional_binop<'db>(
     lhs: Operand,
     rhs: Operand,
     dest: ValueId,
+    expr_temp_mark: usize,
 ) -> Result<ValueId, LowerError> {
     // Emit checked operation.
     let overflow = ctx.fresh_value(IrType::Bool);
@@ -1390,7 +1394,6 @@ fn lower_optional_binop<'db>(
         lhs,
         rhs,
     });
-    ctx.emit_expr_temp_drops();
 
     // Create early return and continue blocks.
     let early_return_block = ctx.fresh_block();
@@ -1410,8 +1413,10 @@ fn lower_optional_binop<'db>(
     drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
-    // Continue block: dest already has the computed value.
+    // Continue block: dest already has the computed value. The early return
+    // let go of every temporary; this way out lets go of the operands' own.
     ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
     Ok(dest)
 }
 
@@ -1427,6 +1432,7 @@ fn lower_checked_result_binop<'db>(
     lhs: Operand,
     rhs: Operand,
     dest: ValueId,
+    expr_temp_mark: usize,
 ) -> Result<ValueId, LowerError> {
     // Emit checked operation.
     let overflow = ctx.fresh_value(IrType::Bool);
@@ -1437,7 +1443,6 @@ fn lower_checked_result_binop<'db>(
         lhs,
         rhs,
     });
-    ctx.emit_expr_temp_drops();
 
     // Create early return and continue blocks.
     let early_return_block = ctx.fresh_block();
@@ -1458,8 +1463,10 @@ fn lower_checked_result_binop<'db>(
     drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message(message, false);
 
-    // Continue block: dest already has the computed value.
+    // Continue block: dest already has the computed value. The early return
+    // let go of every temporary; this way out lets go of the operands' own.
     ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
     Ok(dest)
 }
 
@@ -1495,6 +1502,7 @@ fn lower_optional_unaryop<'db>(
     op: UnaryOp,
     operand: Operand,
     dest: ValueId,
+    expr_temp_mark: usize,
 ) -> Result<ValueId, LowerError> {
     // Emit checked operation.
     let overflow = ctx.fresh_value(IrType::Bool);
@@ -1504,7 +1512,6 @@ fn lower_optional_unaryop<'db>(
         op,
         operand,
     });
-    ctx.emit_expr_temp_drops();
 
     // Create early return and continue blocks.
     let early_return_block = ctx.fresh_block();
@@ -1524,8 +1531,10 @@ fn lower_optional_unaryop<'db>(
     drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
-    // Continue block: dest already has the computed value.
+    // Continue block: dest already has the computed value. The early return
+    // let go of every temporary; this way out lets go of the operands' own.
     ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
     Ok(dest)
 }
 
@@ -1540,6 +1549,7 @@ fn lower_checked_result_unaryop<'db>(
     op: UnaryOp,
     operand: Operand,
     dest: ValueId,
+    expr_temp_mark: usize,
 ) -> Result<ValueId, LowerError> {
     // Emit checked operation.
     let overflow = ctx.fresh_value(IrType::Bool);
@@ -1549,7 +1559,6 @@ fn lower_checked_result_unaryop<'db>(
         op,
         operand,
     });
-    ctx.emit_expr_temp_drops();
 
     // Create early return and continue blocks.
     let early_return_block = ctx.fresh_block();
@@ -1569,8 +1578,10 @@ fn lower_checked_result_unaryop<'db>(
     drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message("negation overflow", false);
 
-    // Continue block: dest already has the computed value.
+    // Continue block: dest already has the computed value. The early return
+    // let go of every temporary; this way out lets go of the operands' own.
     ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
     Ok(dest)
 }
 
@@ -1717,13 +1728,9 @@ fn lower_collection_index_value<'db>(
         else_args: Vec::new(),
     });
 
-    // Read rather than taken, because both ways out let go of the same ones.
-    let temps = ctx.expr_temps_since(temps_mark);
-
+    // The early return lets go of every temporary, these and any an enclosing
+    // expression holds; the other way out lets go of these.
     ctx.start_block(early_return_block);
-    for (value, ty) in &temps {
-        ctx.emit_drop_for_operand(&Operand::Value(*value), ty);
-    }
     match error_mode {
         ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
         ast::IndexErrorMode::Result => {
@@ -1844,12 +1851,7 @@ fn lower_place_expression<'db>(
                         else_args: Vec::new(),
                     });
 
-                    let temps = ctx.expr_temps_since(temps_mark);
-
                     ctx.start_block(early_return_block);
-                    for (value, ty) in &temps {
-                        ctx.emit_drop_for_operand(&Operand::Value(*value), ty);
-                    }
                     match error_mode {
                         ast::IndexErrorMode::Option => ctx.emit_early_return_none(false),
                         ast::IndexErrorMode::Result => {
