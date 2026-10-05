@@ -71,7 +71,7 @@ pub use native::{NativeFunctionTable, NativeFnImpl};
 ///
 /// One box per borrow, kept by whoever prepared the call so that the borrows
 /// outlive it. See `borrow_through_wrapper`.
-type BorrowScratch = Vec<Box<u64>>;
+pub(crate) type BorrowScratch = Vec<Box<u64>>;
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
@@ -195,7 +195,10 @@ impl IrInterpreter {
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
             use_bytecode: std::env::var("DATALOVE_INTERP").is_ok_and(|v| v == "bc"),
-            bc_stats: bytecode::BcStats::default(),
+            bc_stats: bytecode::BcStats {
+                counting: std::env::var_os("DATALOVE_BC_STATS").is_some(),
+                ..Default::default()
+            },
         }
     }
 

@@ -16,8 +16,8 @@
 
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{
-    BinOp, BlockId, CodeRef, ConstValue, Instruction, IrCodeUnit, IrType, Operand, ParamMode,
-    SlotDest, Terminator, ValueId,
+    BinOp, BlockId, CodeRef, CodeUnitContext, ConstValue, Instruction, IrCodeUnit, IrType, Operand,
+    ParamMode, SlotDest, Terminator, ValueId,
 };
 use datalove_datafun_intrinsics::IntrinsicId;
 use datalove_rtdt as rtdt;
@@ -28,6 +28,7 @@ use crate::frame::{Frame, FrameStore};
 use crate::layout::IrLayout;
 use crate::ops::CheckedIntOps;
 use crate::value::Destination;
+use datalove_datafun_ir::frame_layout::tracking;
 use crate::{copy_bytes, IrInterpreter, UnitTypes};
 
 /// Where an operand is: in the frame at an offset, or, with the top bit set,
@@ -163,6 +164,22 @@ pub(crate) enum Op {
     UnwrapOption { dst: Loc, flag: Loc, src: Loc, at: u32, len: u32 },
     UnwrapResult { ok: Loc, err: Loc, flag: Loc, src: Loc, at: u16, ok_len: u16, err_len: u16 },
 
+    /// Destroy what `src` holds; `desc` indexes the body's descriptors.
+    Drop { src: Loc, desc: u32 },
+    /// Destroy what a tracked slot or `out` parameter holds, if its tracking
+    /// byte at frame offset `track` says it holds anything, and mark it moved.
+    DropTracked { src: Loc, track: u32, desc: u32 },
+    /// Store into a tracked slot: destroy what it holds if anything, copy
+    /// `len` bytes from `src`, mark it live.
+    StoreTracked { dst: Loc, track: u32, src: Loc, len: u32, desc: u32 },
+    /// Move out of a tracked slot and mark it moved.
+    LoadMoveTracked { dst: Loc, src: Loc, track: u32, len: u32 },
+    /// Widen a fixed-width integer to an `int`.
+    Widen { dst: Loc, src: Loc, src_desc: u32 },
+    /// A binary operation the typed ops do not cover, on the IR walker's own
+    /// routine with its operands resolved: `rt[at]` holds dst, lhs, rhs.
+    BinOpRt { op: BinOp, at: u32 },
+
     Jump { to: u32 },
     BrIf { cond: Loc, then: u32, els: u32 },
     /// A comparison whose only use is the branch on it.
@@ -194,18 +211,39 @@ struct FastCall {
     /// Where the instruction is, for the general path.
     block: u32,
     index: u32,
-    /// Each argument's place and its descriptor as the caller has it.
-    args: Vec<(Loc, *const rtdt::TyDesc)>,
+    /// Whether each argument is an SSA value, the only kind whose being
+    /// moved into the call the frame need not record. The arguments
+    /// themselves are read as the IR walker reads them, which knows where a
+    /// parameter's or a reference's descriptor comes from at run time.
+    args: Vec<bool>,
+    /// Each argument's place and descriptor, where every one is statically
+    /// typed and there are no shapes to hand over: then reading them is a
+    /// pointer each, which is most calls outside generic code.
+    resolved: Option<Vec<(Loc, *const rtdt::TyDesc)>>,
     dest: Loc,
     dest_tydesc: *const rtdt::TyDesc,
-    /// The callee's layout the last time, and the body it was for, so that a
-    /// call need not look it up again unless the body has changed.
-    cache: std::cell::RefCell<Option<(usize, std::rc::Rc<IrLayout>)>>,
+    /// The callee's layout the last time, the body it was for, and whether
+    /// this call's arguments suit the fast path for it, so that a call need
+    /// not look any of it up again unless the body has changed. No layout for
+    /// a native callee.
+    cache: std::cell::RefCell<Option<(usize, Option<std::rc::Rc<IrLayout>>, bool)>>,
+    /// A module callee, found once: the registry it was found in, held so that
+    /// it cannot be freed and its address reused, and the body. Valid while
+    /// the call's registry is that one -- module bodies do not change within
+    /// a registry -- which saves two ordered-map lookups a call.
+    module_callee: std::cell::RefCell<Option<(
+        std::sync::Arc<datalove_datafun_ir::registry::ModuleFunctionRegistry>,
+        *const IrCodeUnit,
+    )>>,
 }
 
 /// A function body, lowered.
 pub(crate) struct BcFunction {
     calls: Vec<FastCall>,
+    /// Descriptors the ops name by index.
+    descs: Vec<*const rtdt::TyDesc>,
+    /// Operand triples for the ops that hand theirs to an IR walker routine.
+    rt: Vec<[(Loc, *const rtdt::TyDesc); 3]>,
     ops: Vec<Op>,
     /// Where execution starts: the prologue that writes the hoisted
     /// constants, which ends by jumping to the first block.
@@ -220,6 +258,25 @@ pub struct BcStats {
     pub bodies: u32,
     pub ops: u32,
     pub escapes: u32,
+    /// Whether to count what runs on the IR walker as it runs, which costs a
+    /// formatted string per instruction and so only with `DATALOVE_BC_STATS`.
+    pub counting: bool,
+    /// How many times each kind of instruction ran on the IR walker.
+    pub executed: std::collections::HashMap<String, u64>,
+}
+
+impl BcStats {
+    /// Count one execution of something the bytecode handed to the IR walker.
+    #[cold]
+    fn count(&mut self, what: impl FnOnce() -> String) {
+        *self.executed.entry(what()).or_default() += 1;
+    }
+}
+
+/// An instruction's variant name.
+fn variant(instr: &Instruction) -> String {
+    let text = format!("{instr:?}");
+    text.split([' ', '{', '(']).next().unwrap_or("").to_string()
 }
 
 // =============================================================================
@@ -249,6 +306,8 @@ struct Lowering<'a> {
     pool: Vec<u8>,
     switches: Vec<SwitchTable>,
     calls: Vec<FastCall>,
+    descs: Vec<*const rtdt::TyDesc>,
+    rt: Vec<[(Loc, *const rtdt::TyDesc); 3]>,
     /// Op indices still naming a block, to be patched to its first op.
     fixups: Vec<(usize, Fixup)>,
     block_start: Vec<u32>,
@@ -338,6 +397,28 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// The descriptor of what an operand holds, from the layout.
+    fn desc_of(&self, op: &Operand) -> Option<*const rtdt::TyDesc> {
+        let layout = self.layout;
+        Some(match op {
+            Operand::Value(id) => layout.value_tydescs[id.0 as usize],
+            Operand::Slot(id) => layout.slot_tydescs[id.0 as usize],
+            Operand::Param(id) => layout.param_tydescs[id.0 as usize],
+            // A reference's descriptor wraps what it points at as a one-field
+            // tuple, as `Frame::value_deref` reads it.
+            Operand::ValueRef(id) => unsafe {
+                let tydesc = layout.value_tydescs[id.0 as usize];
+                (*(*tydesc).type_info.tuple.fields).tydesc
+            },
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => return None,
+        })
+    }
+
+    fn desc_index(&mut self, desc: *const rtdt::TyDesc) -> u32 {
+        self.descs.push(desc);
+        (self.descs.len() - 1) as u32
+    }
+
     fn copy(dst: Loc, src: Loc, len: u32) -> Option<Op> {
         Some(match len {
             0 => return None,
@@ -394,7 +475,10 @@ impl<'a> Lowering<'a> {
         self.ops.extend(prologue);
         self.ops.push(Op::Jump { to: 0 });
         let escapes = self.escapes;
-        (BcFunction { ops: self.ops, entry, pool: self.pool, switches: self.switches, calls: self.calls }, escapes)
+        (BcFunction {
+            ops: self.ops, entry, pool: self.pool, switches: self.switches, calls: self.calls,
+            descs: self.descs, rt: self.rt,
+        }, escapes)
     }
 
     /// Lower one instruction to ops, or say it has to run on the IR walker.
@@ -443,7 +527,9 @@ impl<'a> Lowering<'a> {
                 }
                 true
             }
-            Instruction::BinOp { dest, op, lhs, rhs } => self.lower_binop(*dest, *op, lhs, rhs),
+            Instruction::BinOp { dest, op, lhs, rhs } => {
+                self.lower_binop(*dest, *op, lhs, rhs) || self.lower_binop_rt(*dest, *op, lhs, rhs)
+            }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 self.lower_checked(*dest, *overflow, *op, lhs, rhs)
             }
@@ -512,16 +598,22 @@ impl<'a> Lowering<'a> {
                 });
                 true
             }
-            Instruction::Call { dest, args, shape_descriptors, .. } if shape_descriptors.is_empty() => {
-                // An argument whose type has a `data` in it may arrive at a
-                // borrowed parameter wrapped, which the general path unwraps.
-                let fast: Option<Vec<_>> = args.iter().map(|arg| match arg {
-                    Operand::Value(id) if !has_data(&self.func.value_types[id.0 as usize]) => {
-                        let id = id.0 as usize;
-                        Some((Loc::direct(self.layout.value_offsets[id]), self.layout.value_tydescs[id]))
+            Instruction::Call { dest, args, .. } => {
+                // Anything but an earlier unit's binding, which a function
+                // body never names.
+                let fast: Option<Vec<_>> = args.iter().map(|arg| {
+                    self.loc(arg)?;
+                    Some(matches!(arg, Operand::Value(_)))
+                }).collect();
+                let resolved: Option<Vec<_>> = match instr {
+                    Instruction::Call { shape_descriptors, .. } if shape_descriptors.is_empty() => {
+                        args.iter().map(|arg| {
+                            self.typed(arg)?;
+                            Some((self.loc(arg)?, self.desc_of(arg)?))
+                        }).collect()
                     }
                     _ => None,
-                }).collect();
+                };
                 match fast {
                     Some(args) => {
                         let site = self.calls.len() as u32;
@@ -529,9 +621,11 @@ impl<'a> Lowering<'a> {
                             block: self.block as u32,
                             index: self.index as u32,
                             args,
+                            resolved,
                             dest: self.value_loc(*dest),
                             dest_tydesc: self.layout.value_tydescs[dest.0 as usize],
                             cache: std::cell::RefCell::new(None),
+                            module_callee: std::cell::RefCell::new(None),
                         });
                         self.emit(Op::CallFast { site });
                     }
@@ -539,8 +633,64 @@ impl<'a> Lowering<'a> {
                 }
                 true
             }
-            Instruction::Call { .. } | Instruction::ComptimeCall { .. } => {
+            Instruction::ComptimeCall { .. } => {
                 self.emit(Op::Call { block: self.block as u32, index: self.index as u32 });
+                true
+            }
+            Instruction::Drop { operand } => {
+                // A copied type owns nothing, and a value whose drop the frame
+                // records is the IR walker's.
+                let (Some(ty), Some(src), Some(desc)) =
+                    (self.typed(operand), self.consumed(operand), self.desc_of(operand)) else { return false };
+                if !ty.is_copy() {
+                    let desc = self.desc_index(desc);
+                    self.emit(Op::Drop { src, desc });
+                }
+                true
+            }
+            Instruction::DropTracked { operand } => {
+                let track = match operand {
+                    Operand::Slot(id) => self.layout.slot_tracking[id.0 as usize],
+                    Operand::Param(id) => self.layout.param_tracking[id.0 as usize],
+                    _ => None,
+                };
+                let (Some(track), Some(_), Some(src), Some(desc)) =
+                    (track, self.typed(operand), self.loc(operand), self.desc_of(operand)) else { return false };
+                let desc = self.desc_index(desc);
+                self.emit(Op::DropTracked { src, track, desc });
+                true
+            }
+            Instruction::SlotStoreCopyTracked { dest: SlotDest::Local(slot), value }
+            | Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(slot), value } => {
+                let Some(track) = self.layout.slot_tracking[slot.0 as usize] else { return false };
+                let src = match instr {
+                    Instruction::SlotStoreMoveTracked { .. } => self.consumed(value),
+                    _ => self.loc(value),
+                };
+                let slot_op = Operand::Slot(*slot);
+                let (Some(ty), Some(src), Some(desc)) =
+                    (self.typed(value), src, self.desc_of(&slot_op)) else { return false };
+                if self.typed(&slot_op).is_none() {
+                    return false;
+                }
+                let dst = Loc::direct(self.layout.slot_offsets[slot.0 as usize]);
+                let desc = self.desc_index(desc);
+                self.emit(Op::StoreTracked { dst, track, src, len: layout_of(ty).size, desc });
+                true
+            }
+            Instruction::SlotLoadMoveTracked { dest, slot } => {
+                let Some(track) = self.layout.slot_tracking[slot.0 as usize] else { return false };
+                let op = Operand::Slot(*slot);
+                let (Some(ty), Some(src)) = (self.typed(&op), self.loc(&op)) else { return false };
+                self.emit(Op::LoadMoveTracked { dst: self.value_loc(*dest), src, track, len: layout_of(ty).size });
+                true
+            }
+            Instruction::Widen { dest, src } => {
+                let (Some(_), Some(s), Some(desc)) = (self.typed(src), self.loc(src), self.desc_of(src)) else {
+                    return false;
+                };
+                let src_desc = self.desc_index(desc);
+                self.emit(Op::Widen { dst: self.value_loc(*dest), src: s, src_desc });
                 true
             }
             Instruction::Nop => true,
@@ -628,6 +778,21 @@ impl<'a> Lowering<'a> {
             return false;
         }
         self.emit(op);
+        true
+    }
+
+    /// A binary operation on the IR walker's routine, with its operands
+    /// resolved, for the types no typed op covers.
+    fn lower_binop_rt(&mut self, dest: ValueId, op: BinOp, lhs: &Operand, rhs: &Operand) -> bool {
+        let d = Operand::Value(dest);
+        let mut triple = [(Loc(0), std::ptr::null()); 3];
+        for (k, operand) in [&d, lhs, rhs].into_iter().enumerate() {
+            let (Some(_), Some(loc), Some(desc)) =
+                (self.typed(operand), self.loc(operand), self.desc_of(operand)) else { return false };
+            triple[k] = (loc, desc);
+        }
+        self.rt.push(triple);
+        self.emit(Op::BinOpRt { op, at: (self.rt.len() - 1) as u32 });
         true
     }
 
@@ -901,6 +1066,8 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout) -> (BcFunction, u32) {
         pool: Vec::new(),
         switches: Vec::new(),
         calls: Vec::new(),
+        descs: Vec::new(),
+        rt: Vec::new(),
         fixups: Vec::new(),
         block_start: vec![0; func.blocks.len()],
         escapes: 0,
@@ -974,12 +1141,18 @@ impl IrInterpreter {
                 match *ops.get_unchecked(pc) {
                     Op::Ir { block, index } => {
                         let instr = &func.blocks[block as usize].instructions[index as usize];
+                        if self.bc_stats.counting {
+                            self.bc_stats.count(|| variant(instr));
+                        }
                         if !self.execute_hot(instr, frame, frames) {
                             self.execute_instruction(
                                 instr, &unit_types, frame, ctx, registry, frames, code_ref)?;
                         }
                     }
                     Op::Call { block, index } => {
+                        if self.bc_stats.counting {
+                            self.bc_stats.count(|| "(general call)".into());
+                        }
                         let (call_site_info, func_ref, args, shapes, dest) =
                             match &func.blocks[block as usize].instructions[index as usize] {
                                 Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } => (
@@ -1001,6 +1174,9 @@ impl IrInterpreter {
                     Op::CallFast { site } => {
                         let call = &bc.calls[site as usize];
                         if !self.fast_call(call, base, frame, ctx, registry, frames, code_ref, func)? {
+                            if self.bc_stats.counting {
+                                self.bc_stats.count(|| "(fast call fell back)".into());
+                            }
                             let Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } =
                                 &func.blocks[call.block as usize].instructions[call.index as usize] else {
                                 unreachable!("a fast call is a call")
@@ -1083,6 +1259,42 @@ impl IrInterpreter {
                         }
                     }
 
+                    Op::Drop { src, desc } => {
+                        let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[desc as usize] };
+                        self.execute_drop(&val);
+                    }
+                    Op::DropTracked { src, track, desc } => {
+                        let byte = base.add(track as usize);
+                        if *byte == tracking::LIVE {
+                            let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[desc as usize] };
+                            self.execute_drop(&val);
+                            *byte = tracking::MOVED;
+                        }
+                    }
+                    Op::StoreTracked { dst, track, src, len, desc } => {
+                        let byte = base.add(track as usize);
+                        let d = dst.at(base);
+                        if *byte == tracking::LIVE {
+                            let old = crate::value::Value { ptr: d, tydesc: bc.descs[desc as usize] };
+                            self.execute_drop(&old);
+                        }
+                        copy_bytes(src.at(base), d, len as usize);
+                        *byte = tracking::LIVE;
+                    }
+                    Op::LoadMoveTracked { dst, src, track, len } => {
+                        copy_bytes(src.at(base), dst.at(base), len as usize);
+                        *base.add(track as usize) = tracking::MOVED;
+                    }
+                    Op::Widen { dst, src, src_desc } => {
+                        let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[src_desc as usize] };
+                        self.widen_to_int(&val, &mut *(dst.at(base) as *mut rtdt::Int));
+                    }
+                    Op::BinOpRt { op, at } => {
+                        let [(d, dd), (a, ad), (b, bd)] = bc.rt[at as usize];
+                        let lhs = crate::value::Value { ptr: a.at(base), tydesc: ad };
+                        let rhs = crate::value::Value { ptr: b.at(base), tydesc: bd };
+                        self.execute_binop(op, &lhs, &rhs, Destination { ptr: d.at(base), tydesc: dd });
+                    }
                     Op::Jump { to } => {
                         pc = to as usize;
                         continue;
@@ -1112,6 +1324,9 @@ impl IrInterpreter {
                         continue;
                     }
                     Op::EdgeIr { block, edge, to } => {
+                        if self.bc_stats.counting {
+                            self.bc_stats.count(|| "(edge)".into());
+                        }
                         let (target, args) = match &func.blocks[block as usize].terminator {
                             Terminator::Goto { target, args } => (*target, args),
                             Terminator::Branch { then_block, then_args, .. } if edge == 0 => {
@@ -1138,6 +1353,9 @@ impl IrInterpreter {
                     }
                     Op::ReturnUnit => return Ok(()),
                     Op::ReturnIr { block } => {
+                        if self.bc_stats.counting {
+                            self.bc_stats.count(|| "(return)".into());
+                        }
                         let Terminator::Return { value: Some(op) } =
                             &func.blocks[block as usize].terminator else {
                             unreachable!("ReturnIr on a block that does not return a value")
@@ -1181,33 +1399,123 @@ impl IrInterpreter {
             &caller.blocks[call.block as usize].instructions[call.index as usize] else {
             unreachable!("a fast call is a call")
         };
-        let callee = ctx.get_unit(code_ref, registry);
-        if callee.native_context().is_some() {
-            return Ok(false);
-        }
+        let callee = match code_ref {
+            CodeRef::Module { .. } => {
+                let current = registry.module_registry_arc();
+                let mut found = call.module_callee.borrow_mut();
+                match &*found {
+                    // SAFETY: the registry the body is in is held, and is the
+                    // one this call is made against.
+                    Some((held, body)) if std::sync::Arc::ptr_eq(held, current) => unsafe { &**body },
+                    _ => {
+                        let body = ctx.get_unit(code_ref, registry);
+                        *found = Some((std::sync::Arc::clone(current), body as *const IrCodeUnit));
+                        body
+                    }
+                }
+            }
+            _ => ctx.get_unit(code_ref, registry),
+        };
         let address = callee as *const IrCodeUnit as usize;
-        let layout = {
+        let (layout, suits) = {
             let mut cache = call.cache.borrow_mut();
             match &*cache {
-                Some((at, layout)) if *at == address => std::rc::Rc::clone(layout),
+                Some((at, layout, suits)) if *at == address => (layout.clone(), *suits),
                 _ => {
-                    let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
-                    let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
-                    *cache = Some((address, std::rc::Rc::clone(&layout)));
-                    layout
+                    let (layout, suits) = match &callee.context {
+                        CodeUnitContext::Native(native) => {
+                            let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                            let suits = call.args.iter().enumerate().all(|(i, &is_value)| match mode(i) {
+                                ParamMode::Out => false,
+                                ParamMode::In => is_value || native.param_types[i].is_copy(),
+                                ParamMode::Ref | ParamMode::Mut => true,
+                            });
+                            (None, suits)
+                        }
+                        _ => {
+                            let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
+                            let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
+                            let suits = call.args.iter().enumerate().all(|(i, &is_value)| {
+                                match layout.param_modes[i] {
+                                    ParamMode::Out => false,
+                                    ParamMode::In => is_value || !layout.param_moves[i],
+                                    ParamMode::Ref | ParamMode::Mut => true,
+                                }
+                            });
+                            (Some(layout), suits)
+                        }
+                    };
+                    *cache = Some((address, layout.clone(), suits));
+                    (layout, suits)
                 }
             }
         };
-        if layout.param_modes.contains(&ParamMode::Out) {
+        if !suits {
             return Ok(false);
         }
+        let dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };
+
+        // The common case, a function called with statically typed arguments
+        // and no shapes, reads nothing but the resolved places.
+        if let (Some(resolved), Some(layout)) = (&call.resolved, &layout) {
+            let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(layout));
+            for &(loc, tydesc) in resolved {
+                // SAFETY: lowered against this frame's layout.
+                callee_frame.push_param(crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
+            }
+            callee_frame.enter();
+            let callee_ctx = ctx.for_callee(code_ref, registry);
+            let bc = self.bytecode_for(layout, callee);
+            callee_frame.stop_keeping_liveness();
+            let result = self.run_bytecode(
+                &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
+            self.frame_pool.give_back(callee_frame);
+            return result.map(|()| true);
+        }
+
+        let Instruction::Call { args: ir_args, shape_descriptors, .. } =
+            &caller.blocks[call.block as usize].instructions[call.index as usize] else { unreachable!() };
+        let shapes: Vec<*const rtdt::TyDesc> = if shape_descriptors.is_empty() {
+            Vec::new()
+        } else {
+            shape_descriptors.iter().map(|r| self.resolve_shape_ref(r, frame)).collect()
+        };
+        // A borrowed argument that arrives wrapped is read through its
+        // wrapper, into here if it has no address of its own; held until the
+        // call returns.
+        let mut scratch: crate::BorrowScratch = Vec::new();
+        let mut read = |this: &Self, i: usize, mode: ParamMode, frame: &Frame| {
+            if let Some(resolved) = &call.resolved {
+                let (loc, tydesc) = resolved[i];
+                // SAFETY: lowered against this frame's layout.
+                return crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc };
+            }
+            let val = this.read_operand(&ir_args[i], frame, frames);
+            if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
+                IrInterpreter::borrow_through_wrapper(val, &mut scratch)
+            } else {
+                val
+            }
+        };
+
+        let Some(layout) = layout else {
+            // A native: no frame, just the arguments as a list.
+            let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
+            let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+            let args: Vec<crate::value::Value> = (0..call.args.len())
+                .map(|i| read(self, i, mode(i), frame))
+                .collect();
+            self.native_table.call(&native.symbol, self.runtime.handle(), &args, dest, &shapes)?;
+            return Ok(true);
+        };
 
         let mut callee_frame = self.frame_pool.take(std::rc::Rc::clone(&layout));
-        for &(loc, tydesc) in &call.args {
-            // SAFETY: lowered against this frame's layout.
-            callee_frame.push_param(crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
+        for i in 0..call.args.len() {
+            callee_frame.push_param(read(self, i, layout.param_modes[i], frame));
         }
-        let dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };
+        for tydesc in shapes {
+            callee_frame.push_shape_descriptor(tydesc);
+        }
         callee_frame.enter();
         let callee_ctx = ctx.for_callee(code_ref, registry);
         let bc = self.bytecode_for(&layout, callee);
@@ -1215,8 +1523,9 @@ impl IrInterpreter {
         let result = self.run_bytecode(
             &bc, callee, &mut callee_frame, dest, &callee_ctx, registry, frames, Some(code_ref));
         self.frame_pool.give_back(callee_frame);
-        // The caller's frame keeps no flags for values, which is all these are.
-        let _ = frame;
+        drop(scratch);
+        // The caller's frame keeps no flags for values, the only arguments
+        // that can be moved into a fast call.
         result.map(|()| true)
     }
 }
@@ -1240,7 +1549,15 @@ impl Drop for IrInterpreter {
     fn drop(&mut self) {
         if self.use_bytecode && std::env::var_os("DATALOVE_BC_STATS").is_some() {
             let s = &self.bc_stats;
+            if s.bodies == 0 {
+                return;
+            }
             eprintln!("bytecode: {} bodies, {} ops, {} on the IR walker", s.bodies, s.ops, s.escapes);
+            let mut executed: Vec<_> = s.executed.iter().collect();
+            executed.sort_by(|a, b| b.1.cmp(a.1));
+            for (what, n) in executed.iter().take(15) {
+                eprintln!("  {n:>12}  {what}");
+            }
         }
     }
 }

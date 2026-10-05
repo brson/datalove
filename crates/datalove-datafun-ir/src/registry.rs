@@ -188,6 +188,14 @@ impl FunctionRegistry {
     /// Get a mutable reference to the module registry (for initial setup).
     ///
     /// Panics if there are multiple references to the module registry.
+    /// The shared module registry itself, for holding on to: a caller that
+    /// remembers something it looked up in it can tell the registry has not
+    /// been replaced since by comparing this pointer, while holding it keeps
+    /// the one it compares against alive.
+    pub fn module_registry_arc(&self) -> &Arc<ModuleFunctionRegistry> {
+        &self.module_registry
+    }
+
     pub fn module_registry_mut(&mut self) -> &mut ModuleFunctionRegistry {
         Arc::get_mut(&mut self.module_registry)
             .expect("Cannot get mutable reference to shared module registry")

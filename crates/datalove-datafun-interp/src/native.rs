@@ -4,7 +4,6 @@
 //! The interpreter calls through this table when executing `NativeContext` code units.
 
 use std::any::Any;
-use std::collections::HashMap;
 use std::sync::Arc;
 use datalove_rt::c::LocalRtHandle;
 use crate::value::{Value, Destination};
@@ -33,7 +32,8 @@ pub type NativeFnImpl = Box<
 ///
 /// Keyed by linker symbol (e.g. `dlr_testlib__int_add`).
 pub struct NativeFunctionTable {
-    table: HashMap<String, NativeFnImpl>,
+    /// Looked up by name at every call, so hashed with Fx rather than SipHash.
+    table: rustc_hash::FxHashMap<String, NativeFnImpl>,
     /// Whatever the registered implementations' code lives in.
     ///
     /// A native taken out of a loaded library is a pointer into mapped code,
@@ -51,7 +51,7 @@ pub struct NativeFunctionTable {
 impl NativeFunctionTable {
     /// Create an empty table.
     pub fn new() -> Self {
-        Self { table: HashMap::new(), code_owners: Vec::new() }
+        Self { table: Default::default(), code_owners: Vec::new() }
     }
 
     /// Register a native function implementation.
