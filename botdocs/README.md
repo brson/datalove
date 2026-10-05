@@ -35,6 +35,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Generics and Specialization](plan-generics.md)
 - [Script Reactivity](plan-script-reactivity.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
+- [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
