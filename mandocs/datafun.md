@@ -90,7 +90,7 @@ A name can only be imported once per scope,
 so when two modules export functions of the same name,
 as `u8.from_int` and `i8.from_int`,
 at least one must be called qualified.
-Modules are covered further in [Modules, packages, and libraries](#user-content-modules-packages-and-libraries).
+Modules are covered further in [Modules, packages, libraries and the workspace](#user-content-modules-packages-libraries-and-the-workspace).
 
 The `ref` before `greeting` passes the string by reference
 instead of moving it into the function.
@@ -1212,6 +1212,144 @@ though this capability is not yet exposed through any frontend.
 
 
 ## Constants and compile-time evaluation
+
+`const` binds a value that the compiler computes.
+It is written like `let`,
+and is valid at the top level of a script or module
+and inside function bodies.
+Constants are spelled `UPPER_CASE` by convention.
+
+```datalove
+const LIMIT: u32 = 10
+const NAME: string = "limit"
+
+fun clamp_to_limit(x: u32): u32
+  if x .> LIMIT
+    ret LIMIT
+  else
+    ret x
+  end if
+end fun
+
+debuglog (NAME, clamp_to_limit(50))
+```
+
+There is no separate compile-time sublanguage
+and no special marking for functions that may run at compile time.
+Every datafun function is pure,
+so the compiler evaluates a const by running its expression
+with the same machinery that runs it at run time,
+and any function can be called from a const.
+Constants are not limited to scalars:
+strings, bigints and collections are all computed the same way.
+
+```datalove
+require module sys/std/list
+
+fun squares(n: int): [int]
+  var out: [int] = []
+  var x = 0
+  loop while x .< n
+    call list.push(mut out, x * x)
+    set x = x + 1
+  end loop
+  ret out
+end fun
+
+const SQUARES: [int] = squares(5)
+const BIG: int = 99999999999999999999 * 99999999999999999999
+
+let a = SQUARES
+let b = SQUARES
+
+debuglog (a, b, BIG)
+```
+
+A const names a value, not a place,
+so reading one does not move it.
+Each mention produces a fresh value,
+which is why `SQUARES` above can be bound twice without `@`,
+though a list is a moved type.
+
+A const expression is evaluated before any parameter or `let` exists,
+so it may only name other consts.
+Naming a `let`, `var` or ordinary parameter is a compile error.
+The functions it calls bind their own parameters as usual.
+
+In scripts and function bodies,
+a const is in scope from where it is written, like `let`.
+At the top level of a module it is in scope for the whole module,
+regardless of where it is written.
+The compiler orders evaluation itself:
+a module const is evaluated after the functions it calls,
+and before the functions that name it.
+If a const calls a function that in turn names a module const,
+the two depend on each other and the compiler reports the cycle.
+
+Module consts are private to their module.
+To share a constant, export a function that returns it.
+
+The early-return operators, `?`, `!` and the checked arithmetic,
+can be used in a const inside a function,
+but if one actually returns early the program does not compile.
+A script returns a result,
+so the same holds for `!` at the top level of a script.
+A const at the top level of a module
+has no enclosing function to return from,
+so cannot use them at all.
+
+```datalove
+fun ratio(): ?u32
+  const A: u32 = 10
+  const B: u32 = 2
+  // This compiles, but would not if `B` were 0.
+  const C: u32 = A /? B
+  ret some C
+end fun
+
+debuglog ratio()
+```
+
+### Const parameters
+
+A function parameter declared `const` takes a value known at compile time.
+The compiler _specializes_ the function,
+making a copy of it for each distinct const argument
+with the value written into the body.
+
+```datalove
+require module sys/std/string
+
+fun repeat(const n: int, ref s: string): string
+  var out = ""
+  var i = 0
+  loop while i .< n
+    call string.push_str(mut out, ref s)
+    set i = i + 1
+  end loop
+  ret out
+end fun
+
+const THREE: int = 3
+let s = "ab"
+
+debuglog repeat(THREE, ref s)
+```
+
+The argument to a const parameter must be the name of a const binding.
+Not even a literal is accepted:
+`repeat(3, ref s)` is an error.
+Within the specialized body the parameter is itself a const,
+so it may be passed on to other const parameters,
+and consts computed from it are evaluated per specialization.
+
+A const parameter is not passed at run time,
+so it cannot also be `ref`, `mut` or `out`.
+It may be of any type a const can hold, collections included,
+but not a type parameter of a generic function.
+
+
+
 
 ## Generics
 

@@ -1,3 +1,7 @@
+## 2026/10/05 consts are reified on use
+
+should be references to static memory
+
 ## 2026/10/05 table type synthesis
 
 datalit doesn't synthesize table types but dafun does?
