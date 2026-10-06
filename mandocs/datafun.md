@@ -1119,7 +1119,7 @@ Generics are described in [Generics](#user-content-generics).
 ```datalove
 require module sys/std/ord
 
-fun largest<T>(ref items: [T]): ?T with { T is ord, }
+fun largest<T>(ref items: [T]): ?T with { T is ord }
   ret ord.greatest(ref items)
 end fun
 
