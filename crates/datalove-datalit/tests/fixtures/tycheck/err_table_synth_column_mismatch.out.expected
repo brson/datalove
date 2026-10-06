@@ -1,0 +1,79 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [
+          "name",
+          "age"
+        ],
+        "rows": [
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Alice\""
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "25"
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          },
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Bob\""
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"thirty\""
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T060",
+      "labels": [
+        {
+          "message": "expected `int`, found `string`",
+          "span": [
+            38,
+            46
+          ],
+          "text": "\"thirty\""
+        }
+      ],
+      "message": "mismatched types in table column"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "string",
+      "expected": "int",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

@@ -267,15 +267,57 @@ pub fn synthesize_unhinted<'db>(
             Type::Tensor(TypeTensor { element_type: Box::new(first_type), rank })
         }
 
-        Expr::Table(_) => {
-            if let Some(ts) = ctx.get_span(expr) {
-                DiagnosticBuilder::error(db, "cannot synthesize type for table expression")
-                    .code("T018")
-                    .primary_label(ts.clone(), "table requires type hint")
-                    .note("use a type hint to specify the table schema")
-                    .emit_type();
+        // Rule: Syn-Table
+        //
+        // Each column takes the type of its element in the first row, and
+        // every later row has to agree, as a list's elements agree with its
+        // first. A table with no rows has unit columns, as an empty list has
+        // a unit element.
+        Expr::Table(t) => {
+            let columns = t.header.len();
+            for (row_idx, row) in t.rows.iter().enumerate() {
+                if row.elements.len() != columns {
+                    if let Some(ts) = ctx.get_span(expr) {
+                        DiagnosticBuilder::error(db, "table row has wrong number of columns")
+                            .code("T056")
+                            .primary_label(ts.clone(), &format!("row {}: expected {} column(s), found {}",
+                                row_idx + 1, columns, row.elements.len()))
+                            .emit_type();
+                    }
+                    return Err(TypeError::ArityMismatch { expected: columns, actual: row.elements.len() });
+                }
             }
-            return Err(TypeError::CannotSynthesize);
+
+            let column_types = match t.rows.first() {
+                Some(first) => first.elements.iter()
+                    .map(|elem| synthesize(ctx, *elem))
+                    .collect::<Result<Vec<_>, _>>()?,
+                None => vec![unit_type(); columns],
+            };
+
+            for row in t.rows.iter().skip(1) {
+                for ((elem, column_type), name) in row.elements.iter().zip(&column_types).zip(&t.header) {
+                    let elem_type = synthesize(ctx, *elem)?;
+                    if let Err(e) = check_element_compatible(db, column_type, &elem_type) {
+                        if let Some(ts) = ctx.get_span(*elem) {
+                            if let TypeError::TypeMismatch { expected, actual } = &e {
+                                DiagnosticBuilder::error(db, "mismatched types in table column")
+                                    .code("T060")
+                                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`", expected, actual))
+                                    .note(&format!("every element of column `{}` has the type of its first row's", name.as_str(db)))
+                                    .emit_type();
+                            }
+                        }
+                        return Err(e);
+                    }
+                }
+            }
+
+            Type::Table(TypeTable {
+                columns: t.header.iter().zip(column_types)
+                    .map(|(name, ty)| TypeNamedField { name: *name, ty: Box::new(ty) })
+                    .collect(),
+            })
         }
 
         Expr::ParseError(_) => {

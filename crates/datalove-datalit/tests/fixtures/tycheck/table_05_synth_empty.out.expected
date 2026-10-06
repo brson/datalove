@@ -1,0 +1,35 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [
+          "x",
+          "y"
+        ],
+        "rows": []
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "columns": [
+      {
+        "name": "x",
+        "type": {
+          "fields": [],
+          "kind": "AnonTuple"
+        }
+      },
+      {
+        "name": "y",
+        "type": {
+          "fields": [],
+          "kind": "AnonTuple"
+        }
+      }
+    ],
+    "kind": "Table"
+  }
+}

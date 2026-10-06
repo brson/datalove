@@ -1,0 +1,70 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [
+          "name",
+          "age"
+        ],
+        "rows": [
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Alice\""
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "25"
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          },
+          {
+            "elements": [
+              {
+                "expr": {
+                  "String": {
+                    "value": "\"Bob\""
+                  }
+                },
+                "type_hint": null
+              },
+              {
+                "expr": {
+                  "Int": {
+                    "value": "30"
+                  }
+                },
+                "type_hint": null
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "columns": [
+      {
+        "name": "name",
+        "type": "string"
+      },
+      {
+        "name": "age",
+        "type": "int"
+      }
+    ],
+    "kind": "Table"
+  }
+}

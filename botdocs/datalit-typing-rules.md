@@ -282,11 +282,17 @@ Rank is the length of the shape vector. Empty tensors synthesize as `tensor<(), 
 
 ### Rule: Syn-Table
 ```
------------------
-Cannot synthesize type for table expressions (needs type hint)
+every row has one element per column c1 ... cn
+the first row's elements synthesize to T1 ... Tn
+every later row's element in column ci synthesizes to Ti
+---------------------------------------------------------
+{| c1, ..., cn; row1; row2; ... |} => {| c1: T1, ..., cn: Tn |}
 ```
 
-Tables always require a type hint.
+Each column takes its type from its first row, as a list takes its element
+type from its first element, and a later row that disagrees is T060. A table
+with no rows synthesizes with unit columns, as the empty collections do. As
+the datafun typechecker does, so a table literal no longer needs a hint.
 
 ### Rule: Syn-Some
 ```
@@ -657,7 +663,7 @@ The type checker produces the following diagnostic codes:
 | T015 | int/hex | index out of range |
 | T016 | synth | Cannot synthesize type for none, er or an enum literal |
 | T017 | synth | Cannot type-check expression with parse errors |
-| T018 | synth | List element type mismatch; also: table requires type hint |
+| T018 | synth | List element type mismatch |
 | T019 | synth | Set element type mismatch |
 | T020 | synth | Map key type mismatch |
 | T021 | synth | Map value type mismatch |
@@ -676,6 +682,8 @@ The type checker produces the following diagnostic codes:
 | T056 | check | Table row column count mismatch |
 | T057 | check | Atom or term is not the expected atom, term or enum variant |
 | T058 | check | Enum literal checked against a type that is not an enum |
+| T059 | hint | Unknown type name in a type hint |
+| T060 | synth | Table column type mismatch with the first row |
 
 ## Design Decisions Summary
 
@@ -690,6 +698,8 @@ Empty collections synthesize with unit element type, and check against any eleme
 : #{u32} / #{}          ok (checking)
 %{} => %{() = ()}        (synthesis)
 : %{u32 = string} / %{}  ok (checking)
+{| x, y |} => {| x: (), y: () |}            (synthesis)
+: {| x: u32, y: string |} / {| x, y |}      ok (checking)
 ```
 
 ### 2. Field order in anonymous structs
