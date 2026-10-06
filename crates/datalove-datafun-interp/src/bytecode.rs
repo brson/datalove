@@ -346,7 +346,20 @@ struct Plan {
     /// goes in the callee's, and its descriptor as the callee's frame holds
     /// it once entered -- the callee's own for an owned parameter, the
     /// argument's for a borrowed one.
-    params: Box<[(Loc, u32, *const rtdt::TyDesc)]>,
+    params: Box<[PlannedParam]>,
+}
+
+/// One argument of a planned call.
+struct PlannedParam {
+    /// Where the argument is in the caller's frame.
+    src: Loc,
+    /// Where its `Value` goes in the callee's.
+    value: u32,
+    /// Its descriptor as the callee's frame holds it once entered.
+    tydesc: *const rtdt::TyDesc,
+    /// Where the callee's frame keeps a copy of it, and its size, if it does;
+    /// see `IrLayout::param_copies`.
+    copy: Option<(u32, u32)>,
 }
 
 /// What a fast call did.
@@ -604,7 +617,10 @@ impl<'a> Lowering<'a> {
         Some(match op {
             Operand::Value(id) => Loc::direct(layout.value_offsets[id.0 as usize]),
             Operand::Slot(id) => Loc::direct(layout.slot_offsets[id.0 as usize]),
-            Operand::Param(id) => Loc::indirect(layout.param_offsets[id.0 as usize]),
+            Operand::Param(id) => match layout.param_copies[id.0 as usize] {
+                Some((at, _)) => Loc::direct(at),
+                None => Loc::indirect(layout.param_offsets[id.0 as usize]),
+            },
             Operand::ValueRef(id) => Loc::indirect(layout.value_offsets[id.0 as usize]),
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => return None,
         })
@@ -1745,40 +1761,8 @@ impl IrInterpreter {
                 // an op of this body, so `pc` never runs off the end.
                 debug_assert!(pc < bc.ops.len());
                 match *ops.add(pc) {
-                    Op::Ir { block, index } => {
-                        let instr = &regs.func.blocks[block as usize].instructions[index as usize];
-                        if self.bc_stats.counting {
-                            self.bc_stats.count(|| variant(instr));
-                        }
-                        if !self.execute_hot(instr, &mut regs.frame, &mut *regs.frames)
-                            && !self.execute_warm(instr, &UnitTypes::of(regs.func), &mut regs.frame, &mut *regs.frames)
-                        {
-                            tri!(self.execute_instruction(
-                                instr, &mut regs.frame, &regs.ctx, regs.registry, &mut *regs.frames, regs.code_ref));
-                        }
-                    }
-                    Op::Call { block, index } => {
-                        if self.bc_stats.counting {
-                            self.bc_stats.count(|| "(general call)".into());
-                        }
-                        let (call_site_info, func_ref, args, shapes, dest) =
-                            match &regs.func.blocks[block as usize].instructions[index as usize] {
-                                Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } => (
-                                    regs.code_ref.map(|caller| crate::dispatch::CallSiteInfo {
-                                        caller: caller.clone(),
-                                        caller_unit: regs.ctx.unit(),
-                                        call_site_id: *site_id,
-                                    }),
-                                    f, args, shape_descriptors, *dest,
-                                ),
-                                Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, .. } => {
-                                    (None, f, args, shape_descriptors, *dest)
-                                }
-                                i => unreachable!("Call op on {:?}", i),
-                            };
-                        tri!(self.execute_call(
-                            func_ref, args, shapes, dest, call_site_info, &mut regs.frame, &regs.ctx, regs.registry, &mut *regs.frames));
-                    }
+                    Op::Ir { block, index } => tri!(self.run_ir_op(regs, block, index)),
+                    Op::Call { block, index } => tri!(self.run_general_call(regs, block, index)),
                     Op::CallFast { site } => {
                         let call = &bc.calls[site as usize];
                         if let Some(plan) = self.valid_plan(call, regs) {
@@ -1788,32 +1772,12 @@ impl IrInterpreter {
                             base = regs.frame.base_ptr();
                             continue;
                         }
-                        match tri!(self.fast_call(call, base, &mut regs.frame, &regs.ctx, regs.registry, &mut *regs.frames, regs.func)) {
-                            Called::Done => {}
-                            Called::Enter(callee) => {
-                                pc = self.enter(regs, callee, pc.wrapping_add(1));
-                                bc = &*regs.bc;
-                                ops = bc.ops.as_ptr();
-                                base = regs.frame.base_ptr();
-                                continue;
-                            }
-                            Called::General => {
-                                if self.bc_stats.counting {
-                                    self.bc_stats.count(|| "(fast call fell back)".into());
-                                }
-                                let Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } =
-                                    &regs.func.blocks[call.block as usize].instructions[call.index as usize] else {
-                                    unreachable!("a fast call is a call")
-                                };
-                                let call_site_info = regs.code_ref.map(|caller| crate::dispatch::CallSiteInfo {
-                                    caller: caller.clone(),
-                                    caller_unit: regs.ctx.unit(),
-                                    call_site_id: *site_id,
-                                });
-                                tri!(self.execute_call(
-                                    f, args, shape_descriptors, *dest, call_site_info, &mut regs.frame, &regs.ctx,
-                                    regs.registry, &mut *regs.frames));
-                            }
+                        if let Some(resume) = tri!(self.run_fast_call(regs, call, base, pc)) {
+                            pc = resume;
+                            bc = &*regs.bc;
+                            ops = bc.ops.as_ptr();
+                            base = regs.frame.base_ptr();
+                            continue;
                         }
                     }
                     Op::Const1 { dst, imm } => wr(base, dst, imm),
@@ -2007,18 +1971,7 @@ impl IrInterpreter {
                         continue;
                     }
                     Op::EdgeIr { block, edge, to } => {
-                        if self.bc_stats.counting {
-                            self.bc_stats.count(|| "(edge)".into());
-                        }
-                        let (target, args) = match &regs.func.blocks[block as usize].terminator {
-                            Terminator::Goto { target, args } => (*target, args),
-                            Terminator::Branch { then_block, then_args, .. } if edge == 0 => {
-                                (*then_block, then_args)
-                            }
-                            Terminator::Branch { else_block, else_args, .. } => (*else_block, else_args),
-                            t => unreachable!("an edge from {:?}", t),
-                        };
-                        tri!(self.pass_block_args(&regs.func.blocks, target, args, &mut regs.frame, &mut *regs.frames));
+                        tri!(self.run_edge(regs, block, edge));
                         pc = to as usize;
                         continue;
                     }
@@ -2042,16 +1995,7 @@ impl IrInterpreter {
                     }
                     Op::ReturnUnit => ret!(),
                     Op::ReturnIr { block } => {
-                        if self.bc_stats.counting {
-                            self.bc_stats.count(|| "(return)".into());
-                        }
-                        let Terminator::Return { value: Some(op) } =
-                            &regs.func.blocks[block as usize].terminator else {
-                            unreachable!("ReturnIr on a block that does not return a value")
-                        };
-                        let val = self.read_operand(op, &regs.frame, &*regs.frames);
-                        self.move_value(&val, regs.ret_dest);
-                        Self::mark_source_dropped_all(op, &mut regs.frame, &mut *regs.frames);
+                        self.run_return_ir(regs, block);
                         ret!();
                     }
                 }
@@ -2170,13 +2114,18 @@ impl IrInterpreter {
         // rather than dropped.
         let mut frame = unsafe { self.frame_stack.push_borrowed(&plan.layout) }?;
         let callee_base = frame.base_ptr();
-        for &(loc, offset, tydesc) in plan.params.iter() {
-            // SAFETY: `loc` was lowered against the caller's frame, which
-            // `base` is, and `offset` is a parameter's place in the callee's.
+        for param in plan.params.iter() {
+            // SAFETY: `src` was lowered against the caller's frame, which
+            // `base` is, and `value` and `copy` are places in the callee's.
             unsafe {
-                let ptr = loc.at(base);
-                (callee_base.add(offset as usize) as *mut crate::value::Value)
-                    .write(crate::value::Value { ptr, tydesc });
+                let mut ptr = param.src.at(base);
+                if let Some((at, size)) = param.copy {
+                    let copy = callee_base.add(at as usize);
+                    copy_bytes(ptr, copy, size as usize);
+                    ptr = copy;
+                }
+                (callee_base.add(param.value as usize) as *mut crate::value::Value)
+                    .write(crate::value::Value { ptr, tydesc: param.tydesc });
             }
         }
         frame.stop_keeping_liveness();
@@ -2211,6 +2160,122 @@ impl IrInterpreter {
             // SAFETY: the caller's frame, still on the stack.
             regs.frame = unsafe { Frame::without_liveness(caller.base, caller.layout) };
         }
+    }
+}
+
+impl IrInterpreter {
+    // The loop's rarer ops, out of it, so that the loop's own code is what
+    // the common ops need: every value live across a call in an arm is one
+    // the loop has to keep somewhere, and with these inline it kept its
+    // registers on the stack.
+
+    /// Run an instruction on the IR walker.
+    #[inline(never)]
+    fn run_ir_op(&mut self, regs: &mut Regs<'_>, block: u32, index: u32) -> Result<(), InterpError> {
+        let instr = &regs.func.blocks[block as usize].instructions[index as usize];
+        if self.bc_stats.counting {
+            self.bc_stats.count(|| variant(instr));
+        }
+        // SAFETY: the frame store the loop was lent.
+        let frames = unsafe { &mut *regs.frames };
+        if !self.execute_hot(instr, &mut regs.frame, frames)
+            && !self.execute_warm(instr, &UnitTypes::of(regs.func), &mut regs.frame, frames)
+        {
+            self.execute_instruction(instr, &mut regs.frame, &regs.ctx, regs.registry, frames, regs.code_ref)?;
+        }
+        Ok(())
+    }
+
+    /// Make the call that is instruction `index` of block `block` by the
+    /// general path.
+    #[inline(never)]
+    fn run_general_call(&mut self, regs: &mut Regs<'_>, block: u32, index: u32) -> Result<(), InterpError> {
+        if self.bc_stats.counting {
+            self.bc_stats.count(|| "(general call)".into());
+        }
+        let (call_site_info, func_ref, args, shapes, dest) =
+            match &regs.func.blocks[block as usize].instructions[index as usize] {
+                Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } => (
+                    regs.code_ref.map(|caller| crate::dispatch::CallSiteInfo {
+                        caller: caller.clone(),
+                        caller_unit: regs.ctx.unit(),
+                        call_site_id: *site_id,
+                    }),
+                    f, args, shape_descriptors, *dest,
+                ),
+                Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, .. } => {
+                    (None, f, args, shape_descriptors, *dest)
+                }
+                i => unreachable!("Call op on {:?}", i),
+            };
+        // SAFETY: the frame store the loop was lent.
+        let frames = unsafe { &mut *regs.frames };
+        self.execute_call(func_ref, args, shapes, dest, call_site_info, &mut regs.frame, &regs.ctx, regs.registry, frames)
+    }
+
+    /// Make a fast call without a plan: a native, a forwarder, a bytecode
+    /// body the loop goes on in -- then where it starts -- or the general
+    /// path.
+    #[inline(never)]
+    unsafe fn run_fast_call<'r>(
+        &mut self,
+        regs: &mut Regs<'r>,
+        call: &'r FastCall,
+        base: *mut u8,
+        pc: usize,
+    ) -> Result<Option<usize>, InterpError> {
+        // SAFETY: the frame store the loop was lent.
+        let frames = unsafe { &mut *regs.frames };
+        // SAFETY: lowered against the running frame, which `base` is.
+        match unsafe { self.fast_call(call, base, &mut regs.frame, &regs.ctx, regs.registry, frames, regs.func) }? {
+            Called::Done => Ok(None),
+            Called::Enter(callee) => Ok(Some(self.enter(regs, callee, pc.wrapping_add(1)))),
+            Called::General => {
+                if self.bc_stats.counting {
+                    self.bc_stats.count(|| "(fast call fell back)".into());
+                }
+                let Instruction::Call { .. } = &regs.func.blocks[call.block as usize].instructions[call.index as usize] else {
+                    unreachable!("a fast call is a call")
+                };
+                self.run_general_call(regs, call.block, call.index).map(|()| None)
+            }
+        }
+    }
+
+    /// Pass edge `edge` of block `block`'s terminator's arguments on the IR
+    /// walker.
+    #[inline(never)]
+    fn run_edge(&mut self, regs: &mut Regs<'_>, block: u32, edge: u32) -> Result<(), InterpError> {
+        if self.bc_stats.counting {
+            self.bc_stats.count(|| "(edge)".into());
+        }
+        let (target, args) = match &regs.func.blocks[block as usize].terminator {
+            Terminator::Goto { target, args } => (*target, args),
+            Terminator::Branch { then_block, then_args, .. } if edge == 0 => (*then_block, then_args),
+            Terminator::Branch { else_block, else_args, .. } => (*else_block, else_args),
+            t => unreachable!("an edge from {:?}", t),
+        };
+        // SAFETY: the frame store the loop was lent.
+        let frames = unsafe { &mut *regs.frames };
+        self.pass_block_args(&regs.func.blocks, target, args, &mut regs.frame, frames)
+    }
+
+    /// Return block `block`'s value on the IR walker.
+    #[inline(never)]
+    fn run_return_ir(&mut self, regs: &mut Regs<'_>, block: u32) {
+        if self.bc_stats.counting {
+            self.bc_stats.count(|| "(return)".into());
+        }
+        let Terminator::Return { value: Some(op) } = &regs.func.blocks[block as usize].terminator else {
+            unreachable!("ReturnIr on a block that does not return a value")
+        };
+        // SAFETY: the frame store the loop was lent.
+        let frames = unsafe { &mut *regs.frames };
+        let val = self.read_operand(op, &regs.frame, frames);
+        // SAFETY: the value read is the operand the IR returns, and the
+        // destination the caller gave for it.
+        unsafe { self.move_value(&val, regs.ret_dest) };
+        Self::mark_source_dropped_all(op, &mut regs.frame, frames);
     }
 }
 
@@ -2482,12 +2547,14 @@ impl IrInterpreter {
                             bc: self.bytecode_for(layout, callee),
                             func: callee,
                             code_ref,
-                            params: layout.param_modes.iter().enumerate().map(|(i, mode)| {
-                                let desc = match mode {
+                            params: layout.param_modes.iter().enumerate().map(|(i, mode)| PlannedParam {
+                                src: resolved[i].0,
+                                value: layout.param_offsets[i],
+                                tydesc: match mode {
                                     ParamMode::In | ParamMode::Out => layout.param_tydescs[i],
                                     ParamMode::Ref | ParamMode::Mut => resolved[i].1,
-                                };
-                                (resolved[i].0, layout.param_offsets[i], desc)
+                                },
+                                copy: layout.param_copies[i],
                             }).collect(),
                         }),
                     };

@@ -392,6 +392,16 @@ impl Frame {
                 // SAFETY: the descriptor half of a parameter's place.
                 unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(layout.param_tydescs[i]) };
             }
+            if let Some((at, size)) = layout.param_copies[i] {
+                // SAFETY: the parameter's place holds the caller's pointer to
+                // `size` bytes, and its copy's place is inside the frame.
+                unsafe {
+                    let place = self.at_offset(layout.param_offsets[i]) as *mut *mut u8;
+                    let copy = self.at_offset(at);
+                    std::ptr::copy_nonoverlapping(place.read(), copy, size as usize);
+                    place.write(copy);
+                }
+            }
         }
         self.clear_tracking();
         if !self.liveness.is_null() {

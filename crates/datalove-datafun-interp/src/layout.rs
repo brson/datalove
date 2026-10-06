@@ -76,6 +76,13 @@ pub struct IrLayout {
     /// Where each parameter's `Value` is: its pointer, then its descriptor.
     /// Consecutive, so that the parameters are a `[Value]` from the first.
     pub param_offsets: Vec<u32>,
+    /// For each parameter the frame keeps a copy of, where the copy goes and
+    /// its size: an owned parameter of a small copied type, whose `Value`
+    /// points at the copy rather than into the caller's frame, so that a read
+    /// of it is one load rather than two. Nothing can tell: the callee owns
+    /// the argument, and the caller's original, being a copied type, is
+    /// untouched either way.
+    pub param_copies: Vec<Option<(u32, u32)>>,
     /// Where the descriptors for the declared shapes start, and how many.
     pub shape_offset: u32,
     pub shape_count: u32,
@@ -115,6 +122,8 @@ pub struct LayoutExtras<'a> {
     pub keep_liveness: bool,
     /// Whether the frame is a script unit's.
     pub is_script: bool,
+    /// How each parameter is passed; empty if not known, as for a script.
+    pub param_modes: &'a [ParamMode],
 }
 
 impl IrLayout {
@@ -158,6 +167,16 @@ impl IrLayout {
         let mut offset = align_up(frame.frame_size, WORD);
         let param_offsets: Vec<u32> = (0..param_types.len() as u32).map(|i| offset + i * VALUE).collect();
         offset += param_types.len() as u32 * VALUE;
+        let param_copies: Vec<Option<(u32, u32)>> = param_types.iter().enumerate().map(|(i, ty)| {
+            let size = datalove_datafun_ir::layout::layout_of(ty).size;
+            let copied = extras.param_modes.get(i) == Some(&ParamMode::In) && ty.is_copy()
+                && size > 0 && size <= WORD;
+            copied.then(|| {
+                let at = offset;
+                offset += WORD;
+                (at, size)
+            })
+        }).collect();
         let shape_offset = offset;
         offset += extras.shape_count as u32 * WORD;
         let mut ref_desc_offsets = vec![None; value_types.len()];
@@ -185,6 +204,7 @@ impl IrLayout {
             slot_is_copy: slot_types.iter().map(|ty| ty.is_copy()).collect(),
             param_tracking: frame.param_tracking.clone(),
             param_offsets,
+            param_copies,
             shape_offset,
             shape_count: extras.shape_count as u32,
             ref_desc_offsets,
@@ -209,6 +229,7 @@ impl IrLayout {
             // its bindings.
             let extras = LayoutExtras {
                 shape_count: 0, described_refs: &described_refs, keep_liveness: true, is_script: true,
+                param_modes: &[],
             };
             return Self::compute(
                 &unit.value_types, &unit.slot_types, &[], &unit.tracked_slots, &[], None,
@@ -216,18 +237,20 @@ impl IrLayout {
         };
         // A function frame keeps liveness in debug builds only, as a check on
         // the ownership analysis.
+        let param_modes: Vec<ParamMode> = (0..ctx.param_types.len())
+            .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
+            .collect();
         let extras = LayoutExtras {
             shape_count: ctx.descriptor_shapes.len(),
             described_refs: &described_refs,
             keep_liveness: cfg!(debug_assertions),
             is_script: false,
+            param_modes: &param_modes,
         };
         let mut layout = Self::compute(
             &unit.value_types, &unit.slot_types, &ctx.param_types,
             &unit.tracked_slots, &ctx.tracked_params, Some(&ctx.return_type), extras, tydesc_table);
-        layout.param_modes = (0..ctx.param_types.len())
-            .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
-            .collect();
+        layout.param_modes = param_modes;
         layout.param_moves = layout.param_modes.iter().zip(&ctx.param_types)
             .map(|(mode, ty)| *mode == ParamMode::In && !ty.is_copy())
             .collect();
