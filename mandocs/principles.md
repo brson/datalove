@@ -19,7 +19,7 @@ with a focus on correctness uncommon in scripting languages.
 
 ## Contents
 
-<div class="toc toc-repeat-6">
+<div class="toc toc-repeat-7">
 
 - [Glorify the plain old data types](#user-content-glorify-the-plain-old-data-types)
 - [Advance interactive scripting design](#user-content-advance-interactive-scripting-design)
@@ -28,6 +28,7 @@ with a focus on correctness uncommon in scripting languages.
 - [Numerical correctness](#user-content-numerical-correctness)
 - [Power through restricted language design](#user-content-power-through-restricted-language-design)
 - [Straightforward syntax with minimal sugar](#user-content-straightforward-syntax-with-minimal-sugar)
+- [Strict baseline first; controlled ergonomics later](#user-content-strict-baseline-first-controlled-ergonomics-later)
 - [Sigil-logic](#user-content-sigil-logic)
 - [Small enough to understand and remember](#user-content-small-enough-to-understand-and-remember)
 - [Mechanical and machine-model sympathy](#user-content-mechanical-and-machine-model-sympathy)
@@ -129,6 +130,22 @@ for human eyes to scan and computers to parse.
 It is happily verbose.
 It provides the basic features necessary to write algorithms,
 but does not bloat the compiler and spec with syntactic niceties.
+
+
+## Strict baseline first; controlled ergonomics later
+
+The baseline Datalove language of today is spartan and strict,
+likely too verbose to be practical as the quick-prototyping interactive
+language it is intended to be.
+This is an intentional development strategy to develop
+the language semantics and architectural capabilities necessary
+to build upon. The ultimate surface language for casual
+interactivity is expected to be more ergonomic,
+and we will get there by incrementally and experimentally developing
+ergonomic modes that reduce boilerplate and transformations between
+which can be mechanically analyzed and applied.
+
+
 
 
 ## Sigil-logic
