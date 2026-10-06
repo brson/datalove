@@ -1,0 +1,21 @@
+----------
+module local/test/main
+----------
+
+// Test *? operator with no overflow - returns Some(result)
+fun test_mul(a: u32, b: u32): ?u32
+    ret some (a *? b)
+end fun
+
+fun main(): ?u32
+    ret test_mul(100, 200)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

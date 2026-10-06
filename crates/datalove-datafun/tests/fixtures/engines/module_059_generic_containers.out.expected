@@ -1,0 +1,129 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn unwrap_or(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        drop p1
+                        return v1
+                    block2:
+                        v3 = move p1
+                        return v3
+                    
+                    fn ok_or(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        drop p1
+                        return v1
+                    block2:
+                        v4 = move p1
+                        drop v2
+                        return v4
+                    
+                    fn flatten_or(p0, p1):
+                    block0:
+                        v0 = erase p0
+                        v1 = none
+                        v2 = erase v1
+                        v3 = call @0 m0.u0(v0, v2)
+                        v4 = reify v3
+                        v5 = call @1 m0.u0(v4, p1)
+                        return v5
+                    
+                    fn pass_through(p0, p1):
+                    block0:
+                        v0 = call @0 m0.u0(p0, p1)
+                        return v0
+                    
+                    fn main():
+                    block0:
+                        v0 = const 7u32
+                        v1 = some v0
+                        v2 = erase v1
+                        v3 = const 0u32
+                        v4 = erase v3
+                        v5 = call @0 m0.u0(v2, v4)
+                        v6 = reify v5
+                        v7 = none
+                        v8 = erase v7
+                        v9 = const "fallback"
+                        v10 = erase v9
+                        v11 = call @1 m0.u0(v8, v10)
+                        v12 = reify v11
+                        v13 = const 12345678901234567890int
+                        v14 = some v13
+                        v15 = erase v14
+                        v16 = const 0int
+                        v17 = erase v16
+                        v18 = call @2 m0.u0(v15, v17)
+                        v19 = reify v18
+                        v20 = const "deep"
+                        v21 = some v20
+                        v22 = some v21
+                        v23 = erase v22
+                        v24 = const "missing"
+                        v25 = erase v24
+                        v26 = call @3 m0.u2(v23, v25)
+                        v27 = reify v26
+                        v28 = const 99int
+                        v29 = some v28
+                        v30 = erase v29
+                        v31 = const 0int
+                        v32 = erase v31
+                        v33 = call @4 m0.u3(v30, v32)
+                        v34 = reify v33
+                        v35 = const 3u32
+                        v36 = ok v35
+                        v37 = erase v36
+                        v38 = const 0u32
+                        v39 = erase v38
+                        v40 = call @5 m0.u1(v37, v39)
+                        v41 = reify v40
+                        v42 = pack Tuple6 {v6, v12, v19, v27, v34, v41}
+                        return v42
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u4()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, \"fallback\", 12345678901234567890, \"deep\", 99, 3)\n"),
+        ),
+    ],
+)

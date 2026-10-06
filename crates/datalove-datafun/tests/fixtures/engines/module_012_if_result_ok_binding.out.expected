@@ -1,0 +1,59 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn test():
+                    block0:
+                        v0 = const 42u32
+                        v1 = ok v0
+                        return v1
+                    
+                    fn main():
+                    block0:
+                        v0 = call @0 m0.u0()
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = const 999u32
+                        drop v2
+                        return v4
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u1()
+                        debuglog v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("42\n"),
+        ),
+    ],
+)

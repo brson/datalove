@@ -1,0 +1,35 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1000000int
+                        v1 = const 2000000int
+                        v2 = const 3000000int
+                        v3 = pack Struct0 {v0, v1, v2}
+                        v4 = getfieldref v3.0
+                        debuglog *v4
+                        v5 = getfieldref v3.1
+                        debuglog *v5
+                        v6 = getfieldref v3.2
+                        debuglog *v6
+                        unit_end_drop v3
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1000000\n2000000\n3000000\n"),
+        ),
+    ],
+)

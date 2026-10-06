@@ -1,0 +1,62 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/resmath"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn checked_add(p0, p1):
+                    block0:
+                        v0, v1 = add.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = call @0 m0.u0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        v3 = const 4294967295u32
+                        v4 = const 1u32
+                        v5 = call @1 m0.u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok 30\ner error \"arithmetic overflow\"\n"),
+        ),
+    ],
+)

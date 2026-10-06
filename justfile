@@ -68,8 +68,9 @@ bench-filter FILTER:
     cargo bench -p datalove-bench -- {{FILTER}}
 
 test-sanitizers-all:
-    just test-sanitizers-stable
-    just test-sanitizers-nightly
+    just test-san-address
+    just test-san-leak
+    just test-san-memory
 
 test-san-address *ARGS='':
     env ASAN_SYMBOLIZER_PATH="$(which llvm-symbolizer-18)" ASAN_OPTIONS="symbolize=1" RUSTFLAGS="-Z sanitizer=address" cargo +nightly test --target x86_64-unknown-linux-gnu -j1 {{ARGS}}
@@ -124,23 +125,16 @@ test-miri-rt-tests-one TEST_FILE *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
 
-# The interpreter fixtures under Miri, function bodies on the bytecode: its
-# frame access is raw pointer arithmetic, which this checks as it runs.
+# The engine fixtures under Miri, on the IR walker and the bytecode: the
+# bytecode's frame access is raw pointer arithmetic, which this checks as it
+# runs. The runner leaves out the engines that generate code.
 #
 # Tree borrows, because the test harness's rayon pulls in crossbeam-epoch,
 # which stacked borrows rejects and tree borrows accepts; under stacked
 # borrows the run stops in crossbeam before reaching the interpreter.
 test-miri-interp *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
-        cargo +nightly miri test -p datalove-datafun --test interp_tests {{ARGS}}
-
-test-miri-module-interp *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
-        cargo +nightly miri test -p datalove-datafun --test module_interp_tests {{ARGS}}
-
-test-miri-interp-all *ARGS='':
-    just test-miri-interp {{ARGS}}
-    just test-miri-module-interp {{ARGS}}
+        cargo +nightly miri test -p datalove-datafun --test engine_tests {{ARGS}}
 
 # Install the `datalove` binary from this working copy.
 install:

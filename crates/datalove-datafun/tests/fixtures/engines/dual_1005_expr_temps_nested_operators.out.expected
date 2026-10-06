@@ -1,0 +1,150 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = call @0 u0(v0)
+                        v2 = const true
+                        v3 = call @1 u1(v2)
+                        v4 = pack Tuple2 {v1, v3}
+                        debuglog v4
+                        v5 = const 1int
+                        v6 = some v5
+                        v7 = call @2 u2(v6)
+                        v8 = none
+                        v9 = call @3 u2(v8)
+                        v10 = pack Tuple2 {v7, v9}
+                        debuglog v10
+                        v11 = const 1u8
+                        v12 = const 2u8
+                        v13 = call @4 u3(v11, v12)
+                        v14 = const 255u8
+                        v15 = const 1u8
+                        v16 = call @5 u3(v14, v15)
+                        v17 = pack Tuple2 {v13, v16}
+                        debuglog v17
+                        v18 = const 1int
+                        v19 = list [v18]
+                        v20 = const 0index
+                        v21 = call @6 u4(v19, v20)
+                        v22 = const 1int
+                        v23 = list [v22]
+                        v24 = const 5index
+                        v25 = call @7 u4(v23, v24)
+                        v26 = pack Tuple2 {v21, v25}
+                        debuglog v26
+                        unit_end
+                    
+                    fn negated(p0):
+                    block0:
+                        v0 = const "abc"
+                        v1 = neg p0
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const "abc"
+                        v4 = neg p0
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = eq v2, v5
+                        drop v2
+                        drop v5
+                        drop p0
+                        return v6
+                    
+                    fn inverted(p0):
+                    block0:
+                        v0 = const "abc"
+                        v1 = logic_not p0
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const "abc"
+                        v4 = logic_not p0
+                        v5 = pack Tuple2 {v3, v4}
+                        v6 = eq v2, v5
+                        drop v2
+                        drop v5
+                        return v6
+                    
+                    fn through_try(p0):
+                    block0:
+                        v0 = const "abc"
+                        v1 = const 1int
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const "abc"
+                        v4 = move p0
+                        v5, v6 = unwrap_option v4
+                        branch v6, block2, block1
+                    block1:
+                        v7 = none
+                        drop v2
+                        drop v3
+                        return v7
+                    block2:
+                        v8 = pack Tuple2 {v3, v5}
+                        v9 = eq v2, v8
+                        drop v2
+                        drop v8
+                        v10 = some v9
+                        return v10
+                    
+                    fn through_checked(p0, p1):
+                    block0:
+                        v0 = const "abc"
+                        v1 = const 3u8
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const "abc"
+                        v4, v5 = add.checked p0, p1
+                        branch v5, block1, block2
+                    block1:
+                        v6 = none
+                        drop v2
+                        drop v3
+                        return v6
+                    block2:
+                        v7 = pack Tuple2 {v3, v4}
+                        v8 = eq v2, v7
+                        drop v2
+                        drop v7
+                        v9 = some v8
+                        return v9
+                    
+                    fn through_index(p0, p1):
+                    block0:
+                        v0 = const "abc"
+                        v1 = const 1int
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = const "abc"
+                        v4 = listboundscheck p0[p1]
+                        branch v4, block2, block1
+                    block1:
+                        v5 = none
+                        drop v2
+                        drop v3
+                        drop p0
+                        return v5
+                    block2:
+                        v6 = listelementref p0[p1]
+                        v7 = clone *v6
+                        v8 = pack Tuple2 {v3, v7}
+                        v9 = eq v2, v8
+                        drop v2
+                        drop v8
+                        v10 = some v9
+                        drop p0
+                        return v10
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(true, true)\n(some true, none)\n(some true, none)\n(some true, none)\n"),
+        ),
+    ],
+)

@@ -1,0 +1,42 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "line 8, col 16: error[F026]: invalid operand type `u32` for operator `+`",
+                    "line 9, col 7: error[F001]: cannot find value `r` in this scope",
+                    "line 14, col 16: error[F026]: invalid operand type `int` for operator `/`",
+                    "line 15, col 7: error[F001]: cannot find value `r` in this scope",
+                    "line 20, col 16: error[F026]: invalid operand type `u32` for operator `+`",
+                    "line 21, col 7: error[F001]: cannot find value `r` in this scope",
+                    "line 33, col 17: error[F016]: mismatched types: expected `u32`, found `u64`",
+                    "line 34, col 7: error[F001]: cannot find value `r` in this scope",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

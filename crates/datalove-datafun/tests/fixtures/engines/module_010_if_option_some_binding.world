@@ -1,0 +1,24 @@
+----------
+module local/test/main
+----------
+
+fun test(): ?u32
+    ret some 42
+end fun
+
+fun main(): u32
+    if test() |val|
+        ret val
+    else
+        ret 999
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

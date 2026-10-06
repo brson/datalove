@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun main(): bool
+    ret true
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

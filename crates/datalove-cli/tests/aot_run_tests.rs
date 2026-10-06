@@ -8,24 +8,7 @@ use std::process::Command;
 
 /// Run the datalove CLI with `aot-compile --run` on a script file.
 fn run_aot(path: &Path) -> Result<String, String> {
-    // Get the path to the compiled binary.
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let manifest_path = std::path::PathBuf::from(manifest_dir);
-    let workspace_dir = manifest_path
-        .parent().unwrap()
-        .parent().unwrap();
-
-    let target_dir = workspace_dir.join("target");
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let binary_path = target_dir.join(profile).join("datalove");
-
-    // Ensure the binary exists.
-    if !binary_path.exists() {
-        return Err(format!(
-            "Binary not found at {}. Run 'cargo build -p datalove-cli' first.",
-            binary_path.display()
-        ));
-    }
+    let binary_path = env!("CARGO_BIN_EXE_datalove");
 
     // Create a temp directory for the output executable.
     let temp_dir = rmx::tempfile::tempdir()

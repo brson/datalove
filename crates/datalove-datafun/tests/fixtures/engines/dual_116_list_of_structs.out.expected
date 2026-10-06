@@ -1,0 +1,36 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 3int
+                        v4 = const 4int
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = const 5int
+                        v7 = const 6int
+                        v8 = pack Struct0 {v6, v7}
+                        v9 = list [v2, v5, v8]
+                        debuglog v9
+                        unit_end_drop v9
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("[{x = 1, y = 2}, {x = 3, y = 4}, {x = 5, y = 6}]\n"),
+        ),
+    ],
+)

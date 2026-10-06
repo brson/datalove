@@ -1,0 +1,61 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10index
+                        v1 = const 20index
+                        v2 = const 10index
+                        v3 = const 0index
+                        v4 = const 4294967295index
+                        v5 = eq v0, v2
+                        debuglog v5
+                        v6 = eq v0, v1
+                        debuglog v6
+                        v7 = ne v0, v1
+                        debuglog v7
+                        v8 = ne v0, v2
+                        debuglog v8
+                        v9 = lt v0, v1
+                        debuglog v9
+                        v10 = lt v1, v0
+                        debuglog v10
+                        v11 = lt v3, v4
+                        debuglog v11
+                        v12 = le v0, v1
+                        debuglog v12
+                        v13 = le v0, v2
+                        debuglog v13
+                        v14 = le v1, v0
+                        debuglog v14
+                        v15 = gt v1, v0
+                        debuglog v15
+                        v16 = gt v0, v1
+                        debuglog v16
+                        v17 = gt v4, v3
+                        debuglog v17
+                        v18 = ge v1, v0
+                        debuglog v18
+                        v19 = ge v0, v2
+                        debuglog v19
+                        v20 = ge v0, v1
+                        debuglog v20
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("true\nfalse\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\ntrue\nfalse\ntrue\ntrue\ntrue\nfalse\n"),
+        ),
+    ],
+)

@@ -1,9 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): int
-    let a: int = 100
-    let b: int = 25
-    ret a - b
-end fun

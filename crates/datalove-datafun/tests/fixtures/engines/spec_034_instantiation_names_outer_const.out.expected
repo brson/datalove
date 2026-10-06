@@ -1,0 +1,95 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/outer"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn plus_k(p0):
+                    block0:
+                        v0 = staticref 2int
+                        v1 = add p0, *v0
+                        v2 = clone v1
+                        drop v1
+                        return v2
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 3int
+                        v2 = call @0 u2()
+                        v3 = call @1 u1()
+                        v4 = pack Tuple2 {v2, v3}
+                        debuglog v4
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn plus_j(p0):
+                    block0:
+                        v0 = staticref 10int
+                        v1 = add p0, *v0
+                        v2 = clone v1
+                        drop v1
+                        return v2
+                    
+                    fn plus_j__ct1():
+                    block0:
+                        v1 = staticref 13int
+                        v2 = clone *v1
+                        return v2
+                    
+                    fn plus_k__ct2():
+                    block0:
+                        v1 = staticref 5int
+                        v2 = clone *v1
+                        return v2
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(5, 13)\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(5, 13)",
+        ),
+    ],
+)

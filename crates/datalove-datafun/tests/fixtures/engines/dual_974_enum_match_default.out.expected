@@ -1,0 +1,40 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = enum_variant 0
+                        v1 = enum_discriminant v0
+                        switch v1, [1 => block1], default => block2
+                    block1:
+                        drop v0
+                        v2 = const "cat"
+                        debuglog v2
+                        drop v2
+                        goto block3
+                    block2:
+                        drop v0
+                        v3 = const "other"
+                        debuglog v3
+                        drop v3
+                        goto block3
+                    block3:
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("\"other\"\n"),
+        ),
+    ],
+)

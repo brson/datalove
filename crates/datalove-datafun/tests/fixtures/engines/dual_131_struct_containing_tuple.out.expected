@@ -1,0 +1,42 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = pack Tuple3 {v0, v1, v2}
+                        v4 = const "tuple holder"
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = getfieldref v5.0
+                        v7 = getfieldref *v6.0
+                        debuglog *v7
+                        v8 = getfieldref v5.0
+                        v9 = getfieldref *v8.1
+                        debuglog *v9
+                        v10 = getfieldref v5.0
+                        v11 = getfieldref *v10.2
+                        debuglog *v11
+                        v12 = getfieldref v5.1
+                        debuglog *v12
+                        unit_end_drop v5
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("1\n2\n3\n\"tuple holder\"\n"),
+        ),
+    ],
+)

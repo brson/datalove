@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+// Test let shadowing let.
+fun main(): u32
+    let x: u32 = 1
+    let x: u32 = 2
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

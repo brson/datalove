@@ -1,0 +1,44 @@
+----------
+module local/test/main
+----------
+
+// Indexing a map. A map is indexed by its key type rather than by `index`,
+// and the read is fallible like any other index, so it carries `?` to
+// propagate the miss or `!` to raise it.
+
+fun get(m: %{u32 = u32}, k: u32): ?u32
+  ret some (m[k]?)
+end fun
+
+// A miss propagates through the `?` and the function returns none, so the
+// `some` around it is never reached.
+fun get_or_none(m: %{u32 = u32}, k: u32): ?u32
+  ret some (m[k]?)
+end fun
+
+// Reading out a non-copy element consumes it out of a map the caller still
+// owns, so it needs `@` to clone rather than move.
+fun get_str(m: %{u32 = string}, k: u32): ?string
+  ret some (m[k]?@)
+end fun
+
+// A key that is itself non-copy.
+fun get_by_str(m: %{string = u32}, k: string): ?u32
+  ret some (m[k]?)
+end fun
+
+fun main(): (?u32, ?u32, ?string, ?u32)
+  ret (get(%{(: u32 / 1) = (: u32 / 10)}, : u32 / 1),
+       get_or_none(%{(: u32 / 1) = (: u32 / 10)}, : u32 / 9),
+       get_str(%{(: u32 / 2) = "two"}, : u32 / 2),
+       get_by_str(%{"key" = (: u32 / 42)}, "key"))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

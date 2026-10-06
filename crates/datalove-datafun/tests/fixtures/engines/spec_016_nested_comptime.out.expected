@@ -1,0 +1,116 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/nested"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_n(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p1
+                        return v0
+                    
+                    fn double_add(p0, p1):
+                    block0:
+                        v0 = clone p0
+                        v1 = comptime_call m0.u0(v0, p1) [comptime_params=[0]]
+                        v2 = comptime_call m0.u0(v0, v1) [comptime_params=[0]]
+                        drop v0
+                        return v2
+                    
+                    fn double_add_seven(p0):
+                    block0:
+                        v1 = call @0 m0.u3(p0)
+                        return v1
+                    
+                    fn double_add__ct3(p0):
+                    block0:
+                        v1 = call @0 m0.u4(p0)
+                        v2 = call @1 m0.u4(v1)
+                        return v2
+                    
+                    fn add_n__ct4(p0):
+                    block0:
+                        v1 = staticref 7int
+                        v0 = add *v1, p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = const 10int
+                        v2 = call @1 u0(v1)
+                        v3 = const 10int
+                        v4 = call @0 m0.u2(v3)
+                        debuglog v2
+                        debuglog v4
+                        unit_end_drop v0
+                        unit_end_drop v2
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn double_add__ct0(p0):
+                    block0:
+                        v1 = call @0 u1(p0)
+                        v2 = call @1 u1(v1)
+                        return v2
+                    
+                    fn add_n__ct1(p0):
+                    block0:
+                        v1 = staticref 5int
+                        v0 = add *v1, p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("20\n24\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = clone unit0.v2
+                        v1 = clone unit0.v4
+                        v2 = pack Tuple2 {v0, v1}
+                        unit_end v2
+                """,
+            ),
+            output: "(20, 24)",
+        ),
+    ],
+)

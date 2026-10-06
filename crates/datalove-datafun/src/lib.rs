@@ -30,7 +30,4 @@ pub mod incremental;
 pub mod memo_analysis;
 pub mod package_resolve;
 pub mod pipeline;
-pub mod worldfile_analysis_modules;
 pub mod worldfile_analysis;
-pub mod constlet_worldfile_analysis;
-pub mod specialize_differential_analysis;

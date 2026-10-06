@@ -1,0 +1,107 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/ops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn safe_add(p0, p1):
+                    block0:
+                        v0, v1 = add.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn safe_mul(p0, p1):
+                    block0:
+                        v0, v1 = mul.checked p0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 2u32
+                        v1 = const 3u32
+                        v2 = const 4u32
+                        v3 = call @0 u0(v0, v1, v2)
+                        v4 = const 999u32
+                        v5 = call @1 u1(v3, v4)
+                        debuglog v5
+                        v6 = const 10u32
+                        v7 = const 20u32
+                        v8 = const 2u32
+                        v9 = call @2 u0(v6, v7, v8)
+                        v10 = const 999u32
+                        v11 = call @3 u1(v9, v10)
+                        debuglog v11
+                        unit_end
+                    
+                    fn pipeline(p0, p1, p2):
+                    block0:
+                        v0 = call @0 m0.u0(p0, p1)
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = call @1 m0.u1(v1, p2)
+                        v5, v6 = unwrap_option v4
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        return v7
+                    block4:
+                        v8 = some v5
+                        return v8
+                    
+                    fn unwrap(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = copy p1
+                        return v3
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("20\n60\n"),
+        ),
+    ],
+)

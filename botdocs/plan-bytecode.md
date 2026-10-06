@@ -412,9 +412,9 @@ dispatcher suites, so the bytecode must handle a body being replaced.
 ## Testing
 
 - **Differential from the first day.** Add bytecode variants of the interpreter
-  fixture suites, the way `interp_jit_tests` runs the same fixtures under the JIT:
-  `interp_tests`, `module_interp_tests`, `std_tests` and the dispatcher suites,
-  each under `bc`. The IR walker is the reference.
+  fixture suites, the way the JIT suite ran the same fixtures under the JIT. The
+  IR walker is the reference. (As built: a `test-bc` configuration, and since
+  then `engine_tests`; see `plan-engine-tests.md`.)
 - **`bc-strict` for coverage**: the same suites with fallback forbidden show what
   is left to lower.
 - **Leak checking** stays on, as for every suite: destruction must be exact.

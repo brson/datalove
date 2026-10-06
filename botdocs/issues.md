@@ -221,7 +221,7 @@ compiled tiers do, each cheap to state and none started.
   callee's code cell (`JitCompiler::code_cells`); only a call to a function not
   yet compiled reaches `__jit_dispatch_call`.
 - **The C backend runs `cc -std=c11 -O0 -g`** (`pipeline/c_aot.rs`, and the
-  same in `c_dual_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
+  same in `engine_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
   number in the jit report. The work is whatever undefined behaviour `-O2` exposes
   in the emitted C, which the four-backend differential suite would find.
 - **`register_natives` in the cli only finds a bare `JitEngine`.** It downcasts
@@ -545,7 +545,7 @@ name does not parse in any type position -- `let a: qt.Shape`,
 `const A: qt.Shape` and a parameter `s: qt.Shape` are all parse errors -- and
 `import qt.Shape` looks for a function and reports F002. So a value of another
 module's named type can only be annotated by writing the type out in full, as
-`std_tests` and `specialize_differential/033_comptime_collections` do.
+`std_tests` and `engines/spec_033_comptime_collections` do.
 
 The typechecker already records each module's `exported_type_aliases`; what is
 missing is a way to reach them, either a qualified type name or an `import`

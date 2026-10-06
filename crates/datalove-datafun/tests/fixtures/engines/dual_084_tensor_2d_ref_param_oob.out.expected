@@ -1,0 +1,55 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u1()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                    
+                    fn read_row(p0):
+                    block0:
+                        v0 = clone p0
+                        return v0
+                    
+                    fn test():
+                    block0:
+                        v0 = const 10u32
+                        v1 = const 20u32
+                        v2 = const 30u32
+                        v3 = const 40u32
+                        v4 = const 50u32
+                        v5 = const 60u32
+                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v7 = const 5index
+                        v8 = tensorboundscheck v6[v7]
+                        branch v8, block2, block1
+                    block1:
+                        v9 = none
+                        drop v6
+                        return v9
+                    block2:
+                        v10 = tensorindexref v6[v7]
+                        v11 = call @0 u0(*v10)
+                        v12 = some v11
+                        drop v6
+                        return v12
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("none\n"),
+        ),
+    ],
+)

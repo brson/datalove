@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+fun main(): u32
+    if true
+        ret 1
+    else
+        ret 0
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

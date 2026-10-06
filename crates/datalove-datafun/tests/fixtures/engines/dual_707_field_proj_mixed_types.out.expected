@@ -1,0 +1,34 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 42u32
+                        v1 = const true
+                        v2 = const 99u32
+                        v3 = pack Tuple3 {v0, v1, v2}
+                        v4 = getfield v3.0
+                        v5 = getfield v3.1
+                        v6 = getfield v3.2
+                        debuglog v4
+                        debuglog v5
+                        debuglog v6
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("42\ntrue\n99\n"),
+        ),
+    ],
+)

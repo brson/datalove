@@ -1,0 +1,77 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/twoconst"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_consts(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = call @0 u0()
+                        debuglog v2
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn add_consts__ct0():
+                    block0:
+                        v1 = staticref 10int
+                        v2 = staticref 20int
+                        v0 = add *v1, *v2
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("30\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "30",
+        ),
+    ],
+)

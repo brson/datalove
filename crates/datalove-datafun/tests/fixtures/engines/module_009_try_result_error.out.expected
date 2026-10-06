@@ -1,0 +1,66 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn make_error():
+                    block0:
+                        v0 = const "module error"
+                        v1 = error_from v0
+                        return v1
+                    
+                    fn might_fail():
+                    block0:
+                        v0 = call @0 m0.u0()
+                        v1 = err v0
+                        return v1
+                    
+                    fn main():
+                    block0:
+                        v0 = call @0 m0.u1()
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = err v2
+                        return v4
+                    block2:
+                        v5 = ok v1
+                        return v5
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u2()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("er error \"module error\"\n"),
+        ),
+    ],
+)

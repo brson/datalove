@@ -1,0 +1,36 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "settings"
+                        v1 = const "key1"
+                        v2 = const 100int
+                        v3 = const "key2"
+                        v4 = const 200int
+                        v5 = %{v1: v2, v3: v4}
+                        v6 = pack Struct0 {v0, v5}
+                        v7 = getfieldref v6.0
+                        debuglog *v7
+                        v8 = getfieldref v6.1
+                        debuglog *v8
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("\"settings\"\n%{\"key1\" = 100, \"key2\" = 200}\n"),
+        ),
+    ],
+)

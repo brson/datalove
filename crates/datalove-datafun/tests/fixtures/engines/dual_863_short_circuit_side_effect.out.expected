@@ -1,0 +1,63 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/effects"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn side_effect(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const true
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "start"
+                        debuglog v0
+                        drop v0
+                        v1 = const true
+                        v2 = const "should_not_print"
+                        v3 = call @0 m0.u0(v2)
+                        v4 = logic_or v1, v3
+                        v5 = const "middle"
+                        debuglog v5
+                        drop v5
+                        v6 = const false
+                        v7 = const "should_print"
+                        v8 = call @1 m0.u0(v7)
+                        v9 = logic_or v6, v8
+                        v10 = const "end"
+                        debuglog v10
+                        drop v10
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("\"start\"\n\"should_not_print\"\n\"middle\"\n\"should_print\"\n\"end\"\n"),
+        ),
+    ],
+)

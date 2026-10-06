@@ -1,0 +1,75 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10index
+                        v1 = const 5index
+                        v2 = const 3index
+                        v3, v4 = add.checked v0, v1
+                        branch v4, block1, block2
+                    block1:
+                        v5 = const "arithmetic overflow"
+                        v6 = error_from v5
+                        v7 = err v6
+                        unit_early_return v7
+                    block2:
+                        debuglog v3
+                        v8, v9 = sub.checked v0, v1
+                        branch v9, block3, block4
+                    block3:
+                        v10 = const "arithmetic overflow"
+                        v11 = error_from v10
+                        v12 = err v11
+                        unit_early_return v12
+                    block4:
+                        debuglog v8
+                        v13, v14 = mul.checked v0, v2
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        unit_early_return v17
+                    block6:
+                        debuglog v13
+                        v18 = const 4294967295index
+                        v19 = const 1index
+                        v20, v21 = add.checked v18, v19
+                        branch v21, block7, block8
+                    block7:
+                        v22 = const "arithmetic overflow"
+                        v23 = error_from v22
+                        v24 = err v23
+                        unit_early_return v24
+                    block8:
+                        debuglog v20
+                        v25 = const 0index
+                        v26, v27 = sub.checked v25, v19
+                        branch v27, block9, block10
+                    block9:
+                        v28 = const "arithmetic overflow"
+                        v29 = error_from v28
+                        v30 = err v29
+                        unit_early_return v30
+                    block10:
+                        debuglog v26
+                        unit_end
+                """,
+            ),
+            output: "er error \"arithmetic overflow\"",
+            debug_output: Some("15\n5\n30\ner error \"arithmetic overflow\"\n"),
+        ),
+    ],
+)

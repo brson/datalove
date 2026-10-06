@@ -1,0 +1,97 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn identity(p0):
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn pick_first(p0, p1):
+                    block0:
+                        v0 = move p0
+                        drop p1
+                        return v0
+                    
+                    fn second(p0, p1):
+                    block0:
+                        v0 = move p1
+                        drop p0
+                        return v0
+                    
+                    fn twice(p0):
+                    block0:
+                        v0 = call @0 m0.u0(p0)
+                        return v0
+                    
+                    fn main():
+                    block0:
+                        v0 = const 7u32
+                        v1 = erase v0
+                        v2 = call @0 m0.u0(v1)
+                        v3 = reify v2
+                        v4 = const "hello"
+                        v5 = erase v4
+                        v6 = call @1 m0.u0(v5)
+                        v7 = reify v6
+                        v8 = const 12345678901234567890int
+                        v9 = erase v8
+                        v10 = call @2 m0.u0(v9)
+                        v11 = reify v10
+                        v12 = const true
+                        v13 = erase v12
+                        v14 = const false
+                        v15 = erase v14
+                        v16 = call @3 m0.u1(v13, v15)
+                        v17 = reify v16
+                        v18 = const "ignored"
+                        v19 = erase v18
+                        v20 = const 9u32
+                        v21 = erase v20
+                        v22 = call @4 m0.u2(v19, v21)
+                        v23 = reify v22
+                        v24 = const "through two"
+                        v25 = erase v24
+                        v26 = call @5 m0.u3(v25)
+                        v27 = reify v26
+                        v28 = pack Tuple6 {v3, v7, v11, v17, v23, v27}
+                        return v28
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u4()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, \"hello\", 12345678901234567890, true, 9, \"through two\")\n"),
+        ),
+    ],
+)

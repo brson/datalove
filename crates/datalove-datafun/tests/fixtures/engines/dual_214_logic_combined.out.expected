@@ -1,0 +1,52 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const true
+                        v1 = const true
+                        v2 = logic_and v0, v1
+                        v3 = const false
+                        v4 = logic_or v2, v3
+                        debuglog v4
+                        v5 = const true
+                        v6 = const false
+                        v7 = const false
+                        v8 = logic_and v6, v7
+                        v9 = logic_or v5, v8
+                        debuglog v9
+                        v10 = const true
+                        v11 = logic_not v10
+                        v12 = const true
+                        v13 = logic_or v11, v12
+                        debuglog v13
+                        v14 = const false
+                        v15 = logic_not v14
+                        v16 = const true
+                        v17 = logic_and v15, v16
+                        debuglog v17
+                        v18 = const true
+                        v19 = const false
+                        v20 = const true
+                        v21 = logic_and v19, v20
+                        v22 = logic_xor v18, v21
+                        debuglog v22
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("true\ntrue\ntrue\ntrue\ntrue\n"),
+        ),
+    ],
+)

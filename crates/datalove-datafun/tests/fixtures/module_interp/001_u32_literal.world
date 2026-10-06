@@ -1,7 +1,0 @@
-----------
-module local/test/main
-----------
-
-fun main(): u32
-    ret 42
-end fun

@@ -1,0 +1,16 @@
+----------
+module local/test/main
+----------
+
+fun main(): [|u32, 2|]
+    ret [| 1 2, 3 4 |]
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

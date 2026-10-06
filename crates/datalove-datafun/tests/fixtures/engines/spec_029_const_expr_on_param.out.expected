@@ -1,0 +1,154 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/constexpr"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn helper(p0):
+                    block0:
+                        v0 = const 10int
+                        v1 = mul p0, v0
+                        drop v0
+                        drop p0
+                        return v1
+                    
+                    fn scale(p0, p1):
+                    block0:
+                        v0 = mul p0, p1
+                        drop p1
+                        return v0
+                    
+                    fn uses_consts(p0, p1):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        v2 = clone p0
+                        v3 = call @0 m0.u0(v2)
+                        v4 = const 2int
+                        v5 = mul v1, v4
+                        drop v4
+                        v6 = comptime_call m0.u1(v1, p1) [comptime_params=[0]]
+                        v7 = add v6, v3
+                        drop v6
+                        v8 = add v7, v5
+                        drop v7
+                        drop v1
+                        drop v3
+                        drop v5
+                        return v8
+                    
+                    fn from_module(p0):
+                    block0:
+                        v1 = call @0 m0.u4(p0)
+                        return v1
+                    
+                    fn uses_consts__ct4(p0):
+                    block0:
+                        v0 = const 1int
+                        drop v0
+                        v3 = staticref 30int
+                        v4 = const 2int
+                        v5 = staticref 8int
+                        drop v4
+                        v6 = call @1 m0.u5(p0)
+                        v7 = add v6, *v3
+                        drop v6
+                        v8 = add v7, *v5
+                        drop v7
+                        return v8
+                    
+                    fn scale__ct5(p0):
+                    block0:
+                        v1 = staticref 4int
+                        v0 = mul *v1, p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5int
+                        v1 = const 2int
+                        v2 = call @0 m0.u3(v1)
+                        v3 = const 2int
+                        v4 = call @1 u0(v3)
+                        debuglog v2
+                        debuglog v4
+                        unit_end_drop v0
+                        unit_end_drop v2
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn uses_consts__ct0(p0):
+                    block0:
+                        v0 = const 1int
+                        drop v0
+                        v3 = staticref 50int
+                        v4 = const 2int
+                        v5 = staticref 12int
+                        drop v4
+                        v6 = call @1 u1(p0)
+                        v7 = add v6, *v3
+                        drop v6
+                        v8 = add v7, *v5
+                        drop v7
+                        return v8
+                    
+                    fn scale__ct1(p0):
+                    block0:
+                        v1 = staticref 6int
+                        v0 = mul *v1, p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("46\n74\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = clone unit0.v2
+                        v1 = clone unit0.v4
+                        v2 = pack Tuple2 {v0, v1}
+                        unit_end v2
+                """,
+            ),
+            output: "(46, 74)",
+        ),
+    ],
+)

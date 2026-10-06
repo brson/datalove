@@ -1051,8 +1051,7 @@ assume.
 | `ir_serial_tests` | Serialization round-trip, and that both backends agree across it |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `aot_layout_tests` | The cranelift AOT type layouts against the interpreter's type descriptors |
-| `interp_specialize_tests` | Specialized and unspecialized output agreeing |
-| `dual_tests`, `c_dual_tests` | The interpreter and the two AOT backends agreeing |
+| `engine_tests` | Every engine, and the program compiled without specialization or const inlining, agreeing with the IR walker |
 
 `layout_conformance_tests` is the one worth naming twice. It walks a corpus of
 types and checks size, alignment, field offsets, variant payload offsets and tag

@@ -1,0 +1,96 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn helper():
+                    block0:
+                        v0 = const 3u32
+                        return v0
+                    
+                    fn uses_top():
+                    block0:
+                        v0 = const 7u32
+                        return v0
+                    
+                    fn uses_chained():
+                    block0:
+                        v0 = const 7u32
+                        return v0
+                    
+                    fn uses_from_call():
+                    block0:
+                        v0 = const 3u32
+                        return v0
+                    
+                    fn uses_string():
+                    block0:
+                        v0 = staticref "hello"
+                        v1 = clone *v0
+                        return v1
+                    
+                    fn uses_bigint():
+                    block0:
+                        v0 = staticref 99999999999999999999int
+                        v1 = clone *v0
+                        return v1
+                    
+                    fn uses_list():
+                    block0:
+                        v0 = staticref [1int, 2int, 3int]
+                        v1 = clone *v0
+                        return v1
+                    
+                    fn local_names_module():
+                    block0:
+                        v0 = const 7u32
+                        return v0
+                    
+                    fn main():
+                    block0:
+                        v0 = call @0 m0.u1()
+                        v1 = call @1 m0.u2()
+                        v2 = call @2 m0.u3()
+                        v3 = call @3 m0.u7()
+                        v4 = call @4 m0.u5()
+                        v5 = call @5 m0.u6()
+                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        return v6
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u8()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, 7, 3, 7, 99999999999999999999, [1, 2, 3])\n"),
+        ),
+    ],
+)

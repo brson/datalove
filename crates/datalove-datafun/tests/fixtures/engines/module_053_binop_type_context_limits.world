@@ -1,0 +1,51 @@
+----------
+module local/test/main
+----------
+
+// Propagating the expected type must not hand an operator to a type that
+// does not have it, and must not widen without being asked.
+
+// Bare + is not an operator on u32. @ against u32 is a no-op, so the
+// operands never reach a type that has it.
+fun bare_add_fixed(a: u32, b: u32): u32
+  let r: u32 = a@ + b@
+  ret r
+end fun
+
+// Bare / is not an operator on int; /! and /? are.
+fun bare_div_bigint(a: int, b: int): int
+  let r: int = a@ / b@
+  ret r
+end fun
+
+// Widening still has to be asked for.
+fun no_implicit_widen(x: u32): int
+  let r: int = x + x
+  ret r
+end fun
+
+// Nothing to draw a type from when neither operand has one, so each clones
+// and the two are compared at the type they already had.
+fun both_untyped(a: int, b: int): bool
+  let r: bool = a@ .< b@
+  ret r
+end fun
+
+// Cloning does not make them agree, though.
+fun both_untyped_mismatched(a: u32, b: u64): bool
+  let r: bool = a@ .< b@
+  ret r
+end fun
+
+fun main(): u32
+  ret : u32 / 1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

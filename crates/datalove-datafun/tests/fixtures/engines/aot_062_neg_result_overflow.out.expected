@@ -1,0 +1,54 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const -2147483648i32
+                        v1 = call @0 u0(v0)
+                        v2 = const 999i32
+                        v3 = call @1 u1(v1, v2)
+                        debuglog v3
+                        unit_end
+                    
+                    fn checked_neg(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "negation overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                    
+                    fn unwrap_or_default(p0, p1):
+                    block0:
+                        v0 = move p0
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        v4 = copy p1
+                        drop v2
+                        return v4
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("999\n"),
+        ),
+    ],
+)

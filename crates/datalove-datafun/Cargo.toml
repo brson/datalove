@@ -63,13 +63,8 @@ path = "tests/tycheck_world_tests.rs"
 harness = false
 
 [[test]]
-name = "std_tests"
-path = "tests/std_tests.rs"
-harness = false
-
-[[test]]
-name = "std_all_tests"
-path = "tests/std_all_tests.rs"
+name = "std_engine_tests"
+path = "tests/std_engine_tests.rs"
 harness = false
 
 [[test]]
@@ -83,28 +78,8 @@ path = "tests/ir_lower_script_tests.rs"
 harness = false
 
 [[test]]
-name = "module_interp_tests"
-path = "tests/module_interp_tests.rs"
-harness = false
-
-[[test]]
 name = "engine_tests"
 path = "tests/engine_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_tests"
-path = "tests/interp_tests.rs"
-harness = false
-
-[[test]]
-name = "aot_tests"
-path = "tests/aot_tests.rs"
-harness = false
-
-[[test]]
-name = "dual_tests"
-path = "tests/dual_tests.rs"
 harness = false
 
 [[test]]
@@ -118,40 +93,9 @@ path = "tests/module_memo_tests.rs"
 harness = false
 
 [[test]]
-name = "interp_jit_tests"
-path = "tests/interp_jit_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_constlet_tests"
-path = "tests/interp_constlet_tests.rs"
-harness = false
-
-[[test]]
 name = "ir_inline_tests"
 path = "tests/ir_inline_tests.rs"
 harness = false
-
-[[test]]
-name = "interp_specialize_tests"
-path = "tests/interp_specialize_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_dispatch_tuned_tests"
-path = "tests/interp_dispatch_tuned_tests.rs"
-harness = false
-
-[[test]]
-name = "interp_dispatch_chaos_tests"
-path = "tests/interp_dispatch_chaos_tests.rs"
-harness = false
-
-[[test]]
-name = "c_dual_tests"
-path = "tests/c_dual_tests.rs"
-harness = false
-required-features = ["slow_tests"]
 
 [[test]]
 name = "layout_conformance_tests"

@@ -1,6 +1,0 @@
-----------
-scriptunit-fragment
-----------
-
-let xs = #{ 10, 20, 30 }
-debuglog xs

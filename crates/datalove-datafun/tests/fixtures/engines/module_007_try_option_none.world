@@ -1,0 +1,18 @@
+----------
+module local/test/main
+----------
+
+fun main(): ?u32
+    let input: ?u32 = none
+    let x: u32 = input?
+    ret some x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

@@ -15,18 +15,7 @@ use std::path::Path;
 use std::process::Command;
 
 fn run_aot_compile(path: &Path) -> Result<String, String> {
-    let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    let manifest_path = std::path::PathBuf::from(manifest_dir);
-    let workspace_dir = manifest_path.parent().unwrap().parent().unwrap();
-
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let binary_path = workspace_dir.join("target").join(profile).join("datalove");
-    if !binary_path.exists() {
-        return Err(format!(
-            "Binary not found at {}. Run 'cargo build -p datalove-cli' first.",
-            binary_path.display()
-        ));
-    }
+    let binary_path = env!("CARGO_BIN_EXE_datalove");
 
     // The object goes somewhere nothing else is using, since a fixture that
     // unexpectedly compiles would otherwise write into the tree.

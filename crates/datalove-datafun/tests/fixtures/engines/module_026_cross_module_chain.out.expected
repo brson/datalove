@@ -1,0 +1,92 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/base"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_one(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        drop p0
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/mid"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_two(p0):
+                    block0:
+                        v0 = call @0 m0.u0(p0)
+                        v1 = call @1 m0.u0(v0)
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn main():
+                    block0:
+                        v0 = const 10int
+                        v1 = call @0 m1.u0(v0)
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m2.u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("12\n"),
+        ),
+    ],
+)

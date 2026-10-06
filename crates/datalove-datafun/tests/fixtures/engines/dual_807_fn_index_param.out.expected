@@ -1,0 +1,53 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100index
+                        v1 = const 200index
+                        v2 = call @0 u0(v0, v1)
+                        debuglog v2
+                        v3 = const 50index
+                        v4 = call @1 u1(v3)
+                        debuglog v4
+                        v5 = const 0index
+                        v6 = call @2 u2(v5)
+                        debuglog v6
+                        v7 = const 1index
+                        v8 = call @3 u2(v7)
+                        debuglog v8
+                        unit_end
+                    
+                    fn add_index(p0, p1):
+                    block0:
+                        v0 = intrinsic AddWrappingIndex(p0, p1)
+                        return v0
+                    
+                    fn double_index(p0):
+                    block0:
+                        v0 = intrinsic AddWrappingIndex(p0, p0)
+                        return v0
+                    
+                    fn is_zero_index(p0):
+                    block0:
+                        v0 = const 0index
+                        v1 = eq p0, v0
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("300\n100\ntrue\nfalse\n"),
+        ),
+    ],
+)

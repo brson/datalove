@@ -1,0 +1,30 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = list [v0, v1, v2]
+                        debuglog v3
+                        unit_end_drop v3
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("[1, 2, 3]\n"),
+        ),
+    ],
+)

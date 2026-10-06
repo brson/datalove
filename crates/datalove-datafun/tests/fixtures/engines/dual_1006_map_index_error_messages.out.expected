@@ -1,0 +1,123 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = const 1u32
+                        v2 = %{v0: v1}
+                        v3 = const "b"
+                        v4 = call @0 u0(v2, v3)
+                        v5 = const "a"
+                        v6 = const "x"
+                        v7 = %{v5: v6}
+                        v8 = const "b"
+                        v9 = call @1 u1(v7, v8)
+                        v10 = pack Tuple2 {v4, v9}
+                        debuglog v10
+                        drop v10
+                        v11 = const "a"
+                        v12 = const 1u32
+                        v13 = %{v11: v12}
+                        v14 = const "b"
+                        v15 = call @2 u2(v13, v14)
+                        v16 = const "x"
+                        v17 = list [v16]
+                        v18 = const 3index
+                        v19 = call @3 u3(v17, v18)
+                        v20 = pack Tuple2 {v15, v19}
+                        debuglog v20
+                        drop v20
+                        unit_end
+                    
+                    fn read(p0, p1):
+                    block0:
+                        v0, v1 = mapget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "key not found"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p0
+                        drop p1
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        drop p0
+                        drop p1
+                        return v5
+                    
+                    fn cloned(p0, p1):
+                    block0:
+                        v0 = mapcontainskey p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = const "key not found"
+                        v2 = error_from v1
+                        v3 = err v2
+                        drop p0
+                        drop p1
+                        return v3
+                    block2:
+                        v4 = mapvalueref p0[p1]
+                        v5 = clone *v4
+                        v6 = ok v5
+                        drop p0
+                        drop p1
+                        return v6
+                    
+                    fn written(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = mapcontainskey s0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "key not found"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p1
+                        drop.tracked s0
+                        return v4
+                    block2:
+                        v5 = const 2u32
+                        mapsetvalue s0[p1] = v5
+                        v6 = load.move.tracked s0
+                        v7 = ok v6
+                        drop p1
+                        return v7
+                    
+                    fn listed(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = const "index out of bounds"
+                        v2 = error_from v1
+                        v3 = err v2
+                        drop p0
+                        return v3
+                    block2:
+                        v4 = listelementref p0[p1]
+                        v5 = clone *v4
+                        v6 = ok v5
+                        drop p0
+                        return v6
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(er error \"key not found\", er error \"key not found\")\n(er error \"key not found\", er error \"index out of bounds\")\n"),
+        ),
+    ],
+)

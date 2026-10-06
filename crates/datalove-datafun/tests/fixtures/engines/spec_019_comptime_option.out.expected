@@ -1,0 +1,84 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/optconst"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn get_opt(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v1 = const some 42i32
+                        v2 = const none
+                        v3 = call @0 u0()
+                        v4 = call @1 u1()
+                        debuglog v3
+                        debuglog v4
+                        unit_end
+                    
+                    fn get_opt__ct0():
+                    block0:
+                        v1 = const some 42i32
+                        v0 = copy v1
+                        return v0
+                    
+                    fn get_opt__ct1():
+                    block0:
+                        v1 = const none
+                        v0 = copy v1
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 42\nnone\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit0.v3
+                        v1 = copy unit0.v4
+                        v2 = pack Tuple2 {v0, v1}
+                        unit_end v2
+                """,
+            ),
+            output: "(some 42, none)",
+        ),
+    ],
+)

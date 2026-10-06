@@ -10,6 +10,7 @@ corpus and one runner, and the bytecode on by default.
 - [The design](#user-content-the-design)
 - [Order of work](#user-content-order-of-work)
 - [What goes](#user-content-what-goes)
+- [As built](#user-content-as-built)
 
 ## Where things stand
 
@@ -114,3 +115,36 @@ dispatcher suite, and the chaos suite as a suite of its own; the 394
 `interp3/`, `module_interp3/` and `analysis/` directories; the `test-bc`,
 broken sanitizer and broken Miri recipes. The cli's `backend_tests` stays, for
 the command line itself.
+
+## As built
+
+Steps 1 to 3, October 2026.
+
+**`engine_tests`** runs `fixtures/engines/`: the 420 programs of `interp/`, and
+the 523 of `dual/`, `aot/`, `module_interp/`, `interp_constlet/` and
+`specialize_differential/` that were not byte-for-byte copies of another,
+prefixed with where they came from. A `module_interp/` program gained a
+fragment that requires its `main` module and debuglogs `main()`. The engines
+are the bytecode, the JIT, the chaos dispatcher (on the bytecode), Cranelift
+AOT and C AOT, and two that compile differently -- `noconst`, const inlining
+off, and `nospec`, specialization off -- held to the reference's outputs and
+debug logs only, and only for a program that compiled without error. The run
+prints how many programs each engine took: of 972, the AOT backends take
+about 700. A fixture opts out of an engine with a `// engines: -c` comment
+before its first section; two do, each saying why. Under Miri only the
+engines that generate no code run.
+
+**C AOT runs in the default job**, not only the slow one: over the whole
+corpus it costs about as much again as the rest, which is cheap next to a
+backend that drifts. Its first run found a fault no suite had reached (in
+`issues.md`).
+
+**`std_engine_tests`**, the old `std_all_tests`, is the standard library's
+runner, with the IR walker named as its reference and the bytecode added.
+It stays separate because its programs are scripts against the real `sys/`
+library, built once per worker, rather than worldfiles.
+
+**The expected files still carry the IR.** The design moves IR snapshots to
+the lowering suites; they are still in the reference's rendering, so a
+lowering change re-blesses the engine corpus as it did the old suites.
+

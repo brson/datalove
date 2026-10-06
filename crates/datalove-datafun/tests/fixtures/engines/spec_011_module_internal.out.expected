@@ -1,0 +1,80 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/internal"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn add_factor(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        drop p1
+                        return v0
+                    
+                    fn add_two(p0):
+                    block0:
+                        v1 = call @0 m0.u2(p0)
+                        return v1
+                    
+                    fn add_factor__ct2(p0):
+                    block0:
+                        v1 = staticref 2int
+                        v0 = add *v1, p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = call @0 m0.u1(v0)
+                        debuglog v1
+                        unit_end_drop v1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("12\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "12",
+        ),
+    ],
+)

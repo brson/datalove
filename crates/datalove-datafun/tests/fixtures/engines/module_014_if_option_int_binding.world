@@ -1,0 +1,25 @@
+----------
+module local/test/main
+----------
+
+// Test with non-copy type (int).
+fun test(): ?int
+    ret some 42
+end fun
+
+fun main(): int
+    if test() |val|
+        ret val
+    else
+        ret 0
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

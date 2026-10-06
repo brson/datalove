@@ -1,0 +1,72 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/structconst"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn get_config(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v2 = const {enabled = true, value = 42i32}
+                        v3 = call @0 u0()
+                        debuglog v3
+                        unit_end
+                    
+                    fn get_config__ct0():
+                    block0:
+                        v1 = const {enabled = true, value = 42i32}
+                        v0 = copy v1
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{enabled = true, value = 42}\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "{enabled = true, value = 42}",
+        ),
+    ],
+)

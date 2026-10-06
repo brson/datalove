@@ -1,0 +1,20 @@
+----------
+module local/test/main
+----------
+
+// Test multiple let shadowing in main (until function calls work).
+fun main(): u32
+    let x: u32 = 1
+    let x: u32 = 2
+    let x: u32 = 3
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

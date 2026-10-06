@@ -839,10 +839,10 @@ against 0 s before. From `datalove-sys-packages`, which only the CLI and a coupl
 test targets depend on, the same edit costs about 7 s, nearly all of it
 relinking the debug binary.
 
-The loop that matters for stdlib work is untouched. `std_tests` and
-`std_all_tests` compile `sys/` off disk through
-`WorkspaceDescriptor::load_sys_dir`, so `cargo test -p datalove-datafun --test
-std_tests` after editing a module recompiles nothing at all.
+The loop that matters for stdlib work is untouched. `std_engine_tests`
+compiles `sys/` off disk through `WorkspaceDescriptor::load_sys_dir`, so
+`cargo test -p datalove-datafun --test std_engine_tests` after editing a module
+recompiles nothing at all.
 
 That only holds because the two copies cannot drift.
 `sys/tests/embedded_matches_tree.rs` asserts the embedded
@@ -1269,7 +1269,7 @@ compiling a second time took 84ms (and less since).
 `CompiledWorld` (`datafun/src/pipeline/compiled_world.rs`) is that pair kept
 together: a `Database` and the pipeline whose inputs live in it. It is not a
 cache, just the state a caller holds if it wants salsa to do its job -- owned,
-no thread-local, dropped with its owner. `std_all_tests` holds one per worker,
+no thread-local, dropped with its owner. `std_engine_tests` holds one per worker,
 and the REPL's `Engine` keeps its pipeline across a reset for the same reason.
 
 **Threads.** `Storage::clone` keeps the `Arc<Zalsa>` -- every memo, interned
@@ -1872,7 +1872,7 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 
 `ExampleTestRunner::with_worker_context(dir, init, analyzer)` hands each
 fixture a context built by `init`, for state that is expensive and cannot be
-shared between threads -- `std_all_tests` keeps a `CompiledWorld` there (see
+shared between threads -- `std_engine_tests` keeps a `CompiledWorld` there (see
 [Reusing a Compiled World](#user-content-reusing-a-compiled-world)). The runner
 keeps contexts in a pool, borrowing one per fixture and handing it back,
 rather than using rayon's `map_init`: `map_init` runs its initializer once per
@@ -1894,14 +1894,11 @@ Most live in `crates/datalove-datafun/tests`.
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |
 | `ir_serial_tests` | IR serialization round-trip |
-| `interp_tests`, `module_interp_tests` | Interpreter execution |
-| `interp_jit_tests`, `interp_dispatch_tuned_tests`, `interp_dispatch_chaos_tests` | JIT tiering and dispatch |
-| `interp_specialize_tests`, `interp_constlet_tests` | Specialization and const bindings |
-| `aot_tests`, `aot_layout_tests` | Cranelift AOT compilation and layout compatibility |
-| `dual_tests`, `c_dual_tests` | Compare interp vs Cranelift AOT, and vs C AOT. Both are behind `slow_tests`, so `just test` does not run them |
+| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the JIT, a chaos dispatcher, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
+| `aot_layout_tests` | Cranelift AOT layout compatibility |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |
-| `std_tests`, `std_all_tests` | The `sys/std` library, compiled from `sys/` on disk. `std_all_tests` runs every fixture through all four backends and requires agreement, and is the only suite that puts a rider call, a bigint or a type parameter through the C backend |
+| `std_engine_tests` | The `sys/std` library, compiled from `sys/` on disk, its fixtures in `fixtures/std_tests/` run on the IR walker and compared on the bytecode, the JIT and both AOT backends. The only suite that puts a rider call, a bigint or a type parameter through the C backend |
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-sys-packages`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |

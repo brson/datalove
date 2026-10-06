@@ -1,0 +1,30 @@
+----------
+module local/test/main
+----------
+
+// A const whose evaluation calls a function that reads a module const. The
+// function cannot lower until the const is evaluated, and the const cannot be
+// evaluated until the function is lowered.
+//
+// This is the case the removed implementation met and answered by evaluating
+// literals only. It is reported instead, naming both ends. Before the check it
+// panicked in the interpreter looking for a function that was never lowered.
+
+const A: u32 = f()
+
+fun f(): u32
+  ret A
+end fun
+
+fun main(): u32
+  ret : u32 / 1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

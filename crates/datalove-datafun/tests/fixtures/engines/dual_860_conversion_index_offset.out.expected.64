@@ -1,0 +1,51 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0index
+                        v1 = const 1index
+                        v2 = const 4294967295index
+                        v3 = const 2147483647index
+                        v4 = intrinsic IndexToOffset(v0)
+                        debuglog v4
+                        v5 = intrinsic IndexToOffset(v1)
+                        debuglog v5
+                        v6 = intrinsic IndexToOffset(v3)
+                        debuglog v6
+                        v7 = intrinsic IndexToOffset(v2)
+                        debuglog v7
+                        v8 = const 0offset
+                        v9 = const 1offset
+                        v10 = const -1offset
+                        v11 = const 2147483647offset
+                        v12 = const -2147483648offset
+                        v13 = intrinsic OffsetToIndex(v8)
+                        debuglog v13
+                        v14 = intrinsic OffsetToIndex(v9)
+                        debuglog v14
+                        v15 = intrinsic OffsetToIndex(v10)
+                        debuglog v15
+                        v16 = intrinsic OffsetToIndex(v11)
+                        debuglog v16
+                        v17 = intrinsic OffsetToIndex(v12)
+                        debuglog v17
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("0\n1\n2147483647\n4294967295\n0\n1\n18446744073709551615\n2147483647\n18446744071562067968\n"),
+        ),
+    ],
+)

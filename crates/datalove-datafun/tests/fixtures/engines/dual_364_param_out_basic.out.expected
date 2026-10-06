@@ -1,0 +1,35 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = call @0 u0(s0)
+                        debuglog s0
+                        unit_end
+                    
+                    fn init_42(p0):
+                    block0:
+                        v0 = const 42u32
+                        store.tracked p0, v0
+                        v1 = const true
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("42\n"),
+        ),
+    ],
+)

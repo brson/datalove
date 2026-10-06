@@ -1,0 +1,358 @@
+//! Standard library tests across all backends.
+//!
+//! Runs each `.dfs` fixture on the IR walker, checked against the expected
+//! output, and on the bytecode, the JIT, Cranelift AOT and C AOT, each compared
+//! with the IR walker. The worldfile corpus has the same arrangement in
+//! `engine_tests`; this one is the standard library's.
+//!
+//! The C backend is here because it was not, and fell seven months behind on
+//! the strength of nobody noticing. `c_dual_tests` has no fixture that reaches
+//! the standard library, so this is the only suite that puts a rider call, a
+//! bigint or a type parameter through it.
+
+use rmx::prelude::*;
+use std::path::{Path, PathBuf};
+use datalove_datafun as datafun;
+use datalove_datafun_cranelift_jit::JitEngine;
+use datalove_datafun_interp::{CallDispatcher, Engine};
+use datafun::pipeline::{
+    WorkspaceDescriptor, TypecheckResult, LoweringResult,
+    aot as pipeline_aot, c_aot as pipeline_c_aot,
+};
+
+/// What this suite compiles against, kept for the worker that built it.
+///
+/// One per worker thread rather than one per fixture per backend, which is what
+/// it used to be: 572 compilations of `sys/std` for 534 CPU-seconds. Keeping the
+/// pipeline is what makes the difference -- see "Reusing a
+/// Compiled World" in `botdocs/compiler-guide.md`.
+struct Worker {
+    descriptor: WorkspaceDescriptor,
+    world: datafun::pipeline::CompiledWorld,
+}
+
+impl Worker {
+    fn new() -> Self {
+        let descriptor = describe_sys();
+        let world = datafun::pipeline::CompiledWorld::new(&descriptor);
+        Self { descriptor, world }
+    }
+}
+
+/// Where the library under test comes from.
+///
+/// These are the standard library's own tests, so they compile the sources in the
+/// tree rather than the copy embedded in the datalove binary.
+fn describe_sys() -> WorkspaceDescriptor {
+    let repo_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent().unwrap()
+        .parent().unwrap()
+        .to_path_buf();
+    // The work dir is unique to this suite so a concurrently running suite
+    // builds its own component rather than rebuilding over this one's.
+    let work_dir = repo_root.join("target").join("datalove-work").join("std_engine_tests");
+    rmx::futures::executor::block_on(
+        WorkspaceDescriptor::load_sys_dir(repo_root.join("sys"))
+    ).expect("the standard library's sources must load")
+        .with_work_dir(work_dir)
+}
+
+/// Refuse to run a fixture if the library itself does not compile.
+///
+/// A broken library is not one fixture disagreeing with another, so it is not
+/// reported per fixture.
+fn check_library(compiled: &datafun::pipeline::CompiledModules<'_>) {
+    if let Some(err) = &compiled.resolution_error {
+        panic!("the standard library does not resolve: {}", err);
+    }
+    for (path, errors) in &compiled.path_to_errors {
+        assert!(errors.is_empty(), "typecheck errors in {}: {:?}", path, errors);
+    }
+}
+
+/// Build the unified native component and load it into the given executor.
+/// Returns the static library path (for AOT linking) and loaded rider handle.
+fn build_and_load_riders(
+    descriptor: &WorkspaceDescriptor,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    executor: &mut datafun::pipeline::ScriptExecutor,
+) -> Result<(Vec<PathBuf>, Vec<datafun::pipeline::rider_load::LoadedRider>), String> {
+    let rider_crates = descriptor.rider_crates();
+    let work_dir = descriptor.work_dir.as_ref()
+        .ok_or("workspace has riders but no work dir")?;
+    let staticlib = datafun::pipeline::rider_build::build_component_staticlib(work_dir, &rider_crates)
+        .map_err(|e| format!("rider build error: {}", e))?;
+
+    let lib_paths = vec![staticlib];
+    let native_symbols = compiled.native_symbols();
+    let mut loaded_riders = Vec::new();
+
+    if !native_symbols.is_empty() {
+        let dylib = datafun::pipeline::rider_build::build_rider_dylib(work_dir, &rider_crates)
+            .map_err(|e| format!("rider build error: {}", e))?;
+        let loaded = datafun::pipeline::rider_load::load_rider_library(
+            &dylib,
+            "native-component",
+            &native_symbols,
+            executor.native_table_mut(),
+        ).map_err(|e| format!("rider load error: {}", e))?;
+        loaded_riders.push(loaded);
+    }
+
+    Ok((lib_paths, loaded_riders))
+}
+
+/// Run a script through the interpreter, compiling fragment then evaluating `output`.
+fn run_with_executor(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    descriptor: &WorkspaceDescriptor,
+    script_text: &str,
+    engine: Engine,
+    jit: Option<Box<dyn CallDispatcher>>,
+    backend_name: &str,
+) -> Result<(String, Vec<PathBuf>), String> {
+    let mut compiler = compiled.script_compiler_default(db)
+        .ok_or(format!("{}: module compilation failed (compiler)", backend_name))?;
+    let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Disabled, jit)
+        .ok_or(format!("{}: module compilation failed (executor)", backend_name))?;
+    executor.set_engine(engine);
+
+    let (lib_paths, loaded_riders) = build_and_load_riders(descriptor, compiled, &mut executor)?;
+
+    // Register native rider symbols with JIT engine if present.
+    if let Some(dispatcher) = executor.take_dispatcher() {
+        if let Some(jit_engine) = dispatcher.as_any().downcast_ref::<JitEngine>() {
+            for rider in &loaded_riders {
+                for (symbol, ptr) in &rider.native_fn_ptrs {
+                    jit_engine.register_native_symbol(symbol, *ptr);
+                }
+                // The addresses go into generated code, so the jit holds the
+                // library they lead into as well.
+                jit_engine.hold_code_owner(rider.library.clone());
+            }
+        }
+        executor.set_dispatcher(dispatcher);
+    }
+
+    // Compile and execute the fragment.
+    let result = compiler.compile_fragment(script_text);
+    if let TypecheckResult::Error { errors } = &result.typecheck {
+        executor.destroy_live_values();
+        return Err(format!("{} typecheck errors: {:?}", backend_name, errors));
+    }
+    if let LoweringResult::Error { message } = &result.lowering {
+        executor.destroy_live_values();
+        return Err(format!("{} lowering error: {}", backend_name, message));
+    }
+    if let Some(ir_unit) = &result.ir_unit {
+        let output = executor.execute_fragment(ir_unit);
+        if output.starts_with("Error:") {
+            executor.destroy_live_values();
+            return Err(format!("{} execution error: {}", backend_name, output));
+        }
+    }
+
+    // Evaluate the output variable.
+    let output_compiled = compiler.compile_expr("output");
+    if let TypecheckResult::Error { errors } = &output_compiled.typecheck {
+        executor.destroy_live_values();
+        return Err(format!("{} output typecheck errors: {:?}", backend_name, errors));
+    }
+    if let LoweringResult::Error { message } = &output_compiled.lowering {
+        executor.destroy_live_values();
+        return Err(format!("{} output lowering error: {}", backend_name, message));
+    }
+    let output = if let Some(ir_unit) = &output_compiled.ir_unit {
+        let (_, value) = executor.execute_expr(ir_unit);
+        value
+    } else {
+        String::new()
+    };
+    executor.destroy_live_values();
+
+    if output.starts_with("Error:") {
+        return Err(format!("{} output error: {}", backend_name, output));
+    }
+
+    Ok((output, lib_paths))
+}
+
+/// Run through the AOT backend, returning the debuglog output.
+///
+/// Appends `debuglog output` to the script source so the AOT binary prints the
+/// output value to stderr, then compiles, links (with rider libs), and runs it.
+fn run_aot(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    script_text: &str,
+    rider_lib_paths: &[PathBuf],
+) -> Result<String, String> {
+    let modified_source = format!("{}\ndebuglog output", script_text);
+
+    let mut compiler = compiled.script_compiler_default(db)
+        .ok_or("AOT: module compilation failed (compiler)")?;
+
+    let result = compiler.compile_fragment(&modified_source);
+    if let TypecheckResult::Error { errors } = &result.typecheck {
+        return Err(format!("AOT typecheck errors: {:?}", errors));
+    }
+    if let LoweringResult::Error { message } = &result.lowering {
+        return Err(format!("AOT lowering error: {}", message));
+    }
+
+    let ir_unit = result.ir_unit
+        .ok_or("AOT: IR unit not available")?;
+
+    let registry = compiled.module_registry();
+
+    // AOT compile with world types.
+    let obj_bytes = pipeline_aot::compile_script_to_object_with_world(
+        &ir_unit,
+        registry.iter_all_code_units(),
+        &registry,
+    ).map_err(|e| format!("AOT compile error: {}", e))?;
+
+    // Link with rider shared libraries.
+    let dir = rmx::tempfile::tempdir()
+        .map_err(|e| format!("AOT temp dir error: {}", e))?;
+    let exe_path = dir.path().join("test");
+    pipeline_aot::link_object_to_path_with_libs(&obj_bytes, &exe_path, rider_lib_paths)
+        .map_err(|e| format!("AOT link error: {}", e))?;
+
+    // Run and capture stderr (debuglog output).
+    let exec_output = pipeline_aot::run_executable(&exe_path)
+        .map_err(|e| format!("AOT execution error: {}", e))?;
+
+    // Debuglog appends a newline; trim to match execute_expr format.
+    Ok(exec_output.stderr.trim_end().to_string())
+}
+
+/// Run through the C backend, returning the debuglog output.
+///
+/// The same shape as `run_aot`, differing only in what turns the IR into an
+/// executable: C source and a C compiler rather than an object and a linker.
+fn run_c_aot(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    script_text: &str,
+    rider_lib_paths: &[PathBuf],
+) -> Result<String, String> {
+    let modified_source = format!("{}\ndebuglog output", script_text);
+
+    let mut compiler = compiled.script_compiler_default(db)
+        .ok_or("C AOT: module compilation failed (compiler)")?;
+
+    let result = compiler.compile_fragment(&modified_source);
+    if let TypecheckResult::Error { errors } = &result.typecheck {
+        return Err(format!("C AOT typecheck errors: {:?}", errors));
+    }
+    if let LoweringResult::Error { message } = &result.lowering {
+        return Err(format!("C AOT lowering error: {}", message));
+    }
+
+    let ir_unit = result.ir_unit.ok_or("C AOT: IR unit not available")?;
+    let registry = compiled.module_registry();
+
+    let sources = pipeline_c_aot::compile_world(&ir_unit, &registry)
+        .map_err(|e| format!("C AOT compile error: {}", e))?;
+
+    let dir = rmx::tempfile::tempdir()
+        .map_err(|e| format!("C AOT temp dir error: {}", e))?;
+    let exe_path = dir.path().join("test");
+    pipeline_c_aot::link_sources_to_path(&sources, &exe_path, rider_lib_paths)
+        .map_err(|e| format!("C AOT link error: {}", e))?;
+
+    let exec_output = pipeline_aot::run_executable(&exe_path)
+        .map_err(|e| format!("C AOT execution error: {}", e))?;
+
+    Ok(exec_output.stderr.trim_end().to_string())
+}
+
+/// Analyze a single .dfs file on every engine.
+///
+/// All of them share the worker's database and compiled library. What each needs of
+/// its own is a `ScriptCompiler`, which accumulates units, and a `ScriptExecutor`,
+/// which owns a runtime; `run_with_executor` and the two AOT paths make those.
+fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
+    let script_text = std::fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // Split so that the descriptor and the world are borrowed separately.
+    let Worker { descriptor, world } = worker;
+
+    world.with_compiled(|db, compiled| {
+        check_library(compiled);
+
+        // The reference.
+        let (interp_value, rider_lib_paths) =
+            run_with_executor(db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Interp")?;
+
+        let bytecode_result = run_with_executor(
+            db, compiled, descriptor, &script_text, Engine::Bytecode, None, "Bytecode")
+            .map(|(value, _)| value);
+
+        // The JIT.
+        //
+        // Caught rather than allowed to propagate, so that a jit that panics on
+        // one fixture is reported as that fixture disagreeing with the
+        // interpreter rather than taking the whole suite with it. This used to be
+        // a spawned thread, which caught the panic as a side effect of joining
+        // and was there for a Cranelift relocation problem that the jit's own
+        // arena fixed.
+        let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
+            let jit = JitEngine::new(1)
+                .map_err(|e| format!("JIT engine creation failed: {}", e))?;
+            let (value, _) = run_with_executor(
+                db, compiled, descriptor, &script_text, Engine::IrWalker, Some(Box::new(jit)), "JIT")?;
+            Ok(value)
+        })
+        .unwrap_or_else(|panic| {
+            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            Err(format!("JIT panicked: {}", msg))
+        });
+
+        // Cranelift AOT.
+        let aot_result = run_aot(db, compiled, &script_text, &rider_lib_paths);
+
+        // C AOT.
+        let c_aot_result = run_c_aot(db, compiled, &script_text, &rider_lib_paths);
+
+        // Compare all backends against interpreter. All errors are fatal.
+        let mut mismatches = Vec::new();
+        for (name, result) in [
+            ("Bytecode", &bytecode_result),
+            ("JIT", &jit_result),
+            ("AOT", &aot_result),
+            ("C AOT", &c_aot_result),
+        ] {
+            match result {
+                Ok(value) if value != &interp_value => mismatches.push(format!(
+                    "{} output mismatch:\n  interp: {}\n  {}: {}",
+                    name, interp_value, name, value)),
+                Err(e) => mismatches.push(format!("{} error: {}", name, e)),
+                _ => {}
+            }
+        }
+        if !mismatches.is_empty() {
+            return Err(mismatches.join("\n"));
+        }
+
+        Ok(interp_value)
+    })
+}
+
+fn main() {
+    datalove_exampletest::ExampleTestRunner::with_worker_context(
+        env!("CARGO_MANIFEST_DIR"), Worker::new, analyze_file)
+        .fixture_subdir("std_tests")
+        .file_extension("dfs")
+        .allow_errors(true)
+        .run();
+}

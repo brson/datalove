@@ -1,0 +1,59 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/gen/test"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn test_int(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const false
+                        drop p0
+                        return v0
+                    
+                    fn test_string(p0):
+                    block0:
+                        debuglog p0
+                        v0 = const 42u32
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 12345int
+                        v1 = call @0 m0.u0(v0)
+                        debuglog v1
+                        v2 = const "hello"
+                        v3 = call @1 m0.u1(v2)
+                        debuglog v3
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("12345\nfalse\n\"hello\"\n42\n"),
+        ),
+    ],
+)

@@ -1,0 +1,19 @@
+----------
+module local/test/main
+----------
+
+// Test var shadowing var.
+fun main(): u32
+    var x: u32 = 1
+    var x: u32 = 2
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

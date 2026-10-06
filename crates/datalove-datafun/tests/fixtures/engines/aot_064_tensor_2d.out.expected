@@ -1,0 +1,35 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = const 4u32
+                        v4 = const 5u32
+                        v5 = const 6u32
+                        v6 = [| v0 v1 v2, v3 v4 v5 |]
+                        v7 = const 42int
+                        debuglog v7
+                        drop v7
+                        unit_end_drop v6
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("42\n"),
+        ),
+    ],
+)

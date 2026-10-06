@@ -12,7 +12,16 @@
 //! - **aot**: the Cranelift AOT backend, for a program of one script fragment
 //!   and no expressions that the reference ran to completion; its stderr must
 //!   be the reference's debug log.
-//! - **c**: the same through the C backend, under `slow_tests`.
+//! - **c**: the same through the C backend.
+//! - **noconst**: the bytecode with const inlining off, so every `const` is
+//!   evaluated at run time rather than at compile time.
+//! - **nospec**: the bytecode with comptime specialization off.
+//!
+//! The last two compile differently, so they are held to the reference's
+//! outputs and debug logs, not to its IR, and only for a program the reference
+//! compiled without error: a `const` that fails to evaluate is a compile error,
+//! and at run time it is a value. Under Miri only the interpreted
+//! engines without a JIT run.
 //!
 //! A fixture opts out of an engine with a comment before its first section,
 //! `// engines: -aot -c`, for what that backend does not support.
@@ -39,7 +48,7 @@ static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
 /// Calls the chaos dispatcher inlined, over the whole corpus.
 static CHAOS_INLINED: AtomicU32 = AtomicU32::new(0);
 /// Fixtures each engine ran, in the order of `Differential::ALL`.
-static RAN: [AtomicU32; 5] = [const { AtomicU32::new(0) }; 5];
+static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) }; Differential::ALL.len()];
 
 /// The engines compared with the reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -49,15 +58,19 @@ enum Differential {
     Chaos,
     Aot,
     C,
+    NoConst,
+    NoSpec,
 }
 
 impl Differential {
-    const ALL: [Differential; 5] = [
+    const ALL: [Differential; 7] = [
         Differential::Bytecode,
         Differential::Jit,
         Differential::Chaos,
         Differential::Aot,
         Differential::C,
+        Differential::NoConst,
+        Differential::NoSpec,
     ];
 
     fn name(self) -> &'static str {
@@ -67,6 +80,8 @@ impl Differential {
             Differential::Chaos => "chaos",
             Differential::Aot => "aot",
             Differential::C => "c",
+            Differential::NoConst => "noconst",
+            Differential::NoSpec => "nospec",
         }
     }
 }
@@ -116,13 +131,13 @@ impl ExecutorHooks for Setup {
 
 /// Run the interpreted analysis under `setup` and render it as the expected
 /// files record it.
-fn analyze(parsed: &ParsedWorldfile, setup: Setup) -> Result<(Analysis, String), String> {
+fn analyze(parsed: &ParsedWorldfile, options: AnalysisOptions, setup: Setup) -> Result<(Analysis, String), String> {
     let mut db = datafun::Database::default();
     let mut setup = setup;
     let analysis = datafun::worldfile_analysis::analyze_worldfile_with_hooks(
         &mut db,
         parsed,
-        AnalysisOptions::default(),
+        options,
         &mut setup,
     ).map_err(|e| format!("analysis failed: {e}"))?;
     let config = ron::ser::PrettyConfig::new()
@@ -134,6 +149,15 @@ fn analyze(parsed: &ParsedWorldfile, setup: Setup) -> Result<(Analysis, String),
     Ok((analysis, expand_ir_strings(&ron)))
 }
 
+/// What running a program observes, one line per script unit: its result
+/// and its debug log.
+fn observed(analysis: &Analysis) -> String {
+    analysis.sections.iter()
+        .filter(|s| s.section_type != "module")
+        .map(|s| format!("{}: {:?} {:?}\n", s.section_type, s.output, s.debug_output.as_deref().unwrap_or("")))
+        .collect()
+}
+
 /// Where two renderings first part, with a few lines of context.
 fn first_difference(reference: &str, other: &str) -> String {
     let (r, o): (Vec<_>, Vec<_>) = (reference.lines().collect(), other.lines().collect());
@@ -141,6 +165,15 @@ fn first_difference(reference: &str, other: &str) -> String {
     let from = at.saturating_sub(3);
     let show = |lines: &[&str]| lines[from.min(lines.len())..(at + 4).min(lines.len())].join("\n");
     format!("at line {}:\n--- reference\n{}\n--- engine\n{}", at + 1, show(&r), show(&o))
+}
+
+/// Whether every unit compiled without error.
+fn compiled_cleanly(reference: &Analysis) -> bool {
+    reference.sections.iter().all(|s| {
+        matches!(s.typecheck, TypecheckResult::Success)
+            && matches!(s.ownership, OwnershipResult::Success)
+            && matches!(s.lowering, LoweringResult::Success { .. })
+    })
 }
 
 /// Whether the AOT backends apply: one fragment, no expressions, nothing but
@@ -152,13 +185,9 @@ fn aot_applies(parsed: &ParsedWorldfile, reference: &Analysis) -> bool {
         .count();
     let only_modules = parsed.sections.iter().all(|s| matches!(s,
         WorldfileSection::Module { .. } | WorldfileSection::ScriptFragment { .. }));
-    let all_ran = reference.sections.iter().all(|s| {
-        matches!(s.typecheck, TypecheckResult::Success)
-            && matches!(s.ownership, OwnershipResult::Success)
-            && matches!(s.lowering, LoweringResult::Success { .. })
-            && (s.section_type == "module" || s.output == "(fragment executed)")
-    });
-    fragments == 1 && only_modules && all_ran
+    let all_ran = reference.sections.iter()
+        .all(|s| s.section_type == "module" || s.output == "(fragment executed)");
+    fragments == 1 && only_modules && compiled_cleanly(reference) && all_ran
 }
 
 /// Compile the fragment for an AOT backend and hand it to `build_and_run`,
@@ -235,7 +264,7 @@ fn check(path: &Path) -> Result<String, String> {
     let parsed = package_load_worldfile::parse_worldfile_sections(source.as_bytes())
         .map_err(|e| format!("failed to parse worldfile: {e}"))?;
 
-    let (reference, rendered) = analyze(&parsed, Setup { engine: Engine::IrWalker, dispatcher: None })?;
+    let (reference, rendered) = analyze(&parsed, AnalysisOptions::default(), Setup { engine: Engine::IrWalker, dispatcher: None })?;
 
     let mut seed = DefaultHasher::new();
     source.hash(&mut seed);
@@ -243,6 +272,26 @@ fn check(path: &Path) -> Result<String, String> {
 
     for (i, engine) in Differential::ALL.into_iter().enumerate() {
         if skip.contains(&engine) {
+            continue;
+        }
+        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::NoConst | Differential::NoSpec) {
+            continue;
+        }
+        let variant = match engine {
+            Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..AnalysisOptions::default() }),
+            Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..AnalysisOptions::default() }),
+            _ => None,
+        };
+        if let Some(options) = variant {
+            if !compiled_cleanly(&reference) {
+                continue;
+            }
+            RAN[i].fetch_add(1, Ordering::Relaxed);
+            let (other, _) = analyze(&parsed, options, Setup { engine: Engine::Bytecode, dispatcher: None })?;
+            let (want, got) = (observed(&reference), observed(&other));
+            if want != got {
+                return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&want, &got)));
+            }
             continue;
         }
         let interpreted = match engine {
@@ -257,20 +306,17 @@ fn check(path: &Path) -> Result<String, String> {
                     OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?,
                 )),
             }),
-            Differential::Aot | Differential::C => None,
+            Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec => None,
         };
         if let Some(setup) = interpreted {
             RAN[i].fetch_add(1, Ordering::Relaxed);
-            let (_, other) = analyze(&parsed, setup)?;
+            let (_, other) = analyze(&parsed, AnalysisOptions::default(), setup)?;
             if other != rendered {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&rendered, &other)));
             }
             continue;
         }
 
-        if engine == Differential::C && !cfg!(feature = "slow_tests") {
-            continue;
-        }
         if !aot_applies(&parsed, &reference) {
             continue;
         }
@@ -297,7 +343,7 @@ fn report() -> Result<(), String> {
         .map(|(e, n)| format!("{} {}", e.name(), n.load(Ordering::Relaxed)))
         .collect();
     println!("fixtures run per engine: {}", ran.join(", "));
-    if !datalove_exampletest::parse_test_filters().is_empty() {
+    if cfg!(miri) || !datalove_exampletest::parse_test_filters().is_empty() {
         return Ok(());
     }
     let (compiled, inlined) = (CHAOS_COMPILED.load(Ordering::Relaxed), CHAOS_INLINED.load(Ordering::Relaxed));
@@ -310,7 +356,7 @@ fn report() -> Result<(), String> {
 
 fn main() {
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), check)
-        .fixture_subdir("interp")
+        .fixture_subdir("engines")
         .file_extension("world")
         .allow_errors(true)
         .after_all(report)

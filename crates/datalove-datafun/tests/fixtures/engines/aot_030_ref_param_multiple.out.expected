@@ -1,0 +1,47 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 10int
+                        v1 = const 20int
+                        v2 = const 30int
+                        v3 = call @0 u0(v0, v1)
+                        debuglog v3
+                        drop v3
+                        v4 = call @1 u0(v0, v2)
+                        debuglog v4
+                        drop v4
+                        v5 = call @2 u0(v1, v2)
+                        debuglog v5
+                        drop v5
+                        v6 = call @3 u0(v0, v0)
+                        debuglog v6
+                        drop v6
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v2
+                        unit_end
+                    
+                    fn add_refs(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        return v0
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("30\n40\n50\n20\n"),
+        ),
+    ],
+)

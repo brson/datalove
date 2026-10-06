@@ -1,0 +1,46 @@
+----------
+module local/test/main
+----------
+
+// A generic function is compiled once, with each type parameter erased to
+// `data`. The call site wraps the arguments on the way in and moves the value
+// back out on the way back, which it can do because it is the place that knows
+// the concrete type. So there is one `identity` in the IR below, taking and
+// returning a data, and three different types go through it.
+
+fun identity<T>(x: T): T
+  ret x
+end fun
+
+// Two parameters of the same type: the first argument fixes it.
+fun pick_first<T>(a: T, b: T): T
+  ret a
+end fun
+
+// Two distinct type parameters, returning the second.
+fun second<A, B>(a: A, b: B): B
+  ret b
+end fun
+
+// A generic function calling another generic function.
+fun twice<T>(x: T): T
+  ret identity(x)
+end fun
+
+fun main(): (u32, string, int, bool, u32, string)
+  ret (identity(: u32 / 7),
+       identity("hello"),
+       identity(12345678901234567890),
+       pick_first(true, false),
+       second("ignored", : u32 / 9),
+       twice("through two"))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

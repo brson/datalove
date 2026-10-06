@@ -1,0 +1,18 @@
+----------
+module local/test/main
+----------
+
+fun main(): int
+    let a: int = 100
+    let b: int = 25
+    ret a - b
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

@@ -1,0 +1,25 @@
+----------
+module local/test/main
+----------
+
+// Test var shadowing in nested scopes.
+fun main(): u32
+    var x: u32 = 1
+    let cond: bool = true
+    if cond
+        var x: u32 = 2
+        set x = 3
+        ret x
+    else
+        ret 88
+    end if
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

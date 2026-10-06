@@ -1,0 +1,42 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 u0()
+                        debuglog v0
+                        unit_end
+                    
+                    fn test():
+                    block0:
+                        v0 = const 5u32
+                        v1 = const 6u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = some v2
+                        v4, v5 = unwrap_option v3
+                        branch v5, block2, block1
+                    block1:
+                        v6 = none
+                        return v6
+                    block2:
+                        v7 = getfield v4.0
+                        v8 = some v7
+                        return v8
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 5\n"),
+        ),
+    ],
+)

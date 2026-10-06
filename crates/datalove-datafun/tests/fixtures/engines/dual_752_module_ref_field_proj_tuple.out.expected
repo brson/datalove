@@ -1,0 +1,50 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/refops"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn takes_ref(p0):
+                    block0:
+                        v0 = copy p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100u32
+                        v1 = const 200u32
+                        v2 = pack Tuple2 {v0, v1}
+                        v3 = getfieldref v2.0
+                        v4 = call @0 m0.u0(*v3)
+                        debuglog v4
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("100\n"),
+        ),
+    ],
+)

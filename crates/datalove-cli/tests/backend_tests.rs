@@ -19,21 +19,6 @@ use rmx::prelude::*;
 use std::path::Path;
 use std::process::Command;
 
-fn binary() -> Result<std::path::PathBuf, String> {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let workspace_dir = manifest_dir.parent().unwrap().parent().unwrap();
-    let profile = if cfg!(debug_assertions) { "debug" } else { "release" };
-    let path = workspace_dir.join("target").join(profile).join("datalove");
-
-    if !path.exists() {
-        return Err(format!(
-            "Binary not found at {}. Run 'cargo build -p datalove-cli' first.",
-            path.display()
-        ));
-    }
-    Ok(path)
-}
-
 fn run(binary: &Path, args: &[&std::ffi::OsStr]) -> Result<String, String> {
     let output = Command::new(binary)
         .args(args)
@@ -74,7 +59,7 @@ fn run_aot(binary: &Path, script: &std::ffi::OsStr, extra: &[&str]) -> Result<St
 }
 
 fn run_every_backend(path: &Path) -> Result<String, String> {
-    let binary = binary()?;
+    let binary = Path::new(env!("CARGO_BIN_EXE_datalove"));
     let script: &std::ffi::OsStr = path.as_ref();
 
     let interp = run(&binary, &["script".as_ref(), script])

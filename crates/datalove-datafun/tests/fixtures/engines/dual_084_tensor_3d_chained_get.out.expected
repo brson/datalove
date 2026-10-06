@@ -1,0 +1,81 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = const 4u32
+                        v4 = const 5u32
+                        v5 = const 6u32
+                        v6 = const 7u32
+                        v7 = const 8u32
+                        v8 = [| v0 v1, v2 v3,, v4 v5, v6 v7 |]
+                        v9 = const 0index
+                        v10 = const 1index
+                        v11 = const 0index
+                        v12 = call @0 u0(v8, v9, v10, v11)
+                        debuglog v12
+                        v13 = const 1u32
+                        v14 = const 2u32
+                        v15 = const 3u32
+                        v16 = const 4u32
+                        v17 = const 5u32
+                        v18 = const 6u32
+                        v19 = const 7u32
+                        v20 = const 8u32
+                        v21 = [| v13 v14, v15 v16,, v17 v18, v19 v20 |]
+                        v22 = const 1index
+                        v23 = const 0index
+                        v24 = const 1index
+                        v25 = call @1 u0(v21, v22, v23, v24)
+                        debuglog v25
+                        unit_end
+                    
+                    fn get(p0, p1, p2, p3):
+                    block0:
+                        v0 = tensorboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p0
+                        return v1
+                    block2:
+                        v2 = tensorindexref p0[p1]
+                        v3 = tensorboundscheck *v2[p2]
+                        branch v3, block4, block3
+                    block3:
+                        v4 = none
+                        drop p0
+                        return v4
+                    block4:
+                        v5 = tensorindexref *v2[p2]
+                        v6, v7 = tensorget *v5[p3]
+                        branch v7, block6, block5
+                    block5:
+                        v8 = none
+                        drop p0
+                        return v8
+                    block6:
+                        v9 = some v6
+                        drop p0
+                        return v9
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("some 3\nsome 6\n"),
+        ),
+    ],
+)
