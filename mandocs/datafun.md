@@ -913,7 +913,7 @@ debuglog (fits, dontfits)
 ```
 
 Datalove supports basic numerical binops for
-addition, subtraction, multiplication, division, and unary negation.
+addition, subtraction, multiplication, division, as well as unary negation.
 For floating point types these work according to IEEE spec,
 with some operations producing `NaN` or +/- infinity.
 
@@ -933,12 +933,12 @@ fun do_some_math_result(a: i32, b: i32, c: i32): !i32
 end fun
 ```
 
-Bigints directly support `+`, `-` and `*`, but still division requires
-a checked operator.
+Bigints directly support `+`, `-` and `*`, and unary negation,
+but still division require a checked operator.
 
 ```datalove
 fun do_some_big_math(a: int, b: int, c: int): ?int
-  ret some ((a + b) /? c)
+  ret some -!((a + b) /? c)
 end fun
 ```
 

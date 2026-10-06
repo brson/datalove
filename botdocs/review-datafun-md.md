@@ -36,9 +36,6 @@ These say something the implementation does not do.
   result case the destructuring `else` branch is required" understates it:
   `else` without `|e|` is F046, "Result destructuring requires an else
   binding".
-- **Numerics says unary negation is a supported binop.** For fixed-width
-  integers it is not: `-a` on an `i32` is F026. The checked forms `-?` and
-  `-!` exist, and the example uses them, but the text should say so.
 
 ## Missing topics
 
@@ -161,6 +158,11 @@ The second could become a `loop while` that uses `continue`.
 - The hint binds tightly: `: u32 / 3 + 4` hints only `3` and is a type error.
 - "None of the bare math operations work on fixed-sized integers" needs a
   scope. Comparisons work, as `min_value` shows.
+- "Bigints directly support `+`, `-` and `*`" could add unary `-`, which also
+  works on `int`, so the reader knows which bare operations `int` has. The
+  checked negations `-?` and `-!` on fixed-width integers appear in the
+  example but not in the text. Also, unary negation is listed among the
+  "binops", though it is not one.
 - That checked operators return early from the *enclosing function* is the
   most surprising semantics in the document. Emphasise it, and contrast it
   with Rust's `checked_add`, which returns an `Option` in place.
