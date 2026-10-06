@@ -81,7 +81,7 @@ use cranelift_module::{FuncId, Linkage, Module};
 use datalove_datafun_ir::{
     BlockId, FunctionContext, FunctionRegistry, IrCodeUnit, ParamMode,
     IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
-    ValueId,
+    Terminator, ValueId,
 };
 
 use datalove_datafun_ir::frame_layout::FrameLayout;
@@ -284,9 +284,59 @@ pub struct FunctionCompiler<'a, M: Module> {
     rt_handle_param: Option<cl_ir::Value>,
     /// Sret pointer (implicit second parameter for aggregate returns).
     sret_param: Option<cl_ir::Value>,
+    /// Values built straight into the caller's result slot rather than in
+    /// this frame; see `return_slot_values`.
+    return_slot: std::collections::HashSet<ValueId>,
+}
+
+/// The values a function builds straight into its caller's result slot: each
+/// an option or result its block wraps and then returns, and uses for nothing
+/// else.
+///
+/// Built in this frame instead, such a value is written field by field and then
+/// copied out by the return, and the copy's wide loads read back the narrow
+/// stores that just wrote it, which the processor cannot forward from: on
+/// recursive `fib`, which returns `!u32`, most of a call's time went there.
+fn return_slot_values(func: &IrCodeUnit) -> std::collections::HashSet<ValueId> {
+    let mut uses: HashMap<ValueId, u32> = HashMap::new();
+    let mut count = |op: &Operand| {
+        if let Operand::Value(v) | Operand::ValueRef(v) = op {
+            *uses.entry(*v).or_default() += 1;
+        }
+    };
+    for block in &func.blocks {
+        for instr in &block.instructions {
+            instr.for_each_operand(&mut count);
+        }
+        block.terminator.for_each_operand(&mut count);
+    }
+    func.blocks.iter()
+        .filter_map(|block| {
+            let Terminator::Return { value: Some(Operand::Value(v)) } = &block.terminator else { return None };
+            let wrapped_here = block.instructions.iter().any(|instr| matches!(instr,
+                Instruction::WrapOk { dest, .. } | Instruction::WrapErr { dest, .. }
+                | Instruction::WrapSome { dest, .. } | Instruction::WrapNone { dest } if dest == v));
+            (wrapped_here && uses.get(v) == Some(&1)).then_some(*v)
+        })
+        .collect()
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
+    /// Where an option or result is built: in the caller's result slot if it
+    /// is one `return_slot_values` found, otherwise in this frame.
+    fn wrap_dest_addr(
+        &self,
+        builder: &mut FunctionBuilder,
+        frame_slot: cl_ir::StackSlot,
+        dest: ValueId,
+        dest_offset: u32,
+    ) -> cl_ir::Value {
+        match self.sret_param {
+            Some(sret) if self.return_slot.contains(&dest) => sret,
+            _ => builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32),
+        }
+    }
+
     /// Create a new function compiler.
     ///
     /// Panics if the code unit is not a function.
@@ -330,6 +380,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
             sret_param: None,
+            return_slot: return_slot_values(func),
         }
     }
 
@@ -379,6 +430,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter: TyDescEmitter::new(),
             rt_handle_param: None,
             sret_param: None,
+            return_slot: return_slot_values(func),
         }
     }
 
@@ -430,6 +482,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tydesc_emitter,
             rt_handle_param: None,
             sret_param: None,
+            return_slot: return_slot_values(func),
         }
     }
 

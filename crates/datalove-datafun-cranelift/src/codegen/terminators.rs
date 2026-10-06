@@ -53,11 +53,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             builder.ins().store(cranelift_codegen::ir::MemFlagsData::new(), val, sret_ptr, 0);
                         }
                         types::CraneliftRepr::Aggregate(_) => {
-                            // Aggregate: memcpy from source pointer to sret pointer.
+                            // Aggregate: memcpy from source pointer to sret
+                            // pointer, unless it was built there.
                             let src_ptr = self.get_operand_value(builder, val_op)?;
-                            let size = types::ir_type_size(ret_ty);
-                            let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
-                            builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
+                            if src_ptr != sret_ptr {
+                                let size = types::ir_type_size(ret_ty);
+                                let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
+                                builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
+                            }
                         }
                     }
                     builder.ins().return_(&[]);

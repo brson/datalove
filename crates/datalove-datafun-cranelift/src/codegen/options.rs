@@ -44,7 +44,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for WrapSome".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
 
         // Write tag (Some = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
@@ -82,7 +82,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for WrapNone".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
 
         // Write tag (None = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::None as i64);
@@ -125,7 +125,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for WrapOk".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
 
         // Write tag (Ok = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
@@ -185,7 +185,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for WrapErr".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
 
         // Write tag (Err = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Err as i64);
