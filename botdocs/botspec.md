@@ -1278,10 +1278,12 @@ something else determines the type:
 call unwrap_or(none, "fallback")                 // T is string, from the second
 ```
 
-Because the first argument fixes it, argument order decides which type a
-parameter is when more than one would do. An unsuffixed integer literal is
-`int`, so `pick_first(99, : u32 / 1)` makes `T` `int` and widens the `u32` into
-it, while the two written the other way round make `T` `u32`.
+Because the first argument fixes it, argument order decides whether a call
+type-checks at all. An unsuffixed integer literal with nothing to fix it is
+`int`, so `pick_first(99, : u32 / 1)` makes `T` `int`, and the `u32` is a
+mismatch, since nothing widens implicitly. Written the other way round,
+`pick_first(: u32 / 1, 99)`, the `u32` fixes `T` first and the literal is
+checked against it, so `99` is a `u32`.
 
 **Where a type parameter may appear.** Anywhere: on its own, under `?` or `!`
 to any depth, and inside a list, set, map, tensor, table, tuple, struct, term
