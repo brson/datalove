@@ -1172,18 +1172,21 @@ The `const` modifier declares a parameter whose value must be known at compile
 time:
 
 ```datalove
-fun repeat(const n: i32, s: string): string
+require module sys/std/string
+
+fun repeat(const n: int, ref s: string): string
     var result = ""
-    var i: i32 = 0
+    var i = 0
     loop while i .< n
-        set result = result + s
-        set i = i +! 1
+        call string.push_str(mut result, ref s)
+        set i = i + 1
     end loop
     ret result
 end fun
 
-const COUNT = 3
-let x = repeat(COUNT, "ab")  // COUNT is a const binding
+const COUNT: int = 3
+let s = "ab"
+let x = repeat(COUNT, ref s)  // COUNT is a const binding
 ```
 
 **Semantics:**
@@ -1216,8 +1219,8 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
   generic function is fine: specialization removes const parameters and
   erasure replaces type parameters, so one copy per const instantiation
   serves every type instantiation
-- Nothing else is accepted, not a literal and not an expression: `repeat(3, s)`
-  is refused as surely as `repeat(2 + 1, s)`. The value a const parameter takes
+- Nothing else is accepted, not a literal and not an expression: `repeat(3, ref s)`
+  is refused as surely as `repeat(2 + 1, ref s)`. The value a const parameter takes
   has to be one the compiler already holds, and a `const` binding is the one
   form that says so on its face. A const parameter counts, being a const
   binding within the body

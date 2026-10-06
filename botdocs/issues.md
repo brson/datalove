@@ -19,7 +19,6 @@ home here.
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
 - [The jit cannot see a loop, and the C backend is built at -O0](#user-content-the-jit-cannot-see-a-loop-and-the-c-backend-is-built-at--o0)
-- [A script const that calls through a second function panics](#user-content-a-script-const-that-calls-through-a-second-function-panics)
 - [A `let` that fails to typecheck leaves its name undefined](#user-content-a-let-that-fails-to-typecheck-leaves-its-name-undefined)
 - [A failed `set m[k]!` on a map says "index out of bounds"](#user-content-a-failed-set-mk-on-a-map-says-index-out-of-bounds)
 - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
@@ -35,6 +34,7 @@ home here.
 - [Every REPL line is a new salsa input](#user-content-every-repl-line-is-a-new-salsa-input)
 - [Deep recursion aborts the process, in every engine but the bytecode](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
+- [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
 
 ## Nothing but a test inlines
 
@@ -227,30 +227,6 @@ compiled tiers do, each cheap to state and none started.
   the dispatcher to `JitEngine`, so an `OptimizingDispatcher` would get no native
   symbols and the first native call from jitted code would abort the process.
   Unreachable today, since the cli never builds one; it is in the way of doing so.
-
-## A script const that calls through a second function panics
-
-**Reproduced** with the debug cli. A const in a script whose evaluation calls one
-script function from another panics the interpreter:
-
-```datalove
-fun a(): int
-  ret 3
-end fun
-fun b(): int
-  ret a()
-end fun
-const X: int = b()     // local unit CodeUnitId(0) not found (interp/src/env.rs)
-```
-
-Calling `a` directly works, and the same shape in a worldfile module works. It is
-the same panic whether the const is at top level or in a function body. Not
-investigated further; the CTFE environment presumably has the script's own units
-registered for the first call but not for a call made from inside it.
-
-A second crash, also reproduced: `!` in a *script-level* const panics the lowerer
-(`lower/src/context.rs`, "early return requires function context"), where the
-same const in a module is refused with F049 as botspec says it should be.
 
 ## A `let` that fails to typecheck leaves its name undefined
 
@@ -560,3 +536,16 @@ beside `__frame`, or give it room in the frame layout.
 One instruction executed twice in the same activation, in a loop, reuses its
 view in every backend; whether a reference from an earlier iteration can still
 be live then is a separate question, not looked at.
+
+## Nothing names another module's type
+
+**Reproduced.** A module's `type` alias cannot be named outside it. A qualified
+name does not parse in any type position -- `let a: qt.Shape`,
+`const A: qt.Shape` and a parameter `s: qt.Shape` are all parse errors -- and
+`import qt.Shape` looks for a function and reports F002. So a value of another
+module's named type can only be annotated by writing the type out in full, as
+`std_tests` and `specialize_differential/033_comptime_collections` do.
+
+The typechecker already records each module's `exported_type_aliases`; what is
+missing is a way to reach them, either a qualified type name or an `import`
+that takes types as well as functions.

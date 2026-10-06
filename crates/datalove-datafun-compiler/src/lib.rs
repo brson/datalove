@@ -33,6 +33,9 @@ pub mod compile;
 // Comptime argument specialization.
 pub mod specialize;
 
+// Evaluating const bindings, for both pipelines.
+pub mod const_eval;
+
 #[salsa::db]
 #[derive(Default, Clone)]
 pub struct Database {

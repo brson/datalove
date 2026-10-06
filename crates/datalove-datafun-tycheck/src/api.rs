@@ -62,8 +62,7 @@ pub struct UnitProvides<'db> {
     /// Which of `vars` are consts rather than `let`/`var` bindings.
     ///
     /// Const-ness used to be lost at the unit boundary: a script `const`
-    /// arrived in the next unit's `variables` and not its `const_bindings`, so
-    /// it read as an ordinary binding. That only became visible once function
+    /// arrived in the next unit's `variables` as an ordinary binding. That only became visible once function
     /// bodies stopped seeing enclosing bindings, which is what they should
     /// never have seen -- a const is the one kind a body may name.
     pub consts: Vec<InternedText<'db>>,
@@ -411,22 +410,22 @@ pub fn typecheck_script_unit<'db>(
                 match stmt {
                     Statement::Let(let_stmt) => {
                         for name in let_stmt.binding.names() {
-                            if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
-                                new_vars.push((name, ty.clone(), *is_mutable));
+                            if let Some(binding) = ctx.variables.get(&name) {
+                                new_vars.push((name, binding.ty.clone(), binding.is_mutable));
                             }
                         }
                     }
                     Statement::Var(var_stmt) => {
                         for name in var_stmt.binding.names() {
-                            if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
-                                new_vars.push((name, ty.clone(), *is_mutable));
+                            if let Some(binding) = ctx.variables.get(&name) {
+                                new_vars.push((name, binding.ty.clone(), binding.is_mutable));
                             }
                         }
                     }
                     Statement::Const(const_stmt) => {
                         let name = const_stmt.name;
-                        if let Some((ty, is_mutable)) = ctx.variables.get(&name) {
-                            new_vars.push((name, ty.clone(), *is_mutable));
+                        if let Some(binding) = ctx.variables.get(&name) {
+                            new_vars.push((name, binding.ty.clone(), binding.is_mutable));
                             new_consts.push(name);
                         }
                     }

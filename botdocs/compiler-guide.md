@@ -579,13 +579,23 @@ view of a row rather than an element, and a view may not be bound mutably
 
 ### Const Evaluation
 
-Const evaluation in `evaluate_single_const` has three fast paths:
+Both pipelines evaluate consts through `compiler/src/const_eval.rs`: `evaluate_const`
+for one binding, `evaluate_body_consts` for a function body in order, and
+`evaluate_instantiation_consts` for a comptime function's body once an instantiation
+has given its const parameters values. What they evaluate against is a `ConstEvalEnv`:
+the typechecker's results, the evaluator, the functions lowered so far, and, in the
+module pipeline, the registry used to report a const that depends on a function still
+waiting on a module const (a cycle). Each binding takes one of three routes:
 
 1. **Simple literals** - booleans, integers, floats, strings, None extracted directly
-2. **Const references** - look up already-evaluated const from `resolved_so_far` map
+2. **Const references** - look up an already-evaluated const in the scope given
 3. **Complex expressions** - lower to a minimal script code unit, execute via CTFE, extract result
 
-Function calls in const expressions work because `lowered_functions` are passed to the CTFE evaluator.
+The unit for a complex expression carries every local function it can reach, so that a
+function it calls can call another. A const naming a const parameter has a value per
+instantiation rather than one; `evaluate_body_consts` defers it, and
+`evaluate_instantiation_consts` evaluates it with the parameter's value and the
+enclosing module's or script's consts in scope.
 
 ## Generics
 

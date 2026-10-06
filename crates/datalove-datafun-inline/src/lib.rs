@@ -699,12 +699,11 @@ impl RemapContext {
                 shape_descriptors: shape_descriptors.clone(),
             },
             Instruction::ComptimeCall {
-                dest, func, args, discriminant, comptime_param_indices, type_args, shape_descriptors,
+                dest, func, args, comptime_param_indices, type_args, shape_descriptors,
             } => Instruction::ComptimeCall {
                 dest: self.remap_value(*dest),
                 func: func.clone(),
                 args: args.iter().map(|a| self.remap_operand(a)).collect(),
-                discriminant: *discriminant,
                 comptime_param_indices: comptime_param_indices.clone(),
                 type_args: type_args.clone(),
                 shape_descriptors: shape_descriptors.clone(),

@@ -1,0 +1,35 @@
+----------
+module local/test/shadow
+----------
+
+// A name is a const only where it means the const. A `let` or a parameter of
+// the same name shadows it, and is not one: passing it as a const argument is
+// F076, and naming it in a const expression is F058. The typechecker used to
+// keep const-ness in a set of names that rebinding never touched, so both
+// passed, and specialization went on to read the `let`'s value.
+
+const N: int = 3
+
+fun scale(const factor: int, x: int): int
+    ret factor * x
+end fun
+
+// The const itself is fine.
+fun good(x: int): int
+    ret scale(N, x)
+end fun
+
+fun shadowed_by_let(x: int): int
+    let N = 4
+    ret scale(N, x)
+end fun
+
+fun shadowed_by_param(N: int, x: int): int
+    ret scale(N, x)
+end fun
+
+fun shadowed_in_const_expr(x: int): int
+    let N = 4
+    const M: int = N@
+    ret x
+end fun

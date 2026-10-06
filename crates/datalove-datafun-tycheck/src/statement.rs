@@ -310,15 +310,14 @@ parameters, and neither can see through the other. Give the const parameter a co
             // ordering problem rather than the scoping error it is. A module
             // has no top-level bindings, so this was invisible there.
             //
-            // Consts stay, which is why the filter is on `const_bindings`
-            // rather than a clear -- and why the flag is set as well: an
-            // earlier unit's bindings are no longer in this map at all, they
-            // are reached on a miss, and the flag is what refuses the ones a
-            // body may not name.
+            // Consts stay, which is why this filters rather than clears -- and
+            // why the flag is set as well: an earlier unit's bindings are no
+            // longer in this map at all, they are reached on a miss, and the
+            // flag is what refuses the ones a body may not name. Restoring
+            // `variables` afterwards also takes back the consts the body bound.
             let saved_variables = ctx.variables.C();
             let saved_in_function_body = ctx.in_function_body;
-            let consts_in_scope = ctx.const_bindings.C();
-            ctx.variables.retain(|name, _| consts_in_scope.contains(name));
+            ctx.variables.retain(|_, binding| binding.is_const);
             ctx.in_function_body = true;
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
@@ -336,11 +335,6 @@ parameters, and neither can see through the other. Give the const parameter a co
                     ctx.type_param_bounds.insert(*name, *bound);
                 }
             }
-            // Const bindings are scoped to the body the same way. Without this a
-            // const parameter, or a const statement, stays registered after its
-            // function ends and the next function's argument of that name passes
-            // the const-binding check on the strength of it.
-            let saved_const_bindings = ctx.const_bindings.C();
             let saved_return_type = ctx.expected_return_type.clone();
             let saved_is_void = ctx.is_void_function;
 
@@ -380,7 +374,6 @@ parameters, and neither can see through the other. Give the const parameter a co
             ctx.in_function_body = saved_in_function_body;
             ctx.type_aliases = saved_type_aliases;
             ctx.type_param_bounds = saved_type_param_bounds;
-            ctx.const_bindings = saved_const_bindings;
             ctx.expected_return_type = saved_return_type;
             ctx.is_void_function = saved_is_void;
         }
@@ -482,7 +475,7 @@ parameters, and neither can see through the other. Give the const parameter a co
                 let binding_ty = inner_type;
 
                 ctx.with_scope(|ctx| {
-                    ctx.variables.insert(binding_name, (binding_ty, false));
+                    ctx.add_variable(binding_name, binding_ty, false);
                     for stmt in then_body {
                         check_statement(ctx, stmt);
                     }
@@ -493,7 +486,7 @@ parameters, and neither can see through the other. Give the const parameter a co
                         if let Some(else_binding_name) = else_binding {
                             if let Type::Datalit(datalit::tycheck::Type::Result(_)) = condition_ty {
                                 let error_ty = Type::Datalit(datalit::tycheck::Type::Error);
-                                ctx.variables.insert(else_binding_name, (error_ty, false));
+                                ctx.add_variable(else_binding_name, error_ty, false);
                             } else {
                                 let actual_type = type_to_string(db, &condition_ty);
                                 let err = ctx.error_type_mismatch(

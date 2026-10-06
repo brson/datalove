@@ -38,7 +38,7 @@ Analysis(
                         v4 = const 2int
                         v5 = mul v1, v4
                         drop v4
-                        v6 = comptime_call m0.u1(v1, p1) [disc=0, comptime_params=[0]]
+                        v6 = comptime_call m0.u1(v1, p1) [comptime_params=[0]]
                         v7 = add v6, v3
                         drop v6
                         v8 = add v7, v5

@@ -21,10 +21,13 @@ use datalove_datafun_tycheck::{
 };
 
 use datalove_datafun_const::{
-    inline_function_consts, inline_module_functions, promote_function_consts, PreparedConst,
-    evaluate_prepared_const,
+    inline_function_consts, inline_module_functions, promote_function_consts,
 };
 use crate::IrTypeExt;
+use crate::const_eval::{
+    const_type, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, ConstEvalEnv,
+    NamedConstError,
+};
 use crate::lower;
 use crate::specialize::{
     CalleeKey, MAX_ROUNDS, MonomorphizationPlan, collect_instantiations_into,
@@ -297,6 +300,13 @@ pub struct SingleModuleLoweringResult<'db> {
     /// Function name to FuncId mapping for this module.
     #[returns(ref)]
     pub func_ids: Vec<(String, FuncId)>,
+
+    /// The module's module-level consts, in name order.
+    ///
+    /// A script that specializes one of the module's comptime functions
+    /// evaluates the copy's consts, which may name these.
+    #[returns(ref)]
+    pub consts: Vec<(String, IrType, ConstValue)>,
 }
 
 /// Result of lowering an entire module graph to IR.
@@ -521,6 +531,11 @@ pub fn lower_module<'db>(
 
     log_query("lower", module_path, QueryPhase::End);
 
+    let mut consts: Vec<(String, IrType, ConstValue)> = module_level_consts.into_iter()
+        .map(|(name, (ty, value))| (name, ty, value))
+        .collect();
+    consts.sort_by(|a, b| a.0.cmp(&b.0));
+
     SingleModuleLoweringResult::new(
         db,
         module_id,
@@ -528,6 +543,7 @@ pub fn lower_module<'db>(
         functions,
         errors,
         func_ids,
+        consts,
     )
 }
 
@@ -1392,48 +1408,27 @@ pub fn evaluate_all_module_consts<'db>(
             consts.push((name.clone(), ir_type.clone(), value.clone()));
         }
 
-        // Evaluate function-level consts.
+        // Evaluate function-level consts. A function's const parameters have a
+        // value per instantiation rather than one, so the consts naming them
+        // wait for the copies.
+        let env = ConstEvalEnv {
+            db, expr_types, call_targets, evaluator: &evaluator, lowered: funcs,
+            func_name_to_id: &func_map, func_id_map, callable: Some(callable),
+        };
         for statement in parsed.statements.iter() {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
-                // Get function's return type for try operators in const expressions.
-                let func_return_type = func_stmt.return_type(db)
-                    .map(|ty| IrType::from_type_hint(db, &ty));
-                // Track local consts for this function so later consts can reference earlier ones.
-                let mut func_local_consts: HashMap<String, (IrType, ConstValue)> = module_level.clone();
-
-                // The parameters whose value this function does not have one
-                // of, because it has one per instantiation.
-                // Grows as consts are deferred, since one naming a deferred
-                // const has no value here either.
-                let mut deferred: std::collections::BTreeSet<String> = func_stmt.params(db)
-                    .iter()
+                let const_params = func_stmt.params(db).iter()
                     .filter(|p| p.is_comptime)
                     .map(|p| p.name.text(db).S())
                     .collect();
-
-                for func_body_stmt in func_stmt.body(db).iter() {
-                    if let Statement::Const(const_stmt) = func_body_stmt {
-                        match evaluate_single_const(
-                            db, const_stmt, expr_types, call_targets, &func_local_consts, &evaluator,
-                            funcs, callable, &func_map, func_return_type.clone(), func_id_map,
-                            &deferred,
-                        ) {
-                            Ok(None) => {
-                                deferred.insert(const_stmt.name.text(db).S());
-                            }
-                            Ok(Some((name, ir_type, value))) => {
-                                // Store locally for other consts in this function.
-                                func_local_consts.insert(name.clone(), (ir_type.clone(), value.clone()));
-
-                                // Use qualified name for storage: func_name::const_name
-                                let qualified_name = format!("{}::{}", func_name, name);
-                                consts.push((qualified_name, ir_type, value));
-                            }
-                            Err(e) => errors.push(format!("{}::{}", func_name, e)),
-                        }
-                    }
+                let (body_consts, body_errors) =
+                    evaluate_body_consts(&env, func_stmt, module_level.clone(), const_params);
+                for (name, ir_type, value) in body_consts {
+                    // Stored under a qualified name: func_name::const_name.
+                    consts.push((format!("{}::{}", func_name, name), ir_type, value));
                 }
+                errors.extend(body_errors.iter().map(|e| format!("{}::{}", func_name, e)));
             }
         }
 
@@ -1452,35 +1447,6 @@ pub fn evaluate_all_module_consts<'db>(
     }
 
     result
-}
-
-/// The first function a const expression calls that the evaluator cannot.
-///
-/// `callable` is what the evaluator calls through: every function lowered so
-/// far, and the riders' natives. A function missing from it is waiting on a
-/// module const, which is where a cycle between a const and a function shows
-/// up. Local and external references are resolved against units the caller
-/// already holds, so they cannot be missing.
-fn first_uncallable_target(
-    unit: &IrCodeUnit,
-    callable: &ModuleFunctionRegistry,
-) -> Option<String> {
-    use datalove_datafun_ir::Instruction;
-
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            let func = match instr {
-                Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } => func,
-                _ => continue,
-            };
-            if let CodeRef::Module { module, id } = func {
-                if callable.get_module_function_as_unit(*module, *id).is_none() {
-                    return Some(format!("module function #{}", id.0));
-                }
-            }
-        }
-    }
-    None
 }
 
 /// Whether a module declares a const at module level, and whether it declares
@@ -1555,22 +1521,27 @@ fn evaluate_module_level_consts<'db>(
             None => (&[], HashMap::new()),
         };
 
+        let env = ConstEvalEnv {
+            db, expr_types, call_targets, evaluator, lowered: funcs,
+            func_name_to_id: &func_map, func_id_map, callable: Some(callable),
+        };
         let mut consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
         for statement in parsed.statements.iter() {
             if let Statement::Const(const_stmt) = statement {
                 // A module const is outside any function, so there is no return
                 // type for an early-return operator to check against, and no
                 // const parameters for it to name.
-                match evaluate_single_const(
-                    db, const_stmt, expr_types, call_targets, &consts, evaluator,
-                    funcs, callable, &func_map, None, func_id_map,
-                    &std::collections::BTreeSet::new(),
-                ) {
-                    Ok(None) => {}
-                    Ok(Some((name, ir_type, value))) => {
+                let name = const_stmt.name.text(db).S();
+                let evaluated = const_type(&env, const_stmt.value).and_then(|ty| {
+                    evaluate_const(&env, const_stmt.value, &ty, &consts, None, &Default::default())
+                        .map(|value| (ty, value.expect("nothing is deferred at module level")))
+                });
+                match evaluated {
+                    Ok((ir_type, value)) => {
                         consts.insert(name, (ir_type, value));
                     }
-                    Err(e) => errors_out.entry(*module_id).or_default().push(e),
+                    Err(error) => errors_out.entry(*module_id).or_default()
+                        .push(NamedConstError { name, error }.to_string()),
                 }
             }
         }
@@ -1581,91 +1552,6 @@ fn evaluate_module_level_consts<'db>(
     }
 
     result
-}
-
-/// Evaluate a single const statement.
-///
-/// Returns the evaluated const or an error message describing what went wrong.
-///
-/// The `lowered_functions` are used when const expressions call functions, and
-/// `callable` is what the evaluator can reach of them and the natives.
-/// The `func_return_type` is needed for try operators (`?` and `!`) in const expressions.
-/// The `func_id_map` enables cross-module function calls in const expressions.
-fn evaluate_single_const<'db>(
-    db: &'db dyn salsa::Database,
-    const_stmt: &datalove_datafun_ast::ast::StmtConst<'db>,
-    expr_types: &'db datalove_datafun_sema::ExprTypes<'db>,
-    call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
-    resolved_so_far: &HashMap<String, (IrType, ConstValue)>,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered_functions: &[Arc<IrCodeUnit>],
-    callable: &ModuleFunctionRegistry,
-    func_name_to_id: &HashMap<String, FuncId>,
-    func_return_type: Option<IrType>,
-    func_id_map: &FuncIdLookup<'db>,
-    // Names whose value this function does not have one of: its const
-    // parameters, and the consts already deferred for naming one.
-    deferred: &std::collections::BTreeSet<String>,
-) -> Result<Option<(String, IrType, ConstValue)>, String> {
-    let name = const_stmt.name.text(db).S();
-    let init_expr = const_stmt.value;
-
-    // Get the type from the typechecker.
-    let ir_type = match expr_types.get(&datalove_datafun_ast::ast::ExprKey::of(db, init_expr)) {
-        Some(ty) => IrType::from_tycheck(db, ty),
-        None => return Err(format!("const '{}': missing type information", name)),
-    };
-
-    // Lower the const binding using the "lower then evaluate" pattern.
-    let lowered = lower::lower_const_binding(
-        db,
-        init_expr,
-        &ir_type,
-        expr_types,
-        call_targets,
-        resolved_so_far,
-        func_return_type,
-        lowered_functions,
-        func_name_to_id,
-        Some(func_id_map),
-    );
-    let (unit_opt, value_opt) = match lowered {
-        Ok(pair) => pair,
-        // A const naming a const parameter has a value per instantiation
-        // rather than one, so there is nothing to evaluate until the copies
-        // are made. It lowers as an ordinary binding and specialization
-        // substitutes the parameter, leaving the constant in the copy.
-        Err(lower::LowerError::BindingNotAvailable(ref missing))
-            if deferred.contains(missing) =>
-        {
-            return Ok(None);
-        }
-        Err(e) => return Err(format!("const '{}': lowering error: {}", name, e)),
-    };
-
-    // Evaluate to get the const value.
-    let value = match (unit_opt, value_opt) {
-        (None, Some(v)) => v,
-        (Some(unit), None) => {
-            // Every function this reaches has to be lowered already, or the
-            // interpreter has nothing to call and panics looking for it. A
-            // module const whose evaluation needs a function that is itself
-            // waiting on a module const is a cycle, and this is where it shows.
-            if let Some(missing) = first_uncallable_target(&unit, callable) {
-                return Err(format!(
-                    "const '{}': depends on a function that is not available yet, \
-                     which means it and that function depend on each other: {}",
-                    name, missing
-                ));
-            }
-            let prepared = PreparedConst::Unit(unit);
-            evaluate_prepared_const(&prepared, &ir_type, evaluator)
-                .map_err(|e| format!("const '{}': CTFE error: {}", name, e))?
-        }
-        _ => unreachable!("lower_const_binding returns exactly one of unit or value"),
-    };
-
-    Ok(Some((name, ir_type, value)))
 }
 
 /// Lower module graph with CTFE evaluator for complex const expressions.
@@ -1908,68 +1794,6 @@ fn graph_declares_consts<'db>(
 }
 
 
-/// Evaluate a comptime function's const bindings for one instantiation.
-///
-/// A const naming a const parameter has a value per instantiation rather than
-/// one, so phase 5b leaves it alone: there is nothing to evaluate while the
-/// parameter is still a parameter. Here there is. Seeding the parameters with
-/// what this instantiation passes makes every const in the body evaluable by
-/// the same CTFE that evaluates every other const, which is what keeps `const`
-/// meaning the same thing inside a comptime function as outside one.
-///
-/// Returns the values under their local names, which is how the copy's
-/// `const_values` records them.
-#[allow(clippy::too_many_arguments)]
-fn evaluate_instantiation_consts<'db>(
-    db: &'db dyn salsa::Database,
-    func_stmt: &datalove_datafun_ast::ast::StmtFun<'db>,
-    expr_types: &'db datalove_datafun_sema::ExprTypes<'db>,
-    call_targets: &'db datalove_datafun_sema::CallTargets<'db>,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
-    lowered: &[Arc<IrCodeUnit>],
-    callable: &ModuleFunctionRegistry,
-    func_name_to_id: &HashMap<String, FuncId>,
-    func_id_map: &FuncIdLookup<'db>,
-    module_level: &HashMap<String, (IrType, ConstValue)>,
-    comptime_param_indices: &[usize],
-    values: &[ConstValue],
-) -> (HashMap<String, ConstValue>, Vec<String>) {
-    let params = func_stmt.params(db);
-    let mut seeded = module_level.clone();
-    for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
-        let Some(param) = params.get(param_idx) else { continue };
-        seeded.insert(
-            param.name.text(db).S(),
-            (datalove_datafun_ir::ir_type_of_const_value(value), value.clone()),
-        );
-    }
-
-    let func_return_type = func_stmt.return_type(db)
-        .map(|ty| IrType::from_type_hint(db, &ty));
-
-    let mut evaluated = HashMap::new();
-    let mut errors = Vec::new();
-    for body_stmt in func_stmt.body(db).iter() {
-        let Statement::Const(const_stmt) = body_stmt else { continue };
-        // Nothing may be deferred now: every const parameter has a value, so a
-        // const that still cannot be evaluated is an error rather than a wait.
-        match evaluate_single_const(
-            db, const_stmt, expr_types, call_targets, &seeded, evaluator,
-            lowered, callable, func_name_to_id, func_return_type.clone(), func_id_map,
-            &std::collections::BTreeSet::new(),
-        ) {
-            Ok(Some((name, ir_type, value))) => {
-                seeded.insert(name.clone(), (ir_type, value.clone()));
-                evaluated.insert(name, value);
-            }
-            Ok(None) => unreachable!("nothing defers once the parameters have values"),
-            Err(e) => errors.push(format!("{}::{}", func_stmt.name(db).text(db), e)),
-        }
-    }
-
-    (evaluated, errors)
-}
-
 /// True if any of this module's functions makes a comptime call.
 ///
 /// The gate in front of phase 5c. Working out the plan means reading every
@@ -2157,17 +1981,21 @@ fn specialize_comptime_functions<'db>(
                         func_asts.get(&(*module_id, original.name.clone())),
                         typecheck_module_results.get(module_id),
                     ) {
-                        let (evaluated, const_errors) = evaluate_instantiation_consts(
+                        let func_name_to_id = module_funcs.func_name_to_id.iter().cloned().collect();
+                        let env = ConstEvalEnv {
                             db,
-                            func_stmt,
-                            single_typecheck.expr_types(db),
-                            single_typecheck.call_targets(db),
+                            expr_types: single_typecheck.expr_types(db),
+                            call_targets: single_typecheck.call_targets(db),
                             evaluator,
-                            &module_funcs.functions,
-                            callable,
-                            &module_funcs.func_name_to_id.iter().cloned().collect(),
+                            lowered: &module_funcs.functions,
+                            func_name_to_id: &func_name_to_id,
                             func_id_map,
-                            &module_consts.get(module_id).cloned().unwrap_or_default(),
+                            callable: Some(callable),
+                        };
+                        let (evaluated, const_errors) = evaluate_instantiation_consts(
+                            &env,
+                            func_stmt,
+                            module_consts.get(module_id).cloned().unwrap_or_default(),
                             &mono.comptime_param_indices,
                             values,
                         );

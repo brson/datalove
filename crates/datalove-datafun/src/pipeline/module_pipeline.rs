@@ -19,7 +19,7 @@
 //! ```
 
 use rmx::prelude::*;
-use rmx::std::collections::BTreeMap;
+use rmx::std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use datalove_datafun_pkg::package_load_worldfile::WorldfileSection;
@@ -432,7 +432,7 @@ impl ModuleCompilationPipeline {
     ) -> CompiledModules<'db> {
         let db_salsa = db.as_salsa_db();
 
-        let (func_id_map, module_registry, lowering_errors, module_ir_dumps) =
+        let (func_id_map, module_registry, lowering_errors, module_ir_dumps, module_consts) =
             if let Some(ref lowering) = lowering_result {
                 let func_id_map = func_id_lookup(db_salsa, lowering.func_id_map(db_salsa));
 
@@ -445,9 +445,17 @@ impl ModuleCompilationPipeline {
 
                 let mut lowering_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
                 let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
+                let mut module_consts = HashMap::new();
 
                 for (module_id, result) in lowering.module_results(db_salsa) {
                     let module_path = module_id.path(db_salsa).clone();
+
+                    let consts = result.consts(db_salsa);
+                    if !consts.is_empty() {
+                        module_consts.insert(result.ir_module_id(db_salsa), consts.iter()
+                            .map(|(name, ty, value)| (name.clone(), (ty.clone(), value.clone())))
+                            .collect());
+                    }
 
                     // Collect lowering errors.
                     let errors = result.errors(db_salsa);
@@ -467,7 +475,7 @@ impl ModuleCompilationPipeline {
                     }
                 }
 
-                (func_id_map, registry, lowering_errors, module_ir_dumps)
+                (func_id_map, registry, lowering_errors, module_ir_dumps, module_consts)
             } else {
                 // No lowering - use empty structures.
                 // Still need func_id_map for script compilation even without lowering.
@@ -479,6 +487,7 @@ impl ModuleCompilationPipeline {
                     Arc::new(ModuleFunctionRegistry::new()),
                     BTreeMap::new(),
                     BTreeMap::new(),
+                    HashMap::new(),
                 )
             };
 
@@ -488,6 +497,7 @@ impl ModuleCompilationPipeline {
             graph_typecheck: output.typecheck_result,
             func_id_map,
             module_registry,
+            module_consts,
         });
 
         CompiledModules {

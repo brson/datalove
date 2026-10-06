@@ -66,7 +66,7 @@ end fun
 
 A const parameter follows the same rule.
 Passing it on as a const argument is not a move,
-since a const argument is not passed at all.
+since a const argument is passed by reference.
 
 `const` expressions can call functions.
 

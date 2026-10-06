@@ -29,9 +29,6 @@ use datalove_datafun_sema::{ExprTypes, CallTargets};
 /// deriving from AST type hints. This is necessary when type aliases are used.
 /// Similarly, `resolved_return_type` provides the resolved return type.
 ///
-/// If `ctfe_evaluator` is provided, it will be used to evaluate complex const
-/// expressions at compile time.
-///
 /// If `module_consts` is provided, those pre-evaluated const bindings will be
 /// available for use within the function body.
 pub fn lower_function_for_module<'db>(

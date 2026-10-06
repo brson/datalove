@@ -48,6 +48,16 @@ pub struct InheritedBindings<'db> {
     pub env: crate::ScriptEnv<'db>,
 }
 
+/// What a name in scope is bound to.
+#[derive(Clone)]
+pub(crate) struct VarBinding<'db> {
+    pub(crate) ty: Type<'db>,
+    pub(crate) is_mutable: bool,
+    /// Whether it is a const, which a const expression and a const argument
+    /// may name.
+    pub(crate) is_const: bool,
+}
+
 /// Context for typechecking.
 pub struct TypeContext<'db> {
     pub(crate) db: &'db dyn crate::Db,
@@ -66,8 +76,8 @@ pub struct TypeContext<'db> {
     pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId<'db>>,
-    /// Variable bindings (name -> (type, is_mutable)).
-    pub(crate) variables: HashMap<InternedText<'db>, (Type<'db>, bool)>,
+    /// Variable bindings, by name.
+    pub(crate) variables: HashMap<InternedText<'db>, VarBinding<'db>>,
     /// Function signatures (name -> function type).
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
@@ -131,8 +141,6 @@ pub struct TypeContext<'db> {
     pub(crate) auto_adapt_mode: AutoAdaptMode,
     /// Auto-adaptations that were applied (for reporting and IR lowering).
     pub(crate) auto_adaptations: Vec<AutoAdaptation<'db>>,
-    /// Names of const bindings (for validating comptime args).
-    pub(crate) const_bindings: HashSet<InternedText<'db>>,
     /// Whether we are checking the value of a const binding.
     ///
     /// A const expression may only name other consts, since it is evaluated
@@ -201,7 +209,6 @@ impl<'db> TypeContext<'db> {
             intrinsic_targets: BTreeMap::new(),
             auto_adapt_mode,
             auto_adaptations: Vec::new(),
-            const_bindings: HashSet::new(),
             in_const_expr: false,
         }
     }
@@ -899,8 +906,9 @@ replace the view rather than the elements it shows. Index down to single element
         self.current_module_id.is_some() && self.expected_return_type.is_none()
     }
 
+    /// Bind a name, replacing whatever it named, a const included.
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>, is_mutable: bool) {
-        self.variables.insert(name, (ty, is_mutable));
+        self.variables.insert(name, VarBinding { ty, is_mutable, is_const: false });
     }
 
     /// Add a function signature only (for imports where AST comes from another module).
@@ -946,7 +954,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {
         self.note_asked(name);
         match self.variables.get(&name) {
-            Some((ty, _)) => Some(ty.clone()),
+            Some(binding) => Some(binding.ty.clone()),
             None => self.inherited_variable(name).map(|(ty, _)| ty),
         }
     }
@@ -954,7 +962,7 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn lookup_variable_mutability(&self, name: InternedText<'db>) -> Option<bool> {
         self.note_asked(name);
         match self.variables.get(&name) {
-            Some((_, is_mutable)) => Some(*is_mutable),
+            Some(binding) => Some(binding.is_mutable),
             None => self.inherited_variable(name).map(|(_, is_mutable)| is_mutable),
         }
     }
@@ -1075,20 +1083,27 @@ replace the view rather than the elements it shows. Index down to single element
     // Comptime Support
     // ========================================================================
 
-    /// Add a const binding to track.
+    /// Mark the name just bound as a const.
+    ///
+    /// A const whose value did not typecheck bound nothing, and there is
+    /// nothing to mark.
     pub fn add_const_binding(&mut self, name: InternedText<'db>) {
-        self.const_bindings.insert(name);
+        if let Some(binding) = self.variables.get_mut(&name) {
+            binding.is_const = true;
+        }
     }
 
     /// Check if a name is a const binding.
     ///
-    /// A const declared by an earlier script unit counts, which is what lets a
-    /// function body and a const expression name one across a unit boundary.
+    /// Asked of what the name means here, so a `let` or a parameter that
+    /// shadows a const is not one. A const declared by an earlier script unit
+    /// counts, which is what lets a function body and a const expression name
+    /// one across a unit boundary.
     pub fn is_const_binding(&self, name: InternedText<'db>) -> bool {
-        if self.const_bindings.contains(&name) {
-            return true;
+        match self.variables.get(&name) {
+            Some(binding) => binding.is_const,
+            None => self.inherited(name).is_some_and(|binding| binding.is_const),
         }
-        self.inherited(name).is_some_and(|binding| binding.is_const)
     }
 
     /// Seed context from a pre-computed name resolution.

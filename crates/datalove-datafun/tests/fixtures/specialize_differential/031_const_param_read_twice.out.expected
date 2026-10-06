@@ -22,14 +22,14 @@ Analysis(
                     
                     fn twice(p0, p1):
                     block0:
-                        v0 = comptime_call m0.u0(p0, p1) [disc=0, comptime_params=[0]]
-                        v1 = comptime_call m0.u0(p0, v0) [disc=0, comptime_params=[0]]
+                        v0 = comptime_call m0.u0(p0, p1) [comptime_params=[0]]
+                        v1 = comptime_call m0.u0(p0, v0) [comptime_params=[0]]
                         return v1
                     
                     fn thrice(p0, p1):
                     block0:
-                        v0 = comptime_call m0.u0(p0, p1) [disc=0, comptime_params=[0]]
-                        v1 = comptime_call m0.u0(p0, v0) [disc=0, comptime_params=[0]]
+                        v0 = comptime_call m0.u0(p0, p1) [comptime_params=[0]]
+                        v1 = comptime_call m0.u0(p0, v0) [comptime_params=[0]]
                         v2 = add v1, p0
                         drop v1
                         return v2

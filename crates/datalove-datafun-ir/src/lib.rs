@@ -1299,9 +1299,10 @@ pub enum Instruction {
     /// **Behavior without specialization:** Acts exactly like `Call` - the interpreter
     /// and AOT codegen treat this as a normal call to the original function.
     ///
-    /// **Behavior with specialization:** The specialization pass transforms this to
-    /// a `Const` instruction (for the discriminant) followed by a `Call` with the
-    /// const args removed and discriminant added as first arg.
+    /// **Behavior with specialization:** The specialization pass points this at
+    /// the copy built for its const arguments' values, as a `Call` without the
+    /// const arguments. Those are passed by reference, so there is nothing to
+    /// drop when they go.
     ///
     /// **Ownership:** Same as `Call`.
     ComptimeCall {
@@ -1309,8 +1310,6 @@ pub enum Instruction {
         func: CodeRef,
         /// Original arguments including const parameter args.
         args: Vec<Operand>,
-        /// Pre-computed discriminant for this instantiation (from typecheck).
-        discriminant: u32,
         /// Indices of const parameters (to be removed during specialization).
         comptime_param_indices: Vec<usize>,
         /// What this call site bound each of the callee's type parameters to,
@@ -2956,7 +2955,11 @@ pub struct IrCodeUnit {
     /// Slots requiring runtime tracking.
     #[serde(default)]
     pub tracked_slots: Vec<SlotId>,
-    /// Const bindings for inlining.
+    /// The value each const binding in this unit is bound to, by name.
+    ///
+    /// Const inlining writes the evaluated value in where the binding is
+    /// defined, looking it up by name, and promotion then makes a function's
+    /// non-copy ones statics; see `datalove_datafun_const`.
     #[serde(default)]
     pub const_values: Vec<(String, ValueId)>,
     /// Symbol table for nested unit resolution.

@@ -122,12 +122,11 @@ pub fn map_operands_in_instruction(
                 shape_descriptors: shape_descriptors.clone(),
             },
         Instruction::ComptimeCall {
-            dest, func, args, discriminant, comptime_param_indices, type_args, shape_descriptors,
+            dest, func, args, comptime_param_indices, type_args, shape_descriptors,
         } => Instruction::ComptimeCall {
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
-            discriminant: *discriminant,
             comptime_param_indices: comptime_param_indices.clone(),
             type_args: type_args.clone(),
             shape_descriptors: shape_descriptors.clone(),

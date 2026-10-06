@@ -7,9 +7,6 @@
 //! The "lower then evaluate" pattern:
 //! 1. Caller uses `lower_const_binding` to lower a const expression to IR
 //! 2. Caller passes the IR to `evaluate_prepared_const` in the const crate
-//!
-//! This module also provides `eval_const_expr` for inline evaluation during
-//! lowering when a CTFE evaluator is available in the LowerCtx.
 
 use std::collections::HashMap;
 use bct::module_graph::ModuleId;
@@ -21,104 +18,6 @@ use datalove_datafun_ir::{
 use super::context::LowerCtx;
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
-
-// Empty arrays for isolated contexts that don't need call resolution.
-
-/// Evaluate a constant expression at compile time using the LowerCtx's evaluator.
-///
-/// This is the inline evaluation path used for function-level consts.
-/// Requires a CTFE evaluator to be configured in the context.
-pub fn eval_const_expr<'db>(
-    ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> Result<ConstValue, LowerError> {
-    // For const references, look up the previously computed value.
-    if let ExprFunKind::Place(ref place) = expr.expr(ctx.db) {
-        if place.steps.is_empty() {
-            let name_str = place.root.text(ctx.db);
-            if let Some((_, value)) = ctx.lookup_const(name_str) {
-                return Ok(value.clone());
-            }
-            return Err(LowerError::NotImplemented(format!(
-                "non-const variable '{}' in const expression",
-                name_str
-            )));
-        }
-    }
-
-    // Lower to IR and use the evaluator.
-    let ir_type = ctx.expr_type(expr);
-    let unit = lower_const_expr_to_unit(ctx, expr)?;
-
-    // Get the evaluator from context.
-    let evaluator = ctx.ctfe_evaluator()
-        .ok_or_else(|| LowerError::NotImplemented(
-            "complex const expressions require a CTFE evaluator".to_string()
-        ))?;
-
-    evaluator.borrow_mut()
-        .evaluate(&unit, &ir_type)
-        .map_err(|e| LowerError::NotImplemented(format!("CTFE error: {}", e)))
-}
-
-/// Lower a const expression to a minimal IrCodeUnit for execution.
-///
-/// Uses isolated lowering: creates a fresh `LowerCtx` with independent IR state
-/// but reuses type information from the parent context.
-fn lower_const_expr_to_unit<'db>(
-    parent_ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> Result<IrCodeUnit, LowerError> {
-    // Create isolated LowerCtx that reuses type info but has fresh IR state.
-    let mut isolated_ctx = LowerCtx::new(
-        parent_ctx.db,
-        parent_ctx.expr_types,
-        None,
-    );
-
-    // Copy const bindings from parent so we can reference previously evaluated consts.
-    isolated_ctx.const_bindings = parent_ctx.const_bindings.clone();
-
-    // Copy return type from parent for early-return operators (? and !).
-    isolated_ctx.return_type = parent_ctx.return_type.clone();
-
-    // Mark as script unit so early-return uses UnitEarlyReturn terminator.
-    isolated_ctx.is_script_unit = true;
-
-    // Use the real lowering pipeline.
-    let result_value = super::expr::lower_expression(&mut isolated_ctx, expr)?;
-
-    // Finish the block with a UnitEnd terminator.
-    isolated_ctx.finish_block(Terminator::UnitEnd {
-        result: Some(Operand::Value(result_value)),
-    });
-
-    // Renumber blocks for sequential IDs.
-    isolated_ctx.renumber_blocks();
-
-    // Extract IR into an IrCodeUnit.
-    Ok(IrCodeUnit {
-        id: CodeUnitId(0),
-        name: String::new(),
-        blocks: isolated_ctx.body.blocks,
-        value_count: isolated_ctx.body.next_value,
-        slot_count: isolated_ctx.body.next_slot,
-        call_site_count: isolated_ctx.body.next_call_site,
-        value_types: isolated_ctx.body.value_types,
-        slot_types: isolated_ctx.body.slot_types,
-        tracked_slots: Vec::new(),
-        const_values: Vec::new(),
-        symbols: isolated_ctx.symbols,
-        context: CodeUnitContext::Script(ScriptContext {
-            unit_end_values: Vec::new(),
-            unit_end_slots: Vec::new(),
-            result: Some(result_value),
-            result_name: None,
-            exports: Vec::new(),
-        }),
-        nested_units: Vec::new(),
-    })
-}
 
 /// Lower a const expression to IrCodeUnit without needing a parent LowerCtx.
 ///
@@ -139,7 +38,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
 ) -> Result<IrCodeUnit, LowerError> {
-    use datalove_datafun_ir::{CodeRef, FuncId, Instruction};
+    use datalove_datafun_ir::{CodeRef, FuncId};
     use std::collections::HashSet;
 
     // Create a fresh LowerCtx with the provided type information and module func_id_map.
@@ -179,26 +78,32 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     // Renumber blocks for sequential IDs.
     ctx.renumber_blocks();
 
-    // Collect called local functions from the lowered blocks.
-    let mut called_func_ids: HashSet<FuncId> = HashSet::new();
-    for block in &ctx.body.blocks {
-        for instr in &block.instructions {
-            if let Instruction::Call { func, .. } = instr {
-                if let CodeRef::Local(id) = func {
-                    called_func_ids.insert(FuncId(id.0));
-                }
-            }
-        }
-    }
-
-    // Include called functions from the lowered set (no re-lowering needed).
+    // The local functions the const can reach, from the lowered set, which
+    // the unit carries beside it for the evaluator to call. Every one it
+    // reaches, not only the ones it calls: a function it calls may call
+    // another, and the evaluator finds that one among these too.
+    let local_calls = |blocks: &[datalove_datafun_ir::IrBlock]| -> Vec<FuncId> {
+        blocks.iter()
+            .flat_map(|block| block.instructions.iter())
+            .filter_map(|instr| match instr.call_target() {
+                Some((CodeRef::Local(id), _)) => Some(FuncId(id.0)),
+                _ => None,
+            })
+            .collect()
+    };
+    let mut reached: HashSet<FuncId> = HashSet::new();
     let mut nested_units: Vec<IrCodeUnit> = Vec::new();
-    for func_id in called_func_ids {
-        // Find the function in lowered functions.
+    let mut pending = local_calls(&ctx.body.blocks);
+    while let Some(func_id) = pending.pop() {
+        if !reached.insert(func_id) {
+            continue;
+        }
         if let Some(unit) = lowered_functions.iter().find(|f| f.id.0 == func_id.0) {
+            pending.extend(local_calls(&unit.blocks));
             nested_units.push((**unit).clone());
         }
     }
+    nested_units.sort_by_key(|unit| unit.id.0);
 
     // Extract IR into an IrCodeUnit.
     Ok(IrCodeUnit {

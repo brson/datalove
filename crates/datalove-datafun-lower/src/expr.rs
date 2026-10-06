@@ -697,9 +697,8 @@ pub fn lower_expression<'db>(
             let call_result_type = erased_return_type.clone().unwrap_or_else(|| result_type.clone());
             let dest = ctx.fresh_value(call_result_type);
 
-            // Check if this is a call to a function with comptime params.
-            // If so, emit ComptimeCall with discriminant=0 as placeholder.
-            // The specialization pass will compute the correct discriminant.
+            // A call to a function with const parameters is a `ComptimeCall`,
+            // which specialization points at the copy for its arguments.
             let comptime_param_indices: Vec<usize> = target
                 .map(|t| {
                     t.func(ctx.db).params(ctx.db)
@@ -731,9 +730,7 @@ pub fn lower_expression<'db>(
                 .collect();
 
             if !comptime_param_indices.is_empty() {
-                // Emit ComptimeCall with discriminant=0 (placeholder).
-                // Specialization pass will fill in correct discriminant from const values.
-                ctx.emit_comptime_call(dest, func_ref, args, 0, comptime_param_indices, type_args);
+                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, type_args);
             } else {
                 ctx.emit_call_with_type_args(dest, func_ref, args, type_args);
             }

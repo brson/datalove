@@ -1,0 +1,105 @@
+{
+  "diagnostics": [
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            606,
+            607
+          ],
+          "text": "N"
+        }
+      ],
+      "message": "`N` is not a const binding"
+    },
+    {
+      "code": "F076",
+      "labels": [
+        {
+          "message": "a const parameter takes a const binding",
+          "span": [
+            678,
+            679
+          ],
+          "text": "N"
+        }
+      ],
+      "message": "`N` is not a const binding"
+    },
+    {
+      "code": "F058",
+      "labels": [
+        {
+          "message": "not a const binding",
+          "span": [
+            766,
+            767
+          ],
+          "text": "N"
+        }
+      ],
+      "message": "`N` is not a const binding"
+    }
+  ],
+  "modules": {
+    "shadow": {
+      "errors": [
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "'N' is not a const binding"
+        },
+        {
+          "kind": "ComptimeArgNotConstBinding",
+          "param_idx": 0,
+          "reason": "'N' is not a const binding"
+        },
+        {
+          "kind": "NonConstInConstExpr",
+          "name": "N"
+        }
+      ],
+      "functions": [
+        {
+          "name": "scale",
+          "params": [
+            "int",
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "good",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "shadowed_by_let",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "shadowed_by_param",
+          "params": [
+            "int",
+            "int"
+          ],
+          "return_type": "int"
+        },
+        {
+          "name": "shadowed_in_const_expr",
+          "params": [
+            "int"
+          ],
+          "return_type": "int"
+        }
+      ]
+    }
+  }
+}

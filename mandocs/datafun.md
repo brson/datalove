@@ -1348,8 +1348,8 @@ and consts computed from it are evaluated per specialization.
 Passing a const as a const argument does not move it,
 so it is written without `@`.
 
-A const parameter is not passed at run time,
-so it cannot also be `ref`, `mut` or `out`.
+A const parameter is passed by reference, as any const is borrowed,
+so it is not written `ref`, and cannot be `mut` or `out`.
 It may be of any type a const can hold, collections included,
 but not a type parameter of a generic function.
 

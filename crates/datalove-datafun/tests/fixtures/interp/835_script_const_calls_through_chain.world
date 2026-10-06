@@ -1,0 +1,26 @@
+----------
+scriptunit-fragment
+----------
+
+// A const whose evaluation calls one script function from another. The unit
+// built to evaluate a const carries the script functions beside it for the
+// evaluator to call, and it once carried only the ones the const called
+// directly, so `a`, reached through `b`, was not there: "local unit
+// CodeUnitId(0) not found". At the top level and in a function body alike.
+
+fun a(): int
+    ret 3
+end fun
+
+fun b(): int
+    ret a() + 1
+end fun
+
+const X: int = b()
+
+fun c(): int
+    const Y: int = b()
+    ret Y@
+end fun
+
+debuglog (X@, c())

@@ -4,8 +4,9 @@
 //! - [`SharedModuleContext`]: Shared data across script compilers/executors.
 //! - [`CompiledModules`]: Result of compiling a module graph, with error info.
 
-use rmx::std::collections::BTreeMap;
+use rmx::std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
+use datalove_datafun_ir::{ConstValue, IrModuleId, IrType};
 
 use datalove_datafun_compiler::tracked_lower::FuncIdLookup;
 use datalove_datafun_interp::{ModuleFunctionRegistry, NativeResolver};
@@ -29,6 +30,9 @@ pub struct SharedModuleContext<'db> {
     /// per function in the world, and script compilation only reads it.
     pub func_id_map: &'db FuncIdLookup<'db>,
     pub module_registry: Arc<ModuleFunctionRegistry>,
+    /// Each module's module-level consts, which a copy of one of its comptime
+    /// functions made for a script may name.
+    pub module_consts: HashMap<IrModuleId, HashMap<String, (IrType, ConstValue)>>,
 }
 
 /// Result of module compilation.
