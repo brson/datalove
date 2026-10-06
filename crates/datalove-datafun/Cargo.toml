@@ -35,7 +35,6 @@ libloading = "0.8"
 
 [features]
 default = []
-slow_tests = []
 index-64 = [
     "datalove-rt/index-64",
     "datalove-datafun-common/index-64",

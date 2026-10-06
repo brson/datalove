@@ -36,6 +36,8 @@ home here.
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
 - [The C backend cannot build a const table inside a module function](#user-content-the-c-backend-cannot-build-a-const-table-inside-a-module-function)
+- [A `const` statement loses the `reify` before it, and the erased value leaks](#user-content-a-const-statement-loses-the-reify-before-it-and-the-erased-value-leaks)
+- [Worldgen moves consts](#user-content-worldgen-moves-consts)
 
 ## Nothing but a test inlines
 
@@ -561,3 +563,40 @@ file, so `cc` rejects the program. The interpreters and Cranelift agree on the
 output. Probably the statics initializer needs the descriptors it names
 emitted into the script's file, the way the script's own types are. Found the
 first time the C backend ran over the `interp/` corpus, by `engine_tests`.
+
+## A `const` statement loses the `reify` before it, and the erased value leaks
+
+Reproduced, minimized from worldgen seed 1013, which fails `just test-worldgen
+1000` under leak checking:
+
+```
+fun dup<T>(x: T): (T, T)
+  ret (x@, x)
+end fun
+
+fun f(): i32
+  let a: index = : index / 149
+  let v: (index, index) = dup(a)
+  const C: u32 = 93
+  ret : i32 / 56
+end fun
+```
+
+Calling `f` leaks two 4-byte allocations, on every engine, because the IR is
+wrong. Without the `const`, `f` lowers to `v2 = call dup(v1)` and then
+`v3 = reify v2`, which turns the erased tuple back into a concrete one; with
+it, the `reify` is gone, the value numbering skips from `v2` to `v5`, and the
+erased tuple's two boxed elements are never destroyed. So lowering a `const`
+statement discards an instruction the statement before it emitted. Any type
+the generic erases will do; `u32` does not erase there and does not leak. Not
+investigated past the IR.
+
+## Worldgen moves consts
+
+About one generated world in twenty fails to compile, the same way on both
+sides of `worldgen_dual_tests`, which counts it a failure: seeds 19, 25,
+424248 and 424263 among them. Seed 19's is `CannotMoveConst` --
+the generator uses a `const` by move where it has to clone it with `@`. CI's
+seed (`just test-worldgen`, 2000) is one whose twenty worlds compile and run
+clean.
+

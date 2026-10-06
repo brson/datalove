@@ -1335,7 +1335,8 @@ Thinning `ModuleGraphTypecheckResult` took typecheck from 1.57x to 1.78x for
 exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
 
-`just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`. CI does not.
+`just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`, as one of CI's
+four jobs.
 
 ## Ownership Analysis
 
@@ -1868,7 +1869,12 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 - Filter: `cargo test -- filter_name`
 - `just test` runs the whole suite; `just test-64` uses 64-bit collection
   indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, `just test-slow`
-  the `slow_tests` features.
+  the `slow_tests` features, the wasm build, the suite against sys riders
+  built from source and `just test-worldgen`. Those four are CI's four jobs,
+  and `just test-ci` runs them all.
+- `DATALOVE_INTERP=ir` runs function bodies on the IR walker rather than the
+  bytecode, for debugging; `engine_tests` and `std_engine_tests` choose each
+  engine themselves and ignore it.
 
 `ExampleTestRunner::with_worker_context(dir, init, analyzer)` hands each
 fixture a context built by `init`, for state that is expensive and cannot be
@@ -1952,7 +1958,9 @@ What it does not tell you:
 - **Generated is not exercised.** `test_1000_seeds_typecheck` only typechecks,
   and is `#[ignore]`d. Only `worldgen_dual_tests` runs ownership analysis and
   executes anything, and it skips unless `WORLDGEN_DUAL_TEST=1`
-  (`WORLDGEN_DUAL_SEED` reproduces a run).
+  (`WORLDGEN_DUAL_SEED` reproduces a run). `just test-worldgen`, part of
+  `test-slow` and so of CI's slow job, runs it on one fixed seed's twenty
+  worlds.
 - **It counts single node kinds, not combinations.** Every bug the generator
   has found was at an intersection -- a generic over a map at `data`, a tensor
   of a tuple holding a heap value -- and a roll of node kinds calls all of

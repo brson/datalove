@@ -71,7 +71,7 @@ The engines:
 | JIT | a `JitEngine` compiling on first call |
 | chaos | an `OptimizingDispatcher` with a chaos config seeded from the fixture; asserting the JIT or the inliner engaged somewhere in the run |
 | Cranelift AOT | a single-fragment program compiled, linked and run |
-| C AOT | the same through the C backend (in the slow job) |
+| C AOT | the same through the C backend |
 
 The engine is chosen by the runner, not by an environment variable, so the
 reference can never silently be something else. An engine applies to a
@@ -92,8 +92,8 @@ with the IR walker.
 
 | job | runs |
 |---|---|
-| default | every crate; the runner's engines but C AOT |
-| slow | the runner with C AOT; property tests; wasm check; sys riders built; a fixed-seed worldgen run |
+| default | every crate, every engine |
+| slow | property tests; wasm check; sys riders built; a fixed-seed worldgen run |
 | index-64 | default under `index-64` |
 | parallel | default under `DATALOVE_PARALLEL=1` |
 
@@ -118,7 +118,7 @@ the command line itself.
 
 ## As built
 
-Steps 1 to 3, October 2026.
+October 2026.
 
 **`engine_tests`** runs `fixtures/engines/`: the 420 programs of `interp/`, and
 the 523 of `dual/`, `aot/`, `module_interp/`, `interp_constlet/` and
@@ -147,4 +147,11 @@ library, built once per worker, rather than worldfiles.
 **The expected files still carry the IR.** The design moves IR snapshots to
 the lowering suites; they are still in the reference's rendering, so a
 lowering change re-blesses the engine corpus as it did the old suites.
+
+**CI is four jobs**, `just test-ci` the same four: default, index-64,
+parallel, and slow, which is the `slow_tests` property and exhaustive tests,
+the wasm build, the suite against sys riders built from source, and
+`just test-worldgen` on a fixed seed. Worldgen under leak checking found a
+lowering fault on its first run (in `issues.md`), so its seed is one whose
+worlds pass; another seed is a command-line argument away.
 

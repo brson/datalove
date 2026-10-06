@@ -31,15 +31,25 @@ test-sys-riders:
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
 
+# The slow configuration: the property tests and exhaustive cases, the wasm
+# build, the whole suite against sys riders built from source, and generated
+# programs.
 test-slow:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt-tests --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun-compiler --features slow_tests
-    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun --features slow_tests
     just check-wasm
+    just test-sys-riders
+    just test-worldgen
+
+# Generated programs, run on the interpreter under a chaos dispatcher and
+# through Cranelift AOT. CI's seed is fixed so that a failure is a change, not
+# a draw; pass another to explore.
+test-worldgen SEED='2000':
+    WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-sys-riders
+test-ci: test test-slow test-64 test-parallel
 
 # Run tests with parallelism enabled.
 test-parallel:

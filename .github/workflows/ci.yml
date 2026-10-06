@@ -32,6 +32,9 @@ jobs:
         include:
           - name: default
             recipe: test
+          # The slow_tests property and exhaustive tests, the wasm build,
+          # the whole suite against sys riders built from source, and
+          # generated programs on a fixed seed.
           - name: slow
             recipe: test-slow
           - name: index-64
