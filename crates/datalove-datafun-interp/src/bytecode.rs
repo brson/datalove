@@ -108,6 +108,25 @@ impl Cmp {
     }
 }
 
+/// Which checked operation a fused op does.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum Ck {
+    Add,
+    Sub,
+    Mul,
+}
+
+impl Ck {
+    #[inline(always)]
+    fn apply(self, a: u32, b: u32) -> (u32, bool) {
+        match self {
+            Ck::Add => a.overflowing_add(b),
+            Ck::Sub => a.overflowing_sub(b),
+            Ck::Mul => a.overflowing_mul(b),
+        }
+    }
+}
+
 /// One instruction of the bytecode.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Op {
@@ -145,6 +164,14 @@ pub(crate) enum Op {
     AddCkI64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     SubCkI64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     MulCkI64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
+
+    /// Ops with a `u32` constant for an operand, which a value nothing else
+    /// writes held: the constant's own op goes, if every read of it went into
+    /// one of these.
+    CmpU32I { cmp: Cmp, dst: Loc, a: Loc, imm: u32 },
+    AddCkU32I { dst: Loc, ovf: Loc, a: Loc, imm: u32 },
+    SubCkU32I { dst: Loc, ovf: Loc, a: Loc, imm: u32 },
+    MulCkU32I { dst: Loc, ovf: Loc, a: Loc, imm: u32 },
 
     CmpU8 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
     CmpU32 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
@@ -210,6 +237,15 @@ pub(crate) enum Op {
     BrIf { cond: Loc, then: u32, els: u32 },
     /// A comparison whose only use is the branch on it.
     BrCmpU8 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
+    BrCmpU32I { cmp: Cmp, a: Loc, imm: u32, then: u32, els: u32 },
+    /// Checked `u32` arithmetic whose overflow flag only a branch reads:
+    /// on to `ovf` if it overflowed, `ok` if not.
+    CkU32Br { kind: Ck, dst: Loc, a: Loc, b: Loc, ovf: u32, ok: u32 },
+    CkU32IBr { kind: Ck, dst: Loc, a: Loc, imm: u32, ovf: u32, ok: u32 },
+    /// Unwrap a result whose flag only a branch reads: on `Ok`, its payload
+    /// to `ok` and on to `then`; otherwise its error to `err` and on to the
+    /// next op, the start of the block the branch takes then.
+    UnwrapOkBr { ok: Loc, err: Loc, src: Loc, at: u16, ok_len: u16, then: u32 },
     BrCmpU32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpI32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpU64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
@@ -471,6 +507,12 @@ struct Lowering<'a> {
     escapes: u32,
     /// How many times each value is read, for fusing an op into its only use.
     uses: Vec<u32>,
+    /// The `u32` each value nothing but its constant writes holds, how many of
+    /// its reads an op took as an immediate, and where its constant's op is:
+    /// in the prologue or not, and at what index.
+    const_u32: Vec<Option<u32>>,
+    absorbed: Vec<u32>,
+    const_op: Vec<Option<(bool, usize)>>,
     /// Values something other than their defining instruction may write, an
     /// `out` argument or a reference store, which a hoisted constant would not
     /// be rewritten for.
@@ -490,6 +532,7 @@ enum Fixup {
     JumpTo,
     BrThen,
     BrElse,
+    OkThen,
     EdgeTo,
     SwitchCase(usize, usize),
     SwitchDefault(usize),
@@ -682,6 +725,7 @@ impl<'a> Lowering<'a> {
                 Fixup::BrThen => *branch_targets(&mut self.ops[at]).0 = start(*branch_targets(&mut self.ops[at]).0),
                 Fixup::BrElse => *branch_targets(&mut self.ops[at]).1 = start(*branch_targets(&mut self.ops[at]).1),
                 Fixup::EdgeTo => if let Op::EdgeIr { to, .. } = &mut self.ops[at] { *to = start(*to) },
+                Fixup::OkThen => if let Op::UnwrapOkBr { then, .. } = &mut self.ops[at] { *then = start(*then) },
                 Fixup::SwitchCase(t, c) => {
                     let target = self.switches[t].cases[c].1;
                     self.switches[t].cases[c].1 = start(target);
@@ -697,6 +741,14 @@ impl<'a> Lowering<'a> {
         let prologue = std::mem::take(&mut self.prologue);
         self.ops.extend(prologue);
         self.ops.push(Op::Jump { to: 0 });
+        // Constants every read of which an op took as an immediate go.
+        let mut removed = vec![false; self.ops.len()];
+        for (v, at) in self.const_op.iter().enumerate() {
+            if let Some((in_prologue, i)) = *at && self.absorbed[v] == self.uses[v] {
+                removed[if in_prologue { entry as usize + i } else { i }] = true;
+            }
+        }
+        let entry = compact(&mut self.ops, &removed, &mut self.switches, entry);
         let escapes = self.escapes;
         (BcFunction {
             func: self.func, ops: self.ops, entry, pool: self.pool, switches: self.switches, calls: self.calls,
@@ -857,6 +909,7 @@ impl<'a> Lowering<'a> {
                 }
                 let at = result_payload_offset(ty);
                 let len = layout_of(ty).size;
+                let src = self.fold_copy(inner, src);
                 self.emit(Op::WrapOk { dst: self.value_loc(*dest), src, at, len });
                 true
             }
@@ -1005,11 +1058,39 @@ impl<'a> Lowering<'a> {
 
     /// Emit a constant's op, on entry if nothing but it writes the value.
     fn emit_const(&mut self, dest: ValueId, op: Op) {
-        if self.pinned[dest.0 as usize] || !self.in_loop[self.block] {
+        let at = if self.pinned[dest.0 as usize] || !self.in_loop[self.block] {
             self.emit(op);
+            (false, self.ops.len() - 1)
         } else {
             self.prologue.push(op);
+            (true, self.prologue.len() - 1)
+        };
+        self.const_op[dest.0 as usize] = Some(at);
+    }
+
+    /// The constant a `u32` operand always holds, if it does, counted as read
+    /// into an immediate: only for an op that is going to take it.
+    fn imm_u32(&mut self, op: &Operand) -> Option<u32> {
+        let Operand::Value(v) = op else { return None };
+        let imm = self.const_u32[v.0 as usize]?;
+        self.absorbed[v.0 as usize] += 1;
+        Some(imm)
+    }
+
+    /// Fold a copy just made into `loc`, the only read of `op`, into the op
+    /// about to read it: the copy's source is still what it copied.
+    fn fold_copy(&mut self, op: &Operand, loc: Loc) -> Loc {
+        let Operand::Value(v) = op else { return loc };
+        if self.uses[v.0 as usize] != 1 || self.ops.len() <= self.block_start[self.block] as usize {
+            return loc;
         }
+        let src = match *self.ops.last().expect("an op in this block") {
+            Op::Copy1 { dst, src } | Op::Copy4 { dst, src } | Op::Copy8 { dst, src }
+            | Op::CopyN { dst, src, .. } if dst.0 == loc.0 => src,
+            _ => return loc,
+        };
+        self.ops.pop();
+        src
     }
 
     fn lower_const(&mut self, dest: ValueId, value: &ConstValue) -> bool {
@@ -1073,6 +1154,10 @@ impl<'a> Lowering<'a> {
             return false;
         }
         let dst = self.value_loc(dest);
+        if matches!(lt, IrType::U32) && let Some(imm) = self.imm_u32(rhs) {
+            self.emit(Op::CmpU32I { cmp, dst, a, imm });
+            return true;
+        }
         let op = match lt {
             IrType::U8 | IrType::Bool => Op::CmpU8 { cmp, dst, a, b },
             IrType::U32 => Op::CmpU32 { cmp, dst, a, b },
@@ -1126,6 +1211,16 @@ impl<'a> Lowering<'a> {
             IrType::Offset => (true, if index32 { 32 } else { 64 }),
             _ => return false,
         };
+        if matches!(ty, IrType::U32) && matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+            if let Some(imm) = self.imm_u32(rhs) {
+                self.emit(match op {
+                    BinOp::Add => Op::AddCkU32I { dst, ovf, a, imm },
+                    BinOp::Sub => Op::SubCkU32I { dst, ovf, a, imm },
+                    _ => Op::MulCkU32I { dst, ovf, a, imm },
+                });
+                return true;
+            }
+        }
         let op = match (op, width) {
             (BinOp::Add, (false, 32)) => Op::AddCkU32 { dst, ovf, a, b },
             (BinOp::Sub, (false, 32)) => Op::SubCkU32 { dst, ovf, a, b },
@@ -1213,6 +1308,14 @@ impl<'a> Lowering<'a> {
             // Into the next block with nothing to pass is no op at all.
             Terminator::Goto { target, args } if args.is_empty() && target.0 as usize == block + 1 => {}
             Terminator::Goto { target, args } => self.jump(block, 0, *target, args),
+            Terminator::Branch { cond, then_block, then_args, else_block, else_args }
+                if then_args.is_empty() && else_args.is_empty()
+                    && else_block.0 as usize == block + 1
+                    && let Some(op) = self.fuse_unwrap(cond, then_block.0) =>
+            {
+                self.fixups.push((self.ops.len(), Fixup::OkThen));
+                self.emit(op);
+            }
             Terminator::Branch { cond, then_block, then_args, else_block, else_args } => {
                 let fused = self.fuse_compare(cond, then_block.0, else_block.0);
                 let cond = self.loc(cond).expect("a branch condition is a local bool");
@@ -1258,7 +1361,8 @@ impl<'a> Lowering<'a> {
                         // afterwards read the narrow stores that had just
                         // written its tag and payload back with wide loads,
                         // which the processor cannot forward from.
-                        let wrapped_here = match (op, self.ops.last()) {
+                        let in_block = self.ops.len() > self.block_start[block] as usize;
+                        let wrapped_here = match (op, self.ops.last().filter(|_| in_block)) {
                             (Operand::Value(v), Some(&Op::WrapOk { dst, src, at, len }))
                                 if self.uses[v.0 as usize] == 1 && dst.0 == self.value_loc(*v).0 =>
                                 Some((src, at, len)),
@@ -1320,6 +1424,18 @@ impl Lowering<'_> {
             }
             block.terminator.for_each_operand(|op| read(&mut uses, op));
         }
+        self.const_u32 = self.func.blocks.iter()
+            .flat_map(|b| &b.instructions)
+            .fold(vec![None; n], |mut c, instr| {
+                if let Instruction::Const { dest, value: ConstValue::U32(v) } = instr
+                    && !pinned[dest.0 as usize]
+                {
+                    c[dest.0 as usize] = Some(*v);
+                }
+                c
+            });
+        self.absorbed = vec![0; n];
+        self.const_op = vec![None; n];
         self.uses = uses;
         self.pinned = pinned;
         self.in_loop = self.loop_blocks();
@@ -1357,6 +1473,24 @@ impl Lowering<'_> {
             .collect()
     }
 
+    /// A branch on the flag of a result just unwrapped in this block, fused
+    /// with the unwrap, if the branch is the flag's only use.
+    fn fuse_unwrap(&mut self, cond: &Operand, then: u32) -> Option<Op> {
+        let Operand::Value(id) = cond else { return None };
+        if self.uses[id.0 as usize] != 1 || self.ops.len() <= self.block_start[self.block] as usize {
+            return None;
+        }
+        let want = self.value_loc(*id).0;
+        let fused = match *self.ops.last()? {
+            Op::UnwrapResult { ok, err, flag, src, at, ok_len, err_len }
+                if flag.0 == want && err_len as u32 == layout_of(&IrType::Error).size =>
+                Op::UnwrapOkBr { ok, err, src, at, ok_len, then },
+            _ => return None,
+        };
+        self.ops.pop();
+        Some(fused)
+    }
+
     /// A branch on a comparison just emitted, fused with it, if the branch is
     /// the comparison's only use.
     fn fuse_compare(&mut self, cond: &Operand, then: u32, els: u32) -> Option<Op> {
@@ -1368,6 +1502,13 @@ impl Lowering<'_> {
         let fused = match *self.ops.last()? {
             Op::CmpU8 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU8 { cmp, a, b, then, els },
             Op::CmpU32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU32 { cmp, a, b, then, els },
+            Op::CmpU32I { cmp, dst, a, imm } if dst.0 == want => Op::BrCmpU32I { cmp, a, imm, then, els },
+            Op::AddCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Add, dst, a, b, ovf: then, ok: els },
+            Op::SubCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Sub, dst, a, b, ovf: then, ok: els },
+            Op::MulCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Mul, dst, a, b, ovf: then, ok: els },
+            Op::AddCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Add, dst, a, imm, ovf: then, ok: els },
+            Op::SubCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Sub, dst, a, imm, ovf: then, ok: els },
+            Op::MulCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Mul, dst, a, imm, ovf: then, ok: els },
             Op::CmpI32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI32 { cmp, a, b, then, els },
             Op::CmpU64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU64 { cmp, a, b, then, els },
             Op::CmpI64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI64 { cmp, a, b, then, els },
@@ -1378,11 +1519,57 @@ impl Lowering<'_> {
     }
 }
 
+/// Drop the `removed` ops, pointing every jump at where its target op, or the
+/// next one kept after it, now is. Returns where `entry` now is.
+fn compact(ops: &mut Vec<Op>, removed: &[bool], switches: &mut [SwitchTable], entry: u32) -> u32 {
+    if !removed.contains(&true) {
+        return entry;
+    }
+    let mut new_index = Vec::with_capacity(ops.len() + 1);
+    let mut kept = 0u32;
+    for &r in removed {
+        new_index.push(kept);
+        if !r {
+            kept += 1;
+        }
+    }
+    new_index.push(kept);
+    let map = |t: &mut u32| *t = new_index[*t as usize];
+    for op in ops.iter_mut() {
+        match op {
+            Op::Jump { to } | Op::EdgeIr { to, .. } => map(to),
+            Op::UnwrapOkBr { then, .. } => map(then),
+            Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32 { .. } | Op::BrCmpI32 { .. }
+            | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::BrCmpU32I { .. }
+            | Op::CkU32Br { .. } | Op::CkU32IBr { .. } => {
+                let (then, els) = branch_targets(op);
+                map(then);
+                map(els);
+            }
+            _ => {}
+        }
+    }
+    for table in switches.iter_mut() {
+        for (_, to) in &mut table.cases {
+            map(to);
+        }
+        map(&mut table.default);
+    }
+    let mut i = 0;
+    ops.retain(|_| {
+        i += 1;
+        !removed[i - 1]
+    });
+    new_index[entry as usize]
+}
+
 /// A conditional branch's then and else targets.
 fn branch_targets(op: &mut Op) -> (&mut u32, &mut u32) {
     match op {
+        Op::CkU32Br { ovf: then, ok: els, .. } | Op::CkU32IBr { ovf: then, ok: els, .. } => (then, els),
         Op::BrIf { then, els, .. }
         | Op::BrCmpU8 { then, els, .. }
+        | Op::BrCmpU32I { then, els, .. }
         | Op::BrCmpU32 { then, els, .. }
         | Op::BrCmpI32 { then, els, .. }
         | Op::BrCmpU64 { then, els, .. }
@@ -1406,6 +1593,9 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout) -> (BcFunction, u32) {
         block_start: vec![0; func.blocks.len()],
         escapes: 0,
         uses: Vec::new(),
+        const_u32: Vec::new(),
+        absorbed: Vec::new(),
+        const_op: Vec::new(),
         pinned: Vec::new(),
         prologue: Vec::new(),
         in_loop: Vec::new(),
@@ -1653,6 +1843,22 @@ impl IrInterpreter {
 
                     Op::CmpU8 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<u8>(base, a), rd::<u8>(base, b))),
                     Op::CmpU32 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<u32>(base, a), rd::<u32>(base, b))),
+                    Op::CmpU32I { cmp, dst, a, imm } => wr(base, dst, cmp.apply(rd::<u32>(base, a), imm)),
+                    Op::AddCkU32I { dst, ovf, a, imm } => {
+                        let (r, o) = rd::<u32>(base, a).overflowing_add(imm);
+                        wr(base, dst, r);
+                        wr(base, ovf, o);
+                    }
+                    Op::SubCkU32I { dst, ovf, a, imm } => {
+                        let (r, o) = rd::<u32>(base, a).overflowing_sub(imm);
+                        wr(base, dst, r);
+                        wr(base, ovf, o);
+                    }
+                    Op::MulCkU32I { dst, ovf, a, imm } => {
+                        let (r, o) = rd::<u32>(base, a).overflowing_mul(imm);
+                        wr(base, dst, r);
+                        wr(base, ovf, o);
+                    }
                     Op::CmpI32 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<i32>(base, a), rd::<i32>(base, b))),
                     Op::CmpU64 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<u64>(base, a), rd::<u64>(base, b))),
                     Op::CmpI64 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<i64>(base, a), rd::<i64>(base, b))),
@@ -1758,6 +1964,31 @@ impl IrInterpreter {
                     Op::BrCmpU8 { cmp, a, b, then, els } => {
                         pc = if cmp.apply(rd::<u8>(base, a), rd::<u8>(base, b)) { then } else { els } as usize;
                         continue;
+                    }
+                    Op::BrCmpU32I { cmp, a, imm, then, els } => {
+                        pc = if cmp.apply(rd::<u32>(base, a), imm) { then } else { els } as usize;
+                        continue;
+                    }
+                    Op::CkU32Br { kind, dst, a, b, ovf, ok } => {
+                        let (r, o) = kind.apply(rd::<u32>(base, a), rd::<u32>(base, b));
+                        wr(base, dst, r);
+                        pc = if o { ovf } else { ok } as usize;
+                        continue;
+                    }
+                    Op::CkU32IBr { kind, dst, a, imm, ovf, ok } => {
+                        let (r, o) = kind.apply(rd::<u32>(base, a), imm);
+                        wr(base, dst, r);
+                        pc = if o { ovf } else { ok } as usize;
+                        continue;
+                    }
+                    Op::UnwrapOkBr { ok, err, src, at, ok_len, then } => {
+                        let s = src.at(base).add(at as usize);
+                        if *src.at(base) == rtdt::ResultTag::Ok as u8 {
+                            copy_bytes(s, ok.at(base), ok_len as usize);
+                            pc = then as usize;
+                            continue;
+                        }
+                        copy_bytes(s, err.at(base), std::mem::size_of::<rtdt::Error>());
                     }
                     Op::BrCmpU32 { cmp, a, b, then, els } => {
                         pc = if cmp.apply(rd::<u32>(base, a), rd::<u32>(base, b)) { then } else { els } as usize;
