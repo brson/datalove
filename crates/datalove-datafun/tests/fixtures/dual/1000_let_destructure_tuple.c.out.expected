@@ -43,9 +43,9 @@ DualAnalysis(
                         debuglog v26
                         drop v26
                         v29 = const (10int, 20int)
-                        v30 = const (10int, 20int)
+                        v30 = clone v29
                         (v31, v32) = unpack v30
-                        v33 = const (10int, 20int)
+                        v33 = clone v29
                         (v34, v35) = unpack v33
                         v36 = pack Tuple4 {v31, v32, v34, v35}
                         debuglog v36
@@ -92,9 +92,9 @@ DualAnalysis(
                         debuglog v26
                         drop v26
                         v29 = const (10int, 20int)
-                        v30 = const (10int, 20int)
+                        v30 = clone v29
                         (v31, v32) = unpack v30
-                        v33 = const (10int, 20int)
+                        v33 = clone v29
                         (v34, v35) = unpack v33
                         v36 = pack Tuple4 {v31, v32, v34, v35}
                         debuglog v36
