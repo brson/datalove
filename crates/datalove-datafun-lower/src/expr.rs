@@ -15,8 +15,11 @@ use super::LowerError;
 
 /// Look up a variable by name, checking const bindings first.
 ///
-/// For const bindings, emits a Const instruction and returns the new value
-/// with `is_fresh_const = true`. For regular variables, returns the
+/// A const evaluated before this body, a module's or a script's, has no
+/// binding here. One of a copy type is written in as a `Const`, returned with
+/// `is_fresh_const = true`. One of any other type is borrowed from the one
+/// copy the backend builds, through a `StaticRef`, and returned as the
+/// reference, which nothing drops. Other names return their
 /// Slot/Param/Value operand with `is_fresh_const = false`.
 ///
 /// Callers that need drop tracking should call `record_expr_temp` only
@@ -26,6 +29,14 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
         let const_type = const_type.clone();
         let const_value = const_value.clone();
+        if !const_type.is_copy() {
+            let dest = ctx.fresh_value(IrType::Ref(Box::new(const_type)));
+            ctx.emit(Instruction::StaticRef {
+                dest,
+                value: std::sync::Arc::new(const_value),
+            });
+            return Ok((Operand::ValueRef(dest), false));
+        }
         let dest = ctx.fresh_value(const_type);
         ctx.emit(Instruction::Const {
             dest,
@@ -52,7 +63,16 @@ fn lower_comptime_arg<'db>(ctx: &mut LowerCtx<'db>, arg: ExprFun<'db>) -> Result
     let ExprFunKind::Place(ref place) = arg.expr(ctx.db) else {
         unreachable!("the typechecker requires a const argument to name a const (F076)");
     };
-    let (operand, is_fresh_const) = lower_var_operand(ctx, place.root.text(ctx.db))?;
+    let name = place.root.text(ctx.db);
+    // A const evaluated before this body is written in as a literal, which is
+    // the call's own and is what specialization reads the argument from.
+    if let Some((const_type, const_value)) = ctx.lookup_const(name) {
+        let (const_type, const_value) = (const_type.clone(), const_value.clone());
+        let dest = ctx.fresh_value(const_type);
+        ctx.emit(Instruction::Const { dest, value: const_value });
+        return Ok(Operand::Value(dest));
+    }
+    let (operand, is_fresh_const) = lower_var_operand(ctx, name)?;
     if is_fresh_const || operand_type(ctx, &operand).is_copy() {
         return Ok(operand);
     }
@@ -1757,8 +1777,12 @@ fn lower_place_expression<'db>(
     place: &ast::Place<'db>,
 ) -> Result<ValueId, LowerError> {
     let root_name_str = place.root.text(ctx.db);
-    let mut current_op = ctx.lookup_var(root_name_str)
-        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+    // A const evaluated before this body has no binding here; see
+    // `lower_var_operand`.
+    let (mut current_op, is_fresh_const) = lower_var_operand(ctx, root_name_str)?;
+    if is_fresh_const {
+        record_fresh_const_temp(ctx, &current_op);
+    }
 
     // Process all steps. For intermediate steps, we get refs. For the final
     // index step, we use ListGet/MapGet to get a value.

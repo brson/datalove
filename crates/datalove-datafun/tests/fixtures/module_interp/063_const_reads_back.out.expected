@@ -7,42 +7,30 @@ ModulesAnalysis(
         ir: """
             fn main():
             block0:
-                v0 = const data 7u32
-                v1 = clone v0
-                drop v0
-                v2 = const data 3u8
-                v3 = clone v2
-                drop v2
-                v4 = const data "held"
-                v5 = clone v4
-                drop v4
-                v6 = const data [1u32, 2u32]
-                v7 = clone v6
-                drop v6
-                v8 = const error 3u32
-                v9 = clone v8
-                drop v8
-                v10 = const error "went wrong"
-                v11 = clone v10
-                drop v10
-                v12 = const err error (34u32, 92u8, 110i32)
-                v13 = clone v12
-                drop v12
-                v14 = const err error [1u32, 2u32]
-                v15 = clone v14
-                drop v14
-                v16 = const err error {a = 5u32, b = "in it"}
-                v17 = clone v16
-                drop v16
-                v18 = const err error some 8u32
-                v19 = clone v18
-                drop v18
-                v20 = const ok 5u32
-                v21 = clone v20
-                drop v20
-                v22 = const some data 9u32
-                v23 = clone v22
-                drop v22
+                v0 = staticref data 7u32
+                v1 = clone *v0
+                v2 = staticref data 3u8
+                v3 = clone *v2
+                v4 = staticref data "held"
+                v5 = clone *v4
+                v6 = staticref data [1u32, 2u32]
+                v7 = clone *v6
+                v8 = staticref error 3u32
+                v9 = clone *v8
+                v10 = staticref error "went wrong"
+                v11 = clone *v10
+                v12 = staticref err error (34u32, 92u8, 110i32)
+                v13 = clone *v12
+                v14 = staticref err error [1u32, 2u32]
+                v15 = clone *v14
+                v16 = staticref err error {a = 5u32, b = "in it"}
+                v17 = clone *v16
+                v18 = staticref err error some 8u32
+                v19 = clone *v18
+                v20 = staticref ok 5u32
+                v21 = clone *v20
+                v22 = staticref some data 9u32
+                v23 = clone *v22
                 v24 = pack Tuple12 {v1, v3, v5, v7, v9, v11, v13, v15, v17, v19, v21, v23}
                 return v24
         """,

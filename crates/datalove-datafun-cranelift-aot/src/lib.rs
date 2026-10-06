@@ -40,7 +40,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    IrCodeUnit, IrModule, IrModuleId, IrType,
+    ConstValue, Instruction, IrCodeUnit, IrModule, IrModuleId, IrType,
 };
 
 /// Errors during AOT compilation.
@@ -183,6 +183,50 @@ impl AotCompiler {
         let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
         tydesc_emitter.emit_all(&mut obj_module, types)?;
 
+        // The script body, as a function the codegen can compile.
+        let body_func = self.script_unit_to_function(unit);
+
+        // A data object for each const a `StaticRef` names, equal ones once,
+        // built by `__dtlv_statics_init` before the script runs.
+        let mut statics: Vec<(cranelift_module::DataId, IrType, ConstValue)> = Vec::new();
+        let mut static_consts = codegen::StaticConsts::new();
+        {
+            let mut by_value: HashMap<(IrType, ConstValue), cranelift_module::DataId> = HashMap::new();
+            let mut units: Vec<&IrCodeUnit> = vec![&body_func];
+            units.extend(unit.nested_units.iter());
+            units.extend(registry.iter_module_code_units_with_ids().map(|(_, u)| u));
+            for code_unit in units {
+                for block in &code_unit.blocks {
+                    for instr in &block.instructions {
+                        let Instruction::StaticRef { dest, value } = instr else { continue };
+                        let IrType::Ref(ty) = &code_unit.value_types[dest.0 as usize] else {
+                            panic!("a static ref's destination is a reference");
+                        };
+                        let key = ((**ty).clone(), (**value).clone());
+                        let data_id = match by_value.get(&key) {
+                            Some(id) => *id,
+                            None => {
+                                let layout = types::ir_type_to_cranelift(ty).layout();
+                                let name = format!("__dtlv_static_{}", statics.len());
+                                let id = obj_module.declare_data(&name, Linkage::Local, true, false)
+                                    .map_err(|e| AotError::Module(format!("declare {}: {}", name, e)))?;
+                                let mut data = cranelift_module::DataDescription::new();
+                                data.define_zeroinit(layout.size.max(1) as usize);
+                                data.set_align(layout.align.max(1) as u64);
+                                obj_module.define_data(id, &data)
+                                    .map_err(|e| AotError::Module(format!("define {}: {}", name, e)))?;
+                                statics.push((id, key.0.clone(), key.1.clone()));
+                                by_value.insert(key, id);
+                                id
+                            }
+                        };
+                        static_consts.insert(codegen::static_const_key(value),
+                            codegen::StaticConstLoc::Data(data_id));
+                    }
+                }
+            }
+        }
+
         // === Three-pass compilation for local and module functions ===
 
         // Pass 1: Declare all local functions (nested units) to get Cranelift FuncIds.
@@ -234,6 +278,7 @@ impl AotCompiler {
             );
             compiler.set_local_funcs(local_funcs.clone());
             compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
+            compiler.set_static_consts(static_consts.clone());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
@@ -256,11 +301,31 @@ impl AotCompiler {
             );
             compiler.set_local_funcs(local_funcs.clone());
             compiler.set_module_funcs(module_funcs.iter().map(|(k, v)| (*k, *v)).collect());
+            compiler.set_static_consts(static_consts.clone());
             compiler.compile_predeclared(cl_func_id)?;
         }
 
-        // Convert script unit to a function-like code unit for compilation.
-        let body_func = self.script_unit_to_function(unit);
+        // Build the statics before the script runs and destroy them after it.
+        let static_fns = if statics.is_empty() {
+            None
+        } else {
+            let empty = codegen::empty_function_unit("__dtlv_statics");
+            let sig = codegen::build_signature_for_func(&empty, self.isa.as_ref());
+            let mut declare = |name: &str| obj_module
+                .declare_function(name, Linkage::Local, &sig)
+                .map_err(|e| AotError::Module(format!("declare {}: {}", name, e)));
+            let init_id = declare("__dtlv_statics_init")?;
+            let fini_id = declare("__dtlv_statics_fini")?;
+            codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+                &empty, self.isa.as_ref(), &mut obj_module,
+                runtime_imports.clone(), tydesc_emitter.clone(), Some(registry),
+            ).compile_static_init(init_id, &statics)?;
+            codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+                &empty, self.isa.as_ref(), &mut obj_module,
+                runtime_imports.clone(), tydesc_emitter.clone(), Some(registry),
+            ).compile_static_fini(fini_id, &statics)?;
+            Some((init_id, fini_id))
+        };
 
         // Compile the body function with pre-populated local_funcs and module_funcs.
         let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
@@ -273,10 +338,11 @@ impl AotCompiler {
         );
         compiler.set_local_funcs(local_funcs);
         compiler.set_module_funcs(module_funcs.into_iter().collect());
+        compiler.set_static_consts(static_consts);
         let body_func_id = compiler.compile()?;
 
         // Generate the entry point.
-        self.compile_entry_point(&mut obj_module, body_func_id)?;
+        self.compile_entry_point(&mut obj_module, body_func_id, static_fns)?;
 
         Ok(obj_module.finish())
     }
@@ -319,6 +385,7 @@ impl AotCompiler {
         &self,
         module: &mut ObjectModule,
         body_func_id: cranelift_module::FuncId,
+        static_fns: Option<(FuncId, FuncId)>,
     ) -> Result<(), AotError> {
         let call_conv = self.isa.default_call_conv();
 
@@ -355,9 +422,19 @@ impl AotCompiler {
         let stderr_mode = builder.ins().iconst(cl_types::I8, 0); // Stderr = 0
         builder.ins().call(set_debug_ref, &[rt_handle, stderr_mode]);
 
+        if let Some((init_id, _)) = static_fns {
+            let init_ref = module.declare_func_in_func(init_id, builder.func);
+            builder.ins().call(init_ref, &[rt_handle]);
+        }
+
         // Call __script_body(rt).
         let body_ref = module.declare_func_in_func(body_func_id, builder.func);
         builder.ins().call(body_ref, &[rt_handle]);
+
+        if let Some((_, fini_id)) = static_fns {
+            let fini_ref = module.declare_func_in_func(fini_id, builder.func);
+            builder.ins().call(fini_ref, &[rt_handle]);
+        }
 
         // Call dtlv_rti_shutdown(rt).
         let shutdown_ref = module.declare_func_in_func(runtime_imports.shutdown, builder.func);

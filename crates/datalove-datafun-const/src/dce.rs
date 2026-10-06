@@ -50,6 +50,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
     match instr {
         // Constants and copies
         Instruction::Const { dest, .. } => Some(*dest),
+        Instruction::StaticRef { dest, .. } => Some(*dest),
         Instruction::Copy { dest, .. } => Some(*dest),
         Instruction::Move { dest, .. } => Some(*dest),
 
@@ -366,6 +367,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
     match instr {
         // No operands.
         Instruction::Const { .. }
+        | Instruction::StaticRef { .. }
         | Instruction::WrapNone { .. }
         | Instruction::Nop => {}
 

@@ -136,6 +136,39 @@ pub struct IrInterpreter {
     use_bytecode: bool,
     /// What the bytecode lowering has done, for `DATALOVE_BC_STATS`.
     bc_stats: bytecode::BcStats,
+    /// The consts `StaticRef` names, each built once.
+    static_pool: StaticPool,
+}
+
+/// Consts of non-copy types, each built once and kept until the interpreter
+/// is dropped.
+///
+/// A `StaticRef` holds its value in an `Arc`, which inlining and
+/// specialization copy rather than rebuild, so the `Arc`'s address names the
+/// value cheaply at every execution. Holding the `Arc` here keeps that address
+/// from being reused by another value. Equal values reached through different
+/// `Arc`s share one entry.
+#[derive(Default)]
+struct StaticPool {
+    by_identity: rustc_hash::FxHashMap<usize, *const u8>,
+    by_value: std::collections::HashMap<(usize, ConstValue), *const u8>,
+    held: Vec<std::sync::Arc<ConstValue>>,
+    /// Each value's storage and its descriptor, for destroying it.
+    entries: Vec<(Box<[u64]>, *const rtdt::TyDesc)>,
+}
+
+impl Drop for IrInterpreter {
+    fn drop(&mut self) {
+        self.report_bc_stats();
+        // Before the runtime the values were allocated from shuts down, which
+        // is when it checks for leaks.
+        for (mut storage, tydesc) in std::mem::take(&mut self.static_pool.entries) {
+            unsafe {
+                datalove_rt::c::dtlv_rti_any_destroy_local(
+                    self.runtime.handle(), storage.as_mut_ptr() as *mut u8, tydesc);
+            }
+        }
+    }
 }
 
 /// The types a code unit gives its values and slots.
@@ -199,6 +232,7 @@ impl IrInterpreter {
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
             use_bytecode: std::env::var("DATALOVE_INTERP").is_ok_and(|v| v == "bc"),
+            static_pool: StaticPool::default(),
             bc_stats: bytecode::BcStats {
                 counting: std::env::var_os("DATALOVE_BC_STATS").is_some(),
                 ..Default::default()
@@ -232,6 +266,41 @@ impl IrInterpreter {
     /// Get mutable access to the type descriptor table.
     pub fn tydesc_table_mut(&mut self) -> &mut IrTyDescTable {
         &mut self.tydesc_table
+    }
+
+    /// The address of the pool's copy of a static const of type `ty`,
+    /// building it the first time.
+    pub fn static_const(&mut self, value: &std::sync::Arc<ConstValue>, ty: &IrType) -> *const u8 {
+        let tydesc = self.tydesc_table.get_or_create(ty);
+        self.static_const_with_tydesc(value, tydesc)
+    }
+
+    fn static_const_with_tydesc(
+        &mut self,
+        value: &std::sync::Arc<ConstValue>,
+        tydesc: *const rtdt::TyDesc,
+    ) -> *const u8 {
+        let identity = std::sync::Arc::as_ptr(value) as usize;
+        if let Some(&ptr) = self.static_pool.by_identity.get(&identity) {
+            return ptr;
+        }
+        let key = (tydesc as usize, (**value).clone());
+        let ptr = match self.static_pool.by_value.get(&key) {
+            Some(&ptr) => ptr,
+            None => {
+                let (size, align) = unsafe { ((*tydesc).size as usize, (*tydesc).align as usize) };
+                assert!(align <= 8, "a static const aligned to {align} bytes");
+                let mut storage = vec![0u64; size.div_ceil(8).max(1)].into_boxed_slice();
+                let ptr = storage.as_mut_ptr() as *mut u8;
+                self.write_const(value, Destination { ptr, tydesc });
+                self.static_pool.entries.push((storage, tydesc));
+                self.static_pool.by_value.insert(key, ptr);
+                ptr
+            }
+        };
+        self.static_pool.held.push(std::sync::Arc::clone(value));
+        self.static_pool.by_identity.insert(identity, ptr);
+        ptr
     }
 
     /// Get the contents of the debug buffer.
@@ -1393,6 +1462,15 @@ impl IrInterpreter {
             | Instruction::WrapSome { .. } | Instruction::UnwrapOption { .. }
             | Instruction::WrapOk { .. } | Instruction::UnwrapResult { .. } => {
                 unreachable!("{:?} is executed by execute_hot", instr)
+            }
+            Instruction::StaticRef { dest, value } => {
+                let dest_slot = frame.value_dest(*dest);
+                // A reference's descriptor holds what it points at as its one field.
+                let pointee = unsafe { (*(*dest_slot.tydesc).type_info.tuple.fields).tydesc };
+                let ptr = self.static_const_with_tydesc(value, pointee);
+                unsafe { *(dest_slot.ptr as *mut *const u8) = ptr; }
+                frame.set_value_tydesc(*dest, pointee);
+                frame.mark_value_live(*dest);
             }
             Instruction::RefSetField { dest, field_path, value } => {
                 // Store to a field through a reference operand. Used after inlining mut params.

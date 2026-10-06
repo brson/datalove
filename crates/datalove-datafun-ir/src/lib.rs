@@ -1149,6 +1149,19 @@ pub enum Instruction {
     /// **Ownership:** Produces `dest`.
     Const { dest: ValueId, value: ConstValue },
 
+    /// A reference to a const of a non-copy type, built once and kept for as
+    /// long as the code that names it.
+    ///
+    /// `dest` has type `Ref(T)` for the const's type `T`, and is read through
+    /// like any other reference. Nothing owns what it points at, so nothing
+    /// drops it. Each backend builds the value once, the first time it is
+    /// needed or before the program starts, and equal values may share one.
+    /// The value is held in an `Arc` so that copying the instruction, as
+    /// inlining and specialization do, keeps one identity a backend can key on.
+    ///
+    /// **Ownership:** Produces `dest`, a borrow.
+    StaticRef { dest: ValueId, value: std::sync::Arc<ConstValue> },
+
     // ========================================================================
     // Value Movement
     // ========================================================================
@@ -1988,7 +2001,7 @@ impl Instruction {
     pub fn for_each_operand(&self, mut f: impl FnMut(&Operand)) {
         use Instruction as I;
         match self {
-            I::Const { .. } | I::WrapNone { .. } | I::SlotLoadCopy { .. }
+            I::Const { .. } | I::StaticRef { .. } | I::WrapNone { .. } | I::SlotLoadCopy { .. }
             | I::SlotLoadMove { .. } | I::SlotLoadMoveTracked { .. } | I::Nop => {}
             I::Copy { src, .. } | I::Move { src, .. } | I::Widen { src, .. }
             | I::WidenFixed { src, .. } | I::Clone { src, .. } | I::Unpack { src, .. }

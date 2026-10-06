@@ -215,7 +215,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Count the call, which may compile the callee. Once it is compiled its
     // stubs call it directly and no longer come here.
-    match ctx.jit_engine.record_call(key, ir_unit, &callee_ctx, ctx.registry) {
+    match ctx.jit_engine.record_call(key, ir_unit, &callee_ctx, ctx.registry, ctx.interp) {
         Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {

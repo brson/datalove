@@ -30,9 +30,8 @@ Analysis(
                     
                     fn head_of_const():
                     block0:
-                        v0 = const [1int, 2int, 3int]
-                        v1 = call @0 m0.u0(v0)
-                        drop v0
+                        v0 = staticref [1int, 2int, 3int]
+                        v1 = call @0 m0.u0(*v0)
                         return v1
                 """,
             ),
@@ -80,16 +79,15 @@ Analysis(
                     
                     fn first_of_field():
                     block0:
-                        v0 = const {name = "ada", langs = ["x", "y"]}
-                        v1 = getfieldref v0.1
+                        v0 = staticref {name = "ada", langs = ["x", "y"]}
+                        v1 = getfieldref *v0.1
                         v2 = call @0 u0(*v1)
-                        drop v0
                         return v2
                     
                     fn second_lang():
                     block0:
-                        v0 = const {name = "ada", langs = ["x", "y"]}
-                        v1 = getfieldref v0.1
+                        v0 = staticref {name = "ada", langs = ["x", "y"]}
+                        v1 = getfieldref *v0.1
                         v2 = const 1index
                         v3 = listboundscheck *v1[v2]
                         branch v3, block2, block1
@@ -97,12 +95,10 @@ Analysis(
                         v4 = const "index out of bounds"
                         v5 = error_from v4
                         v6 = err v5
-                        drop v0
                         return v6
                     block2:
                         v7 = listelementref *v1[v2]
                         v8 = clone *v7
-                        drop v0
                         v9 = ok v8
                         return v9
                 """,

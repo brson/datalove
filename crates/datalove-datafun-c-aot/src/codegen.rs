@@ -14,6 +14,70 @@ use crate::types::{self, CRepr};
 use crate::{CAotCompiler, CAotError};
 
 /// Emit a complete function.
+/// Emit `__dtlv_statics_init`, which builds each static const into its array
+/// before the script runs, and `__dtlv_statics_fini`, which destroys them
+/// before the runtime shuts down and looks for leaks.
+pub fn emit_static_lifecycle(
+    out: &mut String,
+    compiler: &mut CAotCompiler,
+    registry: &FunctionRegistry,
+) -> Result<(), CAotError> {
+    let statics = compiler.statics().to_vec();
+    // The const writer works within a function; this one has no IR of its own.
+    let unit = IrCodeUnit {
+        id: datalove_datafun_ir::CodeUnitId(0),
+        name: "__dtlv_statics_init".to_string(),
+        blocks: Vec::new(),
+        value_count: 0,
+        slot_count: 0,
+        call_site_count: 0,
+        value_types: Vec::new(),
+        slot_types: Vec::new(),
+        tracked_slots: Vec::new(),
+        const_values: Vec::new(),
+        symbols: Default::default(),
+        context: datalove_datafun_ir::CodeUnitContext::Function(
+            datalove_datafun_ir::FunctionContext {
+                descriptor_params: Vec::new(),
+                params: Vec::new(),
+                param_modes: Vec::new(),
+                param_types: Vec::new(),
+                return_type: IrType::Unit,
+                tracked_params: Vec::new(),
+                descriptor_shapes: Vec::new(),
+            },
+        ),
+        nested_units: Vec::new(),
+    };
+    let layout = FrameLayout::compute(&[], &[], &[], &[], &[]);
+    let mut ctx = FunctionCodegenContext {
+        unit: &unit,
+        parent_unit: None,
+        layout: &layout,
+        compiler,
+        registry,
+        uses_sret: false,
+        const_scratch: 0,
+        ref_descs: Default::default(),
+    };
+
+    writeln!(out, "static void __dtlv_statics_init(void* rt) {{").unwrap();
+    for (i, (ty, value)) in statics.iter().enumerate() {
+        ctx.emit_const_at(out, &format!("((uint8_t*)__dtlv_static_{})", i), ty, value)?;
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+
+    writeln!(out, "static void __dtlv_statics_fini(void* rt) {{").unwrap();
+    for (i, (ty, _)) in statics.iter().enumerate() {
+        let tydesc = ctx.tydesc_name(ty);
+        writeln!(out, "    dtlv_rti_any_destroy_local(rt, __dtlv_static_{}, &{});", i, tydesc).unwrap();
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out).unwrap();
+    Ok(())
+}
+
 pub fn emit_function(
     out: &mut String,
     func_name: &str,
@@ -223,6 +287,13 @@ impl<'a> FunctionCodegenContext<'a> {
         match inst {
             Instruction::Const { dest, value } => {
                 self.emit_const(out, *dest, value)?;
+            }
+            Instruction::StaticRef { dest, value } => {
+                // The reference is the address of the array the program
+                // built the value into before the script ran.
+                let index = self.compiler.static_index(value);
+                writeln!(out, "    *(void**){} = (void*)__dtlv_static_{};",
+                    self.value_addr(*dest), index).unwrap();
             }
             Instruction::Copy { dest, src } | Instruction::Move { dest, src } => {
                 self.emit_copy(out, *dest, src)?;

@@ -28,7 +28,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 
 use datalove_datafun_ir::{
-    CodeRef, FunctionRegistry, IrCodeUnit, IrModuleId, IrType,
+    CodeRef, ConstValue, FunctionRegistry, Instruction, IrCodeUnit, IrModuleId, IrType,
 };
 
 pub use types::TypeLayout;
@@ -79,6 +79,12 @@ pub struct CAotCompiler {
     /// not call costs nothing, and working out which file calls what would
     /// have to walk the same instructions twice.
     native_decls: Vec<String>,
+    /// The consts `StaticRef` names, each an array defined in the script's
+    /// file and built by `__dtlv_statics_init` before the script runs.
+    statics: Vec<(IrType, ConstValue)>,
+    /// Each static's index, by the address of the `Arc` a `StaticRef` holds
+    /// its value in.
+    static_index: HashMap<usize, usize>,
 }
 
 impl Default for CAotCompiler {
@@ -94,7 +100,44 @@ impl CAotCompiler {
             next_tydesc_id: 0,
             tydesc_names: HashMap::new(),
             native_decls: Vec::new(),
+            statics: Vec::new(),
+            static_index: HashMap::new(),
         }
+    }
+
+    /// Number every const a `StaticRef` in the world names, equal ones once.
+    fn collect_statics(&mut self, script_unit: &IrCodeUnit, registry: &FunctionRegistry) {
+        let mut by_value: HashMap<(IrType, ConstValue), usize> = HashMap::new();
+        let mut units: Vec<&IrCodeUnit> = vec![script_unit];
+        units.extend(script_unit.nested_units.iter());
+        units.extend(registry.iter_module_code_units_with_ids().map(|(_, unit)| unit));
+        for unit in units {
+            for block in &unit.blocks {
+                for instr in &block.instructions {
+                    let Instruction::StaticRef { dest, value } = instr else { continue };
+                    let IrType::Ref(ty) = &unit.value_types[dest.0 as usize] else {
+                        panic!("a static ref's destination is a reference");
+                    };
+                    let key = ((**ty).clone(), (**value).clone());
+                    let next = self.statics.len();
+                    let index = *by_value.entry(key.clone()).or_insert_with(|| {
+                        self.statics.push(key);
+                        next
+                    });
+                    self.static_index.insert(std::sync::Arc::as_ptr(value) as usize, index);
+                }
+            }
+        }
+    }
+
+    /// The index of the array a `StaticRef`'s value lives in.
+    pub(crate) fn static_index(&self, value: &std::sync::Arc<ConstValue>) -> usize {
+        self.static_index[&(std::sync::Arc::as_ptr(value) as usize)]
+    }
+
+    /// The consts `StaticRef`s name, in index order.
+    pub(crate) fn statics(&self) -> &[(IrType, ConstValue)] {
+        &self.statics
     }
 
     /// Compile a world (script + modules) to separate C source files.
@@ -108,6 +151,8 @@ impl CAotCompiler {
         registry: &FunctionRegistry,
     ) -> Result<CompilationOutput, CAotError> {
         let mut files = Vec::new();
+
+        self.collect_statics(script_unit, registry);
 
         // Group module functions by module ID. Ordered, because both the file
         // list and the extern declarations below are emitted in this order.
@@ -168,6 +213,7 @@ impl CAotCompiler {
         // A module calls into the modules it imports, so it declares every
         // module function, its own included, the same as the script does.
         self.emit_module_declarations(&mut output, modules_by_id);
+        self.emit_static_declarations(&mut output, false);
 
         // Emit module functions.
         for unit in units {
@@ -189,14 +235,18 @@ impl CAotCompiler {
         // Emit header.
         self.emit_header(&mut output)?;
 
-        // Collect types used in script.
+        // Collect types used in script, and in the statics this file builds.
         let mut types = BTreeSet::new();
         tydesc::collect_types_from_script_unit(unit, &mut types);
+        for (ty, value) in &self.statics {
+            tydesc::collect_types_from_static(ty, value, &mut types);
+        }
 
         // Emit type descriptors.
         self.emit_tydescs(&mut output, &types)?;
 
         self.emit_module_declarations(&mut output, modules_by_id);
+        self.emit_static_declarations(&mut output, true);
 
         // Forward declare local functions.
         if !unit.nested_units.is_empty() {
@@ -221,10 +271,31 @@ impl CAotCompiler {
         // Emit script body.
         self.emit_script_body(&mut output, unit, registry)?;
 
+        if !self.statics.is_empty() {
+            codegen::emit_static_lifecycle(&mut output, self, registry)?;
+        }
+
         // Emit main entry point.
         self.emit_main(&mut output)?;
 
         Ok(output)
+    }
+
+    /// Declare the arrays the statics live in: defined in the script's file,
+    /// and `extern` in every module's.
+    fn emit_static_declarations(&self, out: &mut String, define: bool) {
+        for (i, (ty, _)) in self.statics.iter().enumerate() {
+            if define {
+                let layout = types::ir_type_to_crepr(ty).layout();
+                writeln!(out, "_Alignas({}) uint8_t __dtlv_static_{}[{}];",
+                    layout.align.max(1), i, layout.size.max(1)).unwrap();
+            } else {
+                writeln!(out, "extern uint8_t __dtlv_static_{}[];", i).unwrap();
+            }
+        }
+        if !self.statics.is_empty() {
+            writeln!(out).unwrap();
+        }
     }
 
     /// Emit an `extern` declaration for every module function in the world.
@@ -555,7 +626,13 @@ impl CAotCompiler {
         writeln!(out, "int main(void) {{").unwrap();
         writeln!(out, "    void* rt = dtlv_rti_init();").unwrap();
         writeln!(out, "    dtlv_rti_set_debug_mode(rt, 0); // Stderr").unwrap();
+        if !self.statics.is_empty() {
+            writeln!(out, "    __dtlv_statics_init(rt);").unwrap();
+        }
         writeln!(out, "    __script_body(rt);").unwrap();
+        if !self.statics.is_empty() {
+            writeln!(out, "    __dtlv_statics_fini(rt);").unwrap();
+        }
         writeln!(out, "    dtlv_rti_shutdown(rt);").unwrap();
         writeln!(out, "    return 0;").unwrap();
         writeln!(out, "}}").unwrap();

@@ -79,7 +79,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BlockId, FunctionContext, FunctionRegistry, IrCodeUnit, ParamMode,
+    BlockId, ConstValue, FunctionContext, FunctionRegistry, IrCodeUnit, ParamMode,
     IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
     Terminator, ValueId,
 };
@@ -89,6 +89,59 @@ use crate::runtime::RuntimeImports;
 use crate::tydesc_emit::TyDescEmitter;
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
+
+/// Where a const a `StaticRef` names lives.
+///
+/// Under the JIT the interpreter has already built it, and this is its
+/// address. In an object file it is a data object the program fills in before
+/// the script runs; see [`FunctionCompiler::compile_static_init`].
+#[derive(Clone, Copy, Debug)]
+pub enum StaticConstLoc {
+    Address(usize),
+    Data(cranelift_module::DataId),
+}
+
+/// Where each static const lives, keyed by the address of the `Arc` a
+/// `StaticRef` holds its value in.
+pub type StaticConsts = HashMap<usize, StaticConstLoc>;
+
+/// The key a `StaticRef`'s value is found under in [`StaticConsts`].
+pub fn static_const_key(value: &std::sync::Arc<ConstValue>) -> usize {
+    std::sync::Arc::as_ptr(value) as usize
+}
+
+/// A function unit with no parameters and no body, returning nothing.
+///
+/// What [`FunctionCompiler::compile_static_init`] and
+/// [`FunctionCompiler::compile_static_fini`] are compiled over: they need a
+/// compiler's runtime and descriptors, and no IR of their own.
+pub fn empty_function_unit(name: &str) -> IrCodeUnit {
+    IrCodeUnit {
+        id: datalove_datafun_ir::CodeUnitId(0),
+        name: name.to_string(),
+        blocks: Vec::new(),
+        value_count: 0,
+        slot_count: 0,
+        call_site_count: 0,
+        value_types: Vec::new(),
+        slot_types: Vec::new(),
+        tracked_slots: Vec::new(),
+        const_values: Vec::new(),
+        symbols: Default::default(),
+        context: datalove_datafun_ir::CodeUnitContext::Function(
+            datalove_datafun_ir::FunctionContext {
+                descriptor_params: Vec::new(),
+                params: Vec::new(),
+                param_modes: Vec::new(),
+                param_types: Vec::new(),
+                return_type: IrType::Unit,
+                tracked_params: Vec::new(),
+                descriptor_shapes: Vec::new(),
+            },
+        ),
+        nested_units: Vec::new(),
+    }
+}
 
 /// Build a Cranelift function signature for an IR code unit.
 ///
@@ -287,6 +340,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Values built straight into the caller's result slot rather than in
     /// this frame; see `return_slot_values`.
     return_slot: std::collections::HashSet<ValueId>,
+    /// Where the consts `StaticRef` names live.
+    static_consts: StaticConsts,
 }
 
 /// The values a function builds straight into its caller's result slot: each
@@ -381,6 +436,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             rt_handle_param: None,
             sret_param: None,
             return_slot: return_slot_values(func),
+            static_consts: StaticConsts::new(),
         }
     }
 
@@ -431,6 +487,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             rt_handle_param: None,
             sret_param: None,
             return_slot: return_slot_values(func),
+            static_consts: StaticConsts::new(),
         }
     }
 
@@ -483,6 +540,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             rt_handle_param: None,
             sret_param: None,
             return_slot: return_slot_values(func),
+            static_consts: StaticConsts::new(),
         }
     }
 
@@ -741,6 +799,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match inst {
             Instruction::Const { dest, value } => {
                 self.compile_const(builder, *dest, value)?;
+            }
+            Instruction::StaticRef { dest, value } => {
+                let addr = match self.static_consts.get(&static_const_key(value)) {
+                    Some(StaticConstLoc::Address(addr)) => builder.ins().iconst(PTR_TYPE, *addr as i64),
+                    Some(StaticConstLoc::Data(data_id)) => {
+                        let gv = self.module.declare_data_in_func(*data_id, builder.func);
+                        builder.ins().symbol_value(PTR_TYPE, gv)
+                    }
+                    None => return Err(CraneliftError::Unsupported(format!(
+                        "a static const with nowhere to live: {}", value))),
+                };
+                // The reference is the address.
+                self.values.insert(*dest, addr);
             }
             Instruction::BinOp { dest, op, lhs, rhs } => {
                 self.compile_binop(builder, *dest, *op, lhs, rhs)?;
@@ -1019,6 +1090,89 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Use this for three-pass compilation where all module functions are declared first.
     pub fn set_module_funcs(&mut self, module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>) {
         self.module_funcs = module_funcs;
+    }
+
+    /// Say where the consts `StaticRef` names live.
+    ///
+    /// A body naming one this does not list is refused as unsupported.
+    pub fn set_static_consts(&mut self, static_consts: StaticConsts) {
+        self.static_consts = static_consts;
+    }
+
+    /// Compile a function, taking only the runtime handle, that builds each
+    /// static const into its data object.
+    ///
+    /// The compiler is made over [`empty_function_unit`]. The program calls
+    /// this before the script runs.
+    pub fn compile_static_init(
+        mut self,
+        func_id: FuncId,
+        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+    ) -> Result<(), CraneliftError> {
+        self.compile_static_pass(func_id, |this, builder, addr, ty, value| {
+            this.write_const_value_to_addr(builder, addr, ty, value)
+        }, statics)
+    }
+
+    /// Compile a function, taking only the runtime handle, that destroys each
+    /// static const [`Self::compile_static_init`] built.
+    ///
+    /// The program calls this before the runtime shuts down, which is when the
+    /// runtime looks for leaks.
+    pub fn compile_static_fini(
+        mut self,
+        func_id: FuncId,
+        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+    ) -> Result<(), CraneliftError> {
+        self.compile_static_pass(func_id, |this, builder, addr, ty, _value| {
+            let runtime = this.runtime.expect("static const functions are compiled with runtime imports");
+            let tydesc_id = this.tydesc_emitter.get(ty).ok_or_else(|| {
+                CraneliftError::Codegen(format!("no descriptor emitted for a static {:?}", ty))
+            })?;
+            let tydesc_gv = this.module.declare_data_in_func(tydesc_id, builder.func);
+            let tydesc = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+            let destroy = this.module.declare_func_in_func(runtime.destroy_local, builder.func);
+            let rt = this.rt_handle_param.expect("set at entry");
+            builder.ins().call(destroy, &[rt, addr, tydesc]);
+            Ok(())
+        }, statics)
+    }
+
+    /// Compile a function over each static const's address in turn.
+    fn compile_static_pass(
+        &mut self,
+        func_id: FuncId,
+        mut each: impl FnMut(&mut Self, &mut FunctionBuilder, cl_ir::Value, &IrType, &ConstValue)
+            -> Result<(), CraneliftError>,
+        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+    ) -> Result<(), CraneliftError> {
+        let sig = self.build_signature();
+        let mut cl_func = cl_ir::Function::with_name_signature(
+            cl_ir::UserFuncName::user(0, func_id.as_u32()),
+            sig,
+        );
+        let mut fb_ctx = FunctionBuilderContext::new();
+        let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        builder.seal_block(entry);
+        self.rt_handle_param = Some(builder.block_params(entry)[0]);
+
+        for (data_id, ty, value) in statics {
+            let gv = self.module.declare_data_in_func(*data_id, builder.func);
+            let addr = builder.ins().symbol_value(PTR_TYPE, gv);
+            each(self, &mut builder, addr, ty, value)?;
+        }
+        builder.ins().return_(&[]);
+        builder.finalize(self.isa.frontend_config());
+
+        let mut ctx = cranelift_codegen::Context::new();
+        ctx.func = cl_func;
+        self.module
+            .define_function(func_id, &mut ctx)
+            .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
+        Ok(())
     }
 
     /// Record a result the runtime wrote into `result_ptr` as `dest`.

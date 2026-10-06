@@ -628,6 +628,10 @@ impl RemapContext {
                 dest: self.remap_value(*dest),
                 value: value.clone(),
             },
+            Instruction::StaticRef { dest, value } => Instruction::StaticRef {
+                dest: self.remap_value(*dest),
+                value: value.clone(),
+            },
             Instruction::Copy { dest, src } => Instruction::Copy {
                 dest: self.remap_value(*dest),
                 src: self.remap_operand(src),

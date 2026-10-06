@@ -284,8 +284,8 @@ larger win than named consts.
 
 1. Done. The ownership rule: moving out of a non-copy const or const
    parameter requires `@`, with fixtures and documentation updated to match.
-2. Pools and `staticref` for module-level and script-level consts, on all four
-   backends.
+2. Done. Pools and `staticref` for module-level and script-level consts, on
+   all four backends. See [As built](#user-content-as-built).
 3. Function-local consts, by lowering again once values are known, and const
    parameters through specialization.
 4. Pooling read-only non-copy literals.
@@ -293,14 +293,52 @@ larger win than named consts.
    step 1 adds.
 6. Optionally, prebuilt read-only images for AOT.
 
+## As built
+
+Step 2 landed 2026-10-06, and differs from the plan above in three ways.
+
+**The value is in the instruction.** `StaticRef { dest, value }` holds its
+`ConstValue` in an `Arc` rather than indexing a table on the unit. Inlining,
+specialization and serialization copy the instruction and the `Arc` with it,
+so nothing has to carry entries between units, and the `Arc`'s address is an
+identity a backend can key on cheaply. That settles two of the questions this
+plan had open: a pool belongs to whoever executes the code, not to a unit or a
+module, and the inliner does nothing special.
+
+**The interpreter's pool is per interpreter, built on first use.**
+`IrInterpreter` keeps a `StaticPool`: keyed by the `Arc`'s address, holding the
+`Arc` so the address cannot be reused, and falling back to the value and its
+descriptor so equal consts share an entry. An entry is built with
+`write_const` the first time a `StaticRef` for it executes, on the
+interpreter's own heap, and destroyed in `IrInterpreter`'s `Drop`, before the
+runtime shuts down and checks for leaks. Each script executor and each CTFE
+evaluator has its own interpreter, so parallel scripts never share one.
+
+**Where each backend finds it.**
+
+- The bytecode engine has no op for it and runs it on the IR walker.
+- The jit resolves each `StaticRef` against the interpreter's pool when it
+  compiles a function (`record_call` takes the interpreter for this) and
+  embeds the address. The engine belongs to the interpreter, so compiled code
+  cannot outlive the pool.
+- Cranelift AOT declares a data object per distinct const, and C AOT an array
+  defined in `script.c` and declared `extern` in each module's file.
+  `__dtlv_statics_init` builds them all after `dtlv_rti_init`, with the
+  existing const builders, and `__dtlv_statics_fini` destroys them before
+  `dtlv_rti_shutdown`. There is no second runtime: the program has one heap.
+
+Const arguments are left as `Const`: specialization reads a const argument's
+value from the instruction defining it, and the call owns what it is given.
+
+`std_tests/145_static_consts` runs consts of most shapes through all four
+backends under the leak check.
+
 ## Open questions
 
-- Whether a pool belongs to the code unit or to the module. Per unit is
-  simpler; per module avoids duplicating a const that several units inline.
-- What the inliner does with a `staticref` it moves across units: copy the
-  entry into the destination's pool, or refer to the source's.
-- Whether the bytecode engine wants `staticref` as an op or resolves it to a
-  constant address when compiling to bytecode.
+- An interpreter's pool is never evicted. A long REPL session that keeps
+  editing units which name consts keeps every value it has built.
+- Whether the bytecode engine wants `staticref` as an op that holds the
+  address, rather than running on the IR walker at each execution.
 - How large a const has to be before building it at startup is worse than
   building it on use, if any are never read. Lazy construction behind a
   once-flag is an alternative for the AOT init function.

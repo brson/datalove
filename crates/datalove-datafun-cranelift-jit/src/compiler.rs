@@ -13,8 +13,8 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{FuncId, Linkage, Module};
 use target_lexicon::Triple;
 
-use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId};
-use datalove_datafun_interp::{ExecutionContext, FuncIdentity, FunctionRegistry};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId, IrType};
+use datalove_datafun_interp::{ExecutionContext, FuncIdentity, FunctionRegistry, IrInterpreter};
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::CraneliftError;
 use datalove_datafun_cranelift::runtime::RuntimeImports;
@@ -257,6 +257,7 @@ impl JitCompiler {
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
+        interp: &mut IrInterpreter,
     ) -> Result<(*const u8, bool, usize), JitError> {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
@@ -334,6 +335,7 @@ impl JitCompiler {
         compiler.set_local_funcs(local_funcs);
         compiler.set_external_funcs(external_funcs);
         compiler.set_module_funcs(module_funcs);
+        compiler.set_static_consts(static_consts_of(func, interp));
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = compiler.compile_as(&unique_symbol(func))
@@ -881,4 +883,25 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("nearbyintf", nearbyintf as *const u8);
     jit_builder.symbol("fma", fma as *const u8);
     jit_builder.symbol("fmaf", fmaf as *const u8);
+}
+
+/// Where each const a `StaticRef` in `func` names lives: in the interpreter's
+/// pool, which builds it now if nothing has yet.
+///
+/// The address is the interpreter's, and so is the heap behind it, which the
+/// compiled code runs against too. The engine belongs to the interpreter, so
+/// the code cannot outlive the pool.
+fn static_consts_of(func: &IrCodeUnit, interp: &mut IrInterpreter) -> codegen::StaticConsts {
+    let mut statics = codegen::StaticConsts::new();
+    for block in &func.blocks {
+        for instr in &block.instructions {
+            let Instruction::StaticRef { dest, value } = instr else { continue };
+            let IrType::Ref(ty) = &func.value_types[dest.0 as usize] else {
+                panic!("a static ref's destination is a reference");
+            };
+            let addr = interp.static_const(value, ty);
+            statics.insert(codegen::static_const_key(value), codegen::StaticConstLoc::Address(addr as usize));
+        }
+    }
+    statics
 }

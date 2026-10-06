@@ -1,0 +1,67 @@
+// Consts named from functions, which read the one copy built for them.
+//
+// A function naming a const of a non-copy type borrows it through a
+// `staticref`: the interpreter builds it once into a pool, the jit reads that
+// pool's address, and the two AOT backends build it before the script runs
+// and destroy it after. Each function here runs several times, so a value
+// rebuilt or freed at the wrong time shows, and the leak check sees one that
+// is never destroyed.
+
+require module sys/std/list
+require module sys/std/map
+require module sys/std/set
+require module sys/std/string
+
+const WORD: string = "static"
+const BIG: int = 123456789012345678901234567890
+const NUMS: [int] = [3, 1, 4, 1, 5]
+const AGES: %{string = u32} = %{ "ada" = : u32 / 36, "alan" = : u32 / 41 }
+const PRIMES: #{u32} = #{ : u32 / 2, : u32 / 3, : u32 / 5 }
+const PERSON: { name: string, langs: [string] } = { name = "ada", langs = ["ae", "notes"] }
+const GRID: [|int, 2|] = [| 1 2 3, 4 5 6 |]
+const MAYBE: ?[int] = some [7, 8]
+const SHAPE: enum { atom Point, term Rect (int, int) } = term Rect (2, 3)
+const BOXED: data = data : [u32] / [: u32 / 9]
+
+fun sum(ref xs: [int]): !int
+  var total = 0
+  var i: index = 0
+  loop while i .< list.len(ref xs)
+    set total = total + xs[i]!
+    set i = i +! 1
+  end loop
+  ret ok total
+end fun
+
+fun reads(): !(index, bool, int, u32, bool, index, int, int)
+  let len = string.len(ref WORD)
+  let same = WORD == "static"
+  let total = sum(ref NUMS)! + BIG
+  let age = AGES["alan"]!
+  let has = set.contains(ref PRIMES, ref : u32 / 3)
+  let langs = list.len(ref PERSON.langs)
+  let corner = GRID[1]![2]!@
+  var area = 0
+  match SHAPE@
+  case atom Point
+    set area = 0
+  case term Rect dims
+    set area = dims.0@ * dims.1@
+  end match
+  ret ok (len, same, total, age, has, langs, corner, area)
+end fun
+
+fun copies(): !(string, [int], ?[int], data, string)
+  ret ok (WORD@, NUMS@, MAYBE@, BOXED@, PERSON.langs[1]!@)
+end fun
+
+var round = 0
+var last = reads()
+loop while round .< 5
+  set last = reads()
+  set round = round + 1
+end loop
+
+let first = copies()
+let second = copies()
+let output = (last, first, second, map.len(ref AGES))

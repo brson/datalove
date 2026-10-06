@@ -59,6 +59,45 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
     }
 }
 
+/// Collect the types a static const of type `ty` needs to be built and
+/// destroyed: its own, and those its value names that its type does not, as
+/// a `data` names what it holds.
+pub fn collect_types_from_static(
+    ty: &IrType,
+    value: &datalove_datafun_ir::ConstValue,
+    types: &mut BTreeSet<IrType>,
+) {
+    use datalove_datafun_ir::ConstValue;
+    collect_type_recursive(ty, types);
+    fn walk(value: &ConstValue, types: &mut BTreeSet<IrType>) {
+        match value {
+            ConstValue::Data { payload_type, value } | ConstValue::Error { payload_type, value } => {
+                collect_type_recursive(payload_type, types);
+                walk(value, types);
+            }
+            ConstValue::List(elements) | ConstValue::Set(elements) | ConstValue::Tuple(elements)
+            | ConstValue::Tensor { elements, .. } => elements.iter().for_each(|e| walk(e, types)),
+            ConstValue::Map(entries) => {
+                for (key, value) in entries {
+                    walk(key, types);
+                    walk(value, types);
+                }
+            }
+            ConstValue::Table { rows, .. } => rows.iter().flatten().for_each(|c| walk(c, types)),
+            ConstValue::Struct(fields) => fields.iter().for_each(|(_, f)| walk(f, types)),
+            ConstValue::OptionSome(inner) | ConstValue::ResultOk(inner)
+            | ConstValue::ResultErr(inner) => walk(inner, types),
+            ConstValue::Enum { payload, .. } => {
+                if let Some(payload) = payload {
+                    walk(payload, types);
+                }
+            }
+            _ => {}
+        }
+    }
+    walk(value, types);
+}
+
 /// Collect a type and all its nested types.
 fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
     types.insert(ty.clone());

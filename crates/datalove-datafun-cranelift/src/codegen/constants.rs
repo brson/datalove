@@ -1056,7 +1056,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// built against come from the whole of it. Reading them off the value is
     /// what this did, and it is why a collection could not be written at all
     /// from here: there was nothing to name its elements.
-    fn write_const_value_to_addr(
+    pub(super) fn write_const_value_to_addr(
         &mut self,
         builder: &mut FunctionBuilder,
         addr: cranelift_codegen::ir::Value,

@@ -362,6 +362,9 @@ impl fmt::Display for Instruction {
             Instruction::Const { dest, value } => {
                 write!(f, "{} = const {}", dest, value)
             }
+            Instruction::StaticRef { dest, value } => {
+                write!(f, "{} = staticref {}", dest, value)
+            }
             Instruction::Copy { dest, src } => {
                 write!(f, "{} = copy {}", dest, src)
             }

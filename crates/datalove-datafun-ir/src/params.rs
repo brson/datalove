@@ -388,6 +388,7 @@ pub fn replace_params_in_instruction(
         },
         // These don't have replaceable operands.
         Instruction::Const { .. }
+        | Instruction::StaticRef { .. }
         | Instruction::WrapNone { .. }
         | Instruction::SlotLoadCopy { .. }
         | Instruction::SlotLoadMove { .. }

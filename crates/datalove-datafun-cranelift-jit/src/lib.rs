@@ -33,7 +33,7 @@ use std::time::{Duration, Instant};
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, Destination, DispatchResult, ExecutionContext, FuncIdentity,
-    FunctionRegistry, InterpError, Value,
+    FunctionRegistry, InterpError, IrInterpreter, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -166,6 +166,7 @@ impl JitEngine {
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'_>,
         registry: &FunctionRegistry,
+        interp: &mut IrInterpreter,
     ) -> Result<Recorded, JitError> {
         // A function too wide to be entered is one there is no point compiling.
         // Asked here rather than at the call, so that every way in agrees and
@@ -194,7 +195,7 @@ impl JitEngine {
         }
 
         let start = Instant::now();
-        match self.compiler.compile_function(func, ctx, registry) {
+        match self.compiler.compile_function(func, ctx, registry, interp) {
             Ok((code_ptr, uses_sret, code_size)) => {
                 let compile_time = start.elapsed();
                 self.stats.compiled_count += 1;
@@ -238,7 +239,7 @@ impl JitEngine {
     ) -> JitDispatch {
         let key = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
         let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
-        match self.record_call(key, func, &callee_ctx, call_ctx.registry) {
+        match self.record_call(key, func, &callee_ctx, call_ctx.registry, call_ctx.interp) {
             Err(e) => JitDispatch {
                 result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
                 compiled_now: None,
@@ -378,7 +379,8 @@ mod tests {
         let ctx = ExecutionContext::new(0, std::slice::from_ref(func));
         let registry = FunctionRegistry::new();
         let key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(0) };
-        jit.record_call(key, func, &ctx, &registry).expect("compilation failed")
+        let mut interp = IrInterpreter::new();
+        jit.record_call(key, func, &ctx, &registry, &mut interp).expect("compilation failed")
     }
 
     #[test]
@@ -406,6 +408,44 @@ mod tests {
         }
         // And the fourth finds it compiled.
         assert!(matches!(record(&mut jit, &func), Recorded::Compiled { compiled_now: None, .. }));
+    }
+
+    /// A function borrowing a static const compiles, against the address the
+    /// interpreter's pool built it at, rather than being left to the
+    /// interpreter.
+    #[test]
+    fn test_static_const_compiles_against_the_pool() {
+        let value = std::sync::Arc::new(ConstValue::List(vec![
+            ConstValue::String("a".into()), ConstValue::String("b".into()),
+        ]));
+        let list = IrType::List(Box::new(IrType::String));
+        let func = make_func_unit(
+            0, "borrows", vec![], vec![], list.clone(),
+            vec![IrBlock {
+                id: BlockId(0),
+                params: vec![],
+                instructions: vec![
+                    Instruction::StaticRef { dest: ValueId(0), value: value.clone() },
+                    Instruction::Clone { dest: ValueId(1), src: Operand::ValueRef(ValueId(0)) },
+                ],
+                terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
+            }],
+            vec![IrType::Ref(Box::new(list.clone())), list.clone()],
+        );
+
+        let mut jit = JitEngine::new(1).unwrap();
+        let mut interp = IrInterpreter::new();
+        let ctx = ExecutionContext::new(0, std::slice::from_ref(&func));
+        let registry = FunctionRegistry::new();
+        let key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(0) };
+        let recorded = jit.record_call(key, &func, &ctx, &registry, &mut interp)
+            .expect("compilation failed");
+        assert!(matches!(recorded, Recorded::Compiled { .. }), "refused rather than compiled");
+
+        // Compiling it built the value, so asking again finds the same one.
+        let first = interp.static_const(&value, &list);
+        let again = interp.static_const(&std::sync::Arc::new((*value).clone()), &list);
+        assert_eq!(first, again, "equal values share one entry");
     }
 
     #[test]
@@ -616,7 +656,7 @@ mod tests {
         // Compile main() with context (creates stub for identity()).
         let main_key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(1) };
         let Recorded::Compiled { code_ptr, uses_sret, .. } = jit
-            .record_call(main_key, &main_fn, &ctx, &registry)
+            .record_call(main_key, &main_fn, &ctx, &registry, &mut IrInterpreter::new())
             .expect("compilation failed")
         else {
             panic!("should compile on first call");

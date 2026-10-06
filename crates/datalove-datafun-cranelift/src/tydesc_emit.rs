@@ -1474,8 +1474,14 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
     // no descriptor for it.
     for block in &unit.blocks {
         for instr in &block.instructions {
-            if let datalove_datafun_ir::Instruction::Const { value, .. } = instr {
-                collect_types_from_const_value(value, types);
+            match instr {
+                datalove_datafun_ir::Instruction::Const { value, .. } => {
+                    collect_types_from_const_value(value, types);
+                }
+                datalove_datafun_ir::Instruction::StaticRef { value, .. } => {
+                    collect_types_from_const_value(value, types);
+                }
+                _ => {}
             }
         }
     }

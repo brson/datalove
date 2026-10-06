@@ -420,6 +420,7 @@ ownership. "Borrows" means the operand survives; "consumes" means it does not.
 | Instruction | Printed | Ownership |
 |---|---|---|
 | `Const { dest, value }` | `v0 = const 42int` | Produces `dest` |
+| `StaticRef { dest, value }` | `v0 = staticref [1int, 2int]` | Produces `dest`, a borrow of the one copy the backend built; nothing drops it |
 | `Copy { dest, src }` | `v0 = copy v1` | Borrows `src`; copy types only |
 | `Move { dest, src }` | `v0 = move v1` | Consumes `src`, shallow |
 
