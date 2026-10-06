@@ -27,6 +27,7 @@
 - [Script Reactivity](plan-script-reactivity.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
+- [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
