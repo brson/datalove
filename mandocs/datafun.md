@@ -1345,12 +1345,9 @@ Within the specialized body the parameter is itself a const,
 borrowed wherever it is named,
 so it may be passed on to other const parameters,
 and consts computed from it are evaluated per specialization.
-Passing a const as a const argument does not move it,
-so it is written without `@`.
-
-A const parameter is passed by reference, as any const is borrowed,
-so it is not written `ref`, and cannot be `mut` or `out`.
-It may be of any type a const can hold, collections included,
+`const` arguments are passed as references during compile-time evaluation
+so they are written without `@`.
+They may be of any type a const can hold, collections included,
 but not a type parameter of a generic function.
 
 

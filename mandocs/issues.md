@@ -1,6 +1,6 @@
-## 2026/10/05 consts are reified on use
+## 2026/10/06 const arguments probably should require `const` annotation
 
-should be references to static memory
+like ref etc
 
 ## 2026/10/05 table type synthesis
 
