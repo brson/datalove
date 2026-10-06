@@ -202,7 +202,7 @@ owned native pointers, objects with identity,
 and stack unwinding.
 _This language is not implemented yet,
 and mostly not discussed in the documentation_,
-but I do have a [vision](principles.md) about what it will be.
+but I do have a vision about what it will be.
 
 
 
@@ -223,22 +223,23 @@ but I do have a [vision](principles.md) about what it will be.
 
 ---
 
-<div class="toc toc-repeat-7">
+<!--
+<div class="toc toc-repeat-2">
 
-- [Lexical Structure](lexer.md)
-- [Datalove Types](types.md)
-- [Types, Literals, and Destructuring](types-lits-destr.md)
-- [Modules, Functions and Scripts](modules-functions-scripts.md)
+- [Lexical structure](lexer.md)
+- [Types](types.md)
 - [Control Flow](control-flow.md)
 - [Operators](operators.md)
-- [Optional and Result Types and Operations](checked-types.md)
-- [Moves, Copies, References](moves-etc.md)
-- [Constant Evaluation](const-eval.md)
-- [Datalove Worlds](worlds.md)
-- [Datalove Literals Runtime Types](datalit-runtime-types.md)
+- Optional and result types
+- Error handling
+- Constant evaluation
+- [Runtime type representation](runtime-types.md)
+
+- [Types, literals, and destructuring](types-lits-destr.md)
 - [Novelties](novelties.md)
-- [Concise Feature List](features.md)
+- [Concise feature list](features.md)
 
 </div>
 
 ---
+-->

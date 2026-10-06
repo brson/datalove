@@ -100,7 +100,9 @@ This is described in [Ownership](#user-content-ownership).
 ## Data types
 
 Datalove functions operate on the [datalit](datalit.md) types,
-which are structural and linear. They are in brief:
+which are structural,
+and linear unless cheap enough to copy, as described in [Ownership](#user-content-ownership).
+They are in brief:
 
 _Primitives_
 
@@ -140,11 +142,14 @@ _Aggregates_
 | term    | `term Foo T`                  | `term Foo 1`                  |
 | enum    | `enum { atom A, term B T }`   | `enum { atom A }`             |
 
-As well as the dynamic types, `data` and `error`.
+There are also two dynamic types:
+`data`, which holds a value of any type,
+and `error`, the type of the error in a result.
 
 Types can be given names with the `type` statement.
 These are called _type aliases_ and do not create new types.
-They can be used to name the type but not construct it.
+An alias names a type in annotations and signatures,
+but values are still written structurally.
 They are spelled with `PascalCase` by convention.
 
 ```datalove
@@ -159,6 +164,9 @@ end fun
 
 call debug_shape(atom Circle)
 ```
+
+A value typed as an enum prints with its enum wrapper,
+so this prints `enum { atom Circle }`.
 
 
 
@@ -217,7 +225,9 @@ debuglog avg
 ```
 
 Lines can break freely between matched braces of all kinds
-(`( .. )`, `{ .. }`, `< .. >` and others).
+(`( .. )`, `{ .. }`, and others,
+including the `< .. >` around the type parameters of
+[generic functions](#user-content-generics)).
 
 ```datalove
 require module sys/std/f64
@@ -244,6 +254,9 @@ debuglog avg
 Function arguments are either passed by value, by reference (`ref`),
 by mutable reference (`mut`), or as `out` parameters.
 The caller must correspondingly indicate the passing mode with `ref`, `mut` or `out`.
+An `out` parameter must be written by the function before it returns.
+The caller may pass an unassigned `var`,
+which is assigned once the call returns.
 
 ```datalove
 fun demo_param_modes(
@@ -278,7 +291,7 @@ fun min_value(a: u32, b: u32): u32
   end if
 end fun
 
-let min = min_value(1, 2)
+let smaller = min_value(1, 2)
 
 fun set_min_value(a: u32, b: u32, out target: u32)
   if a <= b
@@ -288,8 +301,10 @@ fun set_min_value(a: u32, b: u32, out target: u32)
   end if
 end fun
 
-var min: u32
-call set_min_value(1, 2, out min)
+var smallest: u32
+call set_min_value(1, 2, out smallest)
+
+debuglog (smaller, smallest)
 ```
 
 
@@ -297,13 +312,22 @@ call set_min_value(1, 2, out min)
 
 ## Ownership
 
-Datalove has a linear type system where all values
+Datalove has a linear type system where values
 are uniquely owned, not reference counted or garbage collected.
 
 Types that do not contain heap allocations are automatically copied when used,
 leaving the original value in place to be reused.
 Types that contain heap allocations are instead moved into their new location,
 statically invalidating the original location.
+
+The copy types are `bool`, the fixed-width integers,
+`index`, `offset`, the floats, unit and atoms,
+along with tuples, structs, options, terms and enums made only of copy types.
+Everything else moves:
+`string`, the collections, `data`, `error` and results,
+and the bigint `int`.
+Arithmetic and comparison operators read their operands rather than moving them,
+so `x + x` does not move `x`.
 
 ```datalove
 fun print_copy_values(a: f64, b: f64, c: f64)
@@ -338,7 +362,7 @@ Attempting to run the above produces an error:
 ```
 $ datalove script test.dfs
 [D001] Error: use of moved value: `a`
-   ╭─[test.dfs:7:9]
+   ╭─[ test.dfs:7:9 ]
    │
  6 │ let b = a
    │         ┬
@@ -348,8 +372,8 @@ $ datalove script test.dfs
    │         ╰── value used after move
    │
    │ Help: insert `@` to clone:
- 6 │    let b = a@
-   │             +
+   │           let b = a@
+   │                    +
 ───╯
 
 < ... other errors elided ... >
@@ -381,11 +405,13 @@ about data correctness and execution semantics,
 the adapt operator is a singular "magic" operator
 that does whatever is necessary to fit a value
 of one compatible type into another.
-Beyond cloning it also performs widening numeric conversions and more.
+Beyond cloning it also performs widening numeric conversions,
+described in [Numerics](#user-content-numerics),
+and converts an atom or term into an enum that has it as a variant.
 
 When `@` solves a compiler error, the compiler will say exactly where to write it.
-In some cases Datalove can optionally compile in an "auto-adapt" mode
-for increased ergonomics.
+In some scenarious Datalove can optionally compile in an "auto-adapt" mode,
+which inserts the `@` itself.
 
 The `ref`, `mut` and `out` parameter modes _borrow_ values temporarily
 instead of moving them.
@@ -459,7 +485,8 @@ end loop
 debuglog (evens, odds)
 ```
 
-Conditional loops are written with `loop while`.
+Conditional loops are written with `loop while`,
+and `continue` skips to the next iteration.
 
 ```datalove
 require module sys/std/int
@@ -469,16 +496,18 @@ var evens = 0
 var odds = 0
 
 loop while counter != 0
-  if int.rem_checked(counter@, 2) == some 0
-    set evens = evens + 1
-  else
-    set odds = odds + 1
-  end if
   set counter = counter - 1
+  if int.rem_checked(counter@, 2) == some 1
+    set odds = odds + 1
+    continue
+  end if
+  set evens = evens + 1
 end loop
 
 debuglog (evens, odds)
 ```
+
+Inside a function, `ret` returns from anywhere, including from within a loop.
 
 
 
@@ -487,7 +516,9 @@ debuglog (evens, odds)
 
 Datalove types and values are generally spelled the same way,
 or at least in predictably similar ways,
-so e.g. the set type is `#{ K }` and its constructor is `#{ 1, 2, 3}`.
+so e.g. the set type is `#{ K }` and its constructor is `#{ 1, 2, 3 }`.
+One difference to note is that struct types separate fields with `:`,
+as in `{a: bool}`, while struct values use `=`, as in `{a = true}`.
 Similarly, aggregate data types can generally be destructured
 with spellings similar to their constructors,
 with struct-like types (product types) destructuring directly
@@ -508,7 +539,12 @@ let {
 debuglog (my_a, my_b)
 
 let term Foo x = term Foo "bar"
+
+debuglog x
 ```
+
+A term can be taken apart by `let` because its type has only one shape.
+An enum may hold any of its variants, so it must be taken apart with `match`.
 
 Values can also be destructured into `var` bindings,
 making each binding individually mutable.
@@ -538,6 +574,8 @@ case atom Point
 case term Rect dims
   set area = dims.0 * dims.1
 end match
+
+debuglog area
 ```
 
 `match` must be exhaustive.
@@ -604,45 +642,56 @@ end if
 ```
 
 These forms disallow `else`-`if` chains.
-In the result case the destructuring `else` branch is required.
+In the result case the `else` branch is required,
+and must bind the error, as `else |e|`.
 
-The postfix `?` and `!` operators propagate
-option and result return types.
+The postfix `?` operator unwraps an option.
+If the option is `some`, it yields the payload.
+If it is `none`, it returns `none` from the enclosing function,
+which must itself return an option.
 
 ```datalove
 require module sys/std/u32
 
-fun add_twice(self: u32, other: u32): ?u32
-  let once: u32 = u32.add_checked(self, other)?
-  let twice: u32 = u32.add_checked(once, other)?
+fun add_twice(a: u32, b: u32): ?u32
+  let once: u32 = u32.add_checked(a, b)?
+  let twice: u32 = u32.add_checked(once, b)?
   ret some twice
 end fun
 
-debuglog (add_twice(: u32 / 1, : u32 / 2))
+debuglog add_twice(: u32 / 1, : u32 / 2)
 ```
 
-With the result type, `!`:
+The postfix `!` operator does the same for results,
+returning the `er` from the enclosing function,
+which must return a result.
+The same two sigils mark the checked arithmetic operators and indexing,
+described later, which return early in the same way.
 
 ```datalove
 require module sys/std/u32
 require module sys/std/option
 
-fun add_twice(self: u32, other: u32): !u32
-  let once: u32 = option.ok_or(u32.add_checked(self, other), error "overflow")!
-  let twice: u32 = option.ok_or(u32.add_checked(once, other), error "overflow")!
+fun add_twice(a: u32, b: u32): !u32
+  let once: u32 = option.ok_or(u32.add_checked(a, b), error "overflow")!
+  let twice: u32 = option.ok_or(u32.add_checked(once, b), error "overflow")!
   ret ok twice
 end fun
 
-debuglog (add_twice(: u32 / 1, : u32 / 2))
-debuglog (add_twice(: u32 / 1, : u32 / 4000000000))
+debuglog add_twice(: u32 / 1, : u32 / 2)
+debuglog add_twice(: u32 / 1, : u32 / 4000000000)
 ```
+
+`option.ok_or` converts an option to a result, given the error to use for `none`.
+It is one of a family of helpers in the `sys/std/option` and `sys/std/result` modules,
+along with `is_some`, `is_none`, `unwrap_or`, `to_option` and others.
 
 
 
 
 ## Collections and indexing
 
-Datalove has five bult-in collection types:
+Datalove has five built-in collection types:
 lists, maps, sets, tables and tensors.
 Like every value, collections are uniquely owned,
 and copying one is an explicit clone with `@`.
@@ -822,6 +871,8 @@ debuglog set.contains(ref primes, ref 3)
 
 There is no `for` loop.
 A list is walked with `loop while` and an index.
+Here `.<` is less-than, described in [Comparison and equality](#user-content-comparison-and-equality),
+and `+!` is checked addition, described in [Numerics](#user-content-numerics).
 
 ```datalove
 require module sys/std/list
@@ -847,27 +898,38 @@ Tables are a work-in-progress and need further language support to be useful.
 
 Datalove has fixed-width integer types,
 `u8` .. `u64` and `i8` .. `i64`,
-and unbounded big integer types, `int`.
+and the unbounded big integer type, `int`.
+The unsigned `index` and signed `offset` types
+are the integers that lists and tensors are indexed with.
+They are 32 bits by default, or 64 bits in builds that enable it,
+and the same operations work on them as on the other fixed-width integers.
 
-Integer literals have the bigint `int` type by default.
-To create integers of other types use a prefix
-type hint of the form `: <type> / <expr>`,
+Integer literals take their type from context.
+Where the context gives no type, they are the bigint `int`.
+A literal returned from a function, assigned to an annotated binding,
+or passed as an argument takes the expected type.
+
+```datalove
+require module sys/std/u8
+
+fun u32_zero(): u32
+  ret 0
+end fun
+
+let zero: u32 = 0
+let wrapped = u8.add_wrapping(255, 1)
+
+debuglog (u32_zero(), zero, wrapped)
+```
+
+Where there is no context,
+use a prefix type hint of the form `: <type> / <expr>`,
 which can be applied to any expression.
 
 ```datalove
-fun u32_zero(): u32
-  ret : u32 / 0
-end fun
-```
+let n = : u32 / 7
 
-Specifying the type in an intermediate `let` binding
-also works.
-
-```datalove
-fun u32_zero(): u32
-  let zero: u32 = 0
-  ret zero
-end fun
+debuglog n
 ```
 
 Floating point literals are always written with a decimal
@@ -912,16 +974,35 @@ let dontfits: ?u8 = u8.from_u64(1000)
 debuglog (fits, dontfits)
 ```
 
-Datalove supports basic numerical binops for
-addition, subtraction, multiplication, division, as well as unary negation.
+These follow a naming convention.
+Each fixed-width type's module has `from_<type>` functions
+that return `none` when the value is out of range,
+`from_<type>_wrapping` variants that wrap instead,
+and a `from_int` for bigints.
+The float modules convert from each integer type,
+and `int.from_f64` converts back.
+
+Datalove supports the basic numerical operators for
+addition, subtraction, multiplication and division,
+as well as unary negation.
 For floating point types these work according to IEEE spec,
 with some operations producing `NaN` or +/- infinity.
 
 Because Datalove prioritizes numerical correctness,
 silent overflow and divide-by-zero is not allowed for integers.
-Thus none of the bare math operations work on fixed-sized integers.
-Instead these types must use checked versions of the operations
-which early return from their enclosing function with either `none` or `er`.
+Thus none of the bare arithmetic operators work on fixed-sized integers,
+though the comparison operators do.
+Instead these types use checked versions of the operators,
+spelled with a trailing `?` or `!`, as in `+?` and `+!`,
+and the negations `-?` and `-!`.
+
+The checked operators do not produce an option or result in place.
+Like the `?` and `!` operators of [Option and result handling](#user-content-option-and-result-handling),
+on failure they _return from the enclosing function_,
+with `none` for the `?` forms,
+and for the `!` forms with `er error "arithmetic overflow"`,
+or from division `er error "division by zero"`.
+On success they yield the plain number.
 
 ```datalove
 fun do_some_math_opt(a: i32, b: i32, c: i32): ?i32
@@ -931,26 +1012,37 @@ end fun
 fun do_some_math_result(a: i32, b: i32, c: i32): !i32
   ret ok -!((a +! b) /! c)
 end fun
+
+debuglog (do_some_math_opt(1, 2, 3), do_some_math_opt(1, 2, 0))
+debuglog (do_some_math_result(1, 2, 3), do_some_math_result(1, 2, 0))
 ```
 
-Bigints directly support `+`, `-` and `*`, and unary negation,
-but still division require a checked operator.
+Bigints cannot overflow,
+so they directly support `+`, `-`, `*` and unary negation,
+but division still requires a checked operator.
 
 ```datalove
 fun do_some_big_math(a: int, b: int, c: int): ?int
-  ret some -!((a + b) /? c)
+  ret some -((a + b) /? c)
 end fun
+
+debuglog do_some_big_math(1, 2, 3)
 ```
 
 For further control over math operations,
-wrapping and saturating versions are provided as library functions.
+the type modules provide functions following the same convention:
+`add_checked` returns an option in place,
+and `add_wrapping` and `add_saturating` wrap or saturate,
+with the same for the other operations.
 
 ```datalove
 require module sys/std/u8
 
 let v = u8.add_wrapping(255, 1)
+let w = u8.add_saturating(255, 1)
+let x = u8.add_checked(255, 1)
 
-debuglog (v)
+debuglog (v, w, x)
 ```
 
 
@@ -1345,8 +1437,8 @@ Within the specialized body the parameter is itself a const,
 borrowed wherever it is named,
 so it may be passed on to other const parameters,
 and consts computed from it are evaluated per specialization.
-`const` arguments are passed as references during compile-time evaluation
-so they are written without `@`.
+Like any named const, a const argument is borrowed,
+so it is written without `@`.
 They may be of any type a const can hold, collections included,
 but not a type parameter of a generic function.
 
@@ -1360,8 +1452,8 @@ written in angle brackets after the function's name,
 and can be generic over their arguments and return values.
 
 ```datalove
-fun unwrap_or<T>(self: ?T, default: T): T
-  if self |value|
+fun unwrap_or<T>(opt: ?T, default: T): T
+  if opt |value|
     ret value
   else
     ret default
@@ -1385,14 +1477,14 @@ require module sys/std/index
 require module sys/std/list
 require module sys/std/option
 
-fun zip<A, B>(ref self: [A], ref other: [B]): [(A, B)]
+fun zip<A, B>(ref xs: [A], ref ys: [B]): [(A, B)]
   var built: [(A, B)] = []
-  let n = list.len(ref self)
+  let n = list.len(ref xs)
   var i: index = : index / 0
   loop while i .< n
     if option.zip_option(
-      list.get(ref self, i),
-      list.get(ref other, i)
+      list.get(ref xs, i),
+      list.get(ref ys, i)
     ) |pair|
       call list.push(mut built, pair)
     else
@@ -1422,8 +1514,8 @@ In the example above `none` says nothing about its payload,
 so `T` is decided by `"other"`.
 
 ```datalove
-fun unwrap_or<T>(self: ?T, default: T): T
-  if self |value|
+fun unwrap_or<T>(opt: ?T, default: T): T
+  if opt |value|
     ret value
   else
     ret default
@@ -1505,8 +1597,8 @@ require module sys/std/fixedint
 
 import fixedint.zero
 
-fun unwrap_or_zero<T>(self: ?T): T with { T is fixedint }
-  if self |value|
+fun unwrap_or_zero<T>(opt: ?T): T with { T is fixedint }
+  if opt |value|
     ret value
   else
     ret zero()
