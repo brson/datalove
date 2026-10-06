@@ -222,8 +222,9 @@ impl Drop for FrameStack {
 ///
 /// A handle, copied freely; the bytes belong to the `FrameStack` or to a
 /// `ScriptFrame`. Laid out by `IrLayout`: values, slots and tracking bytes where
-/// compiled code puts them, then the parameters, the shape descriptors, the
-/// descriptors of references and, where they are kept, the liveness bytes.
+/// compiled code puts them, then the parameters, the copies of small owned
+/// parameters, the shape descriptors, the descriptors of references and, where
+/// they are kept, the liveness bytes.
 #[derive(Clone, Copy)]
 pub struct Frame {
     base: *mut u8,
@@ -331,7 +332,7 @@ impl Frame {
 
     /// Hand over argument `index`, as the caller has it.
     #[inline(always)]
-    pub fn set_param(&mut self, index: usize, value: Value) {
+    pub fn set_param(&self, index: usize, value: Value) {
         let offset = self.layout().param_offsets[index];
         // SAFETY: a parameter's place is inside the frame and word-aligned.
         unsafe { (self.at_offset(offset) as *mut Value).write(value) };
@@ -339,7 +340,7 @@ impl Frame {
 
     /// Hand over the descriptor for the shape declared at `index`.
     #[inline]
-    pub fn set_shape_descriptor(&mut self, index: usize, tydesc: *const TyDesc) {
+    pub fn set_shape_descriptor(&self, index: usize, tydesc: *const TyDesc) {
         let layout = self.layout();
         assert!(index < layout.shape_count as usize,
             "a descriptor for shape {} of {}", index, layout.shape_count);
@@ -391,7 +392,7 @@ impl Frame {
     /// that is not generic the two agree anyway. An `out` parameter starts
     /// uninitialized, since the callee writes it first.
     #[inline]
-    pub fn enter(&mut self) {
+    pub fn enter(&self) {
         let layout = self.layout();
         for (i, mode) in layout.param_modes.iter().enumerate() {
             if matches!(mode, ParamMode::In | ParamMode::Out) {
@@ -424,7 +425,7 @@ impl Frame {
 
     /// Set every tracking byte to say its binding has never been written.
     #[inline]
-    pub(crate) fn clear_tracking(&mut self) {
+    pub(crate) fn clear_tracking(&self) {
         let layout = self.layout();
         // A byte at a time: there are a handful at most, and `write_bytes` of a
         // length only known at run time is a call into `memset`, which was most
@@ -443,7 +444,7 @@ impl Frame {
     }
 
     #[inline(always)]
-    fn set_tracking_byte(&mut self, offset: u32, state: u8) {
+    fn set_tracking_byte(&self, offset: u32, state: u8) {
         // SAFETY: a tracking byte offset is inside the frame, by the layout.
         unsafe { *self.at_offset(offset) = state };
     }
@@ -466,13 +467,13 @@ impl Frame {
 
     /// Mark a value as holding something.
     #[inline(always)]
-    pub fn mark_value_live(&mut self, id: ValueId) {
+    pub fn mark_value_live(&self, id: ValueId) {
         self.set_kept_live(id.0 as usize, true);
     }
 
     /// Mark a value as holding nothing, having been moved or destroyed.
     #[inline(always)]
-    pub fn mark_value_dropped(&mut self, id: ValueId) {
+    pub fn mark_value_dropped(&self, id: ValueId) {
         self.set_kept_live(id.0 as usize, false);
     }
 
@@ -480,7 +481,7 @@ impl Frame {
     ///
     /// Panics if the value ID is out of bounds.
     #[inline(always)]
-    pub fn value_dest(&mut self, id: ValueId) -> Destination {
+    pub fn value_dest(&self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
         Destination { ptr: self.at_offset(layout.value_offsets[idx]), tydesc: layout.value_tydescs[idx] }
@@ -526,7 +527,7 @@ impl Frame {
     /// any other is described by its static type, which the projection's
     /// finding has to agree with.
     #[inline]
-    pub fn set_value_tydesc(&mut self, id: ValueId, tydesc: *const TyDesc) {
+    pub fn set_value_tydesc(&self, id: ValueId, tydesc: *const TyDesc) {
         let idx = id.0 as usize;
         let layout = self.layout();
         match layout.ref_desc_offsets[idx] {
@@ -543,7 +544,7 @@ impl Frame {
     ///
     /// Panics if slot ID is out of bounds (compiler bug).
     #[inline(always)]
-    pub fn slot_dest(&mut self, id: SlotId) -> Destination {
+    pub fn slot_dest(&self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
         Destination { ptr: self.at_offset(layout.slot_offsets[idx]), tydesc: layout.slot_tydescs[idx] }
@@ -600,7 +601,7 @@ impl Frame {
 
     /// Mark slot as holding something.
     #[inline(always)]
-    pub fn mark_slot_live(&mut self, id: SlotId) {
+    pub fn mark_slot_live(&self, id: SlotId) {
         if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::LIVE);
         }
@@ -609,7 +610,7 @@ impl Frame {
 
     /// Mark slot as holding nothing, having been moved or destroyed.
     #[inline]
-    pub fn mark_slot_dropped(&mut self, id: SlotId) {
+    pub fn mark_slot_dropped(&self, id: SlotId) {
         if let Some(offset) = self.layout().slot_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
@@ -656,7 +657,7 @@ impl Frame {
 
     /// Mark param as holding something (after the first write to an `out` one).
     #[inline]
-    pub fn mark_param_live(&mut self, id: ParamId) {
+    pub fn mark_param_live(&self, id: ParamId) {
         if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::LIVE);
         }
@@ -665,7 +666,7 @@ impl Frame {
 
     /// Mark param as holding nothing, having been moved or destroyed.
     #[inline]
-    pub fn mark_param_dropped(&mut self, id: ParamId) {
+    pub fn mark_param_dropped(&self, id: ParamId) {
         if let Some(offset) = self.layout().param_tracking[id.0 as usize] {
             self.set_tracking_byte(offset, tracking::MOVED);
         }
@@ -749,7 +750,7 @@ impl ScriptFrame {
         // reading what has not is a bug rather than a value worth defining.
         let data = AlignedBuffer::uninit(layout.frame_size as usize, layout.frame_align as usize);
         let script = Self { data, layout };
-        let mut frame = script.frame();
+        let frame = script.frame();
         frame.clear_tracking();
         for i in 0..script.layout.value_offsets.len() + script.layout.slot_offsets.len() {
             frame.set_kept_live(i, false);
@@ -912,7 +913,7 @@ impl FrameStore {
         slot: SlotId,
         value: &Value,
     ) {
-        let mut frame = self.frame(unit);
+        let frame = self.frame(unit);
 
         // A slot that was moved out of is uninitialized and owns nothing.
         if frame.slot_is_live(slot) {

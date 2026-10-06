@@ -12,7 +12,45 @@
 //! walker against the same frame. Coverage grows an op at a time, and every
 //! body runs from the first.
 //!
-//! See `botdocs/plan-bytecode.md`.
+//! # Calls
+//!
+//! The loop (`run_body`) makes a call one of these ways, the cheapest first:
+//!
+//! - **Planned** (`valid_plan`, `enter_planned`): an `Op::CallFast` whose
+//!   site has a `Plan` made in this code epoch -- a statically typed call to a
+//!   bytecode body of the same unit or a module. It pushes the callee's frame,
+//!   writes the arguments, saves the caller in an `Activation` and carries on
+//!   in the callee in the same loop.
+//! - **Fast, unplanned** (`run_fast_call` → `fast_call`): any other
+//!   `Op::CallFast`. `fast_call` refreshes the site's `CallCache` (making the
+//!   plan, if the call can have one, for next time) and then makes the call:
+//!   - to a *forwarder*, a body that only passes its parameters on to a
+//!     native, by calling the native from here;
+//!   - to a *native*, through `call_native` and its cached `NativeTarget`;
+//!   - to a *bytecode body*, by pushing and entering its frame and handing it
+//!     back as `Called::Enter`, which `switch_to` turns into an activation the loop
+//!     carries on in;
+//!   - and anything it does not suit -- an `out` argument, a moved argument
+//!     with a tracking byte, a dispatcher installed -- it hands back as
+//!     `Called::General`.
+//! - **General** (`run_general_call`): an `Op::Call`, or a fast call handed
+//!   back. `execute_call`, as the IR walker makes it, which runs a bytecode
+//!   callee in a loop of its own, nested on the Rust stack.
+//!
+//! A return writes the result where the running activation's `ret_dest`
+//! says and `leave`s: pops the frame and goes back to the caller's activation,
+//! or out of the loop if it was the frame the loop was entered with. An error
+//! pops every frame the loop pushed (`unwind`).
+//!
+//! What keeps a frame's layout and bytecode alive: a planned frame borrows
+//! them from its plan, which a call-site cache of the caller's bytecode holds,
+//! which the caller's own activation keeps alive -- by `bc_keep`, by the plan
+//! it was entered through, or, at the bottom, by whoever entered the loop. A
+//! cache replaced while frames may still borrow from it is retired to the
+//! interpreter until no frame runs, and every cache is forgotten when bodies
+//! are replaced (`IrInterpreter::forget_compiled_bodies`).
+//!
+//! See `botdocs/plan-bytecode.md` and `botdocs/plan-frame-stack.md`.
 
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{
@@ -297,21 +335,34 @@ struct FastCall {
     resolved: Option<Vec<(Loc, *const rtdt::TyDesc)>>,
     dest: Loc,
     dest_tydesc: *const rtdt::TyDesc,
+    /// What the call has found out about its callee.
+    ///
+    /// Written only on the slow path -- `resolve_callee`, `call_native` and
+    /// `fast_call`'s refresh -- none of which runs bytecode, so none of them
+    /// holds it borrowed while another does. Read without borrowing it by
+    /// `valid_plan` on the hot path, whose reference ends before any of
+    /// those can run again.
+    site: std::cell::RefCell<SiteCache>,
+}
+
+/// What a call site has found out about its callee; see `FastCall::site`.
+#[derive(Default)]
+struct SiteCache {
     /// What the call found out about its callee the last time, so that a
     /// call need not find it out again unless the body has changed.
-    cache: std::cell::RefCell<Option<CallCache>>,
+    callee: Option<CallCache>,
+    /// A native callee's target, with the body and the native table's
+    /// generation it was looked up for, which saves hashing its symbol at
+    /// every call.
+    native: Option<(usize, u64, NativeTarget)>,
     /// A module callee, found once: the registry it was found in, held so that
     /// it cannot be freed and its address reused, and the body. Valid while
     /// the call's registry is that one -- module bodies do not change within
     /// a registry -- which saves two ordered-map lookups a call.
-    /// A native callee's target, with the body and the native table's
-    /// generation it was looked up for, which saves hashing its symbol at
-    /// every call.
-    native: std::cell::RefCell<Option<(usize, u64, NativeTarget)>>,
-    module_callee: std::cell::RefCell<Option<(
+    module_callee: Option<(
         std::sync::Arc<datalove_datafun_ir::registry::ModuleFunctionRegistry>,
         *const IrCodeUnit,
-    )>>,
+    )>,
 }
 
 /// What a fast call found out about its callee, kept until the callee's body
@@ -371,20 +422,24 @@ enum Called<'r> {
     /// It did not suit the fast path, and the general one has to make it.
     General,
     /// It pushed and entered a bytecode body's frame, for the loop to run.
-    Enter(Entered<'r>),
+    Enter(Callee<'r>),
 }
 
-/// A bytecode body's frame, entered, and what running it needs.
-struct Entered<'r> {
+/// A callee, its frame pushed and entered, for the loop to carry on in.
+struct Callee<'r> {
     frame: Frame,
-    bc: std::rc::Rc<BcFunction>,
+    bc: *const BcFunction,
+    /// What keeps `bc` alive, unless the plan the call was made by does.
+    keep: Option<std::rc::Rc<BcFunction>>,
     func: &'r IrCodeUnit,
     code_ref: &'r CodeRef,
-    ctx: ExecutionContext<'r>,
+    /// Its context, if it is not its caller's.
+    ctx: Option<ExecutionContext<'r>>,
     /// Where the result goes, in the caller's frame.
     dest: Destination,
-    /// What borrowed arguments were read into, held until the call returns.
-    scratch: crate::BorrowScratch,
+    /// What borrowed arguments were read into, if any were, held until the
+    /// call returns.
+    scratch: Option<Box<crate::BorrowScratch>>,
 }
 
 /// What a call made from the loop saves of its caller, to go back to.
@@ -440,7 +495,7 @@ struct Regs<'r> {
     stack: Vec<Activation<'r>>,
     registry: &'r FunctionRegistry,
     /// The frame store, which the loop was lent for as long as it runs.
-    frames: *mut FrameStore,
+    frames: &'r mut FrameStore,
 }
 
 /// A function body, lowered.
@@ -996,9 +1051,7 @@ impl<'a> Lowering<'a> {
                             resolved,
                             dest: self.value_loc(*dest),
                             dest_tydesc: self.layout.value_tydescs[dest.0 as usize],
-                            cache: std::cell::RefCell::new(None),
-                            native: std::cell::RefCell::new(None),
-                            module_callee: std::cell::RefCell::new(None),
+                            site: std::cell::RefCell::new(SiteCache::default()),
                         });
                         self.emit(Op::CallFast { site });
                     }
@@ -2209,29 +2262,27 @@ impl IrInterpreter {
 
 impl IrInterpreter {
     /// Save the running body's registers and carry on in `callee`, whose frame
-    /// a fast call pushed; `pc` is where the caller goes on from. Returns where
-    /// the callee starts.
+    /// is pushed and entered; `pc` is where the caller goes on from. Returns
+    /// where the callee starts.
     #[inline(always)]
-    fn enter<'r>(&mut self, regs: &mut Regs<'r>, callee: Entered<'r>, pc: usize) -> usize {
-        let callee_bc = std::rc::Rc::as_ptr(&callee.bc);
-        regs.stack.push(Activation {
+    fn switch_to<'r>(&mut self, regs: &mut Regs<'r>, callee: Callee<'r>, pc: usize) -> usize {
+        push_in_place(&mut regs.stack, Activation {
             bc: regs.bc,
-            bc_keep: std::mem::replace(&mut regs.bc_keep, Some(callee.bc)),
+            bc_keep: std::mem::replace(&mut regs.bc_keep, callee.keep),
             code_ref: regs.code_ref,
-            ctx: Some(regs.ctx),
+            ctx: callee.ctx.map(|ctx| std::mem::replace(&mut regs.ctx, ctx)),
             base: regs.frame.base_ptr(),
             layout: regs.frame.layout_ptr(),
             ret_dest: regs.ret_dest,
             pc,
-            _scratch: (!callee.scratch.is_empty()).then(|| Box::new(callee.scratch)),
+            _scratch: callee.scratch,
         });
-        regs.bc = callee_bc;
+        regs.bc = callee.bc;
         regs.func = callee.func;
         regs.code_ref = Some(callee.code_ref);
-        regs.ctx = callee.ctx;
         regs.frame = callee.frame;
         regs.ret_dest = callee.dest;
-        // SAFETY: `bc_keep` keeps the body alive.
+        // SAFETY: kept alive by `bc_keep` or by the plan the call was made by.
         unsafe { (*regs.bc).entry as usize }
     }
 
@@ -2244,11 +2295,20 @@ impl IrInterpreter {
             return None;
         }
         self.frame_stack.pop(regs.frame);
-        // SAFETY: the top activation, read field by field and then forgotten,
-        // its owned fields moved out or dropped.
+        // SAFETY: the top activation, taken off the vector first and then
+        // read out of where it was, its two owned fields moved out, so that
+        // nothing in it is dropped twice whatever happens after.
+        //
+        // Field by field, and volatile so that the compiler does not merge
+        // the reads into wider ones: the activation was just written field
+        // by field, and a load wider than the stores it reads waits for them
+        // to reach memory rather than taking their values as they go. Moving
+        // it out of the vector whole did that, at about 4% of a call.
         unsafe {
-            use std::ptr::{addr_of, addr_of_mut, read_volatile};
-            let top = regs.stack.as_mut_ptr().add(len - 1);
+            use std::ptr::{addr_of, read_volatile};
+            regs.stack.set_len(len - 1);
+            let top = regs.stack.as_ptr().add(len - 1);
+            let scratch = std::ptr::read(addr_of!((*top)._scratch));
             regs.bc = read_volatile(addr_of!((*top).bc));
             regs.bc_keep = std::ptr::read(addr_of!((*top).bc_keep));
             regs.func = &*(*regs.bc).func;
@@ -2264,8 +2324,7 @@ impl IrInterpreter {
                 tydesc: read_volatile(addr_of!((*top).ret_dest.tydesc)),
             };
             let pc = read_volatile(addr_of!((*top).pc));
-            std::ptr::drop_in_place(addr_of_mut!((*top)._scratch));
-            regs.stack.set_len(len - 1);
+            drop(scratch);
             Some(pc)
         }
     }
@@ -2278,9 +2337,9 @@ impl IrInterpreter {
     /// found its callee in this epoch has the callee it would find again.
     #[inline(always)]
     fn valid_plan<'c>(&self, call: &'c FastCall) -> Option<&'c Plan> {
-        // SAFETY: only `fast_call` takes the cache mutably, and nothing holds
-        // the plan across one.
-        let cache = unsafe { &*call.cache.as_ptr() }.as_ref()?;
+        // SAFETY: see `FastCall::site`: only the slow path writes it, and
+        // nothing holds the plan across the slow path.
+        let cache = unsafe { &*call.site.as_ptr() }.callee.as_ref()?;
         if cache.epoch != self.code_epoch || self.call_dispatcher.borrow().is_some() {
             return None;
         }
@@ -2324,26 +2383,20 @@ impl IrInterpreter {
         }
         frame.stop_keeping_liveness();
         frame.clear_tracking();
-        push_in_place(&mut regs.stack, Activation {
-            bc: regs.bc,
-            bc_keep: regs.bc_keep.take(),
-            code_ref: regs.code_ref,
+        let callee = Callee {
+            frame,
+            bc: std::rc::Rc::as_ptr(&plan.bc),
+            keep: None,
+            // SAFETY: as the frame's layout, and the caller's body holds
+            // `code_ref`.
+            func: unsafe { &*plan.func },
+            code_ref: unsafe { &*plan.code_ref },
             ctx: None,
-            base: regs.frame.base_ptr(),
-            layout: regs.frame.layout_ptr(),
-            ret_dest: regs.ret_dest,
-            pc: resume,
-            _scratch: None,
-        });
-        regs.bc = std::rc::Rc::as_ptr(&plan.bc);
-        // SAFETY: as the frame's layout, and the caller's body holds
-        // `code_ref`.
-        regs.func = unsafe { &*plan.func };
-        regs.code_ref = Some(unsafe { &*plan.code_ref });
-        regs.frame = frame;
-        // SAFETY: lowered against the caller's frame.
-        regs.ret_dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };
-        Ok(plan.bc.entry as usize)
+            // SAFETY: lowered against the caller's frame.
+            dest: Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc },
+            scratch: None,
+        };
+        Ok(self.switch_to(regs, callee, resume))
     }
 
     /// Pop every frame the loop pushed, on the way out with an error.
@@ -2370,8 +2423,7 @@ impl IrInterpreter {
         if self.bc_stats.counting {
             self.bc_stats.count(|| variant(instr));
         }
-        // SAFETY: the frame store the loop was lent.
-        let frames = unsafe { &mut *regs.frames };
+        let frames = &mut *regs.frames;
         if !self.execute_hot(instr, &mut regs.frame, frames)
             && !self.execute_warm(instr, &UnitTypes::of(regs.func), &mut regs.frame, frames)
         {
@@ -2402,8 +2454,7 @@ impl IrInterpreter {
                 }
                 i => unreachable!("Call op on {:?}", i),
             };
-        // SAFETY: the frame store the loop was lent.
-        let frames = unsafe { &mut *regs.frames };
+        let frames = &mut *regs.frames;
         self.execute_call(func_ref, args, shapes, dest, call_site_info, &mut regs.frame, &regs.ctx, regs.registry, frames)
     }
 
@@ -2418,12 +2469,11 @@ impl IrInterpreter {
         base: *mut u8,
         pc: usize,
     ) -> Result<Option<usize>, InterpError> {
-        // SAFETY: the frame store the loop was lent.
-        let frames = unsafe { &mut *regs.frames };
+        let frames = &mut *regs.frames;
         // SAFETY: lowered against the running frame, which `base` is.
         match unsafe { self.fast_call(call, base, &mut regs.frame, &regs.ctx, regs.registry, frames, regs.func) }? {
             Called::Done => Ok(None),
-            Called::Enter(callee) => Ok(Some(self.enter(regs, callee, pc.wrapping_add(1)))),
+            Called::Enter(callee) => Ok(Some(self.switch_to(regs, callee, pc.wrapping_add(1)))),
             Called::General => {
                 if self.bc_stats.counting {
                     self.bc_stats.count(|| "(fast call fell back)".into());
@@ -2449,8 +2499,7 @@ impl IrInterpreter {
             Terminator::Branch { else_block, else_args, .. } => (*else_block, else_args),
             t => unreachable!("an edge from {:?}", t),
         };
-        // SAFETY: the frame store the loop was lent.
-        let frames = unsafe { &mut *regs.frames };
+        let frames = &mut *regs.frames;
         self.pass_block_args(&regs.func.blocks, target, args, &mut regs.frame, frames)
     }
 
@@ -2463,8 +2512,7 @@ impl IrInterpreter {
         let Terminator::Return { value: Some(op) } = &regs.func.blocks[block as usize].terminator else {
             unreachable!("ReturnIr on a block that does not return a value")
         };
-        // SAFETY: the frame store the loop was lent.
-        let frames = unsafe { &mut *regs.frames };
+        let frames = &mut *regs.frames;
         let val = self.read_operand(op, &regs.frame, frames);
         // SAFETY: the value read is the operand the IR returns, and the
         // destination the caller gave for it.
@@ -2541,7 +2589,8 @@ impl IrInterpreter {
         match code_ref {
             CodeRef::Module { .. } => {
                 let current = registry.module_registry_arc();
-                let mut found = call.module_callee.borrow_mut();
+                let mut site = call.site.borrow_mut();
+                let found = &mut site.module_callee;
                 match &*found {
                     // SAFETY: the registry the body is in is held, and is the
                     // one this call is made against.
@@ -2626,7 +2675,8 @@ impl IrInterpreter {
         let n = call.args.len();
         let target = {
             let generation = self.native_table.generation();
-            let mut found = call.native.borrow_mut();
+            let mut site = call.site.borrow_mut();
+            let found = &mut site.native;
             match &*found {
                 Some((at, seen, target)) if *at == address && *seen == generation => target.clone(),
                 _ => {
@@ -2713,7 +2763,8 @@ impl IrInterpreter {
         let callee_ctx = ctx.for_callee(code_ref, registry);
         let address = callee as *const IrCodeUnit as usize;
         let (layout, suits, forward) = {
-            let mut cache = call.cache.borrow_mut();
+            let mut site = call.site.borrow_mut();
+            let cache = &mut site.callee;
             match &*cache {
                 Some(c) if c.address == address && c.epoch == self.code_epoch => {
                     (c.layout.clone(), c.suits, c.forward.clone())
@@ -2825,27 +2876,6 @@ impl IrInterpreter {
             return Ok(Called::Done);
         }
 
-        // The common case, a function called with statically typed arguments
-        // and no shapes, reads nothing but the resolved places.
-        if let (Some(resolved), Some(layout)) = (&call.resolved, &layout) {
-            let mut callee_frame = self.frame_stack.push(std::rc::Rc::clone(layout))?;
-            for (i, &(loc, tydesc)) in resolved.iter().enumerate() {
-                // SAFETY: lowered against this frame's layout.
-                callee_frame.set_param(i, crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc });
-            }
-            callee_frame.enter();
-            callee_frame.stop_keeping_liveness();
-            return Ok(Called::Enter(Entered {
-                frame: callee_frame,
-                bc: self.bytecode_for(layout, callee),
-                func: callee,
-                code_ref,
-                ctx: callee_ctx,
-                dest,
-                scratch: Vec::new(),
-            }));
-        }
-
         let shapes: Vec<*const rtdt::TyDesc> = if shape_descriptors.is_empty() {
             Vec::new()
         } else {
@@ -2871,14 +2901,16 @@ impl IrInterpreter {
         callee_frame.stop_keeping_liveness();
         // The caller's frame keeps no record of an argument moved into a fast
         // call: those with tracking bytes do not suit it.
-        Ok(Called::Enter(Entered {
+        let bc = self.bytecode_for(&layout, callee);
+        Ok(Called::Enter(Callee {
             frame: callee_frame,
-            bc: self.bytecode_for(&layout, callee),
+            bc: std::rc::Rc::as_ptr(&bc),
+            keep: Some(bc),
             func: callee,
             code_ref,
-            ctx: callee_ctx,
+            ctx: Some(callee_ctx),
             dest,
-            scratch,
+            scratch: (!scratch.is_empty()).then(|| Box::new(scratch)),
         }))
     }
 }

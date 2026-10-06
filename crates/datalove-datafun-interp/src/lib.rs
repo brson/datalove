@@ -123,7 +123,7 @@ pub struct IrInterpreter {
     /// `forget_compiled_bodies`. A call-site cache made in another epoch is
     /// not trusted.
     pub(crate) code_epoch: u64,
-    /// Frames to reuse, so that calling a function does not allocate one.
+    /// Where function frames go, a call pushing one and its return popping it.
     frame_stack: FrameStack,
     /// Call-site caches the bytecode replaced, which a frame may still be
     /// borrowing a layout or a body from; see `bytecode::Plan`.

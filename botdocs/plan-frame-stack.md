@@ -145,7 +145,9 @@ A frame on the stack is a small header and then its bytes:
 - the top before it, for the pop;
 - its layout, a strong reference held as a raw pointer, released on pop, so
   that a replaced layout outlives the frames still running on it;
-- in part 2, the caller's registers.
+- in part 2, the caller's registers. (As built they are not in the header but
+  in a vector of activations beside the loop; moving them into the header is
+  still open.)
 
 The total size is capped, by a setting with a generous default; exceeding it is
 an error, not an abort. That is the interpreter half of the stack-overflow
@@ -188,7 +190,8 @@ Instead one activation of `run_bytecode` runs every frame from the one it was
 entered with to the deepest. The loop's state is a handful of registers: the
 ops, `pc`, `base`, the body, its context. A call to a bytecode body:
 
-1. pushes the callee's frame, with a header holding the caller's registers --
+1. pushes the callee's frame, with a record (as built, an `Activation` in a
+   vector beside the loop) holding the caller's registers --
    ops, `pc` after the call, `base`, body, context, code reference -- and where
    the result goes;
 2. writes the arguments into it, as in part 1;

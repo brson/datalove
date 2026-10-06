@@ -580,8 +580,9 @@ two and a half times CPython's 945ms, where it was four.
   error construction and calls with `out` arguments are still IR walker
   instructions, reached through `execute_hot` and `execute_warm`. None is hot
   in the benchmarks.
-- The call is still recursive on the Rust stack, and ops are 24 bytes rather
-  than 16. Neither has been measured as worth changing yet.
+- Ops are 24 bytes rather than 16, which has not been measured as worth
+  changing. (A call between bytecode bodies no longer recurses on the Rust
+  stack; see [plan-frame-stack.md](plan-frame-stack.md).)
 
 **What is left** is the call itself. In fib about a quarter of the time is in
 the fast call, a tenth in taking and entering the frame, the rest in the loop.

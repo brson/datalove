@@ -31,6 +31,8 @@ use crate::tydesc::IrTyDescTable;
 ///
 /// - the parameters, a `Value` each: a pointer to the caller's data and its
 ///   descriptor, so that the arguments are a slice of the frame;
+/// - a copy of each small owned parameter of a copied type, which its `Value`
+///   points at, so that reading it is one load;
 /// - a descriptor per shape the function declares;
 /// - a descriptor word for each reference whose referent's static type does
 ///   not describe it, as `resolve_ref_descriptors` says, the answer every
