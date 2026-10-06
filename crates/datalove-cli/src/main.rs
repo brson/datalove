@@ -186,7 +186,7 @@ struct Cli {
 
 #[derive(clap::Subcommand)]
 enum Command {
-    /// Run the type checker and report errors.
+    /// Run the datalit type checker and report errors.
     LitTycheck(LitTycheckCommand),
     /// Print the AST of a datalit expression.
     LitAst(LitAstCommand),
