@@ -1,0 +1,40 @@
+----------
+module local/test/inner
+----------
+
+// A module-level const of a linear type, borrowed from a function. It has no
+// binding in the function, so the borrow materializes it as a temporary.
+
+const LST: [int] = [:int/1, :int/2, :int/3]
+
+fun head(ref xs: [int]): !int
+    ret ok (xs[(: index / 0)]!@)
+end fun
+
+fun head_of_const(): !int
+    ret head(ref LST)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/inner
+
+// The same from script functions, through a field and an index.
+const P: { name: string, langs: [string] } = { name = "ada", langs = ["x", "y"] }
+
+fun first_lang(ref langs: [string]): !string
+    ret ok (langs[(: index / 0)]!@)
+end fun
+
+fun first_of_field(): !string
+    ret first_lang(ref P.langs)
+end fun
+
+fun second_lang(): !string
+    let s = P.langs[(: index / 1)]!@
+    ret ok s
+end fun
+
+debuglog (inner.head_of_const(), first_of_field(), second_lang())

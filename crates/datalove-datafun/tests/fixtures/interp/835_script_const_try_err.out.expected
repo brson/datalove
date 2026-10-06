@@ -1,0 +1,19 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Error",
+                message: "const evaluation error: const \'C\' early-returned: const expression returned early via ! or ?",
+            ),
+            output: "",
+        ),
+    ],
+)

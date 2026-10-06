@@ -1345,7 +1345,9 @@ impl<'db> ScriptCompiler<'db> {
                 expr_types,
                 call_targets,
                 &resolved_consts_map,
-                None, // Script-level consts don't have a function return type
+                // A script unit returns `!()`, so a script-level const may use
+                // `!`; if it does return early, evaluation reports it.
+                Some(IrType::Result(Box::new(IrType::Unit))),
                 &lowered_funcs.functions,
                 &lowered_funcs.func_name_to_id,
                 Some(&self.shared_context.func_id_map),

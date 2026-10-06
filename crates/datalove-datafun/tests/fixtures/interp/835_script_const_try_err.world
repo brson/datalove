@@ -1,0 +1,10 @@
+----------
+scriptunit-fragment
+----------
+
+// A script-level const that does return early through `!` is a compile error.
+const A: u32 = 10
+const B: u32 = 0
+const C: u32 = A /! B
+
+debuglog C

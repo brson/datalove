@@ -1,0 +1,9 @@
+----------
+scriptunit-fragment
+----------
+
+// A script-level const may use `!`, since a script returns `!()`.
+const A: u32 = 10
+const C: u32 = A +! A
+
+debuglog C

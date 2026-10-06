@@ -301,16 +301,10 @@ fn collect_used_values(unit: &IrCodeUnit) -> HashSet<ValueId> {
         }
     }
 
-    // Collect from blocks.
+    // Nested units number their values separately and reach this unit's only
+    // through external operands, so their uses say nothing about these values.
     for block in &unit.blocks {
         collect_block_used_values(block, &mut used);
-    }
-
-    // Collect from nested units.
-    for nested in &unit.nested_units {
-        for block in &nested.blocks {
-            collect_block_used_values(block, &mut used);
-        }
     }
 
     used

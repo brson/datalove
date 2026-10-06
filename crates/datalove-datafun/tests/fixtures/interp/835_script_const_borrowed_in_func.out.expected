@@ -1,0 +1,114 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/inner"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn head(p0):
+                    block0:
+                        v0 = const 0index
+                        v1 = listboundscheck p0[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = listelementref p0[v0]
+                        v6 = clone *v5
+                        v7 = ok v6
+                        return v7
+                    
+                    fn head_of_const():
+                    block0:
+                        v0 = const [1int, 2int, 3int]
+                        v1 = call @0 m0.u0(v0)
+                        drop v0
+                        return v1
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v4 = const {name = "ada", langs = ["x", "y"]}
+                        v5 = call @0 m0.u1()
+                        v6 = call @1 u1()
+                        v7 = call @2 u2()
+                        v8 = pack Tuple3 {v5, v6, v7}
+                        debuglog v8
+                        drop v8
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn first_lang(p0):
+                    block0:
+                        v0 = const 0index
+                        v1 = listboundscheck p0[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = listelementref p0[v0]
+                        v6 = clone *v5
+                        v7 = ok v6
+                        return v7
+                    
+                    fn first_of_field():
+                    block0:
+                        v0 = const {name = "ada", langs = ["x", "y"]}
+                        v1 = getfieldref v0.1
+                        v2 = call @0 u0(*v1)
+                        drop v0
+                        return v2
+                    
+                    fn second_lang():
+                    block0:
+                        v0 = const {name = "ada", langs = ["x", "y"]}
+                        v1 = getfieldref v0.1
+                        v2 = const 1index
+                        v3 = listboundscheck *v1[v2]
+                        branch v3, block2, block1
+                    block1:
+                        v4 = const "index out of bounds"
+                        v5 = error_from v4
+                        v6 = err v5
+                        drop v0
+                        return v6
+                    block2:
+                        v7 = listelementref *v1[v2]
+                        v8 = clone *v7
+                        drop v0
+                        v9 = ok v8
+                        return v9
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(ok 1, ok \"x\", ok \"y\")\n"),
+        ),
+    ],
+)

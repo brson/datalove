@@ -1886,8 +1886,15 @@ fn lower_place_as_ref<'db>(
     place: &ast::Place<'db>,
 ) -> Result<Operand, LowerError> {
     let root_name_str = place.root.text(ctx.db);
-    let mut current_op = ctx.lookup_var(root_name_str)
-        .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
+    // A module-level or script-level const borrowed from a function has no
+    // binding here; its value is materialized as a temporary to borrow.
+    let (mut current_op, is_fresh_const) = lower_var_operand(ctx, root_name_str, false)?;
+    if is_fresh_const {
+        if let Operand::Value(vid) = current_op {
+            let ty = ctx.body.value_types[vid.0 as usize].clone();
+            ctx.record_expr_temp(vid, ty);
+        }
+    }
 
     for step in &place.steps {
         match step {
