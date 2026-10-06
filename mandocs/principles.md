@@ -17,6 +17,26 @@ the best of modern practical programming language theory in a simple package,
 with a focus on correctness uncommon in scripting languages.
 
 
+## Contents
+
+<div class="toc toc-repeat-6">
+
+- [Glorify the plain old data types](#user-content-glorify-the-plain-old-data-types)
+- [Advance interactive scripting design](#user-content-advance-interactive-scripting-design)
+- [Determinism and reproducibility](#user-content-determinism-and-reproducibility)
+- [Nothing happens that was not written](#user-content-nothing-happens-that-was-not-written)
+- [Numerical correctness](#user-content-numerical-correctness)
+- [Power through restricted language design](#user-content-power-through-restricted-language-design)
+- [Straightforward syntax with minimal sugar](#user-content-straightforward-syntax-with-minimal-sugar)
+- [Sigil-logic](#user-content-sigil-logic)
+- [Small enough to understand and remember](#user-content-small-enough-to-understand-and-remember)
+- [Mechanical and machine-model sympathy](#user-content-mechanical-and-machine-model-sympathy)
+- [Modern compiler and execution architecture](#user-content-modern-compiler-and-execution-architecture)
+- [Fast compilation over fast execution](#user-content-fast-compilation-over-fast-execution)
+
+</div>
+
+
 
 <!-- What Datalove is for -->
 
