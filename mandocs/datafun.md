@@ -1355,4 +1355,110 @@ but not a type parameter of a generic function.
 
 ## Generics
 
+Datalove functions support type parameters and can be generic over their arguments
+and return values.
+
+```datalove
+fun unwrap_or<T>(self: ?T, default: T): T
+  if self |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+
+debuglog unwrap_or(some "this", "other")
+debuglog unwrap_or(: ?string / none, "other")
+```
+
+Generic functions are compiled once,
+their static types erased and instead interpreted dynamically at run time.
+Most types that would normally be stored on the stack get boxed to and from the heap
+when passed as generics.
+
+Type parameters are inferred from the caller's arguments,
+where the first encountered type argument decides it.
+There is no explicit caller-side syntax for specifying type parameters.
+The following is an error.
+
+```datalove
+fun unwrap_or<T>(self: ?T, default: T): T
+  if self |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+
+// Error: type `T` must be string because `some "this"` decides it.
+debuglog unwrap_or(some "this", 1)
+```
+
+todo is it possible to write list.empty()?
+
+Aggregate and collection types may include interior generic types.
+
+```datalove
+require module sys/std/index
+require module sys/std/list
+require module sys/std/option
+
+fun zip<A, B>(ref self: [A], ref other: [B]): [(A, B)]
+  var built: [(A, B)] = []
+  let n = list.len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if option.zip_option(
+      list.get(ref self, i),
+      list.get(ref other, i)
+    ) |pair|
+      call list.push(mut built, pair)
+    else
+      break
+    end if
+    set i = index.add_wrapping(i, : index / 1)
+  end loop
+  ret built
+end fun
+
+debuglog zip(ref [1, 2, 3], ref ["a", "b", "c"])
+```
+
+All generic types are always clonable and movable, but never copyable,
+thus generic bindings always move, and producing a copy requires `@`.
+All generic types can be stored, returned, passed to other functions,
+and debug-printed with `debuglog`.
+
+Some capabilities require bounds on type parameters.
+Type parameter bounds are specified within `with` blocks that follow the function header.
+
+```datalove
+require module sys/std/fixedint
+
+import fixedint.zero
+
+fun unwrap_or_zero<T>(self: ?T): T with { T is fixedint }
+  if self |value|
+    ret value
+  else
+    ret zero()
+  end if
+end fun
+
+debuglog unwrap_or_zero(: ?u8 / some 10)
+debuglog unwrap_or_zero(: ?i64 / none)
+```
+
+All bounds are built-in.
+There is no interface or trait mechanism for specifying generic type capabilities.
+
+The built-in bounds are:
+
+- `fixedint`
+- `ord`
+- `float`
+
+
+
+
 ## Scripts and interactive units

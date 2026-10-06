@@ -1,3 +1,9 @@
+## 2026/10/06 Generic type aliases
+
+Function arguments can already specify generic types
+so it would be nice if type aliases could do the same.
+
+
 ## 2026/10/03 Enum subtyping and synthesis
 
 This is ugly:
