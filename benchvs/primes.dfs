@@ -1,4 +1,4 @@
-// Prime counting benchmark - count primes up to 1,000,000 by trial division.
+// Prime counting benchmark - count primes up to 4,000,000 by trial division.
 // Uses wrapping arithmetic intrinsics to avoid overflow check overhead.
 
 fun is_prime(n: u32): bool
@@ -33,5 +33,5 @@ fun count_primes(limit: u32): u32
   ret count
 end fun
 
-let result = count_primes(1000000)
+let result = count_primes(4000000)
 debuglog(result)

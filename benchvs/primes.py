@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Prime counting benchmark - count primes up to 1,000,000 by trial division.
+# Prime counting benchmark - count primes up to 4,000,000 by trial division.
 
 def is_prime(n: int) -> bool:
     if n < 2:
@@ -22,5 +22,5 @@ def count_primes(limit: int) -> int:
             count += 1
     return count
 
-result = count_primes(1_000_000)
+result = count_primes(4_000_000)
 print(result)

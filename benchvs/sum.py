@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Sum benchmark - sum integers from 1 to 1,000,000 into an arbitrary-precision int.
+# Sum benchmark - sum integers from 1 to 30,000,000 into an arbitrary-precision int.
 
 def sum_to(limit: int) -> int:
     total = 0
@@ -7,5 +7,5 @@ def sum_to(limit: int) -> int:
         total += i
     return total
 
-result = sum_to(1_000_000)
+result = sum_to(30_000_000)
 print(result)

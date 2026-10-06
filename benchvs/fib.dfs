@@ -1,4 +1,4 @@
-// Fibonacci benchmark - compute fib(32) by naive recursion.
+// Fibonacci benchmark - compute fib(38) by naive recursion.
 // Uses checked u32 arithmetic, so each call returns a result.
 
 fun fib(n: u32): !u32
@@ -8,7 +8,7 @@ fun fib(n: u32): !u32
   ret ok (fib(n -! 1)! +! fib(n -! 2)!)
 end fun
 
-let result = fib(32)
+let result = fib(38)
 if result |value|
   debuglog(value)
 else |err|

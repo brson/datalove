@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# Sum benchmark - sum integers from 1 to 1,000,000 into an arbitrary-precision int.
+# Sum benchmark - sum integers from 1 to 30,000,000 into an arbitrary-precision int.
 
 function sum_to(limit::Int)::BigInt
     total = BigInt(0)
@@ -9,5 +9,5 @@ function sum_to(limit::Int)::BigInt
     return total
 end
 
-result = sum_to(1_000_000)
+result = sum_to(30_000_000)
 println(result)

@@ -29,10 +29,13 @@ run: build
 bench name: build
     just bench-one {{name}}
 
+# At least three runs, rather than hyperfine's ten: the benches are sized so the
+# fastest implementations take most of a second, which puts the IR walker at
+# ten seconds or more a run.
 [private]
 bench-one name:
     @echo "=== {{name}} ==="
-    hyperfine --warmup 1 -N \
+    hyperfine --warmup 1 --min-runs 3 -N \
         -n 'datalove-interp' '{{datalove}} script {{name}}.dfs' \
         -n 'datalove-jit' '{{datalove}} script --jit {{name}}.dfs' \
         -n 'datalove-aot' '{{aotdir}}/{{name}}' \

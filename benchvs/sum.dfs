@@ -1,4 +1,4 @@
-// Sum benchmark - sum integers from 1 to 1,000,000 into an arbitrary-precision int.
+// Sum benchmark - sum integers from 1 to 30,000,000 into an arbitrary-precision int.
 
 fun sum_to(limit: u32): !int
   var total: int = 0
@@ -10,7 +10,7 @@ fun sum_to(limit: u32): !int
   ret ok total
 end fun
 
-let result = sum_to(1000000)
+let result = sum_to(30000000)
 if result |value|
   debuglog(value)
 else |err|

@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# Prime counting benchmark - count primes up to 1,000,000 by trial division.
+# Prime counting benchmark - count primes up to 4,000,000 by trial division.
 # Uses wrapping UInt32 arithmetic to match datalove's wrapping u32 intrinsics.
 
 function is_prime(n::UInt32)::Bool
@@ -34,5 +34,5 @@ function count_primes(limit::UInt32)::UInt32
     return count
 end
 
-result = count_primes(UInt32(1_000_000))
+result = count_primes(UInt32(4_000_000))
 println(result)

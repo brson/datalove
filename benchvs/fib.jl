@@ -1,5 +1,5 @@
 #!/usr/bin/env julia
-# Fibonacci benchmark - compute fib(32) by naive recursion.
+# Fibonacci benchmark - compute fib(38) by naive recursion.
 # Uses checked arithmetic to match datalove's checked u32 operators.
 
 function fib(n::UInt32)::UInt32
@@ -9,5 +9,5 @@ function fib(n::UInt32)::UInt32
     return Base.checked_add(fib(Base.checked_sub(n, UInt32(1))), fib(Base.checked_sub(n, UInt32(2))))
 end
 
-result = fib(UInt32(32))
+result = fib(UInt32(38))
 println(result)
