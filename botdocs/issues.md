@@ -35,6 +35,7 @@ home here.
 - [Deep recursion aborts the process, in every engine but the bytecode](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
+- [The C backend cannot build a const table inside a module function](#user-content-the-c-backend-cannot-build-a-const-table-inside-a-module-function)
 
 ## Nothing but a test inlines
 
@@ -549,3 +550,14 @@ module's named type can only be annotated by writing the type out in full, as
 The typechecker already records each module's `exported_type_aliases`; what is
 missing is a way to reach them, either a qualified type name or an `import`
 that takes types as well as functions.
+
+## The C backend cannot build a const table inside a module function
+
+Reproduced by `interp/832_ctfe_table_module_func`, which opts out of the C
+engine for it. A `const` table in a module function's body becomes a static
+whose initializer, `__dtlv_statics_init` in `script.c`, names the row type's
+descriptor `__tydesc_1` -- a descriptor declared only in the module's own C
+file, so `cc` rejects the program. The interpreters and Cranelift agree on the
+output. Probably the statics initializer needs the descriptors it names
+emitted into the script's file, the way the script's own types are. Found the
+first time the C backend ran over the `interp/` corpus, by `engine_tests`.

@@ -88,6 +88,11 @@ path = "tests/module_interp_tests.rs"
 harness = false
 
 [[test]]
+name = "engine_tests"
+path = "tests/engine_tests.rs"
+harness = false
+
+[[test]]
 name = "interp_tests"
 path = "tests/interp_tests.rs"
 harness = false

@@ -96,6 +96,35 @@ pub fn analyze_worldfile_with_options(
     parsed: ParsedWorldfile,
     options: AnalysisOptions,
 ) -> AnyResult<Analysis> {
+    analyze_worldfile_with_hooks(db, &parsed, options, &mut NoHooks)
+}
+
+/// Hooks into the executor an analysis runs the script units on.
+///
+/// What the engine tests use to choose the engine and install a dispatcher,
+/// and to read the dispatcher's stats when the units have run.
+pub trait ExecutorHooks {
+    /// Configure the executor before any unit runs.
+    fn configure(&mut self, executor: &mut ScriptExecutor);
+    /// Inspect the executor after the last unit has run.
+    fn finish(&mut self, executor: &mut ScriptExecutor);
+}
+
+struct NoHooks;
+
+impl ExecutorHooks for NoHooks {
+    fn configure(&mut self, _executor: &mut ScriptExecutor) {}
+    fn finish(&mut self, _executor: &mut ScriptExecutor) {}
+}
+
+/// Analyze a worldfile as [`analyze_worldfile_with_options`] does, with
+/// hooks into the executor.
+pub fn analyze_worldfile_with_hooks(
+    db: &mut crate::Database,
+    parsed: &ParsedWorldfile,
+    options: AnalysisOptions,
+    hooks: &mut dyn ExecutorHooks,
+) -> AnyResult<Analysis> {
     let mut results = Vec::new();
 
     // This function exists to produce fixture output, which includes the IR.
@@ -148,11 +177,16 @@ pub fn analyze_worldfile_with_options(
         }
     }
 
+    if let Some(executor) = &mut executor {
+        hooks.configure(executor);
+    }
+
     // Process script sections.
     process_script_sections(&parsed.sections, &mut compiler, &mut executor, &mut results);
 
     // Cleanup.
     if let Some(ref mut executor) = executor {
+        hooks.finish(executor);
         executor.destroy_live_values();
     }
 

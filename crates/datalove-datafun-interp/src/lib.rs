@@ -93,6 +93,30 @@ pub enum UnitCompletion {
     EarlyReturn,
 }
 
+/// How the interpreter runs function bodies.
+///
+/// Script units always run on the IR walker; the engine decides only what
+/// runs the functions they call.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Engine {
+    /// Walking the IR, with debug liveness checks: the reference every other
+    /// engine is tested against.
+    IrWalker,
+    /// Register bytecode lowered from the IR.
+    Bytecode,
+}
+
+impl Engine {
+    /// The engine `DATALOVE_INTERP` names, `ir` or `bc`, or the default.
+    pub fn from_env() -> Engine {
+        match std::env::var("DATALOVE_INTERP").as_deref() {
+            Ok("bc") => Engine::Bytecode,
+            Ok("ir") | Err(_) => Engine::IrWalker,
+            Ok(other) => panic!("DATALOVE_INTERP is `{other}`, not `ir` or `bc`"),
+        }
+    }
+}
+
 /// Extract list struct pointer, element type descriptor, and element size from a list value.
 unsafe fn list_element_info(list_val: &Value) -> (&rtdt::List, *const rtdt::TyDesc, usize) {
     unsafe {
@@ -136,8 +160,8 @@ pub struct IrInterpreter {
     temp_view_tensors: Vec<Box<rtdt::Tensor>>,
     /// Native function dispatch table for rider functions.
     native_table: NativeFunctionTable,
-    /// Whether function bodies run as bytecode (`DATALOVE_INTERP=bc`).
-    use_bytecode: bool,
+    /// What runs function bodies.
+    engine: Engine,
     /// What the bytecode lowering has done, for `DATALOVE_BC_STATS`.
     bc_stats: bytecode::BcStats,
     /// The consts `StaticRef` names, each built once.
@@ -236,7 +260,7 @@ impl IrInterpreter {
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
-            use_bytecode: std::env::var("DATALOVE_INTERP").is_ok_and(|v| v == "bc"),
+            engine: Engine::from_env(),
             static_pool: StaticPool::default(),
             bc_stats: bytecode::BcStats {
                 counting: std::env::var_os("DATALOVE_BC_STATS").is_some(),
@@ -266,6 +290,17 @@ impl IrInterpreter {
     /// Set or replace the call dispatcher.
     pub fn set_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+    }
+
+    /// What runs function bodies.
+    pub fn engine(&self) -> Engine {
+        self.engine
+    }
+
+    /// Choose what runs function bodies, before running any.
+    pub fn set_engine(&mut self, engine: Engine) {
+        debug_assert!(self.frame_stack.is_empty(), "switching engines mid-call");
+        self.engine = engine;
     }
 
     /// Get mutable access to the type descriptor table.
@@ -521,7 +556,7 @@ impl IrInterpreter {
         frames: &mut FrameStore,
         code_ref: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
-        if self.use_bytecode {
+        if self.engine == Engine::Bytecode {
             let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();
             return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);

@@ -524,4 +524,9 @@ impl ScriptExecutor {
     pub fn set_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
         self.interp.set_dispatcher(dispatcher);
     }
+
+    /// Choose what runs function bodies, before running any.
+    pub fn set_engine(&mut self, engine: datalove_datafun_interp::Engine) {
+        self.interp.set_engine(engine);
+    }
 }

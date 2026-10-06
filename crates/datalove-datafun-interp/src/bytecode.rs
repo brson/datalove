@@ -2941,7 +2941,7 @@ impl BcStats {
 impl IrInterpreter {
     /// Print what the bytecode lowering did, for `DATALOVE_BC_STATS`.
     pub(crate) fn report_bc_stats(&self) {
-        if self.use_bytecode && std::env::var_os("DATALOVE_BC_STATS").is_some() {
+        if self.engine == crate::Engine::Bytecode && std::env::var_os("DATALOVE_BC_STATS").is_some() {
             let s = &self.bc_stats;
             if s.bodies == 0 {
                 return;

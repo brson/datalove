@@ -489,7 +489,9 @@ impl<'a> Parser<'a> {
             if is_separator(line) {
                 return Ok(true);
             }
-            if !line.trim().is_empty() {
+            // Comments before a section are for whoever reads the file, like
+            // the engine tests' `// engines:` opt-outs.
+            if !line.trim().is_empty() && !line.trim_start().starts_with("//") {
                 bail!("expected '----------' separator at line {}, found '{}'", self.line_num(), line);
             }
             self.pos += 1;
@@ -597,6 +599,13 @@ fn is_separator(line: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn comments_may_precede_a_section_and_nothing_else_may() {
+        let sections = parse_worldfile_to_sections("// engines: -c\n\n----------\nscriptunit-fragment\n----------\n\nlet x = 1\n").X();
+        assert_eq!(sections.len(), 1);
+        assert!(parse_worldfile_to_sections("engines: -c\n----------\nscriptunit-fragment\n----------\n").is_err());
+    }
 
     #[test]
     fn test_parse_simple_worldfile() {

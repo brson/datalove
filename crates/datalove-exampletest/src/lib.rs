@@ -71,6 +71,7 @@ pub struct ExampleTestRunner<Init, F> {
     analyzer: F,
     allow_errors: bool,
     skip_names: Vec<String>,
+    after_all: Option<Box<dyn FnOnce() -> Result<(), String> + Send + Sync>>,
 }
 
 impl ExampleTestRunner<fn(), ()> {
@@ -132,7 +133,17 @@ where
             analyzer,
             allow_errors: false,
             skip_names: Vec::new(),
+            after_all: None,
         }
+    }
+
+    /// Run a check once every fixture has, failing the suite if it fails.
+    ///
+    /// For what no one fixture can show, like that some machinery was
+    /// exercised somewhere in the corpus.
+    pub fn after_all(mut self, check: impl FnOnce() -> Result<(), String> + Send + Sync + 'static) -> Self {
+        self.after_all = Some(Box::new(check));
+        self
     }
 
     /// Set the subdirectory within tests/fixtures/ where test files are located.
@@ -414,6 +425,16 @@ where
                     writeln!(&mut stderr, "{}", error).X();
                     errors += 1;
                 }
+            }
+        }
+
+        if let Some(check) = self.after_all {
+            if let Err(error) = check() {
+                stderr.set_color(ColorSpec::new().set_fg(Some(Color::Red))).X();
+                writeln!(&mut stderr, "\nError:").X();
+                stderr.reset().X();
+                writeln!(&mut stderr, "{}", error).X();
+                errors += 1;
             }
         }
 
