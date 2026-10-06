@@ -46,7 +46,7 @@ test-slow:
     just check-wasm
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-sys-riders
+test-ci: test test-slow test-64 test-sys-riders test-bc
 
 # Run tests with parallelism enabled.
 test-parallel:
@@ -142,6 +142,17 @@ test-miri-module-interp *ARGS='':
 test-miri-interp-all *ARGS='':
     just test-miri-interp {{ARGS}}
     just test-miri-module-interp {{ARGS}}
+
+# The interpreter fixtures on the bytecode, under Miri: the bytecode's frame
+# access is raw pointer arithmetic, which this checks as it runs.
+#
+# Tree borrows, because the test harness's rayon pulls in crossbeam-epoch,
+# which stacked borrows rejects and tree borrows accepts; under stacked
+# borrows the run stops in crossbeam before reaching the interpreter, and
+# `test-miri-interp` does today.
+test-miri-interp-bc *ARGS='':
+    env DATALOVE_INTERP=bc MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
+        cargo +nightly miri test -p datalove-datafun --test interp_tests {{ARGS}}
 
 # Install the `datalove` binary from this working copy.
 install:

@@ -101,7 +101,9 @@ impl FrameStack {
     #[inline(always)]
     pub(crate) unsafe fn push_borrowed(&mut self, layout: &IrLayout) -> Result<Frame, InterpError> {
         let layout = layout as *const IrLayout;
-        let tagged = (layout as usize | BORROWED) as *const IrLayout;
+        // Tagged by address, keeping the pointer's provenance: a tagged one is
+        // never dereferenced, and an untagged one is the `Rc`'s own.
+        let tagged = layout.map_addr(|addr| addr | BORROWED);
         // SAFETY: the caller's.
         unsafe { self.push_raw(layout, tagged) }
     }
@@ -180,16 +182,21 @@ impl FrameStack {
         AllocLayout::from_size_align(size, CHUNK_ALIGN).expect("a frame stack chunk's layout")
     }
 
+    /// Whether no frame is on the stack.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.current == 0 && self.top == 0
+    }
+
     /// Pop the frame on top, which has to be `frame`.
     #[inline]
     pub fn pop(&mut self, frame: Frame) {
         // SAFETY: `frame` was pushed here, so a header precedes it.
         let header = unsafe { (frame.base.sub(HEADER) as *const Header).read() };
-        debug_assert_eq!(header.layout as usize & !BORROWED, frame.layout as usize,
+        debug_assert_eq!(header.layout.addr() & !BORROWED, frame.layout.addr(),
             "popped a frame that is not on top");
         self.current = header.prev_chunk as usize;
         self.top = header.prev_top as usize;
-        if header.layout as usize & BORROWED == 0 {
+        if header.layout.addr() & BORROWED == 0 {
             // SAFETY: from `Rc::into_raw` at the push, and released once.
             drop(unsafe { Rc::from_raw(header.layout) });
         }

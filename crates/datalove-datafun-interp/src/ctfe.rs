@@ -122,6 +122,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
 
     fn set_module_registry(&mut self, registry: Arc<ModuleFunctionRegistry>) {
         self.module_registry = Some(registry);
+        self.interp.forget_compiled_bodies();
     }
 }
 

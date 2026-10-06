@@ -119,6 +119,10 @@ pub struct IrInterpreter {
     tydesc_table: IrTyDescTable,
     /// Frame layouts, kept so that calling a function does not recompute one.
     layout_cache: LayoutCache,
+    /// Counts the times compiled bodies were forgotten; see
+    /// `forget_compiled_bodies`. A call-site cache made in another epoch is
+    /// not trusted.
+    pub(crate) code_epoch: u64,
     /// Frames to reuse, so that calling a function does not allocate one.
     frame_stack: FrameStack,
     /// Call-site caches the bytecode replaced, which a frame may still be
@@ -226,6 +230,7 @@ impl IrInterpreter {
             runtime: datalove_rt::rust::Runtime::new_with_debug_mode(debug_mode),
             tydesc_table: IrTyDescTable::new(),
             layout_cache: LayoutCache::new(),
+            code_epoch: 0,
             frame_stack: FrameStack::new(),
             retired_call_caches: Vec::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
@@ -478,7 +483,30 @@ impl IrInterpreter {
         frame.enter();
         let result = self.run_frame(func, &mut frame, ret_dest, ctx, registry, frames, code_ref.as_ref());
         self.frame_stack.pop(frame);
+        self.release_retired_call_caches();
         result
+    }
+
+    /// Forget everything worked out about the bodies run so far: their
+    /// layouts, their bytecode, and every call site's idea of its callee.
+    ///
+    /// For whoever replaces bodies, which happens between units: re-running a
+    /// unit, truncating units, swapping in a new module compilation. A new body
+    /// is a new allocation, which can land where a replaced one was freed, and
+    /// all of that is kept by function identity or by body address, neither of
+    /// which tells the two apart. Kept, an edited function ran as it was.
+    pub fn forget_compiled_bodies(&mut self) {
+        debug_assert!(self.frame_stack.is_empty(), "bodies replaced while frames run on them");
+        self.code_epoch += 1;
+        self.layout_cache = LayoutCache::new();
+    }
+
+    /// Let go of the call-site caches the bytecode replaced, if no frame is
+    /// left that could be borrowing a layout or a body from one.
+    fn release_retired_call_caches(&mut self) {
+        if self.frame_stack.is_empty() {
+            self.retired_call_caches.clear();
+        }
     }
 
     /// Run a function body in a frame that `Frame::enter` has made ready.
@@ -575,6 +603,9 @@ impl IrInterpreter {
         ret_dest: Destination,
         expr_dest: Option<Destination>,
     ) -> Result<UnitCompletion, InterpError> {
+        if replacing {
+            self.forget_compiled_bodies();
+        }
         let script_ctx = unit.script_context()
             .expect("execute_script_unit_in_env requires a script code unit");
 
@@ -600,6 +631,7 @@ impl IrInterpreter {
             &mut env.frames,
             None,
         );
+        self.release_retired_call_caches();
 
         // On error, destroy the frame and propagate the error. A unit being
         // re-executed keeps the frame it had: the numbering cannot have a hole

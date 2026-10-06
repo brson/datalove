@@ -317,8 +317,10 @@ struct FastCall {
 /// What a fast call found out about its callee, kept until the callee's body
 /// changes.
 pub(crate) struct CallCache {
-    /// The body's address.
+    /// The body's address, and the interpreter's code epoch when it was found:
+    /// an address only names a body within an epoch.
     address: usize,
+    epoch: u64,
     /// Its layout; none for a native.
     layout: Option<std::rc::Rc<IrLayout>>,
     /// Whether the call's arguments suit the fast path for it.
@@ -1511,7 +1513,10 @@ impl Lowering<'_> {
     /// the comparison's only use.
     fn fuse_compare(&mut self, cond: &Operand, then: u32, els: u32) -> Option<Op> {
         let Operand::Value(id) = cond else { return None };
-        if self.uses[id.0 as usize] != 1 {
+        // Only an op of this block: the last op before it may be the end of
+        // the previous one, which falls through into this one, and moving it
+        // here would leave every other way into this block skipping it.
+        if self.uses[id.0 as usize] != 1 || self.ops.len() <= self.block_start[self.block] as usize {
             return None;
         }
         let want = self.value_loc(*id).0;
@@ -1535,6 +1540,206 @@ impl Lowering<'_> {
     }
 }
 
+impl Op {
+    /// Every place in the frame the op reads or writes, with how many bytes it
+    /// reads or writes there.
+    ///
+    /// Exhaustive, so that a new op cannot be added without saying what it
+    /// touches; the verifier checks these against the frame.
+    fn places(&self, f: &mut impl FnMut(Loc, u32)) {
+        const I: u32 = rtdt::INDEX_SIZE;
+        match *self {
+            Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::Jump { .. }
+            | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
+            | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. }
+            | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. } => {}
+            Op::Const1 { dst, .. } => f(dst, 1),
+            Op::Const4 { dst, .. } => f(dst, 4),
+            Op::ConstPool { dst, len, .. } => f(dst, len),
+            Op::ConstString { dst, .. } => f(dst, 1),
+            Op::Copy1 { dst, src } => { f(dst, 1); f(src, 1) }
+            Op::Copy4 { dst, src } => { f(dst, 4); f(src, 4) }
+            Op::Copy8 { dst, src } => { f(dst, 8); f(src, 8) }
+            Op::CopyN { dst, src, len } => { f(dst, len); f(src, len) }
+            Op::AddCkU32 { dst, ovf, a, b } | Op::SubCkU32 { dst, ovf, a, b } | Op::MulCkU32 { dst, ovf, a, b }
+            | Op::AddCkI32 { dst, ovf, a, b } | Op::SubCkI32 { dst, ovf, a, b } | Op::MulCkI32 { dst, ovf, a, b } => {
+                f(dst, 4); f(ovf, 1); f(a, 4); f(b, 4)
+            }
+            Op::AddCkU64 { dst, ovf, a, b } | Op::SubCkU64 { dst, ovf, a, b } | Op::MulCkU64 { dst, ovf, a, b }
+            | Op::AddCkI64 { dst, ovf, a, b } | Op::SubCkI64 { dst, ovf, a, b } | Op::MulCkI64 { dst, ovf, a, b } => {
+                f(dst, 8); f(ovf, 1); f(a, 8); f(b, 8)
+            }
+            Op::CmpU32I { dst, a, .. } => { f(dst, 1); f(a, 4) }
+            Op::AddCkU32I { dst, ovf, a, .. } | Op::SubCkU32I { dst, ovf, a, .. }
+            | Op::MulCkU32I { dst, ovf, a, .. } => { f(dst, 4); f(ovf, 1); f(a, 4) }
+            Op::CmpU8 { dst, a, b, .. } => { f(dst, 1); f(a, 1); f(b, 1) }
+            Op::CmpU32 { dst, a, b, .. } | Op::CmpI32 { dst, a, b, .. } => { f(dst, 1); f(a, 4); f(b, 4) }
+            Op::CmpU64 { dst, a, b, .. } | Op::CmpI64 { dst, a, b, .. } => { f(dst, 1); f(a, 8); f(b, 8) }
+            Op::AddWrapU32 { dst, a, b } | Op::SubWrapU32 { dst, a, b } | Op::MulWrapU32 { dst, a, b }
+            | Op::RemU32 { dst, a, b } | Op::ShrU32 { dst, a, b } | Op::ShlU32 { dst, a, b }
+            | Op::AndU32 { dst, a, b } => { f(dst, 4); f(a, 4); f(b, 4) }
+            Op::AddWrapIndex { dst, a, b } | Op::SubWrapIndex { dst, a, b } => { f(dst, I); f(a, I); f(b, I) }
+            Op::U64ToIndex { dst, src } => { f(dst, I); f(src, 8) }
+            Op::ZextU8U32 { dst, src } => { f(dst, 4); f(src, 1) }
+            Op::ZextU8U64 { dst, src } => { f(dst, 8); f(src, 1) }
+            Op::ZextU32U64 { dst, src } => { f(dst, 8); f(src, 4) }
+            Op::NotBool { dst, src } => { f(dst, 1); f(src, 1) }
+            Op::ListBoundsCheck { dst, list, index } => {
+                f(dst, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
+            }
+            Op::ListElementRef { dst, list, index, .. } => {
+                f(dst, 8); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
+            }
+            Op::WrapSome { dst, src, at, len } | Op::WrapOk { dst, src, at, len } => { f(dst, at + len); f(src, len) }
+            Op::WrapNone { dst } => f(dst, 1),
+            Op::UnwrapOption { dst, flag, src, at, len } => { f(dst, len); f(flag, 1); f(src, at + len) }
+            Op::UnwrapResult { ok, err, flag, src, at, ok_len, err_len } => {
+                f(ok, ok_len as u32); f(err, err_len as u32); f(flag, 1);
+                f(src, at as u32 + (ok_len.max(err_len)) as u32)
+            }
+            Op::UnwrapOkBr { ok, err, src, at, ok_len, .. } => {
+                let err_len = std::mem::size_of::<rtdt::Error>() as u32;
+                f(ok, ok_len as u32); f(err, err_len); f(src, at as u32 + (ok_len as u32).max(err_len))
+            }
+            Op::Drop { src, .. } | Op::DropTracked { src, .. } => f(src, 1),
+            Op::StoreTracked { dst, src, len, .. } | Op::LoadMoveTracked { dst, src, len, .. } => {
+                f(dst, len); f(src, len)
+            }
+            Op::Widen { dst, src, .. } => { f(dst, std::mem::size_of::<rtdt::Int>() as u32); f(src, 1) }
+            Op::BrIf { cond, .. } => f(cond, 1),
+            Op::BrCmpU8 { a, b, .. } => { f(a, 1); f(b, 1) }
+            Op::BrCmpU32I { a, .. } => f(a, 4),
+            Op::CkU32Br { dst, a, b, .. } => { f(dst, 4); f(a, 4); f(b, 4) }
+            Op::CkU32IBr { dst, a, .. } => { f(dst, 4); f(a, 4) }
+            Op::BrCmpU32 { a, b, .. } | Op::BrCmpI32 { a, b, .. } => { f(a, 4); f(b, 4) }
+            Op::BrCmpU64 { a, b, .. } | Op::BrCmpI64 { a, b, .. } => { f(a, 8); f(b, 8) }
+            Op::Switch { disc, .. } => f(disc, 4),
+            Op::Return { src, len } => f(src, len),
+            Op::ReturnOk { src, len, .. } => f(src, len),
+        }
+    }
+
+    /// Every op the op may go to next, other than the one after it.
+    ///
+    /// Exhaustive, so that a new op that jumps cannot be left out of the
+    /// fixups, the compaction or the verifier, which all go through this.
+    fn targets_mut(&mut self, f: &mut impl FnMut(&mut u32)) {
+        match self {
+            Op::Jump { to } | Op::EdgeIr { to, .. } => f(to),
+            Op::UnwrapOkBr { then, .. } => f(then),
+            Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
+            | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
+            | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. } => { f(then); f(els) }
+            Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. } => { f(ovf); f(ok) }
+            Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. }
+            | Op::Const1 { .. } | Op::Const4 { .. } | Op::ConstPool { .. } | Op::ConstString { .. }
+            | Op::Copy1 { .. } | Op::Copy4 { .. } | Op::Copy8 { .. } | Op::CopyN { .. }
+            | Op::AddCkU32 { .. } | Op::SubCkU32 { .. } | Op::MulCkU32 { .. }
+            | Op::AddCkI32 { .. } | Op::SubCkI32 { .. } | Op::MulCkI32 { .. }
+            | Op::AddCkU64 { .. } | Op::SubCkU64 { .. } | Op::MulCkU64 { .. }
+            | Op::AddCkI64 { .. } | Op::SubCkI64 { .. } | Op::MulCkI64 { .. }
+            | Op::CmpU32I { .. } | Op::AddCkU32I { .. } | Op::SubCkU32I { .. } | Op::MulCkU32I { .. }
+            | Op::CmpU8 { .. } | Op::CmpU32 { .. } | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. }
+            | Op::AddWrapU32 { .. } | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. }
+            | Op::ShrU32 { .. } | Op::ShlU32 { .. } | Op::AndU32 { .. }
+            | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::U64ToIndex { .. }
+            | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
+            | Op::ListBoundsCheck { .. } | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
+            | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
+            | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
+            | Op::UnwrapOption { .. } | Op::UnwrapResult { .. }
+            | Op::Drop { .. } | Op::DropTracked { .. } | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. }
+            | Op::Widen { .. } | Op::BinOpRt { .. } | Op::Switch { .. }
+            | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. } => {}
+        }
+    }
+}
+
+impl BcFunction {
+    /// Check, in a debug build, everything the loop takes on trust: that every
+    /// place an op names is inside the frame, every jump lands on an op, every
+    /// index names an entry of its table, and every fused unwrap has a block
+    /// after it to fall through into.
+    ///
+    /// The loop reads and writes the frame through raw offsets, and this is
+    /// what those offsets rest on.
+    fn verify(&self, func: &IrCodeUnit, layout: &IrLayout) {
+        let size = layout.frame_size;
+        let n = self.ops.len() as u32;
+        let place = |at: usize, loc: Loc, len: u32| {
+            let offset = loc.0 & !INDIRECT;
+            // An indirect place is read through the pointer the frame holds;
+            // what it points at is the caller's or a reference's.
+            let len = if loc.0 & INDIRECT != 0 { 8 } else { len };
+            assert!(offset + len <= size,
+                "{}: op {} ({:?}) names {} bytes at {} in a frame of {}",
+                func.name, at, self.ops[at], len, offset, size);
+        };
+        let target = |at: usize, to: u32| {
+            assert!(to < n, "{}: op {} ({:?}) goes to {}, past the last op", func.name, at, self.ops[at], to);
+        };
+        assert!(self.entry < n, "{}: the entry {} is past the last op", func.name, self.entry);
+        for (at, op) in self.ops.iter().enumerate() {
+            op.places(&mut |loc, len| place(at, loc, len));
+            op.clone().targets_mut(&mut |to| target(at, *to));
+            let in_table = |i: u32, len: usize, what: &str| {
+                assert!((i as usize) < len, "{}: op {} ({:?}) names {} {} of {}", func.name, at, op, what, i, len);
+            };
+            match *op {
+                Op::Ir { block, index } | Op::Call { block, index } => {
+                    in_table(block, func.blocks.len(), "block");
+                    in_table(index, func.blocks[block as usize].instructions.len(), "instruction");
+                }
+                Op::EdgeIr { block, .. } | Op::ReturnIr { block } => in_table(block, func.blocks.len(), "block"),
+                Op::CallFast { site } => in_table(site, self.calls.len(), "call site"),
+                Op::ConstPool { at: pool_at, len, .. } | Op::ConstString { at: pool_at, len, .. } => {
+                    assert!(pool_at + len <= self.pool.len() as u32, "{}: op {} reads past the pool", func.name, at);
+                }
+                Op::ListElementRefRt { at: i, .. } | Op::EraseRt { at: i } | Op::ReifyRt { at: i }
+                | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. } => {
+                    in_table(i, self.rt.len(), "routine operands");
+                    // Unused entries of a triple are padding, with no descriptor.
+                    for (loc, desc) in self.rt[i as usize] {
+                        if !matches!(desc, Desc::Static(d) if d.is_null()) {
+                            place(at, loc, 1);
+                        }
+                    }
+                }
+                Op::Switch { table, .. } => {
+                    in_table(table, self.switches.len(), "switch table");
+                    let t = &self.switches[table as usize];
+                    t.cases.iter().for_each(|(_, to)| target(at, *to));
+                    target(at, t.default);
+                }
+                Op::UnwrapOkBr { .. } => assert!((at as u32) + 1 < n,
+                    "{}: op {} unwraps with nothing after it to fall through into", func.name, at),
+                _ => {}
+            }
+            match *op {
+                Op::ConstString { desc, .. } | Op::Drop { desc, .. } | Op::DropTracked { desc, .. }
+                | Op::StoreTracked { desc, .. } | Op::Widen { src_desc: desc, .. } => {
+                    in_table(desc, self.descs.len(), "descriptor");
+                }
+                _ => {}
+            }
+            match *op {
+                Op::DropTracked { track, .. } | Op::StoreTracked { track, .. } | Op::LoadMoveTracked { track, .. } => {
+                    assert!(track < size, "{}: op {} names tracking byte {} in a frame of {}", func.name, at, track, size);
+                }
+                _ => {}
+            }
+        }
+        for call in &self.calls {
+            place(0, call.dest, 1);
+            if let Some(resolved) = &call.resolved {
+                for &(loc, _) in resolved {
+                    place(0, loc, 1);
+                }
+            }
+        }
+    }
+}
+
 /// Drop the `removed` ops, pointing every jump at where its target op, or the
 /// next one kept after it, now is. Returns where `entry` now is.
 fn compact(ops: &mut Vec<Op>, removed: &[bool], switches: &mut [SwitchTable], entry: u32) -> u32 {
@@ -1550,20 +1755,9 @@ fn compact(ops: &mut Vec<Op>, removed: &[bool], switches: &mut [SwitchTable], en
         }
     }
     new_index.push(kept);
-    let map = |t: &mut u32| *t = new_index[*t as usize];
+    let mut map = |t: &mut u32| *t = new_index[*t as usize];
     for op in ops.iter_mut() {
-        match op {
-            Op::Jump { to } | Op::EdgeIr { to, .. } => map(to),
-            Op::UnwrapOkBr { then, .. } => map(then),
-            Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32 { .. } | Op::BrCmpI32 { .. }
-            | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::BrCmpU32I { .. }
-            | Op::CkU32Br { .. } | Op::CkU32IBr { .. } => {
-                let (then, els) = branch_targets(op);
-                map(then);
-                map(els);
-            }
-            _ => {}
-        }
+        op.targets_mut(&mut map);
     }
     for table in switches.iter_mut() {
         for (_, to) in &mut table.cases {
@@ -1596,7 +1790,7 @@ fn branch_targets(op: &mut Op) -> (&mut u32, &mut u32) {
 
 /// Lower a function body against its layout.
 pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout) -> (BcFunction, u32) {
-    Lowering {
+    let lowered = Lowering {
         func,
         layout,
         ops: Vec::new(),
@@ -1618,7 +1812,11 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout) -> (BcFunction, u32) {
         block: 0,
         index: 0,
     }
-    .lower()
+    .lower();
+    if cfg!(debug_assertions) {
+        lowered.0.verify(func, layout);
+    }
+    lowered
 }
 
 // =============================================================================
@@ -1765,7 +1963,7 @@ impl IrInterpreter {
                     Op::Call { block, index } => tri!(self.run_general_call(regs, block, index)),
                     Op::CallFast { site } => {
                         let call = &bc.calls[site as usize];
-                        if let Some(plan) = self.valid_plan(call, regs) {
+                        if let Some(plan) = self.valid_plan(call) {
                             pc = tri!(self.enter_planned(regs, call, plan, base, pc.wrapping_add(1)));
                             bc = &*regs.bc;
                             ops = bc.ops.as_ptr();
@@ -2073,27 +2271,20 @@ impl IrInterpreter {
     }
 
     /// The plan for a call, if it has one and it still holds: no dispatcher
-    /// installed, and the callee the body the plan was made for.
+    /// installed, and no body replaced since it was made.
+    ///
+    /// Within one code epoch no body changes -- bodies are replaced only
+    /// between units, and doing so starts a new epoch -- so a call site that
+    /// found its callee in this epoch has the callee it would find again.
     #[inline(always)]
-    fn valid_plan<'c>(&self, call: &'c FastCall, regs: &Regs<'_>) -> Option<&'c Plan> {
+    fn valid_plan<'c>(&self, call: &'c FastCall) -> Option<&'c Plan> {
         // SAFETY: only `fast_call` takes the cache mutably, and nothing holds
         // the plan across one.
-        let plan = unsafe { &*call.cache.as_ptr() }.as_ref()?.plan.as_ref()?;
-        if self.call_dispatcher.borrow().is_some() {
+        let cache = unsafe { &*call.cache.as_ptr() }.as_ref()?;
+        if cache.epoch != self.code_epoch || self.call_dispatcher.borrow().is_some() {
             return None;
         }
-        // SAFETY: in the caller's body, which is running.
-        let same = match unsafe { &*plan.code_ref } {
-            CodeRef::Local(id) => regs.ctx.find_local_function(*id)
-                .is_some_and(|f| std::ptr::eq(f, plan.func)),
-            CodeRef::Module { .. } => match &*call.module_callee.borrow() {
-                Some((held, body)) => std::sync::Arc::ptr_eq(held, regs.registry.module_registry_arc())
-                    && std::ptr::eq(*body, plan.func),
-                None => false,
-            },
-            CodeRef::External { .. } => false,
-        };
-        same.then_some(plan)
+        cache.plan.as_ref()
     }
 
     /// Make a planned call: push the callee's frame, write the arguments and
@@ -2107,11 +2298,14 @@ impl IrInterpreter {
         base: *mut u8,
         resume: usize,
     ) -> Result<usize, InterpError> {
-        // SAFETY: the plan keeps the layout and the bytecode alive for as
-        // long as the frame is on the stack: a call site's cache, which holds
-        // the plan, is only replaced when the callee's body changes, which it
-        // cannot while the body is running, and a replaced one is retired
-        // rather than dropped.
+        // SAFETY: the frame borrows the layout, and the activation the
+        // bytecode, from the plan, which outlives the frame: the plan is in a
+        // call-site cache of the caller's bytecode, which the caller's own
+        // activation keeps alive -- by `bc_keep`, by the plan it was entered
+        // through, or, at the bottom, by whoever entered the loop -- and a
+        // cache that is replaced while frames may still borrow from it is
+        // retired to the interpreter rather than dropped, until no frame is
+        // left (`release_retired_call_caches`).
         let mut frame = unsafe { self.frame_stack.push_borrowed(&plan.layout) }?;
         let callee_base = frame.base_ptr();
         for param in plan.params.iter() {
@@ -2521,7 +2715,9 @@ impl IrInterpreter {
         let (layout, suits, forward) = {
             let mut cache = call.cache.borrow_mut();
             match &*cache {
-                Some(c) if c.address == address => (c.layout.clone(), c.suits, c.forward.clone()),
+                Some(c) if c.address == address && c.epoch == self.code_epoch => {
+                    (c.layout.clone(), c.suits, c.forward.clone())
+                }
                 _ => {
                     let (layout, suits, forward) = match &callee.context {
                         CodeUnitContext::Native(native) => (None, Self::suits_native(call, native), None),
@@ -2558,7 +2754,9 @@ impl IrInterpreter {
                             }).collect(),
                         }),
                     };
-                    let fresh = CallCache { address, layout: layout.clone(), suits, forward: forward.clone(), plan };
+                    let fresh = CallCache {
+                        address, epoch: self.code_epoch, layout: layout.clone(), suits, forward: forward.clone(), plan,
+                    };
                     // A planned call's frame borrows its layout and bytecode
                     // from the plan, so a replaced one is kept.
                     if let Some(old) = cache.replace(fresh) {

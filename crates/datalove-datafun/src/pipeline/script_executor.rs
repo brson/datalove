@@ -404,6 +404,7 @@ impl ScriptExecutor {
         self.unit_exports.truncate(len);
         self.rebuild_script_ctx();
         self.env.truncate_units(self.interp.runtime_handle(), len);
+        self.interp.forget_compiled_bodies();
     }
 
     /// Point the executor at a module compilation done since it was built.
@@ -419,6 +420,7 @@ impl ScriptExecutor {
         module_registry: Arc<datalove_datafun_interp::ModuleFunctionRegistry>,
     ) {
         self.env.set_module_registry(module_registry);
+        self.interp.forget_compiled_bodies();
     }
 
     /// Get the type and value of a binding by name.
