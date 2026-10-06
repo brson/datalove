@@ -1,169 +1,193 @@
 # Review: mandocs/datafun.md
 
-A review of the datafun primer for content and flow, refreshed 2026-10-05
-against the draft as it then stood: sections written through Numerics, with
-Collections and indexing and everything after Numerics stubbed. The intended
-audience is experienced programmers, likely knowing Rust, who have already
-read `datalit.md`.
+A review of the datafun primer for content and flow, as of 2026-10-06. The
+intended audience is experienced programmers, likely knowing Rust, who have
+already read `datalit.md`.
 
-An earlier version of this review (2026-10-02) asked for a first-script
-section, bindings before functions, an Ownership section, a smaller first
-function, and option/result handling taught once rather than split across
-two sections. The draft has done all of these, and the order of topics now
-matches what that review suggested. Those items are gone from here, as are
-the mechanical fixes it applied. What remains is either still open or new.
-
-Every `datalove` code block was run through `datalove script`. All run, with
-two exceptions: the D001 example, which is meant to fail, and the
-`case default` example, which continues the block before it and fails alone
-with F001 (`s` not found). Saying so in the text, or repeating the binding,
-would help readers who paste examples.
+Every section is written except Scripts and interactive units, which is a
+heading only. Every `datalove` code block was run through `datalove script`.
+All run except the two meant to fail: the D001 example in Ownership and the
+inference example in Generics (F016). Both are labelled as failing in the text.
 
 ## Summary
 
-The structure is now sound, and the first script, Variables, Functions and
-Ownership read well in sequence. The largest remaining gap is that Ownership
-never says which types are copied and which are moved, and `int` -- the
-default integer type -- is moved. Option and result handling understates
-what a result's `else` needs.
+The structure is sound and the order of topics works. Collections and
+indexing, Comparison and equality, Constants, and Generics are thorough and
+accurate. What remains falls into three groups:
 
-The draft's rule that destructuring `if`s take no part in `else if` chains was
-not enforced when this review was first refreshed. The parser now enforces it
-(P073), so the text is right as written.
+- Three gaps in the early sections that this audience will trip on. Ownership
+  never says which types copy, and `int` moves. Numerics doesn't say literals
+  take their type from context. Option and result handling understates the
+  result `else`.
+- Topics with no home yet: the Scripts section, strings, `error` and `data`,
+  writing a module, and riders.
+- Smaller clarity issues, most of them in the first half, which was written
+  earliest.
 
 ## Errors
 
 These say something the implementation does not do.
 
-- **The result `if` needs an error binding, not just an `else`.** "In the
-  result case the `else` branch is required" understates it: `else` without
-  `|e|` is F046, "Result destructuring requires an else binding". Say that
-  the `else` must bind the error.
 - **The D001 transcript does not match the output.** The real header is
   `╭─[ test.dfs:7:9 ]`, with spaces inside the brackets. The help shows the
-  fixed line without a line-number gutter (`let b = a@` under `Help:`), not as
-  ` 6 │    let b = a@`. Regenerate the transcript before publishing, or say it is
-  abridged.
+  fixed line without a line-number gutter (`│           let b = a@`), not as
+  ` 6 │    let b = a@`. Regenerate it, or say it is abridged.
+- **The result `if` needs an error binding, not just an `else`.** "In the
+  result case the destructuring `else` branch is required" understates it:
+  `else` without `|e|` is F046, "Result destructuring requires an else
+  binding".
+- **Numerics says unary negation is a supported binop.** For fixed-width
+  integers it is not: `-a` on an `i32` is F026. The checked forms `-?` and
+  `-!` exist, and the example uses them, but the text should say so.
 
 ## Missing topics
 
+- **Scripts and interactive units.** This is the only stub. The intro promises
+  incremental recompilation and reevaluation, and Constants says a script
+  returns a result. This section should cover what a script's top level is,
+  the script's result, how `!` at top level stops it, and the interactive and
+  reactive behaviour. Generics now points here for the REPL story.
 - **Which types copy and which move.** Ownership says types "that contain heap
   allocations" move. The reader cannot tell from that which types are which,
-  and the answer surprises Rust readers: `int` moves (`let y = x;
-  debuglog (x, y)` is D001), while `f64` and the fixed-width integers copy.
-  List them: copied are `bool`, the fixed-width integers, the floats,
-  `index` and `offset`, and aggregates of those. Moved are `int`, `string`,
-  collections, `data` and `error`. Also say that arithmetic and comparison
-  read their operands rather than consuming them. That is why the
-  control-flow examples can write `counter - 1` and `counter == 0` freely,
-  but need `counter@` to pass `counter` to `rem_checked`.
+  and the answer surprises Rust readers: `int` moves (`let y = x; debuglog
+  (x, y)` is D001), while `f64` and the fixed-width integers copy. List them.
+  Copied: `bool`, the fixed-width integers, the floats, `index` and `offset`,
+  and aggregates of those. Moved: `int`, `string`, collections, `data` and
+  `error`. Also say that arithmetic and comparison read their operands rather
+  than consuming them. That explains why Control flow writes `counter - 1` and
+  `counter == 0` freely but needs `counter@` for `rem_checked`. Generics and
+  Constants both lean on this distinction.
 - **What `out` means.** The parameter-modes example shows `out` but never says
   that the callee must write it before returning, that the caller's binding
   may be an unassigned `var`, and that it is initialised afterwards.
-- **Collections in use** (the stubbed section): fallible indexing (`a[i]?`,
-  `m[key]!`), field access (`.0`, `.name` -- the `match` example uses
-  `dims.0` unexplained), building and iterating. Indexing that cannot panic
-  is a strong selling point for this audience.
 - **Totality.** The intro says functions "have no exceptional control-flow".
-  The stronger and more distinctive claim deserves a paragraph: no panics,
-  and every partial operation returns an option or result.
-- **`index` and `offset`** are in the primitives table but absent from
-  Numerics, though they are what lists are indexed by and their width is a
-  build setting.
-- **`error` and `data`**: "As well as the dynamic types, `data` and `error`"
-  is the whole treatment, and `er error "failed to load"` uses the `error`
-  constructor unexplained. A sentence on making errors and what boxes into
-  `data`.
-- **Riders**: a paragraph under Modules or std, since an embeddable scripting
-  language is the intro's pitch.
-- **Strings**: the first script shows `to_uppercase` and `len`, and Ownership
-  shows `push_str`. A short tour of everyday string operations would still
-  help, since it is the most common moved type.
+  Collections now makes the strongest case, "no indexing operation that
+  panics", but only for indexing. Give it a paragraph near the start: no
+  panics, and every partial operation returns an option or result, or returns
+  early through `?` and `!`.
+- **`error` and `data`.** "As well as the dynamic types, `data` and `error`" is
+  the whole treatment. `er error "failed to load"` uses the `error`
+  constructor unexplained, and Generics now says type parameters are carried
+  as `data`. A short passage on making errors and what `data` holds.
+- **Strings.** The most common moved type gets no section. The first script
+  shows `to_uppercase` and `len`, and Ownership shows `push_str`. A short tour
+  of everyday string operations would help.
+- **Writing a module.** Modules describes the hierarchy and the workspace but
+  never shows a module's contents. Say that a `.dfm` holds functions, types
+  and consts. Say that every function is visible to requirers while consts are
+  private, as Constants says, and show a `local/` module being required from
+  a script.
+- **Riders.** These are native modules, `require`d like any other. A paragraph
+  under Modules, since an embeddable scripting language is the intro's pitch.
+- **`index` and `offset` in Numerics.** They are in the primitives table, and
+  Collections indexes with them, but Numerics opens with "`u8` .. `u64` and
+  `i8` .. `i64`" and never mentions them or that their width is a build
+  setting.
 
 ## Clarity, by section
 
-**Intro.** "Reactive script units that may be chained together, and that
-incrementally recompile and reevaluate as dependent units and modules are
-updated" is heavy for a bullet. Plainer wording, or a forward reference to
-Scripts. "For detail see additional documentation" should name or link it.
+**Intro.** "For detail see additional documentation" should name or link it.
 
 **Data types.**
 - "Structural and linear" sits awkwardly with Ownership's copy types.
-  Something like "structural, and linear unless trivially copyable" would
-  avoid a contradiction three sections later.
+  "Structural, and linear unless trivially copyable" avoids the contradiction.
 - "As well as the dynamic types, `data` and `error`" is a sentence fragment.
-- "They can be used to name the type but not construct it" is still unclear.
-  If the point is that there are no nominal constructors and values are built
+- "They can be used to name the type but not construct it" is unclear. If the
+  point is that there are no nominal constructors, so values are built
   structurally (`atom Circle`, not `Shape.Circle`), say that.
-- The example prints `enum { atom Circle }`, not `atom Circle`: a value
-  typed as an enum prints with its enum wrapper. That will surprise readers,
-  so say it, or print something less surprising.
+- The example prints `enum { atom Circle }`, not `atom Circle`. A value typed
+  as an enum prints with its enum wrapper. Say so, or log something less
+  surprising.
 
 **Functions.**
-- "(`( .. )`, `{ .. }`, `< .. >` and others)": nothing so far uses `< .. >`,
-  so either drop it or say what uses it.
-- The `min_value` example rebinds `min` from a `let` to a `var`. That is
-  legal shadowing, but it reads like a mistake in an example about something
-  else; use two names.
+- "`< .. >`" now has a use: forward-reference Generics.
+- The `min_value` example rebinds `min` from a `let` to a `var`. That is legal
+  shadowing, but it reads like a mistake in an example about something else.
+  Use two names.
 
 **Ownership.**
 - "All values are uniquely owned" followed by copy types reads as a
   contradiction; "affine" or "owned, with cheap types copied" is closer.
-- The parameter modes map onto Rust directly, and saying so would orient
-  this audience in one line: by value moves, `ref` is `&`, `mut` is
-  `&mut`, `@` is `.clone()` or a lossless `.into()`.
-- "In some cases Datalove can optionally compile in an 'auto-adapt' mode":
-  say how it is enabled, or forward-reference where.
+- The parameter modes map onto Rust directly, and one line would orient this
+  audience: by value moves, `ref` is `&`, `mut` is `&mut`, `@` is `.clone()`
+  or a lossless `.into()`.
+- "In some cases Datalove can optionally compile in an 'auto-adapt' mode": say
+  how it is enabled, or cut it.
 - "Beyond cloning it also performs widening numeric conversions and more":
   forward-reference Numerics, which shows the widening, and name the "more".
 
-**Control flow.** `continue` is named but never shown, and early `ret` from
-inside a loop is not mentioned. The two examples are still close. The second
-could become a `loop while` that uses `continue`.
+**Control flow.** `continue` is named but never shown, and an early `ret` from
+inside a loop is not mentioned. The two examples are nearly the same program.
+The second could become a `loop while` that uses `continue`.
 
 **Data types and destructuring.**
 - Point out that struct types use `:` and struct values use `=` (`{a: bool}`
   versus `{a = true}`). The table shows it, but it is the reverse of what a
-  Rust reader expects and deserves a sentence.
+  Rust reader expects.
 - `let term Foo x = term Foo "bar"` is unexplained. It works only because the
   type has one variant, and a reader will wonder what happens otherwise.
-- The first `match` example computes `area` and never logs it.
-- "Match must be exhaustive; Use" has a capital after a semicolon.
+- The first `match` example computes `area` and never logs it, so it prints
+  nothing.
 
 **Option and result handling.**
 - For Rust readers: `?` is for options and `!` for results, unlike Rust's
-  single `?`. Tie this to the checked operators in Numerics, which
-  early-return by the same mechanism.
-- "The postfix `?` and `!` operators propagate option and result return
-  types" is vague. They return `none` or the `er` from the enclosing
-  function, and otherwise yield the payload.
+  single `?`. Tie this to the checked operators and to indexing, which return
+  early the same way. Collections already says "just like the checked
+  arithmetic operators", but that comparison belongs here first.
+- "The postfix `?` and `!` operators propagate option and result return types"
+  is vague. They return `none` or the `er` from the enclosing function, and
+  otherwise yield the payload.
 - `add_twice(self: u32, ...)`: naming a parameter `self` suggests method
-  syntax, which does not exist (`x.add_checked(2)` is F078). Use another name.
-- Mention the helpers (`ok_or`, `unwrap_or`, `is_some`) as a family; `ok_or`
+  syntax, which does not exist (`x.add_checked(2)` is F078). The same name is
+  used in the Generics examples, so either explain the convention once or
+  rename it.
+- Introduce the helpers (`ok_or`, `unwrap_or`, `is_some`) as a family; `ok_or`
   appears with no introduction.
-- `debuglog(add_twice(...))` and, in Numerics, `debuglog(v)` are spaced
-  differently from `debuglog (a, b)` everywhere else.
+- `debuglog (add_twice(...))` wraps a single value in parentheses, unlike the
+  rest of the document.
+
+**Collections and indexing.**
+- "bult-in" is a typo.
+- The `loop while` walk uses `i +! 1` at script top level, where a failure
+  would stop the script. That's fine, but it is the first time a checked
+  operator appears outside a function, and Numerics has not yet been read.
+  Either move Numerics earlier or say what `+!` does here.
 
 **Numerics.**
 - "Integer literals have the bigint `int` type by default" undersells it:
-  literals take their type from context. `u8.add_wrapping(255, 1)` and
-  `u8.from_u64(100)` need no hint. The draft shows the `let` annotation case
-  but not the argument case. The `: T /` hint is for when there is no
-  context.
-- The hint's precedence: `: u32 / 3 + 4` hints only `3`.
-- "Thus none of the bare math binops work on fixed-sized integers" needs a
-  scope. Comparisons work, as `min_value` shows. `+` is F026, and so is unary
-  `-` on `i32`, though the paragraph before lists unary negation among the
-  supported operations. Say whether there is a checked negation.
+  literals take their type from context. `u8.add_wrapping(255, 1)` needs no
+  hint, as the section's last example shows without comment, and Generics now
+  relies on the same rule. The `: T /` hint is for when there is no context.
+- The hint binds tightly: `: u32 / 3 + 4` hints only `3` and is a type error.
+- "None of the bare math operations work on fixed-sized integers" needs a
+  scope. Comparisons work, as `min_value` shows.
 - That checked operators return early from the *enclosing function* is the
   most surprising semantics in the document. Emphasise it, and contrast it
-  with Rust's `checked_add`.
+  with Rust's `checked_add`, which returns an `Option` in place.
 - Say what the `!` operators produce: `er error "arithmetic overflow"` for
-  `+!`, `-!` and `*!`, and for `/!` `er error "division by zero"`, or
-  `"division by zero or overflow"` on signed types, where `MIN /! -1` fails
-  too.
-- Conversions: describe the naming conventions rather than one function:
-  `from_X` (none when out of range), `from_X_wrapping`, `from_int` on every
-  fixed type, `f32`/`f64.from_<fixed>`, `int.from_f64`, conversions between
-  `index`/`offset` and the integers, and that `@` only widens. Likewise the
-  `_checked`/`_wrapping`/`_saturating` arithmetic naming.
+  `+!`, `-!` and `*!`. For `/!` it is `er error "division by zero"`, or
+  `"division by zero or overflow"` on signed types, where `MIN /! -1` also
+  fails.
+- Conversions: describe the naming conventions rather than one function.
+  `from_X` returns none when out of range; there are also `from_X_wrapping`,
+  `from_int` on every fixed type, `f32`/`f64.from_<fixed>`, `int.from_f64`,
+  and conversions between `index`/`offset` and the integers. `@` only widens.
+  Likewise the `_checked`/`_wrapping`/`_saturating` arithmetic naming.
+- `debuglog (v)` has redundant parentheses.
+
+**Comparison and equality.** Accurate and complete. The `largest` example
+writes `with { T is ord, }` with a trailing comma, while Generics writes
+`with { T is fixedint }` without one. Both parse; pick one.
+
+**Modules, packages, libraries and the workspace.** See the missing-topic items
+on writing a module and on riders. "This capability is not yet exposed through
+any frontend" ends the section on something the reader cannot use; it could be
+cut or moved to Scripts.
+
+**Constants and compile-time evaluation.** Clear. One sentence in Const
+parameters is hard to parse: "`const` arguments are passed as references
+during compile-time evaluation so they are written without `@`". Saying that
+a const argument is borrowed, like any named const, would be enough.
+
+**Generics.** Accurate and complete. The `with` comma style is noted under
+Comparison.
