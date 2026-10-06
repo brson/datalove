@@ -1,0 +1,66 @@
+----------
+module local/test/collconst
+----------
+
+// Const parameters of linear types: collections, a struct holding one, and an
+// enum with a collection payload. Each distinct value gets its own copy.
+
+type Shape: enum {
+    atom Empty,
+    term Points [int],
+}
+
+fun list_head(const xs: [int]): !int
+    ret ok (xs[(: index / 0)]!@)
+end fun
+
+fun map_get(const m: %{string = int}): !int
+    ret ok (m["a"]!@)
+end fun
+
+fun set_back(const s: #{int}): #{int}
+    ret s
+end fun
+
+fun name_of(const p: {name: string, tags: [string]}): string
+    ret p.name@
+end fun
+
+fun shape_count(const s: Shape): int
+    match s
+    case atom Empty
+        ret :int/0
+    case term Points xs
+        ret :int/1
+    end match
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/collconst
+
+const XS: [int] = [:int/7, :int/8]
+const YS: [int] = [:int/9]
+const M: %{string = int} = %{ "a" = :int/1 }
+const S: #{int} = #{ :int/2, :int/3 }
+const P: {name: string, tags: [string]} = {name = "ada", tags = ["x"]}
+const E: enum { atom Empty, term Points [int] } = term Points [:int/1]
+
+let result = (
+    collconst.list_head(XS),
+    collconst.list_head(YS),
+    collconst.list_head(XS),
+    collconst.map_get(M),
+    collconst.set_back(S),
+    collconst.name_of(P),
+    collconst.shape_count(E),
+)
+debuglog result
+
+----------
+scriptunit-expr
+----------
+
+result

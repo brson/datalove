@@ -1,0 +1,256 @@
+// PASS: Specialized and unspecialized outputs match
+
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/collconst"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn list_head(p0):
+                    block0:
+                        v0 = const 0index
+                        v1 = listboundscheck p0[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop p0
+                        return v4
+                    block2:
+                        v5 = listelementref p0[v0]
+                        v6 = clone *v5
+                        v7 = ok v6
+                        drop p0
+                        return v7
+                    
+                    fn map_get(p0):
+                    block0:
+                        v0 = const "a"
+                        v1 = mapcontainskey p0[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "key not found"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop v0
+                        drop p0
+                        return v4
+                    block2:
+                        v5 = mapvalueref p0[v0]
+                        v6 = clone *v5
+                        drop v0
+                        v7 = ok v6
+                        drop p0
+                        return v7
+                    
+                    fn set_back(p0):
+                    block0:
+                        v0 = clone p0
+                        drop p0
+                        return v0
+                    
+                    fn name_of(p0):
+                    block0:
+                        v0 = getfieldref p0.0
+                        v1 = clone *v0
+                        drop p0
+                        return v1
+                    
+                    fn shape_count(p0):
+                    block0:
+                        v0 = clone p0
+                        v1 = enum_discriminant v0
+                        switch v1, [0 => block1, 1 => block2], default => block1
+                    block1:
+                        drop v0
+                        v2 = const 0int
+                        drop p0
+                        return v2
+                    block2:
+                        v3 = enum_payload v0 1
+                        v4 = const 1int
+                        drop v3
+                        drop p0
+                        return v4
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v2 = const [7int, 8int]
+                        v4 = const [9int]
+                        v7 = const %{"a" = 1int}
+                        v10 = const #{2int, 3int}
+                        v14 = const {name = "ada", tags = ["x"]}
+                        v17 = const enum Points([1int])
+                        v18 = const [7int, 8int]
+                        drop v18
+                        v19 = call @0 u0()
+                        v20 = const [9int]
+                        drop v20
+                        v21 = call @1 u1()
+                        v22 = const [7int, 8int]
+                        drop v22
+                        v23 = call @2 u0()
+                        v24 = const %{"a" = 1int}
+                        drop v24
+                        v25 = call @3 u2()
+                        v26 = const #{2int, 3int}
+                        drop v26
+                        v27 = call @4 u3()
+                        v28 = const {name = "ada", tags = ["x"]}
+                        drop v28
+                        v29 = call @5 u4()
+                        v30 = const enum Points([1int])
+                        drop v30
+                        v31 = call @6 u5()
+                        v32 = pack Tuple7 {v19, v21, v23, v25, v27, v29, v31}
+                        debuglog v32
+                        unit_end_drop v2
+                        unit_end_drop v4
+                        unit_end_drop v7
+                        unit_end_drop v10
+                        unit_end_drop v14
+                        unit_end_drop v17
+                        unit_end_drop v32
+                        unit_end
+                    
+                    fn list_head__ct0():
+                    block0:
+                        v8 = const [7int, 8int]
+                        v0 = const 0index
+                        v1 = listboundscheck v8[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop v8
+                        return v4
+                    block2:
+                        v5 = listelementref v8[v0]
+                        v6 = clone *v5
+                        v7 = ok v6
+                        drop v8
+                        return v7
+                    
+                    fn list_head__ct1():
+                    block0:
+                        v8 = const [9int]
+                        v0 = const 0index
+                        v1 = listboundscheck v8[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "index out of bounds"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop v8
+                        return v4
+                    block2:
+                        v5 = listelementref v8[v0]
+                        v6 = clone *v5
+                        v7 = ok v6
+                        drop v8
+                        return v7
+                    
+                    fn map_get__ct2():
+                    block0:
+                        v8 = const %{"a" = 1int}
+                        v0 = const "a"
+                        v1 = mapcontainskey v8[v0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = const "key not found"
+                        v3 = error_from v2
+                        v4 = err v3
+                        drop v0
+                        drop v8
+                        return v4
+                    block2:
+                        v5 = mapvalueref v8[v0]
+                        v6 = clone *v5
+                        drop v0
+                        v7 = ok v6
+                        drop v8
+                        return v7
+                    
+                    fn set_back__ct3():
+                    block0:
+                        v1 = const #{2int, 3int}
+                        v0 = clone v1
+                        drop v1
+                        return v0
+                    
+                    fn name_of__ct4():
+                    block0:
+                        v2 = const {name = "ada", tags = ["x"]}
+                        v0 = getfieldref v2.0
+                        v1 = clone *v0
+                        drop v2
+                        return v1
+                    
+                    fn shape_count__ct5():
+                    block0:
+                        v5 = const enum Points([1int])
+                        v0 = clone v5
+                        v1 = enum_discriminant v0
+                        switch v1, [0 => block1, 1 => block2], default => block1
+                    block1:
+                        drop v0
+                        v2 = const 0int
+                        drop v5
+                        return v2
+                    block2:
+                        v3 = enum_payload v0 1
+                        v4 = const 1int
+                        drop v3
+                        drop v5
+                        return v4
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(ok 7, ok 9, ok 7, ok 1, #{2, 3}, \"ada\", 1)\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "(ok 7, ok 9, ok 7, ok 1, #{2, 3}, \"ada\", 1)",
+        ),
+    ],
+)

@@ -1191,7 +1191,10 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
   `if n .< 3`, is not folded and keeps its branch; nothing unrolls a loop
 
 **Restrictions:**
-- Const parameters must have primitive types or simple aggregates
+- A const parameter may have any concrete type a const binding can hold,
+  collections and linear aggregates included. Instantiations are told apart
+  by structural equality of the values, floats by their bits, so `0.0` and
+  `-0.0` get separate copies and every NaN with the same bits shares one
 - Cannot combine `const` with a passing mode. A const parameter is not passed:
   specialization removes it and writes the value into the body, so `ref` has no
   borrow to describe and `out` and `mut` have nothing to write back to
