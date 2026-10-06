@@ -1,3 +1,8 @@
+## 2026/10/05 table type synthesis
+
+datalit doesn't synthesize table types but dafun does?
+
+
 ## 2026/10/04 Decide how zsts are represented
 
 There is no single convention yet:
