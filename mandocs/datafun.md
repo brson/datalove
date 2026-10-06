@@ -17,7 +17,7 @@ The Datalove Functions implementation is self-contained and independent from ful
 suitable as a constrained embedded application scripting language.
 
 This document is a broad overview of the language.
-For detail see additional documentation.
+For detail see additional documentation (which does not exist).
 
 
 
