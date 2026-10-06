@@ -57,9 +57,13 @@ struct Header {
     /// The chunk and offset the top was at before the frame was pushed.
     prev_chunk: u32,
     prev_top: u32,
-    /// The frame's layout, from `Rc::into_raw`.
+    /// The frame's layout: from `Rc::into_raw` if the frame holds a count of
+    /// it, with the low bit set if something else keeps it alive.
     layout: *const IrLayout,
 }
+
+/// The low bit of a header's layout pointer: the frame borrows its layout.
+const BORROWED: usize = 1;
 
 const HEADER: usize = std::mem::size_of::<Header>();
 /// Every chunk's alignment, and so the most a frame may ask for.
@@ -83,20 +87,47 @@ impl FrameStack {
     /// of the frame unused. Every frame pushed is popped, error or not.
     #[inline]
     pub fn push(&mut self, layout: Rc<IrLayout>) -> Result<Frame, InterpError> {
-        let size = layout.frame_size as usize;
-        let align = layout.frame_align as usize;
+        let layout = Rc::into_raw(layout);
+        // SAFETY: from `Rc::into_raw`, and released by `pop`.
+        unsafe { self.push_raw(layout, layout) }
+    }
+
+    /// Push a frame whose layout something else keeps alive for as long as
+    /// the frame is on the stack, sparing it a reference count.
+    ///
+    /// # Safety
+    ///
+    /// `layout` has to outlive the frame.
+    #[inline(always)]
+    pub(crate) unsafe fn push_borrowed(&mut self, layout: &IrLayout) -> Result<Frame, InterpError> {
+        let layout = layout as *const IrLayout;
+        let tagged = (layout as usize | BORROWED) as *const IrLayout;
+        // SAFETY: the caller's.
+        unsafe { self.push_raw(layout, tagged) }
+    }
+
+    /// Push a frame for `layout`, recording `header_layout` in its header.
+    #[inline(always)]
+    unsafe fn push_raw(&mut self, layout: *const IrLayout, header_layout: *const IrLayout) -> Result<Frame, InterpError> {
+        // SAFETY: the callers'.
+        let layout_ref = unsafe { &*layout };
+        let size = layout_ref.frame_size as usize;
+        let align = layout_ref.frame_align as usize;
         debug_assert!(align <= CHUNK_ALIGN, "a frame aligned to {} bytes", align);
         let (prev_chunk, prev_top) = (self.current, self.top);
         // An alignment is a power of two, so this is a mask, not a division.
-        let align_up = |n: usize| (n + align - 1) & !(align - 1);
-        let mut start = align_up(self.top + HEADER);
-        if self.chunks.get(self.current).is_none_or(|c| start + size > c.size) {
+        // The arithmetic wraps, so that it is not checked: release builds
+        // check overflow, and nothing here comes near it, a chunk being far
+        // smaller than the address space.
+        let align_up = |n: usize| n.wrapping_add(align - 1) & !(align - 1);
+        let mut start = align_up(self.top.wrapping_add(HEADER));
+        if self.chunks.get(self.current).is_none_or(|c| start.wrapping_add(size) > c.size) {
             self.next_chunk(HEADER + align + size)?;
-            start = align_up(self.top + HEADER);
+            start = align_up(self.top.wrapping_add(HEADER));
         }
-        let chunk = self.chunks[self.current].ptr.as_ptr();
-        self.top = start + size;
-        let layout = Rc::into_raw(layout);
+        // SAFETY: `next_chunk` has made `current` a chunk, if it was not.
+        let chunk = unsafe { self.chunks.get_unchecked(self.current) }.ptr.as_ptr();
+        self.top = start.wrapping_add(size);
         // SAFETY: the header and the frame are inside the chunk, by the check
         // above, and the header is aligned, `start` being a multiple of at
         // least a word.
@@ -105,7 +136,7 @@ impl FrameStack {
             (base.sub(HEADER) as *mut Header).write(Header {
                 prev_chunk: prev_chunk as u32,
                 prev_top: prev_top as u32,
-                layout,
+                layout: header_layout,
             });
             if cfg!(debug_assertions) {
                 // So that reading what was never written reads as garbage
@@ -154,11 +185,14 @@ impl FrameStack {
     pub fn pop(&mut self, frame: Frame) {
         // SAFETY: `frame` was pushed here, so a header precedes it.
         let header = unsafe { (frame.base.sub(HEADER) as *const Header).read() };
-        debug_assert_eq!(header.layout, frame.layout, "popped a frame that is not on top");
+        debug_assert_eq!(header.layout as usize & !BORROWED, frame.layout as usize,
+            "popped a frame that is not on top");
         self.current = header.prev_chunk as usize;
         self.top = header.prev_top as usize;
-        // SAFETY: from `Rc::into_raw` at the push, and released once.
-        drop(unsafe { Rc::from_raw(header.layout) });
+        if header.layout as usize & BORROWED == 0 {
+            // SAFETY: from `Rc::into_raw` at the push, and released once.
+            drop(unsafe { Rc::from_raw(header.layout) });
+        }
     }
 }
 
@@ -205,6 +239,22 @@ impl Frame {
             None => std::ptr::null_mut(),
         };
         Frame { base, layout, liveness }
+    }
+
+    /// A bytecode frame, keeping no liveness, at `base`.
+    ///
+    /// # Safety
+    ///
+    /// As `at`.
+    #[inline(always)]
+    pub(crate) unsafe fn without_liveness(base: *mut u8, layout: *const IrLayout) -> Self {
+        Frame { base, layout, liveness: std::ptr::null_mut() }
+    }
+
+    /// The layout, as a pointer.
+    #[inline(always)]
+    pub(crate) fn layout_ptr(&self) -> *const IrLayout {
+        self.layout
     }
 
     /// The layout this frame was made for.
@@ -364,7 +414,7 @@ impl Frame {
         // of what entering a function cost.
         for i in 0..layout.tracking_count {
             // SAFETY: the tracking bytes are inside the frame, by the layout.
-            unsafe { *self.at_offset(layout.tracking_offset + i) = tracking::UNINIT };
+            unsafe { *self.at_offset(layout.tracking_offset.wrapping_add(i)) = tracking::UNINIT };
         }
     }
 

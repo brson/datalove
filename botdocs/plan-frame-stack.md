@@ -311,6 +311,48 @@ activation could shrink (a context that did not change need not be saved, nor
 an empty scratch vector), and could live in the frame's header rather than a
 vector. Primes is 2.5% slower, from layout of the loop rather than any one op.
 
+## A leaner call
+
+Measured against CPython 3.14 on `fib(38)`, about 126 million calls, the
+bytecode ran 640 instructions and 233 cycles a call to CPython's 474 and 91:
+not many more instructions, but two and a half times the cycles. The
+processor's own accounting (`perf stat -M` on Zen 4) said why: CPython's cycles
+were 85% retiring, ours 48%, with 36% waiting on memory -- not cache misses,
+which were negligible, but loads waiting on stores. Most of it was in the call:
+`enter_planned` a quarter of the time, `leave` an eighth, `FrameStack::push`
+a tenth.
+
+What took it to 4.4s from 6.6s (1.5x), with primes, wordfreq and sum 7-13%
+faster too:
+
+- **`ReturnOk`**: a result wrapped only to be returned is written straight into
+  the caller's slot. Wrapping it in the frame and copying 24 bytes out read
+  back the narrow stores of its tag and payload with wide loads, which the
+  processor cannot forward from -- the Cranelift fix again (7%).
+- **No reference counts on a planned call.** The frame borrows its layout from
+  the plan (`FrameStack::push_borrowed`, the header's low bit), and the plan
+  keeps the bytecode, so a call does no `Rc` increment or decrement. A
+  replaced call-site cache is retired to the interpreter rather than dropped,
+  since a frame may still borrow from it. A smaller activation: the body comes
+  from the bytecode, the frame from its base and layout, the context only from
+  a call that changes it (15%).
+- **The activation read back field by field**, each load the width of the store
+  that wrote it, rather than moved out of the vector as a struct, which copied
+  it with wide loads straddling the stores (4%).
+- **`enter_planned` and `leave` inlined** into the loop: their prologues and
+  epilogues were a large part of what they cost (14%). This one costs the
+  call-free loop about 8% more instructions, which the benchmarks did not
+  show in time.
+- Smaller: wrapping arithmetic where the release profile's overflow checks put
+  a branch and a panic path into the frame stack's bump; the activation written
+  into the vector in place rather than built on the stack and copied; a
+  planned call's arguments precomputed as (source, destination, descriptor).
+
+At 19 billion cycles, about 150 a call, against CPython's 91. Left: the ops
+themselves, most of the rest -- three constants materialized per call (fib's
+blocks are not in loops, so nothing hoists them), a branch after every unwrap,
+a single dispatch point that mispredicts three times as often as CPython's.
+
 ## Open questions
 
 - **Copies of references.** `resolve_ref_descriptors` follows projections

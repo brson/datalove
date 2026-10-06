@@ -121,6 +121,9 @@ pub struct IrInterpreter {
     layout_cache: LayoutCache,
     /// Frames to reuse, so that calling a function does not allocate one.
     frame_stack: FrameStack,
+    /// Call-site caches the bytecode replaced, which a frame may still be
+    /// borrowing a layout or a body from; see `bytecode::Plan`.
+    retired_call_caches: Vec<bytecode::CallCache>,
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
@@ -191,6 +194,7 @@ impl IrInterpreter {
             tydesc_table: IrTyDescTable::new(),
             layout_cache: LayoutCache::new(),
             frame_stack: FrameStack::new(),
+            retired_call_caches: Vec::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
