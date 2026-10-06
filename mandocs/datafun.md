@@ -1355,8 +1355,9 @@ but not a type parameter of a generic function.
 
 ## Generics
 
-Datalove functions support type parameters and can be generic over their arguments
-and return values.
+Functions may take type parameters,
+written in angle brackets after the function's name,
+and can be generic over their arguments and return values.
 
 ```datalove
 fun unwrap_or<T>(self: ?T, default: T): T
@@ -1368,35 +1369,16 @@ fun unwrap_or<T>(self: ?T, default: T): T
 end fun
 
 debuglog unwrap_or(some "this", "other")
-debuglog unwrap_or(: ?string / none, "other")
+debuglog unwrap_or(none, "other")
 ```
 
-Generic functions are compiled once,
-their static types erased and instead interpreted dynamically at run time.
-Most types that would normally be stored on the stack get boxed to and from the heap
-when passed as generics.
-
-Type parameters are inferred from the caller's arguments,
-where the first encountered type argument decides it.
-There is no explicit caller-side syntax for specifying type parameters.
-The following is an error.
-
-```datalove
-fun unwrap_or<T>(self: ?T, default: T): T
-  if self |value|
-    ret value
-  else
-    ret default
-  end if
-end fun
-
-// Error: type `T` must be string because `some "this"` decides it.
-debuglog unwrap_or(some "this", 1)
-```
-
-todo is it possible to write list.empty()?
-
-Aggregate and collection types may include interior generic types.
+Only functions take type parameters.
+Types do not, and there is no way to write a generic type alias.
+Since types are structural,
+a type built around a parameter is written out where it is used,
+anywhere in a signature or body:
+under `?` and `!`, in tuples, structs, terms and enums,
+and as the elements of collections.
 
 ```datalove
 require module sys/std/index
@@ -1424,13 +1406,99 @@ end fun
 debuglog zip(ref [1, 2, 3], ref ["a", "b", "c"])
 ```
 
-All generic types are always clonable and movable, but never copyable,
-thus generic bindings always move, and producing a copy requires `@`.
-All generic types can be stored, returned, passed to other functions,
-and debug-printed with `debuglog`.
+As `zip` shows,
+a generic function can build collections of its type parameters,
+not just receive them.
 
-Some capabilities require bounds on type parameters.
-Type parameter bounds are specified within `with` blocks that follow the function header.
+
+### Inference
+
+Type parameters are always inferred.
+There is no syntax for the caller to name them.
+The arguments are matched against the parameters in order,
+and the first argument to reach a type parameter decides it.
+The arguments after it are checked against that type.
+In the example above `none` says nothing about its payload,
+so `T` is decided by `"other"`.
+
+```datalove
+fun unwrap_or<T>(self: ?T, default: T): T
+  if self |value|
+    ret value
+  else
+    ret default
+  end if
+end fun
+
+// Error: `some "this"` makes `T` a `string`, so `1` is a mismatch.
+debuglog unwrap_or(some "this", 1)
+```
+
+A literal argument after the deciding one takes the decided type,
+as literals take their type from context anywhere.
+In `unwrap_or(some (: u32 / 1), 99)` the `99` is a `u32`.
+
+When a type parameter appears only in the return type,
+no argument can decide it,
+so the result must be bound to a name with a type annotation.
+
+```datalove
+fun empty<T>(): [T]
+  var out: [T] = []
+  ret out
+end fun
+
+let xs: [u32] = empty()
+
+debuglog xs
+```
+
+Writing `debuglog empty()` is an error:
+nothing says what `T` is.
+
+
+### What a type parameter can do
+
+A value of a type parameter can be moved,
+cloned with `@`,
+stored, returned,
+passed to other functions,
+and printed with `debuglog`.
+
+A type parameter is never a copy type,
+even when the caller supplies one,
+because the caller might instead supply a type that moves.
+So using a value of a type parameter twice requires a clone.
+
+```datalove
+require module sys/std/list
+
+fun twice<T>(x: T): [T]
+  var out: [T] = []
+  call list.push(mut out, x@)
+  call list.push(mut out, x)
+  ret out
+end fun
+
+let n: u32 = 7
+
+debuglog (twice(n), twice("hi"))
+```
+
+Without the `@`, `x` is used after it is moved,
+an error,
+even though the caller passed a `u32`.
+
+Nothing else can be done with an unbounded type parameter.
+`a == b` and `a + b` are errors,
+since there is no way to know whether the type supports them.
+
+
+### Bounds
+
+Other operations require bounds on the type parameters.
+Bounds are written in a `with` clause after the function's return type,
+on the same line as the signature.
 
 ```datalove
 require module sys/std/fixedint
@@ -1449,14 +1517,73 @@ debuglog unwrap_or_zero(: ?u8 / some 10)
 debuglog unwrap_or_zero(: ?i64 / none)
 ```
 
-All bounds are built-in.
-There is no interface or trait mechanism for specifying generic type capabilities.
+All bounds are built into the language.
+There is no trait or interface mechanism,
+and bounds cannot be defined in Datalove code.
+Each bound admits a fixed set of types,
+and the body may do whatever all of them support.
+A call that binds the parameter to some other type is an error.
 
-The built-in bounds are:
+There are three bounds.
 
-- `fixedint`
-- `ord`
-- `float`
+- `ord` admits every type.
+  It gives access to the total order described in
+  [Comparison and equality](#user-content-comparison-and-equality),
+  through the functions in `sys/std/ord`,
+  as in the `largest` example there.
+  A set or map over a type parameter, `#{T}` or `%{T = V}`,
+  keeps its elements in order, so it requires `T is ord`.
+  The other two bounds imply `ord`.
+- `float` admits `f32` and `f64`.
+  It allows the bare arithmetic operators and the comparisons,
+  as well as the functions in `sys/std/float`.
+- `fixedint` admits the fixed-width integers, `index` and `offset`.
+  As described in [Numerics](#user-content-numerics),
+  these have no bare arithmetic operators,
+  so it allows the comparisons and the checked operators, like `+!` and `+?`,
+  as well as the functions in `sys/std/fixedint`.
+
+A literal cannot be written at type `T`,
+since a literal needs a known type.
+Instead the `float` and `fixedint` modules provide constants as functions,
+like `zero` above.
+`zero` is generic in its return type alone,
+so like `empty` its result must be bound with a type.
+In `unwrap_or_zero` the return type provides it.
+
+```datalove
+require module sys/std/float
+
+fun mean<T>(a: T, b: T): T with { T is float }
+  let one: T = float.one()
+  let two = one@ + one
+  ret (a + b) / two
+end fun
+
+debuglog (mean(: f32 / 1.0, : f32 / 2.0), mean(1.0, 4.0))
+```
+
+
+### How generics are compiled
+
+A generic function is compiled only once, not for each type instantiation.
+Within it, values of a type parameter are carried as `data`,
+along with a description of their real type,
+and operations that depend on the type,
+like bounded arithmetic, are performed by the runtime.
+Values are converted to and from this representation at the call,
+which can mean boxing them onto the heap.
+
+This costs some run-time performance in exchange for compile time.
+Adding a new call to a generic function compiles nothing new,
+which keeps the interactive and incremental compilation described in
+[Scripts and interactive units](#user-content-scripts-and-interactive-units) fast.
+The choice is not visible in the meaning of programs,
+except that it is why a type parameter is never a copy type.
+
+This is the opposite of [const parameters](#user-content-const-parameters),
+which make a copy of the function for each const argument.
+
 
 
 
