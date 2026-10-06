@@ -14,8 +14,8 @@ falling back to the IR walker for any body it cannot lower, and check it against
 the IR walker on every fixture from the first day.
 
 > **This is a plan, and a prototype of it.** The prototype is in
-> `crates/datalove-datafun-interp/src/bytecode.rs`, off by default and turned on
-> with `DATALOVE_INTERP=bc`; [What the prototype found](#user-content-what-the-prototype-found)
+> `crates/datalove-datafun-interp/src/bytecode.rs`, on by default since October
+> 2026 (`DATALOVE_INTERP=ir` turns it off); [What the prototype found](#user-content-what-the-prototype-found)
 > says how it went. The rest records the reasoning and the facts it rests on as
 > of October 2026.
 
@@ -474,12 +474,12 @@ a bytecode loop header, which the shared frame layout makes possible.
 
 ## What the prototype found
 
-The prototype is `bytecode.rs` in the interpreter crate, run with
-`DATALOVE_INTERP=bc` (and `DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP`
-to print each body's ops). `just test-bc` runs the interpreter-driven suites --
-interpreter, module and std fixtures, both dispatcher suites, the JIT, the
-cross-backend std suite and the CLI tests -- on it, against the IR walker's
-expected output, with leak checking on. They pass.
+The prototype is `bytecode.rs` in the interpreter crate, the interpreter's
+default engine (`DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP` to print
+each body's ops). `engine_tests` runs every fixture on it and compares what it
+observes with the IR walker in the same process; see `plan-engine-tests.md`.
+Before it was the default, a `test-bc` configuration ran the interpreter-driven
+suites on it against the IR walker's expected output, and they passed.
 
 **Fallback is per instruction, not per function.** The plan had a body the
 lowering could not handle fall back to the IR walker whole. Because the two

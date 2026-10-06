@@ -6,8 +6,7 @@
 //! frame layout per function identity, and the bytecode keeps its lowering of
 //! a body, and each call site its callee, by the body's address; none of
 //! those may survive the body they were made for, or an edit runs the code it
-//! replaced. Run under `DATALOVE_INTERP=bc` by `just test-bc`, which is where
-//! the addresses matter.
+//! replaced. The bytecode, the default engine, is where the addresses matter.
 
 use rmx::prelude::*;
 

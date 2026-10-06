@@ -27,13 +27,6 @@ test:
 test-sys-riders:
     DATALOVE_BUILD_SYS_RIDERS=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
-# Run the interpreter-driven suites with function bodies on the bytecode engine.
-#
-# Their expected output is the IR walker's, so this is a differential test of
-# the bytecode against it. See botdocs/plan-bytecode.md.
-test-bc:
-    DATALOVE_INTERP=bc DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun -p datalove-datafun-interp -p datalove-tests -p datalove-cli
-
 # Run tests with 64-bit collection indexes.
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
@@ -46,7 +39,7 @@ test-slow:
     just check-wasm
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-sys-riders test-bc
+test-ci: test test-slow test-64 test-sys-riders
 
 # Run tests with parallelism enabled.
 test-parallel:
@@ -131,28 +124,23 @@ test-miri-rt-tests-one TEST_FILE *ARGS='':
     env MIRIFLAGS="-Zmiri-disable-isolation" \
         cargo +nightly miri test -p datalove-rt-tests --test {{TEST_FILE}} {{ARGS}}
 
+# The interpreter fixtures under Miri, function bodies on the bytecode: its
+# frame access is raw pointer arithmetic, which this checks as it runs.
+#
+# Tree borrows, because the test harness's rayon pulls in crossbeam-epoch,
+# which stacked borrows rejects and tree borrows accepts; under stacked
+# borrows the run stops in crossbeam before reaching the interpreter.
 test-miri-interp *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
         cargo +nightly miri test -p datalove-datafun --test interp_tests {{ARGS}}
 
 test-miri-module-interp *ARGS='':
-    env MIRIFLAGS="-Zmiri-disable-isolation" \
+    env MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
         cargo +nightly miri test -p datalove-datafun --test module_interp_tests {{ARGS}}
 
 test-miri-interp-all *ARGS='':
     just test-miri-interp {{ARGS}}
     just test-miri-module-interp {{ARGS}}
-
-# The interpreter fixtures on the bytecode, under Miri: the bytecode's frame
-# access is raw pointer arithmetic, which this checks as it runs.
-#
-# Tree borrows, because the test harness's rayon pulls in crossbeam-epoch,
-# which stacked borrows rejects and tree borrows accepts; under stacked
-# borrows the run stops in crossbeam before reaching the interpreter, and
-# `test-miri-interp` does today.
-test-miri-interp-bc *ARGS='':
-    env DATALOVE_INTERP=bc MIRIFLAGS="-Zmiri-disable-isolation -Zmiri-tree-borrows" \
-        cargo +nightly miri test -p datalove-datafun --test interp_tests {{ARGS}}
 
 # Install the `datalove` binary from this working copy.
 install:

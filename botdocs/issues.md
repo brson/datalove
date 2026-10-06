@@ -457,7 +457,7 @@ on a release build:
 | IR walker | main thread, 8 MiB | ~7,450 |
 | JIT (`script --jit`) | spawned thread, 2 MiB | ~14,400 |
 
-The bytecode (`DATALOVE_INTERP=bc`) makes calls from one bytecode body to
+The bytecode, the default engine, makes calls from one bytecode body to
 another without recursing on the Rust stack (`plan-frame-stack.md`), so it ran
 a million deep, and ten million fails as `InterpError::StackOverflow` when the
 frame stack reaches its limit; `deep_recursion_tests` checks both. What it

@@ -107,11 +107,11 @@ pub enum Engine {
 }
 
 impl Engine {
-    /// The engine `DATALOVE_INTERP` names, `ir` or `bc`, or the default.
+    /// The engine `DATALOVE_INTERP` names, `ir` or `bc`, or else the bytecode.
     pub fn from_env() -> Engine {
         match std::env::var("DATALOVE_INTERP").as_deref() {
-            Ok("bc") => Engine::Bytecode,
-            Ok("ir") | Err(_) => Engine::IrWalker,
+            Ok("bc") | Err(_) => Engine::Bytecode,
+            Ok("ir") => Engine::IrWalker,
             Ok(other) => panic!("DATALOVE_INTERP is `{other}`, not `ir` or `bc`"),
         }
     }
