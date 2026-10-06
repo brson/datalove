@@ -9,11 +9,11 @@ initialized by a compile-time evaluated expression.
 Expressions in `const` statements typecheck exactly
 the same as `let` statements;
 this is crucial to the mechanism used to implement const evaluation.
-Two additional restrictions:
+Two additional rules:
 - `const` expressions may only reference bindings that are also `const`
-- `const` expressions may not move;
-  naming a const in a move position produces a fresh value rather than consuming it,
-  so a const of a linear type may be named any number of times
+- a const is borrowed wherever it is named, like a `ref` parameter;
+  it may be read any number of times,
+  and moving out of a const of a linear type takes a clone with `@`
 
 
 ## Basic usage
@@ -30,7 +30,7 @@ Consts can reference other consts:
 
 ```datalove
 const A: int = 10
-const B: int = A
+const B: int = A@
 const C: int = A + B
 ```
 
@@ -39,9 +39,20 @@ Consts may be of any type, not only scalars:
 ```datalove
 const MSG: string = "hello"
 const LST: [int] = [1, 2, 3]
-let a = LST
-let b = LST    // reading a const does not move it
+let a = LST@
+let b = LST@   // moving out of a const takes a clone
 ```
+
+Moving out of a const without `@` is an error,
+and the compiler says where the `@` goes:
+
+```
+[D003] Error: cannot move out of const: `LST`
+```
+
+`match`, the destructuring `if` and `let` destructuring
+move what they take apart,
+so a const of a linear type is taken apart as `match C@`.
 
 
 Const works identically in script functions and module functions.
@@ -49,9 +60,13 @@ Const works identically in script functions and module functions.
 ```datalove
 fun get_value(): int
     const X: int = 100 + 200
-    ret X
+    ret X@
 end fun
 ```
+
+A const parameter follows the same rule.
+Passing it on as a const argument is not a move,
+since a const argument is not passed at all.
 
 `const` expressions can call functions.
 

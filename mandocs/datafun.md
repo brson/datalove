@@ -1231,7 +1231,7 @@ fun clamp_to_limit(x: u32): u32
   end if
 end fun
 
-debuglog (NAME, clamp_to_limit(50))
+debuglog (NAME@, clamp_to_limit(50))
 ```
 
 There is no separate compile-time sublanguage
@@ -1259,17 +1259,19 @@ end fun
 const SQUARES: [int] = squares(5)
 const BIG: int = 99999999999999999999 * 99999999999999999999
 
-let a = SQUARES
-let b = SQUARES
+let a = SQUARES@
+let b = SQUARES@
 
-debuglog (a, b, BIG)
+debuglog (a, b, BIG@)
 ```
 
-A const names a value, not a place,
-so reading one does not move it.
-Each mention produces a fresh value,
-which is why `SQUARES` above can be bound twice without `@`,
-though a list is a moved type.
+A const is borrowed wherever it is named, as a `ref` parameter is.
+It can be read, compared, indexed and passed by `ref` any number of times,
+but moving out of a const of a moved type takes a clone with `@`,
+which is why `SQUARES` and `BIG` above are written with one.
+`match`, the destructuring `if` and `let` destructuring
+all move what they take apart,
+so a const enum is matched as `match C@`.
 
 A const expression is evaluated before any parameter or `let` exists,
 so it may only name other consts.
@@ -1340,8 +1342,11 @@ The argument to a const parameter must be the name of a const binding.
 Not even a literal is accepted:
 `repeat(3, ref s)` is an error.
 Within the specialized body the parameter is itself a const,
+borrowed wherever it is named,
 so it may be passed on to other const parameters,
 and consts computed from it are evaluated per specialization.
+Passing a const as a const argument does not move it,
+so it is written without `@`.
 
 A const parameter is not passed at run time,
 so it cannot also be `ref`, `mut` or `out`.
