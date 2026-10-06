@@ -5,7 +5,7 @@ scriptunit-fragment
 // CTFE string in script function.
 fun get_message(): string
     const M: string = "test message"
-    ret M
+    ret M@
 end fun
 
 debuglog get_message()

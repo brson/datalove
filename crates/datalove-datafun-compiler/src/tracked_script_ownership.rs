@@ -135,6 +135,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     statements: Vec<Statement<'db>>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
+    external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
@@ -151,7 +152,8 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze functions in this unit for ownership.
     let func_analyses_result = ownership_analysis::analyze_script_functions_with_mode(
-        db, &expr_types, &statements, Some(&func_param_types), auto_adapt_mode
+        db, &expr_types, typecheck_result.call_targets(db), &statements, Some(&func_param_types),
+        auto_adapt_mode,
     );
 
     let (func_analyses, func_errors, structured_func_errors) = match func_analyses_result {
@@ -177,7 +179,8 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, &expr_types, &statements, auto_adapt_mode, dead_externals
+        db, &expr_types, typecheck_result.call_targets(db), &statements, auto_adapt_mode,
+        dead_externals, external_consts,
     );
 
     // Check for script analysis errors.
@@ -241,12 +244,14 @@ pub fn analyze_script_expr_tracked<'db>(
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
+    external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     // Convert tycheck types to IR types.
     let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
 
     let analysis = ownership_analysis::analyze_expr_with_mode(
-        db, expr, &expr_types, auto_adapt_mode, dead_externals,
+        db, expr, &expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
+        dead_externals, external_consts,
     );
 
     if !analysis.errors.is_empty() {
@@ -339,6 +344,21 @@ fn emit_single_ownership_diagnostic<'db>(
                     .primary_label(ts, "cannot move borrowed value")
                     .note("borrowed parameters (ref, mut, out) cannot be moved")
                     .emit_ownership();
+            }
+        }
+        AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
+            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+                let msg = format!("cannot move out of const: `{}`", name);
+                let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D003")
+                    .primary_label(ts, "cannot move out of const")
+                    .note("a const is borrowed wherever it is named");
+
+                if let OwnershipRecoveryHint::InsertAdapt { description } = recovery_hint {
+                    builder = builder.note(&format!("help: use `@` to {}", description));
+                }
+
+                builder.emit_ownership();
             }
         }
         AnalysisError::CannotMutFromRef { expr_key, name } => {

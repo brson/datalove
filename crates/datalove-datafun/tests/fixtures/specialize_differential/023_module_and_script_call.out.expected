@@ -24,7 +24,7 @@ Analysis(
                     fn triple(p0):
                     block0:
                         v0 = const 3int
-                        v1 = const 3int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u2(p0)
                         drop v0
@@ -58,7 +58,7 @@ Analysis(
                         v0 = const 7int
                         v1 = const 10int
                         v2 = call @0 m0.u1(v1)
-                        v3 = const 7int
+                        v3 = clone v0
                         v4 = const 10int
                         drop v3
                         v5 = call @1 u0(v4)

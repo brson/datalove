@@ -1044,15 +1044,23 @@ const BIG: int = 99999999999999999999
 const LST: [int] = [1, 2, 3]
 ```
 
-A const names a value, not a place, so reading one does not consume it. Each
-mention produces a value of its own, and a const of a linear type can therefore
-be named as often as it is wanted, wherever it is written:
+A const is an immutable ref binding: it is borrowed wherever it is named, as a
+`ref` parameter is. It may be read, compared, indexed and passed as `ref` any
+number of times, and moving out of a const of a linear type takes a clone with
+`@`. A move without one is D003, whose help says where the `@` goes;
+auto-adapt supplies it. A const of a copy type is copied as any copy type is.
 
 ```datalove
 const LST: [int] = [1, 2, 3]
-let a = LST
-let b = LST                    // no `@` needed: reading a const does not move it
+let n = list.len(ref LST)      // a borrow
+let a = LST@                   // a move out of a const takes a clone
+let b = LST                    // D003: cannot move out of const
 ```
+
+This holds for a const initializer too, so `const B: int = add_ten(A@)` clones
+the bigint `A` it passes by value. `match`, the destructuring `if` and `let`
+destructuring move what they take apart, so a linear const is taken apart as
+`match C@`.
 
 **Ordering.** A module-level const is evaluated after the functions it calls are
 compiled, and before the functions that name it. Functions naming no
@@ -1184,8 +1192,11 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
 - Within the function body, the const parameter is a compile-time constant. A
   `const` binding that names it is evaluated for each instantiation, through
   arithmetic and through calls alike, so `const M: int = n + 1` and
-  `const P: int = helper(n)` are constants in the specialized copy and may
+  `const P: int = helper(n@)` are constants in the specialized copy and may
   themselves be passed as const arguments
+- Like any const, a const parameter is borrowed wherever it is named, so moving
+  out of one of a linear type takes `@`. Passing it on as a const argument is
+  not a move: a const argument is not passed at all
 - A branch on such a binding becomes a jump and the unreachable side is
   dropped. An expression over the parameter written in place, such as
   `if n .< 3`, is not folded and keeps its branch; nothing unrolls a loop
@@ -1812,6 +1823,7 @@ values.
 | D001 | UseAfterMove | Using a value after it was moved |
 | D002 | DoubleMove | Moving a value twice |
 | D003 | CannotMoveBorrowed | Moving a `ref`/`mut`/`out` parameter |
+| D003 | CannotMoveConst | Moving out of a const or const parameter without `@` |
 | D004 | CannotMutFromRef | Passing `ref` where `mut` required |
 | D005 | ReadUninitialized | Reading before initialization |
 | D006 | OutParamNotInitialized | Returning without initializing `out` param |

@@ -5,7 +5,7 @@ module local/test/resultfunc
 // CTFE result in module function.
 fun compute(): !u32
     const R: !u32 = ok 77
-    ret R
+    ret R@
 end fun
 
 ----------

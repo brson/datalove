@@ -226,9 +226,8 @@ pub struct BindingInfo {
     pub param_mode: Option<ParamMode>,
     /// Whether this binding is a const.
     ///
-    /// A const names a value the compiler computed, not a place holding the
-    /// only copy of one, so reading it does not consume it however many times
-    /// it is read. Lowering makes each read its own value.
+    /// A const is borrowed wherever it is named: it may be read and borrowed
+    /// any number of times, and moving out of it needs a clone.
     pub is_const: bool,
 }
 
@@ -304,6 +303,13 @@ pub enum AnalysisError<'db> {
     CannotMoveBorrowed {
         expr_key: ExprKey<'db>,
         name: String,
+    },
+    /// Attempting to move out of a const, which is borrowed wherever it is
+    /// named. Also D003.
+    CannotMoveConst {
+        expr_key: ExprKey<'db>,
+        name: String,
+        recovery_hint: OwnershipRecoveryHint,
     },
     /// Attempting to pass a ref param to a mut param.
     /// D004
@@ -436,6 +442,10 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::CannotMoveBorrowed { expr_key: _, name } => {
             format!("error[D003]: cannot move borrowed value: `{}`", name)
+        }
+        AnalysisError::CannotMoveConst { expr_key: _, name, recovery_hint } => {
+            let base = format!("error[D003]: cannot move out of const: `{}`", name);
+            format_with_hint(base, recovery_hint)
         }
         AnalysisError::CannotMutFromRef { expr_key: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)

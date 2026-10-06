@@ -142,6 +142,20 @@ impl Session {
         assert!(!output.starts_with("Error:"), "running {text:?}: {output}");
     }
 
+    /// Compile one more unit, submitted as a bare expression, without running it.
+    pub fn compile_append_expr(&mut self, text: &str) -> ScriptCompilationResult {
+        let compiled = self.pipeline.compile_fresh(&self.db);
+        let mut compiler = compiled
+            .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
+            .expect("a script compiler");
+        let result = compiler.compile_expr(text);
+        self.script = Some(compiler.into_session());
+        if result.ir_unit.is_some() {
+            self.texts.push(text.S());
+        }
+        result
+    }
+
     /// Compile and run one more unit, submitted as a bare expression.
     ///
     /// Returns the result type and the printed value, which is what the REPL

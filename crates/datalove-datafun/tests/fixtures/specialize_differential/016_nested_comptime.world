@@ -13,7 +13,7 @@ end fun
 // says what it passes once `n` has been substituted. Specialization looks
 // again after each round of copying for that reason.
 fun double_add(const n: int, x: int): int
-    const N: int = n
+    const N: int = n@
     let first = add_n(N, x)
     ret add_n(N, first)
 end fun

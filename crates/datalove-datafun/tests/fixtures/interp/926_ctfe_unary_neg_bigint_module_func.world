@@ -6,7 +6,7 @@ module local/test/unaryneg
 fun get_negative(): int
     const A: int = 999
     const B: int = -A
-    ret B
+    ret B@
 end fun
 
 ----------

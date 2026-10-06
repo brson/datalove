@@ -49,6 +49,6 @@ const OK_SIDE: !u32 = ok : u32 / 5
 const WRAPPED: ?data = some : data / data : u32 / 9
 
 fun main(): (data, data, data, data, error, error, !index, !u32, !u32, !u32, !u32, ?data)
-  ret (A_NUMBER, A_NARROW, A_STRING, A_LIST, AN_ERROR, AN_ERROR_STRING,
-       ERR_TUPLE, ERR_LIST, ERR_STRUCT, ERR_OPTION, OK_SIDE, WRAPPED)
+  ret (A_NUMBER@, A_NARROW@, A_STRING@, A_LIST@, AN_ERROR@, AN_ERROR_STRING@,
+       ERR_TUPLE@, ERR_LIST@, ERR_STRUCT@, ERR_OPTION@, OK_SIDE@, WRAPPED@)
 end fun

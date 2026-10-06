@@ -105,25 +105,25 @@ Analysis(
                         v10 = const #{2int, 3int}
                         v14 = const {name = "ada", tags = ["x"]}
                         v17 = const enum Points([1int])
-                        v18 = const [7int, 8int]
+                        v18 = clone v2
                         drop v18
                         v19 = call @0 u0()
-                        v20 = const [9int]
+                        v20 = clone v4
                         drop v20
                         v21 = call @1 u1()
-                        v22 = const [7int, 8int]
+                        v22 = clone v2
                         drop v22
                         v23 = call @2 u0()
-                        v24 = const %{"a" = 1int}
+                        v24 = clone v7
                         drop v24
                         v25 = call @3 u2()
-                        v26 = const #{2int, 3int}
+                        v26 = clone v10
                         drop v26
                         v27 = call @4 u3()
-                        v28 = const {name = "ada", tags = ["x"]}
+                        v28 = clone v14
                         drop v28
                         v29 = call @5 u4()
-                        v30 = const enum Points([1int])
+                        v30 = clone v17
                         drop v30
                         v31 = call @6 u5()
                         v32 = pack Tuple7 {v19, v21, v23, v25, v27, v29, v31}

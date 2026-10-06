@@ -24,7 +24,7 @@ Analysis(
                     fn twice(p0):
                     block0:
                         v0 = const 2int
-                        v1 = const 2int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u3(p0)
                         drop v0
@@ -33,7 +33,7 @@ Analysis(
                     fn fivex(p0):
                     block0:
                         v0 = const 5int
-                        v1 = const 5int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u4(p0)
                         drop v0

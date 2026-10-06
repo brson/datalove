@@ -30,6 +30,6 @@ const AN_ERROR: error = error : string / "went wrong"
 // A set written with a duplicate, which holds it once.
 const DEDUPED: #{u32} = #{: u32 / 4, : u32 / 4, : u32 / 5}
 
-let output = (A_BOOL, A_NUMBER, A_BIGINT, A_STRING, A_TUPLE, A_STRUCT,
-              SOME, NONE, OK, ERR, A_LIST, A_SET, A_MAP, A_DATA, AN_ERROR,
-              DEDUPED)
+let output = (A_BOOL, A_NUMBER, A_BIGINT@, A_STRING@, A_TUPLE@, A_STRUCT@,
+              SOME, NONE, OK@, ERR@, A_LIST@, A_SET@, A_MAP@, A_DATA@, AN_ERROR@,
+              DEDUPED@)

@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 1000int
                         drop v0
                         drop v1
-                        v3 = const 1000int
+                        v3 = clone v2
                         drop v2
                         return v3
                 """,

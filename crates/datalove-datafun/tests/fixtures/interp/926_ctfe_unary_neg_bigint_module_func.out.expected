@@ -15,13 +15,11 @@ Analysis(
                     fn get_negative():
                     block0:
                         v0 = const 999int
-                        v1 = const 999int
-                        v2 = const -999int
-                        drop v1
-                        v3 = const -999int
+                        v1 = const -999int
+                        v2 = clone v1
                         drop v0
-                        drop v2
-                        return v3
+                        drop v1
+                        return v2
                 """,
             ),
             output: "",

@@ -36,31 +36,25 @@ Analysis(
                         drop v0
                         v2 = clone p0
                         v3 = call @0 m0.u0(v2)
-                        v4 = clone v1
-                        v5 = const 2int
-                        v6 = mul v4, v5
+                        v4 = const 2int
+                        v5 = mul v1, v4
                         drop v4
-                        drop v5
-                        v7 = clone v1
-                        v8 = comptime_call m0.u1(v7, p1) [disc=0, comptime_params=[0]]
-                        v9 = clone v3
-                        v10 = add v8, v9
+                        v6 = clone v1
+                        v7 = comptime_call m0.u1(v6, p1) [disc=0, comptime_params=[0]]
+                        v8 = add v7, v3
+                        drop v7
+                        v9 = add v8, v5
                         drop v8
-                        drop v9
-                        v11 = clone v6
-                        v12 = add v10, v11
-                        drop v10
-                        drop v11
                         drop p0
                         drop v1
                         drop v3
-                        drop v6
-                        return v12
+                        drop v5
+                        return v9
                     
                     fn from_module(p0):
                     block0:
                         v0 = const 3int
-                        v1 = const 3int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u4(p0)
                         drop v0
@@ -68,32 +62,26 @@ Analysis(
                     
                     fn uses_consts__ct4(p0):
                     block0:
-                        v13 = const 3int
+                        v10 = const 3int
                         v0 = const 1int
                         v1 = const 4int
                         drop v0
                         v3 = const 30int
-                        v4 = const 4int
-                        v5 = const 2int
-                        v6 = const 8int
+                        v4 = const 2int
+                        v5 = const 8int
                         drop v4
-                        drop v5
-                        v7 = const 4int
+                        v6 = clone v1
+                        drop v6
+                        v7 = call @1 m0.u5(p0)
+                        v8 = add v7, v3
                         drop v7
-                        v8 = call @1 m0.u5(p0)
-                        v9 = const 30int
-                        v10 = add v8, v9
+                        v9 = add v8, v5
                         drop v8
-                        drop v9
-                        v11 = const 8int
-                        v12 = add v10, v11
                         drop v10
-                        drop v11
-                        drop v13
                         drop v1
                         drop v3
-                        drop v6
-                        return v12
+                        drop v5
+                        return v9
                     
                     fn scale__ct5(p0):
                     block0:
@@ -123,7 +111,7 @@ Analysis(
                         v0 = const 5int
                         v1 = const 2int
                         v2 = call @0 m0.u3(v1)
-                        v3 = const 5int
+                        v3 = clone v0
                         v4 = const 2int
                         drop v3
                         v5 = call @1 u0(v4)
@@ -136,32 +124,26 @@ Analysis(
                     
                     fn uses_consts__ct0(p0):
                     block0:
-                        v13 = const 5int
+                        v10 = const 5int
                         v0 = const 1int
                         v1 = const 6int
                         drop v0
                         v3 = const 50int
-                        v4 = const 6int
-                        v5 = const 2int
-                        v6 = const 12int
+                        v4 = const 2int
+                        v5 = const 12int
                         drop v4
-                        drop v5
-                        v7 = const 6int
+                        v6 = clone v1
+                        drop v6
+                        v7 = call @1 u1(p0)
+                        v8 = add v7, v3
                         drop v7
-                        v8 = call @1 u1(p0)
-                        v9 = const 50int
-                        v10 = add v8, v9
+                        v9 = add v8, v5
                         drop v8
-                        drop v9
-                        v11 = const 12int
-                        v12 = add v10, v11
                         drop v10
-                        drop v11
-                        drop v13
                         drop v1
                         drop v3
-                        drop v6
-                        return v12
+                        drop v5
+                        return v9
                     
                     fn scale__ct1(p0):
                     block0:

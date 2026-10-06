@@ -33,7 +33,7 @@ Analysis(
                     fn wrap_one(p0):
                     block0:
                         v0 = const 1int
-                        v1 = const 1int
+                        v1 = clone v0
                         v2 = erase p0
                         drop v1
                         v3 = call @0 m0.u4(v2)
@@ -77,7 +77,7 @@ Analysis(
                     block0:
                         v0 = const 1int
                         v1 = const 2int
-                        v2 = const 1int
+                        v2 = clone v0
                         v3 = const 7u32
                         v4 = erase v3
                         drop v2
@@ -85,7 +85,7 @@ Analysis(
                         v6 = reify v5
                         debuglog v6
                         drop v6
-                        v7 = const 1int
+                        v7 = clone v0
                         v8 = const "s"
                         v9 = erase v8
                         drop v7
@@ -93,7 +93,7 @@ Analysis(
                         v11 = reify v10
                         debuglog v11
                         drop v11
-                        v12 = const 2int
+                        v12 = clone v1
                         v13 = const "s"
                         v14 = erase v13
                         drop v12
@@ -101,7 +101,7 @@ Analysis(
                         v16 = reify v15
                         debuglog v16
                         drop v16
-                        v17 = const 1int
+                        v17 = clone v0
                         v18 = const 3u32
                         v19 = erase v18
                         v20 = const 4u32
@@ -114,11 +114,11 @@ Analysis(
                         v25 = call @0 m0.u2(v24)
                         debuglog v25
                         drop v25
-                        v26 = const 1int
+                        v26 = clone v0
                         v27 = const "spoken"
                         drop v26
                         v28 = call @5 u3(v27)
-                        v29 = const 1int
+                        v29 = clone v0
                         v30 = const "kept"
                         v31 = erase v30
                         v32 = const "dropped"

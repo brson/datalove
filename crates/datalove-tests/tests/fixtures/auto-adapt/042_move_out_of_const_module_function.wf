@@ -1,0 +1,19 @@
+----------
+module local/test/ownership
+----------
+
+// Test: D003 moving out of consts in a module function
+// A module const and a function const are both borrowed
+// Expected: D003 errors with recovery hints in normal mode, success in auto-adapt mode
+
+const MSG: string = "hello"
+
+fun consume(s: string): int
+  ret 42
+end fun
+
+fun test_move(): (int, string)
+  const LOCAL: string = "local"
+  let a: int = consume(MSG)
+  ret (a, LOCAL)
+end fun

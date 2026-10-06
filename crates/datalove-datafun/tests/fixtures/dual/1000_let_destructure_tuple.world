@@ -23,8 +23,9 @@ let pair = (some "p", ok [1, 2])
 let (o, r) = pair
 debuglog (o, r)
 
-// A const is materialized afresh for each read, so it can be taken apart twice.
+// A const is borrowed wherever it is named, so taking one apart takes a clone,
+// and it can be taken apart twice.
 const PAIR: (int, int) = (: int / 10, : int / 20)
-let (p1, p2) = PAIR
-let (p3, p4) = PAIR
+let (p1, p2) = PAIR@
+let (p3, p4) = PAIR@
 debuglog (p1, p2, p3, p4)

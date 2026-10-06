@@ -6,7 +6,7 @@ scriptunit-fragment
 fun negate(): int
     const X: int = 100
     const Y: int = -X
-    ret Y
+    ret Y@
 end fun
 
 debuglog negate()

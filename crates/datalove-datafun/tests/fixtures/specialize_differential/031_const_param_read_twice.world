@@ -2,11 +2,11 @@
 module local/test/twice
 ----------
 
-// A const parameter read more than once. It is a constant, not a value the
-// body owns the only copy of, so reading it does not consume it -- the same
-// rule a const binding has always had. Writing `n@` was refused, since a
-// const argument must be a name, so this used to need a `const N: int = n`
-// standing in front of it.
+// A const parameter read more than once. Like any const it is borrowed
+// wherever it is named, so it may be read and passed on as a const argument
+// any number of times. A const argument is not passed, so it is not a move,
+// and `n@` there would be refused anyway, since a const argument must be a
+// name.
 
 fun add_n(const n: int, x: int): int
     ret n + x

@@ -50,7 +50,7 @@ Analysis(
                     fn use_last(p0):
                     block0:
                         v0 = const 3int
-                        v1 = const 3int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u6(p0)
                         drop v0
@@ -60,8 +60,8 @@ Analysis(
                     block0:
                         v0 = const 2int
                         v1 = const 5int
-                        v2 = const 2int
-                        v3 = const 5int
+                        v2 = clone v0
+                        v3 = clone v1
                         drop v2
                         drop v3
                         v4 = call @0 m0.u7(p0)
@@ -73,9 +73,9 @@ Analysis(
                     block0:
                         v0 = const 3int
                         v1 = const 5int
-                        v2 = const 3int
+                        v2 = clone v0
                         v3 = const 4int
-                        v4 = const 5int
+                        v4 = clone v1
                         v5 = const 1int
                         drop v2
                         drop v4

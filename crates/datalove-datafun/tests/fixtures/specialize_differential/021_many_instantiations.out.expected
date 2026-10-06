@@ -46,35 +46,35 @@ Analysis(
                         v5 = const 6int
                         v6 = const 7int
                         v7 = const 8int
-                        v8 = const 1int
+                        v8 = clone v0
                         v9 = const 10int
                         drop v8
                         v10 = call @0 u0(v9)
-                        v11 = const 2int
+                        v11 = clone v1
                         v12 = const 10int
                         drop v11
                         v13 = call @1 u1(v12)
-                        v14 = const 3int
+                        v14 = clone v2
                         v15 = const 10int
                         drop v14
                         v16 = call @2 u2(v15)
-                        v17 = const 4int
+                        v17 = clone v3
                         v18 = const 10int
                         drop v17
                         v19 = call @3 u3(v18)
-                        v20 = const 5int
+                        v20 = clone v4
                         v21 = const 10int
                         drop v20
                         v22 = call @4 u4(v21)
-                        v23 = const 6int
+                        v23 = clone v5
                         v24 = const 10int
                         drop v23
                         v25 = call @5 u5(v24)
-                        v26 = const 7int
+                        v26 = clone v6
                         v27 = const 10int
                         drop v26
                         v28 = call @6 u6(v27)
-                        v29 = const 8int
+                        v29 = clone v7
                         v30 = const 10int
                         drop v29
                         v31 = call @7 u7(v30)

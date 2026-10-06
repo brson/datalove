@@ -15,9 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v4 = const some [1u32, 2u32, 3u32]
-                        v5 = const some [1u32, 2u32, 3u32]
-                        debuglog v5
-                        drop v5
+                        debuglog v4
                         unit_end_drop v4
                         unit_end
                 """,

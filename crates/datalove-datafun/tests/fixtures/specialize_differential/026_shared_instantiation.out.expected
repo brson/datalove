@@ -122,7 +122,7 @@ Analysis(
                         v4 = call @1 m0.u4(v3)
                         v5 = const 10int
                         v6 = call @2 m0.u5(v5)
-                        v7 = const 2int
+                        v7 = clone v0
                         v8 = const "hi"
                         drop v7
                         v9 = call @4 u0(v8)

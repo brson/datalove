@@ -8,7 +8,7 @@ end fun
 
 fun get_diff(): int
     const DIFF: int = subtract(100, 35)
-    ret DIFF
+    ret DIFF@
 end fun
 
 ----------

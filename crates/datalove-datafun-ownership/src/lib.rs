@@ -53,7 +53,7 @@ use datalove_datafun_sema::Destructure;
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    AdaptSites, ExprIrTypes,
+    AdaptSites, ExprIrTypes, CallTargets,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -111,6 +111,10 @@ struct AnalysisCtx<'a, 'db> {
     adapt_sites: AdaptSites<'db>,
     /// Names earlier units exported without a value behind them.
     dead_externals: Vec<String>,
+    /// Which names this analysis cannot see the binding of are consts.
+    outer_consts: OuterConsts,
+    /// What each call resolved to, for which of its arguments are const.
+    call_targets: &'a CallTargets<'db>,
     /// Names from `dead_externals` this unit assigned to.
     revived_externals: Vec<String>,
     /// Detected errors.
@@ -182,6 +186,22 @@ struct BranchEnd<'db> {
     assigned_at: HashMap<BindingId, ExprKey<'db>>,
 }
 
+/// Which names declared outside the analyzed body are consts.
+///
+/// A const is borrowed wherever it is named, so moving out of one is an
+/// error. A const this analysis declared is a binding it can see; one declared
+/// outside it is only a name, and this says which names those are.
+#[derive(Clone, Debug)]
+enum OuterConsts {
+    /// Every name not bound here. A function body sees only its parameters,
+    /// what it binds, consts and functions, and a function cannot be named as
+    /// a value, so a name it cannot resolve is a const of the module or script.
+    AllUnresolved,
+    /// These names. A script unit also sees the `let` and `var` bindings of
+    /// earlier units, which a unit copies out of rather than borrows.
+    Named(Vec<String>),
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ScopeKind {
     Function,
@@ -199,6 +219,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         expr_types: &'a ExprIrTypes<'db>,
         auto_adapt_mode: AutoAdaptMode,
         dead_externals: Vec<String>,
+        outer_consts: OuterConsts,
+        call_targets: &'a CallTargets<'db>,
     ) -> Self {
         Self {
             db,
@@ -210,6 +232,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             scope_stack: Vec::new(),
             adapt_sites: AdaptSites::default(),
             dead_externals,
+            outer_consts,
+            call_targets,
             revived_externals: Vec::new(),
             errors: Vec::new(),
             schedule: DropSchedule::default(),
@@ -231,6 +255,30 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             description: format!("clone `{}` where it was given away", name),
         };
         self.errors.push(AnalysisError::UseAfterMoveInEarlierUnit {
+            expr_key,
+            name: name.to_string(),
+            recovery_hint,
+        });
+    }
+
+    /// Whether a name this analysis has no binding for is a const.
+    fn is_outer_const(&self, name: &str) -> bool {
+        match &self.outer_consts {
+            OuterConsts::AllUnresolved => true,
+            OuterConsts::Named(names) => names.iter().any(|n| n == name),
+        }
+    }
+
+    /// Report a move out of a const, or clone there under auto-adapt.
+    fn move_out_of_const(&mut self, name: &str, expr_key: ExprKey<'db>) {
+        if self.auto_adapt_mode.is_enabled() {
+            self.adapt_sites.insert(expr_key);
+            return;
+        }
+        let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+            description: format!("clone `{}`", name),
+        };
+        self.errors.push(AnalysisError::CannotMoveConst {
             expr_key,
             name: name.to_string(),
             recovery_hint,
@@ -284,7 +332,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.alloc_binding_inner(name, ty, is_slot, param_mode, false)
     }
 
-    /// Allocate a binding for a const, which reading does not consume.
+    /// Allocate a binding for a const, which is borrowed wherever it is named.
     fn alloc_const_binding(&mut self, name: String, ty: IrType) -> BindingId {
         self.alloc_binding_inner(name, ty, false, None, true)
     }
@@ -809,8 +857,20 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 let args = call.args(self.db);
                 self.check_argument_aliasing(&args, &callee_modes);
 
+                // A const argument is not passed: specialization writes its
+                // value into the callee. So it is not a move, and the argument
+                // is the bare const name the typechecker required.
+                let target = self.call_targets.get(&ExprKey::of_call(self.db, call))
+                    .expect("ownership analysis runs only on a typechecked body, where every call is resolved");
+                let callee_comptime: Vec<bool> = target.func(self.db).params(self.db).iter()
+                    .map(|p| p.is_comptime)
+                    .collect();
+
                 // Analyze args with appropriate consumption based on param mode.
                 for (i, arg) in args.iter().enumerate() {
+                    if callee_comptime[i] {
+                        continue;
+                    }
                     let callee_mode = callee_modes.get(i).copied();
 
                     // The callee writes through a mut or out parameter, so the
@@ -1003,17 +1063,25 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                                 return None;
                             }
                         }
-                        // Reading a const does not consume it. It names a
-                        // value the compiler computed rather than a place
-                        // holding the only copy of one, and lowering gives each
-                        // read its own, so any number of reads is fine.
                         let binding = &self.bindings[id.0 as usize];
-                        if is_consumed && !binding.ty.is_copy() && !binding.is_const {
+                        if is_consumed && !binding.ty.is_copy() {
+                            // A const is borrowed wherever it is named, so a
+                            // move out of it needs a clone.
+                            if binding.is_const {
+                                self.move_out_of_const(root_name, expr_key);
+                                return None;
+                            }
                             self.mark_moved(id, expr_key);
                             return Some(id);
                         }
                     } else {
                         self.check_dead_external(root_name, expr_key);
+                        if is_consumed
+                            && self.is_outer_const(root_name)
+                            && !self.expr_type(expr).is_copy()
+                        {
+                            self.move_out_of_const(root_name, expr_key);
+                        }
                     }
                     None
                 } else {
@@ -1066,9 +1134,10 @@ pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     resolved_param_types: Option<&[IrType]>,
 ) -> FunctionAnalysis<'db> {
-    analyze_function_with_mode(db, func, expr_types, resolved_param_types, AutoAdaptMode::Disabled)
+    analyze_function_with_mode(db, func, expr_types, call_targets, resolved_param_types, AutoAdaptMode::Disabled)
 }
 
 /// Analyze a function for ownership with configurable auto-adapt mode.
@@ -1076,11 +1145,14 @@ pub fn analyze_function_with_mode<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     resolved_param_types: Option<&[IrType]>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> FunctionAnalysis<'db> {
     // A function body cannot name script-level bindings.
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, Vec::new());
+    let mut ctx = AnalysisCtx::new(
+        db, expr_types, auto_adapt_mode, Vec::new(), OuterConsts::AllUnresolved, call_targets,
+    );
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -1094,9 +1166,8 @@ pub fn analyze_function_with_mode<'db>(
             Some(types) => types[i].clone(),
             None => IrType::from_type_hint(db, &param.type_hint),
         };
-        // A const parameter is a constant. Reading one does not consume it,
-        // for the reason reading any other const does not: it names a value the
-        // compiler computed rather than a place holding the only copy of one.
+        // A const parameter is a constant, and like any other const is
+        // borrowed wherever it is named.
         if param.is_comptime {
             ctx.alloc_const_binding(name, ty);
         } else {
@@ -1144,6 +1215,7 @@ pub fn analyze_function_with_mode<'db>(
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
@@ -1158,7 +1230,7 @@ pub fn analyze_script_functions<'db>(
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function(db, *func, expr_types, resolved_params);
+            let analysis = analyze_function(db, *func, expr_types, call_targets, resolved_params);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
@@ -1177,6 +1249,7 @@ pub fn analyze_script_functions<'db>(
 pub fn analyze_script_functions_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     auto_adapt_mode: AutoAdaptMode,
@@ -1192,7 +1265,7 @@ pub fn analyze_script_functions_with_mode<'db>(
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function_with_mode(db, *func, expr_types, resolved_params, auto_adapt_mode);
+            let analysis = analyze_function_with_mode(db, *func, expr_types, call_targets, resolved_params, auto_adapt_mode);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
@@ -1249,20 +1322,28 @@ pub struct ScriptAnalysis<'db> {
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis<'db> {
-    analyze_script_statements_with_mode(db, expr_types, stmts, AutoAdaptMode::Disabled, Vec::new())
+    analyze_script_statements_with_mode(
+        db, expr_types, call_targets, stmts, AutoAdaptMode::Disabled, Vec::new(), Vec::new(),
+    )
 }
 
 /// Analyze script statements for ownership with configurable auto-adapt mode.
 pub fn analyze_script_statements_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
+    external_consts: Vec<String>,
 ) -> ScriptAnalysis<'db> {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
+    let mut ctx = AnalysisCtx::new(
+        db, expr_types, auto_adapt_mode, dead_externals, OuterConsts::Named(external_consts),
+        call_targets,
+    );
 
     // Enter ScriptUnit scope so bindings are Tracked.
     ctx.enter_scope(ScopeKind::ScriptUnit);
@@ -1335,8 +1416,9 @@ pub fn analyze_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
 ) -> ExprAnalysis<'db> {
-    analyze_expr_with_mode(db, expr, expr_types, AutoAdaptMode::Disabled, Vec::new())
+    analyze_expr_with_mode(db, expr, expr_types, call_targets, AutoAdaptMode::Disabled, Vec::new(), Vec::new())
 }
 
 /// Analyze expression for ownership with configurable auto-adapt mode.
@@ -1344,10 +1426,15 @@ pub fn analyze_expr_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
     expr_types: &ExprIrTypes<'db>,
+    call_targets: &CallTargets<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
+    external_consts: Vec<String>,
 ) -> ExprAnalysis<'db> {
-    let mut ctx = AnalysisCtx::new(db, expr_types, auto_adapt_mode, dead_externals);
+    let mut ctx = AnalysisCtx::new(
+        db, expr_types, auto_adapt_mode, dead_externals, OuterConsts::Named(external_consts),
+        call_targets,
+    );
 
     // Enter a scope for the expression analysis.
     ctx.enter_scope(ScopeKind::Function);
@@ -1512,7 +1599,7 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
     }
 
     // Create binding for the const. It is dropped at the end of the scope like
-    // a let, but reading it does not consume it.
+    // a let, but is borrowed wherever it is named.
     let name = stmt.name.text(ctx.db).S();
     let ty = ctx.expr_type(expr);
     ctx.alloc_const_binding(name, ty);

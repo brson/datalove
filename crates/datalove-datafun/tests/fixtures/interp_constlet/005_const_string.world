@@ -4,7 +4,7 @@ scriptunit-fragment
 
 fun get_greeting(): string
     const GREETING: string = "hello"
-    ret GREETING
+    ret GREETING@
 end fun
 
 ----------

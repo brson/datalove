@@ -19,7 +19,7 @@ fun map_get(const m: %{string = int}): !int
 end fun
 
 fun set_back(const s: #{int}): #{int}
-    ret s
+    ret s@
 end fun
 
 fun name_of(const p: {name: string, tags: [string]}): string
@@ -27,7 +27,7 @@ fun name_of(const p: {name: string, tags: [string]}): string
 end fun
 
 fun shape_count(const s: Shape): int
-    match s
+    match s@
     case atom Empty
         ret :int/0
     case term Points xs

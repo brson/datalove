@@ -40,7 +40,7 @@ Analysis(
                     fn bigint_in_and_out():
                     block0:
                         v1 = const 7int
-                        v2 = const 7int
+                        v2 = clone v1
                         drop v1
                         return v2
                 """,

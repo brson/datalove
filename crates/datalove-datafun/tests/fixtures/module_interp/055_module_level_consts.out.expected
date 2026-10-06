@@ -28,17 +28,23 @@ ModulesAnalysis(
             fn uses_string():
             block0:
                 v0 = const "hello"
-                return v0
+                v1 = clone v0
+                drop v0
+                return v1
             
             fn uses_bigint():
             block0:
                 v0 = const 99999999999999999999int
-                return v0
+                v1 = clone v0
+                drop v0
+                return v1
             
             fn uses_list():
             block0:
                 v0 = const [1int, 2int, 3int]
-                return v0
+                v1 = clone v0
+                drop v0
+                return v1
             
             fn local_names_module():
             block0:

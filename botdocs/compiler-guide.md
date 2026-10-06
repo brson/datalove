@@ -1348,6 +1348,19 @@ fall through. Each branch's `BranchEnd` keeps its `moved_at` and `assigned_at`
 sites, so the error can point at the move or `set` that made the branch differ,
 and, for a `set`, at the move before the branches that it undoes.
 
+**Consts are borrowed.** A const, function-level, module-level or script-level,
+and a const parameter are ref bindings: a move out of one of a non-copy type is
+`CannotMoveConst` (D003) unless written with `@`. A const the analysis declared
+is a binding with `is_const`. One declared outside the body is only a name, and
+`OuterConsts` says which: in a function body every name it cannot resolve,
+since a body sees only its parameters, what it binds, consts and functions, and
+a function is never named as a value; in a script or expression unit the
+earlier units' consts, from `external_consts_over`, because an earlier unit's
+`let` is copied out of rather than borrowed. A const argument is not a move:
+the analysis reads `call_targets` to find the callee's const parameters and
+skips those arguments, and lowering hands the call a copy of its own
+(`lower_comptime_arg`), since the call consumes what it is given.
+
 ### Auto-adapt
 
 `AutoAdaptMode::Enabled` accepts the errors an `@` would have fixed by
@@ -1361,7 +1374,8 @@ that expression would - a widening, a clone for linear types.
 | D001, D002 | A clone at the earlier move | Yes |
 | D007 | A clone at the use inside the loop, so each iteration takes a copy | Yes |
 | D013 | A clone where an earlier script unit gave the value away | No: that unit has already run |
-| D003, D004 | Nothing; the parameter mode is wrong | No |
+| D003 moving out of a const | A clone at the use | Yes |
+| D003 moving a parameter, D004 | Nothing; the parameter mode is wrong | No |
 | D005, D006 | Nothing; there is no value to clone | No |
 | F011 | Nothing; `@` needs an expected type, so `let x = v@` cannot synthesize one | No |
 
@@ -1406,6 +1420,7 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D001 | `UseAfterMove` | Using value after move |
 | D002 | `DoubleMove` | Moving value twice |
 | D003 | `CannotMoveBorrowed` | Moving `ref`/`mut`/`out` param |
+| D003 | `CannotMoveConst` | Moving out of a const or const parameter without `@` |
 | D004 | `CannotMutFromRef` | Passing `ref` to `mut` param |
 | D005 | `ReadUninitialized` | Reading an `out` param or `var` binding before it is set |
 | D006 | `OutParamNotInitialized` | Return without initializing `out` |

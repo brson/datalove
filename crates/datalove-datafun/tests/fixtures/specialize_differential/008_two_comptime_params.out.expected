@@ -40,8 +40,8 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 20int
-                        v2 = const 10int
-                        v3 = const 20int
+                        v2 = clone v0
+                        v3 = clone v1
                         drop v2
                         drop v3
                         v4 = call @0 u0()

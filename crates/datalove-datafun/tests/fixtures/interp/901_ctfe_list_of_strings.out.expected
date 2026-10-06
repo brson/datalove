@@ -15,9 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v3 = const ["hello", "world", "test"]
-                        v4 = const ["hello", "world", "test"]
-                        debuglog v4
-                        drop v4
+                        debuglog v3
                         unit_end_drop v3
                         unit_end
                 """,

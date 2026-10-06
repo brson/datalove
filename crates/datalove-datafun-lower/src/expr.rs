@@ -22,7 +22,7 @@ use super::LowerError;
 /// Callers that need drop tracking should call `record_expr_temp` only
 /// when `is_fresh_const` is true, since regular `let` bindings bound to
 /// `Operand::Value` are already managed by the drop schedule.
-fn lower_var_operand(ctx: &mut LowerCtx, name: &str, consuming: bool) -> Result<(Operand, bool), LowerError> {
+fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), LowerError> {
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
         let const_type = const_type.clone();
         let const_value = const_value.clone();
@@ -39,43 +39,33 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str, consuming: bool) -> Result<
     let op = ctx.lookup_var(name)
         .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?;
 
-    // A const written in this body is evaluated after this body is lowered, so
-    // its value is not available here the way a module-level const's is. What
-    // this can do is give the reference a value of its own, by cloning, and
-    // record it under the const's name, so that the pass which replaces a
-    // const's definition with its literal replaces this clone too. Where that
-    // pass runs, each reference reaches the backend as its own literal; where
-    // it does not, the clone stands and is still a value of its own. Either
-    // way reading a const does not consume it.
-    //
-    // A copy type needs none of this: reading one never consumed it.
-    if ctx.const_let_names.contains(name) {
-        let ty = ctx.operand_type(op.clone())
-            .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?
-            .clone();
-        if !ty.is_copy() {
-            let dest = ctx.fresh_value(ty);
-            ctx.emit(Instruction::Clone { dest, src: op });
-            ctx.body.const_values.push((name.to_string(), dest));
-            return Ok((Operand::Value(dest), true));
-        }
-    }
-
-    // A const parameter is a constant, so a read that would consume it takes a
-    // copy instead, the way a read of any other const does. A borrow takes
-    // none: it never consumed anything.
-    if consuming && ctx.const_param_names.contains(name) {
-        let ty = ctx.operand_type(op.clone())
-            .ok_or_else(|| LowerError::BindingNotAvailable(name.to_string()))?
-            .clone();
-        if !ty.is_copy() {
-            let dest = ctx.fresh_value(ty);
-            ctx.emit(Instruction::Clone { dest, src: op });
-            return Ok((Operand::Value(dest), false));
-        }
-    }
-
     Ok((op, false))
+}
+
+/// Lower the argument to a const parameter, which names a const.
+///
+/// The call owns what it is given: unspecialized, the callee consumes it, and
+/// specialized, the rewrite drops it. A const is only borrowed where it is
+/// named, so the call gets a copy of its own, unless the const was built for
+/// this mention and is already one.
+fn lower_comptime_arg<'db>(ctx: &mut LowerCtx<'db>, arg: ExprFun<'db>) -> Result<Operand, LowerError> {
+    let ExprFunKind::Place(ref place) = arg.expr(ctx.db) else {
+        unreachable!("the typechecker requires a const argument to name a const (F076)");
+    };
+    let (operand, is_fresh_const) = lower_var_operand(ctx, place.root.text(ctx.db))?;
+    if is_fresh_const || operand_type(ctx, &operand).is_copy() {
+        return Ok(operand);
+    }
+    Ok(Operand::Value(emit_owned_copy(ctx, arg, operand)))
+}
+
+/// Record a const `lower_var_operand` built as a temporary to drop.
+fn record_fresh_const_temp(ctx: &mut LowerCtx, operand: &Operand) {
+    let Operand::Value(vid) = *operand else {
+        unreachable!("lower_var_operand builds a const as a value");
+    };
+    let ty = ctx.body.value_types[vid.0 as usize].clone();
+    ctx.record_expr_temp(vid, ty);
 }
 
 /// Lower an operand for borrowing contexts (binop, unaryop, `@`).
@@ -97,12 +87,9 @@ pub fn lower_operand<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str, false)?;
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
-                if let Operand::Value(vid) = operand {
-                    let ty = ctx.body.value_types[vid.0 as usize].clone();
-                    ctx.record_expr_temp(vid, ty);
-                }
+                record_fresh_const_temp(ctx, &operand);
             }
             Ok(operand)
         }
@@ -208,13 +195,17 @@ fn lower_call_arg<'db>(
     match arg.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, _) = lower_var_operand(ctx, name_str, true)?;
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             let is_external = matches!(
                 operand,
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. },
             );
             if ctx.is_adapt_site(arg) || is_external {
-                // The callee consumes the copy, not the binding.
+                // The callee consumes the copy, not the binding, and a const
+                // built for the occasion is dropped once copied.
+                if is_fresh_const {
+                    record_fresh_const_temp(ctx, &operand);
+                }
                 return Ok(Operand::Value(emit_owned_copy(ctx, arg, operand)));
             }
             Ok(operand)
@@ -400,12 +391,9 @@ pub fn lower_expression_for_ref<'db>(
         }
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str, false)?;
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
-                if let Operand::Value(vid) = operand {
-                    let ty = ctx.body.value_types[vid.0 as usize].clone();
-                    ctx.record_expr_temp(vid, ty);
-                }
+                record_fresh_const_temp(ctx, &operand);
             }
             Ok(operand)
         }
@@ -464,10 +452,14 @@ pub fn lower_expression<'db>(
     match expr.expr(ctx.db) {
         ExprFunKind::Place(ref place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
-            let (operand, _) = lower_var_operand(ctx, name_str, true)?;
+            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
 
-            // Auto-adapt supplies the `@` here, so clone rather than consume.
+            // Auto-adapt supplies the `@` here, so clone rather than consume,
+            // and drop a const built for the occasion once it is copied.
             if ctx.is_adapt_site(expr) {
+                if is_fresh_const {
+                    record_fresh_const_temp(ctx, &operand);
+                }
                 return Ok(emit_owned_copy(ctx, expr, operand));
             }
 
@@ -592,6 +584,9 @@ pub fn lower_expression<'db>(
                     })
                     .collect())
                 .unwrap_or_default();
+            let param_comptime: Vec<bool> = target
+                .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.is_comptime).collect())
+                .unwrap_or_default();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
                     .enumerate()
@@ -629,7 +624,11 @@ pub fn lower_expression<'db>(
                 let erased_out = mode == ParamMode::Out
                     && param_is_erased.get(i).copied().unwrap_or(false);
                 let arg_type = if erased_out { None } else { param_types.get(i) };
-                let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
+                let mut operand = if param_comptime.get(i).copied().unwrap_or(false) {
+                    lower_comptime_arg(ctx, *arg)?
+                } else {
+                    lower_call_arg(ctx, *arg, mode, arg_type)?
+                };
                 // Convert into the shape the erased callee was compiled for,
                 // which is the parameter's own type with `data` at each type
                 // parameter rather than `data` outright.
@@ -1888,12 +1887,9 @@ fn lower_place_as_ref<'db>(
     let root_name_str = place.root.text(ctx.db);
     // A module-level or script-level const borrowed from a function has no
     // binding here; its value is materialized as a temporary to borrow.
-    let (mut current_op, is_fresh_const) = lower_var_operand(ctx, root_name_str, false)?;
+    let (mut current_op, is_fresh_const) = lower_var_operand(ctx, root_name_str)?;
     if is_fresh_const {
-        if let Operand::Value(vid) = current_op {
-            let ty = ctx.body.value_types[vid.0 as usize].clone();
-            ctx.record_expr_temp(vid, ty);
-        }
+        record_fresh_const_temp(ctx, &current_op);
     }
 
     for step in &place.steps {

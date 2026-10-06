@@ -27,4 +27,4 @@ const WORDS: [|string, 1|] = [| : string / "first" : string / "second" |]
 const IN_A_TUPLE: (u32, [|u32, 1|]) = (: u32 / 9, : [|u32, 1|] / [| : u32 / 8 : u32 / 7 |])
 const IN_AN_OPTION: ?[|u32, 1|] = some : [|u32, 1|] / [| : u32 / 6 |]
 
-let output = (FLAT, GRID, FLOATS, ONE, PAIRS, WORDS, IN_A_TUPLE, IN_AN_OPTION)
+let output = (FLAT@, GRID@, FLOATS@, ONE@, PAIRS@, WORDS@, IN_A_TUPLE@, IN_AN_OPTION@)

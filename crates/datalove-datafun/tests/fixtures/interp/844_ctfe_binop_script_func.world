@@ -5,7 +5,7 @@ scriptunit-fragment
 // CTFE binop in script function.
 fun compute(): int
     const X: int = :int/7 + :int/3
-    ret X
+    ret X@
 end fun
 
 debuglog compute()

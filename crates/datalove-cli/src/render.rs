@@ -200,6 +200,17 @@ fn ownership_diagnostic<'db>(
                     .build(),
             )
         }
+        AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
+            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move out of const: `{name}`"))
+                .code("D003")
+                .primary_label(TextSpan::new(text, span.C()), "cannot move out of const")
+                .note("a const is borrowed wherever it is named");
+            if let Some(help) = adapt_help(recovery_hint, text.as_str(db), &span, name) {
+                builder = builder.help(&help);
+            }
+            Some(builder.build())
+        }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
             let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
             Some(

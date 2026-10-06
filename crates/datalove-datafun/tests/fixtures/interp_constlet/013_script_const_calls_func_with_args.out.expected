@@ -44,7 +44,8 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        unit_end
+                        v0 = clone unit0.v2
+                        unit_end v0
                 """,
             ),
             output: "30",

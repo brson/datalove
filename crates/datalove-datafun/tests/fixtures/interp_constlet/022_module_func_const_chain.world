@@ -12,8 +12,8 @@ end fun
 
 fun compute(): int
     const A: int = double(:int/5)
-    const B: int = add_ten(A)
-    ret B
+    const B: int = add_ten(A@)
+    ret B@
 end fun
 
 ----------

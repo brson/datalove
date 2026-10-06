@@ -9,12 +9,12 @@ scriptunit-fragment
 
 fun linear_elements(): [int]
     const L: [int] = [1, 2, 3]
-    ret L
+    ret L@
 end fun
 
 fun copy_elements(): [u32]
     const M: [u32] = [: u32 / 1, : u32 / 2]
-    ret M
+    ret M@
 end fun
 
 debuglog linear_elements()

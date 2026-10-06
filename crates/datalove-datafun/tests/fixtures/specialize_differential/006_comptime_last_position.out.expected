@@ -40,7 +40,7 @@ Analysis(
                     block0:
                         v0 = const 3int
                         v1 = const 7int
-                        v2 = const 3int
+                        v2 = clone v0
                         drop v2
                         v3 = call @0 u0(v1)
                         debuglog v3

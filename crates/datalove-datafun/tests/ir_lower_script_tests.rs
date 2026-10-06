@@ -123,7 +123,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 }
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, &stmts, Some(&func_param_types)) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, call_targets_raw, &stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -139,7 +139,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, &stmts);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, call_targets_raw, &stmts);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {

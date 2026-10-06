@@ -133,7 +133,7 @@ pub fn analyze_module<'db>(
 
             // Run ownership analysis with auto-adapt mode.
             let analysis = ownership_analysis::analyze_function_with_mode(
-                db, *func, &expr_types, resolved_params, auto_adapt_mode
+                db, *func, &expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
             );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {

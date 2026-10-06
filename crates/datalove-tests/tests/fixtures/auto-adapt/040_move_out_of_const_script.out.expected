@@ -1,0 +1,55 @@
+{
+  "auto_adapt_execution": {
+    "environment": [
+      {
+        "kind": "let",
+        "name": "LST",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      },
+      {
+        "kind": "let",
+        "name": "a",
+        "ty": "int",
+        "value": "42"
+      },
+      {
+        "kind": "let",
+        "name": "b",
+        "ty": "list<int>",
+        "value": "[1, 2]"
+      },
+      {
+        "kind": "fun",
+        "name": "consume",
+        "ty": "function",
+        "value": "-"
+      }
+    ],
+    "outputs": [
+      {
+        "kind": "fragment",
+        "output": "(fragment executed)"
+      }
+    ],
+    "status": "ran"
+  },
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "error[D003]: cannot move out of const: `LST`\n  help: use `@` to clone `LST`\nerror[D003]: cannot move out of const: `LST`\n  help: use `@` to clone `LST`"
+      }
+    ],
+    "success": false
+  }
+}

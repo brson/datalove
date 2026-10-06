@@ -89,6 +89,28 @@ pub fn script_consts_over(
     consts
 }
 
+/// The names of the consts earlier units declared and no later one rebound,
+/// for a unit after `records`.
+///
+/// A unit that exports a name it did not declare as a const rebinds it, so the
+/// name stops being a const from there on.
+pub fn external_consts_over(records: &[UnitLowerRecord]) -> Vec<String> {
+    let mut consts: Vec<String> = Vec::new();
+    for record in records {
+        for (name, _) in &record.exports {
+            if !record.consts.iter().any(|(c, _, _)| c == name) {
+                consts.retain(|held| held != name);
+            }
+        }
+        for (name, _, _) in &record.consts {
+            if !consts.contains(name) {
+                consts.push(name.clone());
+            }
+        }
+    }
+    consts
+}
+
 /// The names earlier units exported and then gave away, for a unit after
 /// `records`.
 ///

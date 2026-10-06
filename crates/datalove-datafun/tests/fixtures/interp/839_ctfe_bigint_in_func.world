@@ -4,7 +4,7 @@ scriptunit-fragment
 
 fun get_value(): int
     const X: int = :int/100 + :int/200
-    ret X
+    ret X@
 end fun
 
 debuglog get_value()

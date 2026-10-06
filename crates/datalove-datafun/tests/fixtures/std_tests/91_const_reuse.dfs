@@ -1,18 +1,17 @@
-// A const names a value, not a place, so reading one does not consume it.
-// These are linear types: naming one twice used to be a use-after-move at
-// script top level while the same thing in a module function was fine.
+// A const is borrowed wherever it is named, so a const of a linear type is
+// cloned out of with `@` as often as wanted, and the copy type needs none.
 
 const S: string = "hi"
 const BIG: int = 99999999999999999999
 const LST: [int] = [1, 2, 3]
 const N: u32 = : u32 / 5
 
-let s1 = S
-let s2 = S
-let b1 = BIG
-let b2 = BIG
-let l1 = LST
-let l2 = LST
+let s1 = S@
+let s2 = S@
+let b1 = BIG@
+let b2 = BIG@
+let l1 = LST@
+let l2 = LST@
 let n1 = N
 let n2 = N
 

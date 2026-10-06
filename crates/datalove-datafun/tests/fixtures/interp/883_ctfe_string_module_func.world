@@ -5,7 +5,7 @@ module local/test/stringfunc
 // CTFE string in module function.
 fun compute(): string
     const S: string = "from module"
-    ret S
+    ret S@
 end fun
 
 ----------

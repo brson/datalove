@@ -5,7 +5,7 @@ module local/test/binopfunc
 // CTFE binop in module function.
 fun calculate(): int
     const A: int = 8 + 2
-    ret A
+    ret A@
 end fun
 
 ----------

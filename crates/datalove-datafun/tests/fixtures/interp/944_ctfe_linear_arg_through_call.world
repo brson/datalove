@@ -24,7 +24,7 @@ end fun
 
 fun bigint_in_and_out(): int
     const B: int = id(7)
-    ret B
+    ret B@
 end fun
 
 debuglog consumes_bigint_arg()

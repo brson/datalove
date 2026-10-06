@@ -35,7 +35,7 @@ use datalove_datafun_compiler::lower::{
 };
 use datalove_datafun_const::{inline_script_consts, PreparedConst, ScriptFunctionConstsResult, evaluate_prepared_const};
 use datalove_datafun_compiler::tracked_script_lower::{
-    UnitLowerRecord, collect_const_graph, dead_externals_over, lower_context_over,
+    UnitLowerRecord, collect_const_graph, dead_externals_over, external_consts_over, lower_context_over,
     script_consts_over,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
@@ -1037,6 +1037,7 @@ impl<'db> ScriptCompiler<'db> {
         typecheck: &TypecheckOutput<'db>,
     ) -> Result<OwnershipOutput<'db>, ScriptCompilationResult> {
         let dead_externals = dead_externals_over(&self.unit_records[..index]);
+        let external_consts = external_consts_over(&self.unit_records[..index]);
         match unit {
             ParsedUnit::Fragment { stmts, .. } => {
                 let ownership_result = analyze_script_fragment_tracked(
@@ -1045,6 +1046,7 @@ impl<'db> ScriptCompiler<'db> {
                     stmts.clone(),
                     self.auto_adapt_mode,
                     dead_externals,
+                    external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.
@@ -1085,6 +1087,7 @@ impl<'db> ScriptCompiler<'db> {
                     *expr,
                     self.auto_adapt_mode,
                     dead_externals,
+                    external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
                     // Store structured errors and spans for CLI rendering.

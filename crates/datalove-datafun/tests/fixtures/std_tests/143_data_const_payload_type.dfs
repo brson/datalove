@@ -32,6 +32,6 @@ const A_TUPLE_ERROR: !index = er error : (u32, u8) / (: u32 / 3, : u8 / 4)
 // A tensor inside a `data`, which wanted both this and the tensor constant.
 const A_TENSOR: data = data : [|u32, 1|] / [| : u32 / 1 : u32 / 2 |]
 
-let output = (EMPTY_MAP, EMPTY_LIST, EMPTY_SET, EMPTY_IN_ERROR,
-              EMPTY_IN_RESULT, NOTHING, A_NUMBER, A_STRING, FULL_MAP,
-              A_TUPLE_ERROR, A_TENSOR)
+let output = (EMPTY_MAP@, EMPTY_LIST@, EMPTY_SET@, EMPTY_IN_ERROR@,
+              EMPTY_IN_RESULT@, NOTHING@, A_NUMBER@, A_STRING@, FULL_MAP@,
+              A_TUPLE_ERROR@, A_TENSOR@)

@@ -58,16 +58,16 @@ Analysis(
                         v0 = const 2int
                         v1 = const 3int
                         v2 = const 5int
-                        v3 = const 2int
+                        v3 = clone v0
                         v4 = const 10int
                         drop v3
                         v5 = call @0 u0(v4)
-                        v6 = const 3int
+                        v6 = clone v1
                         v7 = const 10int
                         drop v6
                         v8 = call @1 u1(v7)
-                        v9 = const 2int
-                        v10 = const 5int
+                        v9 = clone v0
+                        v10 = clone v2
                         v11 = const 10int
                         drop v9
                         drop v10

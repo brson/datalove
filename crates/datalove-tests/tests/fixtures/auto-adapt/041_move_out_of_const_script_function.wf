@@ -1,0 +1,25 @@
+----------
+scriptunit-fragment
+----------
+
+// Test: D003 moving out of consts in a script function
+// A script const, a function const and a const parameter are all borrowed
+// Expected: D003 errors with recovery hints in normal mode, success in auto-adapt mode
+
+const LST: [int] = [1, 2]
+
+fun consume(xs: [int]): int
+  ret 42
+end fun
+
+fun pass_param(const xs: [int]): [int]
+  ret xs
+end fun
+
+fun test_move(): ([int], int, [int])
+  const LOCAL: [int] = [3]
+  let a: int = consume(LST)
+  ret (LOCAL, a, pass_param(LST))
+end fun
+
+let r = test_move()

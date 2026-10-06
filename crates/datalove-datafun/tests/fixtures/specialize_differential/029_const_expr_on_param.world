@@ -17,7 +17,7 @@ end fun
 
 fun uses_consts(const n: int, x: int): int
     const PLUS: int = n + 1
-    const VIA_FUN: int = helper(n)
+    const VIA_FUN: int = helper(n@)
     const CHAINED: int = PLUS * 2
     // `PLUS` has to be a constant for this to specialize at all, so the call
     // below is what proves it is one rather than a runtime value.

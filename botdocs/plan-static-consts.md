@@ -242,13 +242,27 @@ What this changes:
   every const in `sys/std` today, are unaffected.
 - **Documentation.** `botspec.md` (the "Const" paragraphs under bindings, and
   8.4), `mandocs/const-eval.md` and the constants section of
-  `mandocs/datafun.md` all say that reading a const does not move it and needs
-  no `@`. They change with the ownership rule.
+  `mandocs/datafun.md` all said that reading a const does not move it and needs
+  no `@`. `botspec.md` is updated; the two in `mandocs` are not yet.
 
 The rule does not depend on pools: it can land first, on its own, against
 today's lowering, where `CONST@` is a clone of a fresh `Const`. Landing it
 first means the source change is made once, and the pool work after it changes
 no observable behavior.
+
+**Landed** (2026-10-06), as described in the compiler guide's ownership
+section. Two things it needed that this plan did not foresee:
+
+- **Const arguments.** A const argument is a bare const name in a by-value
+  position, but it is not a move. Ownership reads `call_targets` for the
+  callee's const parameters and skips those arguments. Lowering gives the call
+  a copy of its own (`lower_comptime_arg`), because an unspecialized call
+  consumes the argument and a specialized one drops it.
+- **Lowering's per-read copies are gone.** Lowering used to clone a
+  function-local const or a const parameter at each read, so that reading did
+  not consume it. With moves refused, a borrow now uses the binding itself, and
+  `@` is the one clone. A module-level or script-level const named from a
+  function is still a fresh `Const` per mention, which is what pools replace.
 
 ## Literals
 
@@ -268,8 +282,8 @@ larger win than named consts.
 
 ## Order of work
 
-1. The ownership rule: moving out of a non-copy const or const parameter
-   requires `@`, with fixtures and documentation updated to match.
+1. Done. The ownership rule: moving out of a non-copy const or const
+   parameter requires `@`, with fixtures and documentation updated to match.
 2. Pools and `staticref` for module-level and script-level consts, on all four
    backends.
 3. Function-local consts, by lowering again once values are known, and const

@@ -12,4 +12,4 @@ const SUM: int = add(10, 20)
 scriptunit-expr
 ----------
 
-SUM
+SUM@

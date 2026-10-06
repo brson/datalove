@@ -128,8 +128,6 @@ pub struct ShadowedBinding {
     name: String,
     /// The operand the name stood for, or `None` if it was not bound at all.
     operand: Option<Operand>,
-    /// Whether the name was a const written in this body.
-    was_const_let: bool,
 }
 
 impl<'db> FrameState<'db> {
@@ -305,20 +303,6 @@ pub struct LowerCtx<'db> {
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
     pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
-    /// Const bindings written in this body, whose value is not known here.
-    ///
-    /// A module-level const arrives already evaluated and goes in
-    /// `const_bindings`, so a reference to one becomes a fresh `Const`. One
-    /// written here is evaluated after this body is lowered, so a reference has
-    /// to name the value the initializer produced. Reading a const does not
-    /// consume it, so each reference takes its own copy.
-    pub(super) const_let_names: std::collections::HashSet<String>,
-    /// Const parameters, whose reads do not consume them.
-    ///
-    /// Separate from `const_let_names` because the value is not known here at
-    /// all -- specialization writes it in later -- and because only a read that
-    /// would consume needs a copy of its own. A borrow never consumed it.
-    pub(super) const_param_names: std::collections::HashSet<String>,
     /// CTFE evaluator for const expressions.
     pub(super) ctfe_evaluator: Option<Rc<RefCell<dyn CtfeEvaluator>>>,
 }
@@ -344,8 +328,6 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
-            const_let_names: std::collections::HashSet::new(),
-            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -372,8 +354,6 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
-            const_let_names: std::collections::HashSet::new(),
-            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -514,8 +494,6 @@ impl<'db> LowerCtx<'db> {
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             const_bindings: HashMap::new(),
-            const_let_names: std::collections::HashSet::new(),
-            const_param_names: std::collections::HashSet::new(),
             ctfe_evaluator: None,
         }
     }
@@ -719,7 +697,6 @@ impl<'db> LowerCtx<'db> {
             scope.push(ShadowedBinding {
                 name: name.to_string(),
                 operand: self.body.variables.get(name).copied(),
-                was_const_let: self.const_let_names.contains(name),
             });
         }
         self.body.variables.insert(name.to_string(), operand);
@@ -747,11 +724,6 @@ impl<'db> LowerCtx<'db> {
                 None => {
                     self.body.variables.remove(&shadowed.name);
                 }
-            }
-            if shadowed.was_const_let {
-                self.const_let_names.insert(shadowed.name);
-            } else {
-                self.const_let_names.remove(&shadowed.name);
             }
         }
     }

@@ -35,7 +35,7 @@ Analysis(
                     fn double_add_seven(p0):
                     block0:
                         v0 = const 7int
-                        v1 = const 7int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u3(p0)
                         drop v0
@@ -45,10 +45,10 @@ Analysis(
                     block0:
                         v5 = const 7int
                         v0 = const 7int
-                        v1 = const 7int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u4(p0)
-                        v3 = const 7int
+                        v3 = clone v0
                         drop v3
                         v4 = call @1 m0.u4(v2)
                         drop v5
@@ -81,7 +81,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 5int
-                        v1 = const 5int
+                        v1 = clone v0
                         v2 = const 10int
                         drop v1
                         v3 = call @1 u0(v2)
@@ -98,10 +98,10 @@ Analysis(
                     block0:
                         v5 = const 5int
                         v0 = const 5int
-                        v1 = const 5int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 u1(p0)
-                        v3 = const 5int
+                        v3 = clone v0
                         drop v3
                         v4 = call @1 u1(v2)
                         drop v5

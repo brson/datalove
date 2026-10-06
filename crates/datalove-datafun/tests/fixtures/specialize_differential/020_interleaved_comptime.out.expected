@@ -61,22 +61,22 @@ Analysis(
                         v1 = const 3int
                         v2 = const 5int
                         v3 = const 10int
-                        v4 = const 2int
+                        v4 = clone v0
                         v5 = const 5int
                         drop v4
                         v6 = call @0 u0(v3, v5)
                         debuglog v6
                         v7 = const 2int
-                        v8 = const 3int
+                        v8 = clone v1
                         v9 = const 4int
-                        v10 = const 5int
+                        v10 = clone v2
                         v11 = const 1int
                         drop v8
                         drop v10
                         v12 = call @1 u2(v7, v9, v11)
                         debuglog v12
                         v13 = const 3int
-                        v14 = const 3int
+                        v14 = clone v1
                         v15 = const 7int
                         drop v14
                         v16 = call @2 u1(v13, v15)

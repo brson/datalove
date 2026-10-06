@@ -22,7 +22,7 @@ AotAnalysis(
                     fn triple(p0):
                     block0:
                         v0 = const 3int
-                        v1 = const 3int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u3(p0)
                         drop v0
@@ -31,7 +31,7 @@ AotAnalysis(
                     fn quintuple(p0):
                     block0:
                         v0 = const 5int
-                        v1 = const 5int
+                        v1 = clone v0
                         drop v1
                         v2 = call @0 m0.u4(p0)
                         drop v0

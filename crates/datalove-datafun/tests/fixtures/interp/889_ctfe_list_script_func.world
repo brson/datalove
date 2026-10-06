@@ -5,7 +5,7 @@ scriptunit-fragment
 // CTFE list in script function.
 fun get_numbers(): [u32]
     const L: [u32] = [10, 20, 30]
-    ret L
+    ret L@
 end fun
 
 debuglog get_numbers()

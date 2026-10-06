@@ -5,7 +5,7 @@ scriptunit-fragment
 // CTFE map in script function.
 fun get_mapping(): %{u32 = u32}
     const M: %{u32 = u32} = %{ 10 = 1, 20 = 2, 30 = 3 }
-    ret M
+    ret M@
 end fun
 
 debuglog get_mapping()

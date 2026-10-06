@@ -5,7 +5,7 @@ module local/test/tupleconst
 // Comptime function with tuple type parameter - verifies aggregate types work
 // Note: Can't destructure tuples yet, so just pass through
 fun get_pair(const pair: (int, int)): (int, int)
-    ret pair
+    ret pair@
 end fun
 
 ----------

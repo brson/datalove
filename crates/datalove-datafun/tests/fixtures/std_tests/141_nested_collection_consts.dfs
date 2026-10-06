@@ -35,6 +35,6 @@ const DEEP: (u32, ?[[u32]]) = (: u32 / 1, : ?[[u32]] / some : [[u32]] / [: [u32]
 const EMPTY_INSIDE: (u32, [u32]) = (: u32 / 1, : [u32] / [])
 const NONE_INSIDE: (u32, ?[u32]) = (: u32 / 1, : ?[u32] / none)
 
-let output = (TUPLE_WITH_LIST, TUPLE_WITH_SET, STRUCT_WITH_MAP, OPTION_OF_LIST,
-              RESULT_OF_SET, LIST_OF_LISTS, LIST_OF_TUPLES, MAP_TO_LIST, DEEP,
-              EMPTY_INSIDE, NONE_INSIDE)
+let output = (TUPLE_WITH_LIST@, TUPLE_WITH_SET@, STRUCT_WITH_MAP@, OPTION_OF_LIST@,
+              RESULT_OF_SET@, LIST_OF_LISTS@, LIST_OF_TUPLES@, MAP_TO_LIST@, DEEP@,
+              EMPTY_INSIDE@, NONE_INSIDE@)

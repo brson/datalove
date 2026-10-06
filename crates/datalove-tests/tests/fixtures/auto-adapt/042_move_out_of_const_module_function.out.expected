@@ -1,0 +1,23 @@
+{
+  "auto_adapt_execution": {
+    "status": "modules did not compile"
+  },
+  "auto_adapt_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 0,
+    "errors": [],
+    "success": true
+  },
+  "normal_mode": {
+    "diagnostic_count": 0,
+    "diagnostics": [],
+    "error_count": 1,
+    "errors": [
+      {
+        "error": "local/test/ownership: Ownership error in test_move: CannotMoveConst { expr_key: ExprKey(fn #1), name: \"MSG\", recovery_hint: InsertAdapt { description: \"clone `MSG`\" } }, CannotMoveConst { expr_key: ExprKey(fn #4), name: \"LOCAL\", recovery_hint: InsertAdapt { description: \"clone `LOCAL`\" } }"
+      }
+    ],
+    "success": false
+  }
+}

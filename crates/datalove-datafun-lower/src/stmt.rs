@@ -292,7 +292,6 @@ fn lower_statement_with_id<'db>(
             let init_expr = const_stmt.value;
             let value_id = lower_expression(ctx, init_expr)?;
             let operand = Operand::Value(value_id);
-            ctx.const_let_names.insert(name.clone());
             ctx.bind_var(&name, operand);
             ctx.record_binding_operand(operand);
             ctx.body.const_values.push((name, value_id));

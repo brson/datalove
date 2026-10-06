@@ -36,15 +36,15 @@ end fun
 // reference emits a fresh Const and is dropped as an expression temporary. A
 // leak here fails the test rather than changing the output.
 fun uses_string(): string
-  ret MSG
+  ret MSG@
 end fun
 
 fun uses_bigint(): int
-  ret BIG
+  ret BIG@
 end fun
 
 fun uses_list(): [int]
-  ret LST
+  ret LST@
 end fun
 
 // A function-level const may name a module-level one.

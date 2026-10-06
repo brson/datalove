@@ -142,9 +142,9 @@ set counter = 1
 var pending: u32
 set pending = 5
 
-// `const` is evaluated at compile time. Naming a const does not consume it,
-// even when its type is linear, so a const string can be read as many times
-// as you like.
+// `const` is evaluated at compile time. A const is borrowed wherever it is
+// named: it can be read as many times as you like, and moving a linear one,
+// like this string, takes a clone with `@`.
 const LIMIT: u32 = 100
 const NAME: string = "datalove"
 
@@ -746,7 +746,7 @@ let output = (
   // Literals and bindings.
   byte, position, delta, big, pi, e, greeting, greeting_length, mask, huge,
   grouped, from_hint, hinted, widest_integer, widest_float,
-  counter, pending, LIMIT, NAME,
+  counter, pending, LIMIT, NAME@,
   // Collections.
   numbers, scores, unique, grid, readings,
   // Aggregates, options and results.

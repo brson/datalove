@@ -63,13 +63,13 @@ let in_map: %{{| x: u32 |} = u32} = %{{| x; : u32 / 1 |} = : u32 / 9}
 const TABLE: {| x: u32, y: string |} = {| x, y; : u32 / 8, : string / "e" |}
 const EMPTY: {| x: u32 |} = {| x |}
 const NESTED: {| x: [u32] |} = {| x; : [u32] / [: u32 / 1, : u32 / 2] |}
-let from_const = (TABLE, EMPTY, NESTED)
+let from_const = (TABLE@, EMPTY@, NESTED@)
 
 // A constant inside a constant, which is written at an address rather than
 // into a value of its own.
 const PAIR: ({| x: u32 |}, u32) = ({| x; : u32 / 4 |}, : u32 / 5)
 const HELD: ?{| x: u32 |} = some {| x; : u32 / 6 |}
-let nested_consts = (PAIR, HELD)
+let nested_consts = (PAIR@, HELD@)
 
 let output = (plain, three_rows, empty, wide, owning, nested, made, passed,
               cloned, dropped, borrowed, in_option, in_list, in_set, in_map,

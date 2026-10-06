@@ -15,7 +15,7 @@ Analysis(
                     fn compute():
                     block0:
                         v6 = const {| id, val; 100u32, 200u32; 300u32, 400u32 |}
-                        v7 = const {| id, val; 100u32, 200u32; 300u32, 400u32 |}
+                        v7 = clone v6
                         drop v6
                         return v7
                 """,

@@ -949,3 +949,33 @@ fn gave_away(session: &mut Session, name: &str) -> bool {
     let result = session.compile_append(&format!("let probe = {name}\n"));
     format!("{:?}", result.ownership).contains("D013")
 }
+
+/// A const from an earlier unit is **borrowed**, as one from this unit is, and
+/// stops being a const once a later unit rebinds the name.
+///
+/// A unit sees an earlier unit's `let` as something to copy out of, so moving
+/// one is fine, but an earlier unit's const is a ref binding and a move out of
+/// it takes `@`. Ownership learns which names are consts from
+/// `external_consts_over`, which folds the records, so the rebinding has to
+/// take the name back out of the set. The bare expression goes through the
+/// expression-unit analysis, which is told the same thing.
+#[test]
+fn an_earlier_units_const_is_borrowed_until_rebound() {
+    let mut session = Session::new();
+    session.append("const L: [int] = [1, 2]\n");
+
+    let moved = session.compile_append("let a = L\n");
+    assert!(format!("{:?}", moved.ownership).contains("D003"), "{:?}", moved.ownership);
+
+    let moved = session.compile_append_expr("L");
+    assert!(format!("{:?}", moved.ownership).contains("D003"), "{:?}", moved.ownership);
+
+    session.append("let b = L@\n");
+    assert_eq!(session.binding("b"), "[1, 2]");
+    let (_, shown) = session.append_expr("L@");
+    assert_eq!(shown, "[1, 2]");
+
+    session.append("let L = [9]\n");
+    session.append("let c = L\n");
+    assert_eq!(session.binding("c"), "[9]", "an earlier unit's let is copied out of");
+}
