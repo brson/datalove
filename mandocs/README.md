@@ -109,7 +109,7 @@ It includes first-class _tables_ (dataframes),
 and _tensors_ (multidimensional arrays).
 
 ```datalove
-: {| title: string, author: string, published: i32 |} / {|
+{|
   title,                        author,      published
   "The Dispossessed",           "Le Guin",   1974
   "The Player of Games",        "Banks",     1988

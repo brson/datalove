@@ -146,8 +146,6 @@ ergonomic modes that reduce boilerplate and transformations between
 which can be mechanically analyzed and applied.
 
 
-
-
 ## Sigil-logic
 
 Datalove reserves some symbols to strongly mean one thing.
