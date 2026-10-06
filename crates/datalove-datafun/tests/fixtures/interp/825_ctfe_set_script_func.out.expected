@@ -21,9 +21,8 @@ Analysis(
                     
                     fn get_numbers():
                     block0:
-                        v3 = const #{10u32, 20u32, 30u32}
-                        v4 = clone v3
-                        drop v3
+                        v3 = staticref #{10u32, 20u32, 30u32}
+                        v4 = clone *v3
                         return v4
                 """,
             ),

@@ -20,7 +20,10 @@ use datalove_datafun_tycheck::{
     ParsedModuleGraph,
 };
 
-use datalove_datafun_const::{inline_function_consts, inline_module_functions, PreparedConst, evaluate_prepared_const};
+use datalove_datafun_const::{
+    inline_function_consts, inline_module_functions, promote_function_consts, PreparedConst,
+    evaluate_prepared_const,
+};
 use crate::IrTypeExt;
 use crate::lower;
 use crate::specialize::{
@@ -508,6 +511,11 @@ pub fn lower_module<'db>(
                 .collect();
             // Inline const values directly into the functions.
             inline_module_functions(&mut functions, &const_values);
+        }
+        // A function's consts, and a specialized copy's const parameters, are
+        // built once and borrowed rather than built at every call.
+        for func in &mut functions {
+            promote_function_consts(Arc::make_mut(func));
         }
     }
 

@@ -1,9 +1,11 @@
-//! Substituting parameters in instructions and terminators.
+//! Substituting operands in instructions and terminators.
 //!
-//! Two transformations need this: inlining, which replaces a callee's
-//! parameters with the caller's argument operands, and const parameter
+//! Two transformations substitute parameters: inlining, which replaces a
+//! callee's parameters with the caller's argument operands, and const parameter
 //! monomorphization, which replaces a comptime parameter with the constant it
-//! was called with and renumbers the parameters that remain.
+//! was called with and renumbers the parameters that remain. Promoting a const
+//! to a static reads it through a reference instead of as a value, which is the
+//! same walk over a different operand.
 //!
 //! The match over instructions is exhaustive on purpose. A variant that falls
 //! through unsubstituted leaves a reference to a parameter the transformed
@@ -18,15 +20,39 @@ pub fn replace_params_in_instruction(
     instr: &Instruction,
     replacements: &HashMap<ParamId, Operand>,
 ) -> Instruction {
-    let replace_operand = |op: &Operand| -> Operand {
-        if let Operand::Param(p) = op {
-            if let Some(replacement) = replacements.get(p) {
-                return replacement.clone();
-            }
-        }
-        op.clone()
-    };
+    map_operands_in_instruction(instr, |op| param_replacement(op, replacements))
+}
 
+/// Replace Param operands in a terminator with the corresponding replacement operands.
+pub fn replace_params_in_terminator(
+    term: &Terminator,
+    replacements: &HashMap<ParamId, Operand>,
+) -> Terminator {
+    map_operands_in_terminator(term, |op| param_replacement(op, replacements))
+}
+
+/// What a parameter an instruction stores to becomes, if anything.
+fn replaced_param(param: ParamId, replace_operand: &impl Fn(&Operand) -> Operand) -> Option<Operand> {
+    let original = Operand::Param(param);
+    let replaced = replace_operand(&original);
+    (replaced != original).then_some(replaced)
+}
+
+fn param_replacement(op: &Operand, replacements: &HashMap<ParamId, Operand>) -> Operand {
+    if let Operand::Param(p) = op {
+        if let Some(replacement) = replacements.get(p) {
+            return replacement.clone();
+        }
+    }
+    op.clone()
+}
+
+/// Rebuild an instruction with each of its operands passed through
+/// `replace_operand`.
+pub fn map_operands_in_instruction(
+    instr: &Instruction,
+    replace_operand: impl Fn(&Operand) -> Operand,
+) -> Instruction {
     match instr {
         Instruction::Copy { dest, src } => Instruction::Copy {
             dest: *dest,
@@ -270,7 +296,7 @@ pub fn replace_params_in_instruction(
         },
         Instruction::ParamStore { param, value } => {
             // If the param is being replaced, convert to RefStore.
-            if let Some(replacement) = replacements.get(param) {
+            if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefStore {
                     dest: replacement.clone(),
                     value: replace_operand(value),
@@ -284,7 +310,7 @@ pub fn replace_params_in_instruction(
         }
         Instruction::ParamStoreTracked { param, value } => {
             // If the param is being replaced, convert to RefStoreTracked.
-            if let Some(replacement) = replacements.get(param) {
+            if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefStoreTracked {
                     dest: replacement.clone(),
                     value: replace_operand(value),
@@ -302,7 +328,7 @@ pub fn replace_params_in_instruction(
             value,
         } => {
             // If the param is being replaced, convert to RefSetField.
-            if let Some(replacement) = replacements.get(param) {
+            if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefSetField {
                     dest: replacement.clone(),
                     field_path: field_path.clone(),
@@ -322,7 +348,7 @@ pub fn replace_params_in_instruction(
             value,
         } => {
             // If the param is being replaced, convert to RefSetFieldTracked.
-            if let Some(replacement) = replacements.get(param) {
+            if let Some(replacement) = replaced_param(*param, &replace_operand) {
                 Instruction::RefSetFieldTracked {
                     dest: replacement.clone(),
                     field_path: field_path.clone(),
@@ -466,20 +492,12 @@ pub fn replace_params_in_instruction(
     }
 }
 
-/// Replace Param operands in a terminator with the corresponding replacement operands.
-pub fn replace_params_in_terminator(
+/// Rebuild a terminator with each of its operands passed through
+/// `replace_operand`.
+pub fn map_operands_in_terminator(
     term: &Terminator,
-    replacements: &HashMap<ParamId, Operand>,
+    replace_operand: impl Fn(&Operand) -> Operand,
 ) -> Terminator {
-    let replace_operand = |op: &Operand| -> Operand {
-        if let Operand::Param(p) = op {
-            if let Some(replacement) = replacements.get(p) {
-                return replacement.clone();
-            }
-        }
-        op.clone()
-    };
-
     match term {
         Terminator::Goto { target, args } => Terminator::Goto {
             target: *target,

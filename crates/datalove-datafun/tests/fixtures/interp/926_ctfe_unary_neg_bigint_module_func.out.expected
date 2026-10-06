@@ -14,11 +14,8 @@ Analysis(
                 ir: """
                     fn get_negative():
                     block0:
-                        v0 = const 999int
-                        v1 = const -999int
-                        v2 = clone v1
-                        drop v0
-                        drop v1
+                        v1 = staticref -999int
+                        v2 = clone *v1
                         return v2
                 """,
             ),

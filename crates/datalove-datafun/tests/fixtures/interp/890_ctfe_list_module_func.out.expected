@@ -14,9 +14,8 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v3 = const [7u32, 8u32, 9u32]
-                        v4 = clone v3
-                        drop v3
+                        v3 = staticref [7u32, 8u32, 9u32]
+                        v4 = clone *v3
                         return v4
                 """,
             ),

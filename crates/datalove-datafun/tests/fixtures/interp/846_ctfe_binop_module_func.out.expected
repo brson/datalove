@@ -16,11 +16,10 @@ Analysis(
                     block0:
                         v0 = const 8int
                         v1 = const 2int
-                        v2 = const 10int
+                        v2 = staticref 10int
                         drop v0
                         drop v1
-                        v3 = clone v2
-                        drop v2
+                        v3 = clone *v2
                         return v3
                 """,
             ),

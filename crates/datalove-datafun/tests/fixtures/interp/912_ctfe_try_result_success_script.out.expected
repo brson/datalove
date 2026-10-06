@@ -21,12 +21,10 @@ Analysis(
                     
                     fn compute():
                     block0:
-                        v1 = const ok 99u32
                         v3 = const 99u32
                         goto block1
                     block1:
                         v7 = ok v3
-                        drop v1
                         return v7
                 """,
             ),

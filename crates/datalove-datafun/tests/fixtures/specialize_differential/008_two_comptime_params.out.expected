@@ -17,8 +17,6 @@ Analysis(
                     fn add_consts(p0, p1):
                     block0:
                         v0 = add p0, p1
-                        drop p0
-                        drop p1
                         return v0
                 """,
             ),
@@ -40,24 +38,18 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 20int
-                        v2 = clone v0
-                        v3 = clone v1
-                        drop v2
-                        drop v3
-                        v4 = call @0 u0()
-                        debuglog v4
+                        v2 = call @0 u0()
+                        debuglog v2
                         unit_end_drop v0
                         unit_end_drop v1
-                        unit_end_drop v4
+                        unit_end_drop v2
                         unit_end
                     
                     fn add_consts__ct0():
                     block0:
-                        v1 = const 10int
-                        v2 = const 20int
-                        v0 = add v1, v2
-                        drop v1
-                        drop v2
+                        v1 = staticref 10int
+                        v2 = staticref 20int
+                        v0 = add *v1, *v2
                         return v0
                 """,
             ),

@@ -1196,7 +1196,7 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
   themselves be passed as const arguments
 - Like any const, a const parameter is borrowed wherever it is named, so moving
   out of one of a linear type takes `@`. Passing it on as a const argument is
-  not a move: a const argument is not passed at all
+  not a move: a const argument is borrowed
 - A branch on such a binding becomes a jump and the unreachable side is
   dropped. An expression over the parameter written in place, such as
   `if n .< 3`, is not folded and keeps its branch; nothing unrolls a loop
@@ -1206,9 +1206,11 @@ let x = repeat(COUNT, "ab")  // COUNT is a const binding
   collections and linear aggregates included. Instantiations are told apart
   by structural equality of the values, floats by their bits, so `0.0` and
   `-0.0` get separate copies and every NaN with the same bits shares one
-- Cannot combine `const` with a passing mode. A const parameter is not passed:
-  specialization removes it and writes the value into the body, so `ref` has no
-  borrow to describe and `out` and `mut` have nothing to write back to
+- Cannot combine `const` with a passing mode. A const parameter is passed by
+  reference, as any const is borrowed: a specialized copy has the value written
+  in and is passed nothing, and a call that is not specialized borrows the
+  argument. `ref` would say what it already is, and `out` and `mut` would write
+  to a constant
 - A const parameter's type cannot be a type parameter (`const n: T` in a
   generic function is an error). A const parameter of a concrete type in a
   generic function is fine: specialization removes const parameters and

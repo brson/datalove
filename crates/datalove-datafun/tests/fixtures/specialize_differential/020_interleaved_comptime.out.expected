@@ -20,7 +20,6 @@ Analysis(
                         v1 = mul v0, p1
                         drop v0
                         drop p0
-                        drop p1
                         drop p2
                         return v1
                     
@@ -34,9 +33,7 @@ Analysis(
                         v3 = add v2, p4
                         drop v2
                         drop p0
-                        drop p1
                         drop p2
-                        drop p3
                         drop p4
                         return v3
                 """,
@@ -61,71 +58,59 @@ Analysis(
                         v1 = const 3int
                         v2 = const 5int
                         v3 = const 10int
-                        v4 = clone v0
-                        v5 = const 5int
-                        drop v4
-                        v6 = call @0 u0(v3, v5)
-                        debuglog v6
-                        v7 = const 2int
-                        v8 = clone v1
-                        v9 = const 4int
-                        v10 = clone v2
-                        v11 = const 1int
-                        drop v8
-                        drop v10
-                        v12 = call @1 u2(v7, v9, v11)
+                        v4 = const 5int
+                        v5 = call @0 u0(v3, v4)
+                        debuglog v5
+                        v6 = const 2int
+                        v7 = const 4int
+                        v8 = const 1int
+                        v9 = call @1 u2(v6, v7, v8)
+                        debuglog v9
+                        v10 = const 3int
+                        v11 = const 7int
+                        v12 = call @2 u1(v10, v11)
                         debuglog v12
-                        v13 = const 3int
-                        v14 = clone v1
-                        v15 = const 7int
-                        drop v14
-                        v16 = call @2 u1(v13, v15)
-                        debuglog v16
                         unit_end_drop v0
                         unit_end_drop v1
                         unit_end_drop v2
-                        unit_end_drop v6
+                        unit_end_drop v5
+                        unit_end_drop v9
                         unit_end_drop v12
-                        unit_end_drop v16
                         unit_end
                     
                     fn compute__ct0(p0, p1):
                     block0:
-                        v2 = const 2int
+                        v2 = staticref 2int
                         v0 = add p0, p1
-                        v1 = mul v0, v2
+                        v1 = mul v0, *v2
                         drop v0
                         drop p0
-                        drop v2
                         drop p1
                         return v1
                     
                     fn compute__ct1(p0, p1):
                     block0:
-                        v2 = const 3int
+                        v2 = staticref 3int
                         v0 = add p0, p1
-                        v1 = mul v0, v2
+                        v1 = mul v0, *v2
                         drop v0
                         drop p0
-                        drop v2
                         drop p1
                         return v1
                     
                     fn multi_interleaved__ct2(p0, p1, p2):
                     block0:
-                        v4 = const 3int
-                        v5 = const 5int
-                        v0 = mul p0, v4
-                        v1 = mul p1, v5
+                        v4 = staticref 3int
+                        v5 = staticref 5int
+                        v0 = mul p0, *v4
+                        v1 = mul p1, *v5
                         v2 = add v0, v1
                         drop v0
                         drop v1
                         v3 = add v2, p2
                         drop v2
                         drop p0
-                        drop v4
                         drop p1
-                        drop v5
                         drop p2
                         return v3
                 """,
@@ -147,9 +132,9 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = clone unit0.v6
-                        v1 = clone unit0.v12
-                        v2 = clone unit0.v16
+                        v0 = clone unit0.v5
+                        v1 = clone unit0.v9
+                        v2 = clone unit0.v12
                         v3 = pack Tuple3 {v0, v1, v2}
                         unit_end v3
                 """,

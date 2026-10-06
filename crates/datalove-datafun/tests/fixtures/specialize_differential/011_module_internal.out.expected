@@ -17,24 +17,18 @@ Analysis(
                     fn add_factor(p0, p1):
                     block0:
                         v0 = add p0, p1
-                        drop p0
                         drop p1
                         return v0
                     
                     fn add_two(p0):
                     block0:
-                        v0 = const 2int
-                        v1 = clone v0
-                        drop v1
-                        v2 = call @0 m0.u2(p0)
-                        drop v0
-                        return v2
+                        v1 = call @0 m0.u2(p0)
+                        return v1
                     
                     fn add_factor__ct2(p0):
                     block0:
-                        v1 = const 2int
-                        v0 = add v1, p0
-                        drop v1
+                        v1 = staticref 2int
+                        v0 = add *v1, p0
                         drop p0
                         return v0
                 """,

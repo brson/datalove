@@ -25,7 +25,6 @@ Analysis(
                     fn scale(p0, p1):
                     block0:
                         v0 = mul p0, p1
-                        drop p0
                         drop p1
                         return v0
                     
@@ -39,55 +38,40 @@ Analysis(
                         v4 = const 2int
                         v5 = mul v1, v4
                         drop v4
-                        v6 = clone v1
-                        v7 = comptime_call m0.u1(v6, p1) [disc=0, comptime_params=[0]]
-                        v8 = add v7, v3
+                        v6 = comptime_call m0.u1(v1, p1) [disc=0, comptime_params=[0]]
+                        v7 = add v6, v3
+                        drop v6
+                        v8 = add v7, v5
                         drop v7
-                        v9 = add v8, v5
-                        drop v8
-                        drop p0
                         drop v1
                         drop v3
                         drop v5
-                        return v9
+                        return v8
                     
                     fn from_module(p0):
                     block0:
-                        v0 = const 3int
-                        v1 = clone v0
-                        drop v1
-                        v2 = call @0 m0.u4(p0)
-                        drop v0
-                        return v2
+                        v1 = call @0 m0.u4(p0)
+                        return v1
                     
                     fn uses_consts__ct4(p0):
                     block0:
-                        v10 = const 3int
                         v0 = const 1int
-                        v1 = const 4int
                         drop v0
-                        v3 = const 30int
+                        v3 = staticref 30int
                         v4 = const 2int
-                        v5 = const 8int
+                        v5 = staticref 8int
                         drop v4
-                        v6 = clone v1
+                        v6 = call @1 m0.u5(p0)
+                        v7 = add v6, *v3
                         drop v6
-                        v7 = call @1 m0.u5(p0)
-                        v8 = add v7, v3
+                        v8 = add v7, *v5
                         drop v7
-                        v9 = add v8, v5
-                        drop v8
-                        drop v10
-                        drop v1
-                        drop v3
-                        drop v5
-                        return v9
+                        return v8
                     
                     fn scale__ct5(p0):
                     block0:
-                        v1 = const 4int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 4int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                 """,
@@ -111,45 +95,34 @@ Analysis(
                         v0 = const 5int
                         v1 = const 2int
                         v2 = call @0 m0.u3(v1)
-                        v3 = clone v0
-                        v4 = const 2int
-                        drop v3
-                        v5 = call @1 u0(v4)
+                        v3 = const 2int
+                        v4 = call @1 u0(v3)
                         debuglog v2
-                        debuglog v5
+                        debuglog v4
                         unit_end_drop v0
                         unit_end_drop v2
-                        unit_end_drop v5
+                        unit_end_drop v4
                         unit_end
                     
                     fn uses_consts__ct0(p0):
                     block0:
-                        v10 = const 5int
                         v0 = const 1int
-                        v1 = const 6int
                         drop v0
-                        v3 = const 50int
+                        v3 = staticref 50int
                         v4 = const 2int
-                        v5 = const 12int
+                        v5 = staticref 12int
                         drop v4
-                        v6 = clone v1
+                        v6 = call @1 u1(p0)
+                        v7 = add v6, *v3
                         drop v6
-                        v7 = call @1 u1(p0)
-                        v8 = add v7, v3
+                        v8 = add v7, *v5
                         drop v7
-                        v9 = add v8, v5
-                        drop v8
-                        drop v10
-                        drop v1
-                        drop v3
-                        drop v5
-                        return v9
+                        return v8
                     
                     fn scale__ct1(p0):
                     block0:
-                        v1 = const 6int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 6int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                 """,
@@ -172,7 +145,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = clone unit0.v2
-                        v1 = clone unit0.v5
+                        v1 = clone unit0.v4
                         v2 = pack Tuple2 {v0, v1}
                         unit_end v2
                 """,

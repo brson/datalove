@@ -51,7 +51,7 @@ use std::collections::{BTreeMap, HashMap};
 use datalove_datafun_const::inline_function_consts;
 use datalove_datafun_ir::{
     CallSiteId, CodeRef, CodeUnitContext, CodeUnitId, ConstValue, FunctionContext, Instruction,
-    IrBlock, IrCodeUnit, IrModuleId, Operand, ParamId, ValueId,
+    IrBlock, IrCodeUnit, IrModuleId, IrType, Operand, ParamId, ValueId,
     replace_params_in_instruction, replace_params_in_terminator,
 };
 
@@ -216,18 +216,26 @@ pub fn monomorphize_function(
         new_param_modes.push(*mode);
     }
 
-    // One fresh value per const parameter, defined by a `Const` at entry. The
-    // body's own drop of what used to be the parameter becomes a drop of this,
-    // so the ownership accounting carries over unchanged.
+    // One fresh value per const parameter, defined at entry. A const
+    // parameter is borrowed, so the body never drops it, and what stands for
+    // it is borrowed too: a static of a non-copy type, read through the
+    // reference as the parameter was, or a `Const` of a copy type.
     let mut value_types = original.value_types.clone();
     let mut next_value = original.value_count;
     let mut entry_consts = Vec::new();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
         let dest = ValueId(next_value);
         next_value += 1;
-        value_types.push(func_ctx.param_types[param_idx].clone());
-        entry_consts.push(Instruction::Const { dest, value: value.clone() });
-        substitutions.insert(ParamId(param_idx as u32), Operand::Value(dest));
+        let ty = func_ctx.param_types[param_idx].clone();
+        if ty.is_copy() {
+            value_types.push(ty);
+            entry_consts.push(Instruction::Const { dest, value: value.clone() });
+            substitutions.insert(ParamId(param_idx as u32), Operand::Value(dest));
+        } else {
+            value_types.push(IrType::Ref(Box::new(ty)));
+            entry_consts.push(Instruction::StaticRef { dest, value: std::sync::Arc::new(value.clone()) });
+            substitutions.insert(ParamId(param_idx as u32), Operand::ValueRef(dest));
+        }
     }
 
     let blocks: Vec<IrBlock> = original.blocks.iter().enumerate()
@@ -305,14 +313,8 @@ pub fn rewrite_comptime_calls(
                 continue;
             };
 
-            // The copy does not take the const arguments, so what this call
-            // site computed for them is dropped here rather than by the callee.
-            for (i, arg) in args.iter().enumerate() {
-                if comptime_param_indices.contains(&i) {
-                    instructions.push(Instruction::Drop { operand: arg.clone() });
-                }
-            }
-
+            // The copy does not take the const arguments. They were borrowed,
+            // so there is nothing to give back.
             let kept_args = args.iter().enumerate()
                 .filter(|(i, _)| !comptime_param_indices.contains(i))
                 .map(|(_, arg)| arg.clone())
@@ -459,7 +461,9 @@ fn comptime_values(
 ) -> Option<Vec<ConstValue>> {
     comptime_param_indices.iter()
         .map(|&idx| match args.get(idx)? {
-            Operand::Value(value) => consts.get(value).cloned(),
+            // A const argument is passed by reference: the binding itself, or
+            // a static one.
+            Operand::Value(value) | Operand::ValueRef(value) => consts.get(value).cloned(),
             _ => None,
         })
         .collect()
@@ -474,6 +478,9 @@ fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
             match instr {
                 Instruction::Const { dest, value } => {
                     map.insert(*dest, value.clone());
+                }
+                Instruction::StaticRef { dest, value } => {
+                    map.insert(*dest, (**value).clone());
                 }
                 // A constant carried somewhere is still that constant. Reading
                 // a const of a linear type clones it, so that each read has a

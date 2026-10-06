@@ -24,16 +24,14 @@ Analysis(
                     
                     fn linear_elements():
                     block0:
-                        v3 = const [1int, 2int, 3int]
-                        v4 = clone v3
-                        drop v3
+                        v3 = staticref [1int, 2int, 3int]
+                        v4 = clone *v3
                         return v4
                     
                     fn copy_elements():
                     block0:
-                        v2 = const [1u32, 2u32]
-                        v3 = clone v2
-                        drop v2
+                        v2 = staticref [1u32, 2u32]
+                        v3 = clone *v2
                         return v3
                 """,
             ),

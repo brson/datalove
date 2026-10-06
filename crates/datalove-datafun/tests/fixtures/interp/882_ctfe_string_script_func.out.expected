@@ -21,9 +21,8 @@ Analysis(
                     
                     fn get_message():
                     block0:
-                        v0 = const "test message"
-                        v1 = clone v0
-                        drop v0
+                        v0 = staticref "test message"
+                        v1 = clone *v0
                         return v1
                 """,
             ),

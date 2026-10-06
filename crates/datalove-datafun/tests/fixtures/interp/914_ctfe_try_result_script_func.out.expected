@@ -21,12 +21,10 @@ Analysis(
                     
                     fn get_value():
                     block0:
-                        v1 = const ok 12345i64
                         v3 = const 12345i64
                         goto block1
                     block1:
                         v7 = ok v3
-                        drop v1
                         return v7
                 """,
             ),

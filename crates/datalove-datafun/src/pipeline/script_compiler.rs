@@ -970,10 +970,20 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_resolve_shape_descriptors(ir_unit);
 
         // Phase 5: Const parameter specialization.
-        let ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs) {
+        let mut ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
+
+        // Phase 6: A function's consts, and a specialized copy's const
+        // parameters, are built once and borrowed rather than built at every
+        // call. After specialization, which reads const arguments out of the
+        // `Const` instructions this replaces.
+        if !self.skip_const_inlining {
+            for func in &mut ir_unit.nested_units {
+                datalove_datafun_const::promote_function_consts(func);
+            }
+        }
 
         self.record_unit(index, &ir_unit, &typecheck, &ownership, &consts);
 

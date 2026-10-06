@@ -14,9 +14,8 @@ Analysis(
                 ir: """
                     fn compute():
                     block0:
-                        v0 = const "from module"
-                        v1 = clone v0
-                        drop v0
+                        v0 = staticref "from module"
+                        v1 = clone *v0
                         return v1
                 """,
             ),

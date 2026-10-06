@@ -189,13 +189,10 @@ drop v3
 ```
 
 Turning `v3` into a `Ref` after the fact means retyping it and deleting its
-drops, which is fragile. The cleaner fix is to lower the function again once
-its consts have values, so they arrive in `const_bindings` like module-level
-ones. There is precedent: a function that names a module-level const not yet
-evaluated already fails with `BindingNotAvailable` and is lowered again.
-
-Const parameters go the same way. Specialization writes the value into the
-copy, and for a non-copy type that becomes a pool entry and a `staticref`.
+drops. That looked fragile while a const could be moved, so this plan proposed
+lowering the function again once its consts had values. Once step 1 refused
+moves out of a const it stopped being fragile, and step 3 did the rewrite
+instead; see [As built](#user-content-as-built).
 
 ## The other passes
 
@@ -255,9 +252,11 @@ section. Two things it needed that this plan did not foresee:
 
 - **Const arguments.** A const argument is a bare const name in a by-value
   position, but it is not a move. Ownership reads `call_targets` for the
-  callee's const parameters and skips those arguments. Lowering gives the call
-  a copy of its own (`lower_comptime_arg`), because an unspecialized call
-  consumes the argument and a specialized one drops it.
+  callee's const parameters and skips those arguments. Lowering first gave the
+  call a copy of its own, because an unspecialized call consumed the argument
+  and a specialized one dropped it. Const parameters are now passed by
+  reference instead, so the call borrows; see
+  [As built](#user-content-as-built).
 - **Lowering's per-read copies are gone.** Lowering used to clone a
   function-local const or a const parameter at each read, so that reading did
   not consume it. With moves refused, a borrow now uses the binding itself, and
@@ -286,8 +285,8 @@ larger win than named consts.
    parameter requires `@`, with fixtures and documentation updated to match.
 2. Done. Pools and `staticref` for module-level and script-level consts, on
    all four backends. See [As built](#user-content-as-built).
-3. Function-local consts, by lowering again once values are known, and const
-   parameters through specialization.
+3. Done. Function-local consts, and const parameters through specialization,
+   by promoting them in the IR. See [As built](#user-content-as-built).
 4. Pooling read-only non-copy literals.
 5. Borrowing `match` and destructuring `if`, which remove most of the `@`s
    step 1 adds.
@@ -327,11 +326,38 @@ evaluator has its own interpreter, so parallel scripts never share one.
   existing const builders, and `__dtlv_statics_fini` destroys them before
   `dtlv_rti_shutdown`. There is no second runtime: the program has one heap.
 
-Const arguments are left as `Const`: specialization reads a const argument's
-value from the instruction defining it, and the call owns what it is given.
+Const arguments were at first left as `Const`, built for the call and
+dropped by it. That changed after step 3; see below.
 
 `std_tests/145_static_consts` runs consts of most shapes through all four
 backends under the leak check.
+
+**Step 3 promotes in the IR rather than lowering again.** After const
+inlining, a function-local const is a value defined by a `Const`.
+`promote_function_consts` in `datafun-const` turns each such value of a
+non-copy type into a `StaticRef`: it retypes the value as a
+reference, rewrites every use to read through it (with
+`map_operands_in_instruction`, the walk that substitutes parameters, now
+general), and deletes its drops. That is sound only because no use consumes
+it, which the ownership rule guarantees. It runs on module functions in
+`lower_module` after const inlining, and on a script unit's functions after
+specialization, which reads const arguments out of the `Const` instructions
+the pass replaces. A const naming a const parameter in the unspecialized
+original is an ordinary binding and is left alone, as is everything under
+`skip_const_inlining`. A const left with no use once its drop is gone, as
+one passed only as a const argument is, is removed by dead-code
+elimination. `std_tests/146_static_function_consts` covers both kinds on all
+four backends.
+
+**Const parameters are passed by reference.** A function lowers each const
+parameter as a `ref` parameter, which ownership treats as borrowed, so its
+body never drops one, and a call lowers a const argument as a `ref` argument:
+the static for an outer const, the binding for a local one, the parameter
+itself for one passed on. Specialization reads the value through a
+`StaticRef` as well as a `Const`, drops nothing when it takes the argument
+away, and defines a copy's const parameter at entry as a `StaticRef` of a
+non-copy type, or a `Const` of a copy one, rather than leaving it to
+promotion. So no call builds a const argument, specialized or not.
 
 ## Open questions
 

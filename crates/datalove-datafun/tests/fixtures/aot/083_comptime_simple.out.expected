@@ -15,7 +15,6 @@ AotAnalysis(
                     fn scale(p0, p1):
                     block0:
                         v0 = mul p0, p1
-                        drop p0
                         drop p1
                         return v0
                 """,
@@ -37,20 +36,17 @@ AotAnalysis(
                     scriptunit:
                     block0:
                         v0 = const 3int
-                        v1 = clone v0
-                        v2 = const 7int
-                        drop v1
-                        v3 = call @0 u0(v2)
-                        debuglog v3
+                        v1 = const 7int
+                        v2 = call @0 u0(v1)
+                        debuglog v2
                         unit_end_drop v0
-                        unit_end_drop v3
+                        unit_end_drop v2
                         unit_end
                     
                     fn scale__ct0(p0):
                     block0:
-                        v1 = const 3int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 3int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                 """,

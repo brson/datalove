@@ -1,0 +1,46 @@
+// Function-local consts and const parameters, built once and borrowed.
+//
+// After const inlining a function's const is a value its body builds at every
+// call, and a specialized copy's const parameter is the same. Promotion makes
+// each a `staticref`, so the body reads one copy through a reference. Each
+// function here runs several times, indexes and borrows its consts in a loop,
+// and clones out of them, on all four backends under the leak check.
+
+require module sys/std/list
+require module sys/std/string
+fun local(i: int): !(index, bool, int, [int], string)
+  const L: [int] = [10, 20, 30]
+  const S: string = "local"
+  const M: %{string = int} = %{ "k" = 7 }
+  const N: u32 = 3
+  var total = 0
+  var j: index = 0
+  loop while j .< list.len(ref L)
+    set total = total + L[j]!
+    set j = j +! 1
+  end loop
+  let first = L[0]!@
+  ret ok (list.len(ref L), S == "local", total + first + M["k"]!@ + i, L@, S@)
+end fun
+fun repeat(const n: int, const s: string): string
+  var out = ""
+  var i = 0
+  loop while i .< n
+    call string.push_str(mut out, ref s)
+    set i = i + 1
+  end loop
+  ret out
+end fun
+fun outer(const xs: [int]): (index, [int])
+  const COPY: [int] = xs@
+  ret (list.len(ref xs), COPY@)
+end fun
+const THREE: int = 3
+const AB: string = "ab"
+const NUMS: [int] = [4, 5]
+var k = 0
+loop while k .< 4
+  let r = local(k@)!
+  set k = k + 1
+end loop
+let output = (local(1)!, repeat(THREE, AB), repeat(THREE, AB), outer(NUMS))

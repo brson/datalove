@@ -53,32 +53,6 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
     Ok((op, false))
 }
 
-/// Lower the argument to a const parameter, which names a const.
-///
-/// The call owns what it is given: unspecialized, the callee consumes it, and
-/// specialized, the rewrite drops it. A const is only borrowed where it is
-/// named, so the call gets a copy of its own, unless the const was built for
-/// this mention and is already one.
-fn lower_comptime_arg<'db>(ctx: &mut LowerCtx<'db>, arg: ExprFun<'db>) -> Result<Operand, LowerError> {
-    let ExprFunKind::Place(ref place) = arg.expr(ctx.db) else {
-        unreachable!("the typechecker requires a const argument to name a const (F076)");
-    };
-    let name = place.root.text(ctx.db);
-    // A const evaluated before this body is written in as a literal, which is
-    // the call's own and is what specialization reads the argument from.
-    if let Some((const_type, const_value)) = ctx.lookup_const(name) {
-        let (const_type, const_value) = (const_type.clone(), const_value.clone());
-        let dest = ctx.fresh_value(const_type);
-        ctx.emit(Instruction::Const { dest, value: const_value });
-        return Ok(Operand::Value(dest));
-    }
-    let (operand, is_fresh_const) = lower_var_operand(ctx, name)?;
-    if is_fresh_const || operand_type(ctx, &operand).is_copy() {
-        return Ok(operand);
-    }
-    Ok(Operand::Value(emit_owned_copy(ctx, arg, operand)))
-}
-
 /// Record a const `lower_var_operand` built as a temporary to drop.
 fn record_fresh_const_temp(ctx: &mut LowerCtx, operand: &Operand) {
     let Operand::Value(vid) = *operand else {
@@ -577,8 +551,12 @@ pub fn lower_expression<'db>(
 
             // Get param modes and types from the resolved call target.
             let target = ctx.call_targets.and_then(|t| t.get(&ExprKey::of_call(ctx.db, call)));
+            // A const argument is passed by reference, as the callee's const
+            // parameter is lowered: see `lower_function_body`.
             let param_modes: Vec<ParamMode> = target
-                .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.mode).collect())
+                .map(|t| t.func(ctx.db).params(ctx.db).iter()
+                    .map(|p| if p.is_comptime { ParamMode::Ref } else { p.mode })
+                    .collect())
                 .unwrap_or_default();
             // A parameter whose type mentions one of the callee's type
             // parameters was erased to `data` at that position when the callee
@@ -603,9 +581,6 @@ pub fn lower_expression<'db>(
                         !borrowed && names_a_type_param(&p.type_hint)
                     })
                     .collect())
-                .unwrap_or_default();
-            let param_comptime: Vec<bool> = target
-                .map(|t| t.func(ctx.db).params(ctx.db).iter().map(|p| p.is_comptime).collect())
                 .unwrap_or_default();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
@@ -644,11 +619,7 @@ pub fn lower_expression<'db>(
                 let erased_out = mode == ParamMode::Out
                     && param_is_erased.get(i).copied().unwrap_or(false);
                 let arg_type = if erased_out { None } else { param_types.get(i) };
-                let mut operand = if param_comptime.get(i).copied().unwrap_or(false) {
-                    lower_comptime_arg(ctx, *arg)?
-                } else {
-                    lower_call_arg(ctx, *arg, mode, arg_type)?
-                };
+                let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
                 // Convert into the shape the erased callee was compiled for,
                 // which is the parameter's own type with `data` at each type
                 // parameter rather than `data` outright.

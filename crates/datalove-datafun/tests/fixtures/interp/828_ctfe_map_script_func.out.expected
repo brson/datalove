@@ -21,9 +21,8 @@ Analysis(
                     
                     fn get_mapping():
                     block0:
-                        v6 = const %{10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
-                        v7 = clone v6
-                        drop v6
+                        v6 = staticref %{10u32 = 1u32, 20u32 = 2u32, 30u32 = 3u32}
+                        v7 = clone *v6
                         return v7
                 """,
             ),

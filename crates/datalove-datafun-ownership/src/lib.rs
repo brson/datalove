@@ -337,6 +337,12 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.alloc_binding_inner(name, ty, false, None, true)
     }
 
+    /// Allocate a binding for a const parameter, which is passed by reference,
+    /// so the body does not own it and does not drop it.
+    fn alloc_const_param(&mut self, name: String, ty: IrType) -> BindingId {
+        self.alloc_binding_inner(name, ty, false, Some(ParamMode::Ref), true)
+    }
+
     fn alloc_binding_inner(&mut self, name: String, ty: IrType, is_slot: bool, param_mode: Option<ParamMode>, is_const: bool) -> BindingId {
         let id = BindingId(self.next_binding);
         self.next_binding += 1;
@@ -1167,9 +1173,9 @@ pub fn analyze_function_with_mode<'db>(
             None => IrType::from_type_hint(db, &param.type_hint),
         };
         // A const parameter is a constant, and like any other const is
-        // borrowed wherever it is named.
+        // borrowed wherever it is named. It arrives by reference.
         if param.is_comptime {
-            ctx.alloc_const_binding(name, ty);
+            ctx.alloc_const_param(name, ty);
         } else {
             ctx.alloc_binding(name, ty, false, Some(param.mode));
         }

@@ -21,9 +21,8 @@ Analysis(
                     
                     fn get_result():
                     block0:
-                        v1 = const ok 100u32
-                        v2 = clone v1
-                        drop v1
+                        v1 = staticref ok 100u32
+                        v2 = clone *v1
                         return v2
                 """,
             ),

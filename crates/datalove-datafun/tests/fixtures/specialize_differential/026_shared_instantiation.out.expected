@@ -17,14 +17,12 @@ Analysis(
                     fn scale(p0, p1):
                     block0:
                         v0 = mul p0, p1
-                        drop p0
                         drop p1
                         return v0
                     
                     fn keep_str(p0, p1):
                     block0:
                         v0 = move p1
-                        drop p0
                         return v0
                     
                     fn multiply_i32(p0, p1):
@@ -42,45 +40,35 @@ Analysis(
                     
                     fn triple(p0):
                     block0:
-                        v0 = const 3int
-                        drop v0
                         v1 = call @0 m0.u7(p0)
                         return v1
                     
                     fn quintuple(p0):
                     block0:
-                        v0 = const 5int
-                        drop v0
                         v1 = call @0 m0.u8(p0)
                         return v1
                     
                     fn thrice_again(p0):
                     block0:
-                        v0 = const 3int
-                        drop v0
                         v1 = call @0 m0.u7(p0)
                         return v1
                     
                     fn triple_i32(p0):
                     block0:
-                        v0 = const 3i32
-                        drop v0
                         v1 = call @0 m0.u9(p0)
                         return v1
                     
                     fn scale__ct7(p0):
                     block0:
-                        v1 = const 3int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 3int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                     
                     fn scale__ct8(p0):
                     block0:
-                        v1 = const 5int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 5int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                     
@@ -122,30 +110,26 @@ Analysis(
                         v4 = call @1 m0.u4(v3)
                         v5 = const 10int
                         v6 = call @2 m0.u5(v5)
-                        v7 = clone v0
-                        v8 = const "hi"
-                        drop v7
-                        v9 = call @4 u0(v8)
-                        v10 = const 5i32
-                        v11 = call @3 m0.u6(v10)
+                        v7 = const "hi"
+                        v8 = call @4 u0(v7)
+                        v9 = const 5i32
+                        v10 = call @3 m0.u6(v9)
                         debuglog v2
                         debuglog v4
                         debuglog v6
-                        debuglog v9
-                        debuglog v11
+                        debuglog v8
+                        debuglog v10
                         unit_end_drop v0
                         unit_end_drop v2
                         unit_end_drop v4
                         unit_end_drop v6
-                        unit_end_drop v9
-                        unit_end_drop v11
+                        unit_end_drop v8
+                        unit_end_drop v10
                         unit_end
                     
                     fn keep_str__ct0(p0):
                     block0:
-                        v1 = const 2int
                         v0 = move p0
-                        drop v1
                         return v0
                 """,
             ),

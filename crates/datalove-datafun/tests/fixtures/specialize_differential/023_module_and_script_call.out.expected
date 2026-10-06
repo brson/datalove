@@ -17,24 +17,18 @@ Analysis(
                     fn scale(p0, p1):
                     block0:
                         v0 = mul p0, p1
-                        drop p0
                         drop p1
                         return v0
                     
                     fn triple(p0):
                     block0:
-                        v0 = const 3int
-                        v1 = clone v0
-                        drop v1
-                        v2 = call @0 m0.u2(p0)
-                        drop v0
-                        return v2
+                        v1 = call @0 m0.u2(p0)
+                        return v1
                     
                     fn scale__ct2(p0):
                     block0:
-                        v1 = const 3int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 3int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                 """,
@@ -58,22 +52,19 @@ Analysis(
                         v0 = const 7int
                         v1 = const 10int
                         v2 = call @0 m0.u1(v1)
-                        v3 = clone v0
-                        v4 = const 10int
-                        drop v3
-                        v5 = call @1 u0(v4)
+                        v3 = const 10int
+                        v4 = call @1 u0(v3)
                         debuglog v2
-                        debuglog v5
+                        debuglog v4
                         unit_end_drop v0
                         unit_end_drop v2
-                        unit_end_drop v5
+                        unit_end_drop v4
                         unit_end
                     
                     fn scale__ct0(p0):
                     block0:
-                        v1 = const 7int
-                        v0 = mul v1, p0
-                        drop v1
+                        v1 = staticref 7int
+                        v0 = mul *v1, p0
                         drop p0
                         return v0
                 """,
@@ -96,7 +87,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = clone unit0.v2
-                        v1 = clone unit0.v5
+                        v1 = clone unit0.v4
                         v2 = pack Tuple2 {v0, v1}
                         unit_end v2
                 """,

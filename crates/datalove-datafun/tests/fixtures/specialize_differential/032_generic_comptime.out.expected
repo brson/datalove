@@ -20,42 +20,33 @@ Analysis(
                         v1 = list [v0]
                         store.move.tracked s0, v1
                         v2 = load.move.tracked s0
-                        drop p0
                         return v2
                     
                     fn pick(p0, p1, p2):
                     block0:
                         v0 = move p1
-                        drop p0
                         drop p2
                         return v0
                     
                     fn wrap_one(p0):
                     block0:
-                        v0 = const 1int
-                        v1 = clone v0
-                        v2 = erase p0
-                        drop v1
-                        v3 = call @0 m0.u4(v2)
-                        v4 = reify v3
-                        drop v0
-                        return v4
+                        v1 = erase p0
+                        v2 = call @0 m0.u4(v1)
+                        v3 = reify v2
+                        return v3
                     
                     fn announce(p0, p1):
                     block0:
                         debuglog p1
-                        drop p0
                         drop p1
                         return
                     
                     fn wrap__ct4(p0):
                     block0:
-                        v3 = const 1int
                         v0 = move p0
                         v1 = list [v0]
                         store.move.tracked s0, v1
                         v2 = load.move.tracked s0
-                        drop v3
                         return v2
                 """,
             ),
@@ -77,93 +68,73 @@ Analysis(
                     block0:
                         v0 = const 1int
                         v1 = const 2int
-                        v2 = clone v0
-                        v3 = const 7u32
-                        v4 = erase v3
-                        drop v2
-                        v5 = call @1 u0(v4)
-                        v6 = reify v5
-                        debuglog v6
-                        drop v6
-                        v7 = clone v0
-                        v8 = const "s"
-                        v9 = erase v8
-                        drop v7
-                        v10 = call @2 u0(v9)
-                        v11 = reify v10
-                        debuglog v11
-                        drop v11
-                        v12 = clone v1
-                        v13 = const "s"
-                        v14 = erase v13
-                        drop v12
-                        v15 = call @3 u1(v14)
-                        v16 = reify v15
-                        debuglog v16
-                        drop v16
-                        v17 = clone v0
-                        v18 = const 3u32
-                        v19 = erase v18
-                        v20 = const 4u32
-                        v21 = erase v20
-                        drop v17
-                        v22 = call @4 u2(v19, v21)
-                        v23 = reify v22
-                        debuglog v23
-                        v24 = const 9u32
-                        v25 = call @0 m0.u2(v24)
-                        debuglog v25
-                        drop v25
-                        v26 = clone v0
-                        v27 = const "spoken"
-                        drop v26
-                        v28 = call @5 u3(v27)
-                        v29 = clone v0
-                        v30 = const "kept"
-                        v31 = erase v30
-                        v32 = const "dropped"
-                        v33 = erase v32
-                        drop v29
-                        v34 = call @6 u2(v31, v33)
-                        v35 = reify v34
+                        v2 = const 7u32
+                        v3 = erase v2
+                        v4 = call @1 u0(v3)
+                        v5 = reify v4
+                        debuglog v5
+                        drop v5
+                        v6 = const "s"
+                        v7 = erase v6
+                        v8 = call @2 u0(v7)
+                        v9 = reify v8
+                        debuglog v9
+                        drop v9
+                        v10 = const "s"
+                        v11 = erase v10
+                        v12 = call @3 u1(v11)
+                        v13 = reify v12
+                        debuglog v13
+                        drop v13
+                        v14 = const 3u32
+                        v15 = erase v14
+                        v16 = const 4u32
+                        v17 = erase v16
+                        v18 = call @4 u2(v15, v17)
+                        v19 = reify v18
+                        debuglog v19
+                        v20 = const 9u32
+                        v21 = call @0 m0.u2(v20)
+                        debuglog v21
+                        drop v21
+                        v22 = const "spoken"
+                        v23 = call @5 u3(v22)
+                        v24 = const "kept"
+                        v25 = erase v24
+                        v26 = const "dropped"
+                        v27 = erase v26
+                        v28 = call @6 u2(v25, v27)
+                        v29 = reify v28
                         unit_end_drop v0
                         unit_end_drop v1
-                        unit_end_drop v35
+                        unit_end_drop v29
                         unit_end
                     
                     fn wrap__ct0(p0):
                     block0:
-                        v3 = const 1int
                         v0 = move p0
                         v1 = list [v0]
                         store.move.tracked s0, v1
                         v2 = load.move.tracked s0
-                        drop v3
                         return v2
                     
                     fn wrap__ct1(p0):
                     block0:
-                        v3 = const 2int
                         v0 = move p0
                         v1 = list [v0]
                         store.move.tracked s0, v1
                         v2 = load.move.tracked s0
-                        drop v3
                         return v2
                     
                     fn pick__ct2(p0, p1):
                     block0:
-                        v1 = const 1int
                         v0 = move p0
-                        drop v1
                         drop p1
                         return v0
                     
                     fn announce__ct3(p0):
                     block0:
-                        v0 = const 1int
                         debuglog p0
-                        drop v0
                         drop p0
                         return
                 """,

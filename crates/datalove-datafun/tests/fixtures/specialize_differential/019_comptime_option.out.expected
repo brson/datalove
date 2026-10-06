@@ -38,9 +38,7 @@ Analysis(
                     block0:
                         v1 = const some 42i32
                         v2 = const none
-                        drop v1
                         v3 = call @0 u0()
-                        drop v2
                         v4 = call @1 u1()
                         debuglog v3
                         debuglog v4

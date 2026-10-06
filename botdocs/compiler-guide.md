@@ -450,9 +450,11 @@ across. The one refused case is a const parameter whose own type is a type param
 what `T` is, and a copy is built by substituting into cloned blocks, so it cannot change
 its signature or the erasure decisions in its body.
 
-**Where instantiations come from.** They are read out of the IR. The const argument at a
-call site is already an operand defined by a `Const` instruction, so the values the
-rewrite looks for are the values the plan was built from, and the two cannot disagree.
+**Where instantiations come from.** They are read out of the IR. A const argument is
+passed by reference, as a const parameter is lowered, and the operand at a call site is
+the const itself: defined by a `Const`, or by a `StaticRef` carrying its value. So the
+values the rewrite looks for are the values the plan was built from, and the two cannot
+disagree.
 Specialization used to resolve them instead by the *name* of the const binding, which the
 typechecker recorded in a `ComptimeCallSiteRegistry`; that could disagree, because two
 function-level consts sharing a name in one module resolved to the same value. The
@@ -483,7 +485,9 @@ rounds, as a backstop; running out leaves call sites unspecialized rather than w
 
 **Call site handling:** The lowering phase emits `ComptimeCall` instructions for calls to
 functions with const parameters. Specialization turns the ones it can place into a
-regular `Call` to the copy, dropping the const arguments the copy does not take.
+regular `Call` to the copy, leaving out the const arguments the copy does not take. They
+were borrowed, so nothing is dropped. A copy defines each const parameter at entry, as a
+`StaticRef` for a non-copy type and a `Const` otherwise.
 
 **Testing:** The `skip_specialization` flag (like `skip_const_inlining`) allows differential
 testing - comparing specialized vs unspecialized output to verify correctness.
@@ -1360,6 +1364,13 @@ earlier units' consts, from `external_consts_over`, because an earlier unit's
 the analysis reads `call_targets` to find the callee's const parameters and
 skips those arguments, and lowering hands the call a copy of its own
 (`lower_comptime_arg`), since the call consumes what it is given.
+
+Because nothing consumes a const, every one of a non-copy type is built once
+and borrowed through a `StaticRef`. A module or script const named from a
+function is lowered that way directly. A function-local const, and a
+specialized copy's const parameter, is lowered as a value defined by a `Const`
+and promoted afterwards by `promote_function_consts`; see
+[Consts Built Once](plan-static-consts.md#user-content-as-built).
 
 ### Auto-adapt
 

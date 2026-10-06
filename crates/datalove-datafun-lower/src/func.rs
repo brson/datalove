@@ -125,7 +125,12 @@ pub fn lower_function_body<'db>(
     let func_params = func.params(ctx.db);
     for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
+        // A const parameter is passed by reference: like any const it is
+        // borrowed wherever it is named, so the call has nothing to hand over
+        // and the body nothing to drop. Specialization removes it anyway, and
+        // this is what an unspecialized call does.
         let mode = match p.mode {
+            _ if p.is_comptime => ParamMode::Ref,
             ast::ParamMode::In => ParamMode::In,
             ast::ParamMode::Out => ParamMode::Out,
             ast::ParamMode::Ref => ParamMode::Ref,

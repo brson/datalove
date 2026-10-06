@@ -21,22 +21,16 @@ Analysis(
                     
                     fn by_pos_zero(p0):
                     block0:
-                        v0 = const 0f64
-                        drop v0
                         v1 = call @0 m0.u4(p0)
                         return v1
                     
                     fn by_neg_zero(p0):
                     block0:
-                        v0 = const -0f64
-                        drop v0
                         v1 = call @0 m0.u5(p0)
                         return v1
                     
                     fn by_half(p0):
                     block0:
-                        v0 = const 0.5f64
-                        drop v0
                         v1 = call @0 m0.u6(p0)
                         return v1
                     
@@ -83,7 +77,6 @@ Analysis(
                         v5 = call @2 m0.u3(v4)
                         v7 = const -0f64
                         v8 = const 2f64
-                        drop v7
                         v9 = call @3 u0(v8)
                         debuglog v1
                         debuglog v3

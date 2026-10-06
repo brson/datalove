@@ -21,11 +21,8 @@ Analysis(
                     
                     fn negate():
                     block0:
-                        v0 = const 100int
-                        v1 = const -100int
-                        v2 = clone v1
-                        drop v0
-                        drop v1
+                        v1 = staticref -100int
+                        v2 = clone *v1
                         return v2
                 """,
             ),
