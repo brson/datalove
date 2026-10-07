@@ -43,6 +43,10 @@ jobs:
           # hand many times, which is not the same as anything holding it.
           - name: parallel
             recipe: test-parallel
+          # The benchvs programs and the store demo, built in release. Their
+          # own runner, since a release build would not fit beside a debug one.
+          - name: demos
+            recipe: test-demos
     steps:
       - uses: actions/checkout@v4
 
@@ -76,6 +80,11 @@ jobs:
 
       - name: Install just
         uses: taiki-e/install-action@just
+
+      # The store demo generates its data and checks its report with Python,
+      # through uv. Only test-demos needs it.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
 
       - name: Run tests
         run: just ${{ matrix.recipe }}

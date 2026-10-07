@@ -48,8 +48,15 @@ test-slow:
 test-worldgen SEED='2000':
     WORLDGEN_DUAL_TEST=1 WORLDGEN_DUAL_SEED={{SEED}} DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-tests --test worldgen_dual_tests
 
+# The programs outside the test suite, in release: the benchvs benches built
+# and AOT-compiled, and the store demo's report checked against its Python
+# twin on a small dataset. Needs uv and a C compiler.
+test-demos:
+    cd benchvs && just build
+    cd demos/store && just gen 2000 && just check
+
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-parallel
+test-ci: test test-slow test-64 test-parallel test-demos
 
 # Run tests with parallelism enabled.
 test-parallel:
