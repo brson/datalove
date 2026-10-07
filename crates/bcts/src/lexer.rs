@@ -32,11 +32,19 @@ fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token>)) -> usize {
 /// A plain value rather than a tracked struct. Tokens are read straight out of
 /// the `Vec` in a [`ChunkLex`] and never looked up by identity, so the salsa id
 /// and page slot each one used to carry paid for nothing.
+///
+/// Whitespace and comments are not tokens. Every reader skipped them, and the
+/// one thing in them anything needed, whether a line ended there, is kept on
+/// the token after them. Whether two tokens were written against each other
+/// is in their spans.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct Token {
     pub span: Range<usize>,
     pub kind: TokenKind,
+    /// Whether whitespace between this token and the one before it held a
+    /// newline. A newline inside a block comment does not count.
+    pub newline_before: bool,
 }
 
 #[derive(Copy, Clone, Debug, Hash, salsa::SalsaValue)]
@@ -45,8 +53,6 @@ pub enum TokenKind {
     Word,
     Sigil(Sigil),
     String,
-    Whitespace,
-    Comment,
     Error,
 }
 
@@ -187,31 +193,32 @@ pub fn lex_chunk<'db>(
     let mut tokens = Vec::new();
     let chunk_text = chunk.text(db);
     let chunk_str = chunk_text.as_str(db);
+    // Carried across ranges, since a comment can come between a newline and
+    // the token it goes on.
+    let mut newline_before = false;
 
     for range in chunk.ranges(db) {
         match range {
-            (range, RangeKind::Comment) => {
-                tokens.push(Token {
-                    span: range,
-                    kind: TokenKind::Comment,
-                });
-            }
+            (_, RangeKind::Comment) => {}
             (range, RangeKind::String) => {
                 tokens.push(Token {
                     span: range,
                     kind: TokenKind::String,
+                    newline_before: mem::take(&mut newline_before),
                 });
             }
             (range, RangeKind::Error) => {
                 tokens.push(Token {
                     span: range,
                     kind: TokenKind::Error,
+                    newline_before: mem::take(&mut newline_before),
                 });
             }
             (range, RangeKind::Unknown) => {
                 let mut tokenizer = Tokenizer {
                     text: chunk_str,
                     range,
+                    newline_before: &mut newline_before,
                 };
 
                 tokens.extend(
@@ -228,9 +235,10 @@ pub fn lex_chunk<'db>(
     /// `text` is the whole chunk rather than a handle to fetch it with: reading
     /// it back out of salsa on every `peek` was two field reads per character,
     /// and `peek` is what every other method is built on.
-    struct Tokenizer<'db> {
+    struct Tokenizer<'db, 'a> {
         text: &'db str,
         range: Range<usize>,
+        newline_before: &'a mut bool,
     }
 
     #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -241,14 +249,22 @@ pub fn lex_chunk<'db>(
         Error,
     }
 
-    impl<'db> Tokenizer<'db> {
+    impl<'db> Tokenizer<'db, '_> {
         fn next(&mut self) -> Option<Token> {
-            match self.peek_token() {
-                None => None,
-                Some(NextToken::Whitespace) => Some(self.eat_whitespace()),
-                Some(NextToken::Word) => Some(self.eat_word()),
-                Some(NextToken::Sigil) => Some(self.eat_sigil()),
-                Some(NextToken::Error) => Some(self.eat_error()),
+            loop {
+                let mut token = match self.peek_token()? {
+                    NextToken::Whitespace => {
+                        if self.eat_whitespace() {
+                            *self.newline_before = true;
+                        }
+                        continue;
+                    }
+                    NextToken::Word => self.eat_word(),
+                    NextToken::Sigil => self.eat_sigil(),
+                    NextToken::Error => self.eat_error(),
+                };
+                token.newline_before = mem::take(self.newline_before);
+                return Some(token);
             }
         }
 
@@ -287,6 +303,7 @@ pub fn lex_chunk<'db>(
             Token {
                 span,
                 kind: TokenKind::Word,
+                newline_before: false,
             }
         }
 
@@ -312,6 +329,7 @@ pub fn lex_chunk<'db>(
                     return Token {
                         span,
                         kind: TokenKind::Sigil(sigil),
+                        newline_before: false,
                     }
                 }
             }
@@ -360,26 +378,24 @@ pub fn lex_chunk<'db>(
             Token {
                 span,
                 kind: TokenKind::Error,
+                newline_before: false,
             }
         }
 
-        fn eat_whitespace(&mut self) -> Token {
+        /// Skip a run of whitespace, saying whether it held a newline.
+        fn eat_whitespace(&mut self) -> bool {
             assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
 
-            let start = self.range.start;
+            let mut newline = false;
             while let Some(ch) = self.peek() {
                 if ch.is_whitespace() {
+                    newline |= ch == '\n';
                     self.eat_char(ch);
                 } else {
                     break;
                 }
             }
-            assert!(start < self.range.start);
-            let span = start .. self.range.start;
-            Token {
-                span,
-                kind: TokenKind::Whitespace,
-            }
+            newline
         }
 
         fn eat_char(&mut self, ch: char) {
@@ -402,8 +418,12 @@ impl<'db> ChunkLex<'db> {
         let chunk_text = self.chunk(db).text(db).as_str(db);
         #[allow(unstable_name_collisions)] // intersperse
         self.tokens(db).iter().map(|token| {
-            token.debug_str(chunk_text)
-        }).intersperse(" ").collect()
+            if token.newline_before {
+                fmt!("nl {}", token.debug_str(chunk_text))
+            } else {
+                token.debug_str(chunk_text).S()
+            }
+        }).intersperse(S(" ")).collect()
     }
 }
 
@@ -416,14 +436,6 @@ impl Token {
         self.span.clone()
     }
 
-    pub fn without_space(self) -> Option<Self> {
-        match self.kind {
-            TokenKind::Whitespace => None,
-            TokenKind::Comment => None,
-            _ => Some(self),
-        }
-    }
-
     #[cfg(test)]
     pub fn debug_str<'a>(&self, chunk_text: &'a str) -> &'a str {
         match self.kind {
@@ -431,8 +443,6 @@ impl Token {
                 self.text(chunk_text)
             }
             TokenKind::Sigil(s) => s.as_str(),
-            TokenKind::Whitespace => "ws",
-            TokenKind::Comment => "cmt",
             TokenKind::Error => "err",
         }
     }
@@ -594,7 +604,7 @@ fn test_lex_chunk() {
 
     assert_eq!(
         dbglex(" "),
-        "ws",
+        "",
     );
     assert_eq!(
         dbglex("a"),
@@ -602,7 +612,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("a b"),
-        "a ws b",
+        "a b",
     );
     assert_eq!(
         dbglex("a:-b"),
@@ -610,19 +620,29 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("a :- b \n c"),
-        "a ws :- ws b ws c",
+        "a :- b nl c",
     );
     assert_eq!(
         dbglex("a//"),
-        "a cmt",
+        "a",
     );
     assert_eq!(
         dbglex("a//\n"),
-        "a cmt ws",
+        "a",
     );
     assert_eq!(
         dbglex("a//\nd"),
-        "a cmt ws d",
+        "a nl d",
+    );
+    // A newline inside a block comment ends no line, and one before a
+    // comment still counts for the token after it.
+    assert_eq!(
+        dbglex("a/*\n*/b"),
+        "a b",
+    );
+    assert_eq!(
+        dbglex("a\n/* x */ b"),
+        "a nl b",
     );
     assert_eq!(
         dbglex("(){}){"),
@@ -630,7 +650,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("a / b / c"),
-        "a ws / ws b ws / ws c",
+        "a / b / c",
     );
     assert_eq!(
         dbglex("a/b/c"),
@@ -660,7 +680,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("a % b"),
-        "a ws % ws b",
+        "a % b",
     );
     assert_eq!(
         dbglex("%%"),
@@ -674,7 +694,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("0 .. 8"),
-        "0 ws .. ws 8",
+        "0 .. 8",
     );
     assert_eq!(
         dbglex("1.5"),
@@ -710,7 +730,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("a + b - c * d / e"),
-        "a ws + ws b ws - ws c ws * ws d ws / ws e",
+        "a + b - c * d / e",
     );
 
     // Question variants.
@@ -720,7 +740,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+? -? *? /?"),
-        "+? ws -? ws *? ws /?",
+        "+? -? *? /?",
     );
 
     // Bar variants.
@@ -730,7 +750,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+| -| *| /|"),
-        "+| ws -| ws *| ws /|",
+        "+| -| *| /|",
     );
 
     // Exclamation variants.
@@ -740,7 +760,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+! -! *! /!"),
-        "+! ws -! ws *! ws /!",
+        "+! -! *! /!",
     );
 
     // Percent variants.
@@ -750,7 +770,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+% -% *% /%"),
-        "+% ws -% ws *% ws /%",
+        "+% -% *% /%",
     );
 
     // Assignment operators.
@@ -760,7 +780,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+= -= *= /="),
-        "+= ws -= ws *= ws /=",
+        "+= -= *= /=",
     );
 
     // Question-equals variants.
@@ -770,7 +790,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+?= -?= *?= /?="),
-        "+?= ws -?= ws *?= ws /?=",
+        "+?= -?= *?= /?=",
     );
 
     // Bar-equals variants.
@@ -780,7 +800,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex("+|= -|= *|= /|="),
-        "+|= ws -|= ws *|= ws /|=",
+        "+|= -|= *|= /|=",
     );
 
     // Comparison operators.
@@ -790,7 +810,7 @@ fn test_lex_chunk() {
     );
     assert_eq!(
         dbglex(".< .> <= >= == !="),
-        ".< ws .> ws <= ws >= ws == ws !=",
+        ".< .> <= >= == !=",
     );
 
     // Mixed complex expressions.
@@ -864,11 +884,11 @@ fn test_lex_multibyte_error() {
     assert_eq!(dbglex("\u{a7}"), "err");
     assert_eq!(dbglex("a\u{a7}"), "a err");
     assert_eq!(dbglex("\u{a7}a"), "err a");
-    assert_eq!(dbglex("a \u{a7} b"), "a ws err ws b");
+    assert_eq!(dbglex("a \u{a7} b"), "a err b");
 
     // Three bytes and four, since the width is what was got wrong.
-    assert_eq!(dbglex("a \u{2014} b"), "a ws err ws b");
-    assert_eq!(dbglex("a \u{1f600} b"), "a ws err ws b");
+    assert_eq!(dbglex("a \u{2014} b"), "a err b");
+    assert_eq!(dbglex("a \u{1f600} b"), "a err b");
 
     // Adjacent error characters are one token, which is the arm that keeps
     // eating after the first.

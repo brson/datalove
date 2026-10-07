@@ -73,6 +73,10 @@ fn tokens_are_not_tracked_structs() {
 /// Without this the test above would pass just as well if the tokens had been
 /// moved somewhere salsa cannot see, which would look like a saving and be
 /// nothing of the kind.
+///
+/// The tokens are about 20 KB, whitespace and comments having stopped being
+/// tokens; without the heap size each `ChunkLex` is only its fields, a chunk
+/// id and a `Vec` header.
 #[test]
 fn the_tokens_are_still_accounted_for() {
     let held = ingredients(24);
@@ -83,8 +87,8 @@ fn the_tokens_are_still_accounted_for() {
 
     assert_eq!(count, 24, "one ChunkLex per module");
     assert!(
-        bytes > 24 * 1024,
-        "24 modules of tokens should be tens of kilobytes, but ChunkLex \
+        bytes > 8 * 1024,
+        "24 modules of tokens should be kilobytes, but ChunkLex \
          reports {} bytes; has the heap_size on ChunkLex been dropped?",
         bytes,
     );

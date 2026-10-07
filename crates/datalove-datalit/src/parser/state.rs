@@ -6,7 +6,6 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 
 use bct::{
-    lexer::TokenKind,
     bracer::{BracerIter, TreeToken},
     text::InternedText,
 };
@@ -121,39 +120,15 @@ impl<'db> Parser<'db> {
         rmx::std::mem::take(&mut self.alias_spans)
     }
 
-    /// Fill the iterator buffer with next non-whitespace tokens.
+    /// Fill the iterator buffer.
     fn fill_iter_buffer(&mut self) {
         if let TokenSource::Iter { iter, buffer, .. } = &mut self.source {
             if buffer[0].is_none() {
-                buffer[0] = Self::next_non_whitespace(iter);
+                buffer[0] = iter.next();
             }
             if buffer[1].is_none() {
-                buffer[1] = Self::next_non_whitespace(iter);
+                buffer[1] = iter.next();
             }
-        }
-    }
-
-    /// Get next non-whitespace token from iterator.
-    fn next_non_whitespace(iter: &mut BracerIter<'db>) -> Option<TreeToken<'db>> {
-        loop {
-            match iter.next() {
-                Some(token) => {
-                    if Self::is_non_whitespace(&token) {
-                        return Some(token);
-                    }
-                }
-                None => return None,
-            }
-        }
-    }
-
-    /// Check if a token is non-whitespace.
-    fn is_non_whitespace(token: &TreeToken<'db>) -> bool {
-        match token {
-            TreeToken::Token(t) => {
-                !matches!(t.kind, TokenKind::Whitespace | TokenKind::Comment)
-            }
-            TreeToken::Branch { .. } => true,
         }
     }
 
@@ -320,7 +295,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
                 // Shift slot 1 to slot 0.
                 buffer[0] = buffer[1].take();
                 // Fill slot 1 from iterator.
-                buffer[1] = Self::next_non_whitespace(iter);
+                buffer[1] = iter.next();
                 result
             }
         }

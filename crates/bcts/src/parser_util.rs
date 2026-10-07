@@ -708,7 +708,6 @@ mod tests {
             let chunk = basic_source_map(db, source);
             let tokens = bracer(db, lex_chunk(db, chunk))
                 .iter(db)
-                .filter_map(|token| token.without_space())
                 .collect();
             TestStream { db, tokens, pos: 0, text: chunk.text(db) }
         }

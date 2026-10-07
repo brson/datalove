@@ -614,13 +614,11 @@ impl<'db> TreeToken<'db> {
         Some(crate::text::TextSpan::new(source_text, self.span()))
     }
 
-    pub fn without_space(self) -> Option<Self> {
+    /// Whether a newline was written between this and what came before it.
+    pub fn newline_before(&self) -> bool {
         match self {
-            TreeToken::Token(token) => {
-                token.without_space()
-                    .map(TreeToken::Token)
-            }
-            token @ TreeToken::Branch { .. } => Some(token),
+            TreeToken::Token(token) => token.newline_before,
+            TreeToken::Branch { open, .. } => open.newline_before,
         }
     }
 }
@@ -703,15 +701,15 @@ fn dbglex(s: &str) -> String {
 fn test_bracer() {
     assert_eq!(
         dbglex(" "),
-        "ws",
+        "",
     );
     assert_eq!(
         dbglex("a b"),
-        "a ws b",
+        "a b",
     );
     assert_eq!(
         dbglex("a\nb"),
-        "a ws b",
+        "a b",
     );
     assert_eq!(
         dbglex("()"),
@@ -884,31 +882,6 @@ fn test_text_span() {
     assert_eq!(spanned, "<z>");
     assert_eq!(start, 0);
     assert_eq!(end, 3);
-}
-
-#[test]
-fn test_without_space() {
-    let ref db = crate::Database::default();
-    let source = crate::input::Source::new(db, S("a b (c)"));
-    let chunk = crate::source_map::basic_source_map(db, source);
-    let chunk_lex = crate::lexer::lex_chunk(db, chunk);
-    let bracer = bracer(db, chunk_lex);
-
-    let tokens: Vec<_> = bracer.iter(db).collect();
-    // tokens: "a", ws, "b", ws, branch(c)
-    assert_eq!(tokens.len(), 5);
-
-    // Token "a" - not whitespace, returns Some.
-    let t0 = tokens[0].C().without_space();
-    assert!(t0.is_some());
-
-    // Whitespace token - returns None.
-    let t1 = tokens[1].C().without_space();
-    assert!(t1.is_none());
-
-    // Branch - always returns Some.
-    let t4 = tokens[4].C().without_space();
-    assert!(t4.is_some());
 }
 
 #[test]

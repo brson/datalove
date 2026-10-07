@@ -17,7 +17,7 @@ use crate::diagnostic::DiagnosticBuilder;
 use crate::lexer::{Sigil, TokenKind};
 use crate::text::{Text, TextSpan};
 
-/// A run of tokens between two delimiters, with the whitespace taken out.
+/// A run of tokens between two delimiters.
 #[derive(Clone)]
 pub struct TokenGroup<'db> {
     pub tokens: Vec<TreeToken<'db>>,
@@ -56,40 +56,35 @@ impl Written {
     }
 }
 
-/// Split on line delimiters: a newline inside whitespace, or `;`.
+/// Split on line delimiters: a newline outside a comment, or `;`.
+///
+/// A newline is kept on the token after it, so one at the end of the tokens
+/// is not seen, and closes nothing that the end would not.
 pub fn split_lines<'db>(
-    chunk_text: &str,
     tokens: impl IntoIterator<Item = TreeToken<'db>>,
 ) -> Vec<TokenGroup<'db>> {
     let mut groups = vec![];
     let mut current = vec![];
 
     for token in tokens {
-        let delimiter = match &token {
-            TreeToken::Token(t) => match t.kind {
-                TokenKind::Whitespace if t.text(chunk_text).contains('\n') => {
-                    Some(Delimiter::Newline)
-                }
-                TokenKind::Sigil(sigil @ Sigil::Semicolon) => Some(Delimiter::Written(Written {
-                    sigil,
-                    count: 1,
-                    span: t.span(),
-                })),
-                _ => None,
-            },
-            TreeToken::Branch { .. } => None,
-        };
-
-        match delimiter {
-            Some(end) => groups.push(TokenGroup {
+        if token.newline_before() {
+            groups.push(TokenGroup {
                 tokens: mem::take(&mut current),
-                end: Some(end),
-            }),
-            None => {
-                if let Some(token) = token.without_space() {
-                    current.push(token);
-                }
+                end: Some(Delimiter::Newline),
+            });
+        }
+        match &token {
+            TreeToken::Token(t) if t.kind == TokenKind::Sigil(Sigil::Semicolon) => {
+                groups.push(TokenGroup {
+                    tokens: mem::take(&mut current),
+                    end: Some(Delimiter::Written(Written {
+                        sigil: Sigil::Semicolon,
+                        count: 1,
+                        span: t.span(),
+                    })),
+                });
             }
+            _ => current.push(token),
         }
     }
 
@@ -109,7 +104,7 @@ pub fn split_commas<'db>(
     level: usize,
 ) -> Vec<TokenGroup<'db>> {
     assert!(level > 0, "a separator is at least one comma");
-    let tokens: Vec<_> = tokens.into_iter().filter_map(|t| t.without_space()).collect();
+    let tokens: Vec<_> = tokens.into_iter().collect();
 
     let mut groups = vec![];
     let mut current = vec![];
@@ -145,8 +140,7 @@ pub fn split_commas<'db>(
     groups
 }
 
-/// The longest run of commas anywhere in the tokens, which must already have
-/// had their whitespace taken out.
+/// The longest run of commas anywhere in the tokens.
 ///
 /// A tensor's rank is one more than this: the widest separator written is the
 /// outermost axis, and the elements inside the innermost one are separated by
@@ -258,8 +252,7 @@ pub struct TensorHeaderError {
 /// Split a tensor's tokens at the `|` that ends its shape header, if there
 /// is one, and read the header's extents.
 ///
-/// The tokens must already have had their whitespace taken out. What comes
-/// before the first `|` is the header: whole numbers, one per axis, of which
+/// What comes before the first `|` is the header: whole numbers, one per axis, of which
 /// there has to be at least one, since a tensor has at least one axis.
 pub fn split_tensor_header<'db>(
     chunk_text: &str,
@@ -333,7 +326,7 @@ fn shape<'db>(groups: &[TokenGroup<'db>]) -> (Vec<usize>, Vec<String>) {
 
 #[cfg(test)]
 fn line_shape(db: &crate::Database, text: &str) -> (Vec<usize>, Vec<String>) {
-    shape(&split_lines(text, tree_tokens(db, text)))
+    shape(&split_lines(tree_tokens(db, text)))
 }
 
 #[test]
@@ -342,8 +335,9 @@ fn test_split_lines() {
     let none: Vec<String> = vec![];
     // A blank line separates nothing and is nobody's mistake.
     assert_eq!(line_shape(db, "a\nb"), (vec![1, 1], none.C()));
-    // A run of them is one whitespace token, so it is one delimiter.
-    assert_eq!(line_shape(db, "\n\na\n\nb\n\n"), (vec![0, 1, 1, 0], none.C()));
+    // A run of them is one delimiter, on the token after it, so the run at
+    // the end is not one at all.
+    assert_eq!(line_shape(db, "\n\na\n\nb\n\n"), (vec![0, 1, 1], none.C()));
     // A `;` written with nothing before it is.
     assert_eq!(line_shape(db, "a;b"), (vec![1, 1], none.C()));
     assert_eq!(line_shape(db, "a;;b"), (vec![1, 0, 1], vec![S(";")]));
@@ -383,11 +377,7 @@ fn test_split_commas() {
 fn test_max_comma_run() {
     let ref db = crate::Database::default();
     let run = |text: &str| {
-        let tokens: Vec<_> = tree_tokens(db, text)
-            .into_iter()
-            .filter_map(|t| t.without_space())
-            .collect();
-        max_comma_run(&tokens)
+        max_comma_run(&tree_tokens(db, text))
     };
     assert_eq!(run("a b"), 0);
     assert_eq!(run("a, b"), 1);

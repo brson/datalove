@@ -426,12 +426,9 @@ impl<'db> Parser<'db> {
     /// `,,` separates slabs (3rd axis).
     /// `,,,` separates blocks (4th axis), etc.
     fn parse_tensor_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {
-        // Filter to non-whitespace tokens for comma-level scanning.
-        let tokens_no_ws: Vec<_> = iter
-            .filter_map(|t| t.without_space())
-            .collect();
+        let tokens: Vec<_> = iter.collect();
 
-        let (header, body) = split::split_tensor_header(self.text(), tokens_no_ws);
+        let (header, body) = split::split_tensor_header(self.text(), tokens);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),
@@ -529,7 +526,7 @@ impl<'db> Parser<'db> {
 
     fn parse_table_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {
         // Split by row delimiters (newline in whitespace, or semicolon).
-        let groups = split::split_lines(self.text(), iter);
+        let groups = split::split_lines(iter);
         self.report_stray_delimiters(&groups, "rows");
         let rows = split::nonempty_groups(groups);
 
