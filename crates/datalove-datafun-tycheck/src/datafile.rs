@@ -35,7 +35,7 @@ pub fn data_file_type<'db>(
 ) -> Result<datalit::tycheck::Type<'db>, Vec<String>> {
     let source = *query.source(db);
     let expr = datalit::parser::parse(db, source).expr(db);
-    let resolved = datalit::resolve::resolve_names(db, source, expr);
+    let resolved = datalit::resolve::resolve_names(db, source, expr.clone());
     let result = datalit::tycheck::type_check_with_expected(db, expr, resolved, query.expected(db).clone());
     let errors: Vec<String> = result.errors(db).iter()
         .map(|entry| describe(&entry.error(db)))

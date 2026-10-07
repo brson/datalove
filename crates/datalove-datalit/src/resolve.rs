@@ -7,7 +7,7 @@ use crate::ast::*;
 #[salsa::tracked]
 pub struct ResolvedExpr<'db> {
     /// Original expression.
-    #[returns(copy)]
+    #[returns(clone)]
     pub expr: ExprFull<'db>,
 
     /// Source for on-demand span lookup.

@@ -126,7 +126,7 @@ fn error_kinds(errors: Vec<String>) -> Vec<String> {
 fn datalit_errors(db: &datalove_datafun_compiler::Database, ty: &str, literal: &str) -> Vec<String> {
     let src = bct::input::Source::new(db, format!(": {ty} / {literal}"));
     let parsed = datalove_datalit::parser::parse_integration_test(db, src);
-    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed);
+    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.clone());
     let result = datalove_datalit::tycheck::type_check(db, parsed, resolved);
 
     error_kinds(result.errors(db).iter().map(|e| format!("{:?}", e.error(db))).collect())

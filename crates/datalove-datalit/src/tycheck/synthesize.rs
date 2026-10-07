@@ -12,12 +12,10 @@ use super::types::*;
 /// Synthesize a type for an expression.
 pub fn synthesize<'db>(
     ctx: &mut TypeContext<'db>,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-
     // Rule: Syn-TypedExpr - if type hint present, check against it.
-    if let Some(type_hint) = expr.type_hint(db) {
+    if let Some(type_hint) = expr.type_hint() {
         let expected_type = ctx.convert_hint(expr, &type_hint)?;
         check(ctx, expr, &expected_type)?;
         return Ok(expected_type);
@@ -32,10 +30,10 @@ pub fn synthesize<'db>(
 /// itself, having already weighed the hint against what was expected.
 pub fn synthesize_unhinted<'db>(
     ctx: &mut TypeContext<'db>,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    let expr_inner = expr.expr(db);
+    let expr_inner = expr.expr();
 
     let ty = match &expr_inner {
         // Rule: Syn-Bool
@@ -57,7 +55,7 @@ pub fn synthesize_unhinted<'db>(
         Expr::AnonTuple(t) => {
             let mut element_types = Vec::new();
             for elem in &t.elements {
-                let elem_type = synthesize(ctx, *elem)?;
+                let elem_type = synthesize(ctx, elem)?;
                 element_types.push(elem_type);
             }
             Type::AnonTuple(TypeAnonTuple { fields: element_types })
@@ -67,7 +65,7 @@ pub fn synthesize_unhinted<'db>(
         Expr::AnonStruct(s) => {
             let mut field_types = Vec::new();
             for field in &s.fields {
-                let field_type = synthesize(ctx, field.value)?;
+                let field_type = synthesize(ctx, &field.value)?;
                 field_types.push(TypeNamedField { name: field.name, ty: Box::new(field_type) });
             }
             Type::AnonStruct(TypeAnonStruct { fields: field_types })
@@ -79,12 +77,12 @@ pub fn synthesize_unhinted<'db>(
                 return Ok(empty_list_type());
             }
 
-            let first_type = synthesize(ctx, l.elements[0])?;
+            let first_type = synthesize(ctx, &l.elements[0])?;
 
             for elem in &l.elements[1..] {
-                let elem_type = synthesize(ctx, *elem)?;
+                let elem_type = synthesize(ctx, elem)?;
                 if let Err(e) = check_element_compatible(db, &first_type, &elem_type) {
-                    if let Some(ts) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(elem) {
                         if let TypeError::TypeMismatch { expected, actual } = &e {
                             DiagnosticBuilder::error(db, "mismatched types in list")
                                 .code("T018")
@@ -106,12 +104,12 @@ pub fn synthesize_unhinted<'db>(
                 return Ok(empty_set_type());
             }
 
-            let first_type = synthesize(ctx, s.elements[0])?;
+            let first_type = synthesize(ctx, &s.elements[0])?;
 
             for elem in &s.elements[1..] {
-                let elem_type = synthesize(ctx, *elem)?;
+                let elem_type = synthesize(ctx, elem)?;
                 if let Err(e) = check_element_compatible(db, &first_type, &elem_type) {
-                    if let Some(ts) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(elem) {
                         if let TypeError::TypeMismatch { expected, actual } = &e {
                             DiagnosticBuilder::error(db, "mismatched types in set")
                                 .code("T019")
@@ -134,15 +132,15 @@ pub fn synthesize_unhinted<'db>(
             }
 
             let first_entry = &m.entries[0];
-            let first_key_type = synthesize(ctx, first_entry.key)?;
-            let first_value_type = synthesize(ctx, first_entry.value)?;
+            let first_key_type = synthesize(ctx, &first_entry.key)?;
+            let first_value_type = synthesize(ctx, &first_entry.value)?;
 
             for entry in &m.entries[1..] {
-                let key_type = synthesize(ctx, entry.key)?;
-                let value_type = synthesize(ctx, entry.value)?;
+                let key_type = synthesize(ctx, &entry.key)?;
+                let value_type = synthesize(ctx, &entry.value)?;
 
                 if let Err(e) = check_element_compatible(db, &first_key_type, &key_type) {
-                    if let Some(ts) = ctx.get_span(entry.key) {
+                    if let Some(ts) = ctx.get_span(&entry.key) {
                         if let TypeError::TypeMismatch { expected, actual } = &e {
                             DiagnosticBuilder::error(db, "mismatched key types in map")
                                 .code("T020")
@@ -155,7 +153,7 @@ pub fn synthesize_unhinted<'db>(
                 }
 
                 if let Err(e) = check_element_compatible(db, &first_value_type, &value_type) {
-                    if let Some(ts) = ctx.get_span(entry.value) {
+                    if let Some(ts) = ctx.get_span(&entry.value) {
                         if let TypeError::TypeMismatch { expected, actual } = &e {
                             DiagnosticBuilder::error(db, "mismatched value types in map")
                                 .code("T021")
@@ -173,38 +171,38 @@ pub fn synthesize_unhinted<'db>(
 
         // Rule: Syn-Some
         Expr::Some(s) => {
-            let inner_type = synthesize(ctx, s.payload)?;
+            let inner_type = synthesize(ctx, &s.payload)?;
             Type::Option(TypeOption { inner_type: Box::new(inner_type) })
         }
 
         // Rule: Syn-Ok
         Expr::Ok(o) => {
-            let inner_type = synthesize(ctx, o.payload)?;
+            let inner_type = synthesize(ctx, &o.payload)?;
             Type::Result(TypeResult { inner_type: Box::new(inner_type) })
         }
 
         // Rule: Syn-Data - the payload has a type of its own, which is the
         // type the data carries.
         Expr::Data(d) => {
-            synthesize(ctx, d.value)?;
+            synthesize(ctx, &d.value)?;
             Type::Data
         }
 
         // Rule: Syn-Error
         Expr::Error(e) => {
-            synthesize(ctx, e.value)?;
+            synthesize(ctx, &e.value)?;
             Type::Error
         }
 
         // Rule: Syn-Group
-        Expr::Group(g) => synthesize(ctx, g.inner)?,
+        Expr::Group(g) => synthesize(ctx, &g.inner)?,
 
         // Rule: Syn-Atom
         Expr::Atom(a) => Type::Atom(TypeAtom { name: a.name }),
 
         // Rule: Syn-Term
         Expr::Term(t) => {
-            let payload = synthesize(ctx, t.payload)?;
+            let payload = synthesize(ctx, &t.payload)?;
             Type::Term(TypeTerm { name: t.name, payload: Box::new(payload) })
         }
 
@@ -246,12 +244,12 @@ pub fn synthesize_unhinted<'db>(
                 return Err(e);
             }
 
-            let first_type = synthesize(ctx, t.elements[0])?;
+            let first_type = synthesize(ctx, &t.elements[0])?;
 
             for elem in &t.elements[1..] {
-                let elem_type = synthesize(ctx, *elem)?;
+                let elem_type = synthesize(ctx, elem)?;
                 if let Err(e) = check_element_compatible(db, &first_type, &elem_type) {
-                    if let Some(ts) = ctx.get_span(*elem) {
+                    if let Some(ts) = ctx.get_span(elem) {
                         if let TypeError::TypeMismatch { expected, actual } = &e {
                             DiagnosticBuilder::error(db, "mismatched types in tensor")
                                 .code("T052")
@@ -290,16 +288,16 @@ pub fn synthesize_unhinted<'db>(
 
             let column_types = match t.rows.first() {
                 Some(first) => first.elements.iter()
-                    .map(|elem| synthesize(ctx, *elem))
+                    .map(|elem| synthesize(ctx, elem))
                     .collect::<Result<Vec<_>, _>>()?,
                 None => vec![unit_type(); columns],
             };
 
             for row in t.rows.iter().skip(1) {
                 for ((elem, column_type), name) in row.elements.iter().zip(&column_types).zip(&t.header) {
-                    let elem_type = synthesize(ctx, *elem)?;
+                    let elem_type = synthesize(ctx, elem)?;
                     if let Err(e) = check_element_compatible(db, column_type, &elem_type) {
-                        if let Some(ts) = ctx.get_span(*elem) {
+                        if let Some(ts) = ctx.get_span(elem) {
                             if let TypeError::TypeMismatch { expected, actual } = &e {
                                 DiagnosticBuilder::error(db, "mismatched types in table column")
                                     .code("T060")

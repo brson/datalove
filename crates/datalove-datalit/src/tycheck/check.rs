@@ -13,15 +13,15 @@ use super::types::*;
 /// Check an expression against an expected type.
 pub fn check<'db>(
     ctx: &mut TypeContext<'db>,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     expected: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
-    let expr_inner = expr.expr(db);
+    let expr_inner = expr.expr();
 
     // Rule: Check-Hinted - a hint says what the expression is, and it has to
     // be what is expected. Nothing converts on the way from one to the other.
-    if let Some(type_hint) = expr.type_hint(db) {
+    if let Some(type_hint) = expr.type_hint() {
         let hinted = ctx.convert_hint(expr, &type_hint)?;
         if !types_equivalent(db, &hinted, expected) {
             if let Some(ts) = ctx.get_span(expr) {
@@ -40,26 +40,26 @@ pub fn check<'db>(
         }
     }
 
-    match (expr_inner.clone(), expected) {
+    match (expr_inner, expected) {
         // Rule: Check-Group
-        (Expr::Group(g), _) => check(ctx, g.inner, expected),
+        (Expr::Group(g), _) => check(ctx, &g.inner, expected),
 
         // Rule: Check-None
         (Expr::None, Type::Option(_)) => Ok(()),
 
         // Rule: Check-Some - explicit some constructor
         (Expr::Some(s), Type::Option(opt)) => {
-            check(ctx, s.payload, &opt.inner_type)
+            check(ctx, &s.payload, &opt.inner_type)
         }
 
         // Rule: Check-Ok - explicit ok constructor
         (Expr::Ok(o), Type::Result(res)) => {
-            check(ctx, o.payload, &res.inner_type)
+            check(ctx, &o.payload, &res.inner_type)
         }
 
         // Rule: Check-Er - the payload is the error, and an error is written
         // as one, as datafun has it.
-        (Expr::Er(e), Type::Result(_)) => check(ctx, e.payload, &Type::Error),
+        (Expr::Er(e), Type::Result(_)) => check(ctx, &e.payload, &Type::Error),
 
         // `none` and `er` have no type of their own to report, so what they
         // are checked against is what is wrong.
@@ -128,7 +128,7 @@ pub fn check<'db>(
             }
 
             for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
-                check(ctx, *elem, expected_field)?;
+                check(ctx, elem, expected_field)?;
             }
 
             Ok(())
@@ -166,7 +166,7 @@ pub fn check<'db>(
                     return Err(TypeError::FieldOrderMismatch);
                 }
 
-                check(ctx, field.value, &expected_field.ty)?;
+                check(ctx, &field.value, &expected_field.ty)?;
             }
 
             Ok(())
@@ -176,7 +176,7 @@ pub fn check<'db>(
         // Rule: Check-List
         (Expr::List(l), Type::List(expected_list)) => {
             for elem in &l.elements {
-                check(ctx, *elem, &expected_list.element_type)?;
+                check(ctx, elem, &expected_list.element_type)?;
             }
             Ok(())
         }
@@ -184,8 +184,8 @@ pub fn check<'db>(
         // Rule: Check-Map
         (Expr::Map(m), Type::Map(expected_map)) => {
             for entry in &m.entries {
-                check(ctx, entry.key, &expected_map.key_type)?;
-                check(ctx, entry.value, &expected_map.value_type)?;
+                check(ctx, &entry.key, &expected_map.key_type)?;
+                check(ctx, &entry.value, &expected_map.value_type)?;
             }
             Ok(())
         }
@@ -193,7 +193,7 @@ pub fn check<'db>(
         // Rule: Check-Set
         (Expr::Set(s), Type::Set(expected_set)) => {
             for elem in &s.elements {
-                check(ctx, *elem, &expected_set.element_type)?;
+                check(ctx, elem, &expected_set.element_type)?;
             }
             Ok(())
         }
@@ -231,7 +231,7 @@ pub fn check<'db>(
             }
 
             for elem in &t.elements {
-                check(ctx, *elem, &expected_tensor.element_type)?;
+                check(ctx, elem, &expected_tensor.element_type)?;
             }
 
             Ok(())
@@ -285,7 +285,7 @@ pub fn check<'db>(
                 }
 
                 for (elem, expected_col) in row.elements.iter().zip(expected_columns.iter()) {
-                    check(ctx, *elem, &expected_col.ty)?;
+                    check(ctx, elem, &expected_col.ty)?;
                 }
             }
 
@@ -315,7 +315,7 @@ pub fn check<'db>(
         // Rule: Check-Term
         (Expr::Term(t), Type::Term(expected_term)) => {
             if t.name == expected_term.name {
-                check(ctx, t.payload, &expected_term.payload)
+                check(ctx, &t.payload, &expected_term.payload)
             } else {
                 Err(variant_mismatch(ctx, expr, expected, &format!("term {}", t.name.as_str(db)), "term name mismatch"))
             }
@@ -327,13 +327,13 @@ pub fn check<'db>(
                 .find(|v| v.name == t.name)
                 .and_then(|v| v.payload.as_deref());
             match payload_ty {
-                Some(payload_ty) => check(ctx, t.payload, payload_ty),
+                Some(payload_ty) => check(ctx, &t.payload, payload_ty),
                 None => Err(variant_mismatch(ctx, expr, expected, &format!("term {}", t.name.as_str(db)), "term is not a variant of this enum")),
             }
         }
 
         // Rule: Check-Enum
-        (Expr::Enum(e), Type::Enum(_)) => check(ctx, e.variant, expected),
+        (Expr::Enum(e), Type::Enum(_)) => check(ctx, &e.variant, expected),
 
         (Expr::Enum(_), _) => {
             if let Some(ts) = ctx.get_span(expr) {
@@ -351,10 +351,10 @@ pub fn check<'db>(
 
         // Rule: Check-Data - the payload has a type of its own, which is the
         // type the data carries.
-        (Expr::Data(d), Type::Data) => synthesize(ctx, d.value).map(|_| ()),
+        (Expr::Data(d), Type::Data) => synthesize(ctx, &d.value).map(|_| ()),
 
         // Rule: Check-Error
-        (Expr::Error(e), Type::Error) => synthesize(ctx, e.value).map(|_| ()),
+        (Expr::Error(e), Type::Error) => synthesize(ctx, &e.value).map(|_| ()),
 
         // Otherwise, try subsumption.
         _ => {
@@ -382,7 +382,7 @@ pub fn check<'db>(
 /// Report a `none` or `er` checked against a type it is no value of.
 fn constructor_mismatch<'db>(
     ctx: &TypeContext<'db>,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     expected: &Type<'db>,
     constructor: &str,
 ) -> TypeError {
@@ -405,7 +405,7 @@ fn constructor_mismatch<'db>(
 /// Report an atom or term that is not the one the expected type names.
 fn variant_mismatch<'db>(
     ctx: &TypeContext<'db>,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     expected: &Type<'db>,
     actual: &str,
     note: &str,
@@ -426,7 +426,7 @@ fn variant_mismatch<'db>(
 }
 
 /// Emit a diagnostic for integer literal out of range.
-fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &Type<'db>) {
+fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: &ExprFull<'db>, ty: &Type<'db>) {
     let db = ctx.db;
     let (code, note) = int_type_range_info(ty);
     let type_name = type_to_string(db, ty);
@@ -440,7 +440,7 @@ fn emit_int_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &T
 }
 
 /// Emit a diagnostic for hex literal out of range.
-fn emit_hex_range_error<'db>(ctx: &TypeContext<'db>, expr: ExprFull<'db>, ty: &Type<'db>) {
+fn emit_hex_range_error<'db>(ctx: &TypeContext<'db>, expr: &ExprFull<'db>, ty: &Type<'db>) {
     let db = ctx.db;
     let (code, note) = hex_type_range_info(ty);
     let message = match ty {

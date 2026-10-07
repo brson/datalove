@@ -138,7 +138,7 @@ impl Mutation {
         expr: ExprFull<'db>,
         rng: &mut impl Rng,
     ) -> Option<MutationResult> {
-        let source = pretty_print(db, expr);
+        let source = pretty_print(db, &expr);
 
         match self {
             Mutation::DeleteOpeningBracket => apply_delete_opening_bracket(&source, rng),
@@ -148,7 +148,7 @@ impl Mutation {
             Mutation::OutOfRangeInt => apply_out_of_range_int(db, expr, rng),
             Mutation::WrongElementType => apply_wrong_element_type(db, expr, rng),
             Mutation::ArityMismatch => apply_arity_mismatch(db, expr, rng),
-            Mutation::RemoveTypeHint => apply_remove_type_hint(db, expr),
+            Mutation::RemoveTypeHint => apply_remove_type_hint(expr),
             Mutation::DuplicateField => apply_duplicate_field(db, expr),
             Mutation::WrongFieldName => apply_wrong_field_name(db, expr),
             Mutation::DeleteClosingBracket => apply_delete_closing_bracket(&source, rng),
@@ -266,7 +266,7 @@ fn apply_out_of_range_int<'db>(
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
     // Check if the expression has a type hint for a fixed-width integer type.
-    let th = expr.type_hint(db)?;
+    let th = expr.type_hint()?;
 
     // Determine the out-of-range value based on type.
     let (out_of_range_value, error_code) = match th {
@@ -282,7 +282,7 @@ fn apply_out_of_range_int<'db>(
     };
 
     // Check if the expression is an integer literal.
-    let inner_expr = expr.expr(db);
+    let inner_expr = expr.expr();
     match inner_expr {
         Expr::Int(_) | Expr::Hex(_) => {}
         _ => return None,
@@ -310,7 +310,7 @@ fn apply_wrong_element_type<'db>(
     expr: ExprFull<'db>,
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
-    let inner_expr = expr.expr(db);
+    let inner_expr = expr.expr();
     
 
     // Check if this is a list with at least one element.
@@ -321,8 +321,8 @@ fn apply_wrong_element_type<'db>(
         }
 
         // Get the type of first element to determine what's "wrong".
-        let first_elem = elements[0];
-        let first_expr = first_elem.expr(db);
+        let first_elem = &elements[0];
+        let first_expr = first_elem.expr();
 
         // Determine the wrong element to insert based on first element's type.
         let wrong_elem_str = match first_expr {
@@ -345,7 +345,7 @@ fn apply_wrong_element_type<'db>(
         };
 
         // Build list source via string manipulation.
-        let elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, *e)).collect();
+        let elem_strs: Vec<String> = elements.iter().map(|e| pretty_print(db, &e)).collect();
 
         // Build type prefix.
         
@@ -356,7 +356,7 @@ fn apply_wrong_element_type<'db>(
         all_elems.push(wrong_elem_str);
         let list_body = format!("{}[{}]", "", all_elems.join(", "));
 
-        let source = if let Some(th) = expr.type_hint(db) {
+        let source = if let Some(th) = expr.type_hint() {
             let mut type_str = String::new();
             pretty_type_hint(db, th, &mut type_str);
             format!(": {} / {}", type_str, list_body)
@@ -382,8 +382,8 @@ fn apply_arity_mismatch<'db>(
     expr: ExprFull<'db>,
     _rng: &mut impl Rng,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
+    let type_hint = expr.type_hint()?;
+    let inner_expr = expr.expr();
     
 
     
@@ -399,7 +399,7 @@ fn apply_arity_mismatch<'db>(
             // Pretty-print elements, then remove last one.
             let elem_strs: Vec<String> = elements[..elements.len() - 1]
                 .iter()
-                .map(|e| pretty_print(db, *e))
+                .map(|e| pretty_print(db, &e))
                 .collect();
 
             // Build type hint string.
@@ -429,7 +429,7 @@ fn apply_arity_mismatch<'db>(
                 .iter()
                 .map(|f| {
                     let name = f.name.as_str(db);
-                    let value = pretty_print(db, f.value);
+                    let value = pretty_print(db, &f.value);
                     format!("{}: {}", name, value)
                 })
                 .collect();
@@ -455,11 +455,10 @@ fn apply_arity_mismatch<'db>(
 ///
 /// Uses source-level string manipulation to avoid salsa tracked function issues.
 fn apply_remove_type_hint<'db>(
-    db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let _type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
+    let _type_hint = expr.type_hint()?;
+    let inner_expr = expr.expr();
     
 
     // Check if this is an expression that requires a type hint.
@@ -523,8 +522,8 @@ fn apply_duplicate_field<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
+    let type_hint = expr.type_hint()?;
+    let inner_expr = expr.expr();
     
 
     
@@ -540,12 +539,12 @@ fn apply_duplicate_field<'db>(
         let first_name = fields[0].name.as_str(db);
         let mut field_strs: Vec<String> = fields.iter().map(|f| {
             let name = f.name.as_str(db);
-            let value = pretty_print(db, f.value);
+            let value = pretty_print(db, &f.value);
             format!("{} = {}", name, value)
         }).collect();
 
         // Replace second field name with first field name.
-        let second_value = pretty_print(db, fields[1].value);
+        let second_value = pretty_print(db, &fields[1].value);
         field_strs[1] = format!("{} = {}", first_name, second_value);
 
         // Build type hint string.
@@ -569,8 +568,8 @@ fn apply_wrong_field_name<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
+    let type_hint = expr.type_hint()?;
+    let inner_expr = expr.expr();
     
 
     
@@ -585,11 +584,11 @@ fn apply_wrong_field_name<'db>(
         // Change first field name to nonexistent.
         let mut field_strs: Vec<String> = fields.iter().map(|f| {
             let name = f.name.as_str(db);
-            let value = pretty_print(db, f.value);
+            let value = pretty_print(db, &f.value);
             format!("{}: {}", name, value)
         }).collect();
 
-        let first_value = pretty_print(db, fields[0].value);
+        let first_value = pretty_print(db, &fields[0].value);
         field_strs[0] = format!("nonexistent_field_xyz: {}", first_value);
 
         // Build type hint string.
@@ -614,8 +613,8 @@ fn apply_swap_map_key_value<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFull<'db>,
 ) -> Option<MutationResult> {
-    let type_hint = expr.type_hint(db)?;
-    let inner_expr = expr.expr(db);
+    let type_hint = expr.type_hint()?;
+    let inner_expr = expr.expr();
     
 
     // Check if this is a map with at least one entry where key/value types differ.
@@ -638,8 +637,8 @@ fn apply_swap_map_key_value<'db>(
 
         // Build map entries with first entry's key/value swapped.
         let entry_strs: Vec<String> = entries.iter().enumerate().map(|(i, e)| {
-            let key_pp = pretty_print(db, e.key);
-            let val_pp = pretty_print(db, e.value);
+            let key_pp = pretty_print(db, &e.key);
+            let val_pp = pretty_print(db, &e.value);
             if i == 0 {
                 // Swap key and value for first entry.
                 format!("{}: {}", val_pp, key_pp)

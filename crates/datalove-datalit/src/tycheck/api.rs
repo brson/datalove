@@ -20,7 +20,7 @@ pub struct TypeErrorEntry<'db> {
 #[salsa::tracked]
 pub struct TypecheckResult<'db> {
     /// The root expression.
-    #[returns(copy)]
+    #[returns(clone)]
     pub root_expr: ExprFull<'db>,
 
     /// The root expression type (if successfully synthesized).
@@ -62,7 +62,7 @@ pub fn type_check_with_expected<'db>(
 
     let root_type = if let Some(expected_ty) = expected {
         // Use checking mode when expected type is provided.
-        match check(&mut ctx, expr, &expected_ty) {
+        match check(&mut ctx, &expr, &expected_ty) {
             Ok(()) => Some(expected_ty),
             Err(e) => {
                 ctx.add_error(e);
@@ -71,7 +71,7 @@ pub fn type_check_with_expected<'db>(
         }
     } else {
         // Use synthesis mode when no expected type.
-        match synthesize(&mut ctx, expr) {
+        match synthesize(&mut ctx, &expr) {
             Ok(ty) => Some(ty),
             Err(e) => {
                 ctx.add_error(e);

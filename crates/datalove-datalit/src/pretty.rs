@@ -5,10 +5,9 @@ use crate::tycheck::*;
 /// Pretty print a datalove literal expression.
 ///
 /// Returns a canonical string representation that can be parsed back.
-#[salsa::tracked(returns(clone))]
 pub fn pretty_print<'db>(
     db: &'db dyn crate::Db,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
 ) -> String {
     let mut output = String::new();
     pretty_expr_full(db, expr, &mut output, 0);
@@ -245,19 +244,19 @@ fn pretty_type<'db>(
 
 fn pretty_expr_full<'db>(
     db: &'db dyn crate::Db,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     out: &mut String,
     indent: usize,
 ) {
     // Print type hint if present.
-    if let Some(type_hint) = expr.type_hint(db) {
+    if let Some(type_hint) = expr.type_hint() {
         out.push_str(": ");
         pretty_type_hint(db, type_hint.clone(), out);
         out.push_str(" / ");
     }
 
     // Print expression.
-    let expr_inner = expr.expr(db);
+    let expr_inner = expr.expr();
     pretty_expr(db, expr_inner, out, indent);
 }
 
@@ -422,15 +421,15 @@ fn pretty_expr<'db>(
         Expr::None => out.push_str("none"),
         Expr::Some(s) => {
             out.push_str("some ");
-            pretty_expr_full(db, s.payload, out, indent);
+            pretty_expr_full(db, &s.payload, out, indent);
         }
         Expr::Ok(o) => {
             out.push_str("ok ");
-            pretty_expr_full(db, o.payload, out, indent);
+            pretty_expr_full(db, &o.payload, out, indent);
         }
         Expr::Er(e) => {
             out.push_str("er ");
-            pretty_expr_full(db, e.payload, out, indent);
+            pretty_expr_full(db, &e.payload, out, indent);
         }
 
         Expr::Int(i) => {
@@ -456,7 +455,7 @@ fn pretty_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_expr_full(db, *elem, out, indent);
+                pretty_expr_full(db, elem, out, indent);
             }
             // Trailing comma for 1-tuples to distinguish from grouping parens.
             if elements.len() == 1 {
@@ -474,7 +473,7 @@ fn pretty_expr<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(" = ");
-                pretty_expr_full(db, field.value, out, indent);
+                pretty_expr_full(db, &field.value, out, indent);
             }
             out.push('}');
         }
@@ -487,7 +486,7 @@ fn pretty_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_expr_full(db, *elem, out, indent);
+                pretty_expr_full(db, elem, out, indent);
             }
             out.push(']');
         }
@@ -499,9 +498,9 @@ fn pretty_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_expr_full(db, entry.key, out, indent);
+                pretty_expr_full(db, &entry.key, out, indent);
                 out.push_str(" = ");
-                pretty_expr_full(db, entry.value, out, indent);
+                pretty_expr_full(db, &entry.value, out, indent);
             }
             out.push('}');
         }
@@ -513,7 +512,7 @@ fn pretty_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                pretty_expr_full(db, *elem, out, indent);
+                pretty_expr_full(db, elem, out, indent);
             }
             out.push('}');
         }
@@ -529,7 +528,7 @@ fn pretty_expr<'db>(
                 out.push('|');
                 for elem in &t.elements {
                     out.push(' ');
-                    pretty_expr_full(db, *elem, out, indent);
+                    pretty_expr_full(db, elem, out, indent);
                 }
             } else if t.elements.is_empty() {
                 // `[| |]`, the empty tensor of rank 1.
@@ -542,12 +541,12 @@ fn pretty_expr<'db>(
 
         Expr::Data(d) => {
             out.push_str("data ");
-            pretty_expr_full(db, d.value, out, indent);
+            pretty_expr_full(db, &d.value, out, indent);
         }
 
         Expr::Error(e) => {
             out.push_str("error ");
-            pretty_expr_full(db, e.value, out, indent);
+            pretty_expr_full(db, &e.value, out, indent);
         }
 
         Expr::Atom(a) => {
@@ -559,18 +558,18 @@ fn pretty_expr<'db>(
             out.push_str("term ");
             out.push_str(t.name.as_str(db));
             out.push(' ');
-            pretty_expr_full(db, t.payload, out, indent);
+            pretty_expr_full(db, &t.payload, out, indent);
         }
 
         Expr::Enum(e) => {
             out.push_str("enum { ");
-            pretty_expr_full(db, e.variant, out, indent);
+            pretty_expr_full(db, &e.variant, out, indent);
             out.push_str(" }");
         }
 
         Expr::Group(g) => {
             out.push('(');
-            pretty_expr_full(db, g.inner, out, indent);
+            pretty_expr_full(db, &g.inner, out, indent);
             out.push(')');
         }
 
@@ -596,7 +595,7 @@ fn pretty_expr<'db>(
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    pretty_expr_full(db, *elem, out, indent);
+                    pretty_expr_full(db, elem, out, indent);
                 }
             }
             out.push_str(" |}");
@@ -644,7 +643,7 @@ fn pretty_tensor_group<'db>(
             if i > 0 {
                 out.push(' ');
             }
-            pretty_expr_full(db, *elem, out, indent);
+            pretty_expr_full(db, elem, out, indent);
         }
         return;
     }

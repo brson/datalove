@@ -1752,6 +1752,7 @@ dependencies = [
  "getrandom 0.2.16",
  "num-traits",
  "rand 0.8.5",
+ "rustc-hash",
  "rustmax 0.0.10",
  "salsa",
  "serde",

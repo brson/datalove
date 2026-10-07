@@ -7,7 +7,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let source = bct::input::Source::new(&db, source_text.S());
 
     let ast = datalove_datalit::parser::parse_integration_test(&db, source);
-    Ok(datalove_datalit::pretty::pretty_print(&db, ast))
+    Ok(datalove_datalit::pretty::pretty_print(&db, &ast))
 }
 
 fn main() {

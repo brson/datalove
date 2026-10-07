@@ -289,8 +289,8 @@ pub struct ExprParseError {
 impl ExprFull {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprFull<'db>) -> Self {
         ExprFull {
-            type_hint: ast.type_hint(db).map(|th| TypeHint::from_ast(db, th)),
-            expr: Expr::from_ast(db, ast.expr(db).clone()),
+            type_hint: ast.type_hint().map(|th| TypeHint::from_ast(db, th)),
+            expr: Expr::from_ast(db, ast.expr().clone()),
         }
     }
 }
@@ -501,7 +501,7 @@ impl ExprString {
 impl ExprAnonTuple {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprAnonTuple<'db>) -> Self {
         ExprAnonTuple {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
         }
     }
 }
@@ -527,7 +527,7 @@ impl ExprStructField {
 impl ExprList {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprList<'db>) -> Self {
         ExprList {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
         }
     }
 }
@@ -552,7 +552,7 @@ impl ExprMapEntry {
 impl ExprSet {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprSet<'db>) -> Self {
         ExprSet {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
         }
     }
 }
@@ -561,7 +561,7 @@ impl ExprTensor {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTensor<'db>) -> Self {
         ExprTensor {
             shape: ast.shape.clone(),
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
             header: ast.header,
         }
     }
@@ -579,7 +579,7 @@ impl ExprTable {
 impl ExprTableRow {
     pub fn from_ast<'db>(db: &'db dyn crate::Db, ast: crate::ast::ExprTableRow<'db>) -> Self {
         ExprTableRow {
-            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, *e)).collect(),
+            elements: ast.elements.iter().map(|e| ExprFull::from_ast(db, e.clone())).collect(),
         }
     }
 }

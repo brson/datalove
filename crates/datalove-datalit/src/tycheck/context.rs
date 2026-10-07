@@ -34,7 +34,7 @@ impl<'db> TypeContext<'db> {
     /// A bare name is an alias in datafun and nothing in datalit, which has
     /// no way to declare one. A hint that did not parse was reported by the
     /// parser.
-    pub fn convert_hint(&self, expr: ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
+    pub fn convert_hint(&self, expr: &ExprFull<'db>, hint: &TypeHint<'db>) -> Result<Type<'db>, TypeError> {
         convert_type_hint(self.db, hint).map_err(|error| {
             if let (Some(name), Some(ts)) = (first_alias(hint), self.get_span(expr)) {
                 let name = name.as_str(self.db);
@@ -52,7 +52,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the source location for an expression (on-demand).
-    pub fn get_span(&self, expr: ExprFull<'db>) -> Option<TextSpan<'db>> {
+    pub fn get_span(&self, expr: &ExprFull<'db>) -> Option<TextSpan<'db>> {
         let spans = crate::spans::datalit_spans(self.db, self.source);
         spans.get_text_span(self.db, expr)
     }

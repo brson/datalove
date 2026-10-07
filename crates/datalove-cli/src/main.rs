@@ -408,8 +408,8 @@ impl LitTycheckCommand {
             bail!("Parse error");
         }
 
-        let resolved = datalit::resolve::resolve_names(&db, source, ast);
-        let result = datalit::tycheck::type_check(&db, ast, resolved);
+        let resolved = datalit::resolve::resolve_names(&db, source, ast.clone());
+        let result = datalit::tycheck::type_check(&db, ast.clone(), resolved);
         let type_diags = datalit::tycheck::type_check::accumulated::<datalove::diagnostic::TypeDiagnostic>(&db, ast, resolved);
         render::render_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
         if !result.errors(&db).is_empty() {
@@ -460,7 +460,7 @@ impl LitPrettyCommand {
         let ast = parse_result.expr(&db);
 
         // Pretty print using the pretty printer.
-        let pretty_printed = datalit::pretty::pretty_print(&db, ast);
+        let pretty_printed = datalit::pretty::pretty_print(&db, &ast);
         println!("{}", pretty_printed);
 
         Ok(())
@@ -484,10 +484,10 @@ impl LitOpCommand {
         let expr2 = parse_result2.expr(&db);
 
         // Resolve and type check.
-        let resolved1 = datalit::resolve::resolve_names(&db, source1, expr1);
+        let resolved1 = datalit::resolve::resolve_names(&db, source1, expr1.clone());
         let typechecked1 = datalit::tycheck::type_check(&db, expr1, resolved1);
 
-        let resolved2 = datalit::resolve::resolve_names(&db, source2, expr2);
+        let resolved2 = datalit::resolve::resolve_names(&db, source2, expr2.clone());
         let typechecked2 = datalit::tycheck::type_check(&db, expr2, resolved2);
 
         // Check for type errors.

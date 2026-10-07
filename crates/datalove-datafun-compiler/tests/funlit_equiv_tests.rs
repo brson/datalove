@@ -65,7 +65,7 @@ fn test_typecheck_equiv(db: &datalove_datafun_compiler::Database, expr_text: &st
     // Parse and typecheck with datalit.
     let datalit_source = bct::input::Source::new(db, expr_text.to_string());
     let datalit_parsed = datalove_datalit::parser::parse_integration_test(db, datalit_source);
-    let datalit_resolved = datalove_datalit::resolve::resolve_names(db, datalit_source, datalit_parsed);
+    let datalit_resolved = datalove_datalit::resolve::resolve_names(db, datalit_source, datalit_parsed.clone());
     let datalit_result = datalove_datalit::tycheck::type_check(db, datalit_parsed, datalit_resolved);
     let datalit_serde = datalit_typecheck_to_serde(db, datalit_result);
 
@@ -336,7 +336,7 @@ fn test_funlit_equiv_generated_parse() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        let expr_text = datalove_datalit::pretty::pretty_print(&db, expr_full);
+        let expr_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
 
         if let Err(e) = test_parse_equiv(&db, &expr_text) {
             failures.push((seed, expr_text, e));
@@ -360,7 +360,7 @@ fn test_funlit_equiv_generated_typecheck() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        let expr_text = datalove_datalit::pretty::pretty_print(&db, expr_full);
+        let expr_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
 
         if let Err(e) = test_typecheck_equiv(&db, &expr_text) {
             failures.push((seed, expr_text, e));
@@ -384,7 +384,7 @@ fn test_funlit_equiv_roundtrip() {
 
     for seed in 0..50 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        let original_text = datalove_datalit::pretty::pretty_print(&db, expr_full);
+        let original_text = datalove_datalit::pretty::pretty_print(&db, &expr_full);
 
         // First pass.
         if let Err(e) = test_parse_equiv(&db, &original_text) {

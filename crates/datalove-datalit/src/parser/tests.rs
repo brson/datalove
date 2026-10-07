@@ -10,7 +10,7 @@ fn test_parse_bool() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("true"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     assert!(matches!(expr, ast::Expr::True));
 }
 
@@ -19,9 +19,9 @@ fn test_parse_bool_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": bool / true"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
+    let type_hint = ast.type_hint().unwrap();
     assert!(matches!(type_hint, ast::TypeHint::Bool));
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     assert!(matches!(expr, ast::Expr::True));
 }
 
@@ -30,7 +30,7 @@ fn test_parse_int() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("42"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::Int(e) => assert_eq!(e.value.as_str(db), "42"),
         _ => panic!("expected int"),
@@ -42,7 +42,7 @@ fn test_parse_tuple() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("(true, 1)"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::AnonTuple(e) => assert_eq!(e.elements.len(), 2),
         _ => panic!("expected tuple"),
@@ -54,7 +54,7 @@ fn test_parse_list() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("[1, 2, 3]"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::List(e) => assert_eq!(e.elements.len(), 3),
         _ => panic!("expected list"),
@@ -66,7 +66,7 @@ fn test_parse_float() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("1.0"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::Float(e) => assert_eq!(e.value.as_str(db), "1.0"),
         ast::Expr::Int(_) => panic!("expected float, got Int"),
@@ -87,7 +87,7 @@ fn test_parse_float_exponent() {
     ] {
         let source = Source::new(db, S(source_text));
         let ast = parse_for_test(db, source);
-        match ast.expr(db).clone() {
+        match ast.expr().clone() {
             ast::Expr::Float(e) => assert_eq!(
                 e.value.as_str(db), source_text,
                 "{source_text} did not survive parsing",
@@ -104,7 +104,7 @@ fn test_parse_not_float_exponent() {
     for source_text in ["1", "-1", "0x1e5", "1.0"] {
         let source = Source::new(db, S(source_text));
         let ast = parse_for_test(db, source);
-        let expr = ast.expr(db).clone();
+        let expr = ast.expr().clone();
         let is_exponent = matches!(&expr, ast::Expr::Float(e) if e.value.as_str(db).contains(['e', 'E']));
         assert!(!is_exponent, "{source_text} was read as having an exponent");
     }
@@ -117,7 +117,7 @@ fn test_parse_digit_separators() {
     for source_text in ["1_000", "1_000_000", "0xFF_FF", "1_0.000_1", "1.0e1_0"] {
         let source = Source::new(db, S(source_text));
         let ast = parse_for_test(db, source);
-        let text = match ast.expr(db).clone() {
+        let text = match ast.expr().clone() {
             ast::Expr::Int(e) => e.value.as_str(db).S(),
             ast::Expr::Hex(e) => e.value.as_str(db).S(),
             ast::Expr::Float(e) => e.value.as_str(db).S(),
@@ -135,7 +135,7 @@ fn test_parse_separator_needs_digits() {
         let source = Source::new(db, S(source_text));
         let ast = parse_for_test(db, source);
         let is_number = matches!(
-            ast.expr(db).clone(),
+            ast.expr().clone(),
             ast::Expr::Int(_) | ast::Expr::Hex(_) | ast::Expr::Float(_),
         );
         assert!(!is_number, "{source_text} was read as a number");
@@ -147,9 +147,9 @@ fn test_parse_float_with_type() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": f32 / 1.0"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
+    let type_hint = ast.type_hint().unwrap();
     assert!(matches!(type_hint, ast::TypeHint::F32));
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::Float(e) => assert_eq!(e.value.as_str(db), "1.0"),
         _ => panic!("expected float"),
@@ -162,7 +162,7 @@ fn test_parse_string() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(r#": string / "hello world""#));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::String(s) => {
             assert_eq!(s.value.as_str(db), r#""hello world""#);
@@ -176,12 +176,12 @@ fn test_parse_map() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": %{u32 = u32} / %{ 0 = 5, 2 = 2 }"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
+    let type_hint = ast.type_hint().unwrap();
     match type_hint {
         ast::TypeHint::Map(_) => {}
         _ => panic!("expected map type hint"),
     }
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::Map(m) => {
             assert_eq!(m.entries.len(), 2);
@@ -195,12 +195,12 @@ fn test_parse_set() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S(": #{u32} / #{ 1, 2, 3 }"));
     let ast = parse_for_test(db, source);
-    let type_hint = ast.type_hint(db).unwrap();
+    let type_hint = ast.type_hint().unwrap();
     match type_hint {
         ast::TypeHint::Set(_) => {}
         _ => panic!("expected set type hint"),
     }
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::Set(s) => {
             assert_eq!(s.elements.len(), 3);
@@ -219,7 +219,7 @@ fn test_parse_list_multiline() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("[\n1,\n2,\n3\n]"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::List(e) => assert_eq!(e.elements.len(), 3),
         _ => panic!("expected list"),
@@ -232,7 +232,7 @@ fn test_parse_tuple_multiline() {
     let ref db = crate::Database::default();
     let source = Source::new(db, S("(\ntrue,\n1\n)"));
     let ast = parse_for_test(db, source);
-    let expr = ast.expr(db).clone();
+    let expr = ast.expr().clone();
     match expr {
         ast::Expr::AnonTuple(e) => assert_eq!(e.elements.len(), 2),
         _ => panic!("expected tuple"),

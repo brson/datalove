@@ -67,7 +67,7 @@ fn test_generated_exprs_typecheck() {
 
         // Generated ASTs don't have a real source, use empty source.
         let dummy_source = bct::input::Source::new(&db, String::new());
-        let resolved = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full);
+        let resolved = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full.clone());
         let typechecked = datalove_datalit::tycheck::type_check(&db, expr_full, resolved);
 
         let has_errors = !typechecked.errors(&db).is_empty();
@@ -87,18 +87,18 @@ fn test_pretty_print_roundtrip() {
     for seed in 0..50 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
 
-        let pretty = datalove_datalit::pretty::pretty_print(&db, expr_full);
+        let pretty = datalove_datalit::pretty::pretty_print(&db, &expr_full);
         let pretty_clone = pretty.clone();
         let source = bct::input::Source::new(&db, pretty.into());
         let parsed = datalove_datalit::parser::parse_integration_test(&db, source);
 
         // Generated ASTs don't have a real source, use empty source.
         let dummy_source = bct::input::Source::new(&db, String::new());
-        let resolved_orig = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full);
-        let resolved_parsed = datalove_datalit::resolve::resolve_names(&db, source, parsed);
+        let resolved_orig = datalove_datalit::resolve::resolve_names(&db, dummy_source, expr_full.clone());
+        let resolved_parsed = datalove_datalit::resolve::resolve_names(&db, source, parsed.clone());
 
-        let typechecked_orig = datalove_datalit::tycheck::type_check(&db, expr_full, resolved_orig);
-        let typechecked_parsed = datalove_datalit::tycheck::type_check(&db, parsed, resolved_parsed);
+        let typechecked_orig = datalove_datalit::tycheck::type_check(&db, expr_full.clone(), resolved_orig);
+        let typechecked_parsed = datalove_datalit::tycheck::type_check(&db, parsed.clone(), resolved_parsed);
 
         let has_errors_orig = !typechecked_orig.errors(&db).is_empty();
         let has_errors_parsed = !typechecked_parsed.errors(&db).is_empty();
@@ -111,8 +111,8 @@ fn test_pretty_print_roundtrip() {
             eprintln!("Original typechecked OK: {}", !has_errors_orig);
 
             // Check if parse matches
-            let orig_pretty = datalove_datalit::pretty::pretty_print(&db, expr_full);
-            let reparsed_pretty = datalove_datalit::pretty::pretty_print(&db, parsed);
+            let orig_pretty = datalove_datalit::pretty::pretty_print(&db, &expr_full);
+            let reparsed_pretty = datalove_datalit::pretty::pretty_print(&db, &parsed);
             eprintln!("Original pretty: {}", orig_pretty);
             eprintln!("Reparsed pretty: {}", reparsed_pretty);
             eprintln!("Pretty-prints match: {}", orig_pretty == reparsed_pretty);
@@ -149,7 +149,7 @@ fn test_max_collection_size_enforced() {
                 assert!(elements.len() <= max_size,
                     "List has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).clone(), max_size);
+                    check_collection_size(db, &elem.expr().clone(), max_size);
                 }
             }
             Expr::Map(map) => {
@@ -157,8 +157,8 @@ fn test_max_collection_size_enforced() {
                 assert!(entries.len() <= max_size,
                     "Map has {} entries, max is {}", entries.len(), max_size);
                 for entry in entries {
-                    check_collection_size(db, &entry.key.expr(db).clone(), max_size);
-                    check_collection_size(db, &entry.value.expr(db).clone(), max_size);
+                    check_collection_size(db, &entry.key.expr().clone(), max_size);
+                    check_collection_size(db, &entry.value.expr().clone(), max_size);
                 }
             }
             Expr::Set(set) => {
@@ -166,7 +166,7 @@ fn test_max_collection_size_enforced() {
                 assert!(elements.len() <= max_size,
                     "Set has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).clone(), max_size);
+                    check_collection_size(db, &elem.expr().clone(), max_size);
                 }
             }
             Expr::Tensor(tensor) => {
@@ -174,24 +174,24 @@ fn test_max_collection_size_enforced() {
                 assert!(elements.len() <= max_size,
                     "Tensor has {} elements, max is {}", elements.len(), max_size);
                 for elem in elements {
-                    check_collection_size(db, &elem.expr(db).clone(), max_size);
+                    check_collection_size(db, &elem.expr().clone(), max_size);
                 }
             }
             Expr::AnonTuple(tuple) => {
                 for elem in tuple.elements.clone() {
-                    check_collection_size(db, &elem.expr(db).clone(), max_size);
+                    check_collection_size(db, &elem.expr().clone(), max_size);
                 }
             }
             Expr::AnonStruct(st) => {
                 for field in st.fields.clone() {
-                    check_collection_size(db, &field.value.expr(db).clone(), max_size);
+                    check_collection_size(db, &field.value.expr().clone(), max_size);
                 }
             }
             Expr::Data(d) => {
-                check_collection_size(db, &d.value.expr(db).clone(), max_size);
+                check_collection_size(db, &d.value.expr().clone(), max_size);
             }
             Expr::Error(e) => {
-                check_collection_size(db, &e.value.expr(db).clone(), max_size);
+                check_collection_size(db, &e.value.expr().clone(), max_size);
             }
             _ => {}
         }
@@ -199,7 +199,7 @@ fn test_max_collection_size_enforced() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        check_collection_size(&db, &expr_full.expr(&db).clone(), config.max_collection_size);
+        check_collection_size(&db, &expr_full.expr().clone(), config.max_collection_size);
     }
 }
 
@@ -231,7 +231,7 @@ fn test_numeric_corner_cases_generated() {
     for seed in 0..1000 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
 
-        match expr_full.expr(&db).clone() {
+        match expr_full.expr().clone() {
             Expr::Float(f) => {
                 let val_str = f.value.as_str(&db);
                 // Note: NaN and infinity not tested because parser doesn't support them yet.
@@ -316,7 +316,7 @@ fn test_type_weight_configuration() {
 
     for seed in 0..100 {
         let expr_full = gen_expr_full_seeded(&db, seed, config.clone());
-        match expr_full.expr(&db).clone() {
+        match expr_full.expr().clone() {
             Expr::True | Expr::False => bool_count += 1,
             _ => other_count += 1,
         }
@@ -354,44 +354,44 @@ fn test_result_error_case_generation() {
                 }
                 Expr::List(list) => {
                     for elem in list.elements.clone() {
-                        check_for_er(db, &elem.expr(db).clone(), seen);
+                        check_for_er(db, &elem.expr().clone(), seen);
                     }
                 }
                 Expr::Map(map) => {
                     for entry in map.entries.clone() {
-                        check_for_er(db, &entry.key.expr(db).clone(), seen);
-                        check_for_er(db, &entry.value.expr(db).clone(), seen);
+                        check_for_er(db, &entry.key.expr().clone(), seen);
+                        check_for_er(db, &entry.value.expr().clone(), seen);
                     }
                 }
                 Expr::Set(set) => {
                     for elem in set.elements.clone() {
-                        check_for_er(db, &elem.expr(db).clone(), seen);
+                        check_for_er(db, &elem.expr().clone(), seen);
                     }
                 }
                 Expr::AnonTuple(tuple) => {
                     for elem in tuple.elements.clone() {
-                        check_for_er(db, &elem.expr(db).clone(), seen);
+                        check_for_er(db, &elem.expr().clone(), seen);
                     }
                 }
                 Expr::AnonStruct(st) => {
                     for field in st.fields.clone() {
-                        check_for_er(db, &field.value.expr(db).clone(), seen);
+                        check_for_er(db, &field.value.expr().clone(), seen);
                     }
                 }
                 Expr::Data(d) => {
-                    check_for_er(db, &d.value.expr(db).clone(), seen);
+                    check_for_er(db, &d.value.expr().clone(), seen);
                 }
                 _ => {}
             }
         }
 
-        if matches!(expr_full.expr(&db).clone(), Expr::Er(_)) {
+        if matches!(expr_full.expr().clone(), Expr::Er(_)) {
             seen_er = true;
         } else {
             seen_ok = true;
         }
 
-        check_for_er(&db, &expr_full.expr(&db).clone(), &mut seen_er);
+        check_for_er(&db, &expr_full.expr().clone(), &mut seen_er);
     }
 
     assert!(seen_er, "Should generate at least one Result error case (Expr::Er)");

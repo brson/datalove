@@ -56,7 +56,7 @@ pub fn instantiate_value<'db, 't>(
     let root_expr = typechecked.root_expr(db);
     let resolved = typechecked.resolved(db);
 
-    let value_ptr = instantiate_expr(db, rt, root_expr, &root_type, tydesc_table, resolved)?;
+    let value_ptr = instantiate_expr(db, rt, &root_expr, &root_type, tydesc_table, resolved)?;
 
     let tydesc = tydesc_table.get_or_create_ref(&root_type);
 
@@ -72,7 +72,7 @@ pub fn instantiate_value<'db, 't>(
 fn instantiate_expr<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     resolved: ResolvedExpr<'db>,
@@ -95,14 +95,14 @@ fn instantiate_expr<'db>(
 fn instantiate_expr_into<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     dest_ptr: *mut u8,
     resolved: ResolvedExpr<'db>,
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null(), "dest_ptr must be non-null");
-    let expr_inner = expr.expr(db);
+    let expr_inner = expr.expr();
 
     match (expr_inner, ty) {
         (Expr::True, Type::Bool) => instantiate_bool(rt, true, dest_ptr),
@@ -163,27 +163,27 @@ fn instantiate_expr_into<'db>(
 
         (Expr::Some(some_expr), Type::Option(opt)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_option(db, rt, true, Some(some_expr.payload), *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_option(db, rt, true, Some(&some_expr.payload), *opt.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Er(er_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, false, None, Some(er_expr.payload), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, false, None, Some(&er_expr.payload), *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Ok(ok_expr), Type::Result(res)) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_result(db, rt, true, Some(ok_expr.payload), None, *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_result(db, rt, true, Some(&ok_expr.payload), None, *res.inner_type.clone(), tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Data(data_expr), Type::Data) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_data(db, rt, data_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_data(db, rt, &data_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Error(err_expr), Type::Error) => {
             let tydesc = tydesc_table.get_or_create(ty);
-            instantiate_error(db, rt, err_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
+            instantiate_error(db, rt, &err_expr.value, tydesc_table, tydesc, dest_ptr, resolved)
         }
 
         (Expr::Map(map_expr), Type::Map(map_ty)) => {
@@ -207,18 +207,18 @@ fn instantiate_expr_into<'db>(
         }
 
         (Expr::Group(group), _) => {
-            instantiate_expr_into(db, rt, group.inner, ty, tydesc_table, dest_ptr, resolved)
+            instantiate_expr_into(db, rt, &group.inner, ty, tydesc_table, dest_ptr, resolved)
         }
 
         (Expr::Atom(_), Type::Atom(_)) => Ok(dest_ptr as *const u8),
 
         (Expr::Term(term_expr), Type::Term(term_ty)) => {
-            instantiate_expr_into(db, rt, term_expr.payload, &term_ty.payload, tydesc_table, dest_ptr, resolved)?;
+            instantiate_expr_into(db, rt, &term_expr.payload, &term_ty.payload, tydesc_table, dest_ptr, resolved)?;
             Ok(dest_ptr as *const u8)
         }
 
         (Expr::Enum(enum_expr), Type::Enum(_)) => {
-            instantiate_expr_into(db, rt, enum_expr.variant, ty, tydesc_table, dest_ptr, resolved)
+            instantiate_expr_into(db, rt, &enum_expr.variant, ty, tydesc_table, dest_ptr, resolved)
         }
 
         (Expr::Atom(atom_expr), Type::Enum(enum_ty)) => {
@@ -226,7 +226,7 @@ fn instantiate_expr_into<'db>(
         }
 
         (Expr::Term(term_expr), Type::Enum(enum_ty)) => {
-            instantiate_variant(db, rt, term_expr.name, Some(term_expr.payload), enum_ty, ty, tydesc_table, dest_ptr, resolved)
+            instantiate_variant(db, rt, term_expr.name, Some(&term_expr.payload), enum_ty, ty, tydesc_table, dest_ptr, resolved)
         }
 
         _ => bail!("Unsupported expression/type combination for instantiation"),
@@ -603,7 +603,7 @@ fn instantiate_tuple<'db>(
     for (i, (elem, field_ty)) in elements.iter().zip(field_types.iter()).enumerate() {
         let field_offset = layout.field_offsets[i];
         let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-        if let Err(e) = instantiate_expr_into(db, rt, *elem, field_ty, tydesc_table, field_dest, resolved) {
+        if let Err(e) = instantiate_expr_into(db, rt, elem, field_ty, tydesc_table, field_dest, resolved) {
             // Destroy successfully instantiated fields.
             for j in 0..i {
                 let prev_field_ty = &field_types[j];
@@ -643,7 +643,7 @@ fn instantiate_struct<'db>(
             let field_name = type_field.name.as_str(db);
             let field_ty = &type_field.ty;
 
-            let field_expr = expr_fields
+            let field_expr = &expr_fields
                 .iter()
                 .find(|ef| ef.name.as_str(db) == field_name)
                 .ok_or_else(|| anyhow!("Missing field: {}", field_name))?
@@ -667,10 +667,10 @@ fn instantiate_struct<'db>(
         }
     } else {
         // HashMap for large structs.
-        let mut field_map: std::collections::HashMap<&str, ExprFull<'db>> = std::collections::HashMap::new();
+        let mut field_map: std::collections::HashMap<&str, &ExprFull<'db>> = std::collections::HashMap::new();
         for expr_field in expr_fields {
             let name = expr_field.name.as_str(db);
-            field_map.insert(name, expr_field.value);
+            field_map.insert(name, &expr_field.value);
         }
 
         for (i, type_field) in type_fields.iter().enumerate() {
@@ -682,7 +682,7 @@ fn instantiate_struct<'db>(
 
             let field_offset = layout.field_offsets[i];
             let field_dest = unsafe { dest_ptr.add(field_offset as usize) };
-            if let Err(e) = instantiate_expr_into(db, rt, *field_expr, &**field_ty, tydesc_table, field_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, field_expr, &**field_ty, tydesc_table, field_dest, resolved) {
                 // Destroy successfully instantiated fields.
                 for j in 0..i {
                     let prev_field_ty = &type_fields[j].ty;
@@ -726,7 +726,7 @@ fn instantiate_list<'db>(
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_ty, tydesc_table, elem_dest, resolved) {
+                if let Err(e) = instantiate_expr_into(db, rt, elem, &element_ty, tydesc_table, elem_dest, resolved) {
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
@@ -816,7 +816,7 @@ fn instantiate_table<'db>(
         for (col_idx, (elem, col)) in row.elements.iter().zip(columns.iter()).enumerate() {
             let field_offset = row_layout.field_offsets[col_idx];
             let cell_dest = unsafe { row_buffer.add(field_offset as usize) };
-            if let Err(e) = instantiate_expr_into(db, rt, *elem, &*col.ty, tydesc_table, cell_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, elem, &*col.ty, tydesc_table, cell_dest, resolved) {
                 // Destroy already instantiated cells in this row.
                 for cleanup_col in 0..col_idx {
                     let cleanup_offset = row_layout.field_offsets[cleanup_col];
@@ -874,7 +874,7 @@ fn instantiate_option<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     is_some: bool,
-    payload_expr: Option<ExprFull<'db>>,
+    payload_expr: Option<&ExprFull<'db>>,
     inner_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     option_tydesc: *const rtdt::TyDesc,
@@ -901,8 +901,8 @@ fn instantiate_result<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     is_ok: bool,
-    ok_payload_expr: Option<ExprFull<'db>>,
-    err_payload_expr: Option<ExprFull<'db>>,
+    ok_payload_expr: Option<&ExprFull<'db>>,
+    err_payload_expr: Option<&ExprFull<'db>>,
     ok_type: Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     result_tydesc: *const rtdt::TyDesc,
@@ -933,7 +933,7 @@ fn instantiate_result<'db>(
 fn instantiate_data<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    inner_expr: ExprFull<'db>,
+    inner_expr: &ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _data_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -941,7 +941,7 @@ fn instantiate_data<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     // Typechecked again for the type it has, which is what the value carries.
-    let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
+    let typechecked = crate::tycheck::type_check(db, inner_expr.clone(), resolved);
 
     let inner_type = typechecked.root_type(db).clone()
         .expect("the typechecker checked the payload");
@@ -964,7 +964,7 @@ fn instantiate_data<'db>(
 fn instantiate_error<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
-    inner_expr: ExprFull<'db>,
+    inner_expr: &ExprFull<'db>,
     tydesc_table: &mut TyDescTable<'db>,
     _error_tydesc: *const rtdt::TyDesc,
     dest_ptr: *mut u8,
@@ -972,7 +972,7 @@ fn instantiate_error<'db>(
 ) -> AnyResult<*const u8> {
     debug_assert!(!dest_ptr.is_null());
     // Typechecked again for the type it has, which is what the value carries.
-    let typechecked = crate::tycheck::type_check(db, inner_expr, resolved);
+    let typechecked = crate::tycheck::type_check(db, inner_expr.clone(), resolved);
 
     let inner_type = typechecked.root_type(db).clone()
         .expect("the typechecker checked the payload");
@@ -1005,7 +1005,7 @@ fn instantiate_variant<'db>(
     db: &'db dyn crate::Db,
     rt: datalove_rt::c::LocalRtHandle,
     name: bct::text::InternedText<'db>,
-    payload: Option<ExprFull<'db>>,
+    payload: Option<&ExprFull<'db>>,
     enum_ty: &TypeEnum<'db>,
     ty: &Type<'db>,
     tydesc_table: &mut TyDescTable<'db>,
@@ -1096,7 +1096,7 @@ fn instantiate_map<'db>(
             let value_dest = values_buffer.add(i * value_size);
 
             // Try to instantiate key.
-            if let Err(e) = instantiate_expr_into(db, rt, entry.key, &key_type, tydesc_table, key_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, &entry.key, &key_type, tydesc_table, key_dest, resolved) {
                 // Cleanup: destroy already-instantiated entries.
                 for j in 0..instantiated_count {
                     datalove_rt::c::dtlv_rti_any_destroy_local(rt, keys_buffer.add(j * key_size), key_tydesc);
@@ -1108,7 +1108,7 @@ fn instantiate_map<'db>(
             }
 
             // Try to instantiate value.
-            if let Err(e) = instantiate_expr_into(db, rt, entry.value, &value_type, tydesc_table, value_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, &entry.value, &value_type, tydesc_table, value_dest, resolved) {
                 // Destroy the key we just instantiated.
                 datalove_rt::c::dtlv_rti_any_destroy_local(rt, key_dest, key_tydesc);
                 for j in 0..instantiated_count {
@@ -1227,7 +1227,7 @@ fn instantiate_set<'db>(
         // Instantiate elements into the buffer in the order they were written.
         for (i, elem) in elements.iter().enumerate() {
             let elem_dest = buffer.add(i * element_size);
-            if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_type, tydesc_table, elem_dest, resolved) {
+            if let Err(e) = instantiate_expr_into(db, rt, elem, &element_type, tydesc_table, elem_dest, resolved) {
                 // Cleanup: destroy already-instantiated elements.
                 for j in 0..instantiated_count {
                     let elem_to_destroy = buffer.add(j * element_size);
@@ -1377,7 +1377,7 @@ fn instantiate_tensor<'db>(
             // Try to instantiate all elements. If any fail, clean up and return error.
             for (i, elem) in elements.iter().enumerate() {
                 let elem_dest = array_ptr.add(i * element_size as usize);
-                if let Err(e) = instantiate_expr_into(db, rt, *elem, &element_ty, tydesc_table, elem_dest, resolved) {
+                if let Err(e) = instantiate_expr_into(db, rt, elem, &element_ty, tydesc_table, elem_dest, resolved) {
                     // Destroy successfully instantiated elements.
                     for j in 0..i {
                         let elem_to_destroy = array_ptr.add(j * element_size as usize);
@@ -1495,7 +1495,7 @@ mod tests {
     fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.to_string());
         let parsed = crate::parser::parse_for_test(db, source);
-        let resolved = crate::resolve::resolve_names(db, source, parsed);
+        let resolved = crate::resolve::resolve_names(db, source, parsed.clone());
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
     }

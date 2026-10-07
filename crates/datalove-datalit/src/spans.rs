@@ -26,15 +26,15 @@ impl<'db> DatalitSpans<'db> {
     ///
     /// An expression the typechecker or the generator built has no position,
     /// and so no span to find.
-    pub fn lookup(&self, db: &'db dyn crate::Db, expr: ExprFull<'db>) -> Option<SpanEntry> {
-        let expr_index = expr.local_index(db)?;
+    pub fn lookup(&self, db: &'db dyn crate::Db, expr: &ExprFull<'db>) -> Option<SpanEntry> {
+        let expr_index = expr.local_index()?;
         self.entries(db).iter()
             .find(|e| e.expr_index == expr_index)
             .map(|e| e.entry.C())
     }
 
     /// Get text and span for an expression.
-    pub fn get_text_span(&self, db: &'db dyn crate::Db, expr: ExprFull<'db>) -> Option<TextSpan<'db>> {
+    pub fn get_text_span(&self, db: &'db dyn crate::Db, expr: &ExprFull<'db>) -> Option<TextSpan<'db>> {
         self.lookup(db, expr).map(|entry| {
             let (text, span) = entry.to_text_and_span(db);
             TextSpan::new(text, span)

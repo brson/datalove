@@ -1,4 +1,7 @@
 use rmx::prelude::*;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use bct::text::{InternedText, Text};
 use bct::text::ByteSpan;
 
@@ -24,25 +27,86 @@ impl ParseSpanEntry {
 /// Result of parsing containing the root expression and span side table.
 #[salsa::tracked]
 pub struct ParseResult<'db> {
-    #[returns(copy)]
+    #[returns(clone)]
     pub expr: ExprFull<'db>,
     #[returns(clone)]
     pub expr_spans: Vec<ParseSpanEntry>,
 }
 
-#[salsa::tracked]
-pub struct ExprFull<'db> {
+/// An expression, with its type hint and its position in the parse.
+///
+/// A plain tree shared by reference count rather than a salsa struct: a data
+/// file is hundreds of thousands of these, and giving each a salsa identity
+/// cost more than the rest of parsing. Each node keeps a hash of its contents,
+/// worked out from its children's when it is made, so that a tree passed to a
+/// query is keyed in constant time; equality is by contents.
+#[derive(Clone)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprFull<'db>(Arc<ExprNode<'db>>);
+
+#[derive(salsa::SalsaValue)]
+struct ExprNode<'db> {
+    hash: u64,
+    local_index: Option<u32>,
+    type_hint: Option<TypeHint<'db>>,
+    expr: Expr<'db>,
+}
+
+impl<'db> ExprFull<'db> {
+    pub fn new(
+        local_index: Option<u32>,
+        type_hint: Option<TypeHint<'db>>,
+        expr: Expr<'db>,
+    ) -> ExprFull<'db> {
+        let mut hasher = rustc_hash::FxHasher::default();
+        (local_index, &type_hint, &expr).hash(&mut hasher);
+        let hash = hasher.finish();
+        ExprFull(Arc::new(ExprNode { hash, local_index, type_hint, expr }))
+    }
+
     /// Position of this expression in the parse that produced it.
     ///
     /// `None` for an expression that came from no source: the typechecker
     /// builds a few to re-check a literal without its type hint, and the AST
     /// generator makes them up wholesale. Neither has a span to look up.
-    #[returns(copy)]
-    pub local_index: Option<u32>,
-    #[returns(clone)]
-    pub type_hint: Option<TypeHint<'db>>,
-    #[returns(ref)]
-    pub expr: Expr<'db>,
+    pub fn local_index(&self) -> Option<u32> {
+        self.0.local_index
+    }
+
+    pub fn type_hint(&self) -> Option<TypeHint<'db>> {
+        self.0.type_hint.clone()
+    }
+
+    pub fn expr(&self) -> &Expr<'db> {
+        &self.0.expr
+    }
+}
+
+impl<'db> Hash for ExprFull<'db> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_u64(self.0.hash);
+    }
+}
+
+impl<'db> PartialEq for ExprFull<'db> {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+            || (self.0.hash == other.0.hash
+                && self.0.local_index == other.0.local_index
+                && self.0.type_hint == other.0.type_hint
+                && self.0.expr == other.0.expr)
+    }
+}
+
+impl<'db> Eq for ExprFull<'db> {}
+
+impl<'db> fmt::Debug for ExprFull<'db> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExprFull")
+            .field("local_index", &self.0.local_index)
+            .field("hash", &self.0.hash)
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

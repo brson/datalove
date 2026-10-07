@@ -79,15 +79,15 @@ fn types_equal<'db>(
 }
 
 /// Compile and instantiate a datalit value.
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(clone))]
 fn compile<'db>(
     db: &'db dyn salsa::Database,
     source: bct::input::Source,
 ) -> (datalit::ast::ExprFull<'db>, datalit::resolve::ResolvedExpr<'db>, datalit::tycheck::TypecheckResult<'db>) {
     let parse_result = datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalit::resolve::resolve_names(db, source, parsed);
-    let typechecked = datalit::tycheck::type_check(db, parsed, resolved);
+    let resolved = datalit::resolve::resolve_names(db, source, parsed.clone());
+    let typechecked = datalit::tycheck::type_check(db, parsed.clone(), resolved);
     (parsed, resolved, typechecked)
 }
 

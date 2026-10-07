@@ -33,15 +33,15 @@ fn write_expr<'db>(
         Expr::None => out.push_str("none"),
         Expr::Some(s) => {
             out.push_str("some ");
-            write_expr_full(db, s.payload, out);
+            write_expr_full(db, &s.payload, out);
         }
         Expr::Ok(o) => {
             out.push_str("ok ");
-            write_expr_full(db, o.payload, out);
+            write_expr_full(db, &o.payload, out);
         }
         Expr::Er(e) => {
             out.push_str("er ");
-            write_expr_full(db, e.payload, out);
+            write_expr_full(db, &e.payload, out);
         }
 
         Expr::Int(i) => {
@@ -66,7 +66,7 @@ fn write_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                write_expr_full(db, *elem, out);
+                write_expr_full(db, elem, out);
             }
             // A one-element tuple takes a trailing comma, since `(x)` on its
             // own is the expression `x` in brackets.
@@ -84,7 +84,7 @@ fn write_expr<'db>(
                 }
                 out.push_str(field.name.as_str(db));
                 out.push_str(" = ");
-                write_expr_full(db, field.value, out);
+                write_expr_full(db, &field.value, out);
             }
             out.push('}');
         }
@@ -96,7 +96,7 @@ fn write_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                write_expr_full(db, *elem, out);
+                write_expr_full(db, elem, out);
             }
             out.push(']');
         }
@@ -107,9 +107,9 @@ fn write_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                write_expr_full(db, entry.key, out);
+                write_expr_full(db, &entry.key, out);
                 out.push_str(" = ");
-                write_expr_full(db, entry.value, out);
+                write_expr_full(db, &entry.value, out);
             }
             out.push('}');
         }
@@ -120,7 +120,7 @@ fn write_expr<'db>(
                 if i > 0 {
                     out.push_str(", ");
                 }
-                write_expr_full(db, *elem, out);
+                write_expr_full(db, elem, out);
             }
             out.push('}');
         }
@@ -136,7 +136,7 @@ fn write_expr<'db>(
                 out.push('|');
                 for elem in &t.elements {
                     out.push(' ');
-                    write_expr_full(db, *elem, out);
+                    write_expr_full(db, elem, out);
                 }
             } else {
                 write_tensor_elements(db, &t.shape, &t.elements, out);
@@ -146,12 +146,12 @@ fn write_expr<'db>(
 
         Expr::Data(d) => {
             out.push_str("data ");
-            write_expr_full(db, d.value, out);
+            write_expr_full(db, &d.value, out);
         }
 
         Expr::Error(e) => {
             out.push_str("error ");
-            write_expr_full(db, e.value, out);
+            write_expr_full(db, &e.value, out);
         }
 
         Expr::Atom(a) => {
@@ -163,18 +163,18 @@ fn write_expr<'db>(
             out.push_str("term ");
             out.push_str(t.name.as_str(db));
             out.push(' ');
-            write_expr_full(db, t.payload, out);
+            write_expr_full(db, &t.payload, out);
         }
 
         Expr::Enum(e) => {
             out.push_str("enum { ");
-            write_expr_full(db, e.variant, out);
+            write_expr_full(db, &e.variant, out);
             out.push_str(" }");
         }
 
         Expr::Group(g) => {
             out.push('(');
-            write_expr_full(db, g.inner, out);
+            write_expr_full(db, &g.inner, out);
             out.push(')');
         }
 
@@ -198,7 +198,7 @@ fn write_expr<'db>(
                     if i > 0 {
                         out.push_str(", ");
                     }
-                    write_expr_full(db, *elem, out);
+                    write_expr_full(db, elem, out);
                 }
             }
             out.push_str(" |}");
@@ -208,15 +208,15 @@ fn write_expr<'db>(
 
 fn write_expr_full<'db>(
     db: &'db dyn salsa::Database,
-    expr: ExprFull<'db>,
+    expr: &ExprFull<'db>,
     out: &mut String,
 ) {
-    if let Some(th) = expr.type_hint(db) {
+    if let Some(th) = expr.type_hint() {
         out.push_str(": ");
         write_type_hint(db, &th, out);
         out.push_str(" / ");
     }
-    write_expr(db, &expr.expr(db), out);
+    write_expr(db, &expr.expr(), out);
 }
 
 fn write_type_hint<'db>(
@@ -393,7 +393,7 @@ fn write_tensor_group<'db>(
             if i > 0 {
                 out.push(' ');
             }
-            write_expr_full(db, *elem, out);
+            write_expr_full(db, elem, out);
         }
         return;
     }

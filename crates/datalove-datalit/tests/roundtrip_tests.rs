@@ -17,14 +17,14 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let ast = datalit::parser::parse_integration_test(&db, source);
 
     // Step 2: Pretty-print the AST.
-    let pretty1 = datalit::pretty::pretty_print(&db, ast);
+    let pretty1 = datalit::pretty::pretty_print(&db, &ast);
 
     // Step 3: Parse the pretty-printed output.
     let source2 = bct::input::Source::new(&db, pretty1.S());
     let ast2 = datalit::parser::parse_integration_test(&db, source2);
 
     // Step 4: Pretty-print again.
-    let pretty2 = datalit::pretty::pretty_print(&db, ast2);
+    let pretty2 = datalit::pretty::pretty_print(&db, &ast2);
 
     // Step 5: Check that both pretty-prints are identical.
     if pretty1 != pretty2 {

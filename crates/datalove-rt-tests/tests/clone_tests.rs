@@ -9,7 +9,7 @@ use datalove_datalit::tydesc_table::TyDescTable;
 fn compile<'db>(db: &'db dyn salsa::Database, source: bct::input::Source) -> datalove_datalit::tycheck::TypecheckResult<'db> {
     let parse_result = datalove_datalit::parser::parse(db, source);
     let parsed = parse_result.expr(db);
-    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed);
+    let resolved = datalove_datalit::resolve::resolve_names(db, source, parsed.clone());
     datalove_datalit::tycheck::type_check(db, parsed, resolved)
 }
 
@@ -915,7 +915,7 @@ fn test_clone_leak_regression_seed_980509222901775213() {
 
     let rt = Runtime::new();
     let mut tydesc_table = TyDescTable::new(&db);
-    let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr);
+    let resolved = datalove_datalit::resolve::resolve_names(&db, bct::input::Source::new(&db, String::new()), expr.clone());
     let typechecked = datalove_datalit::tycheck::type_check(&db, expr, resolved);
     assert!(typechecked.errors(&db).is_empty(), "Type checking failed for seed {}", seed);
 

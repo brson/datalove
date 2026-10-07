@@ -970,7 +970,7 @@ mod tests {
     fn compile<'db>(db: &'db Database, source_text: &str) -> AnyResult<crate::tycheck::TypecheckResult<'db>> {
         let source = bct::input::Source::new(db, source_text.S());
         let parsed = crate::parser::parse_for_test(db, source);
-        let resolved = crate::resolve::resolve_names(db, source, parsed);
+        let resolved = crate::resolve::resolve_names(db, source, parsed.clone());
         let typechecked = crate::tycheck::type_check(db, parsed, resolved);
         Ok(typechecked)
     }

@@ -52,7 +52,7 @@ fn parse_bracer<'db>(
 ///
 /// Allows tests to call parse() which creates tracked AST nodes.
 /// Regular code should call parse() from within a tracked function context.
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(clone))]
 #[cfg(test)]
 pub(crate) fn parse_for_test<'db>(
     db: &'db dyn crate::Db,
@@ -64,7 +64,7 @@ pub(crate) fn parse_for_test<'db>(
 /// Public wrapper for integration tests.
 ///
 /// Integration tests are compiled as separate binaries and need pub access.
-#[salsa::tracked(returns(copy))]
+#[salsa::tracked(returns(clone))]
 pub fn parse_integration_test<'db>(
     db: &'db dyn crate::Db,
     source: Source,

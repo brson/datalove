@@ -36,7 +36,7 @@ impl<'db> Parser<'db> {
                     text: e.text, span: e.span.C(), message: e.message,
                 });
                 self.eat_sigil(Sigil::SlashForward);
-                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint.C()), error_expr)
+                ast::ExprFull::new(Some(local_index), Some(type_hint.C()), error_expr)
             } else if !self.eat_sigil(Sigil::SlashForward) {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
@@ -44,10 +44,10 @@ impl<'db> Parser<'db> {
                     "D012",
                     "expected '/' separator between type hint and expression"
                 );
-                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint), error_expr)
+                ast::ExprFull::new(Some(local_index), Some(type_hint), error_expr)
             } else {
                 let expr = self.parse_expr();
-                ast::ExprFull::new(self.db, Some(local_index), Some(type_hint), expr)
+                ast::ExprFull::new(Some(local_index), Some(type_hint), expr)
             }
         } else {
             // No type hint, just parse expression. Parentheses around a hinted
@@ -55,7 +55,7 @@ impl<'db> Parser<'db> {
             // hint for them to keep apart.
             match self.parse_expr() {
                 ast::Expr::Group(group) => return group.inner,
-                expr => ast::ExprFull::new(self.db, Some(local_index), None, expr),
+                expr => ast::ExprFull::new(Some(local_index), None, expr),
             }
         };
 
@@ -261,9 +261,9 @@ impl<'db> Parser<'db> {
                 // Single element without comma is grouping parens, not a 1-tuple.
                 if elements.len() == 1 && !had_comma {
                     let inner = elements.into_iter().next().X();
-                    match inner.type_hint(self.db) {
+                    match inner.type_hint() {
                         Some(_) => ast::Expr::Group(ast::ExprGroup { inner }),
-                        None => inner.expr(self.db).clone(),
+                        None => inner.expr().clone(),
                     }
                 } else {
                     ast::Expr::AnonTuple(ast::ExprAnonTuple { elements })
@@ -312,7 +312,7 @@ impl<'db> Parser<'db> {
                             "D017",
                             "expected '=' after key"
                         );
-                        let error_value = ast::ExprFull::new(p.db, None, None, error_expr);
+                        let error_value = ast::ExprFull::new(None, None, error_expr);
                         return ast::ExprMapEntry { key, value: error_value };
                     }
                     let value = p.parse_expr_full();
@@ -380,7 +380,7 @@ impl<'db> Parser<'db> {
                     "expected field name"
                 );
                 let placeholder_name = InternedText::new(self.db, "<error>".S());
-                let error_value = ast::ExprFull::new(self.db, None, None, error_expr);
+                let error_value = ast::ExprFull::new(None, None, error_expr);
                 return ast::ExprStructField { name: placeholder_name, value: error_value };
             }
         };
@@ -391,7 +391,7 @@ impl<'db> Parser<'db> {
                 "D018",
                 "expected '=' after field name"
             );
-            let error_value = ast::ExprFull::new(self.db, None, None, error_expr);
+            let error_value = ast::ExprFull::new(None, None, error_expr);
             return ast::ExprStructField { name, value: error_value };
         }
         let value = self.parse_expr_full();

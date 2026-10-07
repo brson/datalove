@@ -23,11 +23,11 @@ fn get_datalit_errors<'db>(
     let parsed = datalove_datalit::parser::parse_integration_test(db, src);
 
     // Check for parse errors first.
-    if has_parse_error(db, parsed) {
+    if has_parse_error(db, parsed.clone()) {
         return (vec!["PARSE_ERROR".to_string()], true);
     }
 
-    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed);
+    let resolved = datalove_datalit::resolve::resolve_names(db, src, parsed.clone());
     let result = datalove_datalit::tycheck::type_check(db, parsed, resolved);
 
     let errors: Vec<String> = result
@@ -71,28 +71,28 @@ fn has_parse_error<'db>(
     use datalove_datalit::ast::Expr;
 
     // Check type hint first.
-    if let Some(th) = expr.type_hint(db) {
+    if let Some(th) = expr.type_hint() {
         if has_datalit_type_hint_parse_error(db, &th) {
             return true;
         }
     }
 
-    match expr.expr(db) {
+    match expr.expr() {
         Expr::ParseError(_) => true,
-        Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, *e)),
-        Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, *e)),
+        Expr::List(l) => l.elements.iter().any(|e| has_parse_error(db, e.clone())),
+        Expr::Set(s) => s.elements.iter().any(|e| has_parse_error(db, e.clone())),
         Expr::Map(m) => m.entries.iter().any(|e| {
-            has_parse_error(db, e.key) || has_parse_error(db, e.value)
+            has_parse_error(db, e.key.clone()) || has_parse_error(db, e.value.clone())
         }),
-        Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
-        Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value)),
+        Expr::AnonTuple(t) => t.elements.iter().any(|e| has_parse_error(db, e.clone())),
+        Expr::AnonStruct(s) => s.fields.iter().any(|f| has_parse_error(db, f.value.clone())),
 
-        Expr::Data(d) => has_parse_error(db, d.value),
-        Expr::Error(e) => has_parse_error(db, e.value),
-        Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, *e)),
-        Expr::Some(s) => has_parse_error(db, s.payload),
-        Expr::Ok(o) => has_parse_error(db, o.payload),
-        Expr::Er(e) => has_parse_error(db, e.payload),
+        Expr::Data(d) => has_parse_error(db, d.value.clone()),
+        Expr::Error(e) => has_parse_error(db, e.value.clone()),
+        Expr::Tensor(t) => t.elements.iter().any(|e| has_parse_error(db, e.clone())),
+        Expr::Some(s) => has_parse_error(db, s.payload.clone()),
+        Expr::Ok(o) => has_parse_error(db, o.payload.clone()),
+        Expr::Er(e) => has_parse_error(db, e.payload.clone()),
         _ => false,
     }
 }
@@ -770,7 +770,7 @@ fn test_debug_bracket_mutations() {
                 let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
                 let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
-                let original = datalove_datalit::pretty::pretty_print(&db, expr);
+                let original = datalove_datalit::pretty::pretty_print(&db, &expr);
 
                 if let Some(result) = mutation.apply(&db, expr, &mut rng) {
                     let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
@@ -827,11 +827,11 @@ fn test_debug_specific_bracket_cases() {
     // Parse with datalit
     let src1 = bct::input::Source::new(&db, source1.to_string());
     let datalit_parsed = datalove_datalit::parser::parse_integration_test(&db, src1);
-    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, datalit_parsed));
-    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed));
+    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, &datalit_parsed));
+    eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed.clone()));
 
     // Check the type hint
-    if let Some(_th) = datalit_parsed.type_hint(&db) {
+    if let Some(_th) = datalit_parsed.type_hint() {
         eprintln!("Datalit type hint: present");
     }
 
@@ -868,7 +868,7 @@ fn test_debug_specific_bracket_cases() {
     // Parse with datalit
     let src2 = bct::input::Source::new(&db, source2.to_string());
     let datalit_parsed2 = datalove_datalit::parser::parse_integration_test(&db, src2);
-    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, datalit_parsed2));
+    eprintln!("Datalit pretty: {}", datalove_datalit::pretty::pretty_print(&db, &datalit_parsed2));
     eprintln!("Datalit has_parse_error: {}", has_parse_error(&db, datalit_parsed2));
 
     // Type check both
@@ -893,7 +893,7 @@ fn test_debug_arity_mismatch() {
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
             // For debugging, also print what type of expr was generated.
-            let original = datalove_datalit::pretty::pretty_print(&db, expr);
+            let original = datalove_datalit::pretty::pretty_print(&db, &expr);
 
             if let Some(result) = Mutation::ArityMismatch.apply(&db, expr, &mut rng) {
                 let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
@@ -941,7 +941,7 @@ fn test_debug_delete_comma() {
             let expr = datalove_datalit::ast_gen::gen_expr_full_seeded(&db, seed, config_clone);
             let mut rng = StdRng::seed_from_u64(seed.wrapping_mul(0xdeadbeef));
 
-            let original = datalove_datalit::pretty::pretty_print(&db, expr);
+            let original = datalove_datalit::pretty::pretty_print(&db, &expr);
 
             if let Some(result) = Mutation::DeleteComma.apply(&db, expr, &mut rng) {
                 let (datalit_errs, datalit_parse) = get_datalit_errors(&db, &result.source);
