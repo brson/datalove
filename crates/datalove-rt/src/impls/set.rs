@@ -802,6 +802,15 @@ unsafe fn split_leaf(
         write_node_len(leaf, split_point as u32);
         write_node_len(new_leaf, move_count as u32);
 
+        // The new leaf goes into the chain after the old one. It was left out,
+        // so every walk in order stopped at the first split: a set of two
+        // hundred read out as its first five.
+        let layout = rtdt::layout::compute_set_leaf_node_layout(element_tydesc_ref);
+        let leaf_next = (leaf as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode;
+        let new_next = (new_leaf as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode;
+        *new_next = *leaf_next;
+        *leaf_next = new_leaf;
+
         // Clone the separator key (first key of new_leaf).
         let mut separator_key_buf = AlignedBuffer::with_align(element_size, element_tydesc_ref.align() as usize);
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
@@ -1458,6 +1467,50 @@ pub unsafe fn btreeset_remove_impl(
 
         // Element not found.
         *bool_out = 0;
+        RtStatus::Ok
+    }
+}
+
+/// Every element of a set, in order, cloned onto the end of a list.
+///
+/// One walk along the leaf chain; see `btreemap_collect_impl`.
+pub unsafe fn btreeset_to_list_impl(
+    rt: &mut RtLocal,
+    set_value_ref: *const u8,
+    set_tydesc: rtdt::TyDescRef,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        let element_ty = set_tydesc.set_element_ty();
+        let set_ptr = set_value_ref as *const Set;
+
+        let status = crate::impls::list::list_reserve_impl(
+            rt, list_value_mut, list_tydesc, (*set_ptr).len.0);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        let root = (*set_ptr).root as *mut SetNode;
+        if root.is_null() {
+            return RtStatus::Ok;
+        }
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let layout = rtdt::layout::compute_set_leaf_node_layout(element_ty);
+        let mut node = leftmost_leaf(root, element_ty);
+        while !node.is_null() {
+            let keys = leaf_keys_ptr(node, element_ty.as_ptr());
+            for i in 0..read_node_len(node) as usize {
+                let slot = crate::impls::list::list_end_slot(list_value_mut, element_ty);
+                let status = crate::impls::clone::clone_value(
+                    rt_handle, keys.add(i * element_ty.size() as usize), element_ty.as_ptr(), slot);
+                if status != RtStatus::Ok {
+                    return status;
+                }
+                crate::impls::list::list_count_last(list_value_mut, element_ty);
+            }
+            node = *((node as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode);
+        }
         RtStatus::Ok
     }
 }

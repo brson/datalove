@@ -1420,7 +1420,89 @@ unsafe fn btreemap_at_inner(
     }
 }
 
-/// Check if a map contains a given key./// Check if a map contains a given key.
+/// What `btreemap_collect_impl` takes out of each entry.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum MapPart {
+    Keys,
+    Values,
+    /// The key and the value, as the two fields of a tuple.
+    Entries,
+}
+
+/// Every key, value or entry of a map, in sort order, cloned onto the end of a
+/// list.
+///
+/// One walk along the leaf chain. Reaching each entry by its position instead
+/// (`btreemap_key_at_impl`) walks the chain from its start every time, which
+/// made reading out a whole map quadratic in its length.
+pub unsafe fn btreemap_collect_impl(
+    rt: &mut RtLocal,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    part: MapPart,
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+) -> RtStatus {
+    unsafe {
+        let key_ty = btreemap_tydesc.map_key_ty();
+        let value_ty = btreemap_tydesc.map_value_ty();
+        let element_ty = list_tydesc.list_element_ty();
+        let map_ptr = btreemap_value_ref as *const Map;
+
+        let status = crate::impls::list::list_reserve_impl(
+            rt, list_value_mut, list_tydesc, (*map_ptr).len.0);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        let root = (*map_ptr).root as *mut MapNode;
+        if root.is_null() {
+            return RtStatus::Ok;
+        }
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let clone = crate::impls::clone::clone_value;
+        let mut node = leftmost_leaf(root, key_ty);
+        while !node.is_null() {
+            let keys = leaf_keys_ptr(node, key_ty, value_ty);
+            let values = leaf_values_ptr(node, key_ty, value_ty);
+            for i in 0..read_node_len(node) as usize {
+                let key = keys.add(i * key_ty.size() as usize);
+                let value = values.add(i * value_ty.size() as usize);
+                let slot = crate::impls::list::list_end_slot(list_value_mut, element_ty);
+                let status = match part {
+                    MapPart::Keys => clone(rt_handle, key, key_ty.as_ptr(), slot),
+                    MapPart::Values => clone(rt_handle, value, value_ty.as_ptr(), slot),
+                    MapPart::Entries => {
+                        let pair = element_ty.tuple_info();
+                        let (Some(first), Some(second)) = (pair.field(0), pair.field(1)) else {
+                            return RtStatus::Error;
+                        };
+                        let first_slot = slot.add(first.offset() as usize);
+                        let status = clone(rt_handle, key, key_ty.as_ptr(), first_slot);
+                        if status != RtStatus::Ok {
+                            return status;
+                        }
+                        let status = clone(rt_handle, value, value_ty.as_ptr(),
+                            slot.add(second.offset() as usize));
+                        if status != RtStatus::Ok {
+                            crate::impls::destroy::any_destroy_local(
+                                rt_handle, first_slot, first.tydesc().as_ptr());
+                        }
+                        status
+                    }
+                };
+                if status != RtStatus::Ok {
+                    return status;
+                }
+                crate::impls::list::list_count_last(list_value_mut, element_ty);
+            }
+            node = *leaf_next_ptr_mut(node, key_ty, value_ty);
+        }
+        RtStatus::Ok
+    }
+}
+
+/// Check if a map contains a given key.
 ///
 /// Writes `true` to `result_out` if the key is found, `false` otherwise.
 pub unsafe fn btreemap_contains_key_impl(

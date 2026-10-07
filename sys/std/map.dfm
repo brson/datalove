@@ -8,9 +8,7 @@
 // known.
 
 require rider std
-require module sys/std/option
 
-import option.zip_option
 import std.map_len
 import std.map_clear
 import std.map_contains_key
@@ -19,7 +17,9 @@ import std.map_insert
 import std.map_remove
 import std.map_key_at
 import std.map_value_at
-import std.list_push
+import std.map_keys_into
+import std.map_values_into
+import std.map_entries_into
 import std.list_pop
 
 // The number of entries.
@@ -107,49 +107,22 @@ end fun
 // Every key, in sort order.
 fun keys<K, V>(ref self: %{K = V}): [K] with { K is ord, }
   var built: [K] = []
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if key_at(ref self, i) |k|
-      call list_push(mut built, k)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  call map_keys_into(ref self, mut built)
   ret built
 end fun
 
 // Every value, in the order of its key.
 fun values<K, V>(ref self: %{K = V}): [V] with { K is ord, }
   var built: [V] = []
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if value_at(ref self, i) |v|
-      call list_push(mut built, v)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  call map_values_into(ref self, mut built)
   ret built
 end fun
 
-// Every entry as a key and its value, in sort order.
-//
-// A list of a pair of two type parameters is a shape erasure reaches: the pair
-// is converted position by position on the way into the list, against the
-// descriptor the call site handed over. Both are cloned, since the map keeps
-// what it holds.
+// Every entry as a key and its value, in sort order. Both are cloned, since
+// the map keeps what it holds.
 fun entries<K, V>(ref self: %{K = V}): [(K, V)] with { K is ord, }
   var built: [(K, V)] = []
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if zip_option(key_at(ref self, i), value_at(ref self, i)) |pair|
-      call list_push(mut built, pair)
-    else
-      break
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  call map_entries_into(ref self, mut built)
   ret built
 end fun
 

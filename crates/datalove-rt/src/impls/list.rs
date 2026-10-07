@@ -270,6 +270,20 @@ pub unsafe fn list_set_impl(
     RtStatus::Ok
 }
 
+/// Where the next element of a list being filled in place goes: after its
+/// last, where `list_reserve_impl` has made room.
+pub(crate) unsafe fn list_end_slot(list_value: *mut u8, element_tydesc: rtdt::TyDescRef) -> *mut u8 {
+    let list = unsafe { ListMut::new(list_value as *mut List, element_tydesc) };
+    debug_assert!(list.size() < list.capacity(), "no room for the element");
+    list.end_ptr()
+}
+
+/// Take in the element just written at `list_end_slot`.
+pub(crate) unsafe fn list_count_last(list_value: *mut u8, element_tydesc: rtdt::TyDescRef) {
+    let mut list = unsafe { ListMut::new(list_value as *mut List, element_tydesc) };
+    list.set_size(list.size() + 1);
+}
+
 // ============================================================================
 // Stack Operations (push/pop)
 // ============================================================================

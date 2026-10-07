@@ -518,6 +518,50 @@ pub unsafe fn dtlv_rti_btreemap_value_at_local(rt: LocalRtHandle, btreemap_value
     unsafe { (crate::table(rt).dtlv_rti_btreemap_value_at_local)(rt, btreemap_value_ref, btreemap_tydesc, index, option_value_out, option_tydesc, as_data) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_btreemap_keys_into_local`](crate::table::RtiTable::dtlv_rti_btreemap_keys_into_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_keys_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_keys_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreemap_values_into_local`](crate::table::RtiTable::dtlv_rti_btreemap_values_into_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_values_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_values_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreemap_entries_into_local`](crate::table::RtiTable::dtlv_rti_btreemap_entries_into_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_entries_into_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_entries_into_local)(rt, btreemap_value_ref, btreemap_tydesc, list_value_mut, list_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreeset_into_list_local`](crate::table::RtiTable::dtlv_rti_btreeset_into_list_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreeset_into_list_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: *const rtdt::TyDesc, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreeset_into_list_local)(rt, set_value_ref, set_tydesc, list_value_mut, list_tydesc) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_btreeset_get_at_local`](crate::table::RtiTable::dtlv_rti_btreeset_get_at_local).
 ///
 /// # Safety

@@ -129,6 +129,12 @@ native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 // quadratic in its length, because a tree has no position to jump to.
 native fun map_key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
 native fun map_value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
+// The whole map read out in one walk, onto the end of a list, which reaching
+// every position does not. The list is the caller's, so that it has a real
+// descriptor where a result would only be a `data`.
+native fun map_keys_into<K, V>(ref self: %{K = V}, mut out: [K]) with { K is ord, }
+native fun map_values_into<K, V>(ref self: %{K = V}, mut out: [V]) with { K is ord, }
+native fun map_entries_into<K, V>(ref self: %{K = V}, mut out: [(K, V)]) with { K is ord, }
 
 // Tensors. The rank is part of the type rather than a parameter, so these are
 // written at rank 1 -- the shape a list-like walk wants. What they need that a
@@ -144,6 +150,7 @@ native fun set_insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
 native fun set_remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
 // Reaching an element by position; see `map_key_at`.
 native fun set_get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
+native fun set_into_list<T>(ref self: #{T}, mut out: [T]) with { T is ord, }
 
 // Floating point math, from the platform's libm. These are the operations
 // that have no machine instruction behind them, which is why they are here

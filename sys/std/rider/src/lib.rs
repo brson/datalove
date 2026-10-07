@@ -1481,6 +1481,68 @@ pub extern "C-unwind" fn dlr_std__map_value_at(
     }
 }
 
+/// Every key, value or entry of a map, or element of a set, read out in one
+/// walk onto the end of the caller's list. See `dtlv_rti_btreemap_keys_into_local`.
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_keys_into(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    list_ptr: *const u8, list_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rti::call::dtlv_rti_btreemap_keys_into_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            list_ptr as *mut u8, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_values_into(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    list_ptr: *const u8, list_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rti::call::dtlv_rti_btreemap_values_into_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            list_ptr as *mut u8, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_entries_into(
+    rt: *mut u8,
+    map_ptr: *const u8, map_td: *const u8,
+    list_ptr: *const u8, list_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rti::call::dtlv_rti_btreemap_entries_into_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            list_ptr as *mut u8, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__set_into_list(
+    rt: *mut u8,
+    set_ptr: *const u8, set_td: *const u8,
+    list_ptr: *const u8, list_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rti::call::dtlv_rti_btreeset_into_list_local(
+            rt, set_ptr, set_td as *const rtdt::TyDesc,
+            list_ptr as *mut u8, list_td as *const rtdt::TyDesc,
+        ) as u8
+    }
+}
+
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__set_contains(
     rt: *mut u8,

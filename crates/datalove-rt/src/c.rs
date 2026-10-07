@@ -1140,6 +1140,107 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_value_at_local(
     }
 }
 
+/// Every key of a map, in sort order, onto the end of a list.
+///
+/// Appended to the list, which is the caller's: a generic one makes it with a
+/// descriptor for the element type it was handed, so the list has a real one
+/// here where a result slot would only say `data`. See `btreemap_collect_impl`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_keys_into_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_collect_impl(
+            rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
+            crate::impls::btreemap::MapPart::Keys,
+            list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc),
+        )
+    }
+}
+
+/// Every value of a map, in the order of its key, onto the end of a list.
+///
+/// Appended to the list, which is the caller's: a generic one makes it with a
+/// descriptor for the element type it was handed, so the list has a real one
+/// here where a result slot would only say `data`. See `btreemap_collect_impl`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_values_into_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_collect_impl(
+            rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
+            crate::impls::btreemap::MapPart::Values,
+            list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc),
+        )
+    }
+}
+
+/// Every entry of a map as a key and its value, in sort order, onto the end of
+/// a list.
+///
+/// Appended to the list, which is the caller's: a generic one makes it with a
+/// descriptor for the element type it was handed, so the list has a real one
+/// here where a result slot would only say `data`. See `btreemap_collect_impl`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_entries_into_local(
+    rt: LocalRtHandle,
+    btreemap_value_ref: *const u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_collect_impl(
+            rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
+            crate::impls::btreemap::MapPart::Entries,
+            list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc),
+        )
+    }
+}
+
+/// Every element of a set, in order, onto the end of a list. See
+/// `dtlv_rti_btreemap_keys_into_local`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_into_list_local(
+    rt: LocalRtHandle,
+    set_value_ref: *const u8,
+    set_tydesc: *const rtdt::TyDesc,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!set_value_ref.is_null(), "set_value_ref is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::set::btreeset_to_list_impl(
+            rt_ref, set_value_ref, rtdt::TyDescRef::from_ptr(set_tydesc),
+            list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc),
+        )
+    }
+}
+
 /// The element at `index` in sort order, or none past the end.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_get_at_local(

@@ -1,0 +1,69 @@
+require module sys/std/list
+require module sys/std/map
+require module sys/std/set
+require module sys/std/string
+
+// A map and a set read out whole, big enough to be trees of several levels.
+//
+// `keys`, `values`, `entries` and `to_list` walk the leaf chain once, onto a
+// list the caller made. Each is checked from a concrete caller and from a
+// generic one, whose list is made with a descriptor it was handed, and the
+// strings check that every element is cloned rather than shared.
+//
+// The set is built by inserting, which splits leaves, and a split leaf was
+// once left out of the chain: a set of two hundred read out as five.
+
+fun squares(n: u32): !%{u32 = string}
+  var out: %{u32 = string} = %{}
+  var i: u32 = 0
+  loop while i .< n
+    // Inserted in a scrambled order, so that the tree is built by splitting.
+    let k = i *! 37 -! (i *! 37 /! n) *! n
+    call map.insert(mut out, k, string.from_u32(k))
+    set i = i +! 1
+  end loop
+  ret ok out
+end fun
+
+fun generic_keys<K, V>(ref m: %{K = V}): [K] with { K is ord, }
+  ret map.keys(ref m)
+end fun
+
+fun generic_entries<K, V>(ref m: %{K = V}): [(K, V)] with { K is ord, }
+  ret map.entries(ref m)
+end fun
+
+fun generic_elements<T>(ref s: #{T}): [T] with { T is ord, }
+  ret set.to_list(ref s)
+end fun
+
+let m = squares(200)!
+let keys = map.keys(ref m)
+let values = map.values(ref m)
+let entries = map.entries(ref m)
+
+var evens: #{u32} = #{}
+var i: index = 0
+loop while i .< list.len(ref keys)
+  let _ = set.insert(mut evens, keys[i]! *! 2)
+  set i = i +! 1
+end loop
+let elements = set.to_list(ref evens)
+
+// Lengths, ends, and that the order is the keys'.
+let summary = (
+  list.len(ref keys), keys[0]!, keys[199]!,
+  list.len(ref values), values[199]!@,
+  list.len(ref entries), entries[100]!@,
+  list.len(ref elements), elements[0]!, elements[199]!,
+)
+
+let generic = (
+  list.len(ref generic_keys(ref m)),
+  generic_keys(ref m)[150]!,
+  generic_entries(ref m)[199]!@,
+  list.len(ref generic_elements(ref evens)),
+  generic_elements(ref evens)[3]!,
+)
+
+let output = (summary, generic)

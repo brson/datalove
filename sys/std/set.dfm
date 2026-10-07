@@ -12,7 +12,7 @@ import std.set_contains
 import std.set_insert
 import std.set_remove
 import std.set_get
-import std.list_push
+import std.set_into_list
 import std.list_pop
 
 // The number of elements.
@@ -58,14 +58,7 @@ end fun
 // Every element, in sort order.
 fun to_list<T>(ref self: #{T}): [T] with { T is ord, }
   var built: [T] = []
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      call list_push(mut built, elem)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  call set_into_list(ref self, mut built)
   ret built
 end fun
 
