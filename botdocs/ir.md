@@ -72,8 +72,8 @@ The crate is `crates/datalove-datafun-ir`, with four modules -- `layout`,
 IR. `FuncId` survives above it, in the compiler's map from `(ModuleId, name)` to
 `(IrModuleId, FuncId)`; where both appear they are numerically the same.
 
-`CallSiteId` stays stable across transformations like inlining, which is what
-lets the JIT count calls at a site and decide to tier it up.
+`CallSiteId` numbers a code unit's call sites. Nothing reads it now that the
+dynamic inliner, which counted calls per site, is gone.
 
 `IrModuleId` is a plain number so that a module reference can be serialized.
 Salsa's `ModuleId` is a `#[salsa::input]`, so two `::new()` calls on the same
@@ -94,8 +94,7 @@ position in whichever unit's list is in scope, and every script unit numbers its
 own functions from zero, so `Local(1)` means a different function in each of
 them. Resolving one is fine, because the execution context holds one unit's list
 at a time and only `External` swaps it. What is not fine is *remembering* a
-function between calls by a `Local` alone: the dynamic inliner's optimized
-bodies and the JIT's compiled ones both did, and a hot function in one REPL line
+function between calls by a `Local` alone: the JIT's compiled bodies did, and a hot function in one REPL line
 was executed in place of a different function at the same id in the next.
 Anything that caches keys on a resolved identity instead -- `FuncIdentity`,
 which the interpreter and the JIT share.
@@ -348,8 +347,7 @@ one has four forms, split by whether the destination is precise (`Mut`, which
 the caller always hands over initialized) or tracked (`Out`, which starts
 empty): `ParamStore`, `ParamStoreTracked`, `ParamSetField`,
 `ParamSetFieldTracked`. `RefStore` and `RefSetField` generalize these to any
-reference-like operand, which is what inlining needs in order to write straight
-to the caller's location.
+reference-like operand.
 
 For an `out` parameter the **caller** destroys the existing value before the
 call, with `DropViaRef`.
@@ -921,12 +919,6 @@ the one now running, since a unit is added once it has finished.
 
 Everything here transforms `IrCodeUnit` in place or produces a new one.
 
-**Inlining** (`datalove-datafun-inline`) replaces a call with the callee's
-body, substituting the callee's parameters with the caller's argument operands.
-It handles same-module, cross-module and dynamic (interpreter-driven) cases.
-`RefStore` and `RefSetField` exist for it: an inlined body writing an `out`
-parameter has to write the caller's location directly.
-
 **Const inlining and DCE** (`datalove-datafun-const`) evaluates a const
 binding's pre-lowered IR to a `ConstValue`, replaces the expression with a
 `Const` instruction, and then eliminates the instructions and blocks that leaves
@@ -1047,7 +1039,6 @@ assume.
 |---|---|
 | `ir_lower_tests` | IR lowering from worldfiles |
 | `ir_lower_script_tests` | Script IR lowering |
-| `ir_inline_tests` | The inlining pass |
 | `ir_serial_tests` | Serialization round-trip, and that both backends agree across it |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `aot_layout_tests` | The cranelift AOT type layouts against the interpreter's type descriptors |

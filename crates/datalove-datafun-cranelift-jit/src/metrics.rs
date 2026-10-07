@@ -14,8 +14,6 @@ pub enum ExecutionMode {
     Interpreted,
     /// Executed via JIT-compiled code.
     Jit,
-    /// Executed via JIT-compiled inlined code.
-    InlinedJit,
 }
 
 /// Per-function execution metrics.
@@ -27,8 +25,6 @@ pub struct FunctionMetrics {
     pub total_time_ns: u64,
     /// Execution mode for this function (last used mode).
     pub mode: Option<ExecutionMode>,
-    /// Whether this function was inlined into callers.
-    pub inlined: bool,
     /// Whether this function was JIT-compiled.
     pub jit_compiled: bool,
 }
@@ -42,18 +38,12 @@ pub struct AggregateMetrics {
     pub interpreted_calls: u64,
     /// Calls executed via JIT.
     pub jit_calls: u64,
-    /// Calls executed via inlined JIT.
-    pub inlined_jit_calls: u64,
     /// Total execution time for all calls.
     pub total_execution_time: Duration,
     /// Number of JIT-compiled functions.
     pub jit_compiled_count: u32,
     /// Total JIT code size in bytes.
     pub total_jit_code_size: usize,
-    /// Number of inlined call sites.
-    pub inlined_sites_count: u32,
-    /// Number of inlining attempts skipped.
-    pub inlinings_skipped: u32,
 }
 
 /// Configuration for metrics collection.
@@ -139,7 +129,6 @@ impl MetricsCollector {
         match mode {
             ExecutionMode::Interpreted => self.aggregate.interpreted_calls += 1,
             ExecutionMode::Jit => self.aggregate.jit_calls += 1,
-            ExecutionMode::InlinedJit => self.aggregate.inlined_jit_calls += 1,
         }
 
         // Calculate elapsed time if timing was enabled.
@@ -171,21 +160,6 @@ impl MetricsCollector {
         }
     }
 
-    /// Record that a call site was inlined.
-    pub fn record_inlining(&mut self, caller: FuncIdentity) {
-        self.aggregate.inlined_sites_count += 1;
-
-        if self.config.per_function_enabled {
-            let metrics = self.per_function.entry(caller).or_default();
-            metrics.inlined = true;
-        }
-    }
-
-    /// Record that an inlining attempt was skipped.
-    pub fn record_inlining_skipped(&mut self) {
-        self.aggregate.inlinings_skipped += 1;
-    }
-
     /// Get aggregate metrics.
     pub fn aggregate(&self) -> &AggregateMetrics {
         &self.aggregate
@@ -210,8 +184,7 @@ impl MetricsCollector {
         };
 
         let jit_ratio = if self.aggregate.total_calls > 0 {
-            (self.aggregate.jit_calls + self.aggregate.inlined_jit_calls) as f64
-                / self.aggregate.total_calls as f64
+            self.aggregate.jit_calls as f64 / self.aggregate.total_calls as f64
         } else {
             0.0
         };
@@ -220,7 +193,6 @@ impl MetricsCollector {
             total_calls: self.aggregate.total_calls,
             jit_compiled_functions: self.aggregate.jit_compiled_count,
             total_code_size: self.aggregate.total_jit_code_size,
-            inlined_sites: self.aggregate.inlined_sites_count,
             avg_call_time_ns,
             jit_execution_ratio: jit_ratio,
         }
@@ -249,8 +221,6 @@ pub struct MetricsSummary {
     pub jit_compiled_functions: u32,
     /// Total generated code size in bytes.
     pub total_code_size: usize,
-    /// Number of inlined call sites.
-    pub inlined_sites: u32,
     /// Average call execution time in nanoseconds.
     pub avg_call_time_ns: u64,
     /// Ratio of calls executed via JIT (0.0 to 1.0).
@@ -263,7 +233,6 @@ impl std::fmt::Display for MetricsSummary {
         writeln!(f, "  Total calls: {}", self.total_calls)?;
         writeln!(f, "  JIT-compiled functions: {}", self.jit_compiled_functions)?;
         writeln!(f, "  Total code size: {} bytes", self.total_code_size)?;
-        writeln!(f, "  Inlined sites: {}", self.inlined_sites)?;
         writeln!(f, "  Avg call time: {} ns", self.avg_call_time_ns)?;
         writeln!(f, "  JIT execution ratio: {:.1}%", self.jit_execution_ratio * 100.0)?;
         Ok(())

@@ -8,7 +8,7 @@
 //! - **bytecode**: the whole analysis again, function bodies on the bytecode.
 //! - **jit**: the IR walker with a JIT compiling every function on its first call.
 //! - **chaos**: the bytecode under an `OptimizingDispatcher` that compiles,
-//!   uses the JIT and inlines at random, seeded from the fixture.
+//!   and uses the JIT at random, seeded from the fixture.
 //! - **aot**: the Cranelift AOT backend, for a program of one script fragment
 //!   and no expressions that the reference ran to completion; its stderr must
 //!   be the reference's debug log.
@@ -45,8 +45,6 @@ use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks};
 
 /// Functions the chaos dispatcher JIT-compiled, over the whole corpus.
 static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
-/// Calls the chaos dispatcher inlined, over the whole corpus.
-static CHAOS_INLINED: AtomicU32 = AtomicU32::new(0);
 /// Fixtures each engine ran, in the order of `Differential::ALL`.
 static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) }; Differential::ALL.len()];
 
@@ -124,7 +122,6 @@ impl ExecutorHooks for Setup {
         };
         if let Some(chaos) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
             CHAOS_COMPILED.fetch_add(chaos.jit().stats().compiled_count, Ordering::Relaxed);
-            CHAOS_INLINED.fetch_add(chaos.inliner().stats().inlinings_performed, Ordering::Relaxed);
         }
     }
 }
@@ -346,10 +343,10 @@ fn report() -> Result<(), String> {
     if cfg!(miri) || !datalove_exampletest::parse_test_filters().is_empty() {
         return Ok(());
     }
-    let (compiled, inlined) = (CHAOS_COMPILED.load(Ordering::Relaxed), CHAOS_INLINED.load(Ordering::Relaxed));
-    println!("chaos: {compiled} functions JIT-compiled, {inlined} calls inlined");
-    if compiled == 0 || inlined == 0 {
-        return Err(format!("the chaos dispatcher never engaged: {compiled} compiled, {inlined} inlined"));
+    let compiled = CHAOS_COMPILED.load(Ordering::Relaxed);
+    println!("chaos: {compiled} functions JIT-compiled");
+    if compiled == 0 {
+        return Err("the chaos dispatcher never engaged: 0 compiled".to_string());
     }
     Ok(())
 }

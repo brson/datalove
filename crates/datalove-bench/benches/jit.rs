@@ -1,14 +1,10 @@
-//! Interpreter, inliner and jit measured against each other on one workload.
+//! Interpreter and jit measured against each other on one workload.
 //!
-//! Four configurations per workload, so that the jit's contribution and the
-//! inliner's can be read apart:
+//! Two configurations per workload:
 //!
 //! - `interp` -- no dispatcher at all, which is what every entry point but
 //!   `datalove script --jit` uses today.
-//! - `inline` -- `OptimizingDispatcher` with the jit off. Measures whether
-//!   inlining pays for itself under the interpreter alone.
-//! - `jit` -- `OptimizingDispatcher` with inlining off.
-//! - `jit_inline` -- both on.
+//! - `jit` -- `OptimizingDispatcher`.
 //!
 //! Only execution is timed. Building the database, compiling the fragment and
 //! constructing the dispatcher all happen in `with_inputs`, which divan does
@@ -39,30 +35,24 @@ fn main() {
 #[derive(Clone, Copy)]
 enum Config {
     Interp,
-    Inline,
     Jit,
-    JitInline,
 }
 
 impl Config {
     /// The dispatcher this configuration runs with, if any.
     ///
-    /// Thresholds are 1 rather than production's 100 and 50. At production
-    /// thresholds most of these workloads never reach either optimization, so
-    /// the four configurations would measure the same thing; what the
-    /// thresholds cost is a separate question from what the optimizations are
-    /// worth, and mixing them measures neither.
+    /// The threshold is 1 rather than production's 100. At the production
+    /// threshold most of these workloads never compile anything, so both
+    /// configurations would measure the same thing; what the threshold costs
+    /// is a separate question from what the jit is worth, and mixing them
+    /// measures neither.
     fn dispatcher(self) -> Option<Box<dyn CallDispatcher>> {
-        let (jit_enabled, inlining_enabled) = match self {
-            Config::Interp => return None,
-            Config::Inline => (false, true),
-            Config::Jit => (true, false),
-            Config::JitInline => (true, true),
-        };
+        if let Config::Interp = self {
+            return None;
+        }
         let config = DispatcherConfig {
-            jit_enabled,
-            inlining_enabled,
-            mode: DispatcherMode::Tuned { jit_threshold: 1, inline_threshold: 1 },
+            jit_enabled: true,
+            mode: DispatcherMode::Tuned { jit_threshold: 1 },
             // Off: the collector times the dispatcher's own bookkeeping rather
             // than the call, and its per-call `Instant::now` would land inside
             // what is being measured.
@@ -176,11 +166,7 @@ macro_rules! workload {
             #[divan::bench]
             fn interp(bencher: Bencher) { run(bencher, Config::Interp) }
             #[divan::bench]
-            fn inline(bencher: Bencher) { run(bencher, Config::Inline) }
-            #[divan::bench]
             fn jit(bencher: Bencher) { run(bencher, Config::Jit) }
-            #[divan::bench]
-            fn jit_inline(bencher: Bencher) { run(bencher, Config::JitInline) }
         }
     };
 }
@@ -188,8 +174,7 @@ macro_rules! workload {
 // What the harness itself costs, with nothing to run.
 workload!(floor, "debuglog 1");
 
-// A tight arithmetic loop inside one call. Nothing to inline, and the jit's
-// best case: no call crosses the boundary while the loop runs.
+// A tight arithmetic loop inside one call. The jit's best case: no call crosses the boundary while the loop runs.
 workload!(
     loop_arith,
     r#"
@@ -217,8 +202,7 @@ debuglog run_many(20, 100000)
 "#
 );
 
-// A small callee in a hot loop: what inlining is for, and what the jit is
-// worst at, since every call in compiled code leaves through the trampoline.
+// A small callee in a hot loop: what the jit is worst at, since every call in compiled code leaves through the trampoline.
 workload!(
     small_callee,
     r#"
@@ -240,8 +224,7 @@ debuglog many_calls(200000)
 "#
 );
 
-// Recursion, where inlining a call site cannot remove the call and the jit
-// pays the trampoline on every level.
+// Recursion, where the jit pays the trampoline on every level.
 workload!(
     recursive,
     r#"
@@ -257,7 +240,7 @@ debuglog fib(24)
 "#
 );
 
-// A chain of small calls, so that inlining has somewhere to go transitively.
+// A chain of small calls.
 workload!(
     call_chain,
     r#"

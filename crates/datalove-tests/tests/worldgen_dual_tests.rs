@@ -95,12 +95,11 @@ fn run_with_chaos_interp(
         }
     }
 
-    // Chaos dispatch without inlining: compile 75% of calls on the first one
+    // Chaos dispatch: compile 75% of calls on the first one
     // offered, and use the compiled code for 1% of calls from interpreted code.
     // Most compiled code is then reached from other compiled code, through the
     // stubs, with the interpreter in between wherever a callee is not compiled.
-    let mut config = DispatcherConfig::chaos_with_probabilities(seed, 75, 1, 0);
-    config.inlining_enabled = false;
+    let config = DispatcherConfig::chaos_with_probabilities(seed, 75, 1);
     let chaos = match OptimizingDispatcher::with_config(config) {
         Ok(c) => c,
         Err(e) => {

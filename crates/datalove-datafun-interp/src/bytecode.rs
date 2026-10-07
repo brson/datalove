@@ -175,7 +175,7 @@ pub(crate) enum Op {
     Call { block: u32, index: u32 },
     /// Make the call described by `calls[site]`, whose arguments are all in
     /// this frame, without the general call path. Takes the general one whenever
-    /// a dispatcher is installed, so the JIT and the inliner see every call.
+    /// a dispatcher is installed, so the JIT sees every call.
     CallFast { site: u32 },
 
     Const1 { dst: Loc, imm: u8 },
@@ -2427,7 +2427,7 @@ impl IrInterpreter {
         if !self.execute_hot(instr, &mut regs.frame, frames)
             && !self.execute_warm(instr, &UnitTypes::of(regs.func), &mut regs.frame, frames)
         {
-            self.execute_instruction(instr, &mut regs.frame, &regs.ctx, regs.registry, frames, regs.code_ref)?;
+            self.execute_instruction(instr, &mut regs.frame, &regs.ctx, regs.registry, frames)?;
         }
         Ok(())
     }
@@ -2439,23 +2439,16 @@ impl IrInterpreter {
         if self.bc_stats.counting {
             self.bc_stats.count(|| "(general call)".into());
         }
-        let (call_site_info, func_ref, args, shapes, dest) =
+        let (func_ref, args, shapes, dest) =
             match &regs.func.blocks[block as usize].instructions[index as usize] {
-                Instruction::Call { site_id, dest, func: f, args, shape_descriptors, .. } => (
-                    regs.code_ref.map(|caller| crate::dispatch::CallSiteInfo {
-                        caller: caller.clone(),
-                        caller_unit: regs.ctx.unit(),
-                        call_site_id: *site_id,
-                    }),
-                    f, args, shape_descriptors, *dest,
-                ),
-                Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, .. } => {
-                    (None, f, args, shape_descriptors, *dest)
+                Instruction::Call { dest, func: f, args, shape_descriptors, .. }
+                | Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, .. } => {
+                    (f, args, shape_descriptors, *dest)
                 }
                 i => unreachable!("Call op on {:?}", i),
             };
         let frames = &mut *regs.frames;
-        self.execute_call(func_ref, args, shapes, dest, call_site_info, &mut regs.frame, &regs.ctx, regs.registry, frames)
+        self.execute_call(func_ref, args, shapes, dest, &mut regs.frame, &regs.ctx, regs.registry, frames)
     }
 
     /// Make a fast call without a plan: a native, a forwarder, a bytecode

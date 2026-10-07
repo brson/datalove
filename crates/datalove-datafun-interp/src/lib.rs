@@ -47,7 +47,6 @@ mod ops;
 mod types;
 mod collections;
 mod dispatch;
-mod dynamic;
 mod intrinsics;
 mod ctfe;
 mod native;
@@ -62,8 +61,7 @@ pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
-pub use dispatch::{CallDispatcher, CallSiteInfo, DispatchCallContext, DispatchResult, FuncIdentity};
-pub use dynamic::{DynamicInliner, DynamicInlinerConfig, InlinerStats};
+pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult, FuncIdentity};
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
 
@@ -282,7 +280,7 @@ impl IrInterpreter {
     /// Take the call dispatcher out of the interpreter.
     ///
     /// Returns the dispatcher if one was set, leaving None in its place.
-    /// Useful for inspecting dispatcher state (like inliner stats) after execution.
+    /// Useful for inspecting dispatcher state (like JIT stats) after execution.
     pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
         self.call_dispatcher.borrow_mut().take()
     }
@@ -464,7 +462,7 @@ impl IrInterpreter {
 
     /// Execute a function with arguments in a context with available functions.
     ///
-    /// `code_ref` identifies the function being executed (for call site tracking).
+    /// `code_ref` identifies the function being executed, to key its layout on.
     pub fn call_in_context(
         &mut self,
         func: &IrCodeUnit,
@@ -563,7 +561,7 @@ impl IrInterpreter {
         }
         // Functions write their result to ret_dest, and always complete
         // normally.
-        self.execute_blocks(&func.blocks, &UnitTypes::of(func), frame, ret_dest, None, ctx, registry, frames, code_ref)
+        self.execute_blocks(&func.blocks, &UnitTypes::of(func), frame, ret_dest, None, ctx, registry, frames)
             .map(|_| ())
     }
 
@@ -654,7 +652,6 @@ impl IrInterpreter {
         let ctx = ExecutionContext::new(at, &unit.nested_units);
 
         // Execute blocks with registry for function lookups and frames for slot access.
-        // Script units don't have a single function ID, so pass None.
         let result = self.execute_blocks(
             &unit.blocks,
             &UnitTypes::of(unit),
@@ -664,7 +661,6 @@ impl IrInterpreter {
             &ctx,
             &env.registry,
             &mut env.frames,
-            None,
         );
         self.release_retired_call_caches();
 
@@ -713,7 +709,6 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        current_func: Option<&CodeRef>,
     ) -> Result<UnitCompletion, InterpError> {
         let mut current_block = BlockId(0);
 
@@ -726,7 +721,7 @@ impl IrInterpreter {
                 if !self.execute_hot(instr, frame, frames)
                     && !self.execute_warm(instr, unit_types, frame, frames)
                 {
-                    self.execute_instruction(instr, frame, ctx, registry, frames, current_func)?;
+                    self.execute_instruction(instr, frame, ctx, registry, frames)?;
                 }
             }
 
@@ -1486,7 +1481,6 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        current_func: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
         match instr {
             Instruction::Erase { .. }
@@ -1601,21 +1595,12 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 frame.mark_slot_dropped(*slot);
             }
-            Instruction::Call { site_id, dest, func, args, shape_descriptors, .. } => {
-                let call_site_info = current_func.map(|caller| dispatch::CallSiteInfo {
-                    caller: caller.clone(),
-                    caller_unit: ctx.unit(),
-                    call_site_id: *site_id,
-                });
-                self.execute_call(
-                    func, args, shape_descriptors, *dest, call_site_info, frame, ctx, registry, frames)?;
-            }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
-            // only used by the specialization pass. It has no site id, so the
-            // dynamic inliner does not see it.
-            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
+            // only used by the specialization pass.
+            Instruction::Call { dest, func, args, shape_descriptors, .. }
+            | Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
                 self.execute_call(
-                    func, args, shape_descriptors, *dest, None, frame, ctx, registry, frames)?;
+                    func, args, shape_descriptors, *dest, frame, ctx, registry, frames)?;
             }
             Instruction::ListNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);
@@ -2527,7 +2512,6 @@ impl IrInterpreter {
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        call_site_info: Option<dispatch::CallSiteInfo>,
     ) -> Option<Result<(), InterpError>> {
         // Take dispatcher temporarily to avoid borrow conflicts.
         let mut dispatcher = self.call_dispatcher.borrow_mut().take()?;
@@ -2540,7 +2524,6 @@ impl IrInterpreter {
             registry,
             frames,
             interp: self,
-            call_site_info,
             shape_descriptors,
         };
 
@@ -2567,15 +2550,6 @@ impl IrInterpreter {
         self.layout_cache.get_or_compute(func, unit, &mut self.tydesc_table)
     }
 
-    /// Get an optimized version of a code unit from the dispatcher if available.
-    ///
-    /// Shared rather than borrowed: the dispatcher is behind a `RefCell` and the
-    /// borrow cannot be held across the call this body is about to make.
-    fn get_optimized_function(&self, func: dispatch::FuncIdentity) -> Option<Rc<IrCodeUnit>> {
-        let dispatcher = self.call_dispatcher.borrow();
-        dispatcher.as_ref().and_then(|d| d.get_optimized_function(func))
-    }
-
     /// Execute a call instruction.
     #[allow(clippy::too_many_arguments)]
     fn execute_call(
@@ -2584,7 +2558,6 @@ impl IrInterpreter {
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
         dest: datalove_datafun_ir::ValueId,
-        call_site_info: Option<dispatch::CallSiteInfo>,
         frame: &mut Frame,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -2596,7 +2569,7 @@ impl IrInterpreter {
                 self.execute_native_call(native_ctx, args, shape_refs, dest, frame, frames)
             }
             _ => self.execute_call_site(
-                code_ref, callee, args, shape_refs, dest, call_site_info,
+                code_ref, callee, args, shape_refs, dest,
                 frame, ctx, registry, frames),
         }
     }
@@ -2663,10 +2636,6 @@ impl IrInterpreter {
     /// end up, and a dispatcher is offered them there. Only if it declines is
     /// the rest of the frame made ready, so a call the jit takes does not pay
     /// for it.
-    ///
-    /// The body is chosen before the dispatcher is asked, so that the frame is
-    /// taken for the body that will run. An inlining the dispatcher performs
-    /// during this call is used from the next one, which is the same program.
     #[allow(clippy::too_many_arguments)]
     fn execute_call_site(
         &mut self,
@@ -2675,16 +2644,13 @@ impl IrInterpreter {
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
         dest: datalove_datafun_ir::ValueId,
-        call_site_info: Option<dispatch::CallSiteInfo>,
         frame: &mut Frame,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         let identity = dispatch::FuncIdentity::of(code_ref, ctx.unit());
-        let optimized = self.get_optimized_function(identity);
-        let body = optimized.as_deref().unwrap_or(callee);
-        let layout = self.layout_cache.get_or_compute(identity, body, &mut self.tydesc_table);
+        let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
         let mut callee_frame = self.frame_stack.push(layout)?;
 
         // Held until the call returns, because a borrowed argument with no
@@ -2709,14 +2675,14 @@ impl IrInterpreter {
 
         let dispatched = self.try_dispatch_call(
             code_ref, callee, callee_frame.params(), callee_frame.shape_descriptors(),
-            dest_slot, ctx, registry, frames, call_site_info);
+            dest_slot, ctx, registry, frames);
         let result = match dispatched {
             Some(result) => result,
             None => {
                 callee_frame.enter();
                 let callee_ctx = ctx.for_callee(code_ref, registry);
                 self.run_frame(
-                    body, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
+                    callee, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
                     Some(code_ref))
             }
         };

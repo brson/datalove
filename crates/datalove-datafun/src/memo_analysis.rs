@@ -152,8 +152,7 @@ fn parse_sections(content: &str) -> AnyResult<Vec<ParsedSection>> {
             WorldfileSection::ScriptFragment { .. } | WorldfileSection::ScriptExpr { .. } => {
                 bail!("module_memo only supports module sections, not script sections");
             }
-            WorldfileSection::InlineDirectives { .. }
-            | WorldfileSection::Rider { .. } => {
+            WorldfileSection::Rider { .. } => {
                 // Not relevant for memoization tests, skip.
                 continue;
             }

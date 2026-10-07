@@ -14,7 +14,6 @@ home here.
 
 ## Contents
 
-- [Nothing but a test inlines](#user-content-nothing-but-a-test-inlines)
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
@@ -35,46 +34,6 @@ home here.
 - [Deep recursion aborts the process, in every engine but the bytecode](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
-
-## Nothing but a test inlines
-
-**Reproduced**, in the sense that the constructors are countable.
-
-`DynamicInliner` is constructed in exactly one place,
-`OptimizingDispatcher::with_config`. `OptimizingDispatcher` in turn is
-constructed only in its own unit tests, in the two dispatch suites, and in
-`datalove-bench/benches/jit.rs` -- and a bench is compiled by `just test` but
-not run by it. `datalove script --jit` builds a bare `JitEngine`; the REPL and
-`worldfile_analysis` pass no dispatcher at all. So the inliner has never run in
-anything a user can invoke.
-
-The other inliner, the directive-driven `datalove-datafun-inline` API --
-`parse_inline_directives`, `inline_module`, `inline_cross_module`, and the
-`inline-directives` worldfile section -- is reachable only from
-`ir_inline_tests`, which compares printed IR before and against after and never
-*runs* the result. 21 fixtures, none generic.
-
-What does run is the two dispatch suites, over the 409 worldfiles in
-`fixtures/interp`: 7 inlinings in tuned mode, 151 in chaos mode, checked by
-comparing against the plain interpreter.
-
-**Worth knowing before spending anything here.** An inlined body is picked up in
-`execute_call`, when the function is *entered*, so an inlining performed during
-an invocation does not affect that invocation -- only a later call to the same
-caller. A hot loop inside a single call never benefits from inlining its
-callees. That is what makes the feature much weaker than the thresholds
-suggest, and it is worth deciding whether the inliner earns its place at all
-before building anything on top of it.
-
-**Two more things, reasoned from the code.** The inlined body never reaches the
-jit: `OptimizingDispatcher::dispatch_call` always hands `try_jit_execution` the
-original callee ("We always pass the original function to JIT"), and the inlined
-caller is only picked up in `execute_call`, after dispatch has declined. So
-`InlinedJit` is a metrics label, not a different compile. And `DynamicInliner`
-has no cost model: it inlines when a site's count crosses `threshold` (100), with
-no size limit, no growth budget, no depth limit and no recursion check, so a hot
-self-recursive function inlines into itself and the moved sites, with fresh ids,
-cross the threshold in turn. The directive-driven path does check recursion.
 
 ## No table module, and none can be written
 
@@ -139,7 +98,7 @@ element *is* a type parameter -- `[|T, 1|]` -- even though its rank is not. See
 A script unit is registered once it finishes
 (`IrInterpreter::execute_script_unit_in_env` calls `env.add_unit` after
 execution, and returns early on error). So a unit that runs far enough to leave
-something behind -- an inlined body in the dispatcher, a JIT entry -- and then
+something behind -- a JIT entry -- and then
 errors is never registered, and the next unit takes the index it was using.
 Anything remembered under that index is then the wrong unit's.
 

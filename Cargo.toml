@@ -62,7 +62,6 @@ datalove-datafun-const = { version = "0.1.0", path = "crates/datalove-datafun-co
 datalove-datafun-cranelift = { version = "0.1.0", path = "crates/datalove-datafun-cranelift" }
 datalove-datafun-cranelift-aot = { version = "0.1.0", path = "crates/datalove-datafun-cranelift-aot" }
 datalove-datafun-cranelift-jit = { version = "0.1.0", path = "crates/datalove-datafun-cranelift-jit" }
-datalove-datafun-inline = { version = "0.1.0", path = "crates/datalove-datafun-inline" }
 datalove-datafun-interp = { version = "0.1.0", path = "crates/datalove-datafun-interp" }
 datalove-datafun-intrinsics = { version = "0.1.0", path = "crates/datalove-datafun-intrinsics" }
 datalove-datafun-ir = { version = "0.1.0", path = "crates/datalove-datafun-ir" }

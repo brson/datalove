@@ -2,7 +2,7 @@
 scriptunit-fragment
 ----------
 
-// Test inline function with ref param.
+// Test a function with a ref param, called twice.
 fun read_int(ref x: int): int
     ret x + :int/0
 end fun

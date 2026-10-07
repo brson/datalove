@@ -204,10 +204,6 @@ pub enum WorldfileSection {
     ScriptExpr {
         source: String,
     },
-    /// Inline directives for function inlining tests.
-    InlineDirectives {
-        source: String,
-    },
     /// Rider interface definition (native function signatures).
     Rider {
         name: String,
@@ -239,7 +235,6 @@ impl WorldfileSection {
             }
             WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::InlineDirectives { .. }
             | WorldfileSection::Rider { .. } => None,
         }
     }
@@ -254,7 +249,6 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeTy { source, .. }
             | WorldfileSection::ScriptFragment { source }
             | WorldfileSection::ScriptExpr { source }
-            | WorldfileSection::InlineDirectives { source }
             | WorldfileSection::Rider { source, .. } => Some(source),
             WorldfileSection::ModuleRemove { .. } => None,
         }
@@ -271,7 +265,6 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeTy { .. } => Some(ModuleSectionKind::ChangeTy),
             WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::InlineDirectives { .. }
             | WorldfileSection::Rider { .. } => None,
         }
     }
@@ -287,7 +280,6 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeTy { .. } => "module-change-ty",
             WorldfileSection::ScriptFragment { .. } => "scriptunit-fragment",
             WorldfileSection::ScriptExpr { .. } => "scriptunit-expr",
-            WorldfileSection::InlineDirectives { .. } => "inline-directives",
             WorldfileSection::Rider { .. } => "rider",
         }
     }
@@ -547,11 +539,6 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::ScriptExpr { source });
         }
 
-        if header == "inline-directives" {
-            let source = self.read_content();
-            return Ok(WorldfileSection::InlineDirectives { source });
-        }
-
         // Rider sections.
         if let Some(name) = header.strip_prefix("rider ") {
             let name = name.trim().to_string();
@@ -569,7 +556,7 @@ impl<'a> Parser<'a> {
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
              'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             'scriptunit-expr', 'inline-directives', or 'rider <name>')",
+             'scriptunit-expr', or 'rider <name>')",
             header
         );
     }

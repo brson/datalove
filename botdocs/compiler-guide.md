@@ -65,7 +65,6 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-datafun-const` | Const evaluation (CTFE), const inlining, dead code elimination |
 | `datalove-datafun-ir` | IR types (`IrCodeUnit`, `IrType`, `ValueId`, layout, registries) |
 | `datalove-datafun-intrinsics` | `IntrinsicId` and signatures for `icall` operations |
-| `datalove-datafun-inline` | Function inlining pass over IR, including cross-module and dynamic inlining |
 | `datalove-datafun-compiler` | Salsa-tracked pipeline, `Database`, `compile_modules()`, `lower_module_graph_with_evaluator()`, specialization |
 | `datalove-datafun` | High-level facade, `ModuleCompilationPipeline`, `ScriptCompiler`, workspaces, rider build/load |
 
@@ -76,7 +75,7 @@ Reference for the datalove-datafun compiler architecture.
 | `datalove-datafun-interp` | Interpreter, `CallDispatcher`, `NativeFunctionTable`, CTFE evaluator |
 | `datalove-datafun-cranelift` | Shared Cranelift utilities |
 | `datalove-datafun-cranelift-aot` | Cranelift AOT compilation |
-| `datalove-datafun-cranelift-jit` | JIT compilation, tiering and dynamic inlining dispatcher |
+| `datalove-datafun-cranelift-jit` | JIT compilation and tiering dispatcher |
 | `datalove-datafun-c-aot` | AOT backend emitting C11 source linked against the runtime |
 | `datalove-rt` | The runtime: C ABI (`c`), Rust wrappers (`rust`), implementation (`impls`) |
 | `datalove-rtdt` | Runtime type descriptors (`TyDesc`), runtime-side layout, anypack |
@@ -1004,8 +1003,7 @@ pub struct IrModuleId(pub u32); // Module index (not salsa ModuleId)
 `CodeUnitId` is the unified addressing scheme that replaced `FuncId` inside the
 IR. `FuncId` survives above it, in the compiler's `FuncIdMap` from
 `(ModuleId, name)` to `(IrModuleId, FuncId)`; the two are numerically the same
-where both appear. `CallSiteId` stays stable across IR transformations like
-inlining, which is what the JIT counts for tiering decisions.
+where both appear.
 
 ### Code Unit References
 
@@ -1024,8 +1022,8 @@ position in whichever unit's list is in scope, and every script unit numbers its
 own functions from zero, so `Local(1)` means a different function in each of
 them. Resolution is fine -- `ExecutionContext` holds one unit's list at a time,
 and only `CodeRef::External` swaps it -- but anything that *remembers* a
-function between calls has to say which unit as well. The dynamic inliner's
-optimized bodies and the JIT's compiled ones both did not, so a hot function in
+function between calls has to say which unit as well. The JIT's compiled
+bodies did not, so a hot function in
 one REPL line was executed in place of a different function at the same id in
 the next. `FuncIdentity` (interp `dispatch.rs`) is what those key on now: it
 resolves `Local` against the scope unit, which also makes it agree with the
@@ -1039,11 +1037,8 @@ The same goes for anything that carries a reference out of the body it was
 written in. A JIT stub encodes its callee's `FuncIdentity`, resolved when the
 stub is built, because compiled code from one unit calls compiled code from an
 earlier one directly and the trampoline cannot know whose code a `Local` came
-from. And the dynamic inliner rewrites an earlier unit's callee's local calls
-to `External` ones (`with_calls_into_unit`) before moving its body into a later
-unit's function. Both are covered by the last units of
-`interp/999_inline_caller_in_earlier_unit`, which the plain jit suite and both
-dispatcher suites get wrong without them.
+from. That is covered by the last units of
+`engines/999_call_into_earlier_unit`.
 
 ### IrCodeUnit
 
@@ -1158,8 +1153,7 @@ four forms:
 - `ParamSetField { param, field_path, value }` - field write to Mut
 - `ParamSetFieldTracked { param, field_path, value }` - field write to Out
 
-`RefStore` and `RefSetField` generalize these to any reference-like operand,
-which is what inlining needs to write straight to the caller's location.
+`RefStore` and `RefSetField` generalize these to any reference-like operand.
 
 For `out` params, the **caller** destroys the existing value before the call via `DropViaRef`.
 
@@ -1500,15 +1494,14 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
 
 - **Interpreter** (`datalove-datafun-interp`) walks the IR directly.
   `CallDispatcher` is the extension point: it can intercept a call and hand it
-  to a JIT or a dynamic inliner, or return `NotHandled` to fall through.
+  to a JIT, or return `NotHandled` to fall through.
   Native rider calls are checked before the dispatcher.
 - **CTFE** (`interp/src/ctfe.rs`) is the interpreter used at compile time.
   `InterpCtfeEvaluator::with_module_registry` gives const expressions access to
   cross-module function calls.
 - **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count.
-  `OptimizingDispatcher` tracks call sites, picks the best available IR
-  (inlined if one exists), executes native code when compiled, and otherwise
-  counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
+  `OptimizingDispatcher` executes native code when a function is compiled, and
+  otherwise counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
   `Chaos` makes seeded pseudo-random decisions for testing.
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) compiles ahead of time.
 - **C AOT** (`datalove-datafun-c-aot`) emits C11 in one pass: type descriptors,
@@ -1525,8 +1518,6 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   must agree on is the runtime's, and that one is fixed. A rider is called
   through it the same way every backend does: `(ptr, tydesc)` per argument, the
   result through an out pair, and a status back.
-- **Inlining** (`datalove-datafun-inline`) transforms IR under
-  `InlineDirective`s, and also drives the interpreter's dynamic inliner.
 
 The runtime's C API (`datalove-rt/src/c.rs`) is entirely `dtlv_rti_*`: calls
 only the compiler emits, which may use whatever ABI is convenient. The crate
@@ -1610,8 +1601,7 @@ runtime, which the JIT cannot speed up, so it is near its ceiling of about 1.8x
 there; arithmetic-shaped code is over 90% interpreter, which is where the 85x
 comes from. The interpreter's call path takes frames off a `FrameStack`
 (`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`);
-reusing frames and layouts made it 1.5-1.8x faster on call-heavy code and turned
-inlining under the interpreter from a regression into roughly break-even.
+reusing frames and layouts made it 1.5-1.8x faster on call-heavy code.
 
 **The interpreter's dispatch is mostly call overhead.** `execute_instruction` is
 one `match` over every instruction, and its prologue and epilogue -- six saved

@@ -114,8 +114,8 @@ pub struct ExecutionContext<'a> {
     ///
     /// A `CodeRef::Local` names one of `functions` by id and says nothing
     /// about whose list that is, so every unit's ids start again at zero.
-    /// Anything that remembers a function between calls -- the inliner's
-    /// optimized bodies, the JIT's compiled ones -- has to key on this as well,
+    /// Anything that remembers a function between calls -- the JIT's compiled
+    /// bodies, the layout cache -- has to key on this as well,
     /// or unit 1's function answers to unit 2's name.
     unit: u32,
     /// Local functions available for calling (from current unit).

@@ -267,20 +267,17 @@ impl IrLayout {
 /// a type descriptor lookup per value and per slot, in the innermost loop there
 /// is.
 ///
-/// Keyed by the function rather than by the body's address, because an address
-/// is not stable across an inlining and a `CodeRef::Local` is not a name on its
-/// own; this is the same key the dispatcher remembers an optimized body under.
-/// The body a key maps to does change, when the inliner replaces one, and
-/// `value_count` is how that is noticed: inlining only ever adds values, so a
-/// body with the count the entry was computed from is the body it was computed
-/// from.
+/// Keyed by the function rather than by the body's address, because a
+/// `CodeRef::Local` is not a name on its own; this is the same key the JIT
+/// remembers a compiled body under. The body a key maps to only changes when
+/// the interpreter's bodies are all replaced, and that empties the cache.
 #[derive(Default)]
 pub struct LayoutCache {
     entries: FxHashMap<FuncIdentity, CachedLayout>,
 }
 
 struct CachedLayout {
-    /// What the layout was computed for, and the version number of the body.
+    /// What the layout was computed for, to check that the body has not changed.
     value_count: u32,
     slot_count: u32,
     layout: Rc<IrLayout>,
@@ -292,8 +289,7 @@ impl LayoutCache {
         Self::default()
     }
 
-    /// The layout for `unit`, computing it if this is the first call to it or
-    /// the first since the inliner replaced its body.
+    /// The layout for `unit`, computing it if this is the first call to it.
     pub fn get_or_compute(
         &mut self,
         key: FuncIdentity,
@@ -304,9 +300,10 @@ impl LayoutCache {
         let slot_count = unit.slot_types.len() as u32;
 
         if let Some(entry) = self.entries.get(&key) {
-            if entry.value_count == value_count && entry.slot_count == slot_count {
-                return Rc::clone(&entry.layout);
-            }
+            debug_assert!(
+                entry.value_count == value_count && entry.slot_count == slot_count,
+                "the body for {key:?} changed under its cached layout");
+            return Rc::clone(&entry.layout);
         }
 
         let layout = Rc::new(IrLayout::of_unit(unit, tydesc_table));

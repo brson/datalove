@@ -309,7 +309,7 @@ typechecking is lazy. Ask the units directly when the question is about validity
   missing is a history, which is engine-level rather than reactivity-level and
   was deliberately left out of the splice work.
 - **A `CallDispatcher` is not told about a module edit, or about a splice.**
-  Cached inlining decisions and JIT code survive one, and a dispatcher keys a
+  JIT code survives one, and a dispatcher keys a
   remembered function on `(unit, id)`, which a splice renumbers. Unreachable
   today, the REPL passing `None`.
 - **No engine path adds or removes a module** mid-session. `WorkspaceDelta`

@@ -1,11 +1,10 @@
 //! Call dispatch trait for extensibility.
 //!
-//! Allows external code (like a JIT or dynamic inliner) to intercept function calls.
+//! Allows external code (like a JIT) to intercept function calls.
 
 use std::any::Any;
-use std::rc::Rc;
 
-use datalove_datafun_ir::{CallSiteId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_rt::c::LocalRtHandle;
 
 use crate::error::InterpError;
@@ -13,26 +12,6 @@ use crate::env::{ExecutionContext, FunctionRegistry};
 use crate::frame::FrameStore;
 use crate::value::{Destination, Value};
 use crate::IrInterpreter;
-
-/// Information about the call site in the caller function.
-///
-/// Used for tracking call sites for dynamic inlining decisions.
-#[derive(Clone, Debug)]
-pub struct CallSiteInfo {
-    /// The function containing this call site.
-    pub caller: CodeRef,
-    /// The script unit whose local scope `caller` names, where it is `Local`.
-    pub caller_unit: u32,
-    /// The unique ID of this call site within the caller.
-    pub call_site_id: CallSiteId,
-}
-
-impl CallSiteInfo {
-    /// Which function this call site is in, unambiguously.
-    pub fn caller_identity(&self) -> FuncIdentity {
-        FuncIdentity::of(&self.caller, self.caller_unit)
-    }
-}
 
 /// A function, named so that two units cannot mean the same thing by it.
 ///
@@ -83,10 +62,6 @@ pub struct DispatchCallContext<'a, 'b> {
     pub frames: &'a mut FrameStore,
     /// Interpreter for executing non-compiled functions.
     pub interp: &'b mut IrInterpreter,
-    /// Information about the call site (for dynamic inlining).
-    ///
-    /// None for calls from JIT code or when caller context is unavailable.
-    pub call_site_info: Option<CallSiteInfo>,
     /// A descriptor for each shape the callee declared, worked out by the call
     /// site, in the order the callee declared them.
     ///
@@ -126,23 +101,9 @@ pub trait CallDispatcher {
 
     /// Convert to Any for downcasting.
     ///
-    /// Used to access dispatcher-specific state (like inliner stats) after execution.
+    /// Used to access dispatcher-specific state (like JIT stats) after execution.
     fn as_any(&self) -> &dyn Any;
 
     /// Convert to mutable Any for downcasting.
     fn as_any_mut(&mut self) -> &mut dyn Any;
-
-    /// Get an optimized version of a code unit if available.
-    ///
-    /// Called before executing a function to check if there's an inlined/optimized
-    /// version that should be used instead. Returns None to use the original code unit.
-    ///
-    /// Shared rather than borrowed because the caller holds the dispatcher through
-    /// a `RefCell` and cannot keep that borrow across the call it is about to
-    /// make. Copying the body out instead was a deep clone of every block and
-    /// instruction, once per entry to an optimized function, and it cost more
-    /// than the inlining saved.
-    fn get_optimized_function(&self, _func: FuncIdentity) -> Option<Rc<IrCodeUnit>> {
-        None
-    }
 }

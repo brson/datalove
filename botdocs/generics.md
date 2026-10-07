@@ -156,8 +156,7 @@ nothing outside a generic.
 
 The map is **derived, not stored**. Each backend calls
 `resolve_ref_descriptors` once for the unit it is about to compile. A field on
-`IrCodeUnit` would have to survive specialization renumbering values and
-inlining offsetting them; deriving on demand cannot go stale.
+`IrCodeUnit` would have to survive specialization renumbering values; deriving on demand cannot go stale.
 
 Roots are `descriptor_params` and `DataBorrow`. Nothing else roots one: a local
 holding an erased value holds a `data` for real, so its static type is honest.
@@ -295,16 +294,6 @@ is width rather than shape: `bridge::enterable` turns away a function whose
 parameters and descriptors together exceed `MAX_DIRECT_ARGS` words, since
 `call_jit` has no function pointer type to enter it through.
 
-The **inliner** has a related rule, for a different reason. `inline_call_site`
-refuses a callee whose `descriptor_shapes` is non-empty, because its body names
-those shapes by index -- `DescriptorRef::Own` on a call, `descriptor` on a
-`ListNew` -- and an index means a different shape, or nothing at all, in the
-caller's list. What it does carry across is `DescriptorRef::Static`, which names
-a whole type and so is valid in any body. A function that is concrete still
-hands static descriptors to the generics it calls, and blanking them on the way
-in entered the callee with nothing to build from
-(`interp/989_inline_static_descriptor`).
-
 The jit also needs runtime symbols registered twice: once in
 `register_runtime_symbols` and once in `trampoline_all_runtime_imports`. Nothing
 catches a missed one at compile time -- it aborts at run time.
@@ -363,7 +352,7 @@ site before it can emit the callee, which is exactly what a REPL cannot give,
 since call sites arrive one at a time.
 
 Monomorphizing what is *hot* remains open, and would reuse the counters
-`optimizing.rs` already keeps for inlining and jit compilation. It is an
+`optimizing.rs` already keeps for jit compilation. It is an
 optimization over a complete implementation rather than a different design.
 
 ## Where the tests are

@@ -515,7 +515,7 @@ impl ScriptExecutor {
     /// Take the call dispatcher from the interpreter.
     ///
     /// Returns the dispatcher if one was set, leaving None in its place.
-    /// Useful for inspecting dispatcher state (like inliner stats) after execution.
+    /// Useful for inspecting dispatcher state (like JIT stats) after execution.
     pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
         self.interp.take_dispatcher()
     }
