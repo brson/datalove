@@ -1,0 +1,57 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn dup(p0):
+                    block0:
+                        v0 = clone p0
+                        v1 = move p0
+                        v2 = pack Tuple2 {v0, v1}
+                        return v2
+                    
+                    fn f():
+                    block0:
+                        v0 = const 149index
+                        v1 = erase v0
+                        v2 = call @0 m0.u0(v1)
+                        drop v2
+                        v5 = const 56i32
+                        return v5
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call @0 m0.u1()
+                        debuglog v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("56\n"),
+        ),
+    ],
+)

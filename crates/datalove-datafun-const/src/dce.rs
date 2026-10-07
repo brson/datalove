@@ -8,7 +8,7 @@
 
 use std::collections::{HashMap, HashSet};
 use datalove_datafun_ir::{
-    BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit,
+    BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit, IrType,
     Operand, Terminator, ValueId,
 };
 
@@ -575,33 +575,80 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
 
 /// Remove instructions that define unused values.
 ///
+/// An instruction removed this way may have been what ended an operand's life:
+/// `v3 = reify v2`, its `v3` a tuple of indexes nothing reads, was the only
+/// thing consuming the erased `v2`, and removing it leaked the boxes `v2` held.
+/// So a removed instruction leaves a drop of each value it consumed that is not
+/// copy, unless what defined that value is itself pure and so goes the same way
+/// once nothing reads it -- the chain building a value const inlining folded.
+/// A slot or a parameter it consumed keeps the instruction instead.
+///
 /// Returns true if any instructions were removed.
 fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &HashSet<ValueId>) -> bool {
     let mut changed = false;
+    let param_types = unit.function_context().map(|c| c.param_types.clone());
+    let pure_defined: HashSet<ValueId> = unit.blocks.iter()
+        .flat_map(|b| &b.instructions)
+        .filter(|i| !has_side_effects(i))
+        .flat_map(instruction_dests)
+        .collect();
 
     for block in &mut unit.blocks {
-        let original_len = block.instructions.len();
-        block.instructions.retain(|instr| {
-            // Keep instructions with side effects.
-            if has_side_effects(instr) {
-                return true;
+        let mut kept = Vec::with_capacity(block.instructions.len());
+        for instr in block.instructions.drain(..) {
+            // Keep instructions with side effects, and those defining a used
+            // value. All of an instruction's values have to be consulted: one
+            // defining a dead value and a live one still has to stay.
+            let dests = instruction_dests(&instr);
+            if has_side_effects(&instr) || dests.is_empty() || dests.iter().any(|d| used.contains(d)) {
+                kept.push(instr);
+                continue;
             }
-            // Keep instructions that define a used value. All of them have to be
-            // consulted: an instruction defining one dead value and one live one
-            // still has to stay.
-            let dests = instruction_dests(instr);
-            if dests.is_empty() {
-                // No dest means it's a side-effect instruction, already handled above.
-                return true;
-            }
-            dests.iter().any(|d| used.contains(d))
-        });
-        if block.instructions.len() != original_len {
+            let Some(consumed) = consumed_owned(&instr, &unit.value_types, &unit.slot_types, param_types.as_ref()) else {
+                kept.push(instr);
+                continue;
+            };
+            kept.extend(consumed.into_iter()
+                .filter(|id| !pure_defined.contains(id))
+                .map(|id| Instruction::Drop { operand: Operand::Value(id) }));
             changed = true;
         }
+        block.instructions = kept;
     }
 
     changed
+}
+
+/// The values an instruction consumes that are not copy, or `None` if it
+/// consumes a slot or a parameter that is not copy.
+///
+/// Reading a value that is not copy consumes it, as the interpreter has it,
+/// except for the instructions that only look: a clone, a copy, a borrow.
+fn consumed_owned(
+    instr: &Instruction,
+    value_types: &[IrType],
+    slot_types: &[IrType],
+    param_types: Option<&Vec<IrType>>,
+) -> Option<Vec<ValueId>> {
+    if matches!(instr,
+        Instruction::Clone { .. } | Instruction::Copy { .. }
+        | Instruction::GetFieldRef { .. } | Instruction::DataBorrow { .. }) {
+        return Some(Vec::new());
+    }
+    let owned = |ty: Option<&IrType>| !ty.is_some_and(|t| t.is_copy());
+    let mut values = Vec::new();
+    let mut place = false;
+    instr.for_each_operand(|op| match op {
+        Operand::Value(id) => {
+            if owned(value_types.get(id.0 as usize)) {
+                values.push(*id);
+            }
+        }
+        Operand::Slot(id) => place |= owned(slot_types.get(id.0 as usize)),
+        Operand::Param(id) => place |= owned(param_types.and_then(|t| t.get(id.0 as usize))),
+        Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+    });
+    (!place).then_some(values)
 }
 
 /// Check if an instruction has side effects and should not be removed.

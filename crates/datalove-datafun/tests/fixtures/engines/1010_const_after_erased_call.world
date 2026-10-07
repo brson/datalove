@@ -1,0 +1,26 @@
+----------
+module local/test/m
+----------
+
+// A `const` makes the function's IR go through const inlining's dead code
+// pass, which once removed `v = reify (call dup a)` because nothing read `v`,
+// and with it the only thing that consumed the call's erased result.
+fun dup<T>(x: T): (T, T)
+  ret (x@, x)
+end fun
+
+fun f(): i32
+  let a: index = : index / 149
+  let v: (index, index) = dup(a)
+  const C: u32 = 93
+  ret : i32 / 56
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/m
+import m.f
+
+debuglog f()
