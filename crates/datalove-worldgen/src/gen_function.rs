@@ -123,7 +123,12 @@ pub fn gen_function<'db, R: Rng>(
     let mut var_counter = 0;
     for param in &sig.params {
         if param.mode == ParamMode::Out {
+            // Nothing that can return early, which would leave this parameter
+            // and the ones after it unwritten (`OutParamNotInitialized`): with
+            // no return type in force, `gen_expr` offers no `?` or `!` form.
+            let return_type = ctx.return_type.take();
             let value = gen_expr(db, rng, param.type_hint.clone(), config, &mut ctx);
+            ctx.return_type = return_type;
             lead_statements.push(format!("  set {} = {}", param.name, value));
         }
         ctx.variables.push(Variable {

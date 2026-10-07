@@ -181,10 +181,10 @@ pub fn gen_expr<'db, R: Rng>(
         Option::None => Vec::new(),
     };
 
-    // A const of the wanted type, which may be named without being consumed:
-    // each mention makes a value of its own. Every other name the generator
-    // writes is moved on first use, so this is the one place a linear value is
-    // read twice without a `@`.
+    // A const of the wanted type, which is never consumed: a const is borrowed
+    // wherever it is named, so one of a linear type is cloned out with `@`
+    // (moving it is D003), and one of a copy type is copied as any other value
+    // of it is.
     let consts: Vec<String> = ctx
         .consts
         .iter()
@@ -248,7 +248,10 @@ pub fn gen_expr<'db, R: Rng>(
             let mark = overflow_mark.expect("a choice only offered when there is a mark");
             gen_overflow_arith_expr(db, rng, type_hint, mark, config, ctx)
         }
-        Choice::Const => consts[rng.gen_range(0..consts.len())].clone(),
+        Choice::Const => {
+            let name = &consts[rng.gen_range(0..consts.len())];
+            if is_linear_type(&type_hint) { format!("{}@", name) } else { name.clone() }
+        }
         Choice::Projection => {
             projections[rng.gen_range(0..projections.len())].clone()
         }
