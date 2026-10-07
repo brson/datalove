@@ -1,3 +1,8 @@
+## 2026/10/07 Collection iteration
+
+Iterating maps and sets is expensive because it requires reindexing every item.
+
+
 ## 2026/10/06 Generic type aliases
 
 Function arguments can already specify generic types
