@@ -91,6 +91,12 @@ impl Loc {
         Loc(Self::direct(offset).0 | INDIRECT)
     }
 
+    /// The place `n` bytes further into a place in the frame itself, which an
+    /// indirect one is not: its offset is where the pointer is.
+    fn advanced(self, n: u32) -> Option<Self> {
+        (self.0 & INDIRECT == 0).then(|| Loc::direct(self.0 + n))
+    }
+
     /// The address the operand names, in the frame whose data starts at `base`.
     ///
     /// # Safety
@@ -185,6 +191,18 @@ pub(crate) enum Op {
     /// A new string of `len` bytes of the constant pool from `at`.
     ConstString { dst: Loc, at: u32, len: u32, desc: u32 },
 
+    /// Copy `len` bytes from `offset` past the place `src` names: a field
+    /// read through a reference.
+    CopyAt { dst: Loc, src: Loc, offset: u32, len: u32 },
+    /// Write the address `offset` past the place `src` names: a reference to a
+    /// field.
+    FieldRef { dst: Loc, src: Loc, offset: u32 },
+    /// Write the address of `statics[slot]`'s value in the interpreter's pool.
+    StaticRef { dst: Loc, slot: u32 },
+    /// Look `key` up in `map` and clone what it finds into `dest`, writing
+    /// whether there was one to `valid`; `rt[at]` holds the three.
+    MapGetRt { at: u32, valid: Loc },
+
     Copy1 { dst: Loc, src: Loc },
     Copy4 { dst: Loc, src: Loc },
     Copy8 { dst: Loc, src: Loc },
@@ -196,6 +214,10 @@ pub(crate) enum Op {
     AddCkI32 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     SubCkI32 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     MulCkI32 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
+    DivCkU32 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
+    DivCkI32 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
+    DivCkU64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
+    DivCkI64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     AddCkU64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     SubCkU64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
     MulCkU64 { dst: Loc, ovf: Loc, a: Loc, b: Loc },
@@ -513,6 +535,18 @@ pub(crate) struct BcFunction {
     entry: u32,
     pool: Vec<u8>,
     switches: Vec<SwitchTable>,
+    statics: Vec<StaticSlot>,
+}
+
+/// A const a `StaticRef` op names, and where the pool put it.
+///
+/// Found in the pool the first time the op runs and kept: the pool belongs to
+/// the interpreter, as this body does, and an entry lives as long as the
+/// interpreter. The IR walker looks the value up by its `Arc` every time.
+struct StaticSlot {
+    value: std::sync::Arc<datalove_datafun_ir::ConstValue>,
+    pointee: *const rtdt::TyDesc,
+    resolved: std::cell::Cell<*const u8>,
 }
 
 /// Counts of what was lowered, for judging coverage.
@@ -548,6 +582,23 @@ fn variant(instr: &Instruction) -> String {
 
 /// Whether a type has a `data` anywhere in it: a type parameter, whose real
 /// layout only its descriptor knows at run time.
+/// The offset and type of a field of a tuple or struct whose layout its static
+/// type says, which a type with no `data` in it does: elsewhere the runtime's
+/// descriptor has the offsets.
+fn static_field(ty: &IrType, index: u32) -> Option<(u32, &IrType)> {
+    if has_data(ty) {
+        return None;
+    }
+    let types: Vec<&IrType> = match ty {
+        IrType::Tuple(fields) => fields.iter().collect(),
+        IrType::Struct(fields) => fields.iter().map(|(_, t)| t).collect(),
+        _ => return None,
+    };
+    let owned: Vec<IrType> = types.iter().map(|t| (*t).clone()).collect();
+    let offset = *datalove_datafun_ir::layout::aggregate_field_offsets(&owned).get(index as usize)?;
+    Some((offset, types[index as usize]))
+}
+
 fn has_data(ty: &IrType) -> bool {
     match ty {
         IrType::Data => true,
@@ -571,6 +622,7 @@ struct Lowering<'a> {
     calls: Vec<FastCall>,
     descs: Vec<*const rtdt::TyDesc>,
     rt: Vec<[(Loc, Desc); 3]>,
+    statics: Vec<StaticSlot>,
     /// Op indices still naming a block, to be patched to its first op.
     fixups: Vec<(usize, Fixup)>,
     block_start: Vec<u32>,
@@ -825,7 +877,7 @@ impl<'a> Lowering<'a> {
         let escapes = self.escapes;
         (BcFunction {
             func: self.func, ops: self.ops, entry, pool: self.pool, switches: self.switches, calls: self.calls,
-            descs: self.descs, rt: self.rt,
+            descs: self.descs, rt: self.rt, statics: self.statics,
         }, escapes)
     }
 
@@ -954,6 +1006,78 @@ impl<'a> Lowering<'a> {
             }
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 self.lower_checked(*dest, *overflow, *op, lhs, rhs)
+            }
+            // A reference to a const, where the reference has no descriptor
+            // word to write.
+            Instruction::StaticRef { dest, value } => {
+                if self.layout.ref_desc_offsets[dest.0 as usize].is_some() {
+                    return false;
+                }
+                // A reference's descriptor holds what it points at as its one field.
+                let pointee = unsafe { (*(*self.layout.value_tydescs[dest.0 as usize]).type_info.tuple.fields).tydesc };
+                let slot = self.statics.len() as u32;
+                self.statics.push(StaticSlot {
+                    value: std::sync::Arc::clone(value),
+                    pointee,
+                    resolved: std::cell::Cell::new(std::ptr::null()),
+                });
+                self.emit(Op::StaticRef { dst: self.value_loc(*dest), slot });
+                true
+            }
+            Instruction::GetFieldRef { dest, src, field_index } => {
+                if self.layout.ref_desc_offsets[dest.0 as usize].is_some() {
+                    return false;
+                }
+                let (Some(ty), Some(src)) = (self.typed(src), self.loc(src)) else { return false };
+                let Some((offset, _)) = static_field(ty, *field_index) else { return false };
+                self.emit(Op::FieldRef { dst: self.value_loc(*dest), src, offset });
+                true
+            }
+            // A shallow copy of the field, as `field_read` makes where no
+            // `data` is involved.
+            Instruction::GetField { dest, src, field_index } => {
+                let (Some(ty), Some(src)) = (self.typed(src), self.loc(src)) else { return false };
+                let Some((offset, field_ty)) = static_field(ty, *field_index) else { return false };
+                let len = layout_of(field_ty).size;
+                let dst = self.value_loc(*dest);
+                let op = match src.advanced(offset) {
+                    Some(at) => Self::copy(dst, at, len),
+                    None if len > 0 => Some(Op::CopyAt { dst, src, offset, len }),
+                    None => None,
+                };
+                if let Some(op) = op {
+                    self.emit(op);
+                }
+                true
+            }
+            // The discriminant is the first four bytes of every enum.
+            Instruction::EnumDiscriminant { dest, src } => {
+                let (Some(IrType::Enum(_)), Some(src)) = (self.typed(src), self.loc(src)) else { return false };
+                self.emit(Op::Copy4 { dst: self.value_loc(*dest), src });
+                true
+            }
+            // Each field moved into place, as `execute_pack_tuple` does.
+            Instruction::Pack { dest, fields, .. } => {
+                let Some(ty) = self.value_type(*dest) else { return false };
+                let mut copies = Vec::with_capacity(fields.len());
+                for (i, field) in fields.iter().enumerate() {
+                    let Some((offset, field_ty)) = static_field(ty, i as u32) else { return false };
+                    let Some(src) = self.consumed(field) else { return false };
+                    let Some(dst) = self.value_loc(*dest).advanced(offset) else { return false };
+                    copies.extend(Self::copy(dst, src, layout_of(field_ty).size));
+                }
+                copies.into_iter().for_each(|op| self.emit(op));
+                true
+            }
+            Instruction::MapGet { dest, is_valid, map, key } => {
+                let (Some(d), Some(m), Some(k)) = (
+                    self.rt_operand(&Operand::Value(*dest)), self.rt_operand(map), self.rt_operand(key),
+                ) else {
+                    return false;
+                };
+                let at = self.rt_push(&[d, m, k]);
+                self.emit(Op::MapGetRt { at, valid: self.value_loc(*is_valid) });
+                true
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 self.lower_intrinsic(*dest, *intrinsic, args)
@@ -1305,6 +1429,10 @@ impl<'a> Lowering<'a> {
             (BinOp::Add, (true, 64)) => Op::AddCkI64 { dst, ovf, a, b },
             (BinOp::Sub, (true, 64)) => Op::SubCkI64 { dst, ovf, a, b },
             (BinOp::Mul, (true, 64)) => Op::MulCkI64 { dst, ovf, a, b },
+            (BinOp::Div, (false, 32)) => Op::DivCkU32 { dst, ovf, a, b },
+            (BinOp::Div, (true, 32)) => Op::DivCkI32 { dst, ovf, a, b },
+            (BinOp::Div, (false, 64)) => Op::DivCkU64 { dst, ovf, a, b },
+            (BinOp::Div, (true, 64)) => Op::DivCkI64 { dst, ovf, a, b },
             _ => return false,
         };
         self.emit(op);
@@ -1606,6 +1734,10 @@ impl Op {
             | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
             | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. } => {}
+            Op::CopyAt { dst, src, offset, len } => { f(dst, len); f(src, offset + len) }
+            Op::FieldRef { dst, src, offset } => { f(dst, 8); f(src, offset) }
+            Op::StaticRef { dst, .. } => f(dst, 8),
+            Op::MapGetRt { valid, .. } => f(valid, 1),
             Op::Const1 { dst, .. } => f(dst, 1),
             Op::Const4 { dst, .. } => f(dst, 4),
             Op::ConstPool { dst, len, .. } => f(dst, len),
@@ -1615,11 +1747,13 @@ impl Op {
             Op::Copy8 { dst, src } => { f(dst, 8); f(src, 8) }
             Op::CopyN { dst, src, len } => { f(dst, len); f(src, len) }
             Op::AddCkU32 { dst, ovf, a, b } | Op::SubCkU32 { dst, ovf, a, b } | Op::MulCkU32 { dst, ovf, a, b }
-            | Op::AddCkI32 { dst, ovf, a, b } | Op::SubCkI32 { dst, ovf, a, b } | Op::MulCkI32 { dst, ovf, a, b } => {
+            | Op::AddCkI32 { dst, ovf, a, b } | Op::SubCkI32 { dst, ovf, a, b } | Op::MulCkI32 { dst, ovf, a, b }
+            | Op::DivCkU32 { dst, ovf, a, b } | Op::DivCkI32 { dst, ovf, a, b } => {
                 f(dst, 4); f(ovf, 1); f(a, 4); f(b, 4)
             }
             Op::AddCkU64 { dst, ovf, a, b } | Op::SubCkU64 { dst, ovf, a, b } | Op::MulCkU64 { dst, ovf, a, b }
-            | Op::AddCkI64 { dst, ovf, a, b } | Op::SubCkI64 { dst, ovf, a, b } | Op::MulCkI64 { dst, ovf, a, b } => {
+            | Op::AddCkI64 { dst, ovf, a, b } | Op::SubCkI64 { dst, ovf, a, b } | Op::MulCkI64 { dst, ovf, a, b }
+            | Op::DivCkU64 { dst, ovf, a, b } | Op::DivCkI64 { dst, ovf, a, b } => {
                 f(dst, 8); f(ovf, 1); f(a, 8); f(b, 8)
             }
             Op::CmpU32I { dst, a, .. } => { f(dst, 1); f(a, 4) }
@@ -1687,6 +1821,8 @@ impl Op {
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. }
             | Op::Const1 { .. } | Op::Const4 { .. } | Op::ConstPool { .. } | Op::ConstString { .. }
             | Op::Copy1 { .. } | Op::Copy4 { .. } | Op::Copy8 { .. } | Op::CopyN { .. }
+            | Op::CopyAt { .. } | Op::FieldRef { .. } | Op::StaticRef { .. } | Op::MapGetRt { .. }
+            | Op::DivCkU32 { .. } | Op::DivCkI32 { .. } | Op::DivCkU64 { .. } | Op::DivCkI64 { .. }
             | Op::AddCkU32 { .. } | Op::SubCkU32 { .. } | Op::MulCkU32 { .. }
             | Op::AddCkI32 { .. } | Op::SubCkI32 { .. } | Op::MulCkI32 { .. }
             | Op::AddCkU64 { .. } | Op::SubCkU64 { .. } | Op::MulCkU64 { .. }
@@ -1745,11 +1881,13 @@ impl BcFunction {
                 }
                 Op::EdgeIr { block, .. } | Op::ReturnIr { block } => in_table(block, func.blocks.len(), "block"),
                 Op::CallFast { site } => in_table(site, self.calls.len(), "call site"),
+                Op::StaticRef { slot, .. } => in_table(slot, self.statics.len(), "static"),
                 Op::ConstPool { at: pool_at, len, .. } | Op::ConstString { at: pool_at, len, .. } => {
                     assert!(pool_at + len <= self.pool.len() as u32, "{}: op {} reads past the pool", func.name, at);
                 }
                 Op::ListElementRefRt { at: i, .. } | Op::EraseRt { at: i } | Op::ReifyRt { at: i }
-                | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. } => {
+                | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. }
+                | Op::MapGetRt { at: i, .. } => {
                     in_table(i, self.rt.len(), "routine operands");
                     // Unused entries of a triple are padding, with no descriptor.
                     for (loc, desc) in self.rt[i as usize] {
@@ -1852,6 +1990,7 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout) -> (BcFunction, u32) {
         calls: Vec::new(),
         descs: Vec::new(),
         rt: Vec::new(),
+        statics: Vec::new(),
         fixups: Vec::new(),
         block_start: vec![0; func.blocks.len()],
         escapes: 0,
@@ -1884,6 +2023,40 @@ unsafe fn rd<T: Copy>(base: *mut u8, loc: Loc) -> T {
 #[inline(always)]
 unsafe fn wr<T>(base: *mut u8, loc: Loc, v: T) {
     unsafe { std::ptr::write_unaligned(loc.at(base) as *mut T, v) }
+}
+
+/// Checked division, as the IR walker's: by zero, or the least signed value
+/// by minus one, sets the flag and gives zero.
+#[inline(always)]
+unsafe fn div_checked<T>(base: *mut u8, dst: Loc, ovf: Loc, a: Loc, b: Loc)
+where
+    T: Copy + num_checked_div::CheckedDiv,
+{
+    unsafe {
+        let (r, o) = match rd::<T>(base, a).checked_div(rd::<T>(base, b)) {
+            Some(r) => (r, false),
+            None => (T::ZERO, true),
+        };
+        wr(base, dst, r);
+        wr(base, ovf, o);
+    }
+}
+
+mod num_checked_div {
+    /// The integer types checked division is lowered for.
+    pub(super) trait CheckedDiv: Sized {
+        const ZERO: Self;
+        fn checked_div(self, rhs: Self) -> Option<Self>;
+    }
+    macro_rules! checked_div {
+        ($($t:ty),*) => {$(
+            impl CheckedDiv for $t {
+                const ZERO: Self = 0;
+                fn checked_div(self, rhs: Self) -> Option<Self> { <$t>::checked_div(self, rhs) }
+            }
+        )*};
+    }
+    checked_div!(u32, i32, u64, i64);
 }
 
 /// An operand an op hands to an IR walker routine.
@@ -2106,6 +2279,23 @@ impl IrInterpreter {
                         let i = rd::<rtdt::IndexRepr>(base, index) as usize;
                         wr(base, dst, (list.data as *mut u8).add(i * size as usize));
                     }
+                    Op::CopyAt { dst, src, offset, len } => {
+                        copy_bytes(src.at(base).add(offset as usize), dst.at(base), len as usize);
+                    }
+                    Op::FieldRef { dst, src, offset } => wr(base, dst, src.at(base).add(offset as usize)),
+                    Op::StaticRef { dst, slot } => {
+                        let slot = &bc.statics[slot as usize];
+                        let mut ptr = slot.resolved.get();
+                        if ptr.is_null() {
+                            ptr = self.static_const_with_tydesc(&slot.value, slot.pointee);
+                            slot.resolved.set(ptr);
+                        }
+                        wr(base, dst, ptr);
+                    }
+                    Op::DivCkU32 { dst, ovf, a, b } => div_checked::<u32>(base, dst, ovf, a, b),
+                    Op::DivCkI32 { dst, ovf, a, b } => div_checked::<i32>(base, dst, ovf, a, b),
+                    Op::DivCkU64 { dst, ovf, a, b } => div_checked::<u64>(base, dst, ovf, a, b),
+                    Op::DivCkI64 { dst, ovf, a, b } => div_checked::<i64>(base, dst, ovf, a, b),
 
                     Op::WrapSome { dst, src, at, len } => {
                         let d = dst.at(base);
@@ -2165,7 +2355,7 @@ impl IrInterpreter {
                     }
                     Op::ConstString { .. } | Op::ListElementRefRt { .. } | Op::EraseRt { .. }
                     | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
-                    | Op::Widen { .. } | Op::BinOpRt { .. } => {
+                    | Op::Widen { .. } | Op::BinOpRt { .. } | Op::MapGetRt { .. } => {
                         self.run_routine_op(*ops.add(pc), bc, &mut regs.frame, base)
                     }
                     Op::Jump { to } => {
@@ -2558,6 +2748,11 @@ impl IrInterpreter {
                 Op::Widen { dst, src, src_desc } => {
                     let val = crate::value::Value { ptr: src.at(base), tydesc: bc.descs[src_desc as usize] };
                     self.widen_to_int(&val, &mut *(dst.at(base) as *mut rtdt::Int));
+                }
+                Op::MapGetRt { at, valid } => {
+                    let [d, m, k] = bc.rt[at as usize];
+                    let found = self.map_get(&rt_value(frame, base, m), &rt_value(frame, base, k), rt_dest(frame, base, d));
+                    wr(base, valid, found);
                 }
                 Op::BinOpRt { op, at } => {
                     let [d, a, b] = bc.rt[at as usize];

@@ -1804,50 +1804,11 @@ impl IrInterpreter {
             Instruction::MapGet { dest, is_valid, map, key } => {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
-
-                let (map_tydesc, _, value_tydesc) =
-                    unsafe { map_tydesc_info(&map_val) };
-
-                // The key's own descriptor rather than the map's, because
-                // inside a generic the key arrives packed into a `data` while
-                // the map holds the real thing. Which of the two it is is the
-                // runtime's to decide; see `borrow_lookup_key`.
-                let mut value_ptr: *mut u8 = std::ptr::null_mut();
-                let rt_handle = self.runtime.handle();
-                let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
-                        rt_handle,
-                        map_val.ptr,
-                        map_tydesc,
-                        key_val.ptr,
-                        key_val.tydesc,
-                        &mut value_ptr,
-                    )
-                };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
-
-                let found = !value_ptr.is_null();
+                let found = self.map_get(&map_val, &key_val, frame.value_dest(*dest));
                 let is_valid_dest = frame.value_dest(*is_valid);
                 unsafe { *(is_valid_dest.ptr as *mut bool) = found; }
                 frame.mark_value_live(*is_valid);
-
                 if found {
-                    // What is in the map is the real value type and the
-                    // destination is whatever this function's static type says,
-                    // so the clone may want wrapping on the way. The same
-                    // decision `list_get_erased` makes, and the runtime's for
-                    // the same reason.
-                    let dest_slot = frame.value_dest(*dest);
-                    let status = unsafe {
-                        datalove_rt::c::dtlv_rti_clone_erased_local(
-                            rt_handle,
-                            value_ptr,
-                            value_tydesc,
-                            dest_slot.ptr,
-                            dest_slot.tydesc,
-                        )
-                    };
-                    assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
                     frame.mark_value_live(*dest);
                 }
             }
@@ -2496,6 +2457,38 @@ impl IrInterpreter {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok,
             "borrowing through a wrapper that holds nothing to borrow");
         Value { ptr: inner_ptr as *mut u8, tydesc: inner_tydesc }
+    }
+
+    /// Look a key up in a map and clone what it finds into `dest`, saying
+    /// whether there was anything.
+    pub(crate) fn map_get(&mut self, map_val: &Value, key_val: &Value, dest: Destination) -> bool {
+        let (map_tydesc, _, value_tydesc) = unsafe { map_tydesc_info(map_val) };
+
+        // The key's own descriptor rather than the map's, because inside a
+        // generic the key arrives packed into a `data` while the map holds the
+        // real thing. Which of the two it is is the runtime's to decide; see
+        // `borrow_lookup_key`.
+        let mut value_ptr: *mut u8 = std::ptr::null_mut();
+        let rt_handle = self.runtime.handle();
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
+                rt_handle, map_val.ptr, map_tydesc, key_val.ptr, key_val.tydesc, &mut value_ptr,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet get_value_ref failed");
+        if value_ptr.is_null() {
+            return false;
+        }
+
+        // What is in the map is the real value type and the destination is
+        // whatever this function's static type says, so the clone may want
+        // wrapping on the way. The same decision `list_get_erased` makes, and
+        // the runtime's for the same reason.
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_clone_erased_local(rt_handle, value_ptr, value_tydesc, dest.ptr, dest.tydesc)
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
+        true
     }
 
     /// Try to dispatch a call via the JIT dispatcher.
