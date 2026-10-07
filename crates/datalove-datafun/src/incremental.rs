@@ -77,12 +77,17 @@ pub struct IncrementalModuleWorld {
     /// rebuilt on demand, which gives back the same handle and is what the
     /// cached graph used to be for.
     sources: BTreeMap<String, Source>,
+    /// The source of each data file, by path.
+    ///
+    /// Kept apart from the modules: data takes no part in resolution and has
+    /// no requires, and a module and a data file may share a path.
+    data: BTreeMap<String, Source>,
 }
 
 impl IncrementalModuleWorld {
     /// Create a new empty module world.
     pub fn new() -> Self {
-        Self { sources: BTreeMap::new() }
+        Self { sources: BTreeMap::new(), data: BTreeMap::new() }
     }
 
     /// Add a module with the given path and source text.
@@ -119,6 +124,37 @@ impl IncrementalModuleWorld {
         if let Some(existing) = self.sources.get(path) {
             existing.set_text(db).to(source.S());
         }
+    }
+
+    /// Add a data file with the given path and text.
+    pub fn add_data_with_durability(
+        &mut self,
+        db: &dyn salsa::Database,
+        path: &str,
+        text: &str,
+        durability: salsa::Durability,
+    ) {
+        self.data.insert(
+            path.S(),
+            Source::builder(text.S()).text_durability(durability).new(db),
+        );
+    }
+
+    /// Remove a data file.
+    pub fn remove_data(&mut self, path: &str) {
+        self.data.remove(path);
+    }
+
+    /// Update a data file's text, preserving its identity for memoization.
+    pub fn update_data(&mut self, db: &mut dyn salsa::Database, path: &str, text: &str) {
+        if let Some(existing) = self.data.get(path) {
+            existing.set_text(db).to(text.S());
+        }
+    }
+
+    /// The source of each data file, by path.
+    pub fn data(&self) -> &BTreeMap<String, Source> {
+        &self.data
     }
 
     /// Check if a module exists.
@@ -182,7 +218,7 @@ impl IncrementalModuleWorld {
             dependencies.entry(module.id(db)).or_default();
         }
 
-        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies);
+        let graph = ModuleGraph::new(db, modules, module_by_id, dependencies, self.data.clone());
         (graph, self.build_resolved_requires(db, path_deps, &paths))
     }
 

@@ -55,6 +55,8 @@ impl PackageWorld {
 pub struct Package {
     pub name: PackageName,
     pub modules: BTreeMap<ModuleName, PackageModule>,
+    /// The package's data files, `.dlt`, which `require data` names.
+    pub data: BTreeMap<String, PackageModule>,
     /// Source text of `rider/rider.dli` if present in the package.
     pub rider_source: Option<String>,
     /// What the manifest calls the rider's crate, and which version of it.
@@ -124,7 +126,7 @@ async fn load_library(
 
 /// Whether a directory in a library is a datalove package.
 ///
-/// A package has modules, or has a manifest and intends to. A library root can
+/// A package has modules or data, or has a manifest and intends to. A library root can
 /// hold other things --- `sys` is itself a Rust crate, so `src` and `target`
 /// are beside the packages in it --- and those are left alone by not looking
 /// like a package rather than by being named here. `sys/build.rs` applies the
@@ -136,7 +138,7 @@ fn is_package(dir: &PathBuf) -> bool {
 
     let Ok(entries) = fs::read_dir(dir) else { return false };
     entries.filter_map(|entry| entry.ok()).any(|entry| {
-        entry.path().extension().is_some_and(|ext| ext == "dfm")
+        entry.path().extension().is_some_and(|ext| ext == "dfm" || ext == "dlt")
     })
 }
 
@@ -193,14 +195,15 @@ pub async fn package_from_source_files(
     }
 
     let mut modules = BTreeMap::new();
+    let mut data = BTreeMap::new();
 
     while let Some(next) = rx.next().await {
-        match next {
-            Err(e) => {
-                return Err(e);
-            }
-            Ok(module) => {
+        match next? {
+            (FileKind::Module, module) => {
                 modules.insert(module.name.C(), module);
+            }
+            (FileKind::Data, file) => {
+                data.insert(file.name.C(), file);
             }
         }
     }
@@ -208,15 +211,22 @@ pub async fn package_from_source_files(
     Ok(Package {
         name: package_name,
         modules,
+        data,
         rider_source,
         rider_crate,
         rider_crate_dir,
     })
 }
 
+/// Which of a package's files a source is.
+enum FileKind {
+    Module,
+    Data,
+}
+
 fn send_modules_blocking(
     dir: PathBuf,
-    mut tx: mpsc::Sender<AnyResult<PackageModule>>,
+    mut tx: mpsc::Sender<AnyResult<(FileKind, PackageModule)>>,
 ) {
     if let Err(e) = send_modules_blocking_err(
         dir, tx.C(),
@@ -227,11 +237,11 @@ fn send_modules_blocking(
 
 fn send_modules_blocking_err(
     dir: PathBuf,
-    mut tx: mpsc::Sender<AnyResult<PackageModule>>,
+    mut tx: mpsc::Sender<AnyResult<(FileKind, PackageModule)>>,
 ) -> AnyResult<()> {
     for file in fs::read_dir(dir)? {
         let file = file?;
-        let Some(module) = load_module(file.path())? else {
+        let Some(module) = load_source_file(file.path())? else {
             continue;
         };
         if let Err(_) = block_on(tx.send(Ok(module))) {
@@ -242,14 +252,12 @@ fn send_modules_blocking_err(
     Ok(())
 }
 
-fn load_module(path: PathBuf) -> AnyResult<Option<PackageModule>> {
-    if let Some(ext) = path.extension() {
-        if ext != "dfm" {
-            return Ok(None);
-        }
-    } else {
-        return Ok(None);
-    }
+fn load_source_file(path: PathBuf) -> AnyResult<Option<(FileKind, PackageModule)>> {
+    let kind = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("dfm") => FileKind::Module,
+        Some("dlt") => FileKind::Data,
+        _ => return Ok(None),
+    };
 
     let Some(stem) = path.file_stem() else {
         return Ok(None);
@@ -260,7 +268,7 @@ fn load_module(path: PathBuf) -> AnyResult<Option<PackageModule>> {
     let name = S(name);
     let text = fs::read_to_string(&path)
         .context(fmt!("unable to read file {}", path.display()))?;
-    return Ok(Some(PackageModule {
+    return Ok(Some((kind, PackageModule {
         name, path, text,
-    }));
+    })));
 }

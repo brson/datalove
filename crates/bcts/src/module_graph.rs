@@ -61,12 +61,25 @@ pub struct ModuleGraph<'db> {
     /// Direct dependencies per module (for ordering verification).
     #[returns(ref)]
     pub dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
+
+    /// The data files `require data` may name, by path (e.g. "local/app/orders").
+    ///
+    /// Every one in the world, not only those something requires: data has no
+    /// requires of its own, so there is no order to put it in, and a source is
+    /// a handle, so carrying one nothing reads costs nothing.
+    #[returns(ref)]
+    pub data: BTreeMap<String, Source>,
 }
 
 impl<'db> ModuleGraph<'db> {
     /// Get a module by its ID.
     pub fn get_module(&self, db: &'db dyn salsa::Database, id: ModuleId<'db>) -> Option<Module<'db>> {
         self.module_by_id(db).get(&id).copied()
+    }
+
+    /// The data file at a path, if the world has one.
+    pub fn get_data(&self, db: &'db dyn salsa::Database, path: &str) -> Option<Source> {
+        self.data(db).get(path).copied()
     }
 
     /// Iterate modules in dependency order.
@@ -81,6 +94,7 @@ pub struct ModuleGraphBuilder<'db> {
     modules: Vec<Module<'db>>,
     module_by_id: BTreeMap<ModuleId<'db>, Module<'db>>,
     dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
+    data: BTreeMap<String, Source>,
 }
 
 impl<'db> ModuleGraphBuilder<'db> {
@@ -91,6 +105,7 @@ impl<'db> ModuleGraphBuilder<'db> {
             modules: Vec::new(),
             module_by_id: BTreeMap::new(),
             dependencies: BTreeMap::new(),
+            data: BTreeMap::new(),
         }
     }
 
@@ -117,6 +132,11 @@ impl<'db> ModuleGraphBuilder<'db> {
         }
     }
 
+    /// Add a data file to the graph.
+    pub fn add_data(&mut self, path: impl Into<String>, source: Source) {
+        self.data.insert(path.into(), source);
+    }
+
     /// Build the final ModuleGraph.
     pub fn build(self) -> ModuleGraph<'db> {
         ModuleGraph::new(
@@ -124,6 +144,7 @@ impl<'db> ModuleGraphBuilder<'db> {
             self.modules,
             self.module_by_id,
             self.dependencies,
+            self.data,
         )
     }
 }

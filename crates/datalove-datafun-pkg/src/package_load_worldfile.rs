@@ -196,6 +196,13 @@ pub enum WorldfileSection {
         module: String,
         source: String,
     },
+    /// A data file, as a `.dlt` beside a package's modules: `data lib/pkg/name`.
+    Data {
+        library: String,
+        package: String,
+        name: String,
+        source: String,
+    },
     /// Script unit containing statements (let/var/fun declarations, control flow).
     ScriptFragment {
         source: String,
@@ -233,7 +240,8 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeTy { library, package, module, .. } => {
                 Some(ModulePath::new(library.clone(), package.clone(), module.clone()))
             }
-            WorldfileSection::ScriptFragment { .. }
+            WorldfileSection::Data { .. }
+            | WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
             | WorldfileSection::Rider { .. } => None,
         }
@@ -249,6 +257,7 @@ impl WorldfileSection {
             | WorldfileSection::ModuleChangeTy { source, .. }
             | WorldfileSection::ScriptFragment { source }
             | WorldfileSection::ScriptExpr { source }
+            | WorldfileSection::Data { source, .. }
             | WorldfileSection::Rider { source, .. } => Some(source),
             WorldfileSection::ModuleRemove { .. } => None,
         }
@@ -263,7 +272,8 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeWs { .. } => Some(ModuleSectionKind::ChangeWs),
             WorldfileSection::ModuleChangeAst { .. } => Some(ModuleSectionKind::ChangeAst),
             WorldfileSection::ModuleChangeTy { .. } => Some(ModuleSectionKind::ChangeTy),
-            WorldfileSection::ScriptFragment { .. }
+            WorldfileSection::Data { .. }
+            | WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
             | WorldfileSection::Rider { .. } => None,
         }
@@ -280,6 +290,7 @@ impl WorldfileSection {
             WorldfileSection::ModuleChangeTy { .. } => "module-change-ty",
             WorldfileSection::ScriptFragment { .. } => "scriptunit-fragment",
             WorldfileSection::ScriptExpr { .. } => "scriptunit-expr",
+            WorldfileSection::Data { .. } => "data",
             WorldfileSection::Rider { .. } => "rider",
         }
     }
@@ -347,6 +358,14 @@ pub fn load_worldfile_with_script(mut reader: impl Read) -> AnyResult<WorldfileW
             WorldfileSection::Module { library, package, module, source } => {
                 insert_module(&mut pkglib_system, &mut pkglib_local, &library, &package, &module, source)?;
             }
+            WorldfileSection::Data { library, package, name, source } => {
+                let pkg = package_entry(&mut pkglib_system, &mut pkglib_local, &library, &package)?;
+                pkg.data.insert(name.C(), PackageModule {
+                    path: format!("{library}/{package}/{name}.dlt").into(),
+                    name,
+                    text: source,
+                });
+            }
             WorldfileSection::ScriptFragment { source } => {
                 script = Some(source);
             }
@@ -389,23 +408,7 @@ fn insert_module(
     module: &str,
     source: String,
 ) -> AnyResult<()> {
-    let pkglib = match library {
-        "sys" => pkglib_system,
-        "local" => pkglib_local,
-        other => bail!("unknown library '{other}' (must be 'sys' or 'local')"),
-    };
-
-    let pkg = pkglib.entry(package.S())
-        .or_insert_with(|| Package {
-            name: package.S(),
-            modules: BTreeMap::new(),
-            rider_source: None,
-            // A worldfile carries module text and nothing else, so a package
-            // out of one has no rider to name.
-            rider_crate: None,
-            rider_crate_dir: None,
-        });
-
+    let pkg = package_entry(pkglib_system, pkglib_local, library, package)?;
     let path_str = format!("{}/{}/{}", library, package, module);
     pkg.modules.insert(module.S(), PackageModule {
         name: module.S(),
@@ -414,6 +417,32 @@ fn insert_module(
     });
 
     Ok(())
+}
+
+/// The package a section belongs to, made if this is the first to name it.
+fn package_entry<'a>(
+    pkglib_system: &'a mut BTreeMap<String, Package>,
+    pkglib_local: &'a mut BTreeMap<String, Package>,
+    library: &str,
+    package: &str,
+) -> AnyResult<&'a mut Package> {
+    let pkglib = match library {
+        "sys" => pkglib_system,
+        "local" => pkglib_local,
+        other => bail!("unknown library '{other}' (must be 'sys' or 'local')"),
+    };
+
+    Ok(pkglib.entry(package.S())
+        .or_insert_with(|| Package {
+            name: package.S(),
+            modules: BTreeMap::new(),
+            data: BTreeMap::new(),
+            rider_source: None,
+            // A worldfile carries module text and nothing else, so a package
+            // out of one has no rider to name.
+            rider_crate: None,
+            rider_crate_dir: None,
+        }))
 }
 
 /// Module section header prefixes and their kinds, in order of specificity.
@@ -546,6 +575,13 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::Rider { name, source });
         }
 
+        // Data sections, with the same path a module section has.
+        if let Some(path) = header.strip_prefix("data ").and_then(ModulePath::parse) {
+            let ModulePath { library, package, module: name } = path;
+            let source = self.read_content();
+            return Ok(WorldfileSection::Data { library, package, name, source });
+        }
+
         // Module sections.
         if let Some((kind, path)) = parse_module_header(header) {
             let source = self.read_content();
@@ -556,7 +592,7 @@ impl<'a> Parser<'a> {
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
              'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             'scriptunit-expr', or 'rider <name>')",
+             'scriptunit-expr', 'data', or 'rider <name>')",
             header
         );
     }

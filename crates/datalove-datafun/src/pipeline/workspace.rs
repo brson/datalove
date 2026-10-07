@@ -80,8 +80,23 @@ pub struct PackageDescriptor {
     /// Modules in this package, keyed by module name.
     pub modules: BTreeMap<String, ModuleDescriptor>,
 
+    /// Data files in this package, keyed by name, which `require data` names.
+    pub data: BTreeMap<String, ModuleDescriptor>,
+
     /// Native rider for this package, if any.
     pub rider: Option<RiderDescriptor>,
+}
+
+impl PackageDescriptor {
+    /// A package of nothing yet, under a name.
+    pub fn empty(name: &str) -> Self {
+        Self {
+            name: name.into(),
+            modules: BTreeMap::new(),
+            data: BTreeMap::new(),
+            rider: None,
+        }
+    }
 }
 
 /// A single module's source and origin.
@@ -176,6 +191,9 @@ pub struct WorkspaceDelta {
     pub modules_added: Vec<(ModulePath, ModuleDescriptor)>,
     pub modules_removed: Vec<ModulePath>,
     pub modules_changed: Vec<(ModulePath, ModuleDescriptor)>,
+    pub data_added: Vec<(ModulePath, ModuleDescriptor)>,
+    pub data_removed: Vec<ModulePath>,
+    pub data_changed: Vec<(ModulePath, ModuleDescriptor)>,
     pub riders_added: Vec<(String, RiderDescriptor)>,
     pub riders_removed: Vec<String>,
     pub riders_changed: Vec<(String, RiderDescriptor)>,
@@ -188,6 +206,9 @@ impl WorkspaceDelta {
         self.modules_added.is_empty()
             && self.modules_removed.is_empty()
             && self.modules_changed.is_empty()
+            && self.data_added.is_empty()
+            && self.data_removed.is_empty()
+            && self.data_changed.is_empty()
             && self.riders_added.is_empty()
             && self.riders_removed.is_empty()
             && self.riders_changed.is_empty()
@@ -301,13 +322,18 @@ impl WorkspaceDescriptor {
             match section {
                 WorldfileSection::Module { library, package, module, source } => {
                     let lib = libraries.entry(library.clone()).or_default();
-                    let pkg = lib.entry(package.clone()).or_insert_with(|| PackageDescriptor {
-                        name: package.clone(),
-                        modules: BTreeMap::new(),
-                        rider: None,
-                    });
+                    let pkg = lib.entry(package.clone()).or_insert_with(|| PackageDescriptor::empty(package));
                     pkg.modules.insert(module.clone(), ModuleDescriptor {
                         name: module.clone(),
+                        source: Arc::from(source.as_str()),
+                        origin: None,
+                    });
+                }
+                WorldfileSection::Data { library, package, name, source } => {
+                    let lib = libraries.entry(library.clone()).or_default();
+                    let pkg = lib.entry(package.clone()).or_insert_with(|| PackageDescriptor::empty(package));
+                    pkg.data.insert(name.clone(), ModuleDescriptor {
+                        name: name.clone(),
                         source: Arc::from(source.as_str()),
                         origin: None,
                     });
@@ -391,9 +417,8 @@ impl WorkspaceDescriptor {
         }
         let lib = &mut self.user_libraries[0];
         lib.packages.entry(name.into()).or_insert_with(|| PackageDescriptor {
-            name: name.into(),
-            modules: BTreeMap::new(),
             rider: Some(rider),
+            ..PackageDescriptor::empty(name)
         });
     }
 }
@@ -488,6 +513,20 @@ impl WorkspaceDescriptor {
             .collect()
     }
 
+    /// The file each data file is read from, by path, for diagnostics.
+    ///
+    /// Named the way [`module_files`](Self::module_files) names one with no
+    /// file on disk.
+    pub fn data_files(&self) -> BTreeMap<ModulePath, PathBuf> {
+        self.all_data()
+            .map(|(path, file)| {
+                let origin = file.origin.clone()
+                    .unwrap_or_else(|| PathBuf::from(fmt!("{path}.dlt")));
+                (path, origin)
+            })
+            .collect()
+    }
+
     /// Iterate all libraries (system first, then user).
     pub fn libraries(&self) -> impl Iterator<Item = &PackageLibrary> {
         self.system_library.iter().chain(self.user_libraries.iter())
@@ -500,6 +539,17 @@ impl WorkspaceDescriptor {
                 pkg.modules.values().map(move |m| {
                     let path = format!("{}/{}/{}", lib.name, pkg.name, m.name);
                     (path, m)
+                })
+            })
+        })
+    }
+
+    /// Iterate all (path, data file) pairs across all libraries.
+    pub fn all_data(&self) -> impl Iterator<Item = (ModulePath, &ModuleDescriptor)> {
+        self.libraries().flat_map(|lib| {
+            lib.packages.values().flat_map(move |pkg| {
+                pkg.data.values().map(move |d| {
+                    (format!("{}/{}/{}", lib.name, pkg.name, d.name), d)
                 })
             })
         })
@@ -583,6 +633,24 @@ impl WorkspaceDescriptor {
             }
         }
 
+        // Data, the same way.
+        let old_data: BTreeMap<ModulePath, &ModuleDescriptor> = self.all_data().collect();
+        let new_data: BTreeMap<ModulePath, &ModuleDescriptor> = newer.all_data().collect();
+        for (path, new_file) in &new_data {
+            match old_data.get(path) {
+                None => delta.data_added.push((path.clone(), (*new_file).clone())),
+                Some(old_file) if old_file.source != new_file.source => {
+                    delta.data_changed.push((path.clone(), (*new_file).clone()));
+                }
+                Some(_) => {}
+            }
+        }
+        for path in old_data.keys() {
+            if !new_data.contains_key(path) {
+                delta.data_removed.push(path.clone());
+            }
+        }
+
         // Rider diffing.
         let old_riders: BTreeMap<String, &RiderDescriptor> = self.all_riders().collect();
         let new_riders: BTreeMap<String, &RiderDescriptor> = newer.all_riders().collect();
@@ -656,9 +724,18 @@ fn package_library_from_map(
             (None, None) => None,
         };
 
+        let data = pkg.data.iter().map(|(name, file)| {
+            (name.clone(), ModuleDescriptor {
+                name: name.clone(),
+                source: Arc::from(file.text.as_str()),
+                origin: Some(file.path.clone()),
+            })
+        }).collect();
+
         pkg_map.insert(pkg_name.clone(), PackageDescriptor {
             name: pkg_name.clone(),
             modules,
+            data,
             rider,
         });
     }
@@ -687,6 +764,10 @@ impl WorkspaceDescriptor {
             if parts.len() == 3 {
                 pipeline.add_module(db, parts[0], parts[1], parts[2], &module.source);
             }
+        }
+        for (path, file) in self.all_data() {
+            let parts: Vec<&str> = path.splitn(3, '/').collect();
+            pipeline.add_data(db, parts[0], parts[1], parts[2], &file.source);
         }
 
         pipeline.set_rider_sources(self.rider_sources());
@@ -738,6 +819,19 @@ impl WorkspaceDelta {
                 pipeline.update_source(db, parts[0], parts[1], parts[2], &module.source);
             }
         }
+
+        for path in &self.data_removed {
+            let parts: Vec<&str> = path.splitn(3, '/').collect();
+            pipeline.remove_data(parts[0], parts[1], parts[2]);
+        }
+        for (path, file) in &self.data_added {
+            let parts: Vec<&str> = path.splitn(3, '/').collect();
+            pipeline.add_data(db, parts[0], parts[1], parts[2], &file.source);
+        }
+        for (path, file) in &self.data_changed {
+            let parts: Vec<&str> = path.splitn(3, '/').collect();
+            pipeline.update_data(db, parts[0], parts[1], parts[2], &file.source);
+        }
     }
 }
 
@@ -761,6 +855,7 @@ mod tests {
                     origin: None,
                 },
             )]),
+            data: BTreeMap::new(),
             rider: rider.map(|interface| RiderDescriptor {
                 interface_source: Arc::from(interface),
                 crate_spec: None,
@@ -944,6 +1039,7 @@ mod local_library_tests {
             packages: BTreeMap::from([("std".S(), PackageDescriptor {
                 name: "std".S(),
                 modules: BTreeMap::new(),
+                data: BTreeMap::new(),
                 rider: Some(RiderDescriptor {
                     interface_source: Arc::from(""),
                     crate_spec: Some(("r".S(), "0.1.0".S())),

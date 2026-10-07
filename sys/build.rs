@@ -38,17 +38,10 @@ fn embed_sys() {
         writeln!(table, "        name: {name:?},").expect("writing to a string");
         writeln!(table, "        modules: &[").expect("writing to a string");
 
-        for module in sorted_modules(&package_dir) {
-            let module_name = module.file_stem().expect("a .dfm file has a stem")
-                .to_str().expect("a utf-8 file name");
-            println!("cargo:rerun-if-changed={}", module.display());
-            writeln!(
-                table,
-                "            ({module_name:?}, include_str!({:?})),",
-                module.display().to_string(),
-            ).expect("writing to a string");
-        }
-
+        embed_files(&mut table, &package_dir, "dfm");
+        writeln!(table, "        ],").expect("writing to a string");
+        writeln!(table, "        data: &[").expect("writing to a string");
+        embed_files(&mut table, &package_dir, "dlt");
         writeln!(table, "        ],").expect("writing to a string");
 
         // What the package manifest calls the rider crate, and which version.
@@ -95,6 +88,21 @@ fn embed_sys() {
     write_out("packages.rs", &table);
 }
 
+/// A `(name, include_str!(path))` entry for each file of a package with this
+/// extension, in a fixed order.
+fn embed_files(table: &mut String, package_dir: &Path, extension: &str) {
+    for file in sorted_files(package_dir, extension) {
+        let name = file.file_stem().expect("a source file has a stem")
+            .to_str().expect("a utf-8 file name");
+        println!("cargo:rerun-if-changed={}", file.display());
+        writeln!(
+            table,
+            "            ({name:?}, include_str!({:?})),",
+            file.display().to_string(),
+        ).expect("writing to a string");
+    }
+}
+
 fn write_out(name: &str, contents: &str) {
     let path = out_dir().join(name);
     std::fs::write(&path, contents)
@@ -114,7 +122,7 @@ fn sys_dir() -> PathBuf {
 ///
 /// The library root is this crate's directory, so `src` and `target` are in it
 /// and are not packages. They are excluded by not looking like one rather than
-/// by name: a package has modules, or a manifest, or it is some other
+/// by name: a package has modules or data, or a manifest, or it is some other
 /// directory that happens to be here. `package_load` applies the same rule
 /// when it reads a library off disk.
 fn sorted_dirs(dir: &Path) -> Vec<PathBuf> {
@@ -131,16 +139,16 @@ fn is_package(dir: &Path) -> bool {
     if dir.join(datalove_pkg_manifest::FILE_NAME).is_file() {
         return true;
     }
-    read_dir(dir).any(|path| path.extension().is_some_and(|ext| ext == "dfm"))
+    read_dir(dir).any(|path| path.extension().is_some_and(|ext| ext == "dfm" || ext == "dlt"))
 }
 
-/// Module files of a package, in a fixed order.
-fn sorted_modules(dir: &Path) -> Vec<PathBuf> {
-    let mut modules: Vec<PathBuf> = read_dir(dir)
-        .filter(|path| path.extension().is_some_and(|ext| ext == "dfm"))
+/// A package's files with this extension, in a fixed order.
+fn sorted_files(dir: &Path, extension: &str) -> Vec<PathBuf> {
+    let mut files: Vec<PathBuf> = read_dir(dir)
+        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
         .collect();
-    modules.sort();
-    modules
+    files.sort();
+    files
 }
 
 fn read_dir(dir: &Path) -> impl Iterator<Item = PathBuf> {

@@ -754,66 +754,11 @@ impl<'db> Parser<'db> {
         match self.peek_word() {
             Some("module") => {
                 self.eat_word("module");
-
-                // Parse 3-part path: lib/pkg/module
-                let import_space = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        let ts = self.peek_text_span();
-                        return self.emit_stmt_error(ts,
-                            "expected import space name after 'require module'",
-                            "P013",
-                            "expected import space name",
-                        );
-                    }
-                };
-
-                // Need forward slash.
-                if !self.peek_sigil(Sigil::SlashForward) {
-                    let ts = self.error_span();
-                    return self.emit_stmt_error(ts,
-                        "expected '/' after import space",
-                        "P003",
-                        "expected '/' after import space"
-                    );
-                }
-                self.eat_sigil(Sigil::SlashForward);
-
-                let package_alias = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        let ts = self.error_span();
-                        return self.emit_stmt_error(ts,
-                            "expected package name after '/'",
-                            "P014",
-                            "expected package name",
-                        );
-                    }
-                };
-
-                // Need forward slash.
-                if !self.peek_sigil(Sigil::SlashForward) {
-                    let ts = self.error_span();
-                    return self.emit_stmt_error(ts,
-                        "expected '/' after package alias",
-                        "P004",
-                        "expected '/' after package alias"
-                    );
-                }
-                self.eat_sigil(Sigil::SlashForward);
-
-                let module_alias = match self.eat_declared_name(NameKind::Module) {
-                    Some(n) => n,
-                    None => {
-                        let ts = self.error_span();
-                        return self.emit_stmt_error(ts,
-                            "expected module name after '/'",
-                            "P015",
-                            "expected module name",
-                        );
-                    }
-                };
-
+                let (import_space, package_alias, module_alias) =
+                    match self.parse_require_path("module", "P013", NameKind::Module) {
+                        Ok(path) => path,
+                        Err(error) => return error,
+                    };
                 let local_index = self.record_require_span(ts.with_end(self.last_byte_end()));
                 ast::Statement::Require(ast::StmtRequire::Module(
                     ast::StmtRequireModule {
@@ -826,18 +771,11 @@ impl<'db> Parser<'db> {
             }
             Some("data") => {
                 self.eat_word("data");
-
-                let name = match self.eat_name() {
-                    Some(n) => n,
-                    None => {
-                        let ts = self.peek_text_span();
-                        return self.emit_stmt_error(ts,
-                            "expected data name after 'require data'",
-                            "P016",
-                            "expected data name",
-                        );
-                    }
-                };
+                let (import_space, package_alias, data_alias) =
+                    match self.parse_require_path("data", "P016", NameKind::Value) {
+                        Ok(path) => path,
+                        Err(error) => return error,
+                    };
 
                 // Optional type hint: `: type`
                 let type_hint = if self.peek_sigil(Sigil::Colon) {
@@ -847,12 +785,14 @@ impl<'db> Parser<'db> {
                     None
                 };
 
-                ast::Statement::Require(ast::StmtRequire::Data(
-                    ast::StmtRequireData {
-                        name,
-                        type_hint,
-                    }
-                ))
+                // The const the data is bound to. Its value is the file, and
+                // what the file says is checked against the hint the way any
+                // const's value is.
+                let file = self.create_expr(
+                    ast::ExprFunKind::DataFile(ast::ExprDataFile { import_space, package_alias, data_alias }),
+                    ts.with_end(self.last_byte_end()),
+                );
+                ast::Statement::Const(ast::StmtConst { name: data_alias, type_hint, value: file })
             }
             Some("rider") => {
                 self.eat_word("rider");
@@ -883,6 +823,77 @@ impl<'db> Parser<'db> {
                 )
             }
         }
+    }
+
+    /// The `library/package/name` path a `require module` or `require data`
+    /// names, or the error statement for a malformed one.
+    ///
+    /// Both resolve the same way, so they are written the same way. The last
+    /// segment is the name the require binds, which is a module alias for a
+    /// module and a value for data.
+    fn parse_require_path(
+        &mut self,
+        kind: &str,
+        first_code: &str,
+        alias_kind: NameKind,
+    ) -> Result<(InternedText<'db>, InternedText<'db>, InternedText<'db>), ast::Statement<'db>> {
+        let import_space = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.peek_text_span();
+                return Err(self.emit_stmt_error(ts,
+                    &fmt!("expected import space name after 'require {kind}'"),
+                    first_code,
+                    "expected import space name",
+                ));
+            }
+        };
+
+        if !self.peek_sigil(Sigil::SlashForward) {
+            let ts = self.error_span();
+            return Err(self.emit_stmt_error(ts,
+                "expected '/' after import space",
+                "P003",
+                "expected '/' after import space"
+            ));
+        }
+        self.eat_sigil(Sigil::SlashForward);
+
+        let package_alias = match self.eat_name() {
+            Some(n) => n,
+            None => {
+                let ts = self.error_span();
+                return Err(self.emit_stmt_error(ts,
+                    "expected package name after '/'",
+                    "P014",
+                    "expected package name",
+                ));
+            }
+        };
+
+        if !self.peek_sigil(Sigil::SlashForward) {
+            let ts = self.error_span();
+            return Err(self.emit_stmt_error(ts,
+                "expected '/' after package alias",
+                "P004",
+                "expected '/' after package alias"
+            ));
+        }
+        self.eat_sigil(Sigil::SlashForward);
+
+        let alias = match self.eat_declared_name(alias_kind) {
+            Some(n) => n,
+            None => {
+                let ts = self.error_span();
+                return Err(self.emit_stmt_error(ts,
+                    &fmt!("expected {kind} name after '/'"),
+                    "P015",
+                    &fmt!("expected {kind} name"),
+                ));
+            }
+        };
+
+        Ok((import_space, package_alias, alias))
     }
 
     fn parse_import(&mut self) -> ast::Statement<'db> {

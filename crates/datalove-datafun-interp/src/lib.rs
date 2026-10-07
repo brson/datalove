@@ -2949,85 +2949,40 @@ impl IrInterpreter {
                         dest.tydesc,
                     );
                 }
+                // Inserted one at a time rather than built in bulk, for the
+                // reason `execute_set_new` gives: a constant's elements need
+                // not arrive sorted, or once each, and the insert is what
+                // puts them in order and lets go of a duplicate.
                 ConstValue::Set(elements) => {
-                    // Build set from sorted slice of elements.
-                    let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
-                    let element_tydesc = tydesc_ref.set_element_ty().as_ptr();
-                    let element_size = (*element_tydesc).size as usize;
-                    let element_align = (*element_tydesc).align;
-
-                    // Compute element stride.
-                    let stride = rtdt::layout::align_up(element_size as u32, element_align) as usize;
-                    let stride = if stride == 0 { 1 } else { stride };
-
-                    // Allocate buffer for ALL elements.
-                    let num_elements = elements.len();
-                    let mut elements_buffer = vec![0u8; (stride * num_elements).max(8)];
-
-                    // Write each element at its offset in the buffer.
-                    for (i, element_value) in elements.iter().enumerate() {
-                        let element_dest = Destination {
-                            ptr: elements_buffer.as_mut_ptr().add(i * stride),
-                            tydesc: element_tydesc,
-                        };
-                        self.write_const(element_value, element_dest);
+                    let element_tydesc = rtdt::TyDescRef::from_ptr(dest.tydesc).set_element_ty().as_ptr();
+                    let rt = self.runtime.handle();
+                    datalove_rt::c::dtlv_rti_btreeset_create_local(rt, dest.ptr, dest.tydesc);
+                    let mut scratch = vec![0u64; ((*element_tydesc).size as usize).div_ceil(8).max(1)];
+                    for element_value in elements {
+                        let element = Destination { ptr: scratch.as_mut_ptr() as *mut u8, tydesc: element_tydesc };
+                        self.write_const(element_value, element);
+                        let mut added = false;
+                        datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                            rt, dest.ptr, dest.tydesc, element.ptr, element.tydesc,
+                            &mut added as *mut bool as *mut u8);
                     }
-
-                    // Build set from sorted slice.
-                    datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
-                        self.runtime.handle(),
-                        dest.ptr,
-                        element_tydesc,
-                        elements_buffer.as_mut_ptr(),
-                        num_elements as rtdt::IndexRepr,
-                    );
                 }
                 ConstValue::Map(entries) => {
-                    // Build map from sorted slices of keys and values.
                     let tydesc_ref = rtdt::TyDescRef::from_ptr(dest.tydesc);
                     let key_tydesc = tydesc_ref.map_key_ty().as_ptr();
                     let value_tydesc = tydesc_ref.map_value_ty().as_ptr();
-                    let key_size = (*key_tydesc).size as usize;
-                    let key_align = (*key_tydesc).align;
-                    let value_size = (*value_tydesc).size as usize;
-                    let value_align = (*value_tydesc).align;
-
-                    // Compute key and value strides.
-                    let key_stride = rtdt::layout::align_up(key_size as u32, key_align) as usize;
-                    let key_stride = if key_stride == 0 { 1 } else { key_stride };
-                    let value_stride = rtdt::layout::align_up(value_size as u32, value_align) as usize;
-                    let value_stride = if value_stride == 0 { 1 } else { value_stride };
-
-                    // Allocate buffers for ALL keys and ALL values.
-                    let num_entries = entries.len();
-                    let mut keys_buffer = vec![0u8; (key_stride * num_entries).max(8)];
-                    let mut values_buffer = vec![0u8; (value_stride * num_entries).max(8)];
-
-                    // Write each key and value at their offsets in the buffers.
-                    for (i, (key_value, val_value)) in entries.iter().enumerate() {
-                        let key_dest = Destination {
-                            ptr: keys_buffer.as_mut_ptr().add(i * key_stride),
-                            tydesc: key_tydesc,
-                        };
-                        self.write_const(key_value, key_dest);
-
-                        let val_dest = Destination {
-                            ptr: values_buffer.as_mut_ptr().add(i * value_stride),
-                            tydesc: value_tydesc,
-                        };
-                        self.write_const(val_value, val_dest);
+                    let rt = self.runtime.handle();
+                    datalove_rt::c::dtlv_rti_btreemap_create_local(rt, dest.ptr, dest.tydesc);
+                    let mut key_scratch = vec![0u64; ((*key_tydesc).size as usize).div_ceil(8).max(1)];
+                    let mut value_scratch = vec![0u64; ((*value_tydesc).size as usize).div_ceil(8).max(1)];
+                    for (key_value, val_value) in entries {
+                        let key = Destination { ptr: key_scratch.as_mut_ptr() as *mut u8, tydesc: key_tydesc };
+                        let val = Destination { ptr: value_scratch.as_mut_ptr() as *mut u8, tydesc: value_tydesc };
+                        self.write_const(key_value, key);
+                        self.write_const(val_value, val);
+                        datalove_rt::c::dtlv_rti_btreemap_insert_local(
+                            rt, dest.ptr, dest.tydesc, key.ptr, key.tydesc, val.ptr, val.tydesc);
                     }
-
-                    // Build map from sorted slices.
-                    datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
-                        self.runtime.handle(),
-                        dest.ptr,
-                        key_tydesc,
-                        value_tydesc,
-                        keys_buffer.as_mut_ptr(),
-                        values_buffer.as_mut_ptr(),
-                        num_entries as rtdt::IndexRepr,
-                    );
                 }
                 ConstValue::Table { columns: _, rows } => {
                     // Build table from rows.

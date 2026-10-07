@@ -1,0 +1,12 @@
+// A data file that is not there, and one that is not what it is required as,
+// are refused at the `require`.
+----------
+data local/app/nums
+----------
+[1, 2, 3]
+----------
+scriptunit-fragment
+----------
+
+require data local/app/missing: [u32]
+require data local/app/nums: [string]

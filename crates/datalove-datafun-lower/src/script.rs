@@ -19,7 +19,7 @@ use datalove_datafun_ir::{
 };
 use datalove_datafun_sema::ScriptAnalysisData;
 use crate::ScriptFunctionAnalyses;
-use super::context::{LowerCtx, ScriptLowerContext, FrameState};
+use super::context::{DataFiles, LowerCtx, ScriptLowerContext, FrameState};
 use super::expr::{lower_expression, lower_expression_for_ref};
 use super::func::lower_function_body;
 use super::stmt::{collect_field_path_from_place, lower_destructure, lower_numbered_statement, lower_var};
@@ -78,6 +78,7 @@ pub fn lower_script_fragment_raw<'db>(
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
@@ -86,7 +87,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_return_types: Option<&HashMap<String, IrType>>,
     lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -213,12 +214,13 @@ pub fn lower_script_functions<'db>(
     func_param_types: Option<&HashMap<String, Vec<IrType>>>,
     func_return_types: Option<&HashMap<String, IrType>>,
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     script_consts: &HashMap<String, (IrType, ConstValue)>,
     defer_missing_consts: bool,
 ) -> Result<ScriptFunctionsLowered, LowerError> {
     // Create a minimal context with the accumulated script context.
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
 
     // Script-level consts are in scope for every body in the unit, and stay in
     // scope for later units. Seeded before any body is lowered so that the
@@ -297,10 +299,11 @@ pub fn lower_script_expr<'db>(
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), script_ctx);
+    let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
 
     // An expression unit that is just a name is the prompt asking to see a
     // binding, not to take it. Name it and compute nothing.

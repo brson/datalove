@@ -127,6 +127,10 @@ pub struct TypeContext<'db> {
     /// A call through one would otherwise say again, less helpfully, that
     /// nothing was required under it.
     pub(crate) failed_aliases: HashSet<String>,
+    /// The data files `require data` may name, by path.
+    pub(crate) data_files: crate::DataFiles,
+    /// The data files a `require data` const named, which lowering reads.
+    pub(crate) resolved_data: crate::DataFiles,
     /// Stack of loop depth (for validating break/continue are inside a loop).
     pub(crate) loop_depth: usize,
     /// Whether we're in a reference context (ref/mut/out param or binop operand).
@@ -203,6 +207,8 @@ impl<'db> TypeContext<'db> {
             call_targets: CallTargets::new(),
             qualified: crate::QualifiedScope::default(),
             failed_aliases: HashSet::new(),
+            data_files: crate::DataFiles::new(),
+            resolved_data: crate::DataFiles::new(),
             loop_depth: 0,
             ref_context: false,
             mut_context: false,

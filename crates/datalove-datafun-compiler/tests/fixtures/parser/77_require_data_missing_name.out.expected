@@ -3,7 +3,7 @@
     "statements": [
       {
         "kind": "ParseError",
-        "message": "expected data name after 'require data'"
+        "message": "expected import space name after 'require data'"
       }
     ]
   },
@@ -12,7 +12,7 @@
       "code": "P016",
       "labels": [
         {
-          "message": "expected data name",
+          "message": "expected import space name",
           "span": [
             12,
             12
@@ -20,7 +20,7 @@
           "text": ""
         }
       ],
-      "message": "expected data name after 'require data'"
+      "message": "expected import space name after 'require data'"
     }
   ]
 }

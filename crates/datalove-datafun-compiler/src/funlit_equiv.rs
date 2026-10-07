@@ -231,6 +231,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 datalit::ast_serde::Expr::Table(datalit::ast_serde::ExprTable { header, rows }),
             )
         }
+        ast::ExprFunKind::DataFile(_) => {
+            return Err(ConversionError::NotPureDatalit("DataFile".to_string()));
+        }
         ast::ExprFunKind::ParseError(e) => {
             (
                 None,

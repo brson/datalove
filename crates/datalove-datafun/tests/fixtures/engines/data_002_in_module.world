@@ -1,0 +1,97 @@
+// A module requires data the way it requires a module, and reads it as the
+// const it is: from functions, from another const, and through a type alias
+// the module declares.
+----------
+data local/shop/orders
+----------
+[
+  {sku = "apple", qty = 3, price = 0.5},
+  {sku = "pear", qty = 1, price = 0.75},
+  {sku = "fig", qty = 12, price = 0.25},
+]
+----------
+data local/shop/rates
+----------
+%{ "apple" = 2, "fig" = 1 }
+----------
+module local/shop/report
+----------
+
+type Order: {sku: string, qty: u32, price: f64}
+
+require data local/shop/orders: [Order]
+require data local/shop/rates: %{string = u32}
+
+// One order's fields, or none past the end. The fixtures have no `list.len`.
+fun price_at(i: index): ?f64
+    ret some (orders[i]?.price)
+end fun
+
+fun line_at(i: index): ?(string, u32)
+    ret some (orders[i]?.sku@, orders[i]?.qty)
+end fun
+
+fun rate_of(sku: string): u32
+    if rate_at(sku) |rate|
+        ret rate
+    end if
+    ret 0
+end fun
+
+fun rate_at(sku: string): ?u32
+    ret some (rates[sku]?)
+end fun
+
+// A const evaluated at compile time from a function reading the data, which
+// has to see the data's value there as well as at run time.
+const CHEAPEST: f64 = cheapest()
+
+fun cheapest(): f64
+    var best: f64 = 1000.0
+    var i: index = 0
+    loop
+        if price_at(i) |price|
+            if price .< best
+                set best = price
+            end if
+        else
+            break
+        end if
+        set i = icall add_wrapping_index(i, : index / 1)
+    end loop
+    ret best
+end fun
+
+// What the orders cost, and how many items they weigh at their rates.
+fun total(): !(f64, u32, f64)
+    var cost: f64 = 0.0
+    var weight: u32 = 0
+    var i: index = 0
+    loop
+        if price_at(i) |price|
+            set cost = cost + price
+        else
+            break
+        end if
+        if line_at(i) |line|
+            set weight = weight +! line.1 *! rate_of(line.0@)
+        end if
+        set i = i +! 1
+    end loop
+    ret ok (cost, weight, CHEAPEST)
+end fun
+
+fun first_sku(): !string
+    ret ok orders[0]!.sku@
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/shop/report
+import report.total
+import report.first_sku
+
+debuglog total()
+debuglog first_sku()

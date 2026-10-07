@@ -14,7 +14,7 @@ use datalove_datafun_ir::{
     Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable, ConstValue,
 };
 use datalove_datafun_sema::FunctionAnalysis;
-use super::context::LowerCtx;
+use super::context::{DataFiles, LowerCtx};
 use super::stmt::lower_statement;
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
@@ -42,8 +42,9 @@ pub fn lower_function_for_module<'db>(
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
     module_consts: &HashMap<String, (IrType, ConstValue)>,
+    data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
-    let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map));
+    let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map), data_files);
     // Module-level consts are in scope for the whole module. Seeding them here
     // puts them on the same path as an already-evaluated function-level const,
     // so a reference emits a fresh Const and is dropped as an expression

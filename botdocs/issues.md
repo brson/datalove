@@ -34,6 +34,9 @@ home here.
 - [Deep recursion aborts the process, in every engine but the bytecode](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)
 - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
 - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
+- [Indexing an earlier unit's binding at the top level panics](#user-content-indexing-an-earlier-units-binding-at-the-top-level-panics)
+- [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
+- [A data const is copied once per place that names it](#user-content-a-data-const-is-copied-once-per-place-that-names-it)
 
 ## No table module, and none can be written
 
@@ -508,3 +511,56 @@ module's named type can only be annotated by writing the type out in full, as
 The typechecker already records each module's `exported_type_aliases`; what is
 missing is a way to reach them, either a qualified type name or an `import`
 that takes types as well as functions.
+
+## Indexing an earlier unit's binding at the top level panics
+
+**Reproduced.**
+
+```datalove
+const W: [string] = ["a", "b"]     // unit 1
+debuglog W[0]!                     // unit 2
+```
+
+panics in lowering with `not yet implemented: external value type in place
+lowering` (`operand_type` in `lower/src/expr.rs`). The
+binding is another unit's export, an `Operand::ExternalValue`, and place
+lowering with a step has no type for one. Naming it whole (`debuglog W`) and
+reading it from a function both work, which is what `engines/data_003`
+does. Found writing that fixture; it is not about data, which only makes a
+list from an earlier unit more likely.
+
+## A const reaching a waiting function through another panics
+
+**Reproduced.**
+
+A module const evaluated by calling a function that calls another function
+naming a module const:
+
+```datalove
+const ORDERS: [{price: f64}] = [{price = 2.0}]
+fun price_at(i: index): ?f64       // names ORDERS, so waits for the second stratum
+    ret some (ORDERS[i]?.price)
+end fun
+const CHEAPEST: f64 = cheapest()   // cheapest calls price_at
+```
+
+panics in the interpreter with `module unit IrModuleId(0)::CodeUnitId(0) not
+found`. The spec says this is a cycle and is reported as one, but
+`const_eval::first_uncallable_target` looks only at what the const's own unit
+calls, not at what those calls reach. Data consts are in scope for the first
+stratum (`const_eval::data_consts`), so the same shape over a `require data`
+works; over an evaluated const it still panics.
+
+## A data const is copied once per place that names it
+
+**Reasoned, not measured.**
+
+Every place a const is named lowers to its own `StaticRef`, holding its own
+`Arc` of a clone of the value (`lower_var_operand`), and the interpreter's
+`StaticPool` folds equal ones together by hashing and comparing the whole
+value. For an ordinary const that is nothing. For a data file of tens of
+thousands of rows named from a dozen functions it is a dozen deep clones at
+compile time and a dozen hashes of the whole dataset the first time each
+runs. Sharing one `Arc` per const, made where the const is resolved, would
+make both pointer copies.
+

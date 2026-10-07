@@ -60,6 +60,7 @@ fn typecheck_sections_with_mode(
                 .or_insert_with(|| datalove_datafun_pkg::package_load::Package {
                     name: pkg.C(),
                     modules: std::collections::BTreeMap::new(),
+                    data: std::collections::BTreeMap::new(),
                     rider_source: None,
                     rider_crate: None,
                     rider_crate_dir: None,

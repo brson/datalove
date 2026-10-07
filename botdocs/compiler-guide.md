@@ -1737,6 +1737,27 @@ under options it was not made with, so there are no setters for them, and a
 `WorkspaceDelta` that changes them says `requires_new_pipeline` rather than
 being applied to one that exists.
 
+### Data Files
+
+A package's `.dlt` files travel beside its modules the whole way: the loader
+reads them into `Package::data`, a `WorkspaceDescriptor` keeps them in
+`PackageDescriptor::data` and diffs them into `WorkspaceDelta::data_*`, and
+the pipeline holds each as a `Source` in `IncrementalModuleWorld`, so an edit
+to one is a `set_text` like a module edit. They take no part in package
+resolution -- data has no requires -- and every one in the world rides on the
+`ModuleGraph` as `data`, by path, from where `ScriptEnv` takes them too.
+
+`require data lib/pkg/name: T` is parsed as the const `name: T` whose value is
+an `ExprFunKind::DataFile` naming the path, so it is a const everywhere after
+the parser. The typechecker resolves the path against the graph's data
+(`datafile.rs`), checks the file against `T` with datalit's own checker
+(`data_file_type`, memoized), and records the files it resolved in the unit's
+typecheck result as `data_files`, which is where lowering finds them.
+`datalove-datafun-lower/src/datafile.rs` reads a checked file into a
+`ConstValue` led by the type, memoized on `(Source, IrType)`. A data const
+needs no evaluating, so `const_eval::data_consts` puts the module's or unit's
+data in scope before the first lowering stratum.
+
 ### Compiling From Roots
 
 The world is every module a workspace holds, and a program using the system
@@ -1978,7 +1999,7 @@ end fun
 
 Section headers: `module <lib>/<pkg>/<mod>`, `module-add`, `module-remove`,
 `module-change-ws`, `module-change-ast`, `module-change-ty`,
-`scriptunit-fragment`, `scriptunit-expr`, `inline-directives`, `rider <name>`.
+`scriptunit-fragment`, `scriptunit-expr`, `data <lib>/<pkg>/<name>`, `rider <name>`.
 The three `module-change-*` kinds drive the memoization tests.
 
 ## Key Files

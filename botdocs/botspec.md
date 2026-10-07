@@ -16,6 +16,7 @@
 - [9. Module System](#user-content-9-module-system)
   - [9.4 Qualified Calls](#user-content-94-qualified-calls)
   - [9.5 Native Riders](#user-content-95-native-riders)
+  - [9.6 Data](#user-content-96-data)
 - [10. Numeric Widening](#user-content-10-numeric-widening)
 - [11. Ownership Analysis](#user-content-11-ownership-analysis)
 - [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
@@ -1583,8 +1584,10 @@ line that begins with no statement keyword at all is P001.
 The module system has three levels: library, package, module.
 
 A **library** is a directory of packages (e.g. `sys/`, `local/`).
-A **package** is a directory of modules (e.g. `sys/std/`).
+A **package** is a directory of modules and data (e.g. `sys/std/`).
 A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`).
+A **data file** is a single `.dlt` file of datalit (e.g. `local/shop/orders.dlt`),
+which `require data` reads; see Section 9.6.
 
 The `sys` library is compiled into the `datalove` binary. The `local` library
 is a workspace's own, read from disk by the command line (`script`,
@@ -1608,11 +1611,12 @@ another package that has one, such as `local/std` beside `sys/std`.
 
 ### 9.2 Require
 
-`require` loads a module or rider:
+`require` loads a module, a rider or a data file:
 
 ```datalove
 require module sys/std/u32
 require rider std
+require data local/shop/orders: [{sku: string, qty: u32}]
 ```
 
 A `require` or `import` is read only at the top level of a module or script,
@@ -1748,6 +1752,35 @@ All three execution backends support native rider calls:
 - **JIT**: Native functions are declared as Cranelift imports with their C ABI
   signatures. Symbol addresses are registered via the JIT's symbol lookup
   mechanism from the same table the interpreter uses.
+
+### 9.6 Data
+
+`require data` binds a const to the value a data file holds:
+
+```datalove
+require data local/shop/orders: [{sku: string, qty: u32}]
+```
+
+The path is found exactly as a module's is, naming a `.dlt` file beside the
+package's modules -- `local/shop/orders.dlt` here -- where a module path names
+a `.dfm`. The last segment is the name of the const.
+
+The statement is the const `orders: [{sku: string, qty: u32}]` whose value is
+the file, and it is that const in every respect: it is borrowed wherever it is
+named, cloned out with `@`, in scope for every function of the module or for
+the units of a session after it, and built once. The file is datalit, which
+is the literal syntax of datafun, so its value is the one the same text would
+have as a const's initializer: its literals take their types from the type at
+the `require`, so `3` is a `u32` there and an `int` without one. With no type
+the data has the type it synthesizes, as a const with no hint does.
+
+A data file has no names, no operators and no calls, so it needs no
+evaluating; a function reading one is compiled with its value in scope, and
+a const may be worked out from data by calling such a function.
+
+A data file that does not exist is F079, as a missing module is. One that is
+not of the type the `require` gives is F084, at the `require`, and the
+mismatch inside the file is reported where it is in the file.
 
 ## 10. Numeric Widening
 
@@ -2014,7 +2047,6 @@ The following features appear in design documents but are not yet implemented:
   Mutation of sub-tensor views via `mut` params is rejected;
   element-level mutation through a view requires direct `set` on the
   original tensor with chained indexing.
-- `require data <name>`, which parses and reaches no later phase
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)

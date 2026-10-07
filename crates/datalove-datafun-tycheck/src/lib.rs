@@ -35,6 +35,7 @@ pub use datalove_datafun_sema::ResolvedCallTarget;
 // Implementation modules.
 mod api;
 mod check;
+mod datafile;
 mod context;
 mod emit;
 pub mod statement;
@@ -42,6 +43,7 @@ pub mod synthesize;
 pub mod types;
 
 // Re-export emit infrastructure.
+pub use datafile::{DataFileQuery, DataFiles, data_file_type};
 pub use emit::{SpanLookup, LocalSpanLookup, ModuleGraphSpanLookup, emit_pending_diagnostics, format_pending_diagnostics};
 
 /// Hint for how to recover from an @-recoverable error.
@@ -461,6 +463,9 @@ pub struct ScriptEnv<'db> {
     /// The modules the script may require and import from.
     #[returns(ref)]
     pub modules: Vec<bct::module_graph::Module<'db>>,
+    /// The data files the script may require, by path.
+    #[returns(ref)]
+    pub data: std::collections::BTreeMap<String, bct::input::Source>,
     /// Auto-adapt mode for type checking.
     #[returns(copy)]
     pub auto_adapt_mode: AutoAdaptMode,
@@ -490,6 +495,9 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// binding would hold the unconverted value under the adapted type.
     #[returns(ref)]
     pub adapt_sites: datalove_datafun_sema::AdaptSites<'db>,
+    /// The data files this unit's `require data` consts name, by path.
+    #[returns(ref)]
+    pub data_files: crate::DataFiles,
 }
 
 /// Result of typechecking multiple script units together.
@@ -667,6 +675,10 @@ pub struct SingleModuleTypecheckResult<'db> {
     /// Resolved call targets for this module.
     #[returns(ref)]
     pub call_targets: CallTargets<'db>,
+
+    /// The data files this module's `require data` consts name, by path.
+    #[returns(ref)]
+    pub data_files: crate::DataFiles,
 }
 
 /// Exported function signatures from a module.

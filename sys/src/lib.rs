@@ -26,6 +26,8 @@ struct EmbeddedPackage {
     name: &'static str,
     /// Module name and source text, one per module.
     modules: &'static [(&'static str, &'static str)],
+    /// Data file name and text, one per `.dlt`.
+    data: &'static [(&'static str, &'static str)],
     /// Source of the package's rider interface, if it has one.
     rider_interface: Option<&'static str>,
     /// What the package's manifest calls the rider crate, and which version.
@@ -53,17 +55,20 @@ pub fn system_library() -> SystemLibrary {
 }
 
 fn descriptor(package: &EmbeddedPackage) -> PackageDescriptor {
-    let modules: BTreeMap<String, ModuleDescriptor> = package.modules.iter()
-        .map(|(name, source)| (name.S(), ModuleDescriptor {
-            name: name.S(),
-            source: Arc::from(*source),
-            origin: None,
-        }))
-        .collect();
+    let embedded = |files: &[(&str, &str)]| -> BTreeMap<String, ModuleDescriptor> {
+        files.iter()
+            .map(|(name, source)| (name.S(), ModuleDescriptor {
+                name: name.S(),
+                source: Arc::from(*source),
+                origin: None,
+            }))
+            .collect()
+    };
 
     PackageDescriptor {
         name: package.name.S(),
-        modules,
+        modules: embedded(package.modules),
+        data: embedded(package.data),
         rider: package.rider_interface.map(|source| RiderDescriptor {
             interface_source: Arc::from(source),
             crate_spec: package.rider_crate

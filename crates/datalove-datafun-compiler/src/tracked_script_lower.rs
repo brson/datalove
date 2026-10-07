@@ -349,6 +349,7 @@ fn find_const_refs_inner<'db>(
         | ExprFunKind::Hex(_)
         | ExprFunKind::String(_)
         | ExprFunKind::Atom(_)
+        | ExprFunKind::DataFile(_)
         | ExprFunKind::ParseError(_) => {}
     }
 }

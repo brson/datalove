@@ -1,0 +1,142 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const ["alpha", "beta", "gamma"]
+                        v1 = const (1int, 2.5f64, "three", [4int, 5int])
+                        debuglog v1
+                        v2 = const 2index
+                        v3 = listboundscheck v0[v2]
+                        branch v3, block2, block1
+                    block1:
+                        v4 = const "index out of bounds"
+                        v5 = error_from v4
+                        v6 = err v5
+                        unit_early_return v6
+                    block2:
+                        v7 = listelementref v0[v2]
+                        debuglog *v7
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(1, 2.5, \"three\", [4, 5])\n\"gamma\"\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call u1()
+                        debuglog v0
+                        debuglog unit0.v0
+                        unit_end
+                    
+                    fn word_at(p0):
+                    block0:
+                        v0 = staticref ["alpha", "beta", "gamma"]
+                        v1 = listboundscheck *v0[p0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = listelementref *v0[p0]
+                        v4 = clone *v3
+                        v5 = some v4
+                        return v5
+                    
+                    fn count():
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        goto block1
+                    block1:
+                        v1 = call u0(s0)
+                        v2, v3 = unwrap_option v1
+                        branch v3, block2, block3
+                    block2:
+                        v4 = const 1index
+                        v5 = intrinsic AddWrappingIndex(s0, v4)
+                        store.copy s0, v5
+                        drop v2
+                        goto block4
+                    block3:
+                        goto block5
+                    block4:
+                        goto block1
+                    block5:
+                        v6 = load.copy s0
+                        return v6
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("3\n[\"alpha\", \"beta\", \"gamma\"]\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3int
+                        debuglog v0
+                        unit_end_drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("3\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "3",
+        ),
+    ],
+)

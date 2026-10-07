@@ -1,0 +1,47 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const {flag = true, small = 200u8, neg = -12i32, wide = 9000000000u64, big = 123456789012345678901234567890int, idx = 7index, half = 0.5f32, third = 0.25f64, mask = 255u32, word = "tab\	quote\"", nothing = (), pair = (1u16, "one"), point = {x = 1.5f64, y = -2f64}, nums = [3i64, 1i64, 2i64], tags = #{"b", "a", "b"}, counts = %{"y" = 2u32, "x" = 1u32, "y" = 3u32}, maybe = some 4u8, absent = none, good = ok 1u32, bad = err error "oops", boxed = data [1int, 2int], state = enum Ready, event = enum Click((3u32, 4u32)), kind = enum Custom("c"), grid = [| 1i32 2i32 3i32 4i32 |] of 2x2, rows = {| name, score; "a", 1u32; "b", 2u32 |}}
+                        debuglog v0
+                        v1 = getfieldref v0.1
+                        debuglog *v1
+                        v2 = getfieldref v0.9
+                        debuglog *v2
+                        v3 = getfieldref v0.13
+                        v4 = const 2index
+                        v5 = listboundscheck *v3[v4]
+                        branch v5, block2, block1
+                    block1:
+                        v6 = const "index out of bounds"
+                        v7 = error_from v6
+                        v8 = err v7
+                        unit_early_return v8
+                    block2:
+                        v9 = listelementref *v3[v4]
+                        debuglog *v9
+                        v10 = getfieldref v0.15
+                        v11 = clone *v10
+                        debuglog v11
+                        unit_end_drop v0
+                        unit_end_drop v11
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("{flag = true, small = 200, neg = -12, wide = 9000000000, big = 123456789012345678901234567890, idx = 7, half = 0.5, third = 0.25, mask = 255, word = \"tab\\tquote\\\"\", nothing = (), pair = (1, \"one\"), point = {x = 1.5, y = -2.0}, nums = [3, 1, 2], tags = #{\"a\", \"b\"}, counts = %{\"x\" = 1, \"y\" = 3}, maybe = some 4, absent = none, good = ok 1, bad = er error \"oops\", boxed = data [1, 2], state = atom Ready, event = term Click (3, 4), kind = enum { term Custom \"c\" }, grid = [| 1 2, 3 4 |], rows = {| name, score; \"a\", 1; \"b\", 2 |}}\n200\n\"tab\\tquote\\\"\"\n2\n%{\"x\" = 1, \"y\" = 3}\n"),
+        ),
+    ],
+)

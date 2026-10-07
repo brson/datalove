@@ -1,0 +1,57 @@
+// Data required by one script unit is a const of that unit: later units read
+// it, at the top level and from their functions, until one binds the name to
+// something else. Data with no type at the `require` has the type it says.
+----------
+data local/app/words
+----------
+["alpha", "beta", "gamma"]
+----------
+data local/app/plain
+----------
+(1, 2.5, "three", [4, 5])
+----------
+scriptunit-fragment
+----------
+
+require data local/app/words: [string]
+require data local/app/plain
+
+debuglog plain
+debuglog words[2]!
+
+----------
+scriptunit-fragment
+----------
+
+// A word, or none past the end.
+fun word_at(i: index): ?string
+    ret some (words[i]?@)
+end fun
+
+fun count(): index
+    var n: index = 0
+    loop
+        if word_at(n) |word|
+            set n = icall add_wrapping_index(n, : index / 1)
+        else
+            break
+        end if
+    end loop
+    ret n
+end fun
+
+debuglog count()
+debuglog words
+
+----------
+scriptunit-fragment
+----------
+
+let words = 3
+debuglog words
+
+----------
+scriptunit-expr
+----------
+
+words

@@ -283,6 +283,7 @@ pub fn typecheck_script_unit<'db>(
 
     let unit_spec = unit_ast(db, script.unit(db));
     let mut ctx = TypeContext::with_options(db, unit_spec.spans.clone(), None, auto_adapt_mode);
+    ctx.data_files = env.data(db).C();
 
     // The environment the earlier units left is read on a lookup miss rather
     // than seeded into the context, which is the whole of stage B.
@@ -486,7 +487,7 @@ pub fn typecheck_script_unit<'db>(
     let mut function_types: Vec<_> = ctx.functions.into_iter().collect();
     function_types.sort_by(|(a, _), (b, _)| a.as_str(db).cmp(b.as_str(db)));
     let result = UnitTypecheckResultTracked::new(
-        db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites,
+        db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites, ctx.resolved_data,
     );
 
     ScriptUnitTypecheckOutput::new(
@@ -529,7 +530,7 @@ pub fn single_fragment_script<'db>(
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> (Script<'db>, ScriptEnv<'db>) {
     let unit = ScriptUnit::new(db, source, false);
-    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), auto_adapt_mode))
+    (Script::new(db, None, unit), ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new(), auto_adapt_mode))
 }
 
 /// Typecheck a single script fragment using the production path.
@@ -572,6 +573,7 @@ pub fn typecheck_module<'db>(
     import_errors: Vec<crate::UnresolvedImport>,
     require_errors: Vec<crate::RequireError>,
     qualified: crate::QualifiedScope<'db>,
+    data_files: crate::DataFiles,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> SingleModuleTypecheckResult<'db> {
     let module_id = module.id(db);
@@ -581,6 +583,7 @@ pub fn typecheck_module<'db>(
 
     // Create type context for this module with module_id for pending diagnostics.
     let mut ctx = TypeContext::with_options(db, spans, Some(module_id), auto_adapt_mode);
+    ctx.data_files = data_files;
 
     for error in &require_errors {
         ctx.report_require_error(error);
@@ -658,6 +661,7 @@ pub fn typecheck_module<'db>(
         imports,
         ctx.expr_types.C(),
         ctx.call_targets.C(),
+        ctx.resolved_data.C(),
     )
 }
 
@@ -736,7 +740,7 @@ pub fn typecheck_module_graph<'db>(
         // Call the tracked typecheck function.
         let result = typecheck_module(
             db, module, parsed, spans, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, auto_adapt_mode,
+            require_errors, qualified, prep.graph.data(db).C(), auto_adapt_mode,
         );
 
         // Collect errors from typecheck result.
@@ -818,7 +822,7 @@ pub fn typecheck_module_graph_parallel<'db>(
         let spans = DatafunSpans::new(vec![]);
         let _ = typecheck_module(
             db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, auto_adapt_mode,
+            require_errors, qualified, prep.graph.data(db_salsa).C(), auto_adapt_mode,
         );
     });
 
@@ -987,7 +991,6 @@ fn check_module_requires<'db>(
                     });
                 }
             }
-            StmtRequire::Data(_) => {}
         }
     }
     errors
@@ -1359,7 +1362,6 @@ fn check_script_requires<'db>(
                     kind: Kind::RiderInScript { name },
                 });
             }
-            StmtRequire::Data(_) => {}
         }
     }
     errors

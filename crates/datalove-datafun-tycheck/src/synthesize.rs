@@ -201,6 +201,10 @@ pub fn synthesize_unhinted<'db>(
     let expr_kind = expr.expr(db);
 
     match expr_kind {
+        ExprFunKind::DataFile(ref file) => {
+            crate::datafile::type_data_file(ctx, expr, file, None)
+        }
+
         ExprFunKind::BinOp(ref binop) => {
             synthesize_binop(ctx, expr, binop)
         }

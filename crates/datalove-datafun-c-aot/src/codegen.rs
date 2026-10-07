@@ -741,6 +741,14 @@ impl<'a> FunctionCodegenContext<'a> {
             // An atom is one value of a type that has only that value, so it
             // occupies nothing and there is nothing to write.
             ConstValue::Enum { .. } if matches!(ty, IrType::Atom(_)) => {}
+            // A term is laid out as its payload, with nothing to say which
+            // variant it is, there being only the one.
+            ConstValue::Enum { payload, .. } if matches!(ty, IrType::Term(..)) => {
+                let IrType::Term(_, payload_ty) = ty else { unreachable!() };
+                let payload = payload.as_deref().ok_or_else(|| CAotError::Codegen(
+                    "a term constant has no payload".into()))?;
+                self.emit_const_at(out, dest_addr, payload_ty, payload)?;
+            }
             ConstValue::Enum { variant, payload } => {
                 let IrType::Enum(variants) = ty else {
                     return Err(CAotError::Codegen(format!(

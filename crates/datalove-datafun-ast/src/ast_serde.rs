@@ -174,7 +174,6 @@ pub struct StmtRet {
 #[serde(tag = "variant")]
 pub enum StmtRequire {
     Module(StmtRequireModule),
-    Data(StmtRequireData),
     Rider(StmtRequireRider),
 }
 
@@ -183,12 +182,6 @@ pub struct StmtRequireModule {
     pub import_space: String,
     pub package_alias: String,
     pub module_alias: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct StmtRequireData {
-    pub name: String,
-    pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -310,6 +303,7 @@ pub enum ExprFunKind {
     Er(ExprEr),
     Data(ExprData),
     Error(ExprError),
+    DataFile(ExprDataFile),
 
     // Table expression.
     Table(ExprTable),
@@ -574,6 +568,11 @@ pub struct ExprData {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct ExprDataFile {
+    pub path: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprError {
     pub type_hint: Option<datalove_datalit::ast_serde::TypeHint>,
     pub value: Box<ExprFun>,
@@ -778,12 +777,6 @@ impl StmtRequire {
                     module_alias: m.module_alias.as_str(db).to_string(),
                 })
             }
-            crate::ast::StmtRequire::Data(d) => {
-                StmtRequire::Data(StmtRequireData {
-                    name: d.name.as_str(db).to_string(),
-                    type_hint: d.type_hint.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
-                })
-            }
             crate::ast::StmtRequire::Rider(r) => {
                 StmtRequire::Rider(StmtRequireRider {
                     name: r.name.as_str(db).to_string(),
@@ -909,6 +902,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Ok(e) => ExprFunKind::Ok(ExprOk::from_ast(db, e)),
             crate::ast::ExprFunKind::Er(e) => ExprFunKind::Er(ExprEr::from_ast(db, e)),
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
+            crate::ast::ExprFunKind::DataFile(e) => ExprFunKind::DataFile(ExprDataFile { path: e.path(db) }),
             crate::ast::ExprFunKind::Error(e) => ExprFunKind::Error(ExprError::from_ast(db, e)),
 
             // Table expression.

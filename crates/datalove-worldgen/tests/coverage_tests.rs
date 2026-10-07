@@ -60,7 +60,7 @@ kind_names!(expr_name, ExprFunKind, ExprFunKind<'_>, ALL_EXPRS, [
     BinOp, FunctionCall, Tuple, UnaryOp, TryOption, TryResult, CloneCoerce,
     FieldProj, True, False, None, Int, Float, Hex, String, List, Set, Map,
     Tensor, AnonTuple, AnonStruct, Some, Ok, Er, Data, Error, Table, Atom,
-    Term, EnumLiteral, Hinted, Index, Place, ParseError, IntrinsicCall,
+    Term, EnumLiteral, Hinted, Index, Place, ParseError, IntrinsicCall, DataFile,
 ]);
 
 kind_names!(binop_name, BinOp, BinOp, ALL_BINOPS, [
@@ -134,6 +134,7 @@ const NOT_YET_GENERATED: &[(&str, &str, &str)] = &[
     ("expr", "Hinted", "the generator only hints literals, which keep the hint themselves"),
     ("expr", "IntrinsicCall", "`icall` names intrinsics the generator does not know"),
     ("expr", "ParseError", "a parse error means the generator wrote something wrong"),
+    ("expr", "DataFile", "`require data` needs a data file in the world, and worldfiles from the generator have none"),
 
 
 
@@ -336,7 +337,7 @@ fn walk_expr<'db>(
                 }
             }
         }
-        ExprFunKind::Atom(_) | ExprFunKind::ParseError(_) => {}
+        ExprFunKind::Atom(_) | ExprFunKind::ParseError(_) | ExprFunKind::DataFile(_) => {}
     }
 }
 

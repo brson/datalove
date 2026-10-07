@@ -174,14 +174,14 @@ fn compiled_cleanly(reference: &Analysis) -> bool {
 }
 
 /// Whether the AOT backends apply: one fragment, no expressions, nothing but
-/// modules beside it, and every unit compiled and run to completion by the
+/// modules and data beside it, and every unit compiled and run to completion by the
 /// reference.
 fn aot_applies(parsed: &ParsedWorldfile, reference: &Analysis) -> bool {
     let fragments = parsed.sections.iter()
         .filter(|s| matches!(s, WorldfileSection::ScriptFragment { .. }))
         .count();
     let only_modules = parsed.sections.iter().all(|s| matches!(s,
-        WorldfileSection::Module { .. } | WorldfileSection::ScriptFragment { .. }));
+        WorldfileSection::Module { .. } | WorldfileSection::Data { .. } | WorldfileSection::ScriptFragment { .. }));
     let all_ran = reference.sections.iter()
         .all(|s| s.section_type == "module" || s.output == "(fragment executed)");
     fragments == 1 && only_modules && compiled_cleanly(reference) && all_ran

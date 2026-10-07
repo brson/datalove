@@ -168,8 +168,10 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Use empty func_id_map since these tests don't use modules.
                 // These fixtures declare no script-level const a body names, so
                 // there is nothing to seed and nothing to defer.
+                // These fixtures require no data.
+                let no_data = lower::DataFiles::new();
                 let lowered = lower_script_functions(
-                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, ScriptLowerContext::new(),
+                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, &no_data, ScriptLowerContext::new(),
                     &HashMap::new(), false,
                 ).expect("function lowering failed");
                 let (lowered_functions, func_name_to_id) = (lowered.functions, lowered.func_name_to_id);
@@ -205,6 +207,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                             &lowered_functions.iter().cloned().map(std::sync::Arc::new).collect::<Vec<_>>(),
                             &func_name_to_id,
                             None, // No module functions for script tests
+                            &no_data,
                         );
 
                         let value = match lower_result {
@@ -248,7 +251,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     Some((lowered_functions, func_name_to_id))
                 };
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts
@@ -284,6 +287,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             | WorldfileSection::ModuleChangeWs { .. }
             | WorldfileSection::ModuleChangeAst { .. }
             | WorldfileSection::ModuleChangeTy { .. }
+            | WorldfileSection::Data { .. }
             | WorldfileSection::Rider { .. } => {
                 // Skip module sections in script unit tests.
             }

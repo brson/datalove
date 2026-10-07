@@ -1,0 +1,79 @@
+// A data file holding one of everything datalit writes, read in against a
+// type given at the `require`. The literals take their types from there, so
+// the same `3` is a `u8` in one field and an `int` in another.
+----------
+data local/app/shapes
+----------
+{
+  flag = true,
+  small = 200,
+  neg = -12,
+  wide = 9000000000,
+  big = 123456789012345678901234567890,
+  idx = 7,
+  half = 0.5,
+  third = 0.25,
+  mask = 0xFF,
+  word = "tab\tquote\"",
+  nothing = (),
+  pair = (1, "one"),
+  point = { x = 1.5, y = -2.0 },
+  nums = [3, 1, 2],
+  tags = #{ "b", "a", "b" },
+  counts = %{ "y" = 2, "x" = 1, "y" = 3 },
+  maybe = some 4,
+  absent = none,
+  good = ok 1,
+  bad = er error "oops",
+  boxed = data [1, 2],
+  state = atom Ready,
+  event = term Click (3, 4),
+  kind = enum { term Custom "c" },
+  grid = [| 1 2, 3 4 |],
+  rows = {|
+    name, score
+    "a", 1
+    "b", 2
+  |},
+}
+----------
+scriptunit-fragment
+----------
+
+require data local/app/shapes: {
+  flag: bool,
+  small: u8,
+  neg: i32,
+  wide: u64,
+  big: int,
+  idx: index,
+  half: f32,
+  third: f64,
+  mask: u32,
+  word: string,
+  nothing: (),
+  pair: (u16, string),
+  point: { x: f64, y: f64 },
+  nums: [i64],
+  tags: #{string},
+  counts: %{string = u32},
+  maybe: ?u8,
+  absent: ?string,
+  good: !u32,
+  bad: !u32,
+  boxed: data,
+  state: atom Ready,
+  event: term Click (u32, u32),
+  kind: enum { atom Plain, term Custom string },
+  grid: [|i32, 2|],
+  rows: {| name: string, score: u32 |},
+}
+
+debuglog shapes
+
+// Read the parts back out, by borrowing and by clone.
+debuglog shapes.small
+debuglog shapes.word
+debuglog shapes.nums[2]!
+let copied = shapes.counts@
+debuglog copied

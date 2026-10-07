@@ -493,6 +493,7 @@ pub fn lower_module<'db>(
                     resolved_params,
                     resolved_return,
                     &module_level_consts,
+                    typecheck_result.data_files(db),
                 ) {
                     Ok(ir_func) => {
                         functions.push(Arc::new(ir_func));
@@ -1230,6 +1231,7 @@ pub fn lower_module_functions<'db>(
                 resolved_params,
                 resolved_return,
                 module_consts,
+                single_typecheck.data_files(db),
             ) {
                 Ok(ir_func) => {
                     functions.push(Arc::new(ir_func));
@@ -1414,6 +1416,7 @@ pub fn evaluate_all_module_consts<'db>(
         let env = ConstEvalEnv {
             db, expr_types, call_targets, evaluator: &evaluator, lowered: funcs,
             func_name_to_id: &func_map, func_id_map, callable: Some(callable),
+            data_files: single_typecheck.data_files(db),
         };
         for statement in parsed.statements.iter() {
             if let Statement::Fun(func_stmt) = statement {
@@ -1524,6 +1527,7 @@ fn evaluate_module_level_consts<'db>(
         let env = ConstEvalEnv {
             db, expr_types, call_targets, evaluator, lowered: funcs,
             func_name_to_id: &func_map, func_id_map, callable: Some(callable),
+            data_files: single_typecheck.data_files(db),
         };
         let mut consts: HashMap<String, (IrType, ConstValue)> = HashMap::new();
         for statement in parsed.statements.iter() {
@@ -1595,11 +1599,23 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // evaluated against those, and the rest follow. A const whose evaluation
     // needs a function from the second stratum is a cycle, and shows up as the
     // const failing to evaluate rather than as anything lowering wrongly.
-    let no_consts_yet: HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> = HashMap::new();
+    //
+    // What the first stratum does have is the data consts, which need no
+    // evaluating; see `data_consts`.
+    let typecheck_module_results = typecheck_result.module_results(db_salsa);
+    let data_consts: HashMap<ModuleId<'db>, HashMap<String, (IrType, ConstValue)>> =
+        parsed_graph.statements_only(db_salsa).iter()
+            .filter_map(|(module_id, parsed)| {
+                let single = typecheck_module_results.get(module_id)?;
+                let consts = crate::const_eval::data_consts(
+                    db_salsa, &parsed.statements, single.expr_types(db_salsa), single.data_files(db_salsa));
+                (!consts.is_empty()).then_some((*module_id, consts))
+            })
+            .collect();
     let mut deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
     let first_stratum = lower_all_module_functions(
         db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
-        &no_consts_yet, &mut deferred, None, mode,
+        &data_consts, &mut deferred, None, mode,
     );
 
     // Phase 5a/b boundary is where every module function is lowered, so this is
@@ -1991,6 +2007,7 @@ fn specialize_comptime_functions<'db>(
                             func_name_to_id: &func_name_to_id,
                             func_id_map,
                             callable: Some(callable),
+                            data_files: single_typecheck.data_files(db),
                         };
                         let (evaluated, const_errors) = evaluate_instantiation_consts(
                             &env,

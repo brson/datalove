@@ -52,6 +52,12 @@ pub fn check_expr<'db>(
     }
 
     match expr_kind {
+        // The file is checked against what is expected of it, so that its
+        // literals take their types from there as any literal does.
+        ExprFunKind::DataFile(file) => {
+            crate::datafile::type_data_file(ctx, expr, &file, Some(expected)).map(|_| ())
+        }
+
         // Handle None literals specially - they can check against any Option type.
         ExprFunKind::None(_lit) => {
             match expected {

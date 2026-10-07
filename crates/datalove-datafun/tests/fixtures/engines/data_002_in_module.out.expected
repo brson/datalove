@@ -1,0 +1,233 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/shop/report"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn price_at(p0):
+                    block0:
+                        v0 = staticref [{sku = "apple", qty = 3u32, price = 0.5f64}, {sku = "pear", qty = 1u32, price = 0.75f64}, {sku = "fig", qty = 12u32, price = 0.25f64}]
+                        v1 = listboundscheck *v0[p0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = listelementref *v0[p0]
+                        v4 = getfield *v3.2
+                        v5 = some v4
+                        return v5
+                    
+                    fn line_at(p0):
+                    block0:
+                        v0 = staticref [{sku = "apple", qty = 3u32, price = 0.5f64}, {sku = "pear", qty = 1u32, price = 0.75f64}, {sku = "fig", qty = 12u32, price = 0.25f64}]
+                        v1 = listboundscheck *v0[p0]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = listelementref *v0[p0]
+                        v4 = getfieldref *v3.0
+                        v5 = clone *v4
+                        v6 = staticref [{sku = "apple", qty = 3u32, price = 0.5f64}, {sku = "pear", qty = 1u32, price = 0.75f64}, {sku = "fig", qty = 12u32, price = 0.25f64}]
+                        v7 = listboundscheck *v6[p0]
+                        branch v7, block4, block3
+                    block3:
+                        v8 = none
+                        drop v5
+                        return v8
+                    block4:
+                        v9 = listelementref *v6[p0]
+                        v10 = getfield *v9.1
+                        v11 = pack Tuple2 {v5, v10}
+                        v12 = some v11
+                        return v12
+                    
+                    fn rate_of(p0):
+                    block0:
+                        v0 = call m0.u3(p0)
+                        v1, v2 = unwrap_option v0
+                        branch v2, block1, block2
+                    block1:
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v3 = const 0u32
+                        return v3
+                    
+                    fn rate_at(p0):
+                    block0:
+                        v0 = staticref %{"apple" = 2u32, "fig" = 1u32}
+                        v1, v2 = mapget *v0[p0]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop p0
+                        return v3
+                    block2:
+                        v4 = some v1
+                        drop p0
+                        return v4
+                    
+                    fn cheapest():
+                    block0:
+                        v0 = const 1000f64
+                        store.copy s0, v0
+                        v1 = const 0index
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = call m0.u0(s1)
+                        v3, v4 = unwrap_option v2
+                        branch v4, block2, block6
+                    block2:
+                        v5 = lt v3, s0
+                        branch v5, block3, block4
+                    block3:
+                        store.copy s0, v3
+                        goto block5
+                    block4:
+                        goto block5
+                    block5:
+                        goto block7
+                    block6:
+                        goto block8
+                    block7:
+                        v6 = const 1index
+                        v7 = intrinsic AddWrappingIndex(s1, v6)
+                        store.copy s1, v7
+                        goto block1
+                    block8:
+                        v8 = load.copy s0
+                        return v8
+                    
+                    fn total():
+                    block0:
+                        v0 = const 0f64
+                        store.copy s0, v0
+                        v1 = const 0u32
+                        store.copy s1, v1
+                        v2 = const 0index
+                        store.copy s2, v2
+                        goto block1
+                    block1:
+                        v3 = call m0.u0(s2)
+                        v4, v5 = unwrap_option v3
+                        branch v5, block2, block3
+                    block2:
+                        v6 = add s0, v4
+                        store.copy s0, v6
+                        goto block4
+                    block3:
+                        goto block14
+                    block4:
+                        v7 = call m0.u1(s2)
+                        v8, v9 = unwrap_option v7
+                        branch v9, block5, block10
+                    block5:
+                        v10 = getfield v8.1
+                        v11 = getfieldref v8.0
+                        v12 = clone *v11
+                        v13 = call m0.u2(v12)
+                        v14, v15 = mul.checked v10, v13
+                        branch v15, block6, block7
+                    block6:
+                        v16 = const "arithmetic overflow"
+                        v17 = error_from v16
+                        v18 = err v17
+                        drop v8
+                        return v18
+                    block7:
+                        v19, v20 = add.checked s1, v14
+                        branch v20, block8, block9
+                    block8:
+                        v21 = const "arithmetic overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        drop v8
+                        return v23
+                    block9:
+                        store.copy s1, v19
+                        drop v8
+                        goto block11
+                    block10:
+                        goto block11
+                    block11:
+                        v24 = const 1index
+                        v25, v26 = add.checked s2, v24
+                        branch v26, block12, block13
+                    block12:
+                        v27 = const "arithmetic overflow"
+                        v28 = error_from v27
+                        v29 = err v28
+                        return v29
+                    block13:
+                        store.copy s2, v25
+                        goto block1
+                    block14:
+                        v30 = load.copy s0
+                        v31 = load.copy s1
+                        v32 = const 0.25f64
+                        v33 = pack Tuple3 {v30, v31, v32}
+                        v34 = ok v33
+                        return v34
+                    
+                    fn first_sku():
+                    block0:
+                        v0 = staticref [{sku = "apple", qty = 3u32, price = 0.5f64}, {sku = "pear", qty = 1u32, price = 0.75f64}, {sku = "fig", qty = 12u32, price = 0.25f64}]
+                        v1 = const 0index
+                        v2 = listboundscheck *v0[v1]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = const "index out of bounds"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        v6 = listelementref *v0[v1]
+                        v7 = getfieldref *v6.0
+                        v8 = clone *v7
+                        v9 = ok v8
+                        return v9
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u5()
+                        debuglog v0
+                        drop v0
+                        v1 = call m0.u6()
+                        debuglog v1
+                        drop v1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok (1.5, 18, 0.25)\nok \"apple\"\n"),
+        ),
+    ],
+)

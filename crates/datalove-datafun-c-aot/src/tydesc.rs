@@ -40,8 +40,17 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
     // that may appear nowhere else: a `#{string}` built inside a function
     // returning an index is named only here. Without this the name is emitted
     // at the call and the definition never is.
+    //
+    // A constant names types its own type does not, as a `data` does what it
+    // holds. These were found only when lowering the literal had left one of
+    // its intermediates' types behind in the unit, which a data file's
+    // constant, read in whole, never does.
     for block in &unit.blocks {
         for instr in &block.instructions {
+            if let datalove_datafun_ir::Instruction::Const { dest, value } = instr {
+                collect_types_from_static(&unit.value_types[dest.0 as usize], value, types);
+                continue;
+            }
             let datalove_datafun_ir::Instruction::Call { shape_descriptors, .. } = instr else {
                 continue;
             };

@@ -14,6 +14,9 @@ use datalove_datafun_ir::{
     ConstValue, TypeRef, SlotDest,
 };
 use crate::ir_ext::IrTypeExt;
+
+/// The data files of a world, by path.
+pub type DataFiles = BTreeMap<String, bct::input::Source>;
 use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
 
 /// Compile-time state for building a function's IR.
@@ -272,6 +275,8 @@ pub struct LowerCtx<'db> {
     /// Map from (salsa ModuleId, func_name) -> (IrModuleId, FuncId).
     /// None where there are no module functions to resolve against.
     pub(super) func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
+    /// The data files a `require data` const may name, by path.
+    pub(super) data_files: &'db DataFiles,
 
     /// Function-local state (swapped when entering nested function).
     pub(super) body: FrameState<'db>,
@@ -301,41 +306,20 @@ pub struct LowerCtx<'db> {
 }
 
 impl<'db> LowerCtx<'db> {
-    pub fn new(
-        db: &'db dyn salsa::Database,
-        expr_types: &'db ExprTypes<'db>,
-        call_targets: Option<&'db CallTargets<'db>>,
-    ) -> Self {
-        Self {
-            db,
-            expr_types,
-            call_targets,
-            func_id_map: None,
-            body: FrameState::new(),
-            exports: Vec::new(),
-            functions: Vec::new(),
-            symbols: SymbolTable::new(),
-            func_scope: HashMap::new(),
-            external_slot_types: HashMap::new(),
-            unit_end_drops: Vec::new(),
-            return_type: None,
-            is_script_unit: false,
-            const_bindings: HashMap::new(),
-        }
-    }
-
     /// Create a context for lowering module functions with call resolution support.
     pub fn new_for_module(
         db: &'db dyn salsa::Database,
         expr_types: &'db ExprTypes<'db>,
         call_targets: Option<&'db CallTargets<'db>>,
         func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
+        data_files: &'db DataFiles,
     ) -> Self {
         Self {
             db,
             expr_types,
             call_targets,
             func_id_map,
+            data_files,
             body: FrameState::new(),
             exports: Vec::new(),
             functions: Vec::new(),
@@ -440,6 +424,7 @@ impl<'db> LowerCtx<'db> {
         expr_types: &'db ExprTypes<'db>,
         call_targets: Option<&'db CallTargets<'db>>,
         func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>>,
+        data_files: &'db DataFiles,
         script_ctx: ScriptLowerContext,
     ) -> Self {
         // Seed variables with external bindings from previous units.
@@ -474,6 +459,7 @@ impl<'db> LowerCtx<'db> {
             expr_types,
             call_targets,
             func_id_map,
+            data_files,
             body,
             exports: Vec::new(),
             functions: Vec::new(),
@@ -757,6 +743,13 @@ impl<'db> LowerCtx<'db> {
     /// Const bindings are evaluated at compile time and inlined at use sites.
     pub fn add_const(&mut self, name: String, ir_type: IrType, value: ConstValue) {
         self.const_bindings.insert(name, (ir_type, value));
+    }
+
+    /// The value of the data file a `require data` const names.
+    pub fn data_file_value(&self, file: &datalove_datafun_ast::ast::ExprDataFile<'db>, ty: &IrType) -> ConstValue {
+        let source = *self.data_files.get(&file.path(self.db))
+            .expect("the typechecker found the data file");
+        crate::datafile::data_file_value(self.db, source, ty)
     }
 
     /// Pre-populate const bindings from Phase 2 resolved values.

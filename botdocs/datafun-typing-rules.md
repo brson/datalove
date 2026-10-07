@@ -731,7 +731,7 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F077**: A const parameter whose type is a type parameter
 - **F078**: An import from, or qualified call through, a name that no
   `require` brought in
-- **F079**: A `require` of a module or rider that does not exist
+- **F079**: A `require` of a module, rider or data file that does not exist
 - **F080**: The same module or rider required twice in one module or script
   unit
 - **F081**: A module required under an alias another required module already
@@ -739,6 +739,9 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F082**: `require rider` in a script
 - **F083**: A `require` that closes a cycle of modules, a module requiring
   itself included
+- **F084**: A `require data` whose file is not of the type it gives, or has no
+  type of its own when it gives none; the mismatch in the file is reported
+  where it is too
 
 A refused `require` is reported where it is written, and an import from or
 qualified call through its alias is not reported again as F078.

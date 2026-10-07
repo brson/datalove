@@ -96,6 +96,31 @@ fn command_local_library(
         .transpose()
 }
 
+/// The file each module and data file was read from, by its source.
+fn source_files(
+    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
+    pipeline: &datalove::datafun::pipeline::ModuleCompilationPipeline,
+) -> std::collections::HashMap<datalove::bct::input::Source, PathBuf> {
+    let modules = descriptor.module_files().into_iter()
+        .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)));
+    let data = descriptor.data_files().into_iter()
+        .filter_map(|(path, file)| Some((pipeline.data_source(&path)?, file)));
+    modules.chain(data).collect()
+}
+
+/// Report a script's type errors, each against the file its text came from:
+/// the script's own, or a data file it requires.
+fn render_script_type_diagnostics<'db>(
+    db: &'db dyn datalove::datafun::Db,
+    diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
+    files: &std::collections::HashMap<datalove::bct::input::Source, PathBuf>,
+    script_path: &rmx::std::path::Path,
+    cwd: &rmx::std::path::Path,
+) {
+    let locate = |text: datalove::bct::text::Text<'db>| files.get(&text.source(db)).cloned();
+    render::render_module_diagnostics(db, &[], diagnostics, &locate, script_path, cwd);
+}
+
 /// Report what stopped the modules compiling, and fail, if anything did.
 ///
 /// Parse and type errors are framed against the file each module was read
@@ -113,10 +138,7 @@ fn bail_on_module_errors<'db>(
     }
     let cwd = rmx::std::env::current_dir().unwrap_or_default();
 
-    let files: std::collections::HashMap<datalove::bct::input::Source, PathBuf> = descriptor.module_files()
-        .into_iter()
-        .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)))
-        .collect();
+    let files = source_files(descriptor, pipeline);
     let locate = |text: datalove::bct::text::Text<'db>| files.get(&text.source(db)).cloned();
 
     let parse = compiled.get_module_parse_diagnostics(db);
@@ -630,7 +652,8 @@ impl ScriptCommand {
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
-            render::render_type_diagnostics(compiler.db(), &type_diags, file_path, &cwd);
+            render_script_type_diagnostics(
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
         bail_on_ownership_error(&compiled_unit, &compiler, file_path, &cwd)?;
@@ -703,7 +726,8 @@ impl ScriptIrCommand {
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
-            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
+            render_script_type_diagnostics(
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
         bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
@@ -824,7 +848,8 @@ impl AotCompileCommand {
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
-            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
+            render_script_type_diagnostics(
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
         bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;
@@ -1030,7 +1055,8 @@ impl ScriptWorldCommand {
         }
         if let datafun::pipeline::TypecheckResult::Error { errors } = &compiled_unit.typecheck {
             let type_diags = compiler.get_type_diagnostics();
-            render::render_type_diagnostics(compiler.db(), &type_diags, &self.file_path, &cwd);
+            render_script_type_diagnostics(
+                compiler.db(), &type_diags, &source_files(&descriptor, &pipeline), &self.file_path, &cwd);
             return Err(type_error(&type_diags, errors));
         }
         bail_on_ownership_error(&compiled_unit, &compiler, &self.file_path, &cwd)?;

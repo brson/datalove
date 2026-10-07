@@ -2,10 +2,15 @@
   "ast": {
     "statements": [
       {
-        "kind": "Require",
+        "kind": "Const",
         "name": "lookup_tables",
         "type_hint": null,
-        "variant": "Data"
+        "value": {
+          "expr": {
+            "kind": "DataFile",
+            "path": "local/app/lookup_tables"
+          }
+        }
       }
     ]
   },

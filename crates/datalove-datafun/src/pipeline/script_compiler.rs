@@ -153,7 +153,8 @@ impl<'db> CompiledModules<'db> {
         Some(ScriptCompiler {
             db,
             scripts: Vec::new(),
-            env: ScriptEnv::new(db, modules, AutoAdaptMode::Disabled),
+            env: ScriptEnv::new(
+                db, modules, self.shared.module_graph.data(db).C(), AutoAdaptMode::Disabled),
             last_script: None,
             unit_records: Vec::new(),
             last_source: None,
@@ -845,7 +846,8 @@ impl<'db> ScriptCompiler<'db> {
         // The mode is part of what a unit is checked against, so the handle the
         // per-unit queries are keyed on has to carry it.
         let modules: Vec<bct::module_graph::Module<'db>> = self.env.modules(self.db).C();
-        self.env = ScriptEnv::new(self.db, modules, mode);
+        let data = self.env.data(self.db).C();
+        self.env = ScriptEnv::new(self.db, modules, data, mode);
     }
 
     /// Get current auto-adapt mode.
@@ -928,9 +930,16 @@ impl<'db> ScriptCompiler<'db> {
         // const may call a function in the same unit. So the bodies that need
         // no value from this unit's consts go first, the consts are evaluated
         // against those, and the rest follow.
-        let earlier_consts = script_consts_over(&self.unit_records[..index]);
+        //
+        // This unit's data consts are in the first stratum's scope already;
+        // see `data_consts`.
+        let mut first_consts = script_consts_over(&self.unit_records[..index]);
+        if let ParsedUnit::Fragment { stmts, .. } = unit {
+            first_consts.extend(datalove_datafun_compiler::const_eval::data_consts(
+                self.db, stmts, typecheck.expr_types, self.env.data(self.db)));
+        }
         let lowered_funcs = match self.phase_lower_functions(
-            index, unit, &typecheck, &ownership, &earlier_consts, true,
+            index, unit, &typecheck, &ownership, &first_consts, true,
         ) {
             Ok(lf) => lf,
             Err(result) => return result,
@@ -1183,6 +1192,7 @@ impl<'db> ScriptCompiler<'db> {
             Some(&func_param_types),
             Some(&func_return_types),
             self.shared_context.func_id_map,
+            self.env.data(self.db),
             script_ctx,
             script_consts,
             defer_missing_consts,
@@ -1491,6 +1501,7 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.expr_types,
                     typecheck.call_targets,
                     self.shared_context.func_id_map,
+                    self.env.data(self.db),
                     script_ctx,
                     stmts.clone(),
                     ownership.func_analyses.clone(),
@@ -1511,6 +1522,7 @@ impl<'db> ScriptCompiler<'db> {
                     typecheck.expr_types,
                     typecheck.call_targets,
                     self.shared_context.func_id_map,
+                    self.env.data(self.db),
                     script_ctx,
                     *expr,
                 ).map_err(|e| ScriptCompilationResult {
@@ -1690,6 +1702,7 @@ impl<'db> ScriptCompiler<'db> {
             func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
             callable: None,
+            data_files: self.env.data(self.db),
         };
         evaluate_instantiation_consts(&env, func_stmt, scope, comptime_param_indices, values)
     }
@@ -1710,6 +1723,7 @@ impl<'db> ScriptCompiler<'db> {
             func_name_to_id: &lowered_funcs.func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
             callable: None,
+            data_files: self.env.data(self.db),
         }
     }
 

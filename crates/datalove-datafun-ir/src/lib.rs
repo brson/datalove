@@ -950,9 +950,14 @@ pub enum ConstValue {
     // Collections.
     /// List with elements.
     List(Vec<ConstValue>),
-    /// Set with elements (sorted for determinism).
+    /// Set with elements, in no particular order and possibly repeated: a
+    /// backend builds one by inserting each, as a literal is built. One read
+    /// back by compile-time evaluation is sorted; one read from a data file is
+    /// in the order the file wrote it.
     Set(Vec<ConstValue>),
-    /// Map with key-value pairs (sorted by key for determinism).
+    /// Map with key-value pairs, which like a set's elements need not be
+    /// sorted or each key given once; a later entry for a key replaces an
+    /// earlier one.
     Map(Vec<(ConstValue, ConstValue)>),
     /// A tensor: its shape, and its elements in row-major order.
     ///

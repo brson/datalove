@@ -131,6 +131,45 @@ impl ModuleCompilationPipeline {
         self.world.add_module_with_durability(db, &path, source, durability);
     }
 
+    /// Add a data file to the pipeline, for `require data` to name.
+    pub fn add_data(
+        &mut self,
+        db: &dyn salsa::Database,
+        library: &str,
+        package: &str,
+        name: &str,
+        text: &str,
+    ) {
+        let path = format!("{}/{}/{}", library, package, name);
+        let durability = match library {
+            "sys" => salsa::Durability::HIGH,
+            _ => salsa::Durability::LOW,
+        };
+        self.world.add_data_with_durability(db, &path, text, durability);
+    }
+
+    /// Remove a data file from the pipeline.
+    pub fn remove_data(&mut self, library: &str, package: &str, name: &str) {
+        self.world.remove_data(&format!("{}/{}/{}", library, package, name));
+    }
+
+    /// Update a data file's text for incremental recompilation.
+    pub fn update_data(
+        &mut self,
+        db: &mut dyn salsa::Database,
+        library: &str,
+        package: &str,
+        name: &str,
+        text: &str,
+    ) {
+        self.world.update_data(db, &format!("{}/{}/{}", library, package, name), text);
+    }
+
+    /// The source a data file is read from, by its path.
+    pub fn data_source(&self, path: &str) -> Option<bct::input::Source> {
+        self.world.data().get(path).copied()
+    }
+
     /// Add modules from worldfile sections.
     pub fn add_modules_from_sections(
         &mut self,
@@ -141,6 +180,9 @@ impl ModuleCompilationPipeline {
             match section {
                 WorldfileSection::Module { library, package, module, source } => {
                     self.add_module(db, library, package, module, source);
+                }
+                WorldfileSection::Data { library, package, name, source } => {
+                    self.add_data(db, library, package, name, source);
                 }
                 WorldfileSection::Rider { name, source } => {
                     self.rider_sources.push((name.clone(), source.clone()));
@@ -171,6 +213,9 @@ impl ModuleCompilationPipeline {
         for (pkg_name, pkg) in &package_world_raw.pkglib_system {
             for (mod_name, pkg_module) in &pkg.modules {
                 self.add_module(db, "sys", pkg_name, mod_name, &pkg_module.text);
+            }
+            for (name, file) in &pkg.data {
+                self.add_data(db, "sys", pkg_name, name, &file.text);
             }
         }
 

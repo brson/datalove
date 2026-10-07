@@ -13,7 +13,7 @@ use std::fmt;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use datalove_datafun_ast::ast::{ExprFun, ExprKey, Statement, StmtFun};
+use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, ExprKey, Statement, StmtFun};
 use datalove_datafun_const::{evaluate_prepared_const, PreparedConst};
 use datalove_datafun_ir::{
     CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, Instruction, IrCodeUnit, IrType,
@@ -41,6 +41,8 @@ pub struct ConstEvalEnv<'a, 'db> {
     /// Only the module pipeline has functions waiting on a module const, so
     /// only it can find a const depending on one: a cycle.
     pub callable: Option<&'a ModuleFunctionRegistry>,
+    /// The data files a `require data` const may name, by path.
+    pub data_files: &'db lower::DataFiles,
 }
 
 /// Why a const could not be evaluated.
@@ -82,6 +84,35 @@ impl fmt::Display for NamedConstError {
     }
 }
 
+/// The consts these statements bind to data files, with their values.
+///
+/// Data needs no evaluating, so these have values before anything is lowered,
+/// and a function that reads one does not wait for the consts as a function
+/// naming any other const does. Which is what lets a const be worked out from
+/// data by a function that reads it: waiting, that function would have been
+/// out of reach of the evaluation it was needed for. A const whose type did not
+/// check has no value, as an evaluated one would not.
+pub fn data_consts<'db>(
+    db: &'db dyn salsa::Database,
+    statements: &[Statement<'db>],
+    expr_types: &ExprTypes<'db>,
+    data_files: &lower::DataFiles,
+) -> HashMap<String, (IrType, ConstValue)> {
+    statements.iter()
+        .filter_map(|statement| {
+            let Statement::Const(binding) = statement else { return None };
+            if !matches!(binding.value.expr(db), ExprFunKind::DataFile(_)) {
+                return None;
+            }
+            let ty = expr_types.get(&ExprKey::of(db, binding.value))?;
+            let ty = IrType::from_tycheck(db, ty);
+            let value = lower::try_extract_literal(db, binding.value, &ty, data_files)
+                .expect("a data file is a literal");
+            Some((binding.name.text(db).to_owned(), (ty, value)))
+        })
+        .collect()
+}
+
 /// The type the typechecker gave a const's initializer.
 pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> Result<IrType, ConstError> {
     env.expr_types.get(&ExprKey::of(env.db, init))
@@ -107,7 +138,7 @@ pub fn evaluate_const<'db>(
 ) -> Result<Option<ConstValue>, ConstError> {
     let lowered = lower::lower_const_binding(
         env.db, init, ty, env.expr_types, env.call_targets, resolved, func_return_type,
-        env.lowered, env.func_name_to_id, Some(env.func_id_map),
+        env.lowered, env.func_name_to_id, Some(env.func_id_map), env.data_files,
     );
     let (unit, value) = match lowered {
         Ok(pair) => pair,

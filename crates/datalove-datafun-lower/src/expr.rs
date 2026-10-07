@@ -971,6 +971,13 @@ pub fn lower_expression<'db>(
             ctx.emit_const(dest, const_value);
             Ok(dest)
         }
+        ExprFunKind::DataFile(file) => {
+            let ty = ctx.expr_type(expr);
+            let value = ctx.data_file_value(&file, &ty);
+            let dest = ctx.fresh_value(ty);
+            ctx.emit_const(dest, value);
+            Ok(dest)
+        }
         ExprFunKind::String(string_expr) => {
             let raw = string_expr.value.as_str(ctx.db);
             let content = super::literal::string_literal_value(raw);

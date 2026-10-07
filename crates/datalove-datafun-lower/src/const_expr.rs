@@ -15,7 +15,7 @@ use datalove_datafun_ir::{
     ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext, IrModuleId,
     Operand, Terminator,
 };
-use super::context::LowerCtx;
+use super::context::{DataFiles, LowerCtx};
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
 
@@ -37,6 +37,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
+    data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     use datalove_datafun_ir::{CodeRef, FuncId};
     use std::collections::HashSet;
@@ -47,6 +48,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         expr_types,
         Some(call_targets),
         module_func_id_map,
+        data_files,
     );
 
     // Pre-populate const bindings from previously resolved values.
@@ -152,9 +154,10 @@ pub fn lower_const_binding<'db>(
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
+    data_files: &'db DataFiles,
 ) -> Result<(Option<IrCodeUnit>, Option<ConstValue>), LowerError> {
     // Try simple literal extraction first.
-    if let Some(value) = try_extract_literal(db, expr, ir_type) {
+    if let Some(value) = try_extract_literal(db, expr, ir_type, data_files) {
         return Ok((None, Some(value)));
     }
 
@@ -174,7 +177,7 @@ pub fn lower_const_binding<'db>(
     // Lower to IR unit for CTFE evaluation.
     let unit = lower_const_expr_to_unit_standalone(
         db, expr, expr_types, call_targets, resolved_consts, return_type,
-        lowered_functions, func_name_to_id, func_id_map,
+        lowered_functions, func_name_to_id, func_id_map, data_files,
     )?;
 
     Ok((Some(unit), None))
@@ -182,14 +185,22 @@ pub fn lower_const_binding<'db>(
 
 /// Try to extract a literal value directly without interpreter.
 ///
-/// Returns `Some(value)` for simple literals (bool, int, float, string, none).
+/// Returns `Some(value)` for simple literals (bool, int, float, string, none)
+/// and for data files, which are literals of any size.
 /// Returns `None` for complex expressions that need lowering and CTFE.
 pub fn try_extract_literal<'db>(
     db: &'db dyn salsa::Database,
     expr: ExprFun<'db>,
     ir_type: &IrType,
+    data_files: &DataFiles,
 ) -> Option<ConstValue> {
     match expr.expr(db) {
+        ExprFunKind::DataFile(file) => {
+            let source = *data_files.get(&file.path(db))
+                .expect("the typechecker found the data file");
+            Some(crate::datafile::data_file_value(db, source, ir_type))
+        }
+
         ExprFunKind::True(_) => Some(ConstValue::Bool(true)),
         ExprFunKind::False(_) => Some(ConstValue::Bool(false)),
         ExprFunKind::None(_) => Some(ConstValue::OptionNone),

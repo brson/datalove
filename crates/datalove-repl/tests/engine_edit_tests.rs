@@ -49,6 +49,7 @@ fn engine_with_module(source: &str) -> Engine {
                     "m".S(),
                     ModuleDescriptor { name: "m".S(), source: source.into(), origin: None },
                 )].into_iter().collect(),
+                data: Default::default(),
                 rider: None,
             },
         )].into_iter().collect(),

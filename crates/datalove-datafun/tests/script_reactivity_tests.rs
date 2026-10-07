@@ -61,7 +61,7 @@ fn build<'db>(
     let units: Vec<ScriptUnit<'db>> =
         sources.iter().map(|source| ScriptUnit::new(db, *source, false)).collect();
     let script = Script::from_units(db, &units).expect("at least one unit");
-    (script, ScriptEnv::new(db, Vec::new(), AutoAdaptMode::Disabled))
+    (script, ScriptEnv::new(db, Vec::new(), std::collections::BTreeMap::new(), AutoAdaptMode::Disabled))
 }
 
 /// What each unit provides and what it uses, as owned text.

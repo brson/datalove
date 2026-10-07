@@ -407,7 +407,6 @@ pub struct StmtRet<'db> {
 #[derive(salsa::SalsaValue)]
 pub enum StmtRequire<'db> {
     Module(StmtRequireModule<'db>),
-    Data(StmtRequireData<'db>),
     Rider(StmtRequireRider<'db>),
 }
 
@@ -419,13 +418,6 @@ pub struct StmtRequireModule<'db> {
     pub module_alias: InternedText<'db>,
     /// Index of this statement's span among the requires.
     pub local_index: u32,
-}
-
-#[derive(Clone, Hash, PartialEq, Eq)]
-#[derive(salsa::SalsaValue)]
-pub struct StmtRequireData<'db> {
-    pub name: InternedText<'db>,
-    pub type_hint: Option<datalit::ast::TypeHint<'db>>,
 }
 
 /// Rider requirement: `require rider <name>`.
@@ -682,6 +674,11 @@ pub enum ExprFunKind<'db> {
     Data(ExprData<'db>),
     Error(ExprError<'db>),
 
+    // A data file, as `require data` names one. Never written as an
+    // expression: `require data lib/pkg/name: T` is parsed as the const
+    // `name: T` with one of these as its value.
+    DataFile(ExprDataFile<'db>),
+
     // Table expression.
     Table(ExprTable<'db>),
 
@@ -752,6 +749,7 @@ impl<'db> ExprFunKind<'db> {
             | ExprFunKind::Index(_)
             | ExprFunKind::Place(_)
             | ExprFunKind::ParseError(_)
+            | ExprFunKind::DataFile(_)
             | ExprFunKind::IntrinsicCall(_) => None,
         }
     }
@@ -1027,6 +1025,27 @@ pub struct ExprEr<'db> {
 pub struct ExprData<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub value: ExprFun<'db>,
+}
+
+/// The `.dlt` file at `import_space/package_alias/data_alias`.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprDataFile<'db> {
+    pub import_space: InternedText<'db>,
+    pub package_alias: InternedText<'db>,
+    pub data_alias: InternedText<'db>,
+}
+
+impl<'db> ExprDataFile<'db> {
+    /// The path the file is found by, as a module's is.
+    pub fn path(&self, db: &'db dyn salsa::Database) -> String {
+        format!(
+            "{}/{}/{}",
+            self.import_space.as_str(db),
+            self.package_alias.as_str(db),
+            self.data_alias.as_str(db),
+        )
+    }
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
