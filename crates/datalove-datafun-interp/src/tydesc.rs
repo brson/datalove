@@ -195,7 +195,7 @@ impl IrTyDescTable {
 
         // Ref is pointer-sized. We use a 1-element tuple containing the inner type
         // as a hack to store the inner tydesc. The layout uses special handling
-        // to allocate only 8 bytes for Ref types.
+        // to allocate only a pointer for Ref types.
         let field_info = vec![rtdt::TyInfoTupleField {
             offset: 0,
             tydesc: inner_tydesc,
@@ -205,8 +205,8 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Tuple,  // Use Tuple tag to store inner tydesc
-            size: 8,  // Always pointer-sized
-            align: 8, // Always pointer-aligned
+            size: std::mem::size_of::<*const u8>() as u32,
+            align: std::mem::align_of::<*const u8>() as u32,
             type_info: rtdt::TyInfo {
                 tuple: rtdt::TyInfoTuple {
                     num_fields: 1,
