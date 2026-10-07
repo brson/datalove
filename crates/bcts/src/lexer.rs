@@ -286,7 +286,7 @@ pub fn lex_chunk<'db>(
         }
 
         fn eat_word(&mut self) -> Token {
-            assert_eq!(self.peek_token(), Some(NextToken::Word));
+            debug_assert_eq!(self.peek_token(), Some(NextToken::Word));
 
             let is_word_char = Self::is_word_start;
 
@@ -315,7 +315,7 @@ pub fn lex_chunk<'db>(
         }
 
         fn eat_sigil(&mut self) -> Token {
-            assert_eq!(self.peek_token(), Some(NextToken::Sigil));
+            debug_assert_eq!(self.peek_token(), Some(NextToken::Sigil));
 
             let text = &self.text[self.range.C()];
 
@@ -384,7 +384,7 @@ pub fn lex_chunk<'db>(
 
         /// Skip a run of whitespace, saying whether it held a newline.
         fn eat_whitespace(&mut self) -> bool {
-            assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
+            debug_assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
 
             let mut newline = false;
             while let Some(ch) = self.peek() {
@@ -407,6 +407,15 @@ pub fn lex_chunk<'db>(
         }
 
         fn peek(&self) -> Option<char> {
+            if self.range.is_empty() {
+                return None;
+            }
+            // Nearly everything is ASCII, which needs no decoding, and slicing
+            // the text to decode it checks that both ends are boundaries.
+            let byte = self.text.as_bytes()[self.range.start];
+            if byte.is_ascii() {
+                return Some(byte as char);
+            }
             self.text[self.range.C()].chars().next()
         }
     }
