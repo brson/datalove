@@ -498,7 +498,7 @@ impl ModuleCompilationPipeline {
                     let consts = result.consts(db_salsa);
                     if !consts.is_empty() {
                         module_consts.insert(result.ir_module_id(db_salsa), consts.iter()
-                            .map(|(name, ty, value)| (name.clone(), (ty.clone(), value.clone())))
+                            .map(|(name, ty, value)| (name.clone(), (ty.clone(), std::sync::Arc::clone(value))))
                             .collect());
                     }
 

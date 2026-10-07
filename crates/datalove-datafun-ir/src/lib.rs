@@ -969,6 +969,44 @@ pub enum ConstValue {
     Table { columns: Vec<String>, rows: Vec<Vec<ConstValue>> },
 }
 
+/// A shared const value that hashes by its shape rather than its contents.
+///
+/// For a const that is part of a salsa key, or a field of a tracked struct:
+/// salsa hashes those on every compile, and a const can be a dataset, so a
+/// module's data was hashed whole each time it was lowered. Hashing the shape
+/// -- the variant, a collection's length, a scalar's value -- is constant
+/// time and still gives equal values equal hashes. Equality is still whole,
+/// and `Arc`'s starts by asking whether the two are one value, which a data
+/// file's const is from one compile to the next.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SharedConst(pub std::sync::Arc<ConstValue>);
+
+impl std::hash::Hash for SharedConst {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        let value: &ConstValue = &self.0;
+        std::mem::discriminant(value).hash(state);
+        match value {
+            ConstValue::List(items) | ConstValue::Set(items) | ConstValue::Tuple(items) => items.len().hash(state),
+            ConstValue::Map(entries) => entries.len().hash(state),
+            ConstValue::Struct(fields) => fields.len().hash(state),
+            ConstValue::Tensor { shape, .. } => shape.hash(state),
+            ConstValue::Table { columns, rows } => (columns, rows.len()).hash(state),
+            ConstValue::String(s) => s.len().hash(state),
+            ConstValue::Enum { variant, .. } => variant.hash(state),
+            ConstValue::OptionSome(_) | ConstValue::ResultOk(_) | ConstValue::ResultErr(_)
+            | ConstValue::Data { .. } | ConstValue::Error { .. } => {}
+            scalar => scalar.hash(state),
+        }
+    }
+}
+
+impl std::ops::Deref for SharedConst {
+    type Target = std::sync::Arc<ConstValue>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 /// The type a constant value is of.
 ///
 /// A `ConstValue` says its own shape, so the type can be read off it. Where a

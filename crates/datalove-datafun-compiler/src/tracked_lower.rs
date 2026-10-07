@@ -12,7 +12,7 @@ use datalove_datafun_ast::ast::{ParsedStatements, Statement};
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::Arc;
-use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, SharedConst, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -248,8 +248,9 @@ pub struct ModulePreResolvedConsts<'db> {
     /// Module these consts belong to.
     pub module_id: ModuleId<'db>,
 
-    /// Evaluated const bindings: name -> (type, value).
-    pub consts: Vec<(String, IrType, Arc<ConstValue>)>,
+    /// Evaluated const bindings: name -> (type, value). Hashed by shape; see
+    /// `SharedConst`.
+    pub consts: Vec<(String, IrType, SharedConst)>,
 
     /// Errors encountered during const evaluation.
     pub errors: Vec<String>,
@@ -257,12 +258,12 @@ pub struct ModulePreResolvedConsts<'db> {
 
 impl<'db> ModulePreResolvedConsts<'db> {
     /// Create a new pre-resolved consts container.
-    pub fn new(module_id: ModuleId<'db>, consts: Vec<(String, IrType, Arc<ConstValue>)>) -> Self {
+    pub fn new(module_id: ModuleId<'db>, consts: Vec<(String, IrType, SharedConst)>) -> Self {
         Self { module_id, consts, errors: Vec::new() }
     }
 
     /// Create with errors.
-    pub fn with_errors(module_id: ModuleId<'db>, consts: Vec<(String, IrType, Arc<ConstValue>)>, errors: Vec<String>) -> Self {
+    pub fn with_errors(module_id: ModuleId<'db>, consts: Vec<(String, IrType, SharedConst)>, errors: Vec<String>) -> Self {
         Self { module_id, consts, errors }
     }
 
@@ -270,7 +271,7 @@ impl<'db> ModulePreResolvedConsts<'db> {
     pub fn to_hashmap(&self) -> HashMap<String, (IrType, Arc<ConstValue>)> {
         self.consts
             .iter()
-            .map(|(name, ty, val)| (name.clone(), (ty.clone(), val.clone())))
+            .map(|(name, ty, val)| (name.clone(), (ty.clone(), Arc::clone(val))))
             .collect()
     }
 }
@@ -304,9 +305,10 @@ pub struct SingleModuleLoweringResult<'db> {
     /// The module's module-level consts, in name order.
     ///
     /// A script that specializes one of the module's comptime functions
-    /// evaluates the copy's consts, which may name these.
+    /// evaluates the copy's consts, which may name these. Hashed by shape; see
+    /// `SharedConst`.
     #[returns(ref)]
-    pub consts: Vec<(String, IrType, Arc<ConstValue>)>,
+    pub consts: Vec<(String, IrType, SharedConst)>,
 }
 
 /// Result of lowering an entire module graph to IR.
@@ -444,7 +446,7 @@ pub fn lower_module<'db>(
         .as_ref()
         .map(|c| c.consts.iter()
             .filter(|(name, _, _)| !name.contains("::"))
-            .map(|(name, ty, value)| (name.clone(), (ty.clone(), value.clone())))
+            .map(|(name, ty, value)| (name.clone(), (ty.clone(), Arc::clone(value))))
             .collect())
         .unwrap_or_default();
 
@@ -518,7 +520,7 @@ pub fn lower_module<'db>(
             // Pre-resolved consts have qualified names like "func_name::const_name".
             let const_values: HashMap<String, Arc<ConstValue>> = pre_resolved.consts
                 .iter()
-                .map(|(name, _ir_type, value)| (name.clone(), value.clone()))
+                .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
                 .collect();
             // Inline const values directly into the functions.
             inline_module_functions(&mut functions, &const_values);
@@ -532,8 +534,8 @@ pub fn lower_module<'db>(
 
     log_query("lower", module_path, QueryPhase::End);
 
-    let mut consts: Vec<(String, IrType, Arc<ConstValue>)> = module_level_consts.into_iter()
-        .map(|(name, (ty, value))| (name, ty, value))
+    let mut consts: Vec<(String, IrType, SharedConst)> = module_level_consts.into_iter()
+        .map(|(name, (ty, value))| (name, ty, SharedConst(value)))
         .collect();
     consts.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -1148,7 +1150,7 @@ pub fn lower_module_functions<'db>(
     single_typecheck: SingleModuleTypecheckResult<'db>,
     single_ownership: SingleModuleAnalysis<'db>,
     func_ids: ReachableFuncIds<'db>,
-    module_consts: Vec<(String, (IrType, Arc<ConstValue>))>,
+    module_consts: Vec<(String, (IrType, SharedConst))>,
     restrict: Option<Vec<String>>,
 ) -> ModuleLowerOutcome<'db> {
     log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
@@ -1157,7 +1159,7 @@ pub fn lower_module_functions<'db>(
     let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
         func_ids.entries(db).iter().cloned().collect();
     let module_consts: HashMap<String, (IrType, Arc<ConstValue>)> =
-        module_consts.into_iter().collect();
+        module_consts.into_iter().map(|(name, (ty, value))| (name, (ty, value.0))).collect();
     let restricting = restrict.is_some();
     let restrict = restrict.as_ref();
     let func_id_hashmap = &func_id_hashmap;
@@ -1309,9 +1311,9 @@ pub fn lower_all_module_functions<'db>(
 
             // Sorted, because it arrives as a `HashMap` and the memo key has to
             // hash the same way for the same consts.
-            let mut consts: Vec<(String, (IrType, Arc<ConstValue>))> = module_consts
+            let mut consts: Vec<(String, (IrType, SharedConst))> = module_consts
                 .get(module_id)
-                .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+                .map(|m| m.iter().map(|(k, (ty, v))| (k.clone(), (ty.clone(), SharedConst(Arc::clone(v))))).collect())
                 .unwrap_or_default();
             consts.sort_by(|a, b| a.0.cmp(&b.0));
 
@@ -1407,7 +1409,7 @@ pub fn evaluate_all_module_consts<'db>(
         // function-level const can name one.
         let module_level = module_consts.get(module_id).cloned().unwrap_or_default();
         for (name, (ir_type, value)) in &module_level {
-            consts.push((name.clone(), ir_type.clone(), value.clone()));
+            consts.push((name.clone(), ir_type.clone(), SharedConst(Arc::clone(value))));
         }
 
         // Evaluate function-level consts. A function's const parameters have a
@@ -1429,7 +1431,7 @@ pub fn evaluate_all_module_consts<'db>(
                     evaluate_body_consts(&env, func_stmt, module_level.clone(), const_params);
                 for (name, ir_type, value) in body_consts {
                     // Stored under a qualified name: func_name::const_name.
-                    consts.push((format!("{}::{}", func_name, name), ir_type, value));
+                    consts.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
                 }
                 errors.extend(body_errors.iter().map(|e| format!("{}::{}", func_name, e)));
             }
