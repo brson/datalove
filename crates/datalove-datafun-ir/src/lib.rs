@@ -3147,18 +3147,6 @@ impl CtfeEvaluator for NoopCtfeEvaluator {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 pub struct ConstStmtId(pub u32);
 
-/// Global identifier for a const binding across script units.
-///
-/// In script contexts, const bindings from earlier units can be referenced
-/// by later units. This ID uniquely identifies a const across all units.
-#[derive(Clone, Copy, Debug, Hash, Eq, PartialEq)]
-pub struct GlobalConstId {
-    /// Index of the script unit containing this const.
-    pub unit: u32,
-    /// ID of the const statement within that unit.
-    pub stmt: ConstStmtId,
-}
-
 /// Information about a const binding discovered during Phase 1 collection.
 ///
 /// Collected from AST traversal without evaluating expressions.
@@ -3210,13 +3198,18 @@ impl ConstBindingGraph {
 
 /// Output of Phase 2: evaluated const values.
 ///
+/// Each value is shared rather than owned, so that everything holding a const
+/// -- each function it is in scope for, each reference lowered to a
+/// `StaticRef` -- holds the one value. A data file's const is as big as the
+/// data, and copying it into every one of those was a copy per function.
+///
 /// This type is hashable for salsa memoization. When the same expressions
 /// evaluate to the same values, Phase 3 can use cached results.
 /// Uses sorted vectors instead of HashMaps for deterministic hashing.
 #[derive(Clone, Debug, Default, Hash, Eq, PartialEq)]
 pub struct ResolvedConsts {
     /// Evaluated values sorted by statement ID.
-    values: Vec<(ConstStmtId, ConstValue)>,
+    values: Vec<(ConstStmtId, std::sync::Arc<ConstValue>)>,
     /// Lookup from name to statement ID, sorted by name.
     name_to_stmt: Vec<(String, ConstStmtId)>,
 }
@@ -3228,7 +3221,7 @@ impl ResolvedConsts {
     }
 
     /// Insert a const value.
-    pub fn insert(&mut self, stmt_id: ConstStmtId, name: String, value: ConstValue) {
+    pub fn insert(&mut self, stmt_id: ConstStmtId, name: String, value: std::sync::Arc<ConstValue>) {
         // Insert into values, maintaining sort order.
         match self.values.binary_search_by_key(&stmt_id, |(id, _)| *id) {
             Ok(idx) => self.values[idx].1 = value,
@@ -3242,12 +3235,12 @@ impl ResolvedConsts {
     }
 
     /// Look up a const value by name.
-    pub fn get_by_name(&self, name: &str) -> Option<&ConstValue> {
+    pub fn get_by_name(&self, name: &str) -> Option<&std::sync::Arc<ConstValue>> {
         self.stmt_for_name(name).and_then(|id| self.get(id))
     }
 
     /// Look up a const value by statement ID.
-    pub fn get(&self, stmt_id: ConstStmtId) -> Option<&ConstValue> {
+    pub fn get(&self, stmt_id: ConstStmtId) -> Option<&std::sync::Arc<ConstValue>> {
         self.values.binary_search_by_key(&stmt_id, |(id, _)| *id)
             .ok()
             .map(|idx| &self.values[idx].1)
@@ -3268,7 +3261,7 @@ impl ResolvedConsts {
     }
 
     /// Iterate over all (name, value) pairs.
-    pub fn iter(&self) -> impl Iterator<Item = (&str, &ConstValue)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&str, &std::sync::Arc<ConstValue>)> {
         self.name_to_stmt.iter()
             .filter_map(|(name, stmt_id)| {
                 self.get(*stmt_id).map(|v| (name.as_str(), v))
@@ -3281,43 +3274,13 @@ impl ResolvedConsts {
     }
 
     /// Iterate over all (stmt_id, value) pairs.
-    pub fn values_iter(&self) -> impl Iterator<Item = (ConstStmtId, &ConstValue)> {
+    pub fn values_iter(&self) -> impl Iterator<Item = (ConstStmtId, &std::sync::Arc<ConstValue>)> {
         self.values.iter().map(|(id, v)| (*id, v))
     }
 
     /// Iterate over all (name, stmt_id) pairs.
     pub fn names_iter(&self) -> impl Iterator<Item = (&str, ConstStmtId)> {
         self.name_to_stmt.iter().map(|(n, id)| (n.as_str(), *id))
-    }
-}
-
-/// Accumulated const values across script units.
-///
-/// Used in script contexts to track consts from all previous units.
-#[derive(Clone, Debug, Default)]
-pub struct AccumulatedConsts {
-    /// Values keyed by global ID.
-    pub values: std::collections::HashMap<GlobalConstId, ConstValue>,
-    /// Lookup from name to global ID (most recent definition wins).
-    pub name_index: std::collections::HashMap<String, GlobalConstId>,
-}
-
-impl AccumulatedConsts {
-    /// Add const values from a unit.
-    pub fn add_unit(&mut self, unit_index: u32, resolved: &ResolvedConsts) {
-        for (stmt_id, value) in resolved.values_iter() {
-            let global_id = GlobalConstId { unit: unit_index, stmt: stmt_id };
-            self.values.insert(global_id, value.clone());
-        }
-        for (name, stmt_id) in resolved.names_iter() {
-            let global_id = GlobalConstId { unit: unit_index, stmt: stmt_id };
-            self.name_index.insert(name.to_string(), global_id);
-        }
-    }
-
-    /// Look up a const value by name.
-    pub fn get_by_name(&self, name: &str) -> Option<&ConstValue> {
-        self.name_index.get(name).and_then(|id| self.values.get(id))
     }
 }
 

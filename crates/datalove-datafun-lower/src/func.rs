@@ -6,6 +6,7 @@
 //! - [`lower_function_body`]: Shared implementation used by both module and script
 //!   function lowering. For script functions, called after `swap_body_state`.
 
+use std::sync::Arc;
 use std::collections::HashMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
@@ -41,7 +42,7 @@ pub fn lower_function_for_module<'db>(
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[IrType]>,
     resolved_return_type: Option<IrType>,
-    module_consts: &HashMap<String, (IrType, ConstValue)>,
+    module_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_module(db, expr_types, Some(call_targets), Some(func_id_map), data_files);

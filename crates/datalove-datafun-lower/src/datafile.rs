@@ -5,6 +5,8 @@
 //! led by the type rather than by the literal: a datalit integer is any
 //! integer type until something says which, and here the type says.
 
+use std::sync::Arc;
+
 use bct::input::Source;
 use datalove_datalit as datalit;
 use datalove_datalit::ast::{Expr, ExprFull};
@@ -18,15 +20,17 @@ use crate::literal::{parse_float_const, parse_hex_const, parse_int_const, string
 /// before the functions are lowered, by each const evaluation, and by the
 /// lowering of the binding itself -- and a dataset is the one constant big
 /// enough for reading it again to show.
-pub fn data_file_value(db: &dyn salsa::Database, source: Source, ty: &IrType) -> ConstValue {
-    data_file_value_tracked(db, source, ty.clone()).clone()
+///
+/// Shared, so that what the memo holds is what every user of the const holds.
+pub fn data_file_value(db: &dyn salsa::Database, source: Source, ty: &IrType) -> Arc<ConstValue> {
+    Arc::clone(data_file_value_tracked(db, source, ty.clone()))
 }
 
 #[salsa::tracked(returns(ref))]
-fn data_file_value_tracked(db: &dyn salsa::Database, source: Source, ty: IrType) -> ConstValue {
+fn data_file_value_tracked(db: &dyn salsa::Database, source: Source, ty: IrType) -> Arc<ConstValue> {
     let expr = datalit::parser::parse(db, source).expr(db);
     let resolved = datalit::resolve::resolve_names(db, source, expr);
-    Reader { db, resolved }.read(expr, &ty)
+    Arc::new(Reader { db, resolved }.read(expr, &ty))
 }
 
 struct Reader<'db> {

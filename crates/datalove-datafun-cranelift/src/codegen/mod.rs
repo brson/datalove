@@ -1106,7 +1106,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub fn compile_static_init(
         mut self,
         func_id: FuncId,
-        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+        statics: &[(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)],
     ) -> Result<(), CraneliftError> {
         self.compile_static_pass(func_id, |this, builder, addr, ty, value| {
             this.write_const_value_to_addr(builder, addr, ty, value)
@@ -1121,7 +1121,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub fn compile_static_fini(
         mut self,
         func_id: FuncId,
-        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+        statics: &[(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)],
     ) -> Result<(), CraneliftError> {
         self.compile_static_pass(func_id, |this, builder, addr, ty, _value| {
             let runtime = this.runtime.expect("static const functions are compiled with runtime imports");
@@ -1143,7 +1143,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         func_id: FuncId,
         mut each: impl FnMut(&mut Self, &mut FunctionBuilder, cl_ir::Value, &IrType, &ConstValue)
             -> Result<(), CraneliftError>,
-        statics: &[(cranelift_module::DataId, IrType, ConstValue)],
+        statics: &[(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)],
     ) -> Result<(), CraneliftError> {
         let sig = self.build_signature();
         let mut cl_func = cl_ir::Function::with_name_signature(

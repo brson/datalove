@@ -188,10 +188,10 @@ impl AotCompiler {
 
         // A data object for each const a `StaticRef` names, equal ones once,
         // built by `__dtlv_statics_init` before the script runs.
-        let mut statics: Vec<(cranelift_module::DataId, IrType, ConstValue)> = Vec::new();
+        let mut statics: Vec<(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)> = Vec::new();
         let mut static_consts = codegen::StaticConsts::new();
         {
-            let mut by_value: HashMap<(IrType, ConstValue), cranelift_module::DataId> = HashMap::new();
+            let mut by_value: HashMap<(IrType, std::sync::Arc<ConstValue>), cranelift_module::DataId> = HashMap::new();
             let mut units: Vec<&IrCodeUnit> = vec![&body_func];
             units.extend(unit.nested_units.iter());
             units.extend(registry.iter_module_code_units_with_ids().map(|(_, u)| u));
@@ -202,7 +202,7 @@ impl AotCompiler {
                         let IrType::Ref(ty) = &code_unit.value_types[dest.0 as usize] else {
                             panic!("a static ref's destination is a reference");
                         };
-                        let key = ((**ty).clone(), (**value).clone());
+                        let key = ((**ty).clone(), std::sync::Arc::clone(value));
                         let data_id = match by_value.get(&key) {
                             Some(id) => *id,
                             None => {

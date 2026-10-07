@@ -5,6 +5,7 @@
 //! - [`LowerCtx`]: Main context combining shared state (db, types) with `FrameState`.
 //! - [`ScriptLowerContext`]: Tracks bindings exported from previous script units.
 
+use std::sync::Arc;
 use std::collections::{BTreeMap, HashMap};
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
@@ -302,7 +303,7 @@ pub struct LowerCtx<'db> {
     /// Whether we're in a script unit (vs function).
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
-    pub(super) const_bindings: HashMap<String, (IrType, ConstValue)>,
+    pub(super) const_bindings: HashMap<String, (IrType, Arc<ConstValue>)>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -734,19 +735,19 @@ impl<'db> LowerCtx<'db> {
     /// Look up a const binding by name.
     ///
     /// Returns the type and value if found.
-    pub fn lookup_const(&self, name: &str) -> Option<&(IrType, ConstValue)> {
+    pub fn lookup_const(&self, name: &str) -> Option<&(IrType, Arc<ConstValue>)> {
         self.const_bindings.get(name)
     }
 
     /// Add a const binding.
     ///
     /// Const bindings are evaluated at compile time and inlined at use sites.
-    pub fn add_const(&mut self, name: String, ir_type: IrType, value: ConstValue) {
+    pub fn add_const(&mut self, name: String, ir_type: IrType, value: Arc<ConstValue>) {
         self.const_bindings.insert(name, (ir_type, value));
     }
 
     /// The value of the data file a `require data` const names.
-    pub fn data_file_value(&self, file: &datalove_datafun_ast::ast::ExprDataFile<'db>, ty: &IrType) -> ConstValue {
+    pub fn data_file_value(&self, file: &datalove_datafun_ast::ast::ExprDataFile<'db>, ty: &IrType) -> Arc<ConstValue> {
         let source = *self.data_files.get(&file.path(self.db))
             .expect("the typechecker found the data file");
         crate::datafile::data_file_value(self.db, source, ty)

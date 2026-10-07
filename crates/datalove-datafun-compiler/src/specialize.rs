@@ -359,7 +359,7 @@ pub fn rewrite_comptime_calls(
 pub fn specialize_script_unit(
     unit: &IrCodeUnit,
     module_unit: &dyn Fn(IrModuleId, CodeUnitId) -> Option<IrCodeUnit>,
-    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (HashMap<String, ConstValue>, Vec<String>),
+    instantiation_consts: &dyn Fn(CalleeKey, &[usize], &[ConstValue]) -> (HashMap<String, std::sync::Arc<ConstValue>>, Vec<String>),
 ) -> (IrCodeUnit, Vec<String>) {
     let mut unit = unit.clone();
     let mut plan = MonomorphizationPlan::default();
@@ -451,30 +451,33 @@ pub fn over_limit(name: &str, mono: &FuncMonomorphization) -> Option<String> {
 fn comptime_values(
     args: &[Operand],
     comptime_param_indices: &[usize],
-    consts: &HashMap<ValueId, ConstValue>,
+    consts: &HashMap<ValueId, &ConstValue>,
 ) -> Option<Vec<ConstValue>> {
     comptime_param_indices.iter()
         .map(|&idx| match args.get(idx)? {
             // A const argument is passed by reference: the binding itself, or
             // a static one.
-            Operand::Value(value) | Operand::ValueRef(value) => consts.get(value).cloned(),
+            Operand::Value(value) | Operand::ValueRef(value) => consts.get(value).map(|v| (*v).clone()),
             _ => None,
         })
         .collect()
 }
 
 /// Values in this unit that a `Const` instruction defines.
-fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
+///
+/// Borrowed, since only the few passed as const arguments are wanted and a
+/// unit's statics include its data, as big as the data is.
+fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, &ConstValue> {
     let mut map = HashMap::new();
 
     for block in &unit.blocks {
         for instr in &block.instructions {
             match instr {
                 Instruction::Const { dest, value } => {
-                    map.insert(*dest, value.clone());
+                    map.insert(*dest, value);
                 }
                 Instruction::StaticRef { dest, value } => {
-                    map.insert(*dest, (**value).clone());
+                    map.insert(*dest, &**value);
                 }
                 // A constant carried somewhere is still that constant. Reading
                 // a const of a linear type clones it, so that each read has a
@@ -485,7 +488,7 @@ fn const_value_map(unit: &IrCodeUnit) -> HashMap<ValueId, ConstValue> {
                 Instruction::Clone { dest, src: Operand::Value(src) }
                 | Instruction::Move { dest, src: Operand::Value(src) }
                 | Instruction::Copy { dest, src: Operand::Value(src) } => {
-                    if let Some(value) = map.get(src).cloned() {
+                    if let Some(value) = map.get(src).copied() {
                         map.insert(*dest, value);
                     }
                 }

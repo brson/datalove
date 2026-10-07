@@ -13,9 +13,6 @@ pub mod promote;
 
 // Re-export commonly used items.
 pub use dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instruction_dest};
-pub use eval::{
-    PreparedConst, ScriptFunctionConstsResult,
-    evaluate_consts_prepared, evaluate_function_consts_prepared, evaluate_prepared_const,
-};
+pub use eval::{ScriptFunctionConstsResult, evaluate_const_unit};
 pub use inline::{inline_function_consts, inline_module_functions, inline_script_consts};
 pub use promote::promote_function_consts;

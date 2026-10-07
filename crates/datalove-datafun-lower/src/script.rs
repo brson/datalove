@@ -10,6 +10,7 @@
 //! When a script contains function definitions, they are lowered via
 //! `lower_function_body` after swapping `FrameState` to isolate the function's IR.
 
+use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
@@ -216,7 +217,7 @@ pub fn lower_script_functions<'db>(
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
-    script_consts: &HashMap<String, (IrType, ConstValue)>,
+    script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     defer_missing_consts: bool,
 ) -> Result<ScriptFunctionsLowered, LowerError> {
     // Create a minimal context with the accumulated script context.

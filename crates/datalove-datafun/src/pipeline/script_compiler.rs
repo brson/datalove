@@ -99,7 +99,7 @@ struct LoweredFunctions {
 /// Output from const evaluation phase.
 struct ConstEvalOutput {
     resolved_consts: ResolvedConsts,
-    func_consts: HashMap<String, (IrType, ConstValue)>,
+    func_consts: HashMap<String, (IrType, Arc<ConstValue>)>,
     /// Every script-level const in scope, this unit's and earlier units'.
     ///
     /// Held apart from `resolved_consts` because those are what the inlining
@@ -107,9 +107,9 @@ struct ConstEvalOutput {
     /// what a function body naming a script const is lowered against, which it
     /// does not: a body resolves the const where the reference is lowered, so
     /// there is no later pass for the flag to skip.
-    script_consts: HashMap<String, (IrType, ConstValue)>,
+    script_consts: HashMap<String, (IrType, Arc<ConstValue>)>,
     /// Just this unit's own script-level consts, for its record.
-    declared_consts: Vec<(String, IrType, ConstValue)>,
+    declared_consts: Vec<(String, IrType, Arc<ConstValue>)>,
 }
 
 /// Parsed script unit ready for compilation.
@@ -1150,7 +1150,7 @@ impl<'db> ScriptCompiler<'db> {
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
         ownership: &OwnershipOutput<'db>,
-        script_consts: &HashMap<String, (IrType, ConstValue)>,
+        script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         defer_missing_consts: bool,
     ) -> Result<LoweredFunctions, ScriptCompilationResult> {
         let ParsedUnit::Fragment { stmts, .. } = unit else {
@@ -1330,7 +1330,7 @@ impl<'db> ScriptCompiler<'db> {
     #[allow(clippy::too_many_arguments)]
     fn evaluate_script_consts(
         &self,
-        earlier_consts: &HashMap<String, (IrType, ConstValue)>,
+        earlier_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
         statements: &[Statement<'db>],
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
@@ -1346,7 +1346,7 @@ impl<'db> ScriptCompiler<'db> {
         // This unit's own bindings are inserted below as each is resolved, in
         // statement order, so a redeclaration shadows the earlier value rather
         // than the other way about.
-        let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> =
+        let mut resolved_consts_map: HashMap<String, (IrType, Arc<ConstValue>)> =
             earlier_consts.clone();
 
         // A binding's id is its position among the const statements, so the
@@ -1390,7 +1390,7 @@ impl<'db> ScriptCompiler<'db> {
         statements: &[Statement<'db>],
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
-        script_level_consts: &HashMap<String, (IrType, ConstValue)>,
+        script_level_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         lowered_funcs: &LoweredFunctions,
     ) -> ScriptFunctionConstsResult {
         let env = self.const_env(expr_types, call_targets, lowered_funcs);
@@ -1681,12 +1681,12 @@ impl<'db> ScriptCompiler<'db> {
         func_name: &str,
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
-        scope: HashMap<String, (IrType, ConstValue)>,
+        scope: HashMap<String, (IrType, Arc<ConstValue>)>,
         comptime_param_indices: &[usize],
         values: &[ConstValue],
         lowered: &[std::sync::Arc<IrCodeUnit>],
         func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
-    ) -> (HashMap<String, ConstValue>, Vec<String>) {
+    ) -> (HashMap<String, Arc<ConstValue>>, Vec<String>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
             Statement::Fun(f) if f.name(self.db).text(self.db) == func_name => Some(f),
             _ => None,
@@ -1829,7 +1829,7 @@ impl<'db> ScriptCompiler<'db> {
 
         // Build the const values map for inlining.
         // Combine script-level and function-level consts.
-        let mut const_values: HashMap<String, ConstValue> = HashMap::new();
+        let mut const_values: HashMap<String, Arc<ConstValue>> = HashMap::new();
 
         // Add script-level consts.
         for (name, value) in consts.resolved_consts.iter() {

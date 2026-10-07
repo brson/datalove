@@ -36,7 +36,7 @@ home here.
 - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
 - [Indexing an earlier unit's binding at the top level panics](#user-content-indexing-an-earlier-units-binding-at-the-top-level-panics)
 - [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
-- [A data const is copied once per place that names it](#user-content-a-data-const-is-copied-once-per-place-that-names-it)
+- [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
 
 ## No table module, and none can be written
 
@@ -551,16 +551,20 @@ calls, not at what those calls reach. Data consts are in scope for the first
 stratum (`const_eval::data_consts`), so the same shape over a `require data`
 works; over an evaluated const it still panics.
 
-## A data const is copied once per place that names it
+## A script's data const is copied into the unit that declares it
 
 **Reasoned, not measured.**
 
-Every place a const is named lowers to its own `StaticRef`, holding its own
-`Arc` of a clone of the value (`lower_var_operand`), and the interpreter's
-`StaticPool` folds equal ones together by hashing and comparing the whole
-value. For an ordinary const that is nothing. For a data file of tens of
-thousands of rows named from a dozen functions it is a dozen deep clones at
-compile time and a dozen hashes of the whole dataset the first time each
-runs. Sharing one `Arc` per const, made where the const is resolved, would
-make both pointer copies.
+Consts are shared as `Arc<ConstValue>` from where they are resolved to the
+`StaticRef` a reference lowers to, so naming one costs a pointer copy. What is
+still a copy is the declaration in a script unit: a script const is lowered as
+a binding whose initializer is a `Const` instruction holding the value, and
+`Instruction::Const` owns its `ConstValue`. For a `require data` that is two
+copies of the dataset per declaring unit -- lowering the `DataFile` expression,
+and const inlining writing the evaluated value over it -- and the unit builds
+the value once at run time where its other references share the static.
+Module consts have no declaring instruction and are not affected.
 
+Salsa also hashes a module's consts whole wherever they are a tracked
+function's argument (`lower_module_functions`, `ModulePreResolvedConsts`), once
+per compile of the module. That is a hash, not a copy.

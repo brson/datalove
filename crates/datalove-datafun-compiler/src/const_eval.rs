@@ -14,7 +14,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, ExprKey, Statement, StmtFun};
-use datalove_datafun_const::{evaluate_prepared_const, PreparedConst};
+use datalove_datafun_const::evaluate_const_unit;
 use datalove_datafun_ir::{
     CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, Instruction, IrCodeUnit, IrType,
     ModuleFunctionRegistry,
@@ -97,7 +97,7 @@ pub fn data_consts<'db>(
     statements: &[Statement<'db>],
     expr_types: &ExprTypes<'db>,
     data_files: &lower::DataFiles,
-) -> HashMap<String, (IrType, ConstValue)> {
+) -> HashMap<String, (IrType, Arc<ConstValue>)> {
     statements.iter()
         .filter_map(|statement| {
             let Statement::Const(binding) = statement else { return None };
@@ -132,10 +132,10 @@ pub fn evaluate_const<'db>(
     env: &ConstEvalEnv<'_, 'db>,
     init: ExprFun<'db>,
     ty: &IrType,
-    resolved: &HashMap<String, (IrType, ConstValue)>,
+    resolved: &HashMap<String, (IrType, Arc<ConstValue>)>,
     func_return_type: Option<IrType>,
     deferred: &BTreeSet<String>,
-) -> Result<Option<ConstValue>, ConstError> {
+) -> Result<Option<Arc<ConstValue>>, ConstError> {
     let lowered = lower::lower_const_binding(
         env.db, init, ty, env.expr_types, env.call_targets, resolved, func_return_type,
         env.lowered, env.func_name_to_id, Some(env.func_id_map), env.data_files,
@@ -157,7 +157,7 @@ pub fn evaluate_const<'db>(
                     return Err(ConstError::Cycle(missing));
                 }
             }
-            evaluate_prepared_const(&PreparedConst::Unit(unit), ty, env.evaluator)
+            evaluate_const_unit(&unit, ty, env.evaluator)
                 .map(Some)
                 .map_err(ConstError::Ctfe)
         }
@@ -175,9 +175,9 @@ pub fn evaluate_const<'db>(
 pub fn evaluate_body_consts<'db>(
     env: &ConstEvalEnv<'_, 'db>,
     func_stmt: &StmtFun<'db>,
-    mut scope: HashMap<String, (IrType, ConstValue)>,
+    mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     mut deferred: BTreeSet<String>,
-) -> (Vec<(String, IrType, ConstValue)>, Vec<NamedConstError>) {
+) -> (Vec<(String, IrType, Arc<ConstValue>)>, Vec<NamedConstError>) {
     let db = env.db;
     let func_return_type = func_stmt.return_type(db).map(|ty| IrType::from_type_hint(db, &ty));
     let mut consts = Vec::new();
@@ -241,16 +241,16 @@ fn first_uncallable_target(unit: &IrCodeUnit, callable: &ModuleFunctionRegistry)
 pub fn evaluate_instantiation_consts<'db>(
     env: &ConstEvalEnv<'_, 'db>,
     func_stmt: &StmtFun<'db>,
-    mut scope: HashMap<String, (IrType, ConstValue)>,
+    mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     comptime_param_indices: &[usize],
     values: &[ConstValue],
-) -> (HashMap<String, ConstValue>, Vec<String>) {
+) -> (HashMap<String, Arc<ConstValue>>, Vec<String>) {
     let db = env.db;
     let params = func_stmt.params(db);
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
         scope.insert(
             params[param_idx].name.text(db).to_string(),
-            (datalove_datafun_ir::ir_type_of_const_value(value), value.clone()),
+            (datalove_datafun_ir::ir_type_of_const_value(value), Arc::new(value.clone())),
         );
     }
     let (consts, errors) = evaluate_body_consts(env, func_stmt, scope, BTreeSet::new());

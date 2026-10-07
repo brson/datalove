@@ -81,7 +81,7 @@ pub struct CAotCompiler {
     native_decls: Vec<String>,
     /// The consts `StaticRef` names, each an array defined in the script's
     /// file and built by `__dtlv_statics_init` before the script runs.
-    statics: Vec<(IrType, ConstValue)>,
+    statics: Vec<(IrType, std::sync::Arc<ConstValue>)>,
     /// Each static's index, by the address of the `Arc` a `StaticRef` holds
     /// its value in.
     static_index: HashMap<usize, usize>,
@@ -107,7 +107,7 @@ impl CAotCompiler {
 
     /// Number every const a `StaticRef` in the world names, equal ones once.
     fn collect_statics(&mut self, script_unit: &IrCodeUnit, registry: &FunctionRegistry) {
-        let mut by_value: HashMap<(IrType, ConstValue), usize> = HashMap::new();
+        let mut by_value: HashMap<(IrType, std::sync::Arc<ConstValue>), usize> = HashMap::new();
         let mut units: Vec<&IrCodeUnit> = vec![script_unit];
         units.extend(script_unit.nested_units.iter());
         units.extend(registry.iter_module_code_units_with_ids().map(|(_, unit)| unit));
@@ -118,7 +118,7 @@ impl CAotCompiler {
                     let IrType::Ref(ty) = &unit.value_types[dest.0 as usize] else {
                         panic!("a static ref's destination is a reference");
                     };
-                    let key = ((**ty).clone(), (**value).clone());
+                    let key = ((**ty).clone(), std::sync::Arc::clone(value));
                     let next = self.statics.len();
                     let index = *by_value.entry(key.clone()).or_insert_with(|| {
                         self.statics.push(key);
@@ -136,7 +136,7 @@ impl CAotCompiler {
     }
 
     /// The consts `StaticRef`s name, in index order.
-    pub(crate) fn statics(&self) -> &[(IrType, ConstValue)] {
+    pub(crate) fn statics(&self) -> &[(IrType, std::sync::Arc<ConstValue>)] {
         &self.statics
     }
 

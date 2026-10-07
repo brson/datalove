@@ -28,19 +28,16 @@ use super::LowerError;
 fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), LowerError> {
     if let Some((const_type, const_value)) = ctx.lookup_const(name) {
         let const_type = const_type.clone();
-        let const_value = const_value.clone();
+        let const_value = std::sync::Arc::clone(const_value);
         if !const_type.is_copy() {
             let dest = ctx.fresh_value(IrType::Ref(Box::new(const_type)));
-            ctx.emit(Instruction::StaticRef {
-                dest,
-                value: std::sync::Arc::new(const_value),
-            });
+            ctx.emit(Instruction::StaticRef { dest, value: const_value });
             return Ok((Operand::ValueRef(dest), false));
         }
         let dest = ctx.fresh_value(const_type);
         ctx.emit(Instruction::Const {
             dest,
-            value: const_value,
+            value: (*const_value).clone(),
         });
         return Ok((Operand::Value(dest), true));
     }
@@ -975,7 +972,7 @@ pub fn lower_expression<'db>(
             let ty = ctx.expr_type(expr);
             let value = ctx.data_file_value(&file, &ty);
             let dest = ctx.fresh_value(ty);
-            ctx.emit_const(dest, value);
+            ctx.emit_const(dest, (*value).clone());
             Ok(dest)
         }
         ExprFunKind::String(string_expr) => {

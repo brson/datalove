@@ -8,10 +8,11 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_compiler::lower::{self, ScriptLowerContext, lower_script_functions, lower_const_binding};
-use datalove_datafun_const::{inline_script_consts, PreparedConst, evaluate_prepared_const};
+use datalove_datafun_const::{inline_script_consts, evaluate_const_unit};
 use datalove_datafun_compiler::ownership_analysis;
 use datalove_datafun_compiler::tracked_script_ownership::ScriptAnalysisData;
 use datalove_datafun_compiler::IrTypeExt;
@@ -181,7 +182,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let evaluator: Rc<RefCell<dyn datalove_datafun_ir::CtfeEvaluator>> = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
                     let mut resolved = ResolvedConsts::new();
-                    let mut resolved_consts_map: HashMap<String, (IrType, ConstValue)> = HashMap::new();
+                    let mut resolved_consts_map: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
                     let mut ctfe_error = None;
 
                     // A binding's id is its position among the const statements.
@@ -213,8 +214,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                         let value = match lower_result {
                             Ok((None, Some(v))) => v,
                             Ok((Some(unit), None)) => {
-                                let prepared = PreparedConst::Unit(unit);
-                                match evaluate_prepared_const(&prepared, &binding.ir_type, &evaluator) {
+                                match evaluate_const_unit(&unit, &binding.ir_type, &evaluator) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         ctfe_error = Some(format!("CTFE error: {}", e));
@@ -254,7 +254,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
-                        let const_values_map: HashMap<String, datalove_datafun_ir::ConstValue> = resolved_consts
+                        let const_values_map: HashMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts
                             .as_ref()
                             .map(|rc| rc.iter().map(|(k, v)| (k.to_string(), v.clone())).collect())
                             .unwrap_or_default();

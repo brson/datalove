@@ -13,6 +13,7 @@
 //! This separation allows lowering to be independent of const evaluation.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use datalove_datafun_ir::{
     ConstValue, IrCodeUnit, IrBlock, Instruction, ValueId,
     Operand, Terminator,
@@ -29,10 +30,10 @@ use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instructi
 /// Returns the transformed IR.
 pub fn inline_script_consts(
     mut unit: IrCodeUnit,
-    const_values: &HashMap<String, ConstValue>,
+    const_values: &HashMap<String, Arc<ConstValue>>,
 ) -> IrCodeUnit {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: HashMap<ValueId, ConstValue> = HashMap::new();
+    let mut value_to_const: HashMap<ValueId, Arc<ConstValue>> = HashMap::new();
     for (name, value_id) in &unit.const_values {
         if let Some(const_value) = const_values.get(name) {
             value_to_const.insert(*value_id, const_value.clone());
@@ -66,10 +67,10 @@ pub fn inline_script_consts(
 /// constant branch simplification.
 pub fn inline_function_consts(
     func: &mut IrCodeUnit,
-    const_values: &HashMap<String, ConstValue>,
+    const_values: &HashMap<String, Arc<ConstValue>>,
 ) {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: HashMap<ValueId, ConstValue> = HashMap::new();
+    let mut value_to_const: HashMap<ValueId, Arc<ConstValue>> = HashMap::new();
     for (name, value_id) in &func.const_values {
         if let Some(const_value) = const_values.get(name) {
             value_to_const.insert(*value_id, const_value.clone());
@@ -101,7 +102,7 @@ pub fn inline_function_consts(
 ///
 /// Also simplifies constant branches: if a Branch terminator has a condition that
 /// is defined as a constant bool, replaces it with an unconditional Goto.
-fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, ConstValue>) {
+fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Arc<ConstValue>>) {
     // Track which ValueIds are known to be constant bools (from both the passed-in
     // const values and from newly inserted is_ok/is_some/overflow values).
     let mut const_bools: HashMap<ValueId, bool> = HashMap::new();
@@ -116,7 +117,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
                 // Build replacement instructions.
                 let mut new_instrs = vec![Instruction::Const {
                     dest,
-                    value: const_value.clone(),
+                    value: (**const_value).clone(),
                 }];
 
                 // Special handling for UnwrapOption: also define is_some = true.
@@ -197,7 +198,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
     // replace with Goto to the matching case or default.
     if let Terminator::Switch { discriminant, cases, default } = &block.terminator {
         if let Operand::Value(disc_vid) = discriminant {
-            if let Some(ConstValue::U32(disc_val)) = value_to_const.get(disc_vid) {
+            if let Some(ConstValue::U32(disc_val)) = value_to_const.get(disc_vid).map(|v| &**v) {
                 let target = cases.iter()
                     .find(|(v, _)| v == disc_val)
                     .map(|(_, b)| *b)
@@ -222,7 +223,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Co
 /// This function modifies the functions in place.
 pub fn inline_module_functions(
     functions: &mut [std::sync::Arc<IrCodeUnit>],
-    const_values: &HashMap<String, ConstValue>,
+    const_values: &HashMap<String, Arc<ConstValue>>,
 ) {
     for func in functions {
         // For module functions, const_values has qualified names "func_name::const_name"
@@ -245,11 +246,11 @@ pub fn inline_module_functions(
 /// when looking them up in the const_values map.
 fn inline_module_function_consts(
     func: &mut IrCodeUnit,
-    const_values: &HashMap<String, ConstValue>,
+    const_values: &HashMap<String, Arc<ConstValue>>,
     func_name: &str,
 ) {
     // Build map of ValueId -> ConstValue for consts that should be inlined.
-    let mut value_to_const: HashMap<ValueId, ConstValue> = HashMap::new();
+    let mut value_to_const: HashMap<ValueId, Arc<ConstValue>> = HashMap::new();
     for (name, value_id) in &func.const_values {
         // Look up with qualified name: "func_name::const_name"
         let qualified_name = format!("{}::{}", func_name, name);
@@ -323,7 +324,7 @@ mod tests {
         };
 
         let mut const_values = HashMap::new();
-        const_values.insert("X".to_string(), ConstValue::I32(3));
+        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(3)));
 
         let result = inline_script_consts(unit, &const_values);
 
@@ -383,7 +384,7 @@ mod tests {
         };
 
         let mut const_values = HashMap::new();
-        const_values.insert("X".to_string(), ConstValue::I32(100));
+        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(100)));
 
         let result = inline_script_consts(unit, &const_values);
 
@@ -458,7 +459,7 @@ mod tests {
         };
 
         let mut const_values = HashMap::new();
-        const_values.insert("X".to_string(), ConstValue::I32(42));
+        const_values.insert("X".to_string(), Arc::new(ConstValue::I32(42)));
 
         let result = inline_script_consts(unit, &const_values);
 

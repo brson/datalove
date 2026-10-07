@@ -1754,7 +1754,8 @@ the parser. The typechecker resolves the path against the graph's data
 (`data_file_type`, memoized), and records the files it resolved in the unit's
 typecheck result as `data_files`, which is where lowering finds them.
 `datalove-datafun-lower/src/datafile.rs` reads a checked file into a
-`ConstValue` led by the type, memoized on `(Source, IrType)`. A data const
+`ConstValue` led by the type, memoized on `(Source, IrType)` and handed out as the
+memo's own `Arc`, which every map of consts and every `StaticRef` then shares. A data const
 needs no evaluating, so `const_eval::data_consts` puts the module's or unit's
 data in scope before the first lowering stratum.
 

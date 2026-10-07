@@ -32,7 +32,7 @@ pub struct SharedModuleContext<'db> {
     pub module_registry: Arc<ModuleFunctionRegistry>,
     /// Each module's module-level consts, which a copy of one of its comptime
     /// functions made for a script may name.
-    pub module_consts: HashMap<IrModuleId, HashMap<String, (IrType, ConstValue)>>,
+    pub module_consts: HashMap<IrModuleId, HashMap<String, (IrType, Arc<ConstValue>)>>,
 }
 
 /// Result of module compilation.

@@ -8,6 +8,7 @@
 //! 1. Caller uses `lower_const_binding` to lower a const expression to IR
 //! 2. Caller passes the IR to `evaluate_prepared_const` in the const crate
 
+use std::sync::Arc;
 use std::collections::HashMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
@@ -32,7 +33,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     expr: ExprFun<'db>,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+    resolved_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
@@ -149,13 +150,13 @@ pub fn lower_const_binding<'db>(
     ir_type: &IrType,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    resolved_consts: &HashMap<String, (IrType, ConstValue)>,
+    resolved_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
     data_files: &'db DataFiles,
-) -> Result<(Option<IrCodeUnit>, Option<ConstValue>), LowerError> {
+) -> Result<(Option<IrCodeUnit>, Option<Arc<ConstValue>>), LowerError> {
     // Try simple literal extraction first.
     if let Some(value) = try_extract_literal(db, expr, ir_type, data_files) {
         return Ok((None, Some(value)));
@@ -193,12 +194,12 @@ pub fn try_extract_literal<'db>(
     expr: ExprFun<'db>,
     ir_type: &IrType,
     data_files: &DataFiles,
-) -> Option<ConstValue> {
-    match expr.expr(db) {
+) -> Option<Arc<ConstValue>> {
+    let value = match expr.expr(db) {
         ExprFunKind::DataFile(file) => {
             let source = *data_files.get(&file.path(db))
                 .expect("the typechecker found the data file");
-            Some(crate::datafile::data_file_value(db, source, ir_type))
+            return Some(crate::datafile::data_file_value(db, source, ir_type));
         }
 
         ExprFunKind::True(_) => Some(ConstValue::Bool(true)),
@@ -221,5 +222,6 @@ pub fn try_extract_literal<'db>(
         }
 
         _ => None,
-    }
+    };
+    value.map(Arc::new)
 }

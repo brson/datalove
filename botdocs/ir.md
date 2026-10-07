@@ -736,11 +736,13 @@ symbol, and only then, and the riders linked into the binary are the special
 case that looks the address up instead.
 
 Around it sit the memoization types: `ConstStmtId` numbers const statements in
-source order, `GlobalConstId` pairs one with a script unit, `ConstBindingInfo`
-and `ConstBindingGraph` are the collection phase's output in dependency order,
-`ResolvedConsts` is the evaluation phase's, and `AccumulatedConsts` carries
-values across script units. All of them use sorted vectors rather than hash maps
-so that hashing is deterministic, which is what salsa needs.
+source order, `ConstBindingInfo` and `ConstBindingGraph` are the collection
+phase's output in dependency order, and `ResolvedConsts` is the evaluation
+phase's. All of them use sorted vectors rather than hash maps so that hashing is
+deterministic, which is what salsa needs. A resolved value is an
+`Arc<ConstValue>`, here and in every map of consts after it, down to the
+`StaticRef` a reference lowers to, so a const is one value however many
+functions and references hold it.
 
 `ConstStmtId` used to be a `salsa::Id`, on the grounds that an opaque id avoided
 coupling the IR to AST types. It coupled it to something worse, for the reason

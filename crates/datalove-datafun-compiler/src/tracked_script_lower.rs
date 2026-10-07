@@ -6,6 +6,7 @@
 
 use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     IrType, ConstValue, ExportBinding,
@@ -38,7 +39,7 @@ pub struct UnitLowerRecord {
     /// A script const outlives the unit that declared it and a later unit's
     /// function body may name one, so the values travel forward the way the
     /// bindings do.
-    pub consts: Vec<(String, IrType, ConstValue)>,
+    pub consts: Vec<(String, IrType, Arc<ConstValue>)>,
     /// Names this unit exported without a value behind them.
     pub dead_exports: Vec<String>,
     /// Names from earlier units this unit assigned to.
@@ -79,7 +80,7 @@ pub fn lower_context_over(records: &[UnitLowerRecord]) -> lower::ScriptLowerCont
 /// The script-level consts in scope for a unit sitting after `records`.
 pub fn script_consts_over(
     records: &[UnitLowerRecord],
-) -> HashMap<String, (IrType, ConstValue)> {
+) -> HashMap<String, (IrType, Arc<ConstValue>)> {
     let mut consts = HashMap::new();
     for record in records {
         for (name, ty, value) in &record.consts {
