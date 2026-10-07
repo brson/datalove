@@ -37,6 +37,7 @@ home here.
 - [Indexing an earlier unit's binding at the top level panics](#user-content-indexing-an-earlier-units-binding-at-the-top-level-panics)
 - [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
 - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
+- [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
 
 ## No table module, and none can be written
 
@@ -568,3 +569,26 @@ Module consts have no declaring instruction and are not affected.
 Salsa also hashes a module's consts whole wherever they are a tracked
 function's argument (`lower_module_functions`, `ModulePreResolvedConsts`), once
 per compile of the module. That is a hash, not a copy.
+
+## What writing the store demo ran into
+
+**Reproduced**, each while writing `demos/store`, about 800 lines over three
+data files. None stopped it; each cost a detour.
+
+- **A fallible call cannot be a statement.** `call f()!` is P031 (`call`
+  takes a function call) and a bare `f()!` is P001, so a function returning
+  `!()` is called for its effect as `let _ = f()!`. The store's `sales.add`
+  is called that way two dozen times.
+- **Nothing prints a string as it is.** `debuglog` is the only output, and it
+  quotes and escapes a string, so the report prints every line in quotes.
+- **A module's ownership errors are not rendered.** They print as the
+  `Debug` of the error (`Ownership error in by_tier: InconsistentBranchMove {
+  stmt_idx: 14, at: ExprKey(fn #66), ... }`), where a script's are rendered
+  with spans like any other diagnostic.
+- **A const cannot fail, and nothing can panic.** A module const built by a
+  function that uses `!` has to unwrap the result itself, and the `else`
+  branch needs a value it will never return. `db.product_slots` returns an
+  empty map there and says why.
+- **An `index` does not widen with `@`,** so counting into a `u64` takes
+  `u64.from_index`, where a `u32` widens with `@`.
+

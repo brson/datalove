@@ -1,0 +1,36 @@
+# A store's sales report over a generated dataset, for exercising the
+# interpreter and the jit on a program with some size to it.
+
+default:
+    just --list
+
+datalove := "../../target/release/datalove"
+
+# Build the CLI in release mode.
+build:
+    cargo build -p datalove-cli --release
+
+# Generate the data, with this many orders.
+gen orders="20000":
+    uv run --no-project gen.py {{orders}}
+
+# Print the report.
+run: build
+    {{datalove}} script report.dfs
+
+# Check the report against an independent implementation, on the data as it is.
+check: build
+    uv run --no-project check.py > ../../target/store-expected.txt
+    {{datalove}} script report.dfs > ../../target/store-actual.txt 2>&1
+    diff ../../target/store-expected.txt ../../target/store-actual.txt
+    {{datalove}} script --jit report.dfs > ../../target/store-actual.txt 2>&1
+    diff ../../target/store-expected.txt ../../target/store-actual.txt
+    @echo "the report matches, under the interpreter and the jit"
+
+# Time the report under each engine.
+bench: build
+    {{datalove}} aot-compile --link -o ../../target/store-report report.dfs
+    hyperfine --warmup 1 --min-runs 3 -N \
+        -n 'interp' '{{datalove}} script report.dfs' \
+        -n 'jit' '{{datalove}} script --jit report.dfs' \
+        -n 'aot' '../../target/store-report'
