@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 30u32
                         v3 = list [v0, v1, v2]
                         v4 = const 5index
-                        v5 = call @0 u0(v3, v4)
+                        v5 = call u0(v3, v4)
                         debuglog v5
                         unit_end
                     

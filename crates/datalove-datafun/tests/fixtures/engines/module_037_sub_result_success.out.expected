@@ -29,7 +29,7 @@ Analysis(
                     block0:
                         v0 = const 10u32
                         v1 = const 3u32
-                        v2 = call @0 m0.u0(v0, v1)
+                        v2 = call m0.u0(v0, v1)
                         return v2
                 """,
             ),
@@ -49,7 +49,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u1()
+                        v0 = call m0.u1()
                         debuglog v0
                         drop v0
                         unit_end

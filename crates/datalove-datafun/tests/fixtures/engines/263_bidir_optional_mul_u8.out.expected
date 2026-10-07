@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u0()
+                        v0 = call u0()
                         unit_end
                     
                     fn mul():

@@ -31,7 +31,7 @@ Analysis(
                     fn head_of_const():
                     block0:
                         v0 = staticref [1int, 2int, 3int]
-                        v1 = call @0 m0.u0(*v0)
+                        v1 = call m0.u0(*v0)
                         return v1
                 """,
             ),
@@ -52,9 +52,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v4 = const {name = "ada", langs = ["x", "y"]}
-                        v5 = call @0 m0.u1()
-                        v6 = call @1 u1()
-                        v7 = call @2 u2()
+                        v5 = call m0.u1()
+                        v6 = call u1()
+                        v7 = call u2()
                         v8 = pack Tuple3 {v5, v6, v7}
                         debuglog v8
                         drop v8
@@ -81,7 +81,7 @@ Analysis(
                     block0:
                         v0 = staticref {name = "ada", langs = ["x", "y"]}
                         v1 = getfieldref *v0.1
-                        v2 = call @0 u0(*v1)
+                        v2 = call u0(*v1)
                         return v2
                     
                     fn second_lang():

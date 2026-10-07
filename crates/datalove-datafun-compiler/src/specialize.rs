@@ -50,7 +50,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use datalove_datafun_const::inline_function_consts;
 use datalove_datafun_ir::{
-    CallSiteId, CodeRef, CodeUnitContext, CodeUnitId, ConstValue, FunctionContext, Instruction,
+    CodeRef, CodeUnitContext, CodeUnitId, ConstValue, FunctionContext, Instruction,
     IrBlock, IrCodeUnit, IrModuleId, IrType, Operand, ParamId, ValueId,
     replace_params_in_instruction, replace_params_in_terminator,
 };
@@ -258,7 +258,6 @@ pub fn monomorphize_function(
         blocks,
         value_count: next_value,
         slot_count: original.slot_count,
-        call_site_count: original.call_site_count,
         value_types,
         slot_types: original.slot_types.clone(),
         tracked_slots: original.tracked_slots.clone(),
@@ -287,7 +286,6 @@ pub fn rewrite_comptime_calls(
     key_of: &dyn Fn(&CodeRef) -> Option<CalleeKey>,
 ) -> IrCodeUnit {
     let consts = const_value_map(unit);
-    let mut next_call_site = unit.call_site_count;
     let mut blocks = Vec::with_capacity(unit.blocks.len());
 
     for block in &unit.blocks {
@@ -320,10 +318,7 @@ pub fn rewrite_comptime_calls(
                 .map(|(_, arg)| arg.clone())
                 .collect();
 
-            let site_id = CallSiteId(next_call_site);
-            next_call_site += 1;
             instructions.push(Instruction::Call {
-                site_id,
                 dest: *dest,
                 func: copy_ref,
                 args: kept_args,
@@ -347,7 +342,6 @@ pub fn rewrite_comptime_calls(
 
     IrCodeUnit {
         blocks,
-        call_site_count: next_call_site,
         ..unit.clone()
     }
 }

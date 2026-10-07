@@ -80,9 +80,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 2int
-                        v1 = call @0 m1.u0(v0)
+                        v1 = call m1.u0(v0)
                         v2 = const 5int
-                        v3 = call @1 m0.u0(v2)
+                        v3 = call m0.u0(v2)
                         v4 = pack Tuple2 {v1, v3}
                         debuglog v4
                         drop v4
@@ -107,9 +107,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 1int
-                        v1 = call @0 m1.u0(v0)
+                        v1 = call m1.u0(v0)
                         v2 = const 1int
-                        v3 = call @1 m0.u0(v2)
+                        v3 = call m0.u0(v2)
                         v4 = add v1, v3
                         drop v1
                         drop v3

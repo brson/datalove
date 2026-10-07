@@ -34,13 +34,13 @@ Analysis(
                     
                     fn from_module(p0):
                     block0:
-                        v1 = call @0 m0.u4(p0)
+                        v1 = call m0.u4(p0)
                         return v1
                     
                     fn twice__ct4(p0):
                     block0:
-                        v0 = call @0 m0.u5(p0)
-                        v1 = call @1 m0.u5(v0)
+                        v0 = call m0.u5(p0)
+                        v1 = call m0.u5(v0)
                         return v1
                     
                     fn add_n__ct5(p0):
@@ -69,11 +69,11 @@ Analysis(
                     block0:
                         v0 = const 5int
                         v1 = const 10int
-                        v2 = call @0 m0.u3(v1)
+                        v2 = call m0.u3(v1)
                         v3 = const 10int
-                        v4 = call @1 u0(v3)
+                        v4 = call u0(v3)
                         v5 = const 10int
-                        v6 = call @2 u1(v5)
+                        v6 = call u1(v5)
                         debuglog v2
                         debuglog v4
                         debuglog v6
@@ -86,15 +86,15 @@ Analysis(
                     fn twice__ct0(p0):
                     block0:
                         v2 = staticref 5int
-                        v0 = call @0 u2(p0)
-                        v1 = call @1 u2(v0)
+                        v0 = call u2(p0)
+                        v1 = call u2(v0)
                         return v1
                     
                     fn thrice__ct1(p0):
                     block0:
                         v3 = staticref 5int
-                        v0 = call @0 u2(p0)
-                        v1 = call @1 u2(v0)
+                        v0 = call u2(p0)
+                        v1 = call u2(v0)
                         v2 = add v1, *v3
                         drop v1
                         return v2

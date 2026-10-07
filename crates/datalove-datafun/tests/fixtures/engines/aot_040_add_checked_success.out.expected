@@ -16,9 +16,9 @@ Analysis(
                     block0:
                         v0 = const 5u32
                         v1 = const 3u32
-                        v2 = call @0 u1(v0, v1)
+                        v2 = call u1(v0, v1)
                         v3 = const 999u32
-                        v4 = call @1 u0(v2, v3)
+                        v4 = call u0(v2, v3)
                         debuglog v4
                         unit_end
                     

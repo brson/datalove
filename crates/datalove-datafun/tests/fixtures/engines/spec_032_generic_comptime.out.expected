@@ -29,7 +29,7 @@ Analysis(
                     fn wrap_one(p0):
                     block0:
                         v1 = erase p0
-                        v2 = call @0 m0.u4(v1)
+                        v2 = call m0.u4(v1)
                         v3 = reify v2
                         return v3
                     
@@ -68,19 +68,19 @@ Analysis(
                         v1 = const 2int
                         v2 = const 7u32
                         v3 = erase v2
-                        v4 = call @1 u0(v3)
+                        v4 = call u0(v3)
                         v5 = reify v4
                         debuglog v5
                         drop v5
                         v6 = const "s"
                         v7 = erase v6
-                        v8 = call @2 u0(v7)
+                        v8 = call u0(v7)
                         v9 = reify v8
                         debuglog v9
                         drop v9
                         v10 = const "s"
                         v11 = erase v10
-                        v12 = call @3 u1(v11)
+                        v12 = call u1(v11)
                         v13 = reify v12
                         debuglog v13
                         drop v13
@@ -88,20 +88,20 @@ Analysis(
                         v15 = erase v14
                         v16 = const 4u32
                         v17 = erase v16
-                        v18 = call @4 u2(v15, v17)
+                        v18 = call u2(v15, v17)
                         v19 = reify v18
                         debuglog v19
                         v20 = const 9u32
-                        v21 = call @0 m0.u2(v20)
+                        v21 = call m0.u2(v20)
                         debuglog v21
                         drop v21
                         v22 = const "spoken"
-                        v23 = call @5 u3(v22)
+                        v23 = call u3(v22)
                         v24 = const "kept"
                         v25 = erase v24
                         v26 = const "dropped"
                         v27 = erase v26
-                        v28 = call @6 u2(v25, v27)
+                        v28 = call u2(v25, v27)
                         v29 = reify v28
                         unit_end_drop v0
                         unit_end_drop v1

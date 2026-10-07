@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u1()
+                        v0 = call u1()
                         debuglog v0
                         drop v0
                         unit_end
@@ -42,7 +42,7 @@ Analysis(
                         return v5
                     block2:
                         v6 = listelementref s0[v3]
-                        v7 = call @0 u0(*v6)
+                        v7 = call u0(*v6)
                         v8 = load.move.tracked s0
                         v9 = some v8
                         return v9

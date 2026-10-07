@@ -43,7 +43,7 @@ Analysis(
                         v1 = const 42u32
                         v2 = erase v1
                         v3 = erase.tracked s0
-                        v4 = call @0 m0.u0(v2, v3)
+                        v4 = call m0.u0(v2, v3)
                         v5 = reify v3
                         store.copy s0, v5
                         v6 = const "before"
@@ -51,7 +51,7 @@ Analysis(
                         v7 = const "after"
                         v8 = erase v7
                         v9 = erase.tracked s1
-                        v10 = call @1 m0.u0(v8, v9)
+                        v10 = call m0.u0(v8, v9)
                         v11 = reify v9
                         store.move.tracked s1, v11
                         v12 = const 1int
@@ -59,7 +59,7 @@ Analysis(
                         v13 = const 99999999999999999999int
                         v14 = erase v13
                         v15 = erase.tracked s2
-                        v16 = call @2 m0.u0(v14, v15)
+                        v16 = call m0.u0(v14, v15)
                         v17 = reify v15
                         store.move.tracked s2, v17
                         v18 = none
@@ -67,7 +67,7 @@ Analysis(
                         v19 = const "wrapped"
                         v20 = erase v19
                         v21 = erase.tracked s3
-                        v22 = call @3 m0.u1(v20, v21)
+                        v22 = call m0.u1(v20, v21)
                         v23 = reify v21
                         store.move.tracked s3, v23
                         v24 = const 0u32
@@ -80,7 +80,7 @@ Analysis(
                         v29 = erase v28
                         v30 = erase.tracked s4
                         v31 = erase.tracked s5
-                        v32 = call @4 m0.u2(v27, v29, v30, v31)
+                        v32 = call m0.u2(v27, v29, v30, v31)
                         v33 = reify v30
                         store.copy s4, v33
                         v34 = reify v31
@@ -93,14 +93,14 @@ Analysis(
                         v39 = erase v38
                         v40 = getfieldref s6.0
                         v41 = erase.tracked *v40
-                        v42 = call @5 m0.u0(v39, v41)
+                        v42 = call m0.u0(v39, v41)
                         v43 = reify v41
                         refstore.tracked *v40, v43
                         v44 = const "written"
                         v45 = erase v44
                         v46 = getfieldref s6.1
                         v47 = erase.tracked *v46
-                        v48 = call @6 m0.u0(v45, v47)
+                        v48 = call m0.u0(v45, v47)
                         v49 = reify v47
                         refstore.tracked *v46, v49
                         v50 = load.copy s0
@@ -130,7 +130,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u3()
+                        v0 = call m0.u3()
                         debuglog v0
                         drop v0
                         unit_end

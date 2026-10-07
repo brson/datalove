@@ -307,7 +307,6 @@ mod tests {
             blocks,
             value_count: 3,
             slot_count: 0,
-            call_site_count: 0,
             value_types: vec![IrType::I32, IrType::I32, IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -352,7 +351,6 @@ mod tests {
             params: vec![],
             instructions: vec![
                 Instruction::Call {
-                    site_id: datalove_datafun_ir::CallSiteId(0),
                     dest: ValueId(0),
                     func: datalove_datafun_ir::CodeRef::Local(datalove_datafun_ir::CodeUnitId(0)),
                     args: vec![],
@@ -369,7 +367,6 @@ mod tests {
             blocks,
             value_count: 1,
             slot_count: 0,
-            call_site_count: 1,
             value_types: vec![IrType::I32],
             slot_types: vec![],
             tracked_slots: vec![],
@@ -440,7 +437,6 @@ mod tests {
             blocks,
             value_count: 3,
             slot_count: 0,
-            call_site_count: 0,
             value_types: vec![
                 IrType::Option(Box::new(IrType::I32)),
                 IrType::I32,

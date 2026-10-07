@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u1()
+                        v0 = call u1()
                         debuglog v0
                         unit_end
                     
@@ -34,7 +34,7 @@ Analysis(
                     block0:
                         v0 = const 99u32
                         v1 = some v0
-                        v2 = call @0 u0(v1)
+                        v2 = call u0(v1)
                         return v2
                 """,
             ),

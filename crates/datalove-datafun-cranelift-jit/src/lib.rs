@@ -332,7 +332,6 @@ mod tests {
             blocks,
             value_count: value_types.len() as u32,
             slot_count: 0,
-            call_site_count: 0,
             value_types,
             slot_types: vec![],
             tracked_slots: vec![],
@@ -537,7 +536,6 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
-                        site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![
@@ -628,7 +626,6 @@ mod tests {
                 instructions: vec![
                     Instruction::Const { dest: ValueId(0), value: ConstValue::I32(42) },
                     Instruction::Call {
-                        site_id: datalove_datafun_ir::CallSiteId(0),
                         dest: ValueId(1),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![

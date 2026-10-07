@@ -35,7 +35,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 100int
-                        v1 = call @0 m0.u0(v0)
+                        v1 = call m0.u0(v0)
                         unit_end_drop v0
                         unit_end
                 """,

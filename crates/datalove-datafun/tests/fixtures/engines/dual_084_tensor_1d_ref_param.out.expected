@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u1()
+                        v0 = call u1()
                         debuglog v0
                         unit_end
                     
@@ -38,7 +38,7 @@ Analysis(
                         return v6
                     block2:
                         v7 = tensorindexref v3[v4]
-                        v8 = call @0 u0(*v7)
+                        v8 = call u0(*v7)
                         v9 = some v8
                         drop v3
                         return v9

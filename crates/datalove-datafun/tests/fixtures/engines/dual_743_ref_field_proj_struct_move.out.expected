@@ -18,7 +18,7 @@ Analysis(
                         v1 = const 200int
                         v2 = pack Struct0 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call @0 u0(*v3)
+                        v4 = call u0(*v3)
                         debuglog v4
                         drop v4
                         unit_end_drop v2

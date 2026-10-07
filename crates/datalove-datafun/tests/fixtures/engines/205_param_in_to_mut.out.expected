@@ -23,7 +23,7 @@ Analysis(
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1 = call @0 m0.u0(s0)
+                        v1 = call m0.u0(s0)
                         return v1
                 """,
             ),
@@ -63,7 +63,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 100u32
-                        v1 = call @0 m0.u1(v0)
+                        v1 = call m0.u1(v0)
                         unit_end v1
                 """,
             ),

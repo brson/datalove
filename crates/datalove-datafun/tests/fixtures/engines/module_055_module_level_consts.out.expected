@@ -57,12 +57,12 @@ Analysis(
                     
                     fn main():
                     block0:
-                        v0 = call @0 m0.u1()
-                        v1 = call @1 m0.u2()
-                        v2 = call @2 m0.u3()
-                        v3 = call @3 m0.u7()
-                        v4 = call @4 m0.u5()
-                        v5 = call @5 m0.u6()
+                        v0 = call m0.u1()
+                        v1 = call m0.u2()
+                        v2 = call m0.u3()
+                        v3 = call m0.u7()
+                        v4 = call m0.u5()
+                        v5 = call m0.u6()
                         v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
                         return v6
                 """,
@@ -83,7 +83,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u8()
+                        v0 = call m0.u8()
                         debuglog v0
                         drop v0
                         unit_end

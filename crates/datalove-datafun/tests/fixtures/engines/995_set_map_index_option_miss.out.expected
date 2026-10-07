@@ -21,7 +21,7 @@ Analysis(
                         v4 = %{v0: v1, v2: v3}
                         v5 = const 5u32
                         v6 = const 999u32
-                        v7 = call @0 u0(v4, v5, v6)
+                        v7 = call u0(v4, v5, v6)
                         debuglog v7
                         drop v7
                         unit_end

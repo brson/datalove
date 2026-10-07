@@ -30,7 +30,6 @@ pub fn emit_static_lifecycle(
         blocks: Vec::new(),
         value_count: 0,
         slot_count: 0,
-        call_site_count: 0,
         value_types: Vec::new(),
         slot_types: Vec::new(),
         tracked_slots: Vec::new(),

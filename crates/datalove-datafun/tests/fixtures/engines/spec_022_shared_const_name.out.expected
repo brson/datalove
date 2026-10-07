@@ -20,12 +20,12 @@ Analysis(
                     
                     fn twice(p0):
                     block0:
-                        v1 = call @0 m0.u3(p0)
+                        v1 = call m0.u3(p0)
                         return v1
                     
                     fn fivex(p0):
                     block0:
-                        v1 = call @0 m0.u4(p0)
+                        v1 = call m0.u4(p0)
                         return v1
                     
                     fn scale__ct3(p0):
@@ -60,9 +60,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call @0 m0.u1(v0)
+                        v1 = call m0.u1(v0)
                         v2 = const 10int
-                        v3 = call @1 m0.u2(v2)
+                        v3 = call m0.u2(v2)
                         debuglog v1
                         debuglog v3
                         unit_end_drop v1

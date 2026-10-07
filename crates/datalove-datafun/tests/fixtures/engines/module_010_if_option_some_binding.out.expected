@@ -20,7 +20,7 @@ Analysis(
                     
                     fn main():
                     block0:
-                        v0 = call @0 m0.u0()
+                        v0 = call m0.u0()
                         v1, v2 = unwrap_option v0
                         branch v2, block1, block2
                     block1:
@@ -46,7 +46,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u1()
+                        v0 = call m0.u1()
                         debuglog v0
                         unit_end
                 """,

@@ -15,9 +15,9 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const -2147483648i32
-                        v1 = call @0 u0(v0)
+                        v1 = call u0(v0)
                         v2 = const 999i32
-                        v3 = call @1 u1(v1, v2)
+                        v3 = call u1(v1, v2)
                         debuglog v3
                         unit_end
                     

@@ -16,22 +16,22 @@ Analysis(
                     block0:
                         v0 = const 100offset
                         v1 = const -50offset
-                        v2 = call @0 u0(v0, v1)
+                        v2 = call u0(v0, v1)
                         debuglog v2
                         v3 = const -42offset
-                        v4 = call @1 u1(v3)
+                        v4 = call u1(v3)
                         debuglog v4
                         v5 = const 42offset
-                        v6 = call @2 u1(v5)
+                        v6 = call u1(v5)
                         debuglog v6
                         v7 = const 10offset
-                        v8 = call @3 u2(v7)
+                        v8 = call u2(v7)
                         debuglog v8
                         v9 = const -10offset
-                        v10 = call @4 u2(v9)
+                        v10 = call u2(v9)
                         debuglog v10
                         v11 = const 0offset
-                        v12 = call @5 u2(v11)
+                        v12 = call u2(v11)
                         debuglog v12
                         unit_end
                     

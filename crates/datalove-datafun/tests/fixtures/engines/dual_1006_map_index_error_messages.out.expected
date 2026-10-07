@@ -18,12 +18,12 @@ Analysis(
                         v1 = const 1u32
                         v2 = %{v0: v1}
                         v3 = const "b"
-                        v4 = call @0 u0(v2, v3)
+                        v4 = call u0(v2, v3)
                         v5 = const "a"
                         v6 = const "x"
                         v7 = %{v5: v6}
                         v8 = const "b"
-                        v9 = call @1 u1(v7, v8)
+                        v9 = call u1(v7, v8)
                         v10 = pack Tuple2 {v4, v9}
                         debuglog v10
                         drop v10
@@ -31,11 +31,11 @@ Analysis(
                         v12 = const 1u32
                         v13 = %{v11: v12}
                         v14 = const "b"
-                        v15 = call @2 u2(v13, v14)
+                        v15 = call u2(v13, v14)
                         v16 = const "x"
                         v17 = list [v16]
                         v18 = const 3index
-                        v19 = call @3 u3(v17, v18)
+                        v19 = call u3(v17, v18)
                         v20 = pack Tuple2 {v15, v19}
                         debuglog v20
                         drop v20

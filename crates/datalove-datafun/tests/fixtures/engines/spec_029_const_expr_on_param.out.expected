@@ -32,7 +32,7 @@ Analysis(
                         v1 = add p0, v0
                         drop v0
                         v2 = clone p0
-                        v3 = call @0 m0.u0(v2)
+                        v3 = call m0.u0(v2)
                         v4 = const 2int
                         v5 = mul v1, v4
                         drop v4
@@ -48,7 +48,7 @@ Analysis(
                     
                     fn from_module(p0):
                     block0:
-                        v1 = call @0 m0.u4(p0)
+                        v1 = call m0.u4(p0)
                         return v1
                     
                     fn uses_consts__ct4(p0):
@@ -59,7 +59,7 @@ Analysis(
                         v4 = const 2int
                         v5 = staticref 8int
                         drop v4
-                        v6 = call @1 m0.u5(p0)
+                        v6 = call m0.u5(p0)
                         v7 = add v6, *v3
                         drop v6
                         v8 = add v7, *v5
@@ -92,9 +92,9 @@ Analysis(
                     block0:
                         v0 = const 5int
                         v1 = const 2int
-                        v2 = call @0 m0.u3(v1)
+                        v2 = call m0.u3(v1)
                         v3 = const 2int
-                        v4 = call @1 u0(v3)
+                        v4 = call u0(v3)
                         debuglog v2
                         debuglog v4
                         unit_end_drop v0
@@ -110,7 +110,7 @@ Analysis(
                         v4 = const 2int
                         v5 = staticref 12int
                         drop v4
-                        v6 = call @1 u1(p0)
+                        v6 = call u1(p0)
                         v7 = add v6, *v3
                         drop v6
                         v8 = add v7, *v5

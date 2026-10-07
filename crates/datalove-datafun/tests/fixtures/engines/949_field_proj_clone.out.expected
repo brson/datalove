@@ -28,7 +28,7 @@ Analysis(
                         v8 = getfieldref v2.0
                         debuglog *v8
                         v9 = getfieldref v2.0
-                        v10 = call @0 u0(*v9)
+                        v10 = call u0(*v9)
                         debuglog v10
                         v11 = const 5int
                         v12 = const 1u32
@@ -57,7 +57,7 @@ Analysis(
                         v29 = getfieldref v23.0
                         debuglog *v29
                         v30 = getfieldref v23.0
-                        v31 = call @1 u0(*v30)
+                        v31 = call u0(*v30)
                         debuglog v31
                         v32 = const 5int
                         v33 = const 1u32
@@ -77,12 +77,12 @@ Analysis(
                         v44 = pack Tuple2 {v42, v43}
                         store.move.tracked s0, v44
                         v45 = getfieldref s0.0
-                        v46 = call @2 u1(*v45)
+                        v46 = call u1(*v45)
                         v47 = getfieldref s0.0
                         debuglog *v47
                         v48 = getfieldref s0.0
                         drop.ref v48
-                        v49 = call @3 u2(*v48)
+                        v49 = call u2(*v48)
                         v50 = getfieldref s0.0
                         debuglog *v50
                         v51 = const 50int
@@ -94,12 +94,12 @@ Analysis(
                         v55 = pack Struct0 {v53, v54}
                         store.move.tracked s1, v55
                         v56 = getfieldref s1.0
-                        v57 = call @4 u1(*v56)
+                        v57 = call u1(*v56)
                         v58 = getfieldref s1.0
                         debuglog *v58
                         v59 = getfieldref s1.0
                         drop.ref v59
-                        v60 = call @5 u2(*v59)
+                        v60 = call u2(*v59)
                         v61 = getfieldref s1.0
                         debuglog *v61
                         v62 = const 50int

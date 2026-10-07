@@ -39,8 +39,8 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = const 3int
-                        v2 = call @0 u2()
-                        v3 = call @1 u1()
+                        v2 = call u2()
+                        v3 = call u1()
                         v4 = pack Tuple2 {v2, v3}
                         debuglog v4
                         unit_end_drop v0

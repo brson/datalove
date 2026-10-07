@@ -19,21 +19,21 @@ Analysis(
                         v2 = const 30u32
                         v3 = [| v0 v1 v2 |]
                         v4 = const 0index
-                        v5 = call @0 u0(v3, v4)
+                        v5 = call u0(v3, v4)
                         debuglog v5
                         v6 = const 10u32
                         v7 = const 20u32
                         v8 = const 30u32
                         v9 = [| v6 v7 v8 |]
                         v10 = const 2index
-                        v11 = call @1 u0(v9, v10)
+                        v11 = call u0(v9, v10)
                         debuglog v11
                         v12 = const 10u32
                         v13 = const 20u32
                         v14 = const 30u32
                         v15 = [| v12 v13 v14 |]
                         v16 = const 5index
-                        v17 = call @2 u0(v15, v16)
+                        v17 = call u0(v15, v16)
                         debuglog v17
                         unit_end
                     

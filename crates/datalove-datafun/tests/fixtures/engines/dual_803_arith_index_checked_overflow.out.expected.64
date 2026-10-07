@@ -17,17 +17,17 @@ Analysis(
                         v0 = const 4294967295index
                         v1 = const 1index
                         v2 = const 0index
-                        v3 = call @0 u1(v0, v1)
+                        v3 = call u1(v0, v1)
                         v4 = const 999index
-                        v5 = call @1 u0(v3, v4)
+                        v5 = call u0(v3, v4)
                         debuglog v5
-                        v6 = call @2 u2(v2, v1)
+                        v6 = call u2(v2, v1)
                         v7 = const 999index
-                        v8 = call @3 u0(v6, v7)
+                        v8 = call u0(v6, v7)
                         debuglog v8
-                        v9 = call @4 u3(v1, v2)
+                        v9 = call u3(v1, v2)
                         v10 = const 999index
-                        v11 = call @5 u0(v9, v10)
+                        v11 = call u0(v9, v10)
                         debuglog v11
                         unit_end
                     

@@ -41,7 +41,7 @@ Analysis(
                     block0:
                         v1 = const 5u16
                         v2 = erase v1
-                        v3 = call @0 m0.u0(v2)
+                        v3 = call m0.u0(v2)
                         v4 = reify v3
                         return v4
                     
@@ -51,7 +51,7 @@ Analysis(
                         v2 = erase v1
                         v3 = const 8u16
                         v4 = erase v3
-                        v5 = call @0 m0.u1(v2, v4)
+                        v5 = call m0.u1(v2, v4)
                         v6 = reify v5
                         return v6
                     
@@ -61,7 +61,7 @@ Analysis(
                         v2 = erase v1
                         v3 = const "held"
                         v4 = erase v3
-                        v5 = call @0 m0.u2(v2, v4)
+                        v5 = call m0.u2(v2, v4)
                         v6 = reify v5
                         return v6
                     
@@ -69,16 +69,16 @@ Analysis(
                     block0:
                         v1 = const 9u16
                         v2 = erase v1
-                        v3 = call @0 m0.u3(v2)
+                        v3 = call m0.u3(v2)
                         v4 = reify v3
                         return v4
                     
                     fn main():
                     block0:
-                        v0 = call @0 m0.u4()
-                        v1 = call @1 m0.u5()
-                        v2 = call @2 m0.u6()
-                        v3 = call @3 m0.u7()
+                        v0 = call m0.u4()
+                        v1 = call m0.u5()
+                        v2 = call m0.u6()
+                        v3 = call m0.u7()
                         v4 = pack Tuple4 {v0, v1, v2, v3}
                         return v4
                 """,
@@ -99,7 +99,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u8()
+                        v0 = call m0.u8()
                         debuglog v0
                         drop v0
                         unit_end

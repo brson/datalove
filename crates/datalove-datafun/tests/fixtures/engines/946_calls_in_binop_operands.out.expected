@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call @0 u0(v0)
+                        v1 = call u0(v0)
                         debuglog v1
                         drop v1
                         v2 = const 2int
@@ -23,7 +23,7 @@ Analysis(
                         v4 = const 4int
                         v5 = const 5int
                         v6 = const 1int
-                        v7 = call @1 u1(v2, v3, v4, v5, v6)
+                        v7 = call u1(v2, v3, v4, v5, v6)
                         debuglog v7
                         drop v7
                         unit_end
@@ -41,11 +41,11 @@ Analysis(
                         v3 = const 1int
                         v4 = sub p0, v3
                         drop v3
-                        v5 = call @0 u0(v4)
+                        v5 = call u0(v4)
                         v6 = const 2int
                         v7 = sub p0, v6
                         drop v6
-                        v8 = call @1 u0(v7)
+                        v8 = call u0(v7)
                         v9 = add v5, v8
                         drop v5
                         drop v8

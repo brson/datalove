@@ -18,7 +18,6 @@ fn make_script_unit(
         blocks,
         value_count: value_types.len() as u32,
         slot_count: 0,
-        call_site_count: 0,
         value_types,
         slot_types: vec![],
         tracked_slots: vec![],

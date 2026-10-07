@@ -28,7 +28,7 @@ Analysis(
                         v3 = const 1int
                         v4 = sub p0, v3
                         drop v3
-                        v5 = call @0 m0.u1(v4)
+                        v5 = call m0.u1(v4)
                         drop p0
                         return v5
                     
@@ -48,7 +48,7 @@ Analysis(
                         v3 = const 1int
                         v4 = sub p0, v3
                         drop v3
-                        v5 = call @0 m0.u0(v4)
+                        v5 = call m0.u0(v4)
                         drop p0
                         return v5
                 """,
@@ -70,16 +70,16 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 4int
-                        v1 = call @0 m0.u0(v0)
+                        v1 = call m0.u0(v0)
                         debuglog v1
                         v2 = const 4int
-                        v3 = call @1 m0.u1(v2)
+                        v3 = call m0.u1(v2)
                         debuglog v3
                         v4 = const 5int
-                        v5 = call @2 m0.u0(v4)
+                        v5 = call m0.u0(v4)
                         debuglog v5
                         v6 = const 5int
-                        v7 = call @3 m0.u1(v6)
+                        v7 = call m0.u1(v6)
                         debuglog v7
                         unit_end
                 """,

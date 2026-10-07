@@ -38,22 +38,22 @@ Analysis(
                     
                     fn triple(p0):
                     block0:
-                        v1 = call @0 m0.u7(p0)
+                        v1 = call m0.u7(p0)
                         return v1
                     
                     fn quintuple(p0):
                     block0:
-                        v1 = call @0 m0.u8(p0)
+                        v1 = call m0.u8(p0)
                         return v1
                     
                     fn thrice_again(p0):
                     block0:
-                        v1 = call @0 m0.u7(p0)
+                        v1 = call m0.u7(p0)
                         return v1
                     
                     fn triple_i32(p0):
                     block0:
-                        v1 = call @0 m0.u9(p0)
+                        v1 = call m0.u9(p0)
                         return v1
                     
                     fn scale__ct7(p0):
@@ -103,15 +103,15 @@ Analysis(
                     block0:
                         v0 = const 2int
                         v1 = const 10int
-                        v2 = call @0 m0.u3(v1)
+                        v2 = call m0.u3(v1)
                         v3 = const 10int
-                        v4 = call @1 m0.u4(v3)
+                        v4 = call m0.u4(v3)
                         v5 = const 10int
-                        v6 = call @2 m0.u5(v5)
+                        v6 = call m0.u5(v5)
                         v7 = const "hi"
-                        v8 = call @4 u0(v7)
+                        v8 = call u0(v7)
                         v9 = const 5i32
-                        v10 = call @3 m0.u6(v9)
+                        v10 = call m0.u6(v9)
                         debuglog v2
                         debuglog v4
                         debuglog v6

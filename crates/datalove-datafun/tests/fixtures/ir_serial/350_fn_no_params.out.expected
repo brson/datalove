@@ -10,7 +10,7 @@ IrSerialAnalysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u0()
+                        v0 = call u0()
                         debuglog v0
                         unit_end
                     
@@ -22,7 +22,7 @@ IrSerialAnalysis(
             ),
             direct_interp_output: "5\n",
             direct_aot_output: "5\n",
-            serialized_ir_size: 2402,
+            serialized_ir_size: 2302,
             serialized_registry_size: 168,
             deser_success: true,
             deser_interp_output: "5\n",

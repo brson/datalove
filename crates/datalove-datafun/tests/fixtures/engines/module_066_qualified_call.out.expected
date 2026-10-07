@@ -61,9 +61,9 @@ Analysis(
                     fn main():
                     block0:
                         v0 = const 2int
-                        v1 = call @0 m1.u0(v0)
+                        v1 = call m1.u0(v0)
                         v2 = const 5int
-                        v3 = call @1 m0.u0(v2)
+                        v3 = call m0.u0(v2)
                         v4 = add v1, v3
                         drop v1
                         drop v3
@@ -86,7 +86,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m2.u0()
+                        v0 = call m2.u0()
                         debuglog v0
                         drop v0
                         unit_end

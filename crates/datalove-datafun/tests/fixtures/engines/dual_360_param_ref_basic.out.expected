@@ -15,7 +15,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 21int
-                        v1 = call @0 u0(v0)
+                        v1 = call u0(v0)
                         debuglog v1
                         drop v1
                         debuglog v0

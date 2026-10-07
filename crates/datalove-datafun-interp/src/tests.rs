@@ -1,7 +1,7 @@
 use crate::*;
 use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
-    CallSiteId, IrType, IrBlock, Terminator, CodeRef, ParamId, TypeRef, SlotId, SlotDest,
+    IrType, IrBlock, Terminator, CodeRef, ParamId, TypeRef, SlotId, SlotDest,
     BinOp, UnaryOp, ValueId, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext, ScriptContext,
 };
 
@@ -17,7 +17,6 @@ fn make_func_unit(
     value_types: Vec<IrType>,
     slot_count: u32,
     slot_types: Vec<IrType>,
-    call_site_count: u32,
 ) -> IrCodeUnit {
     IrCodeUnit {
         id: CodeUnitId(id),
@@ -25,7 +24,6 @@ fn make_func_unit(
         blocks,
         value_count,
         slot_count,
-        call_site_count,
         value_types,
         slot_types,
         tracked_slots: vec![],
@@ -51,7 +49,6 @@ fn make_script_unit(
     value_types: Vec<IrType>,
     slot_count: u32,
     slot_types: Vec<IrType>,
-    call_site_count: u32,
     unit_end_values: Vec<ValueId>,
     unit_end_slots: Vec<SlotId>,
     result: Option<ValueId>,
@@ -64,7 +61,6 @@ fn make_script_unit(
         blocks,
         value_count,
         slot_count,
-        call_site_count,
         value_types,
         slot_types,
         tracked_slots: vec![],
@@ -98,7 +94,6 @@ fn make_test_func(
         value_types,
         0,
         vec![],
-        0,
     )
 }
 
@@ -186,7 +181,6 @@ fn make_identity_function() -> IrCodeUnit {
         vec![], // value_types
         0, // slot_count
         vec![], // slot_types
-        0, // call_site_count
     )
 }
 
@@ -215,7 +209,6 @@ fn test_simple_function_call() {
                         value: ConstValue::I64(20),
                     },
                     Instruction::Call {
-                        site_id: CallSiteId(0),
                         dest: ValueId(2),
                         func: CodeRef::Local(CodeUnitId(0)),  // identity function
                         args: vec![
@@ -235,7 +228,6 @@ fn test_simple_function_call() {
         vec![IrType::I64, IrType::I64, IrType::I64],
         0,
         vec![],
-        0,
     );
 
     // Create context with both functions.
@@ -279,7 +271,6 @@ fn test_nested_function_calls() {
         vec![],
         0,
         vec![],
-        0,
     );
 
     // fn nested(x: i64) -> i64 { passthrough(passthrough(x)) }
@@ -294,7 +285,6 @@ fn test_nested_function_calls() {
                 instructions: vec![
                     // First call: passthrough(x)
                     Instruction::Call {
-                        site_id: CallSiteId(0),
                         dest: ValueId(0),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Param(ParamId(0))],
@@ -303,7 +293,6 @@ fn test_nested_function_calls() {
                     },
                     // Second call: passthrough(result)
                     Instruction::Call {
-                        site_id: CallSiteId(1),
                         dest: ValueId(1),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(0))],
@@ -320,7 +309,6 @@ fn test_nested_function_calls() {
         vec![IrType::I64, IrType::I64],
         0,
         vec![],
-        0,
     );
 
     // Create context with both functions.
@@ -834,7 +822,6 @@ fn test_slot_store_load() {
         vec![IrType::I64, IrType::I64, IrType::I64],
         1,
         vec![IrType::I64],
-        0,
     );
 
     assert_eq!(run_i64_function(&func), 42);
@@ -873,7 +860,6 @@ fn test_slot_multiple_updates() {
         vec![IrType::I64; 5],
         1,
         vec![IrType::I64],
-        0,
     );
 
     assert_eq!(run_i64_function(&func), 8);
@@ -1501,7 +1487,6 @@ fn test_crossunit_external_value() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -1527,7 +1512,6 @@ fn test_crossunit_external_value() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         Some(ValueId(0)),
@@ -1586,7 +1570,6 @@ fn test_crossunit_external_slot() {
         vec![IrType::I64],
         1,
         vec![IrType::I64],
-        0,
         vec![],
         vec![],
         None,
@@ -1612,7 +1595,6 @@ fn test_crossunit_external_slot() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         Some(ValueId(0)),
@@ -1669,7 +1651,6 @@ fn test_crossunit_external_function() {
         vec![],
         0,
         vec![],
-        0,
     );
 
     let unit0 = make_script_unit(
@@ -1683,7 +1664,6 @@ fn test_crossunit_external_function() {
         vec![],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -1701,7 +1681,6 @@ fn test_crossunit_external_function() {
                         value: ConstValue::I64(7),
                     },
                     Instruction::Call {
-                        site_id: CallSiteId(0),
                         dest: ValueId(1),
                         func: CodeRef::External { unit: 0, id: CodeUnitId(0) },
                         args: vec![Operand::Value(ValueId(0))],
@@ -1716,7 +1695,6 @@ fn test_crossunit_external_function() {
         vec![IrType::I64, IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         Some(ValueId(1)),
@@ -1771,7 +1749,6 @@ fn test_crossunit_chain() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -1797,7 +1774,6 @@ fn test_crossunit_chain() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -1823,7 +1799,6 @@ fn test_crossunit_chain() {
         vec![IrType::I64],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         Some(ValueId(0)),
@@ -1901,7 +1876,6 @@ fn test_list_with_explicit_drop() {
         vec![IrType::I64, IrType::I64, IrType::List(Box::new(IrType::I64))],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -1947,7 +1921,6 @@ fn test_script_with_function_and_list_drop() {
         vec![],
         0,
         vec![],
-        0,
     );
 
     // Script unit that defines the function and creates a list binding with explicit drop.
@@ -1974,7 +1947,6 @@ fn test_script_with_function_and_list_drop() {
                     Instruction::Const { dest: ValueId(5), value: ConstValue::I64(10) },
                     Instruction::Const { dest: ValueId(6), value: ConstValue::I64(20) },
                     Instruction::Call {
-                        site_id: CallSiteId(0),
                         dest: ValueId(7),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
@@ -1995,7 +1967,6 @@ fn test_script_with_function_and_list_drop() {
         ],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -2062,7 +2033,6 @@ fn test_multiple_explicit_drops() {
         ],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -2115,7 +2085,6 @@ fn test_ctfe_struct_with_string_destruction() {
         vec![struct_type],
         0,
         vec![],
-        0,
         vec![],
         vec![],
         None,
@@ -2166,7 +2135,6 @@ fn test_ctfe_struct_with_string_unit_end_destruction() {
         vec![struct_type],
         0,
         vec![],
-        0,
         vec![ValueId(0)],  // Struct is tracked for cleanup.
         vec![],
         None,
@@ -2219,7 +2187,6 @@ fn test_ctfe_struct_with_string_and_debuglog() {
         vec![struct_type],
         0,
         vec![],
-        0,
         vec![ValueId(0)],  // Struct is tracked for cleanup.
         vec![],
         None,
@@ -2267,7 +2234,6 @@ fn test_const_error() {
         vec![IrType::Error],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2310,7 +2276,6 @@ fn test_const_data() {
         vec![IrType::Data],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2357,7 +2322,6 @@ fn test_const_result_err() {
         vec![result_type],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2399,7 +2363,6 @@ fn test_const_data_with_string() {
         vec![IrType::Data],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2441,7 +2404,6 @@ fn test_const_error_with_i32() {
         vec![IrType::Error],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2489,7 +2451,6 @@ fn test_const_error_with_tuple() {
         vec![IrType::Error],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2537,7 +2498,6 @@ fn test_const_data_with_tuple() {
         vec![IrType::Data],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2583,7 +2543,6 @@ fn test_const_result_err_with_i32() {
         vec![result_type],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2625,7 +2584,6 @@ fn test_const_data_with_bool() {
         vec![IrType::Data],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2667,7 +2625,6 @@ fn test_const_error_with_unit() {
         vec![IrType::Error],
         0,
         vec![],
-        0,
         vec![ValueId(0)],
         vec![],
         None,
@@ -2766,7 +2723,6 @@ fn test_block_args_are_a_parallel_move() {
         ],
         0,
         vec![],
-        0,
     );
 
     let functions: Vec<IrCodeUnit> = vec![swap_once.clone()];

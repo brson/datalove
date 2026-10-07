@@ -21,7 +21,7 @@ Analysis(
                     fn main():
                     block0:
                         v0 = const 9999999999999999999int
-                        v1 = call @0 m0.u0(v0)
+                        v1 = call m0.u0(v0)
                         return v1
                 """,
             ),

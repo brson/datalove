@@ -18,7 +18,7 @@ Analysis(
                         v1 = const "world"
                         v2 = list [v0, v1]
                         v3 = const 5index
-                        v4 = call @0 u0(v2, v3)
+                        v4 = call u0(v2, v3)
                         debuglog v4
                         drop v4
                         unit_end

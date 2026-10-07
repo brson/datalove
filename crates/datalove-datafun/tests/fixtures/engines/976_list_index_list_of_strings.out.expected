@@ -21,7 +21,7 @@ Analysis(
                         v4 = list [v3]
                         v5 = list [v2, v4]
                         v6 = const 0index
-                        v7 = call @0 u0(v5, v6)
+                        v7 = call u0(v5, v6)
                         debuglog v7
                         drop v7
                         v8 = const "hello"
@@ -31,7 +31,7 @@ Analysis(
                         v12 = list [v11]
                         v13 = list [v10, v12]
                         v14 = const 1index
-                        v15 = call @1 u0(v13, v14)
+                        v15 = call u0(v13, v14)
                         debuglog v15
                         drop v15
                         v16 = const "hello"
@@ -41,7 +41,7 @@ Analysis(
                         v20 = list [v19]
                         v21 = list [v18, v20]
                         v22 = const 5index
-                        v23 = call @2 u0(v21, v22)
+                        v23 = call u0(v21, v22)
                         debuglog v23
                         drop v23
                         unit_end

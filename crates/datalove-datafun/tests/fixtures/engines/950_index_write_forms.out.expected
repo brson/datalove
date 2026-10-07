@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u2()
+                        v0 = call u2()
                         debuglog v0
                         drop v0
-                        v1 = call @1 u3()
+                        v1 = call u3()
                         debuglog v1
                         drop v1
                         unit_end
@@ -60,7 +60,7 @@ Analysis(
                         return v9
                     block4:
                         v10 = listelementref s0[v7]
-                        v11 = call @0 u0(*v10)
+                        v11 = call u0(*v10)
                         v12 = const 0index
                         v13 = listboundscheck s0[v12]
                         branch v13, block6, block5
@@ -80,7 +80,7 @@ Analysis(
                     block8:
                         v19 = listelementref s0[v16]
                         drop.ref v19
-                        v20 = call @1 u1(*v19)
+                        v20 = call u1(*v19)
                         v21 = const 0index
                         v22 = listboundscheck s0[v21]
                         branch v22, block10, block9
@@ -129,7 +129,7 @@ Analysis(
                         return v5
                     block2:
                         v6 = mapvalueref s0[v3]
-                        v7 = call @0 u0(*v6)
+                        v7 = call u0(*v6)
                         v8 = const 1u32
                         v9 = mapcontainskey s0[v8]
                         branch v9, block4, block3

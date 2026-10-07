@@ -95,13 +95,13 @@ Analysis(
                         v10 = const #{2int, 3int}
                         v14 = const {name = "ada", tags = ["x"]}
                         v17 = const enum Points([1int])
-                        v18 = call @0 u0()
-                        v19 = call @1 u1()
-                        v20 = call @2 u0()
-                        v21 = call @3 u2()
-                        v22 = call @4 u3()
-                        v23 = call @5 u4()
-                        v24 = call @6 u5()
+                        v18 = call u0()
+                        v19 = call u1()
+                        v20 = call u0()
+                        v21 = call u2()
+                        v22 = call u3()
+                        v23 = call u4()
+                        v24 = call u5()
                         v25 = pack Tuple7 {v18, v19, v20, v21, v22, v23, v24}
                         debuglog v25
                         unit_end_drop v2

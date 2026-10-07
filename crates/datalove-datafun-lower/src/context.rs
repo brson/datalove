@@ -11,7 +11,7 @@ use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
 use datalove_datafun_ir::{
     IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     CodeRef, CodeUnitId, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
-    ConstValue, TypeRef, SlotDest, CallSiteId,
+    ConstValue, TypeRef, SlotDest,
 };
 use crate::ir_ext::IrTypeExt;
 use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
@@ -54,8 +54,6 @@ pub struct FrameState<'db> {
     pub next_slot: u32,
     /// Next ParamId to allocate.
     pub next_param: u32,
-    /// Next CallSiteId to allocate.
-    pub next_call_site: u32,
     /// Mapping from variable names to their operands.
     pub variables: HashMap<String, Operand>,
     /// Stack of open name scopes, innermost last.
@@ -142,7 +140,6 @@ impl<'db> FrameState<'db> {
             next_value: 0,
             next_slot: 0,
             next_param: 0,
-            next_call_site: 0,
             variables: HashMap::new(),
             variable_scopes: Vec::new(),
             binding_to_operand: BTreeMap::new(),
@@ -1099,10 +1096,8 @@ impl<'db> LowerCtx<'db> {
         args: Vec<Operand>,
         type_args: Vec<datalove_datafun_ir::DescriptorShape>,
     ) {
-        let site_id = CallSiteId(self.body.next_call_site);
-        self.body.next_call_site += 1;
         self.emit(Instruction::Call {
-            site_id, dest, func, args, type_args,
+            dest, func, args, type_args,
             // Filled in once the shape sets have settled.
             shape_descriptors: Vec::new(),
         });

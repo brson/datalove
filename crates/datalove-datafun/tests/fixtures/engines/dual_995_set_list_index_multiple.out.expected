@@ -22,7 +22,7 @@ Analysis(
                         v5 = const 2index
                         v6 = const 99u32
                         v7 = const 77u32
-                        v8 = call @0 u0(v3, v4, v5, v6, v7)
+                        v8 = call u0(v3, v4, v5, v6, v7)
                         debuglog v8
                         drop v8
                         unit_end

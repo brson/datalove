@@ -14,7 +14,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u2()
+                        v0 = call u2()
                         debuglog v0
                         drop v0
                         unit_end
@@ -31,8 +31,8 @@ Analysis(
                     
                     fn test():
                     block0:
-                        v0 = call @0 u0()
-                        v1 = call @1 u1()
+                        v0 = call u0()
+                        v1 = call u1()
                         v2, v3 = unwrap_option v1
                         branch v3, block2, block1
                     block1:

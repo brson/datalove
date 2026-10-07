@@ -57,16 +57,16 @@ Analysis(
                         v2 = const 5int
                         v3 = const 10int
                         v4 = const 5int
-                        v5 = call @0 u0(v3, v4)
+                        v5 = call u0(v3, v4)
                         debuglog v5
                         v6 = const 2int
                         v7 = const 4int
                         v8 = const 1int
-                        v9 = call @1 u2(v6, v7, v8)
+                        v9 = call u2(v6, v7, v8)
                         debuglog v9
                         v10 = const 3int
                         v11 = const 7int
-                        v12 = call @2 u1(v10, v11)
+                        v12 = call u1(v10, v11)
                         debuglog v12
                         unit_end_drop v0
                         unit_end_drop v1

@@ -17,7 +17,7 @@ Analysis(
                         v0 = const 42int
                         store.move.tracked s0, v0
                         debuglog s0
-                        v1 = call @0 u0(s0)
+                        v1 = call u0(s0)
                         debuglog s0
                         unit_end_drop.tracked s0
                         unit_end

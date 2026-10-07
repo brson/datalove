@@ -74,22 +74,22 @@ Analysis(
                         v1 = const 10u32
                         v2 = %{v0: v1}
                         v3 = const 1u32
-                        v4 = call @0 m0.u0(v2, v3)
+                        v4 = call m0.u0(v2, v3)
                         v5 = const 1u32
                         v6 = const 10u32
                         v7 = %{v5: v6}
                         v8 = const 9u32
-                        v9 = call @1 m0.u1(v7, v8)
+                        v9 = call m0.u1(v7, v8)
                         v10 = const 2u32
                         v11 = const "two"
                         v12 = %{v10: v11}
                         v13 = const 2u32
-                        v14 = call @2 m0.u2(v12, v13)
+                        v14 = call m0.u2(v12, v13)
                         v15 = const "key"
                         v16 = const 42u32
                         v17 = %{v15: v16}
                         v18 = const "key"
-                        v19 = call @3 m0.u3(v17, v18)
+                        v19 = call m0.u3(v17, v18)
                         v20 = pack Tuple4 {v4, v9, v14, v19}
                         return v20
                 """,
@@ -110,7 +110,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u4()
+                        v0 = call m0.u4()
                         debuglog v0
                         drop v0
                         unit_end

@@ -28,7 +28,7 @@ Analysis(
                         v3 = const 1int
                         v4 = sub p0, v3
                         drop v3
-                        v5 = call @0 m0.u0(v4)
+                        v5 = call m0.u0(v4)
                         v6 = mul p0, v5
                         drop v5
                         drop p0
@@ -52,7 +52,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 5int
-                        v1 = call @0 m0.u0(v0)
+                        v1 = call m0.u0(v0)
                         debuglog v1
                         drop v1
                         unit_end

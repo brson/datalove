@@ -38,7 +38,7 @@ Analysis(
                         v1 = const 200u32
                         v2 = pack Tuple2 {v0, v1}
                         v3 = getfieldref v2.0
-                        v4 = call @0 m0.u0(*v3)
+                        v4 = call m0.u0(*v3)
                         debuglog v4
                         unit_end
                 """,

@@ -43,7 +43,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 unit0.u1()
+                        v0 = call unit0.u1()
                         unit_end v0
                 """,
             ),

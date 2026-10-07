@@ -996,7 +996,6 @@ pub struct ParamId(pub u32);    // Function parameter
 pub struct BlockId(pub u32);    // Control flow block
 pub struct FuncId(pub u32);     // Module-local function ID
 pub struct CodeUnitId(pub u32); // Code unit, local to its containing scope
-pub struct CallSiteId(pub u32); // Call site, unique within a code unit
 pub struct IrModuleId(pub u32); // Module index (not salsa ModuleId)
 ```
 
@@ -1054,7 +1053,6 @@ pub struct IrCodeUnit {
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
-    pub call_site_count: u32,
     pub value_types: Vec<IrType>,
     pub slot_types: Vec<IrType>,
     pub tracked_slots: Vec<SlotId>,

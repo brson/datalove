@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 2.5f64
                         v1 = const 4f64
-                        v2 = call @0 u0(v0, v1)
+                        v2 = call u0(v0, v1)
                         unit_end
                     
                     fn mul(p0, p1):

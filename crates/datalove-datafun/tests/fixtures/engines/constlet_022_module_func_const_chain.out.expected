@@ -70,7 +70,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u2()
+                        v0 = call m0.u2()
                         unit_end v0
                 """,
             ),

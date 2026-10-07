@@ -19,13 +19,13 @@ Analysis(
                     
                     fn outer(p0):
                     block0:
-                        v0 = call @0 m0.u0(p0)
+                        v0 = call m0.u0(p0)
                         return v0
                     
                     fn main():
                     block0:
                         v0 = const 100int
-                        v1 = call @0 m0.u1(v0)
+                        v1 = call m0.u1(v0)
                         drop v0
                         return v1
                 """,
@@ -46,7 +46,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u2()
+                        v0 = call m0.u2()
                         unit_end
                 """,
             ),

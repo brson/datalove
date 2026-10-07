@@ -47,7 +47,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const true
-                        v1 = call @0 unit0.u0(v0)
+                        v1 = call unit0.u0(v0)
                         unit_end v1
                 """,
             ),

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 100u32
                         v1 = const 0u32
-                        v2 = call @0 u0(v0, v1)
+                        v2 = call u0(v0, v1)
                         unit_end_drop v2
                         unit_end
                     

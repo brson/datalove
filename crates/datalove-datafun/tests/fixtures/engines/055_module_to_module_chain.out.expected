@@ -37,8 +37,8 @@ Analysis(
                 ir: """
                     fn add_two(p0):
                     block0:
-                        v0 = call @0 m0.u0(p0)
-                        v1 = call @1 m0.u0(v0)
+                        v0 = call m0.u0(p0)
+                        v1 = call m0.u0(v0)
                         return v1
                 """,
             ),
@@ -58,8 +58,8 @@ Analysis(
                 ir: """
                     fn add_four(p0):
                     block0:
-                        v0 = call @0 m1.u0(p0)
-                        v1 = call @1 m1.u0(v0)
+                        v0 = call m1.u0(p0)
+                        v1 = call m1.u0(v0)
                         return v1
                 """,
             ),
@@ -99,7 +99,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call @0 m2.u0(v0)
+                        v1 = call m2.u0(v0)
                         unit_end v1
                 """,
             ),

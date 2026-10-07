@@ -112,7 +112,6 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         blocks: ctx.body.blocks,
         value_count: ctx.body.next_value,
         slot_count: ctx.body.next_slot,
-        call_site_count: ctx.body.next_call_site,
         value_types: ctx.body.value_types,
         slot_types: ctx.body.slot_types,
         tracked_slots: Vec::new(),

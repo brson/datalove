@@ -14,10 +14,10 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 u0()
+                        v0 = call u0()
                         debuglog v0
                         drop v0
-                        v1 = call @1 u1()
+                        v1 = call u1()
                         debuglog v1
                         drop v1
                         unit_end

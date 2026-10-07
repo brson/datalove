@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const 100i64
                         v1 = const 50i64
-                        v2 = call @0 u0(v0, v1)
+                        v2 = call u0(v0, v1)
                         unit_end
                     
                     fn sub(p0, p1):

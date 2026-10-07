@@ -42,19 +42,19 @@ Analysis(
                     
                     fn use_last(p0):
                     block0:
-                        v1 = call @0 m0.u6(p0)
+                        v1 = call m0.u6(p0)
                         return v1
                     
                     fn use_two_const(p0):
                     block0:
-                        v2 = call @0 m0.u7(p0)
+                        v2 = call m0.u7(p0)
                         return v2
                     
                     fn use_interleaved(p0):
                     block0:
                         v2 = const 4int
                         v3 = const 1int
-                        v4 = call @0 m0.u8(p0, v2, v3)
+                        v4 = call m0.u8(p0, v2, v3)
                         return v4
                     
                     fn last__ct6(p0):
@@ -108,11 +108,11 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 10int
-                        v1 = call @0 m0.u3(v0)
+                        v1 = call m0.u3(v0)
                         v2 = const 10int
-                        v3 = call @1 m0.u4(v2)
+                        v3 = call m0.u4(v2)
                         v4 = const 2int
-                        v5 = call @2 m0.u5(v4)
+                        v5 = call m0.u5(v4)
                         debuglog v1
                         debuglog v3
                         debuglog v5

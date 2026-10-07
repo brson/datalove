@@ -359,7 +359,6 @@ impl AotCompiler {
             blocks: unit.blocks.clone(),
             value_count: unit.value_count,
             slot_count: unit.slot_count,
-            call_site_count: unit.call_site_count,
             value_types: unit.value_types.clone(),
             slot_types: unit.slot_types.clone(),
             tracked_slots: unit.tracked_slots.clone(),

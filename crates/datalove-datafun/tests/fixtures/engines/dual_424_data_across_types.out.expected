@@ -89,17 +89,17 @@ Analysis(
                         drop v38
                         v39 = const 7u32
                         v40 = data_from v39
-                        v41 = call @0 u0(v40)
+                        v41 = call u0(v40)
                         debuglog v41
                         drop v41
                         v42 = const true
                         v43 = data_from v42
-                        v44 = call @1 u1(v43)
+                        v44 = call u1(v43)
                         debuglog v44
                         drop v44
                         v45 = const 2.5f64
                         v46 = data_from v45
-                        v47 = call @2 u1(v46)
+                        v47 = call u1(v46)
                         debuglog v47
                         drop v47
                         v48 = const 1u32

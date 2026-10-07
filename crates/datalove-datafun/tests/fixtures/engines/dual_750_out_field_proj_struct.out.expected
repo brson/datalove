@@ -19,7 +19,7 @@ Analysis(
                         v2 = pack Struct0 {v0, v1}
                         store.copy s0, v2
                         v3 = getfieldref s0.0
-                        v4 = call @0 u0(*v3)
+                        v4 = call u0(*v3)
                         v5 = getfieldref s0.0
                         debuglog *v5
                         v6 = getfieldref s0.1

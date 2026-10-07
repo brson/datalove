@@ -28,7 +28,7 @@ Analysis(
                         v4 = const 1int
                         v5 = add s0, v4
                         drop v4
-                        v6 = call @0 u0(s0, v5)
+                        v6 = call u0(s0, v5)
                         v7 = const 1int
                         v8 = add s1, v7
                         drop v7

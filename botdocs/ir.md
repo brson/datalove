@@ -64,16 +64,12 @@ The crate is `crates/datalove-datafun-ir`, with four modules -- `layout`,
 | `ParamId(u32)` | Function parameter, a reference to the caller's data |
 | `BlockId(u32)` | Basic block |
 | `CodeUnitId(u32)` | Code unit, numbered within its containing scope |
-| `CallSiteId(u32)` | Call site, unique within a code unit |
 | `FuncId(u32)` | Module-local function, in the compiler's `FuncIdMap` |
 | `IrModuleId(u32)` | Module index; *not* salsa's `ModuleId` |
 
 `CodeUnitId` is the unified addressing scheme that replaced `FuncId` inside the
 IR. `FuncId` survives above it, in the compiler's map from `(ModuleId, name)` to
 `(IrModuleId, FuncId)`; where both appear they are numerically the same.
-
-`CallSiteId` numbers a code unit's call sites. Nothing reads it now that the
-dynamic inliner, which counted calls per site, is gone.
 
 `IrModuleId` is a plain number so that a module reference can be serialized.
 Salsa's `ModuleId` is a `#[salsa::input]`, so two `::new()` calls on the same
@@ -236,7 +232,6 @@ pub struct IrCodeUnit {
     pub blocks: Vec<IrBlock>,
     pub value_count: u32,
     pub slot_count: u32,
-    pub call_site_count: u32,
     pub value_types: Vec<IrType>,   // Indexed by ValueId
     pub slot_types: Vec<IrType>,    // Indexed by SlotId
     pub tracked_slots: Vec<SlotId>,
@@ -445,7 +440,7 @@ and the branch on that flag is what the source's `+!` and `+?` become.
 
 | Instruction | Printed |
 |---|---|
-| `Call { site_id, dest, func, args, type_args, shape_descriptors }` | `v0 = call @3 m1.u2(v1, v2)` |
+| `Call { dest, func, args, type_args, shape_descriptors }` | `v0 = call m1.u2(v1, v2)` |
 | `ComptimeCall { dest, func, args, discriminant, comptime_param_indices }` | `v0 = comptime_call u1(v1) [disc=2, comptime_params=[0]]` |
 
 Arguments are consumed or borrowed according to the callee's parameter modes.
@@ -950,8 +945,8 @@ All four agree with `ir::layout`.
 - **C backend** (`datalove-datafun-c-aot`) emits C and compiles it. The same
   program by a different route, which is why the `dual` fixtures run both.
 - **JIT** (`datalove-datafun-cranelift-jit`) compiles hot functions at run time.
-  The `OptimizingDispatcher` tracks call sites by `CallSiteId` and picks the
-  best available body.
+  The `OptimizingDispatcher` counts calls and runs compiled code once a
+  function is compiled.
 
 ## 15. Text and Serialized Forms
 
@@ -991,7 +986,7 @@ are the entry points, and the `ir_serial` fixtures round-trip a unit and then
 check that both the interpreter and the AOT backend produce the same output from
 the deserialized copy as from the original.
 
-Several fields carry `#[serde(default)]` -- `call_site_count`, `tracked_slots`,
+Several fields carry `#[serde(default)]` -- `tracked_slots`,
 `const_values`, `nested_units`, `tracked_params`, the descriptor fields, a
 collection's `descriptor`, and a script context's `unit_end_values`,
 `unit_end_slots`, `result_name` and `exports` -- so that an older serialization
@@ -1012,25 +1007,24 @@ assume.
    assignment, at block entry.
 4. `value_types` has `value_count` entries and is indexed by `ValueId`;
    `slot_types` has `slot_count` entries and is indexed by `SlotId`.
-5. Every `CallSiteId` in a unit is below `call_site_count` and appears once.
-6. A `Goto` or `Branch` passes exactly as many arguments as the target block
+5. A `Goto` or `Branch` passes exactly as many arguments as the target block
    declares parameters, of matching types.
-7. A linear value is consumed on every path, exactly once, either by an
+6. A linear value is consumed on every path, exactly once, either by an
    instruction that consumes it or by a `Drop`.
-8. A tracked destination is written only by a `Tracked` variant, and a precise
+7. A tracked destination is written only by a `Tracked` variant, and a precise
    one only by a precise variant.
-9. An access instruction that assumes a check -- `ListSet`, `MapSetValue`,
+8. An access instruction that assumes a check -- `ListSet`, `MapSetValue`,
    `MapValueRef`, `TensorSet`, and the element-reference forms -- is dominated
    by the matching check instruction and by the branch that acted on it.
-10. A `Reify` reads a `data` that a matching `DataFrom` or `Erase` wrote. It is
+9. A `Reify` reads a `data` that a matching `DataFrom` or `Erase` wrote. It is
     a move, and nothing verifies the type at run time.
-11. An enum's `variant_index` indexes the type's variants **sorted by name**.
-12. A `Table`'s columns are in written order, everywhere, in the type and in the
+10. An enum's `variant_index` indexes the type's variants **sorted by name**.
+11. A `Table`'s columns are in written order, everywhere, in the type and in the
     value alike.
-13. A collection instruction's `descriptor` is `Some` exactly when the
+12. A collection instruction's `descriptor` is `Some` exactly when the
     collection's element type is not concrete, and then indexes the enclosing
     function's `descriptor_shapes`.
-14. A `Call`'s `shape_descriptors` has one entry per shape the callee declared,
+13. A `Call`'s `shape_descriptors` has one entry per shape the callee declared,
     and is empty when the callee declared none.
 
 ## 17. Tests

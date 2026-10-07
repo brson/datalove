@@ -35,7 +35,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v2 = const {enabled = true, value = 42i32}
-                        v3 = call @0 u0()
+                        v3 = call u0()
                         debuglog v3
                         unit_end
                     

@@ -53,11 +53,11 @@ Analysis(
                         v1 = const 3int
                         v2 = const 5int
                         v3 = const 10int
-                        v4 = call @0 u0(v3)
+                        v4 = call u0(v3)
                         v5 = const 10int
-                        v6 = call @1 u1(v5)
+                        v6 = call u1(v5)
                         v7 = const 10int
-                        v8 = call @2 u2(v7)
+                        v8 = call u2(v7)
                         debuglog v4
                         debuglog v6
                         debuglog v8

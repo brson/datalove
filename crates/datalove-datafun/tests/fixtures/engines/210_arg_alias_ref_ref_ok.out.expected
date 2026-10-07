@@ -24,8 +24,8 @@ Analysis(
                     
                     fn outer(p0):
                     block0:
-                        v0 = call @0 m0.u0(p0, p0)
-                        v1 = call @1 m0.u1(p0, p0)
+                        v0 = call m0.u0(p0, p0)
+                        v1 = call m0.u1(p0, p0)
                         v2 = logic_and v1, v0
                         return v2
                 """,

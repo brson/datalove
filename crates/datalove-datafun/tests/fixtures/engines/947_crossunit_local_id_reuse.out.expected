@@ -26,7 +26,7 @@ Analysis(
                         branch v3, block2, block3
                     block2:
                         v4 = clone s0
-                        v5 = call @0 u1(v4)
+                        v5 = call u1(v4)
                         v6 = add s1, v5
                         drop v5
                         drop.tracked s1
@@ -53,7 +53,7 @@ Analysis(
                     
                     fn outer(p0):
                     block0:
-                        v0 = call @0 u0(p0)
+                        v0 = call u0(p0)
                         return v0
                 """,
             ),
@@ -75,7 +75,7 @@ Analysis(
                     scriptunit:
                     block0:
                         v0 = const 7int
-                        v1 = call @0 u1(v0)
+                        v1 = call u1(v0)
                         debuglog v1
                         unit_end_drop v1
                         unit_end

@@ -16,7 +16,7 @@ Analysis(
                     block0:
                         v0 = const "duplicate"
                         v1 = clone v0
-                        v2 = call @0 u0(v1, v0)
+                        v2 = call u0(v1, v0)
                         debuglog v2
                         unit_end_drop v2
                         unit_end

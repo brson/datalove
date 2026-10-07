@@ -25,7 +25,7 @@ Analysis(
                         v8 = pack Struct0 {v6, v7}
                         v9 = list [v2, v5, v8]
                         v10 = const 0index
-                        v11 = call @0 u0(v9, v10)
+                        v11 = call u0(v9, v10)
                         debuglog v11
                         v12 = const 1u32
                         v13 = const 2u32
@@ -38,7 +38,7 @@ Analysis(
                         v20 = pack Struct0 {v18, v19}
                         v21 = list [v14, v17, v20]
                         v22 = const 2index
-                        v23 = call @1 u0(v21, v22)
+                        v23 = call u0(v21, v22)
                         debuglog v23
                         v24 = const 1u32
                         v25 = const 2u32
@@ -51,7 +51,7 @@ Analysis(
                         v32 = pack Struct0 {v30, v31}
                         v33 = list [v26, v29, v32]
                         v34 = const 5index
-                        v35 = call @2 u0(v33, v34)
+                        v35 = call u0(v33, v34)
                         debuglog v35
                         unit_end
                     

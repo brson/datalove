@@ -31,7 +31,7 @@ Analysis(
                         v9 = err v8
                         return v9
                     block4:
-                        v10 = call @0 m0.u1(v5)
+                        v10 = call m0.u1(v5)
                         return v10
                     
                     fn is_odd(p0):
@@ -53,13 +53,13 @@ Analysis(
                         v9 = err v8
                         return v9
                     block4:
-                        v10 = call @0 m0.u0(v5)
+                        v10 = call m0.u0(v5)
                         return v10
                     
                     fn main():
                     block0:
                         v0 = const 6u32
-                        v1 = call @0 m0.u0(v0)
+                        v1 = call m0.u0(v0)
                         return v1
                 """,
             ),
@@ -79,7 +79,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u2()
+                        v0 = call m0.u2()
                         debuglog v0
                         drop v0
                         unit_end

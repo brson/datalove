@@ -19,7 +19,7 @@ Analysis(
                         v2 = const 30u32
                         v3 = list [v0, v1, v2]
                         v4 = const 2index
-                        v5 = call @0 u1(v3, v4)
+                        v5 = call u1(v3, v4)
                         debuglog v5
                         drop v5
                         v6 = const 10u32
@@ -27,7 +27,7 @@ Analysis(
                         v8 = const 30u32
                         v9 = list [v6, v7, v8]
                         v10 = const 5index
-                        v11 = call @1 u1(v9, v10)
+                        v11 = call u1(v9, v10)
                         debuglog v11
                         drop v11
                         unit_end
@@ -50,7 +50,7 @@ Analysis(
                         return v3
                     block2:
                         v4 = listelementref p0[p1]
-                        v5 = call @0 u0(*v4)
+                        v5 = call u0(*v4)
                         drop p0
                         return v5
                 """,

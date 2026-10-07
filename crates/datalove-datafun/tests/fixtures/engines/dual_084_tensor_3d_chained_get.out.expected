@@ -26,7 +26,7 @@ Analysis(
                         v9 = const 0index
                         v10 = const 1index
                         v11 = const 0index
-                        v12 = call @0 u0(v8, v9, v10, v11)
+                        v12 = call u0(v8, v9, v10, v11)
                         debuglog v12
                         v13 = const 1u32
                         v14 = const 2u32
@@ -40,7 +40,7 @@ Analysis(
                         v22 = const 1index
                         v23 = const 0index
                         v24 = const 1index
-                        v25 = call @1 u0(v21, v22, v23, v24)
+                        v25 = call u0(v21, v22, v23, v24)
                         debuglog v25
                         unit_end
                     

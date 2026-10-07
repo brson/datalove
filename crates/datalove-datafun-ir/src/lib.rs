@@ -46,12 +46,6 @@ pub struct BlockId(pub u32);
 #[derive(salsa::SalsaValue)]
 pub struct FuncId(pub u32);
 
-/// Call site identifier, unique within a function.
-///
-/// Used for stable tracking of call sites across IR transformations like inlining.
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
-pub struct CallSiteId(pub u32);
-
 /// Module identifier for IR.
 ///
 /// Serializable numeric ID, unlike salsa's ModuleId.
@@ -1262,7 +1256,6 @@ pub enum Instruction {
     ///
     /// **Ownership:** Args consumed per param mode (In consumes, Ref/Mut/Out borrow).
     Call {
-        site_id: CallSiteId,
         dest: ValueId,
         func: CodeRef,
         args: Vec<Operand>,
@@ -2945,9 +2938,6 @@ pub struct IrCodeUnit {
     pub value_count: u32,
     /// Number of mutable slots.
     pub slot_count: u32,
-    /// Number of call sites.
-    #[serde(default)]
-    pub call_site_count: u32,
     /// Type for each value.
     pub value_types: Vec<IrType>,
     /// Type for each slot.
@@ -3031,7 +3021,6 @@ impl IrCodeUnit {
             blocks: Vec::new(),
             value_count: 0,
             slot_count: 0,
-            call_site_count: 0,
             value_types: Vec::new(),
             slot_types: Vec::new(),
             tracked_slots: Vec::new(),

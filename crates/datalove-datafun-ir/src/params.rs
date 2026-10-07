@@ -112,9 +112,8 @@ pub fn map_operands_in_instruction(
         // The descriptors say what the callee's type parameters were bound to,
         // which no operand substitution changes. Blanking them would drop what
         // a generic callee needs wherever nothing recomputes them afterwards.
-        Instruction::Call { site_id, dest, func, args, type_args, shape_descriptors } =>
+        Instruction::Call { dest, func, args, type_args, shape_descriptors } =>
             Instruction::Call {
-                site_id: *site_id,
                 dest: *dest,
                 func: func.clone(),
                 args: args.iter().map(replace_operand).collect(),

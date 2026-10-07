@@ -23,7 +23,7 @@ Analysis(
                     block0:
                         v0 = const 5u32
                         store.copy s0, v0
-                        v1 = call @0 m0.u0(s0)
+                        v1 = call m0.u0(s0)
                         v2 = load.copy s0
                         return v2
                 """,
@@ -63,7 +63,7 @@ Analysis(
                 ir: """
                     scriptunit:
                     block0:
-                        v0 = call @0 m0.u1()
+                        v0 = call m0.u1()
                         unit_end v0
                 """,
             ),

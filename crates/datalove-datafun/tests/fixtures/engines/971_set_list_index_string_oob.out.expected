@@ -19,7 +19,7 @@ Analysis(
                         v2 = list [v0, v1]
                         v3 = const 5index
                         v4 = const "gone"
-                        v5 = call @0 u0(v2, v3, v4)
+                        v5 = call u0(v2, v3, v4)
                         debuglog v5
                         drop v5
                         unit_end

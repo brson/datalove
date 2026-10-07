@@ -17,29 +17,29 @@ Analysis(
                         v0 = const 100offset
                         v1 = const 50offset
                         v2 = const -25offset
-                        v3 = call @0 u1(v0, v1)
+                        v3 = call u1(v0, v1)
                         v4 = const 999offset
-                        v5 = call @1 u0(v3, v4)
+                        v5 = call u0(v3, v4)
                         debuglog v5
-                        v6 = call @2 u2(v0, v1)
+                        v6 = call u2(v0, v1)
                         v7 = const 999offset
-                        v8 = call @3 u0(v6, v7)
+                        v8 = call u0(v6, v7)
                         debuglog v8
-                        v9 = call @4 u3(v0, v1)
+                        v9 = call u3(v0, v1)
                         v10 = const 999offset
-                        v11 = call @5 u0(v9, v10)
+                        v11 = call u0(v9, v10)
                         debuglog v11
-                        v12 = call @6 u4(v0, v1)
+                        v12 = call u4(v0, v1)
                         v13 = const 999offset
-                        v14 = call @7 u0(v12, v13)
+                        v14 = call u0(v12, v13)
                         debuglog v14
-                        v15 = call @8 u1(v0, v2)
+                        v15 = call u1(v0, v2)
                         v16 = const 999offset
-                        v17 = call @9 u0(v15, v16)
+                        v17 = call u0(v15, v16)
                         debuglog v17
-                        v18 = call @10 u3(v2, v1)
+                        v18 = call u3(v2, v1)
                         v19 = const 999offset
-                        v20 = call @11 u0(v18, v19)
+                        v20 = call u0(v18, v19)
                         debuglog v20
                         unit_end
                     
