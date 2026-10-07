@@ -65,9 +65,7 @@ and syntax of Datalove in general.
     retries = 3,
     timeout = 30.0,
   },
-  metrics_table = : {|
-    name: string, value: f64
-  |} / {|
+  metrics_table = {|
     name, value
     "latency", 0.5
     "throughput", 1000.0
