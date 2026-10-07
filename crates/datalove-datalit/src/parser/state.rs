@@ -1,6 +1,9 @@
 //! Parser state and helper methods.
 
 use rmx::prelude::*;
+use std::cell::RefCell;
+use std::rc::Rc;
+use rustc_hash::FxHashMap;
 
 use bct::{
     lexer::TokenKind,
@@ -34,6 +37,13 @@ enum TokenSource<'db> {
     },
 }
 
+/// Text interned during one parse, shared by a parser and the sub-parsers it
+/// makes for branches.
+///
+/// A data file says the same field names and small numbers over and over, and
+/// salsa hashes and probes its map for every occurrence it is asked to intern.
+type Interned<'db> = Rc<RefCell<FxHashMap<&'db str, InternedText<'db>>>>;
+
 /// Parser state for datalit parsing.
 pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
@@ -49,6 +59,9 @@ pub(super) struct Parser<'db> {
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
+    /// The same text as a string, which the tokens' spans index.
+    text: &'db str,
+    interned: Interned<'db>,
 }
 
 impl<'db> Parser<'db> {
@@ -63,6 +76,8 @@ impl<'db> Parser<'db> {
             alias_spans: Vec::new(),
             had_error: false,
             source_text,
+            text: source_text.as_str(db),
+            interned: Interned::default(),
         }
     }
 
@@ -95,6 +110,8 @@ impl<'db> Parser<'db> {
             alias_spans: Vec::new(),
             had_error: false,
             source_text,
+            text: source_text.as_str(db),
+            interned: Interned::default(),
         };
         parser.fill_iter_buffer();
         parser
@@ -144,6 +161,7 @@ impl<'db> Parser<'db> {
     pub(super) fn sub_parser_from_branch(&self, iter: BracerIter<'db>) -> Self {
         let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         sub.expr_counter = self.expr_counter;
+        sub.interned = Rc::clone(&self.interned);
         sub
     }
 
@@ -151,6 +169,7 @@ impl<'db> Parser<'db> {
     pub(super) fn sub_parser_from_tokens(&self, tokens: Vec<TreeToken<'db>>) -> Self {
         let mut sub = Parser::new(self.db, tokens, self.source_text());
         sub.expr_counter = self.expr_counter;
+        sub.interned = Rc::clone(&self.interned);
         sub
     }
 
@@ -213,7 +232,7 @@ impl<'db> Parser<'db> {
     pub(super) fn parse_u32_literal(&mut self) -> Option<u32> {
         match self.peek() {
             Some(TreeToken::Token(tok)) => {
-                if let Some(word) = tok.word_str(self.db) {
+                if let Some(word) = tok.word_str(self.text) {
                     if let Ok(value) = word.parse::<u32>() {
                         self.next();
                         return Some(value);
@@ -309,5 +328,14 @@ impl<'db> TokenStream<'db> for Parser<'db> {
 
     fn source_text(&self) -> bct::text::Text<'db> {
         self.source_text
+    }
+
+    fn text(&self) -> &'db str {
+        self.text
+    }
+
+    fn intern(&mut self, text: &'db str) -> InternedText<'db> {
+        let db = self.db;
+        *self.interned.borrow_mut().entry(text).or_insert_with(|| InternedText::new(db, text))
     }
 }

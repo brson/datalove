@@ -86,7 +86,11 @@ impl<'db> Parser<'db> {
             return self.emit_expr_error(ts, &message, "D019", &label);
         }
 
-        let value = InternedText::new(self.db, number.text());
+        // A number written well is written as it reads, so its text is what
+        // the source says over its span.
+        let text = &self.text()[number.span.C()];
+        debug_assert_eq!(text, number.text());
+        let value = self.intern(text);
         match (number.radix, number.float) {
             (parser_util::Radix::Hex, _) => ast::Expr::Hex(ast::ExprHex { value }),
             (parser_util::Radix::Dec, true) => ast::Expr::Float(ast::ExprFloat { value }),
@@ -105,7 +109,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let before_hex = self.glued_right() && matches!(
                 self.peek_next(),
-                Some(TreeToken::Token(tok)) if tok.word_str(self.db).is_some_and(parser_util::is_hex_word)
+                Some(TreeToken::Token(tok)) if tok.word_str(self.text()).is_some_and(parser_util::is_hex_word)
             );
             self.next();
             if before_hex {
@@ -216,7 +220,7 @@ impl<'db> Parser<'db> {
                         // A word beginning with a digit was read as a number
                         // above, so whatever is left is a name, and datalit
                         // has nothing for one to mean.
-                        let word = token.word_str(self.db).X();
+                        let word = token.word_str(self.text()).X();
                         let ts = self.peek_text_span();
                         self.next();
                         self.emit_expr_error(ts,
@@ -228,12 +232,12 @@ impl<'db> Parser<'db> {
                     TokenKind::String => {
                         let ts = self.peek_text_span();
                         self.next();
-                        let raw = token.text.as_str(self.db);
+                        let raw = token.text(self.text());
                         if let Err(error) = parser_util::string_literal_value(raw) {
                             let (message, label) = parser_util::escape_complaint(&error);
                             return self.emit_expr_error(ts, &message, "D039", &label);
                         }
-                        let value = InternedText::new(self.db, raw.S());
+                        let value = self.intern(raw);
                         ast::Expr::String(ast::ExprString { value })
                     }
                     _ => {
@@ -427,7 +431,7 @@ impl<'db> Parser<'db> {
             .filter_map(|t| t.without_space())
             .collect();
 
-        let (header, body) = split::split_tensor_header(self.db, tokens_no_ws);
+        let (header, body) = split::split_tensor_header(self.text(), tokens_no_ws);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),
@@ -525,7 +529,7 @@ impl<'db> Parser<'db> {
 
     fn parse_table_expr(&mut self, iter: bct::bracer::BracerIter<'db>) -> ast::Expr<'db> {
         // Split by row delimiters (newline in whitespace, or semicolon).
-        let groups = split::split_lines(self.db, iter);
+        let groups = split::split_lines(self.text(), iter);
         self.report_stray_delimiters(&groups, "rows");
         let rows = split::nonempty_groups(groups);
 
@@ -607,7 +611,7 @@ impl<'db> Parser<'db> {
     /// The word a header cell begins with, if it begins with one.
     fn cell_word(&self, token: &TreeToken<'db>) -> Option<&'db str> {
         match token {
-            TreeToken::Token(tok) => tok.word_str(self.db),
+            TreeToken::Token(tok) => tok.word_str(self.text()),
             TreeToken::Branch { .. } => None,
         }
     }

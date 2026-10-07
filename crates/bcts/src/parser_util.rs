@@ -36,6 +36,18 @@ pub trait TokenStream<'db> {
 
     /// Get the source Text for error reporting when no current token.
     fn source_text(&self) -> crate::text::Text<'db>;
+
+    /// The text of the chunk the tokens were lexed from, which their spans
+    /// index.
+    fn text(&self) -> &'db str;
+
+    /// Intern some of that text.
+    ///
+    /// A stream that sees the same names many times can remember what it has
+    /// interned; salsa hashes and probes its map for each one it is asked.
+    fn intern(&mut self, text: &'db str) -> InternedText<'db> {
+        InternedText::new(self.db(), text)
+    }
 }
 
 /// Extension trait providing shared parsing methods.
@@ -66,7 +78,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     /// Peek at the current token if it's a word, returning the word string.
     fn peek_word(&self) -> Option<&'db str> {
         match self.peek() {
-            Some(TreeToken::Token(token)) => token.word_str(self.db()),
+            Some(TreeToken::Token(token)) => token.word_str(self.text()),
             _ => None,
         }
     }
@@ -103,10 +115,10 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
             return None;
         }
         match self.next() {
-            // The lexer interned this text already, and `InternedText` is keyed
-            // on its string, so reading it back out as a `&str` and interning a
-            // fresh `String` of it allocated its way to the value in hand.
-            Some(TreeToken::Token(token)) => Some(token.text),
+            Some(TreeToken::Token(token)) => {
+                let text = token.text(self.text());
+                Some(self.intern(text))
+            }
             // `peek_word` just said the token at the cursor is a word.
             _ => bug!(),
         }
@@ -343,20 +355,20 @@ impl Number {
 /// digits; whether it is ever offered one is the grammar's business, since a
 /// language with a prefix operator claims it before reaching here.
 pub fn eat_number<'db, S: TokenStreamExt<'db>>(stream: &mut S) -> Option<Number> {
-    let db = stream.db();
+    let text = stream.text();
 
     // A hex literal is a bit pattern and takes no sign, so a `-` against one
     // is left for the caller: an operator where the language has one.
     let negative = stream.peek_sigil(Sigil::Minus)
         && stream.glued_right()
         && stream.peek_next()
-            .and_then(|token| number_word(token, db))
+            .and_then(|token| number_word(token, text))
             .is_some_and(|word| !is_hex_word(word));
 
     // Decided before anything is consumed, so that a `-` that turns out not
     // to be a sign is left where the caller can read it as an operator.
     let word_token = if negative { stream.peek_next() } else { stream.peek() }?.clone();
-    let word = number_word(&word_token, db)?.S();
+    let word = number_word(&word_token, text)?.S();
     let start = stream.peek()?.span().start;
 
     if negative {
@@ -449,7 +461,7 @@ fn read_fraction<'db, S: TokenStreamExt<'db>>(stream: &mut S, number: &mut Numbe
     );
     let next_is_number = stream
         .peek_next()
-        .and_then(|token| number_word(token, stream.db()))
+        .and_then(|token| number_word(token, stream.text()))
         .is_some();
 
     if !next_is_word {
@@ -505,11 +517,11 @@ fn split_suffix(word: &str, is_digit: impl Fn(char) -> bool) -> (&str, Option<St
 }
 
 /// The text of a word that begins with a digit, which is a number attempt.
-fn number_word<'db>(token: &TreeToken<'db>, db: &'db dyn crate::Db) -> Option<&'db str> {
+fn number_word<'a>(token: &TreeToken<'_>, chunk_text: &'a str) -> Option<&'a str> {
     let TreeToken::Token(token) = token else {
         return None;
     };
-    let word = token.word_str(db)?;
+    let word = token.word_str(chunk_text)?;
     is_number_word(word).then_some(word)
 }
 
@@ -729,6 +741,10 @@ mod tests {
 
         fn source_text(&self) -> Text<'db> {
             self.text
+        }
+
+        fn text(&self) -> &'db str {
+            self.text.as_str(self.db)
         }
     }
 

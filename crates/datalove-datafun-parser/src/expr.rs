@@ -423,7 +423,7 @@ impl<'db> Parser<'db> {
                 match token.kind {
                     // Keyword operators (logical).
                     TokenKind::Word => {
-                        match token.word_str(self.db) {
+                        match token.word_str(self.text()) {
                             Some("and") => Some(ast::BinOp::And),
                             Some("or") => Some(ast::BinOp::Or),
                             Some("xor") => Some(ast::BinOp::Xor),
@@ -511,7 +511,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 TokenKind::Sigil(Sigil::MinusQuestion) => Some(ast::UnaryOp::NegOptional),
                 TokenKind::Sigil(Sigil::MinusExclamation) => Some(ast::UnaryOp::NegResult),
                 TokenKind::Word => {
-                    match token.word_str(self.db) {
+                    match token.word_str(self.text()) {
                         Some("not") => Some(ast::UnaryOp::Not),
                         _ => None,
                     }
@@ -543,7 +543,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 // If it's a word token, check if it's a datalit keyword or a datafun name.
                 match token.kind {
                     TokenKind::Word => {
-                        if let Some(word) = token.word_str(self.db) {
+                        if let Some(word) = token.word_str(self.text()) {
                             // Check against datalit keywords - use new inline variants.
                             match word {
                                 // Standalone literals - always keywords.
@@ -657,7 +657,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     // Parse intrinsic name.
                                     let intrinsic_name = match self.peek() {
                                         Some(TreeToken::Token(tok)) if tok.kind == TokenKind::Word => {
-                                            let name = tok.word_str(self.db).unwrap_or("");
+                                            let name = tok.word_str(self.text()).unwrap_or("");
                                             self.next(); // consume the name
                                             InternedText::new(self.db, name.to_string())
                                         }
@@ -762,7 +762,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                         }
                     }
                     TokenKind::String => {
-                        let raw = token.text.as_str(self.db);
+                        let raw = token.text(self.text());
                         let ts = self.peek_text_span();
                         self.next();
                         if let Err(error) = parser_util::string_literal_value(raw) {
@@ -844,7 +844,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
         if t.kind != TokenKind::Word {
             return None;
         }
-        let mode = match t.word_str(self.db)? {
+        let mode = match t.word_str(self.text())? {
             "ref" => ast::ParamMode::Ref,
             "mut" => ast::ParamMode::Mut,
             "out" => ast::ParamMode::Out,

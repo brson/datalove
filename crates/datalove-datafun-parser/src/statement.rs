@@ -71,7 +71,7 @@ impl<'db> Parser<'db> {
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         if let Some(TreeToken::Token(first)) = line.first() {
-            if let Some(word @ ("require" | "import")) = first.word_str(self.db) {
+            if let Some(word @ ("require" | "import")) = first.word_str(self.text()) {
                 self.had_error = true;
                 let ts = self.extract_text_span(&line[0]);
                 DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
@@ -999,7 +999,7 @@ impl<'db> Parser<'db> {
             }
 
             if let Some(TreeToken::Token(t1)) = line.get(0) {
-                if let Some("else") = t1.word_str(self.db) {
+                if let Some("else") = t1.word_str(self.text()) {
                     found_else = true;
                     break;
                 }
@@ -1312,7 +1312,7 @@ impl<'db> Parser<'db> {
 
             // Check for "case" line.
             if let Some(TreeToken::Token(t1)) = line.get(0) {
-                if let Some("case") = t1.word_str(self.db) {
+                if let Some("case") = t1.word_str(self.text()) {
                     let (_, case_line) = remaining_lines.next().X();
                     let mut case_sub = self.new_sub(case_line);
                     case_sub.eat_word("case");
@@ -1447,7 +1447,7 @@ impl<'db> Parser<'db> {
             }
             // Check for next "case".
             if let Some(TreeToken::Token(t1)) = line.get(0) {
-                if let Some("case") = t1.word_str(self.db) {
+                if let Some("case") = t1.word_str(self.text()) {
                     break;
                 }
             }

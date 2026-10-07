@@ -90,13 +90,13 @@ impl<'db> Parser<'db> {
             return self.glued_right() && matches!(
                 self.peek_next(),
                 Some(TreeToken::Token(next))
-                    if next.word_str(self.db).is_some_and(|w| Self::is_number_word(w) && !parser_util::is_hex_word(w))
+                    if next.word_str(self.text()).is_some_and(|w| Self::is_number_word(w) && !parser_util::is_hex_word(w))
             );
         }
         if token.kind != TokenKind::Word {
             return true;
         }
-        let Some(word) = token.word_str(self.db) else {
+        let Some(word) = token.word_str(self.text()) else {
             return true;
         };
         if Self::is_number_word(word) {
@@ -227,7 +227,7 @@ impl<'db> Parser<'db> {
                     TokenKind::Word => {
                         // A word beginning with a digit was read as a number
                         // above, so whatever is left here is a name.
-                        let word = token.word_str(self.db).X();
+                        let word = token.word_str(self.text()).X();
                         let ts = self.peek_text_span();
                         self.next();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
@@ -237,7 +237,7 @@ impl<'db> Parser<'db> {
                         });
                     }
                     TokenKind::String => {
-                        let raw = token.text.as_str(self.db);
+                        let raw = token.text(self.text());
                         let ts = self.peek_text_span();
                         self.next();
                         if let Err(error) = parser_util::string_literal_value(raw) {
@@ -438,7 +438,7 @@ impl<'db> Parser<'db> {
             .filter_map(|t| t.without_space())
             .collect();
 
-        let (header, body) = split::split_tensor_header(self.db, tokens_no_ws);
+        let (header, body) = split::split_tensor_header(self.text(), tokens_no_ws);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),
@@ -555,7 +555,7 @@ impl<'db> Parser<'db> {
         iter: BracerIter<'db>,
     ) -> ast::ExprFunKind<'db> {
         // Split by row delimiters (newline in whitespace, or semicolon).
-        let groups = split::split_lines(self.db, iter);
+        let groups = split::split_lines(self.text(), iter);
         self.report_stray_delimiters(&groups, "rows");
         let rows = split::nonempty_groups(groups);
 
@@ -638,7 +638,7 @@ impl<'db> Parser<'db> {
     /// The word a header cell begins with, if it begins with one.
     fn cell_word(&self, token: &TreeToken<'db>) -> Option<&'db str> {
         match token {
-            TreeToken::Token(tok) => tok.word_str(self.db),
+            TreeToken::Token(tok) => tok.word_str(self.text()),
             TreeToken::Branch { .. } => None,
         }
     }

@@ -58,7 +58,7 @@ impl Written {
 
 /// Split on line delimiters: a newline inside whitespace, or `;`.
 pub fn split_lines<'db>(
-    db: &'db dyn crate::Db,
+    chunk_text: &str,
     tokens: impl IntoIterator<Item = TreeToken<'db>>,
 ) -> Vec<TokenGroup<'db>> {
     let mut groups = vec![];
@@ -67,7 +67,7 @@ pub fn split_lines<'db>(
     for token in tokens {
         let delimiter = match &token {
             TreeToken::Token(t) => match t.kind {
-                TokenKind::Whitespace if t.text.as_str(db).contains('\n') => {
+                TokenKind::Whitespace if t.text(chunk_text).contains('\n') => {
                     Some(Delimiter::Newline)
                 }
                 TokenKind::Sigil(sigil @ Sigil::Semicolon) => Some(Delimiter::Written(Written {
@@ -262,7 +262,7 @@ pub struct TensorHeaderError {
 /// before the first `|` is the header: whole numbers, one per axis, of which
 /// there has to be at least one, since a tensor has at least one axis.
 pub fn split_tensor_header<'db>(
-    db: &'db dyn crate::Db,
+    chunk_text: &str,
     tokens: Vec<TreeToken<'db>>,
 ) -> (Option<Result<TensorHeader, TensorHeaderError>>, Vec<TreeToken<'db>>) {
     let is_pipe = |t: &TreeToken<'db>| {
@@ -289,7 +289,7 @@ pub fn split_tensor_header<'db>(
     let mut extents = vec![];
     for token in &header {
         let extent = match token {
-            TreeToken::Token(t) => t.word_str(db)
+            TreeToken::Token(t) => t.word_str(chunk_text)
                 .filter(|w| crate::parser_util::is_decimal_run(w))
                 .and_then(|w| crate::parser_util::strip_separators(w).parse::<u32>().ok()),
             TreeToken::Branch { .. } => None,
@@ -333,7 +333,7 @@ fn shape<'db>(groups: &[TokenGroup<'db>]) -> (Vec<usize>, Vec<String>) {
 
 #[cfg(test)]
 fn line_shape(db: &crate::Database, text: &str) -> (Vec<usize>, Vec<String>) {
-    shape(&split_lines(db, tree_tokens(db, text)))
+    shape(&split_lines(text, tree_tokens(db, text)))
 }
 
 #[test]

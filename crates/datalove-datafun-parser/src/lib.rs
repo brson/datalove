@@ -142,7 +142,7 @@ fn parse_bracer<'db>(
 ) -> ast::ParseResult<'db> {
     // Split into lines. A newline inside balanced braces is not a line break,
     // since the bracer has already put it inside a branch.
-    let groups = split::split_lines(db, bracer.iter(db));
+    let groups = split::split_lines(source_text.as_str(db), bracer.iter(db));
 
     // A `;` separates two statements, so one with nothing before it separates
     // nothing. A blank line is not the same thing and is left alone.

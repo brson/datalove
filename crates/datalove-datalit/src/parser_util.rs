@@ -51,7 +51,7 @@ pub fn escape_complaint(error: &bct::escapes::EscapeError) -> (String, String) {
 /// languages read their names through this, so they say the same thing about
 /// a repeated one.
 #[derive(Default)]
-pub struct SeenNames<'db>(rmx::std::collections::HashSet<bct::text::InternedText<'db>>);
+pub struct SeenNames<'db>(rustc_hash::FxHashSet<bct::text::InternedText<'db>>);
 
 impl<'db> SeenNames<'db> {
     /// Take a name, reporting it if it was taken already. False if it was.

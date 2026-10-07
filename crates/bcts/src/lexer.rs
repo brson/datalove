@@ -3,7 +3,6 @@ use rmx::prelude::*;
 use rmx::std::ops::Range;
 use rmx::std::{iter, mem};
 
-use crate::text::InternedText;
 use crate::chunk::{Chunk, RangeKind};
 
 #[cfg(test)]
@@ -16,7 +15,7 @@ pub struct ChunkLex<'db> {
     #[returns(copy)]
     pub chunk: Chunk<'db>,
     #[returns(ref)]
-    pub tokens: Vec<Token<'db>>,
+    pub tokens: Vec<Token>,
 }
 
 /// The tokens are values in a `Vec`, so they are heap, not fields.
@@ -24,8 +23,8 @@ pub struct ChunkLex<'db> {
 /// Without this salsa's memory reporting would show the tokens costing nothing,
 /// since it measures fields by their stack size and a `Vec` is three words
 /// whatever it holds.
-fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token<'db>>)) -> usize {
-    fields.1.capacity() * mem::size_of::<Token<'db>>()
+fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token>)) -> usize {
+    fields.1.capacity() * mem::size_of::<Token>()
 }
 
 /// One lexed token.
@@ -35,8 +34,7 @@ fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token<'db>>)) -> usize {
 /// and page slot each one used to carry paid for nothing.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct Token<'db> {
-    pub text: InternedText<'db>,
+pub struct Token {
     pub span: Range<usize>,
     pub kind: TokenKind,
 }
@@ -181,60 +179,6 @@ fn sigil_table() -> &'static SigilTable {
     TABLE.get_or_init(SigilTable::build)
 }
 
-/// Interning a chunk's token texts, remembering what it has already interned.
-///
-/// Most of a chunk's tokens are whitespace and punctuation, and between them they
-/// hold a few dozen distinct strings: of the standard library's 61,952 tokens,
-/// 14,597 are sigils drawn from at most seventy-one spellings and 23,623 are
-/// whitespace runs drawn from the handful a formatter emits. Salsa deduplicates
-/// them, but only after hashing each occurrence and probing a sharded concurrent
-/// map, so asking it 38,220 times to be told one of eighty answers was most of the
-/// interning cost.
-///
-/// A sigil needs no hashing at all, the token kind already saying which one it is.
-/// Everything else is looked up by the slice it came from, which costs a hash but
-/// not salsa's map, and reaches salsa once per distinct string per chunk.
-struct Interner<'db> {
-    db: &'db dyn crate::Db,
-    text: &'db str,
-    seen: rustc_hash::FxHashMap<&'db str, InternedText<'db>>,
-    /// Indexed by `Sigil as usize`, which is its declaration order.
-    sigils: Vec<Option<InternedText<'db>>>,
-}
-
-impl<'db> Interner<'db> {
-    fn new(db: &'db dyn crate::Db, text: &'db str) -> Self {
-        Self {
-            db,
-            text,
-            seen: rustc_hash::FxHashMap::default(),
-            sigils: vec![None; enum_iterator::cardinality::<Sigil>()],
-        }
-    }
-
-    /// The interned text of `range`.
-    fn intern(&mut self, range: Range<usize>) -> InternedText<'db> {
-        let slice = &self.text[range];
-        if let Some(interned) = self.seen.get(slice) {
-            return *interned;
-        }
-        let interned = InternedText::new(self.db, slice);
-        self.seen.insert(slice, interned);
-        interned
-    }
-
-    /// The interned text of a sigil, which is the sigil's own spelling.
-    fn intern_sigil(&mut self, sigil: Sigil) -> InternedText<'db> {
-        let slot = sigil as usize;
-        if let Some(interned) = self.sigils[slot] {
-            return interned;
-        }
-        let interned = InternedText::new(self.db, sigil.as_str());
-        self.sigils[slot] = Some(interned);
-        interned
-    }
-}
-
 #[salsa::tracked(returns(copy))]
 pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
@@ -243,27 +187,23 @@ pub fn lex_chunk<'db>(
     let mut tokens = Vec::new();
     let chunk_text = chunk.text(db);
     let chunk_str = chunk_text.as_str(db);
-    let mut interner = Interner::new(db, chunk_str);
 
     for range in chunk.ranges(db) {
         match range {
             (range, RangeKind::Comment) => {
                 tokens.push(Token {
-                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::Comment,
                 });
             }
             (range, RangeKind::String) => {
                 tokens.push(Token {
-                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::String,
                 });
             }
             (range, RangeKind::Error) => {
                 tokens.push(Token {
-                    text: interner.intern(range.C()),
                     span: range,
                     kind: TokenKind::Error,
                 });
@@ -272,7 +212,6 @@ pub fn lex_chunk<'db>(
                 let mut tokenizer = Tokenizer {
                     text: chunk_str,
                     range,
-                    interner: &mut interner,
                 };
 
                 tokens.extend(
@@ -289,10 +228,9 @@ pub fn lex_chunk<'db>(
     /// `text` is the whole chunk rather than a handle to fetch it with: reading
     /// it back out of salsa on every `peek` was two field reads per character,
     /// and `peek` is what every other method is built on.
-    struct Tokenizer<'db, 'a> {
+    struct Tokenizer<'db> {
         text: &'db str,
         range: Range<usize>,
-        interner: &'a mut Interner<'db>,
     }
 
     #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -303,8 +241,8 @@ pub fn lex_chunk<'db>(
         Error,
     }
 
-    impl<'db> Tokenizer<'db, '_> {
-        fn next(&mut self) -> Option<Token<'db>> {
+    impl<'db> Tokenizer<'db> {
+        fn next(&mut self) -> Option<Token> {
             match self.peek_token() {
                 None => None,
                 Some(NextToken::Whitespace) => Some(self.eat_whitespace()),
@@ -331,11 +269,7 @@ pub fn lex_chunk<'db>(
             ch.is_alphanumeric() || ch == '_'
         }
 
-        fn intern(&mut self, range: Range<usize>) -> InternedText<'db> {
-            self.interner.intern(range)
-        }
-
-        fn eat_word(&mut self) -> Token<'db> {
+        fn eat_word(&mut self) -> Token {
             assert_eq!(self.peek_token(), Some(NextToken::Word));
 
             let is_word_char = Self::is_word_start;
@@ -351,7 +285,6 @@ pub fn lex_chunk<'db>(
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
-                text: self.intern(span.C()),
                 span,
                 kind: TokenKind::Word,
             }
@@ -364,7 +297,7 @@ pub fn lex_chunk<'db>(
             ch.is_ascii() && sigil_table().starts[ch as usize]
         }
 
-        fn eat_sigil(&mut self) -> Token<'db> {
+        fn eat_sigil(&mut self) -> Token {
             assert_eq!(self.peek_token(), Some(NextToken::Sigil));
 
             let text = &self.text[self.range.C()];
@@ -377,7 +310,6 @@ pub fn lex_chunk<'db>(
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
                     let span = range_start .. self.range.start;
                     return Token {
-                        text: self.interner.intern_sigil(sigil),
                         span,
                         kind: TokenKind::Sigil(sigil),
                     }
@@ -389,13 +321,13 @@ pub fn lex_chunk<'db>(
             self.eat_error_from(ch)
         }
 
-        fn eat_error(&mut self) -> Token<'db> {
+        fn eat_error(&mut self) -> Token {
             let ch = self.peek().X();
             self.eat_char(ch);
             self.eat_error_from(ch)
         }
 
-        fn eat_error_from(&mut self, start_ch: char) -> Token<'db> {
+        fn eat_error_from(&mut self, start_ch: char) -> Token {
             // The first error character has already been consumed by the
             // caller, so the token starts however wide that character was --
             // not one byte back. Backing up by one put the span inside a
@@ -426,13 +358,12 @@ pub fn lex_chunk<'db>(
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
-                text: self.intern(span.C()),
                 span,
                 kind: TokenKind::Error,
             }
         }
 
-        fn eat_whitespace(&mut self) -> Token<'db> {
+        fn eat_whitespace(&mut self) -> Token {
             assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
 
             let start = self.range.start;
@@ -446,7 +377,6 @@ pub fn lex_chunk<'db>(
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
-                text: self.intern(span.C()),
                 span,
                 kind: TokenKind::Whitespace,
             }
@@ -469,14 +399,15 @@ pub fn lex_chunk<'db>(
 impl<'db> ChunkLex<'db> {
     #[cfg(test)]
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
+        let chunk_text = self.chunk(db).text(db).as_str(db);
         #[allow(unstable_name_collisions)] // intersperse
         self.tokens(db).iter().map(|token| {
-            token.debug_str(db)
+            token.debug_str(chunk_text)
         }).intersperse(" ").collect()
     }
 }
 
-impl<'db> Token<'db> {
+impl Token {
     /// The token's span in its chunk.
     ///
     /// `Range` is not `Copy`, so the field is cloned rather than borrowed; a
@@ -494,10 +425,10 @@ impl<'db> Token<'db> {
     }
 
     #[cfg(test)]
-    pub fn debug_str(&self, db: &'db dyn crate::Db) -> &'db str {
+    pub fn debug_str<'a>(&self, chunk_text: &'a str) -> &'a str {
         match self.kind {
             TokenKind::Word | TokenKind::String => {
-                self.text.as_str(db)
+                self.text(chunk_text)
             }
             TokenKind::Sigil(s) => s.as_str(),
             TokenKind::Whitespace => "ws",
@@ -513,11 +444,16 @@ impl<'db> Token<'db> {
         }
     }
 
-    pub fn word_str(&self, db: &'db dyn crate::Db) -> Option<&'db str> {
+    /// The token's text, out of the text of the chunk it was lexed from.
+    pub fn text<'a>(&self, chunk_text: &'a str) -> &'a str {
+        &chunk_text[self.span()]
+    }
+
+    pub fn word_str<'a>(&self, chunk_text: &'a str) -> Option<&'a str> {
         if self.kind != TokenKind::Word {
             return None;
         }
-        Some(self.text.as_str(db))
+        Some(self.text(chunk_text))
     }
 }
 
@@ -964,7 +900,7 @@ fn test_lex_error_spans() {
         lex_chunk(db, chunk)
             .tokens(db)
             .iter()
-            .map(|t| (t.span(), t.debug_str(db).to_string()))
+            .map(|t| (t.span(), t.debug_str(s).to_string()))
             .collect()
     }
 

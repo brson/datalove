@@ -81,6 +81,8 @@ pub(super) struct Parser<'db> {
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
     source_text: bct::text::Text<'db>,
+    /// The same text as a string, which the tokens' spans index.
+    text: &'db str,
     /// Module ID for stable function identity (None for scripts).
     module_id: Option<ModuleId<'db>>,
     /// Accumulated expression spans (side table pattern).
@@ -137,6 +139,7 @@ impl<'db> Parser<'db> {
             source: TokenSource::Vec { tokens, pos: 0, last_end: None },
             had_error: false,
             source_text,
+            text: source_text.as_str(db),
             module_id,
             expr_spans: Vec::new(),
             break_spans: Vec::new(),
@@ -209,6 +212,7 @@ impl<'db> Parser<'db> {
             },
             had_error: false,
             source_text,
+            text: source_text.as_str(db),
             module_id,
             expr_spans: Vec::new(),
             break_spans: Vec::new(),
@@ -251,6 +255,7 @@ impl<'db> Parser<'db> {
             },
             had_error: false,
             source_text: self.source_text,
+            text: self.text,
             module_id: self.module_id,
             expr_spans: Vec::new(),
             break_spans: Vec::new(),
@@ -668,7 +673,7 @@ impl<'db> Parser<'db> {
     pub(super) fn line_is_end_keyword(&self, line: &[TreeToken<'db>], keyword: &str) -> bool {
         if line.len() >= 2 {
             if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                return t1.word_str(self.db) == Some("end") && t2.word_str(self.db) == Some(keyword);
+                return t1.word_str(self.text()) == Some("end") && t2.word_str(self.text()) == Some(keyword);
             }
         }
         false
@@ -791,5 +796,9 @@ impl<'db> TokenStream<'db> for Parser<'db> {
 
     fn source_text(&self) -> bct::text::Text<'db> {
         self.source_text
+    }
+
+    fn text(&self) -> &'db str {
+        self.text
     }
 }

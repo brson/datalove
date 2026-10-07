@@ -37,10 +37,12 @@ impl<'db> Bracer<'db> {
         &self,
         db: &'db dyn crate::Db,
     ) -> BracerIter<'db> {
-        let all_tokens = self.chunk(db).tokens(db);
+        let chunk_lex = self.chunk(db);
+        let all_tokens = chunk_lex.tokens(db);
         BracerIter {
             db,
             tree: *self,
+            text: chunk_lex.chunk(db).text(db).as_str(db),
             all_tokens,
             all_branches: self.branches(db),
             all_inserted_closes: self.inserted_closes(db),
@@ -61,6 +63,8 @@ impl<'db> Bracer<'db> {
 pub struct BracerIter<'db> {
     pub db: &'db dyn crate::Db,
     tree: Bracer<'db>,
+    /// The text of the chunk, which the tokens' spans index.
+    pub text: &'db str,
 
     // The four sequences the iterator walks in step, borrowed once.
     //
@@ -69,7 +73,7 @@ pub struct BracerIter<'db> {
     // tokens, and three of the bracer's own -- to advance by one token. They are
     // `#[returns(ref)]` fields, so a `&'db` borrow of each outlives any iterator
     // over them and the sub-iterator for a branch shares the same four.
-    all_tokens: &'db [Token<'db>],
+    all_tokens: &'db [Token],
     all_branches: &'db [Branch],
     all_inserted_closes: &'db [(usize, Sigil)],
     all_removed_closes: &'db [(usize, Sigil)],
@@ -198,6 +202,7 @@ impl<'db> BracerIter<'db> {
                                 inner: Box::new(BracerIter {
                                     db: self.db,
                                     tree: self.tree,
+                                    text: self.text,
                                     all_tokens: self.all_tokens,
                                     all_branches: self.all_branches,
                                     all_inserted_closes: self.all_inserted_closes,
@@ -255,11 +260,11 @@ impl<'db> BracerIter<'db> {
 
 #[derive(Clone)]
 pub enum TreeToken<'db> {
-    Token(Token<'db>),
+    Token(Token),
     Branch {
         sigil: Sigil,
-        open: Token<'db>,
-        close: Option<Token<'db>>,
+        open: Token,
+        close: Option<Token>,
         end_byte: usize,
         /// Boxed: a `BracerIter` is 184 bytes and a `Token` is 32, so this one
         /// field made every `TreeToken` in the stream 264 bytes whether it was a
@@ -623,9 +628,9 @@ impl<'db> TreeToken<'db> {
 #[cfg(test)]
 #[extension_trait]
 impl<'db> VecTreeTokenExt<'db> for Vec<TreeToken<'db>> {
-    fn debug_str(&self, db: &'db dyn crate::Db) -> String {
+    fn debug_str(&self, text: &str) -> String {
         let mut buf = Vec::<u8>::new();
-        Bracer::debug_write(self.iter().cloned(), &mut buf, db).X();
+        Bracer::debug_write(self.iter().cloned(), &mut buf, text).X();
         String::from_utf8(buf).X()
     }
 }
@@ -635,9 +640,9 @@ impl<'db> VecTreeTokenExt<'db> for Vec<TreeToken<'db>> {
 pub impl<'db, I> IteratorOfTreeTokenExt<'db> for I
 where I: Iterator<Item = TreeToken<'db>>
 {
-    fn debug_str(self, db: &'db dyn crate::Db) -> String {
+    fn debug_str(self, text: &str) -> String {
         let mut buf = Vec::<u8>::new();
-        Bracer::debug_write(self, &mut buf, db).X();
+        Bracer::debug_write(self, &mut buf, text).X();
         String::from_utf8(buf).X()
     }
 }
@@ -646,25 +651,27 @@ where I: Iterator<Item = TreeToken<'db>>
 impl<'db> Bracer<'db> {
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
         let mut buf = Vec::<u8>::new();
-        Self::debug_write(self.iter(db), &mut buf, db).X();
+        let iter = self.iter(db);
+        let text = iter.text;
+        Self::debug_write(iter, &mut buf, text).X();
         String::from_utf8(buf).X()
     }
 
     fn debug_write(
         iter: impl Iterator<Item = TreeToken<'db>>,
         w: &mut dyn Write,
-        db: &'db dyn crate::Db,
+        text: &str,
     ) -> AnyResult<()> {
         let mut iter = iter.peekable();
         while let Some(token) = iter.next() {
             match token {
                 TreeToken::Token(token) => {
-                    write!(w, "{}", token.debug_str(db))?;
+                    write!(w, "{}", token.debug_str(text))?;
                 }
                 TreeToken::Branch { sigil, mut inner, .. } => {
                     write!(w, "{} ", sigil.as_str())?;
                     rmx::extras::recurse(|| {
-                        Self::debug_write(inner.C(), w, db)
+                        Self::debug_write(inner.C(), w, text)
                     })?;
                     if inner.next().is_some() {
                         write!(w, " ")?;
