@@ -131,13 +131,13 @@ off, and `nospec`, specialization off -- held to the reference's outputs and
 debug logs only, and only for a program that compiled without error. The run
 prints how many programs each engine took: of 972, the AOT backends take
 about 700. A fixture opts out of an engine with a `// engines: -c` comment
-before its first section; two do, each saying why. Under Miri only the
+before its first section, saying why; one does. Under Miri only the
 engines that generate no code run.
 
 **C AOT runs in the default job**, not only the slow one: over the whole
 corpus it costs about as much again as the rest, which is cheap next to a
-backend that drifts. Its first run found a fault no suite had reached (in
-`issues.md`).
+backend that drifts. Its first run found a fault no suite had reached: a table's
+row descriptor left out of the file that builds one.
 
 **`std_engine_tests`**, the old `std_all_tests`, is the standard library's
 runner, with the IR walker named as its reference and the bytecode added.
@@ -151,7 +151,8 @@ lowering change re-blesses the engine corpus as it did the old suites.
 **CI is four jobs**, `just test-ci` the same four: default, index-64,
 parallel, and slow, which is the `slow_tests` property and exhaustive tests,
 the wasm build, the suite against sys riders built from source, and
-`just test-worldgen` on a fixed seed. Worldgen under leak checking found a
-lowering fault on its first run (in `issues.md`), so its seed is one whose
-worlds pass; another seed is a command-line argument away.
+`just test-worldgen` on a fixed seed, so that a failure is a change rather
+than a draw; another seed is a command-line argument away. Its first run,
+under leak checking, found const inlining's dead code pass removing the only
+instruction that consumed a value, and two faults in the generator.
 
