@@ -507,14 +507,15 @@ unsafe fn pretty_map(
             let key_size = key_ty.size() as usize;
             let value_size = value_ty.size() as usize;
 
+            let map_ty = crate::impls::btreemap::MapTy::of(tydesc);
             let mut current_leaf = crate::impls::btreemap::leftmost_leaf(
-                map.root as *mut rtdt::MapNode, key_ty);
+                map.root as *mut rtdt::MapNode, map_ty);
             let mut entry_count = 0u32;
 
             while !current_leaf.is_null() {
                 let node_len = (*current_leaf).len;
 
-                let layout = rtdt::layout::compute_map_leaf_node_layout(key_ty, value_ty);
+                let layout = map_ty.leaf;
                 let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
                 let values_array = (current_leaf as *const u8).add(layout.values_offset as usize);
 
@@ -559,14 +560,15 @@ unsafe fn pretty_set(
         if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;
 
+            let set_ty = crate::impls::set::SetTy::of(tydesc);
             let mut current_leaf = crate::impls::set::leftmost_leaf(
-                set.root as *mut rtdt::SetNode, elem_ty);
+                set.root as *mut rtdt::SetNode, set_ty);
             let mut elem_count = 0u32;
 
             while !current_leaf.is_null() {
                 let node_len = (*current_leaf).len;
 
-                let layout = rtdt::layout::compute_set_leaf_node_layout(elem_ty);
+                let layout = set_ty.leaf;
                 let keys_array = (current_leaf as *const u8).add(layout.keys_offset as usize);
 
                 for i in 0..node_len {

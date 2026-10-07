@@ -276,8 +276,12 @@ pub fn compute_result_layout(tydesc: TyDescRef) -> ResultLayout {
 pub fn compute_map_internal_node_layout(
     key_tydesc: TyDescRef,
 ) -> MapNodeInternalLayout {
-    let key_size = key_tydesc.size();
-    let key_align = key_tydesc.align();
+    map_internal_node_layout(key_tydesc.size(), key_tydesc.align())
+}
+
+/// The same, from the key's size and alignment, for a producer that writes
+/// descriptors out rather than holding them.
+pub fn map_internal_node_layout(key_size: u32, key_align: u32) -> MapNodeInternalLayout {
 
     let tag_size = 1u32; // u8
     let ptr_size = std::mem::size_of::<*const MapNode>() as u32;
@@ -334,10 +338,11 @@ pub fn compute_map_leaf_node_layout(
     key_tydesc: TyDescRef,
     value_tydesc: TyDescRef,
 ) -> MapNodeLeafLayout {
-    let key_size = key_tydesc.size();
-    let key_align = key_tydesc.align();
-    let value_size = value_tydesc.size();
-    let value_align = value_tydesc.align();
+    map_leaf_node_layout(key_tydesc.size(), key_tydesc.align(), value_tydesc.size(), value_tydesc.align())
+}
+
+/// The same, from sizes and alignments.
+pub fn map_leaf_node_layout(key_size: u32, key_align: u32, value_size: u32, value_align: u32) -> MapNodeLeafLayout {
 
     let tag_size = 1u32; // u8
     let ptr_size = std::mem::size_of::<*const MapNode>() as u32;
@@ -396,8 +401,11 @@ pub fn compute_map_leaf_node_layout(
 pub fn compute_set_internal_node_layout(
     key_tydesc: TyDescRef,
 ) -> SetNodeInternalLayout {
-    let key_size = key_tydesc.size();
-    let key_align = key_tydesc.align();
+    set_internal_node_layout(key_tydesc.size(), key_tydesc.align())
+}
+
+/// The same, from the element's size and alignment.
+pub fn set_internal_node_layout(key_size: u32, key_align: u32) -> SetNodeInternalLayout {
 
     let tag_size = 1u32; // u8
     let ptr_size = std::mem::size_of::<*const SetNode>() as u32;
@@ -450,8 +458,11 @@ pub fn compute_set_internal_node_layout(
 pub fn compute_set_leaf_node_layout(
     key_tydesc: TyDescRef,
 ) -> SetNodeLeafLayout {
-    let key_size = key_tydesc.size();
-    let key_align = key_tydesc.align();
+    set_leaf_node_layout(key_tydesc.size(), key_tydesc.align())
+}
+
+/// The same, from the element's size and alignment.
+pub fn set_leaf_node_layout(key_size: u32, key_align: u32) -> SetNodeLeafLayout {
 
     let tag_size = 1u32; // u8
     let ptr_size = std::mem::size_of::<*const SetNode>() as u32;

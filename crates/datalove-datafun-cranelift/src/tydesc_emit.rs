@@ -85,8 +85,50 @@ const TYDESC_ALIGN: usize = align_of::<TyDesc>();
 const OFFSET_TYPE_TAG: usize = offset_of!(TyDesc, type_tag);
 const OFFSET_SIZE: usize = offset_of!(TyDesc, size);
 const OFFSET_ALIGN: usize = offset_of!(TyDesc, align);
-#[allow(dead_code)]
 const OFFSET_TYPE_INFO: usize = offset_of!(TyDesc, type_info);
+
+/// Write a `u32` into descriptor bytes.
+fn put_u32(bytes: &mut [u8], at: usize, value: u32) {
+    bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+}
+
+/// Write a map's node layouts into its descriptor bytes.
+fn put_map_layouts(bytes: &mut [u8], key_ty: &IrType, val_ty: &IrType) {
+    use datalove_rtdt::{MapNodeInternalLayout as I, MapNodeLeafLayout as L};
+    let (key_size, key_align) = (crate::types::ir_type_size(key_ty), crate::types::ir_type_align(key_ty));
+    let (val_size, val_align) = (crate::types::ir_type_size(val_ty), crate::types::ir_type_align(val_ty));
+    let leaf = datalove_rtdt::layout::map_leaf_node_layout(key_size, key_align, val_size, val_align);
+    let at = OFFSET_TYPE_INFO + offset_of!(TyInfoMap, leaf);
+    put_u32(bytes, at + offset_of!(L, size), leaf.size);
+    put_u32(bytes, at + offset_of!(L, align), leaf.align);
+    put_u32(bytes, at + offset_of!(L, next_leaf_offset), leaf.next_leaf_offset);
+    put_u32(bytes, at + offset_of!(L, keys_offset), leaf.keys_offset);
+    put_u32(bytes, at + offset_of!(L, values_offset), leaf.values_offset);
+    let internal = datalove_rtdt::layout::map_internal_node_layout(key_size, key_align);
+    let at = OFFSET_TYPE_INFO + offset_of!(TyInfoMap, internal);
+    put_u32(bytes, at + offset_of!(I, size), internal.size);
+    put_u32(bytes, at + offset_of!(I, align), internal.align);
+    put_u32(bytes, at + offset_of!(I, keys_offset), internal.keys_offset);
+    put_u32(bytes, at + offset_of!(I, child_ptrs_offset), internal.child_ptrs_offset);
+}
+
+/// Write a set's node layouts into its descriptor bytes.
+fn put_set_layouts(bytes: &mut [u8], elem_ty: &IrType) {
+    use datalove_rtdt::{SetNodeInternalLayout as I, SetNodeLeafLayout as L};
+    let (size, align) = (crate::types::ir_type_size(elem_ty), crate::types::ir_type_align(elem_ty));
+    let leaf = datalove_rtdt::layout::set_leaf_node_layout(size, align);
+    let at = OFFSET_TYPE_INFO + offset_of!(TyInfoSet, leaf);
+    put_u32(bytes, at + offset_of!(L, size), leaf.size);
+    put_u32(bytes, at + offset_of!(L, align), leaf.align);
+    put_u32(bytes, at + offset_of!(L, next_leaf_offset), leaf.next_leaf_offset);
+    put_u32(bytes, at + offset_of!(L, keys_offset), leaf.keys_offset);
+    let internal = datalove_rtdt::layout::set_internal_node_layout(size, align);
+    let at = OFFSET_TYPE_INFO + offset_of!(TyInfoSet, internal);
+    put_u32(bytes, at + offset_of!(I, size), internal.size);
+    put_u32(bytes, at + offset_of!(I, align), internal.align);
+    put_u32(bytes, at + offset_of!(I, keys_offset), internal.keys_offset);
+    put_u32(bytes, at + offset_of!(I, child_ptrs_offset), internal.child_ptrs_offset);
+}
 
 /// Emitter for TyDesc static data.
 #[derive(Clone)]
@@ -270,6 +312,7 @@ impl TyDescEmitter {
         bytes[OFFSET_TYPE_TAG] = tag;
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
+        put_set_layouts(&mut bytes, elem_ty);
 
         // Create unique name.
         let name = format!("__tydesc_{}", self.counter);
@@ -325,6 +368,7 @@ impl TyDescEmitter {
         bytes[OFFSET_TYPE_TAG] = tag;
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
+        put_map_layouts(&mut bytes, key_ty, val_ty);
 
         // Create unique name.
         let name = format!("__tydesc_{}", self.counter);

@@ -81,6 +81,15 @@ const fn abi_version() -> u64 {
     let hash = mix(hash, offset_of!(rtdt::List, size) as u64);
     let hash = mix(hash, offset_of!(rtdt::List, capacity) as u64);
 
+    // A map or set descriptor carries its node layouts, and a rider is
+    // handed descriptors and hands them back.
+    let hash = mix(hash, offset_of!(rtdt::TyInfoMap, leaf) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyInfoMap, internal) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyInfoSet, leaf) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyInfoSet, internal) as u64);
+    let hash = mix(hash, size_of::<rtdt::MapNodeLeafLayout>() as u64);
+    let hash = mix(hash, size_of::<rtdt::SetNodeLeafLayout>() as u64);
+
     // Which is `index-64`, the one feature that moves layout.
     mix(hash, size_of::<rtdt::IndexRepr>() as u64)
 }

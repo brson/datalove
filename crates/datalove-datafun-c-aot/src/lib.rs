@@ -370,6 +370,12 @@ impl CAotCompiler {
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; uint32_t offset; const dtlv_tydesc_t* tydesc; }} dtlv_struct_field_t;").unwrap();
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; uint32_t offset; const dtlv_tydesc_t* payload; }} dtlv_enum_variant_t;").unwrap();
         writeln!(out, "typedef struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* tydesc; }} dtlv_table_column_t;").unwrap();
+        // A map's and a set's node layouts, which their descriptors carry
+        // (`rtdt::MapNodeLeafLayout` and the rest). The two internal layouts
+        // have the same fields.
+        writeln!(out, "typedef struct {{ uint32_t size; uint32_t align; uint32_t next_leaf_offset; uint32_t keys_offset; uint32_t values_offset; }} dtlv_map_leaf_layout_t;").unwrap();
+        writeln!(out, "typedef struct {{ uint32_t size; uint32_t align; uint32_t next_leaf_offset; uint32_t keys_offset; }} dtlv_set_leaf_layout_t;").unwrap();
+        writeln!(out, "typedef struct {{ uint32_t size; uint32_t align; uint32_t keys_offset; uint32_t child_ptrs_offset; }} dtlv_node_internal_layout_t;").unwrap();
         writeln!(out).unwrap();
 
         // Dangling pointer macro for empty arrays (Rust expects aligned non-NULL pointer).
@@ -386,8 +392,8 @@ impl CAotCompiler {
         writeln!(out, "    struct {{ const dtlv_struct_field_t* fields; uint32_t num_fields; }} struct_;").unwrap();
         writeln!(out, "    struct {{ const dtlv_enum_variant_t* variants; uint32_t num_variants; }} enum_;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; }} list;").unwrap();
-        writeln!(out, "    struct {{ const dtlv_tydesc_t* key_tydesc; const dtlv_tydesc_t* value_tydesc; }} map;").unwrap();
-        writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; }} set;").unwrap();
+        writeln!(out, "    struct {{ const dtlv_tydesc_t* key_tydesc; const dtlv_tydesc_t* value_tydesc; dtlv_map_leaf_layout_t leaf; dtlv_node_internal_layout_t internal; }} map;").unwrap();
+        writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; dtlv_set_leaf_layout_t leaf; dtlv_node_internal_layout_t internal; }} set;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; uint32_t rank; }} tensor;").unwrap();
         writeln!(out, "    struct {{ uint32_t num_columns; const dtlv_table_column_t* columns; }} table;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* inner_tydesc; uint32_t payload_offset; }} option;").unwrap();

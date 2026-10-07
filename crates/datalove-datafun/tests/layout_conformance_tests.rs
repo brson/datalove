@@ -201,3 +201,32 @@ fn option_and_result_payload_offsets_agree() {
         }
     }
 }
+
+/// Node layouts must agree for maps and sets.
+///
+/// A map's or set's descriptor carries its node layouts. The interpreter's
+/// table works them out from the element descriptors, and the AOT backends
+/// from the `IrType`'s size and alignment.
+#[test]
+fn map_and_set_node_layouts_agree() {
+    let mut table = IrTyDescTable::new();
+    for ty in corpus() {
+        let ir = ir_layout::layout_of(&ty);
+
+        let set = IrType::Set(Box::new(ty.clone()));
+        let map = IrType::Map(Box::new(ty.clone()), Box::new(IrType::U8));
+        unsafe {
+            let set_td = TyDescRef::from_ptr(table.get_or_create(&set));
+            assert_eq!(*set_td.set_leaf_layout(), rtdt::layout::set_leaf_node_layout(ir.size, ir.align),
+                "set leaf layout disagrees for {:?}", ty);
+            assert_eq!(*set_td.set_internal_layout(), rtdt::layout::set_internal_node_layout(ir.size, ir.align),
+                "set internal layout disagrees for {:?}", ty);
+
+            let map_td = TyDescRef::from_ptr(table.get_or_create(&map));
+            assert_eq!(*map_td.map_leaf_layout(), rtdt::layout::map_leaf_node_layout(ir.size, ir.align, 1, 1),
+                "map leaf layout disagrees for {:?}", ty);
+            assert_eq!(*map_td.map_internal_layout(), rtdt::layout::map_internal_node_layout(ir.size, ir.align),
+                "map internal layout disagrees for {:?}", ty);
+        }
+    }
+}

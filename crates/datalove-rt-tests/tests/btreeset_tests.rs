@@ -69,9 +69,7 @@ fn create_set_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rt
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
-            set: rtdt::TyInfoSet {
-                element_tydesc,
-            },
+            set: unsafe { rtdt::TyInfoSet::new(element_tydesc) },
         },
     });
 
@@ -97,9 +95,7 @@ fn create_set_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
-            set: rtdt::TyInfoSet {
-                element_tydesc,
-            },
+            set: unsafe { rtdt::TyInfoSet::new(element_tydesc) },
         },
     });
 
@@ -3422,9 +3418,7 @@ fn create_set_tuple_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
-            set: rtdt::TyInfoSet {
-                element_tydesc: tuple_tydesc,
-            },
+            set: unsafe { rtdt::TyInfoSet::new(tuple_tydesc) },
         },
     });
 

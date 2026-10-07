@@ -624,6 +624,8 @@ pub enum SetNodeTag {
 }
 
 /// Computed layout information for a Map internal node.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MapNodeInternalLayout {
     pub size: u32,
     pub align: u32,
@@ -632,6 +634,8 @@ pub struct MapNodeInternalLayout {
 }
 
 /// Computed layout information for a Map leaf node.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct MapNodeLeafLayout {
     pub size: u32,
     pub align: u32,
@@ -641,6 +645,8 @@ pub struct MapNodeLeafLayout {
 }
 
 /// Computed layout information for a Set internal node.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SetNodeInternalLayout {
     pub size: u32,
     pub align: u32,
@@ -649,6 +655,8 @@ pub struct SetNodeInternalLayout {
 }
 
 /// Computed layout information for a Set leaf node.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct SetNodeLeafLayout {
     pub size: u32,
     pub align: u32,
@@ -1185,12 +1193,53 @@ pub struct TyInfoList {
 pub struct TyInfoMap {
     pub key_tydesc: *const TyDesc,
     pub value_tydesc: *const TyDesc,
+    /// The layouts of the map's nodes, which follow from the key and value
+    /// types. Kept here because every operation on a node needs them, and
+    /// working them out again each time was a measurable share of a run.
+    pub leaf: MapNodeLeafLayout,
+    pub internal: MapNodeInternalLayout,
+}
+
+impl TyInfoMap {
+    /// The map arm for a key and value type, its node layouts worked out.
+    ///
+    /// # Safety
+    ///
+    /// Both descriptors must be valid.
+    pub unsafe fn new(key_tydesc: *const TyDesc, value_tydesc: *const TyDesc) -> TyInfoMap {
+        let (key, value) = unsafe { (TyDescRef::from_ptr(key_tydesc), TyDescRef::from_ptr(value_tydesc)) };
+        TyInfoMap {
+            key_tydesc,
+            value_tydesc,
+            leaf: layout::compute_map_leaf_node_layout(key, value),
+            internal: layout::compute_map_internal_node_layout(key),
+        }
+    }
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct TyInfoSet {
     pub element_tydesc: *const TyDesc,
+    /// The layouts of the set's nodes, as for a map.
+    pub leaf: SetNodeLeafLayout,
+    pub internal: SetNodeInternalLayout,
+}
+
+impl TyInfoSet {
+    /// The set arm for an element type, its node layouts worked out.
+    ///
+    /// # Safety
+    ///
+    /// The descriptor must be valid.
+    pub unsafe fn new(element_tydesc: *const TyDesc) -> TyInfoSet {
+        let element = unsafe { TyDescRef::from_ptr(element_tydesc) };
+        TyInfoSet {
+            element_tydesc,
+            leaf: layout::compute_set_leaf_node_layout(element),
+            internal: layout::compute_set_internal_node_layout(element),
+        }
+    }
 }
 
 #[repr(C)]

@@ -212,6 +212,45 @@ impl<'a> TyDescRef<'a> {
         }
     }
 
+    /// The layout of this map's leaf nodes.
+    ///
+    /// Read from the descriptor, which every producer fills in; debug builds
+    /// check it against the layout worked out from the key and value.
+    #[inline]
+    pub fn map_leaf_layout(&self) -> &'a MapNodeLeafLayout {
+        debug_assert_eq!(self.inner.type_tag, TyTag::Map);
+        let layout = unsafe { &self.inner.type_info.map.leaf };
+        debug_assert_eq!(*layout, crate::layout::compute_map_leaf_node_layout(self.map_key_ty(), self.map_value_ty()));
+        layout
+    }
+
+    /// The layout of this map's internal nodes.
+    #[inline]
+    pub fn map_internal_layout(&self) -> &'a MapNodeInternalLayout {
+        debug_assert_eq!(self.inner.type_tag, TyTag::Map);
+        let layout = unsafe { &self.inner.type_info.map.internal };
+        debug_assert_eq!(*layout, crate::layout::compute_map_internal_node_layout(self.map_key_ty()));
+        layout
+    }
+
+    /// The layout of this set's leaf nodes.
+    #[inline]
+    pub fn set_leaf_layout(&self) -> &'a SetNodeLeafLayout {
+        debug_assert_eq!(self.inner.type_tag, TyTag::Set);
+        let layout = unsafe { &self.inner.type_info.set.leaf };
+        debug_assert_eq!(*layout, crate::layout::compute_set_leaf_node_layout(self.set_element_ty()));
+        layout
+    }
+
+    /// The layout of this set's internal nodes.
+    #[inline]
+    pub fn set_internal_layout(&self) -> &'a SetNodeInternalLayout {
+        debug_assert_eq!(self.inner.type_tag, TyTag::Set);
+        let layout = unsafe { &self.inner.type_info.set.internal };
+        debug_assert_eq!(*layout, crate::layout::compute_set_internal_node_layout(self.set_element_ty()));
+        layout
+    }
+
     /// Returns the element type descriptor for a Set type.
     ///
     /// # Panics

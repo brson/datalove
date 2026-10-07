@@ -109,10 +109,7 @@ fn create_map_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *cons
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
-            map: rtdt::TyInfoMap {
-                key_tydesc,
-                value_tydesc,
-            },
+            map: unsafe { rtdt::TyInfoMap::new(key_tydesc, value_tydesc) },
         },
     });
 
@@ -737,10 +734,7 @@ fn create_map_string_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
-            map: rtdt::TyInfoMap {
-                key_tydesc,
-                value_tydesc,
-            },
+            map: unsafe { rtdt::TyInfoMap::new(key_tydesc, value_tydesc) },
         },
     });
 

@@ -742,10 +742,7 @@ impl<'db> TyDescTable<'db> {
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
-                map: rtdt::TyInfoMap {
-                    key_tydesc,
-                    value_tydesc,
-                },
+                map: unsafe { rtdt::TyInfoMap::new(key_tydesc, value_tydesc) },
             },
         })
     }
@@ -760,9 +757,7 @@ impl<'db> TyDescTable<'db> {
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
-                set: rtdt::TyInfoSet {
-                    element_tydesc,
-                },
+                set: unsafe { rtdt::TyInfoSet::new(element_tydesc) },
             },
         })
     }
@@ -891,10 +886,7 @@ impl<'db> TyDescTable<'db> {
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
-                map: rtdt::TyInfoMap {
-                    key_tydesc,
-                    value_tydesc,
-                },
+                map: unsafe { rtdt::TyInfoMap::new(key_tydesc, value_tydesc) },
             },
         });
 
@@ -918,7 +910,7 @@ impl<'db> TyDescTable<'db> {
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
-                set: rtdt::TyInfoSet { element_tydesc },
+                set: unsafe { rtdt::TyInfoSet::new(element_tydesc) },
             },
         });
 

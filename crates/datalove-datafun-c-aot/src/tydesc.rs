@@ -272,15 +272,28 @@ pub fn emit_tydesc(
 
         IrType::Set(elem) => {
             let elem_tydesc = compiler.get_tydesc_name(elem);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x53, .size = {}, .align = {}, .type_info = {{ .set = {{ .element_tydesc = &{} }} }} }};",
-                name, layout.size, layout.align, elem_tydesc).unwrap();
+            let e = types::ir_type_to_crepr(elem).layout();
+            let leaf = datalove_rtdt::layout::set_leaf_node_layout(e.size, e.align);
+            let internal = datalove_rtdt::layout::set_internal_node_layout(e.size, e.align);
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x53, .size = {}, .align = {}, .type_info = {{ .set = {{ .element_tydesc = &{}, \
+                .leaf = {{ {}, {}, {}, {} }}, .internal = {{ {}, {}, {}, {} }} }} }} }};",
+                name, layout.size, layout.align, elem_tydesc,
+                leaf.size, leaf.align, leaf.next_leaf_offset, leaf.keys_offset,
+                internal.size, internal.align, internal.keys_offset, internal.child_ptrs_offset).unwrap();
         }
 
         IrType::Map(key, val) => {
             let key_tydesc = compiler.get_tydesc_name(key);
             let val_tydesc = compiler.get_tydesc_name(val);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x52, .size = {}, .align = {}, .type_info = {{ .map = {{ .key_tydesc = &{}, .value_tydesc = &{} }} }} }};",
-                name, layout.size, layout.align, key_tydesc, val_tydesc).unwrap();
+            let k = types::ir_type_to_crepr(key).layout();
+            let v = types::ir_type_to_crepr(val).layout();
+            let leaf = datalove_rtdt::layout::map_leaf_node_layout(k.size, k.align, v.size, v.align);
+            let internal = datalove_rtdt::layout::map_internal_node_layout(k.size, k.align);
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x52, .size = {}, .align = {}, .type_info = {{ .map = {{ .key_tydesc = &{}, .value_tydesc = &{}, \
+                .leaf = {{ {}, {}, {}, {}, {} }}, .internal = {{ {}, {}, {}, {} }} }} }} }};",
+                name, layout.size, layout.align, key_tydesc, val_tydesc,
+                leaf.size, leaf.align, leaf.next_leaf_offset, leaf.keys_offset, leaf.values_offset,
+                internal.size, internal.align, internal.keys_offset, internal.child_ptrs_offset).unwrap();
         }
 
         IrType::Tuple(fields) => {

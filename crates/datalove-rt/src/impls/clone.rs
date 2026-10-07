@@ -245,16 +245,13 @@ unsafe fn clone_impl(
                 map_out.root = std::ptr::null();
                 map_out.len = rtdt::Index::ZERO;
             } else {
-                let key_ty = ty.map_key_ty();
-                let value_ty = ty.map_value_ty();
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::impls::btreemap::btreemap_clone_tree(
                         rt_ref,
                         map_in.root,
-                        key_ty,
-                        value_ty,
+                        crate::impls::btreemap::MapTy::of(ty),
                     )
                 };
 
@@ -278,14 +275,13 @@ unsafe fn clone_impl(
                 set_out.root = std::ptr::null();
                 set_out.len = rtdt::Index::ZERO;
             } else {
-                let element_ty = ty.set_element_ty();
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
                     crate::impls::set::set_clone_tree(
                         rt_ref,
                         set_in.root,
-                        element_ty.as_ptr(),
+                        crate::impls::set::SetTy::of(ty),
                     )
                 };
 
@@ -1475,10 +1471,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
-                map: rtdt::TyInfoMap {
-                    key_tydesc: u32_tydesc_ptr,
-                    value_tydesc: u32_tydesc_ptr,
-                },
+                map: unsafe { rtdt::TyInfoMap::new(u32_tydesc_ptr, u32_tydesc_ptr) },
             },
         };
 
@@ -1519,9 +1512,7 @@ mod tests {
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
-                set: rtdt::TyInfoSet {
-                    element_tydesc: u32_tydesc_ptr,
-                },
+                set: unsafe { rtdt::TyInfoSet::new(u32_tydesc_ptr) },
             },
         };
 
