@@ -1,6 +1,6 @@
 [package]
 name = "datalove"
-description = "The datalove salsa database."
+description = "The datalove language."
 version.workspace = true
 license.workspace = true
 authors.workspace = true
@@ -8,7 +8,3 @@ edition.workspace = true
 repository.workspace = true
 
 [dependencies]
-rmx.workspace = true
-bct.workspace = true
-salsa.workspace = true
-datalove-datalit.workspace = true
