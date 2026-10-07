@@ -37,7 +37,7 @@ pub fn promote_function_consts(func: &mut IrCodeUnit) {
             }
             let dest = *dest;
             let value = Arc::new(std::mem::replace(value, datalove_datafun_ir::ConstValue::Unit));
-            *instr = Instruction::StaticRef { dest, value };
+            *instr = Instruction::StaticRef { dest, value: datalove_datafun_ir::SharedConst(value) };
             promoted.insert(dest);
         }
     }

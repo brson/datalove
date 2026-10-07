@@ -807,7 +807,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         builder.ins().symbol_value(PTR_TYPE, gv)
                     }
                     None => return Err(CraneliftError::Unsupported(format!(
-                        "a static const with nowhere to live: {}", value))),
+                        "a static const with nowhere to live: {}", value.0))),
                 };
                 // The reference is the address.
                 self.values.insert(*dest, addr);

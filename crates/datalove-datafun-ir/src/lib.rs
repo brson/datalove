@@ -973,12 +973,15 @@ pub enum ConstValue {
 ///
 /// For a const that is part of a salsa key, or a field of a tracked struct:
 /// salsa hashes those on every compile, and a const can be a dataset, so a
-/// module's data was hashed whole each time it was lowered. Hashing the shape
+/// module's data was hashed whole each time it was lowered -- and once more
+/// for every function naming it, since a `StaticRef` holds the value and a
+/// lowered function is part of a tracked struct. Hashing the shape
 /// -- the variant, a collection's length, a scalar's value -- is constant
 /// time and still gives equal values equal hashes. Equality is still whole,
 /// and `Arc`'s starts by asking whether the two are one value, which a data
 /// file's const is from one compile to the next.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct SharedConst(pub std::sync::Arc<ConstValue>);
 
 impl std::hash::Hash for SharedConst {
@@ -1200,7 +1203,7 @@ pub enum Instruction {
     /// inlining and specialization do, keeps one identity a backend can key on.
     ///
     /// **Ownership:** Produces `dest`, a borrow.
-    StaticRef { dest: ValueId, value: std::sync::Arc<ConstValue> },
+    StaticRef { dest: ValueId, value: SharedConst },
 
     // ========================================================================
     // Value Movement

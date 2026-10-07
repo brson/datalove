@@ -31,7 +31,7 @@ fn lower_var_operand(ctx: &mut LowerCtx, name: &str) -> Result<(Operand, bool), 
         let const_value = std::sync::Arc::clone(const_value);
         if !const_type.is_copy() {
             let dest = ctx.fresh_value(IrType::Ref(Box::new(const_type)));
-            ctx.emit(Instruction::StaticRef { dest, value: const_value });
+            ctx.emit(Instruction::StaticRef { dest, value: datalove_datafun_ir::SharedConst(const_value) });
             return Ok((Operand::ValueRef(dest), false));
         }
         let dest = ctx.fresh_value(const_type);

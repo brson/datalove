@@ -233,7 +233,7 @@ pub fn monomorphize_function(
             substitutions.insert(ParamId(param_idx as u32), Operand::Value(dest));
         } else {
             value_types.push(IrType::Ref(Box::new(ty)));
-            entry_consts.push(Instruction::StaticRef { dest, value: std::sync::Arc::new(value.clone()) });
+            entry_consts.push(Instruction::StaticRef { dest, value: datalove_datafun_ir::SharedConst(std::sync::Arc::new(value.clone())) });
             substitutions.insert(ParamId(param_idx as u32), Operand::ValueRef(dest));
         }
     }

@@ -424,7 +424,7 @@ mod tests {
                 id: BlockId(0),
                 params: vec![],
                 instructions: vec![
-                    Instruction::StaticRef { dest: ValueId(0), value: value.clone() },
+                    Instruction::StaticRef { dest: ValueId(0), value: datalove_datafun_ir::SharedConst(value.clone()) },
                     Instruction::Clone { dest: ValueId(1), src: Operand::ValueRef(ValueId(0)) },
                 ],
                 terminator: Terminator::Return { value: Some(Operand::Value(ValueId(1))) },
