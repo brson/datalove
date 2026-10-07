@@ -119,17 +119,22 @@ struct ChunkWip {
 
 impl<'db> State<'db> {
     fn map(mut self) -> Chunk<'db> {
-        let all_start_chars =
-            self.config.comment_start_chars(self.db).iter().copied().chain(
-                self.config.string_start_chars(self.db).iter().copied()
-            ).collect::<Vec<_>>();
+        // A byte table rather than a search for any of the characters, which
+        // decoded the whole source a character at a time. The start characters
+        // are ASCII, so a byte that is one is a whole character.
+        let mut is_start = [false; 256];
+        let start_chars = self.config.comment_start_chars(self.db).iter()
+            .chain(self.config.string_start_chars(self.db));
+        for &ch in start_chars {
+            assert!(ch.is_ascii(), "a comment or string starts with an ASCII character");
+            is_start[ch as usize] = true;
+        }
 
         let text_all = self.source.text(self.db);
 
         loop {
             let text_remaining = &text_all[self.position..];
-            let mut start_char_indexes = text_remaining.match_indices(&*all_start_chars).map(|(i, _)| i);
-            let next_start_char_index = start_char_indexes.next();
+            let next_start_char_index = text_remaining.bytes().position(|b| is_start[b as usize]);
 
             match next_start_char_index {
                 Some(start_char_index) => {
