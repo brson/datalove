@@ -29,12 +29,13 @@ datalove-rtdt.workspace = true
 datalove-rti.workspace = true
 datalove-rt.workspace = true
 datalove-diagnostic.workspace = true
-datalove-datafun-cranelift-aot.workspace = true
-datalove-datafun-c-aot.workspace = true
 
-# Wasm has no shared libraries to load.
+# Wasm has no shared libraries to load, nor a linker to hand AOT output to,
+# so neither AOT backend is built there.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libloading = "0.8"
+datalove-datafun-cranelift-aot.workspace = true
+datalove-datafun-c-aot.workspace = true
 
 [features]
 default = []

@@ -55,9 +55,11 @@ mod script_compiler;
 mod script_executor;
 mod module_pipeline;
 pub mod workspace;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod aot;
 pub mod rider_build;
 pub mod rider_load;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod c_aot;
 
 // Re-export main types.
