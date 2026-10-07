@@ -1,6 +1,3 @@
-// engines: -c
-// The C backend cannot build a const table in a module function; see issues.md.
-
 ----------
 module local/test/tablefunc
 ----------

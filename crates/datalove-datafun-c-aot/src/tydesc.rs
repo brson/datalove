@@ -143,9 +143,11 @@ fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
             collect_type_recursive(elem, types);
         }
         IrType::Table(columns) => {
-            for (_, col_ty) in columns {
-                collect_type_recursive(col_ty, types);
-            }
+            // A table is built from rows, each a tuple of its columns, and
+            // the build names that tuple's descriptor though no value in the
+            // program has the type.
+            let row = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
+            collect_type_recursive(&row, types);
         }
         IrType::Ref(inner) => {
             collect_type_recursive(inner, types);
