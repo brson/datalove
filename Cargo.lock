@@ -1388,6 +1388,22 @@ checksum = "d7a1e2f27636f116493b8b860f5546edb47c8d8f8ea73e1d2a20be88e28d1fea"
 [[package]]
 name = "datalove"
 version = "0.1.0"
+dependencies = [
+ "bcts",
+ "datalove-datafun",
+ "datalove-datafun-ast",
+ "datalove-datafun-cranelift-jit",
+ "datalove-datafun-interp",
+ "datalove-datafun-ir",
+ "datalove-datafun-pkg",
+ "datalove-datafun-sema",
+ "datalove-datalit",
+ "datalove-diagnostic",
+ "datalove-paths",
+ "datalove-repl",
+ "datalove-rt",
+ "datalove-sys-packages",
+]
 
 [[package]]
 name = "datalove-bench"
@@ -1417,31 +1433,15 @@ version = "0.1.0"
 name = "datalove-cli"
 version = "0.1.0"
 dependencies = [
- "bcts",
  "datalove",
  "datalove-buildinfo",
- "datalove-datafun",
- "datalove-datafun-ast",
- "datalove-datafun-cranelift-jit",
- "datalove-datafun-interp",
- "datalove-datafun-ir",
- "datalove-datafun-parser",
- "datalove-datafun-pkg",
- "datalove-datafun-sema",
- "datalove-datalit",
- "datalove-diagnostic",
  "datalove-exampletest",
- "datalove-paths",
- "datalove-repl",
  "datalove-repl-rat",
- "datalove-rt",
- "datalove-sys-packages",
  "datalove-worldgen",
  "megaspace-pipeliner",
  "pulldown-cmark",
  "rand 0.8.5",
  "rustmax 0.0.10",
- "salsa",
  "serde",
 ]
 

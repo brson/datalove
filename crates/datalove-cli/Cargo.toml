@@ -11,29 +11,12 @@ repository.workspace = true
 rmx.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-buildinfo.workspace = true
-# For `ABI_VERSION`, which names the work dir a component is built in.
-datalove-paths.workspace = true
 megaspace-pipeliner = "0.1"
-bct.workspace = true
 datalove.workspace = true
-datalove-datalit.workspace = true
-datalove-datafun.workspace = true
-datalove-datafun-ir.workspace = true
-datalove-datafun-interp.workspace = true
-datalove-datafun-cranelift-jit.workspace = true
-datalove-diagnostic.workspace = true
-datalove-datafun-parser.workspace = true
-datalove-datafun-sema.workspace = true
-datalove-datafun-ast.workspace = true
-datalove-rt.workspace = true
-datalove-repl.workspace = true
-datalove-sys-packages.workspace = true
 datalove-repl-rat.workspace = true
-datalove-datafun-pkg.workspace = true
 datalove-worldgen.workspace = true
 pulldown-cmark = "0.12"
 rand = "0.8"
-salsa.workspace = true
 
 [[bin]]
 name = "datalove"

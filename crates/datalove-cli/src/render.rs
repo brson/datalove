@@ -1,21 +1,21 @@
-//! Turning datalove's errors into diagnostics, which `bct::render` prints.
+//! Turning datalove's errors into diagnostics, which `datalove::bct::render` prints.
 
 use rmx::prelude::*;
 use rmx::std::ops::Range;
 use rmx::std::path::Path;
 
-use bct::diagnostic::{Diagnostic, DiagnosticBuilder};
-use bct::render::{self, Renderer};
-use bct::text::{Text, TextSpan};
+use datalove::bct::diagnostic::{Diagnostic, DiagnosticBuilder};
+use datalove::bct::render::{self, Renderer};
+use datalove::bct::text::{Text, TextSpan};
 
-use datalove_datafun_ast::ast::ExprKey;
-use datalove_datafun_ast::spans::DatafunSpans;
-use datalove_datafun_sema::{AnalysisError, OwnershipRecoveryHint};
+use datalove::datafun_ast::ast::ExprKey;
+use datalove::datafun_ast::spans::DatafunSpans;
+use datalove::datafun_sema::{AnalysisError, OwnershipRecoveryHint};
 
 /// Render parse diagnostics to stderr.
 pub fn render_parse_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    diagnostics: &[&datalove_diagnostic::ParseDiagnostic],
+    db: &'db dyn datalove::datafun::Db,
+    diagnostics: &[&datalove::diagnostic::ParseDiagnostic],
     file_path: &Path,
     cwd: &Path,
 ) {
@@ -25,8 +25,8 @@ pub fn render_parse_diagnostics<'db>(
 
 /// Render type diagnostics to stderr.
 pub fn render_type_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    diagnostics: &[&datalove_diagnostic::TypeDiagnostic],
+    db: &'db dyn datalove::datafun::Db,
+    diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
     file_path: &Path,
     cwd: &Path,
 ) {
@@ -39,8 +39,8 @@ pub fn render_type_diagnostics<'db>(
 /// A worldfile's modules are separate sources, and a diagnostic about one can
 /// point at another, so these are rendered against all of them at once.
 pub fn render_module_type_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    diagnostics: &[&datalove_diagnostic::TypeDiagnostic],
+    db: &'db dyn datalove::datafun::Db,
+    diagnostics: &[&datalove::diagnostic::TypeDiagnostic],
     worldfile_path: &Path,
     cwd: &Path,
 ) {
@@ -54,9 +54,9 @@ pub fn render_module_type_diagnostics<'db>(
 /// back to `file_path` -- the script, which is what the reader asked to run --
 /// for one it does not know.
 pub fn render_module_diagnostics<'db>(
-    db: &'db dyn salsa::Database,
-    parse: &[&datalove_diagnostic::ParseDiagnostic],
-    types: &[&datalove_diagnostic::TypeDiagnostic],
+    db: &'db dyn datalove::datafun::Db,
+    parse: &[&datalove::diagnostic::ParseDiagnostic],
+    types: &[&datalove::diagnostic::TypeDiagnostic],
     locate: &dyn Fn(Text<'db>) -> Option<rmx::std::path::PathBuf>,
     file_path: &Path,
     cwd: &Path,
@@ -71,7 +71,7 @@ pub fn render_module_diagnostics<'db>(
 /// This bypasses salsa accumulators since ownership diagnostics are emitted
 /// outside of tracked functions. Takes the raw error list and span lookup.
 pub fn render_ownership_errors_direct<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn datalove::datafun::Db,
     errors: &[AnalysisError<'db>],
     spans: &DatafunSpans<'db>,
     file_path: &Path,
@@ -103,7 +103,7 @@ pub fn render_ownership_errors_direct<'db>(
 
 /// Look up span for an expression by local_index.
 fn lookup_expr_span<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn datalove::datafun::Db,
     spans: &DatafunSpans<'db>,
     expr_key: ExprKey<'db>,
 ) -> Option<(Text<'db>, Range<usize>)> {
@@ -128,7 +128,7 @@ fn adapt_help<'db>(
 
 /// The diagnostic for one ownership error, absent where it has no span.
 fn ownership_diagnostic<'db>(
-    db: &'db dyn salsa::Database,
+    db: &'db dyn datalove::datafun::Db,
     error: &AnalysisError<'db>,
     spans: &DatafunSpans<'db>,
 ) -> Option<Diagnostic<'db>> {
@@ -291,7 +291,7 @@ fn ownership_diagnostic<'db>(
         AnalysisError::InconsistentBranchMove {
             at, name, gave_away, fix_in, changed_at, moved_before, ..
         } => {
-            let message = datalove_datafun_sema::inconsistent_branch_message(error)
+            let message = datalove::datafun_sema::inconsistent_branch_message(error)
                 .expect("is D008");
             let mut builder = DiagnosticBuilder::error(db, &message).code("D008");
 

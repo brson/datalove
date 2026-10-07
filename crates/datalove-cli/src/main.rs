@@ -11,11 +11,11 @@ mod render;
 /// a native, and the executor needs the same ones after; see
 /// [`register_natives`]. Built riders are built at most once between the two.
 fn attach_natives(
-    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
-    sys: &datalove_datafun::pipeline::SystemLibrary,
-    pipeline: &mut datalove_datafun::pipeline::ModuleCompilationPipeline,
-) -> std::sync::Arc<datalove_datafun::pipeline::rider_load::RiderNatives> {
-    use datalove_datafun::pipeline::rider_load::RiderNatives;
+    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
+    sys: &datalove::datafun::pipeline::SystemLibrary,
+    pipeline: &mut datalove::datafun::pipeline::ModuleCompilationPipeline,
+) -> std::sync::Arc<datalove::datafun::pipeline::rider_load::RiderNatives> {
+    use datalove::datafun::pipeline::rider_load::RiderNatives;
 
     let natives = std::sync::Arc::new(RiderNatives::for_workspace(descriptor, &sys.natives));
     pipeline.set_natives(natives.clone());
@@ -33,13 +33,13 @@ fn attach_natives(
 /// mapped; it is returned because a caller wanting to hand a share to anything
 /// else needs it.
 fn register_natives(
-    natives: &std::sync::Arc<datalove_datafun::pipeline::rider_load::RiderNatives>,
-    compiled: &datalove_datafun::pipeline::CompiledModules,
-    executor: &mut datalove_datafun::pipeline::ScriptExecutor,
-) -> AnyResult<datalove_datafun::pipeline::rider_load::RegisteredNatives> {
-    use datalove_datafun_cranelift_jit::JitEngine;
+    natives: &std::sync::Arc<datalove::datafun::pipeline::rider_load::RiderNatives>,
+    compiled: &datalove::datafun::pipeline::CompiledModules,
+    executor: &mut datalove::datafun::pipeline::ScriptExecutor,
+) -> AnyResult<datalove::datafun::pipeline::rider_load::RegisteredNatives> {
+    use datalove::datafun_jit::JitEngine;
 
-    let registered = datalove_datafun::pipeline::rider_load::register_natives(
+    let registered = datalove::datafun::pipeline::rider_load::register_natives(
         natives, compiled, executor)?;
 
     if let Some(dispatcher) = executor.take_dispatcher() {
@@ -62,14 +62,14 @@ fn register_natives(
 /// The workspace a command compiles in.
 ///
 /// The system library unless `no_sys`, and the `local` library that
-/// [`find_local_library`](datalove_datafun::pipeline::find_local_library)
+/// [`find_local_library`](datalove::datafun::pipeline::find_local_library)
 /// finds for `script`, or in the current directory for a command given none.
 fn command_workspace(
-    sys: &datalove_datafun::pipeline::SystemLibrary,
+    sys: &datalove::datafun::pipeline::SystemLibrary,
     no_sys: bool,
     script: Option<&rmx::std::path::Path>,
-) -> AnyResult<datalove_datafun::pipeline::WorkspaceDescriptor> {
-    use datalove_datafun::pipeline::WorkspaceDescriptor;
+) -> AnyResult<datalove::datafun::pipeline::WorkspaceDescriptor> {
+    use datalove::datafun::pipeline::WorkspaceDescriptor;
 
     let descriptor = if no_sys {
         WorkspaceDescriptor::empty()
@@ -87,8 +87,8 @@ fn command_workspace(
 /// See [`command_workspace`].
 fn command_local_library(
     script: Option<&rmx::std::path::Path>,
-) -> AnyResult<Option<datalove_datafun::pipeline::PackageLibrary>> {
-    use datalove_datafun::pipeline::{find_local_library, load_local_library};
+) -> AnyResult<Option<datalove::datafun::pipeline::PackageLibrary>> {
+    use datalove::datafun::pipeline::{find_local_library, load_local_library};
 
     let cwd = rmx::std::env::current_dir().context("failed to read the current directory")?;
     find_local_library(script, &cwd)
@@ -102,10 +102,10 @@ fn command_local_library(
 /// from. Ownership and lowering errors carry no spans yet and are printed as
 /// they are.
 fn bail_on_module_errors<'db>(
-    db: &'db datalove_datafun::Database,
-    compiled: &datalove_datafun::pipeline::CompiledModules<'db>,
-    pipeline: &datalove_datafun::pipeline::ModuleCompilationPipeline,
-    descriptor: &datalove_datafun::pipeline::WorkspaceDescriptor,
+    db: &'db datalove::datafun::Database,
+    compiled: &datalove::datafun::pipeline::CompiledModules<'db>,
+    pipeline: &datalove::datafun::pipeline::ModuleCompilationPipeline,
+    descriptor: &datalove::datafun::pipeline::WorkspaceDescriptor,
     script_path: &rmx::std::path::Path,
 ) -> AnyResult<()> {
     if !compiled.has_errors() {
@@ -113,11 +113,11 @@ fn bail_on_module_errors<'db>(
     }
     let cwd = rmx::std::env::current_dir().unwrap_or_default();
 
-    let files: std::collections::HashMap<bct::input::Source, PathBuf> = descriptor.module_files()
+    let files: std::collections::HashMap<datalove::bct::input::Source, PathBuf> = descriptor.module_files()
         .into_iter()
         .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)))
         .collect();
-    let locate = |text: bct::text::Text<'db>| files.get(&text.source(db)).cloned();
+    let locate = |text: datalove::bct::text::Text<'db>| files.get(&text.source(db)).cloned();
 
     let parse = compiled.get_module_parse_diagnostics(db);
     let types = compiled.get_module_type_diagnostics(db);
@@ -143,7 +143,7 @@ fn bail_on_module_errors<'db>(
 /// A diagnostic carries a span and renders itself. An error without one - a
 /// duplicate import or type alias, say - renders nothing, and a bare "type
 /// error" is all the user would otherwise get.
-fn type_error(diagnostics: &[&datalove_diagnostic::TypeDiagnostic], errors: &[String]) -> AnyError {
+fn type_error(diagnostics: &[&datalove::diagnostic::TypeDiagnostic], errors: &[String]) -> AnyError {
     if diagnostics.is_empty() && !errors.is_empty() {
         anyhow!("Type error:\n{}", errors.join("\n"))
     } else {
@@ -346,12 +346,12 @@ impl Cli {
 /// after lowering" -- which names the step that produced nothing rather than
 /// the analysis that refused to produce it.
 fn bail_on_ownership_error(
-    compiled_unit: &datalove_datafun::pipeline::ScriptCompilationResult,
-    compiler: &datalove_datafun::pipeline::ScriptCompiler<'_>,
+    compiled_unit: &datalove::datafun::pipeline::ScriptCompilationResult,
+    compiler: &datalove::datafun::pipeline::ScriptCompiler<'_>,
     file_path: &std::path::Path,
     cwd: &std::path::Path,
 ) -> AnyResult<()> {
-    use datalove_datafun as datafun;
+    use datalove::datafun;
     if let datafun::pipeline::OwnershipResult::Error { message: _ } = &compiled_unit.ownership {
         if let Some(spans) = compiler.get_last_spans() {
             render::render_ownership_errors_direct(
@@ -369,8 +369,8 @@ fn bail_on_ownership_error(
 
 impl LitTycheckCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datalit as datalit;
-        use bct::input::Source;
+        use datalove::datalit;
+        use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
@@ -380,7 +380,7 @@ impl LitTycheckCommand {
 
         let parse_result = datalit::parser::parse(&db, source);
         let ast = parse_result.expr(&db);
-        let parse_diags = datalit::parser::parse::accumulated::<datalove_diagnostic::ParseDiagnostic>(&db, source);
+        let parse_diags = datalit::parser::parse::accumulated::<datalove::diagnostic::ParseDiagnostic>(&db, source);
         if !parse_diags.is_empty() {
             render::render_parse_diagnostics(&db, &parse_diags, &self.file_path, &cwd);
             bail!("Parse error");
@@ -388,7 +388,7 @@ impl LitTycheckCommand {
 
         let resolved = datalit::resolve::resolve_names(&db, source, ast);
         let result = datalit::tycheck::type_check(&db, ast, resolved);
-        let type_diags = datalit::tycheck::type_check::accumulated::<datalove_diagnostic::TypeDiagnostic>(&db, ast, resolved);
+        let type_diags = datalit::tycheck::type_check::accumulated::<datalove::diagnostic::TypeDiagnostic>(&db, ast, resolved);
         render::render_type_diagnostics(&db, &type_diags, &self.file_path, &cwd);
         if !result.errors(&db).is_empty() {
             bail!("Type error");
@@ -401,8 +401,8 @@ impl LitTycheckCommand {
 
 impl LitAstCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datalit as datalit;
-        use bct::input::Source;
+        use datalove::datalit;
+        use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
@@ -424,8 +424,8 @@ impl LitAstCommand {
 
 impl LitPrettyCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datalit as datalit;
-        use bct::input::Source;
+        use datalove::datalit;
+        use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
@@ -447,8 +447,8 @@ impl LitPrettyCommand {
 
 impl LitOpCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datalit as datalit;
-        use bct::input::Source;
+        use datalove::datalit;
+        use datalove::bct::input::Source;
 
         let db = datalit::Database::default();
 
@@ -485,16 +485,16 @@ impl LitOpCommand {
         }
 
         // Instantiate values with RAII guards for cleanup.
-        let rt = datalove_rt::rust::Runtime::new();
+        let rt = datalove::rt::rust::Runtime::new();
         let mut tydesc_table1 = datalit::tydesc_table::TyDescTable::new(&db);
         let inst1 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table1, typechecked1)?;
         let _guard1 = unsafe {
-            datalove_rt::rust::ValueGuard::from_raw(rt.handle(), inst1.tydesc.as_ptr(), inst1.ptr as *mut u8)
+            datalove::rt::rust::ValueGuard::from_raw(rt.handle(), inst1.tydesc.as_ptr(), inst1.ptr as *mut u8)
         };
         let mut tydesc_table2 = datalit::tydesc_table::TyDescTable::new(&db);
         let inst2 = datalit::instantiate2::instantiate_value(&db, rt.handle(), &mut tydesc_table2, typechecked2)?;
         let _guard2 = unsafe {
-            datalove_rt::rust::ValueGuard::from_raw(rt.handle(), inst2.tydesc.as_ptr(), inst2.ptr as *mut u8)
+            datalove::rt::rust::ValueGuard::from_raw(rt.handle(), inst2.tydesc.as_ptr(), inst2.ptr as *mut u8)
         };
 
         // Execute the operation.
@@ -502,7 +502,7 @@ impl LitOpCommand {
             "eq" => {
                 // Call dtlv_rti_eq.
                 let result = unsafe {
-                    datalove_rt::c::dtlv_rti_eq_local(
+                    datalove::rt::c::dtlv_rti_eq_local(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc.as_ptr(),
@@ -512,15 +512,15 @@ impl LitOpCommand {
                 };
 
                 match result {
-                    datalove_rt::c::RtEq::Equals => println!("true"),
-                    datalove_rt::c::RtEq::NotEquals => println!("false"),
-                    datalove_rt::c::RtEq::Error => bail!("Type mismatch in equality comparison"),
+                    datalove::rt::c::RtEq::Equals => println!("true"),
+                    datalove::rt::c::RtEq::NotEquals => println!("false"),
+                    datalove::rt::c::RtEq::Error => bail!("Type mismatch in equality comparison"),
                 }
             }
             "cmp" => {
                 // Call dtlv_rti_cmp_total.
                 let result = unsafe {
-                    datalove_rt::c::dtlv_rti_cmp_total_local(
+                    datalove::rt::c::dtlv_rti_cmp_total_local(
                         std::ptr::null_mut(), // runtime handle not needed
                         inst1.ptr,
                         inst1.tydesc.as_ptr(),
@@ -530,10 +530,10 @@ impl LitOpCommand {
                 };
 
                 match result {
-                    datalove_rt::c::RtOrdering::Less => println!("less"),
-                    datalove_rt::c::RtOrdering::Equal => println!("equal"),
-                    datalove_rt::c::RtOrdering::Greater => println!("greater"),
-                    datalove_rt::c::RtOrdering::Error => bail!("Type mismatch in comparison"),
+                    datalove::rt::c::RtOrdering::Less => println!("less"),
+                    datalove::rt::c::RtOrdering::Equal => println!("equal"),
+                    datalove::rt::c::RtOrdering::Greater => println!("greater"),
+                    datalove::rt::c::RtOrdering::Error => bail!("Type mismatch in comparison"),
                 }
             }
             _ => {
@@ -550,10 +550,10 @@ impl ReplCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         if let Some(script_path) = &self.script {
             let local = command_local_library(Some(script_path))?;
-            datalove_repl::Engine::run_script(datalove_sys_packages::system_library(), local, script_path)
+            datalove::repl::Engine::run_script(datalove::sys_packages::system_library(), local, script_path)
         } else {
             let local = command_local_library(None)?;
-            datalove_repl_rat::run(datalove_sys_packages::system_library, local)
+            datalove_repl_rat::run(datalove::sys_packages::system_library, local)
         }
     }
 }
@@ -574,16 +574,16 @@ impl ScriptCommand {
     }
 
     fn run_impl(file_path: &PathBuf, no_sys: bool, jit: bool) -> AnyResult<()> {
-        use datalove_datafun as datafun;
+        use datalove::datafun;
 
         let db = datafun::Database::default();
 
         // Build workspace descriptor. The work dir goes on whether or not it
         // is used: with `DATALOVE_BUILD_SYS_RIDERS` set the riders are built
         // rather than taken from this binary, and that is where they build.
-        let sys = datalove_sys_packages::system_library();
+        let sys = datalove::sys_packages::system_library();
         let descriptor = command_workspace(&sys, no_sys, Some(file_path))?
-            .with_work_dir(datalove_paths::work_dir()?);
+            .with_work_dir(datalove::paths::work_dir()?);
 
         // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(file_path)
@@ -601,8 +601,8 @@ impl ScriptCommand {
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
 
         // Create JIT engine if --jit flag is set (threshold=1 compiles on first call).
-        let call_dispatcher: Option<Box<dyn datalove_datafun_interp::CallDispatcher>> = if jit {
-            let jit_engine = datalove_datafun_cranelift_jit::JitEngine::new(1)
+        let call_dispatcher: Option<Box<dyn datalove::datafun_interp::CallDispatcher>> = if jit {
+            let jit_engine = datalove::datafun_jit::JitEngine::new(1)
                 .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;
             Some(Box::new(jit_engine))
         } else {
@@ -664,12 +664,12 @@ impl ScriptCommand {
 
 impl ScriptIrCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datafun as datafun;
+        use datalove::datafun;
 
         let db = datafun::Database::default();
 
         // Build workspace descriptor.
-        let sys = datalove_sys_packages::system_library();
+        let sys = datalove::sys_packages::system_library();
         let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?;
 
                 // Read the script file, which is what says where compilation starts.
@@ -729,12 +729,12 @@ impl AotCompileCommand {
     /// one step, so there is no unlinked halfway point to write out.
     fn compile_via_c(
         &self,
-        ir_unit: &datalove_datafun_ir::IrCodeUnit,
-        registry: &datalove_datafun_ir::FunctionRegistry,
+        ir_unit: &datalove::datafun_ir::IrCodeUnit,
+        registry: &datalove::datafun_ir::FunctionRegistry,
         rider_libs: &[PathBuf],
         should_link: bool,
     ) -> AnyResult<()> {
-        use datalove_datafun::pipeline::{aot, c_aot};
+        use datalove::datafun::pipeline::{aot, c_aot};
 
         let sources = c_aot::compile_world(ir_unit, registry)
             .map_err(|e| anyhow!("{}", e))?;
@@ -778,15 +778,15 @@ impl AotCompileCommand {
     }
 
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datafun as datafun;
+        use datalove::datafun;
         use datafun::pipeline::{aot, rider_build};
 
         let db = datafun::Database::default();
 
         // Build workspace descriptor. The work dir is where the native
         // component the emitted program links gets built.
-        let work_dir = datalove_paths::work_dir()?;
-        let sys = datalove_sys_packages::system_library();
+        let work_dir = datalove::paths::work_dir()?;
+        let sys = datalove::sys_packages::system_library();
         let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?
             .with_work_dir(&work_dir);
 
@@ -908,9 +908,9 @@ impl AotCompileCommand {
 
 impl ScriptWorldCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datafun as datafun;
+        use datalove::datafun;
         use datafun::pipeline::WorkspaceDescriptor;
-        use datalove_datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
+        use datalove::datafun_pkg::package_load_worldfile::{parse_worldfile_sections, WorldfileSection};
 
         let db = datafun::Database::default();
 
@@ -932,7 +932,7 @@ impl ScriptWorldCommand {
         }
 
         // Build workspace descriptor from sys library + worldfile sections.
-        let sys = datalove_sys_packages::system_library();
+        let sys = datalove::sys_packages::system_library();
         let sys_descriptor = if self.no_sys {
             WorkspaceDescriptor::empty()
         } else {
@@ -943,7 +943,7 @@ impl ScriptWorldCommand {
             datafun::pipeline::CompilerOptions::default(),
         );
         let descriptor = sys_descriptor.merge(&worldfile_descriptor)
-            .with_work_dir(datalove_paths::work_dir()?);
+            .with_work_dir(datalove::paths::work_dir()?);
         let mut pipeline = descriptor.to_pipeline(&db);
         let natives = attach_natives(&descriptor, &sys, &mut pipeline);
 
@@ -1055,11 +1055,11 @@ impl ScriptWorldCommand {
 
 impl TypecheckStdCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use datalove_datafun as datafun;
+        use datalove::datafun;
 
         let db = datafun::Database::default();
 
-        let sys = datalove_sys_packages::system_library();
+        let sys = datalove::sys_packages::system_library();
         let descriptor = datafun::pipeline::WorkspaceDescriptor::from_system_library(&sys);
 
         let mut pipeline = descriptor.to_pipeline(&db);
