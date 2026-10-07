@@ -14,7 +14,6 @@ datalove-datafun.workspace = true
 datalove-datafun-ast.workspace = true
 datalove-datafun-ir.workspace = true
 datalove-datafun-interp.workspace = true
-datalove-datafun-cranelift-jit.workspace = true
 datalove-datafun-pkg.workspace = true
 datalove-datafun-sema.workspace = true
 datalove-diagnostic.workspace = true
@@ -22,3 +21,7 @@ datalove-paths.workspace = true
 datalove-repl.workspace = true
 datalove-rt.workspace = true
 datalove-sys-packages.workspace = true
+
+# Wasm cannot map memory executable, so there is no JIT there.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+datalove-datafun-cranelift-jit.workspace = true

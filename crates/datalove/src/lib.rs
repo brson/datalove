@@ -8,6 +8,7 @@ pub use datalove_datafun as datafun;
 pub use datalove_datafun_ast as datafun_ast;
 pub use datalove_datafun_ir as datafun_ir;
 pub use datalove_datafun_interp as datafun_interp;
+#[cfg(not(target_arch = "wasm32"))]
 pub use datalove_datafun_cranelift_jit as datafun_jit;
 pub use datalove_datafun_pkg as datafun_pkg;
 pub use datalove_datafun_sema as datafun_sema;

@@ -31,6 +31,9 @@ datalove-rt.workspace = true
 datalove-diagnostic.workspace = true
 datalove-datafun-cranelift-aot.workspace = true
 datalove-datafun-c-aot.workspace = true
+
+# Wasm has no shared libraries to load.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libloading = "0.8"
 
 [features]

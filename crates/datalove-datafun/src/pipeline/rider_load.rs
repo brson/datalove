@@ -205,11 +205,11 @@ pub fn register_natives(
 ///
 /// See [`datalove_rti::ABI_VERSION`] for what the number covers.
 fn check_abi_version(
-    lib: &libloading::Library,
+    lib: &dylib::Library,
     rider_name: &str,
     lib_path: &Path,
 ) -> AnyResult<()> {
-    let theirs: libloading::Symbol<*const u64> = unsafe { lib.get(b"DLR_ABI_VERSION") }
+    let theirs = unsafe { lib.get(b"DLR_ABI_VERSION") }
         .context(fmt!(
             "rider library '{}' at {} does not say which runtime interface it \
              was built against; it is either not a rider library or was built \
@@ -217,7 +217,7 @@ fn check_abi_version(
             rider_name, lib_path.display(),
         ))?;
 
-    let theirs = unsafe { **theirs };
+    let theirs = unsafe { *(theirs as *const u64) };
     if theirs != datalove_rti::ABI_VERSION {
         bail!(
             "rider library '{}' at {} was built against a different runtime \
@@ -237,7 +237,7 @@ fn check_abi_version(
 /// nobody holds it, and that is this count.
 pub struct LoadedLibrary {
     path: PathBuf,
-    lib: libloading::Library,
+    lib: dylib::Library,
 }
 
 impl LoadedLibrary {
@@ -248,9 +248,8 @@ impl LoadedLibrary {
     /// The caller is trusting the library to define `symbol` with the type it
     /// goes on to use it as.
     unsafe fn symbol(&self, symbol: &str) -> AnyResult<*const ()> {
-        let sym: libloading::Symbol<*const ()> = unsafe { self.lib.get(symbol.as_bytes()) }
-            .context(fmt!("symbol '{}' not found in {}", symbol, self.path.display()))?;
-        Ok(*sym)
+        unsafe { self.lib.get(symbol.as_bytes()) }
+            .context(fmt!("symbol '{}' not found in {}", symbol, self.path.display()))
     }
 }
 
@@ -283,7 +282,7 @@ fn open_library(lib_path: &Path, rider_name: &str) -> AnyResult<Arc<LoadedLibrar
         return Ok(existing);
     }
 
-    let lib = unsafe { libloading::Library::new(lib_path) }
+    let lib = unsafe { dylib::Library::open(lib_path) }
         .context(fmt!("failed to load rider library '{}' from {}", rider_name, lib_path.display()))?;
 
     check_abi_version(&lib, rider_name, lib_path)?;
@@ -352,4 +351,48 @@ pub fn load_rider_library(
         native_fn_ptrs,
         library,
     })
+}
+
+/// Shared libraries, where the target has them.
+#[cfg(not(target_arch = "wasm32"))]
+mod dylib {
+    use rmx::prelude::*;
+    use rmx::std::path::Path;
+
+    pub struct Library(libloading::Library);
+
+    impl Library {
+        /// Map the library at `path` into this process, running its initializers.
+        pub unsafe fn open(path: &Path) -> AnyResult<Self> {
+            Ok(Library(unsafe { libloading::Library::new(path) }?))
+        }
+
+        /// The address `symbol` names in this library.
+        pub unsafe fn get(&self, symbol: &[u8]) -> AnyResult<*const ()> {
+            let sym: libloading::Symbol<*const ()> = unsafe { self.0.get(symbol) }?;
+            Ok(*sym)
+        }
+    }
+}
+
+/// Shared libraries, where the target has them, which wasm does not.
+///
+/// A wasm build still compiles and runs programs whose riders are linked in.
+/// It is only a rider that would have to be built and loaded that it refuses.
+#[cfg(target_arch = "wasm32")]
+mod dylib {
+    use rmx::prelude::*;
+    use rmx::std::path::Path;
+
+    pub struct Library(std::convert::Infallible);
+
+    impl Library {
+        pub unsafe fn open(path: &Path) -> AnyResult<Self> {
+            bail!("cannot load {}: wasm has no shared libraries", path.display())
+        }
+
+        pub unsafe fn get(&self, _symbol: &[u8]) -> AnyResult<*const ()> {
+            match self.0 {}
+        }
+    }
 }
