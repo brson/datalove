@@ -151,30 +151,34 @@ pub enum Sigil {
 struct SigilTable {
     /// Whether any sigil begins with this byte.
     starts: [bool; 256],
-    /// The sigils beginning with this byte, in declaration order.
+    /// The sigils beginning with this byte, and their spellings, in
+    /// declaration order. The spelling is kept beside the sigil because asking
+    /// `as_str` for it, once per candidate per sigil lexed, was still 1.4% of
+    /// compiling a data file.
     ///
     /// Declaration order is load-bearing: `eat_sigil` takes the first match, and
     /// the longer sigils are declared before the shorter ones they begin with, so
     /// `+?=` is found before `+`. Grouping by first byte keeps that order among
     /// the candidates, which is the same order the full scan saw them in.
-    by_first_byte: [Vec<Sigil>; 256],
+    by_first_byte: [Vec<(Sigil, &'static str)>; 256],
 }
 
 impl SigilTable {
     fn build() -> Self {
         let mut starts = [false; 256];
-        let mut by_first_byte: [Vec<Sigil>; 256] = std::array::from_fn(|_| Vec::new());
+        let mut by_first_byte: [Vec<(Sigil, &'static str)>; 256] = std::array::from_fn(|_| Vec::new());
         for sigil in enum_iterator::all::<Sigil>() {
-            let first = sigil.as_str().as_bytes()[0];
+            let spelling = sigil.as_str();
+            let first = spelling.as_bytes()[0];
             assert!(first.is_ascii(), "a sigil starting outside ASCII: {:?}", sigil);
             starts[first as usize] = true;
-            by_first_byte[first as usize].push(sigil);
+            by_first_byte[first as usize].push((sigil, spelling));
         }
         Self { starts, by_first_byte }
     }
 
     /// The sigils that could begin with `byte`, longest first.
-    fn starting_with(&self, byte: u8) -> &[Sigil] {
+    fn starting_with(&self, byte: u8) -> &[(Sigil, &'static str)] {
         &self.by_first_byte[byte as usize]
     }
 }
@@ -320,8 +324,7 @@ pub fn lex_chunk<'db>(
             let text = &self.text[self.range.C()];
 
             // Only the sigils that could start here, rather than all of them.
-            for &sigil in sigil_table().starting_with(text.as_bytes()[0]) {
-                let sigil_str = sigil.as_str();
+            for &(sigil, sigil_str) in sigil_table().starting_with(text.as_bytes()[0]) {
                 if text.starts_with(sigil_str) {
                     let range_start = self.range.start;
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
