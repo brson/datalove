@@ -137,24 +137,8 @@ Early-return an error on overflow or division by zero.
 - `*!` - StarExclamation: Checked multiplication
 - `/!` - SlashExclamation: Checked division
 
-### Arithmetic Variants - Bar (|)
-Reserved, not yet used in parser.
-
-- `+|` - PlusBar
-- `-|` - MinusBar
-- `*|` - StarBar
-- `/|` - SlashBar
-
-### Arithmetic Variants - Percent (%)
-Reserved, not yet used in parser.
-
-- `+%` - PlusPercent
-- `-%` - MinusPercent
-- `*%` - StarPercent
-- `/%` - SlashPercent
-
 ### Assignment Operators
-Reserved, not yet used in parser.
+Compound assignment, as bare arithmetic. Reserved, not yet used in parser.
 
 - `+=` - PlusEquals
 - `-=` - MinusEquals
@@ -179,20 +163,22 @@ Reserved, not yet used in parser.
 ## Three-Character Sigils
 
 ### Assignment Variants - Optional (?)
-Reserved, not yet used in parser.
+Compound assignment, as optional arithmetic. Reserved, not yet used in parser.
 
 - `+?=` - PlusQuestionEquals
 - `-?=` - MinusQuestionEquals
 - `*?=` - StarQuestionEquals
 - `/?=` - SlashQuestionEquals
 
-### Assignment Variants - Bar (|)
-Reserved, not yet used in parser.
+### Assignment Variants - Checked (!)
+Compound assignment, as checked arithmetic. Reserved, not yet used in parser.
+The lexer takes the longest sigil, so `+!=` is one sigil rather than `+` and
+`!=`; `a != b` is unaffected.
 
-- `+|=` - PlusBarEquals
-- `-|=` - MinusBarEquals
-- `*|=` - StarBarEquals
-- `/|=` - SlashBarEquals
+- `+!=` - PlusExclamationEquals
+- `-!=` - MinusExclamationEquals
+- `*!=` - StarExclamationEquals
+- `/!=` - SlashExclamationEquals
 
 ## Available Characters
 

@@ -65,10 +65,10 @@ pub enum Sigil {
     MinusQuestionEquals,
     StarQuestionEquals,
     SlashQuestionEquals,
-    PlusBarEquals,
-    MinusBarEquals,
-    StarBarEquals,
-    SlashBarEquals,
+    PlusExclamationEquals,
+    MinusExclamationEquals,
+    StarExclamationEquals,
+    SlashExclamationEquals,
 
     // Earmuff braces (two-character, before single-char variants).
     ParenPipeOpen,    // "(|"
@@ -90,18 +90,10 @@ pub enum Sigil {
     MinusQuestion,
     StarQuestion,
     SlashQuestion,
-    PlusBar,
-    MinusBar,
-    StarBar,
-    SlashBar,
     PlusExclamation,
     MinusExclamation,
     StarExclamation,
     SlashExclamation,
-    PlusPercent,
-    MinusPercent,
-    StarPercent,
-    SlashPercent,
     PlusEquals,
     MinusEquals,
     StarEquals,
@@ -487,10 +479,10 @@ impl Sigil {
             Sigil::MinusQuestionEquals => "-?=",
             Sigil::StarQuestionEquals => "*?=",
             Sigil::SlashQuestionEquals => "/?=",
-            Sigil::PlusBarEquals => "+|=",
-            Sigil::MinusBarEquals => "-|=",
-            Sigil::StarBarEquals => "*|=",
-            Sigil::SlashBarEquals => "/|=",
+            Sigil::PlusExclamationEquals => "+!=",
+            Sigil::MinusExclamationEquals => "-!=",
+            Sigil::StarExclamationEquals => "*!=",
+            Sigil::SlashExclamationEquals => "/!=",
 
             // Earmuff braces.
             Sigil::ParenPipeOpen => "(|",
@@ -512,18 +504,10 @@ impl Sigil {
             Sigil::MinusQuestion => "-?",
             Sigil::StarQuestion => "*?",
             Sigil::SlashQuestion => "/?",
-            Sigil::PlusBar => "+|",
-            Sigil::MinusBar => "-|",
-            Sigil::StarBar => "*|",
-            Sigil::SlashBar => "/|",
             Sigil::PlusExclamation => "+!",
             Sigil::MinusExclamation => "-!",
             Sigil::StarExclamation => "*!",
             Sigil::SlashExclamation => "/!",
-            Sigil::PlusPercent => "+%",
-            Sigil::MinusPercent => "-%",
-            Sigil::StarPercent => "*%",
-            Sigil::SlashPercent => "/%",
             Sigil::PlusEquals => "+=",
             Sigil::MinusEquals => "-=",
             Sigil::StarEquals => "*=",
@@ -755,16 +739,6 @@ fn test_lex_chunk() {
         "+? -? *? /?",
     );
 
-    // Bar variants.
-    assert_eq!(
-        dbglex("a+|b-|c*|d/|e"),
-        "a +| b -| c *| d /| e",
-    );
-    assert_eq!(
-        dbglex("+| -| *| /|"),
-        "+| -| *| /|",
-    );
-
     // Exclamation variants.
     assert_eq!(
         dbglex("a+!b-!c*!d/!e"),
@@ -775,14 +749,11 @@ fn test_lex_chunk() {
         "+! -! *! /!",
     );
 
-    // Percent variants.
+    // A sigil followed by `%` is two, there being no percent variants. The
+    // `%` before a brace is still the map literal's open.
     assert_eq!(
-        dbglex("a+%b-%c*%d/%e"),
-        "a +% b -% c *% d /% e",
-    );
-    assert_eq!(
-        dbglex("+% -% *% /%"),
-        "+% -% *% /%",
+        dbglex("a+%b"),
+        "a + % b",
     );
 
     // Assignment operators.
@@ -805,14 +776,18 @@ fn test_lex_chunk() {
         "+?= -?= *?= /?=",
     );
 
-    // Bar-equals variants.
+    // Exclamation-equals variants, which take precedence over `!=`.
     assert_eq!(
-        dbglex("a+|=b-|=c*|=d/|=e"),
-        "a +|= b -|= c *|= d /|= e",
+        dbglex("a+!=b-!=c*!=d/!=e"),
+        "a +!= b -!= c *!= d /!= e",
     );
     assert_eq!(
-        dbglex("+|= -|= *|= /|="),
-        "+|= -|= *|= /|=",
+        dbglex("+!= -!= *!= /!="),
+        "+!= -!= *!= /!=",
+    );
+    assert_eq!(
+        dbglex("a!=b"),
+        "a != b",
     );
 
     // Comparison operators.
@@ -831,12 +806,8 @@ fn test_lex_chunk() {
         "x += 1 +? y",
     );
     assert_eq!(
-        dbglex("a+b+?c+|d+=e+?=f+|=g"),
-        "a + b +? c +| d += e +?= f +|= g",
-    );
-    assert_eq!(
-        dbglex("a+b+?c+|d+!e"),
-        "a + b +? c +| d +! e",
+        dbglex("a+b+?c+!d+=e+?=f+!=g"),
+        "a + b +? c +! d += e +?= f +!= g",
     );
 
     // Clone and widen postfix operators.
