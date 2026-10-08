@@ -90,16 +90,17 @@ Analysis(
                     block10:
                         v24 = listelementref s0[v21]
                         debuglog *v24
-                        v25 = const 0index
-                        v26 = listboundscheck s0[v25]
-                        branch v26, block12, block11
+                        v25 = const 50int
+                        v26 = const 0index
+                        v27 = listboundscheck s0[v26]
+                        branch v27, block12, block11
                     block11:
-                        v27 = none
+                        v28 = none
+                        drop v25
                         drop.tracked s0
-                        return v27
+                        return v28
                     block12:
-                        v28 = const 50int
-                        listset s0[v25] = v28
+                        listset s0[v26] = v25
                         v29 = const 0index
                         v30 = listboundscheck s0[v29]
                         branch v30, block14, block13
@@ -139,16 +140,17 @@ Analysis(
                     block4:
                         v11 = mapvalueref s0[v8]
                         debuglog *v11
-                        v12 = const 1u32
-                        v13 = mapcontainskey s0[v12]
-                        branch v13, block6, block5
+                        v12 = const 50int
+                        v13 = const 1u32
+                        v14 = mapcontainskey s0[v13]
+                        branch v14, block6, block5
                     block5:
-                        v14 = none
+                        v15 = none
+                        drop v12
                         drop.tracked s0
-                        return v14
+                        return v15
                     block6:
-                        v15 = const 50int
-                        mapsetvalue s0[v12] = v15
+                        mapsetvalue s0[v13] = v12
                         v16 = const 1u32
                         v17 = mapcontainskey s0[v16]
                         branch v17, block8, block7

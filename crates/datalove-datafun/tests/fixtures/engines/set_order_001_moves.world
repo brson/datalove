@@ -1,0 +1,54 @@
+----------
+module local/test/main
+----------
+
+// A `set` evaluates its value first, so what the value moves is gone by the
+// time the keys and the place are reached.
+
+fun consume(xs: [int]): int
+    ret 1
+end fun
+
+fun take(a: int): int
+    ret 1
+end fun
+
+// The value moves the key out of its binding before the lookup uses it.
+fun key_moved(m: %{string = string}, k: string): ?%{string = string}
+    var b = m
+    set b[k]? = k
+    ret some b
+end fun
+
+// The value moves the collection the place is in.
+fun root_moved(xs: [int]): ?int
+    var b = xs
+    set b[(: index / 0)]? = consume(b)
+    ret some 0
+end fun
+
+// The value moves the place a compound assignment reads.
+fun compound_root_moved(a: int): int
+    var x = a
+    set x += take(x)
+    ret 0
+end fun
+
+// A plain variable may be replaced with a value made from it.
+fun replaced(a: int): int
+    var x = a
+    set x = take(x)
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

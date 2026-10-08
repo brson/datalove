@@ -811,6 +811,11 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
+    /// Stop treating `value` as a temporary, now that something has taken it.
+    pub fn forget_expr_temp(&mut self, value: ValueId) {
+        self.body.expr_temps.retain(|(v, _)| *v != value);
+    }
+
     /// Return the current number of expression temporaries.
     ///
     /// Used to snapshot the level before lowering call arguments so that
@@ -1423,8 +1428,8 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit drops scheduled before a set-target early return (index OOB).
     ///
-    /// These drops include bindings that are still live because the RHS
-    /// expression has not been evaluated yet when the bounds check fails.
+    /// The value and the keys have been evaluated by then, so what they moved
+    /// is not among these, and a key a bare index consumes is a temporary.
     pub fn emit_before_set_target_early_return_drops(&mut self) {
         if let Some(stmt_idx) = self.body.current_stmt_idx {
             let binding_ids = self.body.drop_schedule.before_set_target_early_return
@@ -1440,6 +1445,8 @@ impl<'db> LowerCtx<'db> {
     /// Emit a None early-return block body.
     ///
     /// Caller must have already called `start_block` on the early-return block.
+    /// `set_target_drops` says the return is a `set` failing to reach its
+    /// place, which drops by that schedule rather than an expression's.
     pub fn emit_early_return_none(&mut self, set_target_drops: bool) {
         let return_type = self.return_type.clone()
             .expect("early return requires function context");
@@ -1449,8 +1456,9 @@ impl<'db> LowerCtx<'db> {
         self.emit_pending_intermediate_drops();
         if set_target_drops {
             self.emit_before_set_target_early_return_drops();
+        } else {
+            self.emit_before_try_return_drops();
         }
-        self.emit_before_try_return_drops();
         let terminator = if self.is_script_unit {
             Terminator::UnitEarlyReturn { value: Operand::Value(none_value) }
         } else {
@@ -1482,8 +1490,9 @@ impl<'db> LowerCtx<'db> {
         self.emit_pending_intermediate_drops();
         if set_target_drops {
             self.emit_before_set_target_early_return_drops();
+        } else {
+            self.emit_before_try_return_drops();
         }
-        self.emit_before_try_return_drops();
         let terminator = if self.is_script_unit {
             Terminator::UnitEarlyReturn { value: Operand::Value(wrapped) }
         } else {

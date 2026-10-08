@@ -1,0 +1,57 @@
+require module sys/std/list
+import list.push
+import list.len
+import list.get
+
+// A `set` evaluates its value before it reaches its place, so a value that
+// grows the very collection the place is in is written into the grown one.
+fun grow(mut xs: [{n: int}]): int
+  var i = 0
+  loop while i .< 40
+    call push(mut xs, {n = 1})
+    set i += 1
+  end loop
+  ret 10
+end fun
+
+fun grow_ints(mut xs: [int]): int
+  var i = 0
+  loop while i .< 40
+    call push(mut xs, 1)
+    set i += 1
+  end loop
+  ret 10
+end fun
+
+fun plain_element(): ?(int, index)
+  var xs = [100000000000000000000, 5]
+  set xs[(: index / 0)]? = grow_ints(mut xs)
+  ret some (xs[(: index / 0)]?@, len(ref xs))
+end fun
+
+fun plain_field(): ?({n: int}, index)
+  var xs = [{n = 100000000000000000000}, {n = 5}]
+  set xs[(: index / 0)]?.n = grow(mut xs)
+  ret some (xs[(: index / 0)]?@, len(ref xs))
+end fun
+
+fun compound_element(): ?(int, index)
+  var xs = [100000000000000000000, 5]
+  set xs[(: index / 0)]? += grow_ints(mut xs)
+  ret some (xs[(: index / 0)]?@, len(ref xs))
+end fun
+
+fun compound_field(): ?({n: int}, index)
+  var xs = [{n = 100000000000000000000}, {n = 5}]
+  set xs[(: index / 1)]?.n *= grow(mut xs)
+  ret some (xs[(: index / 1)]?@, len(ref xs))
+end fun
+
+// An index the value pushes into range is in range by the time it's checked.
+fun pushed_into_range(): ?(int, index)
+  var xs = [1, 2]
+  set xs[(: index / 30)]? += grow_ints(mut xs)
+  ret some (xs[(: index / 30)]?@, len(ref xs))
+end fun
+
+let output = (plain_element(), plain_field(), compound_element(), compound_field(), pushed_into_range())

@@ -693,21 +693,49 @@ pub fn lower_loop<'db>(
     Ok(())
 }
 
-/// Lower a set statement.
+/// Lower a `set`, plain or compound.
+///
+/// Everything the statement runs of the program's own code runs first: the
+/// value, then the keys of the place's index steps, left to right. Only then
+/// is the place reached, through its lookups, which run no code of the
+/// program's, so nothing can move or free what a reference into the place
+/// points at before the write goes through it.
 fn lower_set<'db>(
     ctx: &mut LowerCtx<'db>,
     set_stmt: &ast::StmtSet<'db>,
 ) -> Result<(), LowerError> {
     let place = &set_stmt.target;
+    let value_expr = set_stmt.value;
+
+    if set_stmt.op.is_none() && place.steps.is_empty() {
+        let root_name_str = place.root.text(ctx.db).to_string();
+        if is_self_assignment(ctx, &root_name_str, value_expr) {
+            return Ok(());
+        }
+    }
+
+    // A compound assignment's value is an operand, which it borrows. A plain
+    // one's is owned until the write takes it; until then it's a temporary,
+    // which a failed lookup on the way to the place drops.
+    let expr_temp_mark = ctx.expr_temps_mark();
+    let value = match set_stmt.op {
+        Some(_) => lower_operand(ctx, value_expr)?,
+        None => {
+            let value_id = lower_expression(ctx, value_expr)?;
+            ctx.record_expr_temp(value_id, ctx.expr_type(value_expr));
+            Operand::Value(value_id)
+        }
+    };
+    let keys = lower_place_keys(ctx, place)?;
 
     if let Some(op) = set_stmt.op {
-        lower_set_compound(ctx, place, op, set_stmt.value)?;
+        lower_set_compound(ctx, place, &keys, op, value, expr_temp_mark)?;
     } else if place.steps.is_empty() {
-        lower_set_simple(ctx, place, set_stmt.value)?;
+        lower_set_simple(ctx, place, value)?;
     } else if place_contains_index(place) {
-        lower_set_indexed(ctx, place, set_stmt.value)?;
+        lower_set_indexed(ctx, place, &keys, value)?;
     } else {
-        lower_set_field_path(ctx, place, set_stmt.value)?;
+        lower_set_field_path(ctx, place, value)?;
     }
     // A key looked up through `[k]?` or `[k]!` is only borrowed, and is a
     // temporary to drop once the write is done. The early return drops it on
@@ -716,18 +744,24 @@ fn lower_set<'db>(
     Ok(())
 }
 
+/// Hand a plain `set`'s value to the write that takes it.
+fn take_value(ctx: &mut LowerCtx, value: Operand) -> Operand {
+    let Operand::Value(id) = value else {
+        unreachable!("a plain set's value is lowered as a value");
+    };
+    ctx.forget_expr_temp(id);
+    value
+}
+
 /// Lower simple variable assignment: `set x = v`.
 fn lower_set_simple<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
-    value_expr: ExprFun<'db>,
+    value: Operand,
 ) -> Result<(), LowerError> {
     let root_name_str = place.root.text(ctx.db).to_string();
-
-    if is_self_assignment(ctx, &root_name_str, value_expr) {
-        return Ok(());
-    }
-    let value_id = lower_expression(ctx, value_expr)?;
+    let value = take_value(ctx, value);
+    let Operand::Value(value_id) = value else { unreachable!() };
     match ctx.lookup_var(&root_name_str) {
         Some(Operand::Slot(slot)) => {
             store_slot(ctx, slot, value_id);
@@ -736,7 +770,7 @@ fn lower_set_simple<'db>(
         Some(Operand::Param(param)) => {
             let mode = ctx.param_mode(param);
             if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                ctx.emit_param_store(param, Operand::Value(value_id));
+                ctx.emit_param_store(param, value);
                 Ok(())
             } else {
                 panic!("assignment to immutable param '{}' - typechecker should catch this", root_name_str)
@@ -766,20 +800,19 @@ fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
 
 /// Lower a compound assignment: `set x += v`, `set xs[i]!.n +!= v`.
 ///
-/// The place is found once, through the same steps and checks as for any
-/// `set`, so an index is evaluated and looked up once. Then one instruction
-/// updates it in place. An erased type's arithmetic is the runtime's, by its
-/// descriptor, so for one the operator's result is stored back instead.
+/// One instruction updates the place in place, once it has been reached. An
+/// erased type's arithmetic is the runtime's, by its descriptor, so for one
+/// the operator's result is stored back instead.
 fn lower_set_compound<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
+    keys: &[Operand],
     op: ast::BinOp,
-    value_expr: ExprFun<'db>,
+    rhs: Operand,
+    expr_temp_mark: usize,
 ) -> Result<(), LowerError> {
-    let target = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
+    let target = navigate_place(ctx, place, keys, place.steps.len())?;
     let ty = operand_type(ctx, &target);
-    let expr_temp_mark = ctx.expr_temps_mark();
-    let rhs = lower_operand(ctx, value_expr)?;
     if ty != IrType::Data {
         return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
     }
@@ -807,60 +840,41 @@ fn lower_set_compound<'db>(
 fn lower_set_indexed<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
-    value_expr: ExprFun<'db>,
+    keys: &[Operand],
+    value: Operand,
 ) -> Result<(), LowerError> {
     let last_step = place.steps.last().unwrap();
     if let ast::PlaceStep::Index(idx) = last_step {
+        let base_op = navigate_place(ctx, place, keys, place.steps.len() - 1)?;
+        let key_op = *keys.last().expect("an index step has a key");
         if idx.error_mode.is_none() {
-            // Bare index (upsert) for maps.
-            let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
-            let key_id = lower_expression(ctx, idx.index)?;
-            let value_id = lower_expression(ctx, value_expr)?;
-            ctx.emit(Instruction::MapUpsert {
-                map: base_op,
-                key: Operand::Value(key_id),
-                value: Operand::Value(value_id),
-            });
+            // Bare index (upsert) for maps, which takes the key as well.
+            let key_op = take_value(ctx, key_op);
+            let value = take_value(ctx, value);
+            ctx.emit(Instruction::MapUpsert { map: base_op, key: key_op, value });
         } else {
             // Fallible index: set a[i]? = v / set a[i]! = v.
             let error_mode = idx.error_mode.unwrap();
-            let base_op = lower_place_steps_to_operand(ctx, place, place.steps.len() - 1)?;
             let base_type = operand_type(ctx, &base_op);
-            let key_op = lower_operand(ctx, idx.index)?;
-            emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
-            let value_id = lower_expression(ctx, value_expr)?;
+            emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode, true)?;
+            let value = take_value(ctx, value);
             match &base_type {
                 IrType::Map(_, _) => {
-                    ctx.emit(Instruction::MapSetValue {
-                        map: base_op,
-                        key: key_op,
-                        value: Operand::Value(value_id),
-                    });
+                    ctx.emit(Instruction::MapSetValue { map: base_op, key: key_op, value });
                 }
                 IrType::Tensor(_, _) => {
-                    ctx.emit(Instruction::TensorSet {
-                        tensor: base_op,
-                        index: key_op,
-                        value: Operand::Value(value_id),
-                    });
+                    ctx.emit(Instruction::TensorSet { tensor: base_op, index: key_op, value });
                 }
                 _ => {
-                    ctx.emit(Instruction::ListSet {
-                        list: base_op,
-                        index: key_op,
-                        value: Operand::Value(value_id),
-                    });
+                    ctx.emit(Instruction::ListSet { list: base_op, index: key_op, value });
                 }
             }
         }
     } else {
         // Last step is a field, but chain contains index -- use ref-based approach.
-        let ref_op = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
-        let value_id = lower_expression(ctx, value_expr)?;
-        ctx.emit(Instruction::RefStore {
-            dest: ref_op,
-            value: Operand::Value(value_id),
-        });
+        let ref_op = navigate_place(ctx, place, keys, place.steps.len())?;
+        let value = take_value(ctx, value);
+        ctx.emit(Instruction::RefStore { dest: ref_op, value });
     }
     Ok(())
 }
@@ -869,20 +883,20 @@ fn lower_set_indexed<'db>(
 fn lower_set_field_path<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
-    value_expr: ExprFun<'db>,
+    value: Operand,
 ) -> Result<(), LowerError> {
     let root_name_str = place.root.text(ctx.db).to_string();
     let field_path = collect_field_path_from_place(ctx, place)?;
-    let value_id = lower_expression(ctx, value_expr)?;
+    let value = take_value(ctx, value);
     match ctx.lookup_var(&root_name_str) {
         Some(Operand::Slot(slot)) => {
-            ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
+            ctx.emit_set_field(SlotDest::Local(slot), field_path, value);
             Ok(())
         }
         Some(Operand::Param(param)) => {
             let mode = ctx.param_mode(param);
             if mode == Some(ParamMode::Mut) || mode == Some(ParamMode::Out) {
-                ctx.emit_param_set_field(param, field_path, Operand::Value(value_id));
+                ctx.emit_param_set_field(param, field_path, value);
                 Ok(())
             } else {
                 panic!("assignment to field of immutable param '{}' - typechecker should catch this", root_name_str)
@@ -900,12 +914,15 @@ fn lower_set_field_path<'db>(
 ///
 /// Emits ListBoundsCheck or MapContainsKey based on collection type,
 /// branches on the result, emits an early-return block, and starts the continue block.
+/// `set_target` says the index is a step of a `set`'s place, whose early return
+/// drops by the statement's own schedule.
 pub(crate) fn emit_fallible_index_check(
     ctx: &mut LowerCtx,
     collection_op: Operand,
     collection_type: &IrType,
     key_op: Operand,
     error_mode: ast::IndexErrorMode,
+    set_target: bool,
 ) -> Result<(), LowerError> {
     let collection_op = super::expr::open_container(ctx, collection_op, collection_type);
     let is_valid = ctx.fresh_value(IrType::Bool);
@@ -945,13 +962,13 @@ pub(crate) fn emit_fallible_index_check(
 
     ctx.start_block(early_return_block);
     match error_mode {
-        ast::IndexErrorMode::Option => ctx.emit_early_return_none(true),
+        ast::IndexErrorMode::Option => ctx.emit_early_return_none(set_target),
         ast::IndexErrorMode::Result => {
             let msg = match collection_type {
                 IrType::Map(_, _) => "key not found",
                 _ => "index out of bounds",
             };
-            ctx.emit_early_return_err_message(msg, true)
+            ctx.emit_early_return_err_message(msg, set_target)
         }
     }
 
@@ -1010,20 +1027,48 @@ pub(crate) fn emit_collection_element_ref(
     }
 }
 
-/// Lower place steps to an operand referencing a location within the place.
+/// Evaluate the keys of a place's index steps, left to right.
 ///
-/// Processes `step_count` steps from the place, returning the operand for
-/// the resulting location. For the root, returns the slot/param operand.
-/// For field/index steps, emits GetFieldRef/ListElementRef and returns ValueRef.
-fn lower_place_steps_to_operand<'db>(
+/// A key looked up with `?` or `!` is borrowed. The one a bare index inserts
+/// is owned, and a temporary until the upsert takes it.
+fn lower_place_keys<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
+) -> Result<Vec<Operand>, LowerError> {
+    let mut keys = Vec::new();
+    for step in &place.steps {
+        let ast::PlaceStep::Index(idx) = step else { continue };
+        let key = match idx.error_mode {
+            Some(_) => lower_operand(ctx, idx.index)?,
+            None => {
+                let key_id = lower_expression(ctx, idx.index)?;
+                ctx.record_expr_temp(key_id, ctx.expr_type(idx.index));
+                Operand::Value(key_id)
+            }
+        };
+        keys.push(key);
+    }
+    Ok(keys)
+}
+
+/// Reach a location `step_count` steps into a place, with its keys already
+/// evaluated.
+///
+/// Each index is checked, returning early if it fails, and each step takes a
+/// reference, GetFieldRef or ListElementRef and the like, giving a ValueRef.
+/// For the root alone it's the slot or parameter. None of this runs the
+/// program's code.
+fn navigate_place<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+    keys: &[Operand],
     step_count: usize,
 ) -> Result<Operand, LowerError> {
     let root_name_str = place.root.text(ctx.db).to_string();
     let mut current_op = ctx.lookup_var(&root_name_str)
         .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
 
+    let mut keys = keys.iter();
     for step in &place.steps[..step_count] {
         match step {
             ast::PlaceStep::Field(field) => {
@@ -1052,8 +1097,8 @@ fn lower_place_steps_to_operand<'db>(
                 let error_mode = idx.error_mode
                     .expect("bare index (upsert) cannot appear in intermediate set target position");
                 let base_type = operand_type(ctx, &current_op);
-                let key_op = lower_operand(ctx, idx.index)?;
-                emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                let key_op = *keys.next().expect("a key for every index step");
+                emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, true)?;
                 let dest = emit_collection_element_ref(ctx, current_op, &base_type, key_op);
                 current_op = Operand::ValueRef(dest);
             }

@@ -1646,49 +1646,63 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
     let place = &stmt.target;
-
-    // Analyze moves in index sub-expressions of the target (if any).
-    for step in &place.steps {
-        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-            // Bare index (upsert): key is consumed (moved into map if absent).
-            // With ? or !: key is borrowed (only used for lookup).
-            let is_consumed = idx.error_mode.is_none();
-            ctx.analyze_expr_moves(idx.index, is_consumed);
-        }
-    }
-
-    // If the target can early-return (index with ? or !), compute drops NOW before
-    // the RHS is analyzed.
-    let may_early_return = place.steps.iter().any(|s| {
-        matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(idx) if idx.error_mode.is_some())
-    });
-    if may_early_return {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
-        }
-    }
-
     let expr = stmt.value;
-
-    // A compound assignment reads the place before it writes it, so the place
-    // has to hold a value, and its value is an operand, which it borrows. A
-    // plain one moves its value into the place.
     let compound = stmt.op.is_some();
-    if compound {
-        check_compound_target_readable(ctx, stmt);
-    }
+
+    // The value comes first. A plain `set` moves it into the place; a compound
+    // one reads it as an operand, which borrows.
     ctx.analyze_expr_moves(expr, !compound);
 
-    // Check for early return operators in the RHS expression AFTER analyzing
-    // moves. This ensures bindings consumed by the expression aren't dropped.
-    // A checked or optional compound operator returns early from the same
-    // point, after its value.
+    // Then the keys, left to right. A bare index (upsert) consumes its key,
+    // which goes into the map if it is absent; with `?` or `!` the key is
+    // only looked up, and borrowed.
+    let mut keys_may_early_return = false;
+    for step in &place.steps {
+        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+            keys_may_early_return |= ctx.expr_may_early_return(idx.index);
+        }
+    }
+
+    // An early return from inside the value or a key, or from a checked or
+    // optional compound operator, drops what is live once the value has been
+    // evaluated: a key that a bare index will consume hasn't been yet. For the
+    // operator, which runs after the keys, it's the same, since a compound
+    // assignment has no bare index to consume one.
     let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
-    if ctx.expr_may_early_return(expr) || op_may_early_return {
+    if ctx.expr_may_early_return(expr) || keys_may_early_return || op_may_early_return {
         let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
+    }
+
+    for step in &place.steps {
+        if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
+            ctx.analyze_expr_moves(idx.index, idx.error_mode.is_none());
+        }
+    }
+
+    // Only then is the place reached, so only now does its root have to be
+    // there: the value and the keys may have moved it. A compound assignment
+    // reads the place, so it has to hold a value too.
+    if compound {
+        check_compound_target_readable(ctx, stmt);
+    } else if !place.steps.is_empty() {
+        let expr_key = ExprKey::of(ctx.db, expr);
+        if let Some(id) = ctx.lookup(place.root.text(ctx.db)) {
+            ctx.check_not_moved(id, expr_key);
+        }
+    }
+
+    // A failed `?` or `!` on the way to the place returns early with the
+    // value and the keys evaluated, and drops what is live then.
+    let target_may_early_return = place.steps.iter().any(|s| {
+        matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(idx) if idx.error_mode.is_some())
+    });
+    if target_may_early_return {
+        let drops = early_return_drops(ctx, stmt_idx);
+        if !drops.is_empty() {
+            ctx.schedule.before_set_target_early_return.insert(stmt_idx, drops);
         }
     }
 

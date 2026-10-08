@@ -268,7 +268,7 @@ fn lower_index_as_ref<'db>(
     let key_op = lower_operand(ctx, index_expr.index)?;
     let base_type = indexed_base_type(ctx, index_expr.base);
     let base_op = open_container(ctx, base_op, &base_type);
-    super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode)?;
+    super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode, false)?;
     let dest = super::stmt::emit_collection_element_ref(ctx, base_op, &base_type, key_op);
     Ok(Operand::Value(dest))
 }
@@ -1939,7 +1939,7 @@ fn lower_place_expression<'db>(
                     return Ok(dest);
                 } else {
                     // Intermediate index — get ref to element.
-                    super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                    super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, false)?;
                     let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
                     current_op = Operand::ValueRef(dest);
                 }
@@ -1990,7 +1990,7 @@ fn lower_place_as_ref<'db>(
                 };
                 current_op = open_container(ctx, current_op, &base_type);
                 let key_op = lower_operand(ctx, idx.index)?;
-                super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode)?;
+                super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, false)?;
                 let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
                 current_op = Operand::ValueRef(dest);
             }

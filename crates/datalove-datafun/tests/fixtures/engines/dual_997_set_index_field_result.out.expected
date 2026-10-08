@@ -44,19 +44,19 @@ Analysis(
                     block0:
                         v0 = move p0
                         store.move.tracked s0, v0
-                        v1 = listboundscheck s0[p1]
-                        branch v1, block2, block1
+                        v1 = copy p2
+                        v2 = listboundscheck s0[p1]
+                        branch v2, block2, block1
                     block1:
-                        v2 = const "index out of bounds"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v3 = const "index out of bounds"
+                        v4 = error_from v3
+                        v5 = err v4
                         drop.tracked s0
-                        return v4
+                        return v5
                     block2:
-                        v5 = listelementref s0[p1]
-                        v6 = getfieldref *v5.0
-                        v7 = copy p2
-                        refstore *v6, v7
+                        v6 = listelementref s0[p1]
+                        v7 = getfieldref *v6.0
+                        refstore *v7, v1
                         v8 = load.move.tracked s0
                         v9 = ok v8
                         return v9

@@ -1115,7 +1115,7 @@ only happens if all checks pass.
 maps. It inserts if the key is absent, overwrites if present. Lists reject
 bare index on `set` LHS -- list elements must exist to be overwritten.
 
-An upsert evaluates the key, then the RHS, then looks the key up. If the key
+An upsert evaluates the RHS, then the key, then looks the key up. If the key
 is present, the old value is dropped and the new one stored; the key already
 in the map stays and the provided key is dropped. If the key is absent, the
 provided key and value are inserted as a pair:
@@ -1126,16 +1126,34 @@ set m["a"] = "uno"    // drops the provided "a" and "one", stores "uno"
 set m["b"] = "two"    // inserts "b" = "two"
 ```
 
-**Evaluation order** for `set` with indexed targets:
+**Evaluation order** for every `set`, plain or compound:
 
-1. Navigate the LHS chain -- evaluate index subexpressions, perform
-   bounds/existence checks, early-return on failure.
-2. Evaluate the RHS.
-3. Drop the old value at the target (if linear type).
-4. Store the new value.
+1. Evaluate the RHS. An early return from it (`?`, `!`, a checked operator)
+   happens here, before anything else of the statement has run.
+2. Evaluate the keys of the target's index steps, left to right.
+3. Navigate the target: each index step's bounds or existence check, in
+   order, early-returning on the first that fails.
+4. Drop the old value at the target (if linear type) and store the new one,
+   or for a compound assignment, apply its operator.
 
-The RHS can ref-borrow the same collection (e.g., `set a[0]? = a[1]?@`)
-but cannot take mutable or consuming access to it.
+All of the program's own code in a `set` -- the RHS and the keys -- runs
+before step 3, which runs none, so nothing can move or reallocate a
+collection while a reference into it is held. The RHS may borrow the target's
+collection, mutably too: `set xs[0]? = grow(mut xs)` stores into the grown
+list, and an index the RHS pushes into range is in range when it's checked.
+
+Some consequences of the order:
+
+- An RHS's effects happen even when a lookup then fails.
+- When both the RHS and a lookup could fail, the RHS's failure is the one
+  returned.
+- A key evaluated in step 2 runs even when an earlier step's lookup fails.
+- What the RHS moves is gone by step 2: `set m[k]? = k` moves `k` before the
+  lookup uses it, and is an error (`set m[k]? = k@` clones it). So is an RHS
+  that moves the target's root, `set xs[0]? = consume(xs)`. A plain variable
+  may still be replaced by a value made from it, `set x = f(x)`.
+- On a failed lookup, the evaluated RHS, and a key a bare index would have
+  inserted, are dropped.
 
 **Compound assignment** updates a place with an arithmetic operator:
 
@@ -1161,16 +1179,13 @@ As with the binary operators, `!` forms need the function to return a result
 and `?` forms an option, and on failure return early, leaving the place as it
 was (F049). Another operator or type is F026.
 
-The place is evaluated once: its index expressions run, and its lookups
-happen, a single time. The order is:
+The place is evaluated once, in the order of any `set`: the value, then its
+keys, then its lookups, each a single time, and then the operator reads the
+place and the value and stores its result there.
 
-1. Navigate the place, as for `set`, early-returning on a failed `?` or `!`.
-2. Evaluate the value.
-3. Apply the operator to the place's value and the value.
-4. Store the result in the place.
-
-The place has to hold a value, since it is read: a moved-out variable or an
-unwritten `out` parameter is an error. The value is an operand, so it is
+The place has to hold a value when it's reached, since it is read: a
+moved-out variable, an unwritten `out` parameter, or one the value moves
+(`set x += f(x)` with `f` taking `x` by value) is an error. The value is an operand, so it is
 borrowed rather than consumed, and it may be the place itself (`set x += x`).
 A bare map index is rejected (F074): it inserts a missing key, and then there
 is no value to update.

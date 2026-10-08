@@ -42,16 +42,16 @@ Analysis(
                     block0:
                         v0 = move p0
                         store.move.tracked s0, v0
-                        v1 = getfieldref s0.0
-                        v2 = listboundscheck *v1[p1]
-                        branch v2, block2, block1
+                        v1 = copy p2
+                        v2 = getfieldref s0.0
+                        v3 = listboundscheck *v2[p1]
+                        branch v3, block2, block1
                     block1:
-                        v3 = none
+                        v4 = none
                         drop.tracked s0
-                        return v3
+                        return v4
                     block2:
-                        v4 = copy p2
-                        listset *v1[p1] = v4
+                        listset *v2[p1] = v1
                         v5 = load.move.tracked s0
                         v6 = some v5
                         return v6

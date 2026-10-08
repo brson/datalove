@@ -1,0 +1,47 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Error",
+                message: "Ownership error in key_moved: UseAfterMove { expr_key: ExprKey(fn #1), moved_at: ExprKey(fn #2), name: \"k\", recovery_hint: InsertAdapt { description: \"clone `k` before the earlier use\" } }\nOwnership error in root_moved: UseAfterMove { expr_key: ExprKey(fn #3), moved_at: ExprKey(fn #2), name: \"b\", recovery_hint: InsertAdapt { description: \"clone `b` before the earlier use\" } }\nOwnership error in compound_root_moved: UseAfterMove { expr_key: ExprKey(fn #2), moved_at: ExprKey(fn #1), name: \"x\", recovery_hint: InsertAdapt { description: \"clone `x` before the earlier use\" } }",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Skipped",
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

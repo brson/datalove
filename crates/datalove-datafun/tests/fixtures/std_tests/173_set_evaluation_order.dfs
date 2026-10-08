@@ -1,0 +1,48 @@
+require module sys/std/list
+import list.push
+
+// The order a `set` runs its parts in: the value, then the keys left to
+// right, then the lookups, then the write. Each part notes itself.
+fun note(mut log: [string], what: string, at: index): index
+  call push(mut log, what)
+  ret at
+end fun
+
+fun value(mut log: [string], v: int): int
+  call push(mut log, "value")
+  ret v
+end fun
+
+fun nested(mut log: [string]): ?[[int]]
+  var grid = [[1, 2], [3, 4]]
+  set grid[note(mut log, "outer", (: index / 1))]?[note(mut log, "inner", (: index / 0))]? += value(mut log, 10)
+  ret some grid
+end fun
+
+// The value and the keys have run by the time a lookup fails.
+fun missed(mut log: [string]): ?[[int]]
+  var grid = [[1, 2], [3, 4]]
+  set grid[note(mut log, "outer", (: index / 7))]?[note(mut log, "inner", (: index / 0))]? = value(mut log, 10)
+  ret some grid
+end fun
+
+// The value's own failure comes first, before any key runs.
+fun failing_value(mut log: [string]): ?int
+  call push(mut log, "failing")
+  ret none
+end fun
+
+fun value_fails_first(mut log: [string]): ?[int]
+  var xs = [1, 2]
+  set xs[note(mut log, "key", (: index / 9))]? = failing_value(mut log)?
+  ret some xs
+end fun
+
+var log1: [string] = []
+let r1 = nested(mut log1)
+var log2: [string] = []
+let r2 = missed(mut log2)
+var log3: [string] = []
+let r3 = value_fails_first(mut log3)
+
+let output = ((r1, log1), (r2, log2), (r3, log3))

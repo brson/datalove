@@ -1,0 +1,36 @@
+require module sys/std/list
+import list.get
+
+// What a `set` has evaluated and not yet written is let go of when it returns
+// early: the value, and a key a bare index would have inserted.
+fun make(s: string): string
+  ret s
+end fun
+
+fun missed_value(i: index): ?[string]
+  var xs = ["a", "b"]
+  set xs[i]? = make("a string the write never takes")
+  ret some xs
+end fun
+
+fun missed_key(i: index): ?[%{string = string}]
+  var maps: [%{string = string}] = [%{"k" = "v"}]
+  set maps[i]?[make("a key the upsert never takes")] = make("and its value")
+  ret some maps
+end fun
+
+fun nothing(): ?string
+  ret none
+end fun
+
+// The value fails before the key is moved into the statement, so the key is
+// still the binding's to drop.
+fun failed_value_keeps_key(): ?%{string = string}
+  var m: %{string = string} = %{}
+  let k = make("a key still in its binding")
+  set m[k] = nothing()?
+  ret some m
+end fun
+
+let output = (missed_value(: index / 1), missed_value(: index / 5),
+  missed_key(: index / 0), missed_key(: index / 5), failed_value_keeps_key())

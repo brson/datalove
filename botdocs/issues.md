@@ -38,6 +38,7 @@ home here.
 - [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
 - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
 - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
+- [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
 
 ## No table module, and none can be written
 
@@ -602,3 +603,29 @@ data files. None stopped it; each cost a detour.
   m[k@] = #{}` when absent, then `set.insert(mut m[k]!, x)`. Nothing points
   the writer from the first to the second.
 
+## A borrow into a collection outlives a later `mut` of it
+
+**Reproduced.** An operand that names an element of a collection is read
+through a reference into it, taken when the operand is evaluated, and nothing
+stops a later operand of the same expression from taking the collection
+`mut` and reallocating it:
+
+```datalove
+var xs = [100000000000000000000, 5]
+let y = xs[(: index / 0)]? + grow(mut xs)   // grow pushes until xs moves
+```
+
+The addition reads the element through the dangling reference, and gives a
+garbage number rather than failing. The same holds for any pair of operands,
+call arguments aside (which `check_argument_aliasing` covers): a reference
+taken by an earlier operand, then a `mut` or consuming use of its root by a
+later one. `set` no longer has a case of it, since it runs all of its own code
+before it reaches its place, but `set xs[f(mut xs)]? += xs[1]?` still does:
+the value's reference into the list is taken, then the key's call grows it.
+Its IR shows the order; run, it read the freed buffer, which happened still
+to hold the right number.
+
+The fix is an ownership rule: within an expression, a binding an earlier
+operand borrows by reference can't be taken `mut` or moved by a later one, as
+Rust's borrow checker refuses it. The alternative, reading such an operand by
+copy, would cost a clone of every linear element an operator reads.

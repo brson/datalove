@@ -72,9 +72,9 @@ Analysis(
                         v3 = pack Tuple2 {v1, v2}
                         v4 = pack Struct0 {v0, v3}
                         store.move.tracked s0, v4
-                        v5 = getfieldref s0.0
-                        v6 = const 10u32
-                        v7 = add.assign.checked *v5, v6
+                        v5 = const 10u32
+                        v6 = getfieldref s0.0
+                        v7 = add.assign.checked *v6, v5
                         branch v7, block1, block2
                     block1:
                         v8 = const "arithmetic overflow"
@@ -83,10 +83,10 @@ Analysis(
                         drop.tracked s0
                         return v10
                     block2:
-                        v11 = getfieldref s0.1
-                        v12 = getfieldref *v11.0
-                        v13 = const 5u32
-                        v14 = mul.assign.checked *v12, v13
+                        v11 = const 5u32
+                        v12 = getfieldref s0.1
+                        v13 = getfieldref *v12.0
+                        v14 = mul.assign.checked *v13, v11
                         branch v14, block3, block4
                     block3:
                         v15 = const "arithmetic overflow"
@@ -95,32 +95,30 @@ Analysis(
                         drop.tracked s0
                         return v17
                     block4:
-                        v18 = getfieldref s0.1
-                        v19 = getfieldref *v18.1
-                        v20 = const 1000int
-                        add.assign *v19, v20
-                        drop v20
+                        v18 = const 1000int
+                        v19 = getfieldref s0.1
+                        v20 = getfieldref *v19.1
+                        add.assign *v20, v18
+                        drop v18
                         v21 = const 1u32
                         v22 = const 2u32
                         v23 = const 3u32
                         v24 = list [v21, v22, v23]
                         store.move.tracked s1, v24
-                        v25 = const 1index
-                        v26 = listboundscheck s1[v25]
-                        branch v26, block6, block5
+                        v25 = const 40u32
+                        v26 = const 1index
+                        v27 = listboundscheck s1[v26]
+                        branch v27, block6, block5
                     block5:
-                        v27 = const "index out of bounds"
-                        v28 = error_from v27
-                        v29 = err v28
+                        v28 = const "index out of bounds"
+                        v29 = error_from v28
+                        v30 = err v29
                         drop.tracked s0
                         drop.tracked s1
-                        drop.tracked s0
-                        drop.tracked s1
-                        return v29
+                        return v30
                     block6:
-                        v30 = listelementref s1[v25]
-                        v31 = const 40u32
-                        v32 = add.assign.checked *v30, v31
+                        v31 = listelementref s1[v26]
+                        v32 = add.assign.checked *v31, v25
                         branch v32, block7, block8
                     block7:
                         v33 = const "arithmetic overflow"
@@ -134,49 +132,46 @@ Analysis(
                         v37 = const 1int
                         v38 = %{v36: v37}
                         store.move.tracked s2, v38
-                        v39 = const "a"
-                        v40 = mapcontainskey s2[v39]
-                        branch v40, block10, block9
+                        v39 = const 100000000000000000000int
+                        v40 = const "a"
+                        v41 = mapcontainskey s2[v40]
+                        branch v41, block10, block9
                     block9:
-                        v41 = const "key not found"
-                        v42 = error_from v41
-                        v43 = err v42
+                        v42 = const "key not found"
+                        v43 = error_from v42
+                        v44 = err v43
                         drop v39
+                        drop v40
                         drop.tracked s0
                         drop.tracked s1
                         drop.tracked s2
-                        return v43
+                        return v44
                     block10:
-                        v44 = mapvalueref s2[v39]
-                        v45 = const 100000000000000000000int
-                        mul.assign *v44, v45
-                        drop v45
+                        v45 = mapvalueref s2[v40]
+                        mul.assign *v45, v39
                         drop v39
+                        drop v40
                         v46 = const 10u32
                         v47 = const 20u32
                         v48 = const 30u32
                         v49 = [| v46 v47 v48 |]
                         store.move.tracked s3, v49
-                        v50 = const 2index
-                        v51 = tensorboundscheck s3[v50]
-                        branch v51, block12, block11
+                        v50 = const 5u32
+                        v51 = const 2index
+                        v52 = tensorboundscheck s3[v51]
+                        branch v52, block12, block11
                     block11:
-                        v52 = const "index out of bounds"
-                        v53 = error_from v52
-                        v54 = err v53
+                        v53 = const "index out of bounds"
+                        v54 = error_from v53
+                        v55 = err v54
                         drop.tracked s0
                         drop.tracked s1
                         drop.tracked s2
                         drop.tracked s3
-                        drop.tracked s0
-                        drop.tracked s1
-                        drop.tracked s2
-                        drop.tracked s3
-                        return v54
+                        return v55
                     block12:
-                        v55 = tensorindexref s3[v50]
-                        v56 = const 5u32
-                        v57 = sub.assign.checked *v55, v56
+                        v56 = tensorindexref s3[v51]
+                        v57 = sub.assign.checked *v56, v50
                         branch v57, block13, block14
                     block13:
                         v58 = const "arithmetic overflow"
@@ -196,29 +191,24 @@ Analysis(
                         v66 = pack Struct0 {v64, v65}
                         v67 = list [v63, v66]
                         store.move.tracked s4, v67
-                        v68 = const 0index
-                        v69 = listboundscheck s4[v68]
-                        branch v69, block16, block15
+                        v68 = const 100u32
+                        v69 = const 0index
+                        v70 = listboundscheck s4[v69]
+                        branch v70, block16, block15
                     block15:
-                        v70 = const "index out of bounds"
-                        v71 = error_from v70
-                        v72 = err v71
+                        v71 = const "index out of bounds"
+                        v72 = error_from v71
+                        v73 = err v72
                         drop.tracked s0
                         drop.tracked s1
                         drop.tracked s2
                         drop.tracked s3
                         drop.tracked s4
-                        drop.tracked s0
-                        drop.tracked s1
-                        drop.tracked s2
-                        drop.tracked s3
-                        drop.tracked s4
-                        return v72
+                        return v73
                     block16:
-                        v73 = listelementref s4[v68]
-                        v74 = getfieldref *v73.0
-                        v75 = const 100u32
-                        v76 = add.assign.checked *v74, v75
+                        v74 = listelementref s4[v69]
+                        v75 = getfieldref *v74.0
+                        v76 = add.assign.checked *v75, v68
                         branch v76, block17, block18
                     block17:
                         v77 = const "arithmetic overflow"
@@ -231,25 +221,26 @@ Analysis(
                         drop.tracked s4
                         return v79
                     block18:
-                        v80 = const 1index
-                        v81 = listboundscheck s4[v80]
-                        branch v81, block20, block19
+                        v80 = const 25int
+                        v81 = const 1index
+                        v82 = listboundscheck s4[v81]
+                        branch v82, block20, block19
                     block19:
-                        v82 = const "index out of bounds"
-                        v83 = error_from v82
-                        v84 = err v83
+                        v83 = const "index out of bounds"
+                        v84 = error_from v83
+                        v85 = err v84
+                        drop v80
                         drop.tracked s0
                         drop.tracked s1
                         drop.tracked s2
                         drop.tracked s3
                         drop.tracked s4
-                        return v84
+                        return v85
                     block20:
-                        v85 = listelementref s4[v80]
-                        v86 = getfieldref *v85.1
-                        v87 = const 25int
-                        sub.assign *v86, v87
-                        drop v87
+                        v86 = listelementref s4[v81]
+                        v87 = getfieldref *v86.1
+                        sub.assign *v87, v80
+                        drop v80
                         v88 = load.move.tracked s0
                         v89 = load.move.tracked s1
                         v90 = load.move.tracked s2
@@ -263,17 +254,16 @@ Analysis(
                     block0:
                         v0 = move p0
                         store.move.tracked s0, v0
-                        v1 = listboundscheck s0[p1]
-                        branch v1, block2, block1
+                        v1 = const 1u8
+                        v2 = listboundscheck s0[p1]
+                        branch v2, block2, block1
                     block1:
-                        v2 = none
+                        v3 = none
                         drop.tracked s0
-                        drop.tracked s0
-                        return v2
+                        return v3
                     block2:
-                        v3 = listelementref s0[p1]
-                        v4 = const 1u8
-                        v5 = add.assign.checked *v3, v4
+                        v4 = listelementref s0[p1]
+                        v5 = add.assign.checked *v4, v1
                         branch v5, block3, block4
                     block3:
                         v6 = none
@@ -288,20 +278,21 @@ Analysis(
                     block0:
                         v0 = move p0
                         store.move.tracked s0, v0
-                        v1 = mapcontainskey s0[p1]
-                        branch v1, block2, block1
+                        v1 = const 1int
+                        v2 = mapcontainskey s0[p1]
+                        branch v2, block2, block1
                     block1:
-                        v2 = const "key not found"
-                        v3 = error_from v2
-                        v4 = err v3
+                        v3 = const "key not found"
+                        v4 = error_from v3
+                        v5 = err v4
+                        drop v1
                         drop p1
                         drop.tracked s0
-                        return v4
+                        return v5
                     block2:
-                        v5 = mapvalueref s0[p1]
-                        v6 = const 1int
-                        add.assign *v5, v6
-                        drop v6
+                        v6 = mapvalueref s0[p1]
+                        add.assign *v6, v1
+                        drop v1
                         v7 = load.move.tracked s0
                         v8 = ok v7
                         drop p1
@@ -331,27 +322,26 @@ Analysis(
                         store.move.tracked s0, v3
                         v4 = const 0u32
                         store.copy s1, v4
-                        v5 = call u3(s1)
-                        v6, v7, v8 = unwrap_result v5
-                        branch v8, block2, block1
+                        v5 = const 3u32
+                        v6 = call u3(s1)
+                        v7, v8, v9 = unwrap_result v6
+                        branch v9, block2, block1
                     block1:
-                        v9 = err v7
+                        v10 = err v8
                         drop.tracked s0
-                        return v9
+                        return v10
                     block2:
-                        v10 = listboundscheck s0[v6]
-                        branch v10, block4, block3
+                        v11 = listboundscheck s0[v7]
+                        branch v11, block4, block3
                     block3:
-                        v11 = const "index out of bounds"
-                        v12 = error_from v11
-                        v13 = err v12
+                        v12 = const "index out of bounds"
+                        v13 = error_from v12
+                        v14 = err v13
                         drop.tracked s0
-                        drop.tracked s0
-                        return v13
+                        return v14
                     block4:
-                        v14 = listelementref s0[v6]
-                        v15 = const 3u32
-                        v16 = mul.assign.checked *v14, v15
+                        v15 = listelementref s0[v7]
+                        v16 = mul.assign.checked *v15, v5
                         branch v16, block5, block6
                     block5:
                         v17 = const "arithmetic overflow"
