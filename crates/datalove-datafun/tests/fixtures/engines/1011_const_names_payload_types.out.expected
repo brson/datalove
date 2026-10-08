@@ -1,0 +1,55 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/m"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn all():
+                    block0:
+                        v0 = staticref data [1i64, 2i64, 3i64]
+                        v1 = clone *v0
+                        v2 = staticref [data #{4u16, 5u16}, data %{"a" = 6i8}]
+                        v3 = clone *v2
+                        v4 = staticref err error (7u64, "x")
+                        v5 = clone *v4
+                        v6 = staticref {d = data (8i32, true), n = 9u32}
+                        v7 = clone *v6
+                        v8 = pack Tuple4 {v1, v3, v5, v7}
+                        return v8
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u0()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(data [1, 2, 3], [data #{4, 5}, data %{\"a\" = 6}], er error (7, \"x\"), {d = data (8, true), n = 9})\n"),
+        ),
+    ],
+)

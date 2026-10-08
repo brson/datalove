@@ -1,0 +1,26 @@
+----------
+module local/test/m
+----------
+
+// A constant holding a `data` or an `error` names its payload's type, which
+// may be named nowhere else in the unit, and a compiled backend has to make a
+// descriptor for it. The emitter finds such types by walking constants whose
+// own type could hold one, and skips the rest; these are the ones it has to
+// walk.
+const D: data = data (: [i64] / [1, 2, 3])
+const N: [data] = [data (: #{u16} / #{4, 5}), data (: %{string = i8} / %{"a" = 6})]
+const E: !u8 = er error (: u64 / 7, "x")
+const S: {d: data, n: u32} = {d = data (: i32 / 8, true), n = 9}
+
+fun all(): (data, [data], !u8, {d: data, n: u32})
+  ret (D@, N@, E@, S@)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/m
+import m.all
+
+debuglog all()

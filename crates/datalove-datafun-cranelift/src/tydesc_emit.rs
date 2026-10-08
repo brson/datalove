@@ -1516,16 +1516,19 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
     // packed against a descriptor for that: a const of a `data` over a list of
     // `i64` was the only mention of `[i64]` in its unit, and the emitter made
     // no descriptor for it.
+    //
+    // Only a constant whose type has a `data` or `error` in it can hold one,
+    // so the rest are not walked: a dataset is a constant of hundreds of
+    // thousands of values, and every function reading it names it.
     for block in &unit.blocks {
         for instr in &block.instructions {
-            match instr {
-                datalove_datafun_ir::Instruction::Const { value, .. } => {
-                    collect_types_from_const_value(value, types);
-                }
-                datalove_datafun_ir::Instruction::StaticRef { value, .. } => {
-                    collect_types_from_const_value(value, types);
-                }
-                _ => {}
+            let (dest, value) = match instr {
+                datalove_datafun_ir::Instruction::Const { dest, value } => (dest, value),
+                datalove_datafun_ir::Instruction::StaticRef { dest, value } => (dest, &***value),
+                _ => continue,
+            };
+            if can_hold_payload(&unit.value_types[dest.0 as usize]) {
+                collect_types_from_const_value(value, types);
             }
         }
     }
@@ -1533,6 +1536,25 @@ pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrTy
     // Recursively collect from nested units.
     for nested in &unit.nested_units {
         collect_types_from_code_unit(nested, types);
+    }
+}
+
+/// Whether a value of this type can have a `data` or `error` inside it.
+fn can_hold_payload(ty: &IrType) -> bool {
+    match ty {
+        IrType::Data | IrType::Error => true,
+        // The error side of a result is an `error`.
+        IrType::Result(_) => true,
+        IrType::Tuple(fields) => fields.iter().any(can_hold_payload),
+        IrType::Struct(fields) => fields.iter().any(|(_, ty)| can_hold_payload(ty)),
+        IrType::Enum(variants) => variants.iter().any(|(_, ty)| ty.as_ref().is_some_and(can_hold_payload)),
+        IrType::Table(columns) => columns.iter().any(|(_, ty)| can_hold_payload(ty)),
+        IrType::Term(_, ty) | IrType::List(ty) | IrType::Set(ty) | IrType::Option(ty)
+        | IrType::Tensor(ty, _) | IrType::Ref(ty) => can_hold_payload(ty),
+        IrType::Map(key, value) => can_hold_payload(key) || can_hold_payload(value),
+        IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+        | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
+        | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Atom(_) => false,
     }
 }
 
