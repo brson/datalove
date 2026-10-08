@@ -11,7 +11,7 @@ use rmx::std::collections::HashMap;
 use rmx::std::ops::Range;
 use rmx::std::path::{Path, PathBuf};
 
-use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, Label, Report, ReportKind, Source};
+use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, IndexType, Label, Report, ReportKind, Source};
 
 use crate::diagnostic::{Diagnostic, DiagnosticLabel, LabelStyle, Severity};
 use crate::text::Text;
@@ -213,10 +213,23 @@ enum Sink<'a> {
 impl Sink<'_> {
     fn config(&self) -> Config {
         match self {
-            Sink::Stderr => Config::default(),
-            Sink::Text(_) => Config::default().with_color(false).with_char_set(CharSet::Ascii),
+            Sink::Stderr => byte_config(),
+            Sink::Text(_) => byte_config().with_color(false).with_char_set(CharSet::Ascii),
         }
     }
+}
+
+/// The config every report starts from.
+///
+/// A span is bytes into its text, and ariadne counts characters unless told
+/// otherwise, so a label after any character wider than a byte -- an arrow in
+/// a comment, a letter in a string -- was drawn that many columns late, or on
+/// no line at all.
+fn byte_config() -> Config {
+    Config::default().with_index_type(IndexType::Byte)
+}
+
+impl Sink<'_> {
 
     fn emit<S: ariadne::Span, C: Cache<S::SourceId>>(self, report: Report<'_, S>, cache: C) {
         match self {
@@ -331,6 +344,7 @@ fn render_one_multi_source<'db>(
     let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
 
     let mut builder = Report::build(report_kind(diag.severity), (primary_file_id.C(), offset..offset))
+        .with_config(byte_config())
         .with_message(diag.message.as_str(db));
 
     if let Some(code) = &diag.code {
@@ -459,6 +473,17 @@ mod tests {
         assert_eq!(&src[23..27], "5deg");
         let out = rendered(src, 23..27, None);
         assert!(out.contains("panel.fui:2:16"), "{out}");
+    }
+
+    #[test]
+    fn a_label_after_a_multibyte_character_is_placed_by_bytes() {
+        let src = "// \u{2192} arrow\nw = 5deg\n";
+        // `5deg` begins at byte 17, which is line 2, column 5, though only
+        // 15 characters come before it.
+        assert_eq!(&src[17..21], "5deg");
+        let out = rendered(src, 17..21, None);
+        assert!(out.contains("panel.fui:2:5"), "{out}");
+        assert!(out.contains("w = 5deg"), "{out}");
     }
 
     #[test]
