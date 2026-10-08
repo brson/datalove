@@ -3542,3 +3542,36 @@ fn test_btreeset_tuples() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test that a set as long as an index counts refuses an insert.
+#[test]
+fn test_btreeset_full_index_refuses_insert() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (set_tydesc, element_tydesc) = create_set_u32_tydesc(&arena);
+
+    // Faked full, with no tree: the insert should fail before looking.
+    let mut set = rtdt::Set {
+        root: ptr::null(),
+        len: rtdt::Index(rtdt::IndexRepr::MAX),
+    };
+    let mut element = 42u32;
+    let mut was_inserted = 0u8;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_insert_local(
+            rt,
+            &mut set as *mut rtdt::Set as *mut u8,
+            set_tydesc as *const rtdt::TyDesc,
+            &mut element as *mut u32 as *mut u8,
+            element_tydesc as *const rtdt::TyDesc,
+            &mut was_inserted,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+    assert!(set.root.is_null());
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    Ok(())
+}

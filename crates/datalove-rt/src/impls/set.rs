@@ -1194,6 +1194,12 @@ pub unsafe fn btreeset_insert_impl(
         let set_element_tydesc_ref = rtdt::TyDescRef::from_ptr(set_element_tydesc);
 
         let set_ptr = btreeset_value_ref as *mut Set;
+        // A set as long as an index counts takes nothing more, even an
+        // update: whether the key is new isn't known until it's in.
+        if (*set_ptr).len.0 == rtdt::IndexRepr::MAX {
+            return RtStatus::Error;
+        }
+
         let root = (*set_ptr).root as *mut SetNode;
 
         // If set is empty, create the first leaf.

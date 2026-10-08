@@ -303,8 +303,7 @@ pub unsafe fn list_push_impl(
 
     // Grow if needed.
     if list.needs_grow() {
-        let new_capacity = calculate_new_capacity(list.capacity(), list.size() + 1);
-        let status = unsafe { grow_buffer(rt, list_ptr, element_tydesc, new_capacity) };
+        let status = unsafe { reserve(rt, list_ptr, element_tydesc, 1) };
         if status != RtStatus::Ok {
             return status;
         }
@@ -571,8 +570,7 @@ pub unsafe fn list_push_data_impl(
     let mut list = unsafe { ListMut::new(list_ptr, element_ty) };
 
     if list.needs_grow() {
-        let new_capacity = calculate_new_capacity(list.capacity(), list.size() + 1);
-        let status = unsafe { grow_buffer(rt, list_ptr, element_ty, new_capacity) };
+        let status = unsafe { reserve(rt, list_ptr, element_ty, 1) };
         if status != RtStatus::Ok {
             return status;
         }
@@ -649,8 +647,7 @@ pub unsafe fn list_insert_data_impl(
     }
 
     if list.needs_grow() {
-        let new_capacity = calculate_new_capacity(list.capacity(), size + 1);
-        let status = unsafe { grow_buffer(rt, list_ptr, element_ty, new_capacity) };
+        let status = unsafe { reserve(rt, list_ptr, element_ty, 1) };
         if status != RtStatus::Ok {
             return status;
         }
@@ -805,8 +802,7 @@ pub unsafe fn list_insert_impl(
 
     // Grow if needed.
     if list.needs_grow() {
-        let new_capacity = calculate_new_capacity(list.capacity(), size + 1);
-        let status = unsafe { grow_buffer(rt, list_ptr, element_tydesc, new_capacity) };
+        let status = unsafe { reserve(rt, list_ptr, element_tydesc, 1) };
         if status != RtStatus::Ok {
             return status;
         }
@@ -893,10 +889,24 @@ pub unsafe fn list_reserve_impl(
     additional: rtdt::IndexRepr,
 ) -> RtStatus {
     let element_ty = list_tydesc.list_element_ty();
-    let list_ptr = list_value_mut as *mut List;
-    let list = unsafe { ListMut::new(list_ptr, element_ty) };
+    unsafe { reserve(rt, list_value_mut as *mut List, element_ty, additional) }
+}
 
-    let required = list.size().saturating_add(additional);
+/// Make room for `additional` more elements.
+///
+/// Every path that adds elements comes through here first, so that a list's
+/// size can't pass its capacity, and its capacity can't pass what an index
+/// counts. A list that would outgrow the index is an error, not a wrap.
+unsafe fn reserve(
+    rt: &mut RtLocal,
+    list_ptr: *mut List,
+    element_ty: rtdt::TyDescRef,
+    additional: rtdt::IndexRepr,
+) -> RtStatus {
+    let list = unsafe { ListMut::new(list_ptr, element_ty) };
+    let Some(required) = list.size().checked_add(additional) else {
+        return RtStatus::Error;
+    };
     if required <= list.capacity() {
         return RtStatus::Ok;
     }
@@ -1027,10 +1037,7 @@ unsafe fn grow_buffer(
     let old_capacity = list.capacity();
     let size = list.size();
     let old_data = list.data_mut();
-
-    if new_capacity <= old_capacity {
-        return RtStatus::Ok;
-    }
+    debug_assert!(new_capacity > old_capacity, "growing to no more room");
 
     let element_size = element_tydesc.size();
     let element_align = element_tydesc.align();

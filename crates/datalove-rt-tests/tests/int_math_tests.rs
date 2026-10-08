@@ -1741,3 +1741,59 @@ proptest! {
         }
     }
 }
+
+// ============================================================================
+// Size Limit Tests
+// ============================================================================
+
+/// A fake `Int` of `limbs` limbs, over limbs that aren't there.
+fn fake_int(limbs: i32) -> datalove_rtdt::Int {
+    datalove_rtdt::Int {
+        data: std::ptr::NonNull::<u32>::dangling().as_ptr(),
+        size_and_sign: limbs,
+        capacity: datalove_rtdt::Index(limbs as datalove_rtdt::IndexRepr),
+    }
+}
+
+/// Test that results too long for an `Int`'s size fail rather than truncate.
+///
+/// Each should fail before reading a limb.
+#[test]
+fn test_int_results_too_large() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+    let (zero_ptr, tydesc) = instantiate_int(&db, &rt, &mut tydesc_table, ": int / 0")?;
+
+    let huge = fake_int(i32::MAX);
+    let half = fake_int(1 << 30);
+    let mut result = fake_int(0);
+    let result_ptr = &mut result as *mut datalove_rtdt::Int as *mut u8;
+    let as_in = |i: &datalove_rtdt::Int| i as *const datalove_rtdt::Int as *const u8;
+
+    unsafe {
+        let status = datalove_rt::c::dtlv_rti_int_add(
+            rt.handle(), as_in(&huge), tydesc, zero_ptr, tydesc, result_ptr, tydesc);
+        assert_eq!(status, RtStatus::Error);
+        assert_eq!(result.size_and_sign, 0);
+
+        let status = datalove_rt::c::dtlv_rti_int_mul(
+            rt.handle(), as_in(&half), tydesc, as_in(&half), tydesc, result_ptr, tydesc);
+        assert_eq!(status, RtStatus::Error);
+        assert_eq!(result.size_and_sign, 0);
+
+        let status = datalove_rt::c::dtlv_rti_int_from_limbs(
+            rt.handle(),
+            std::ptr::NonNull::<u32>::dangling().as_ptr(),
+            i32::MAX as u32 + 1,
+            false,
+            result_ptr,
+            tydesc,
+        );
+        assert_eq!(status, RtStatus::Error);
+        assert_eq!(result.size_and_sign, 0);
+
+        cleanup_value(&rt, zero_ptr, tydesc);
+    }
+    Ok(())
+}

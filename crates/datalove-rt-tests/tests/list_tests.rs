@@ -3280,3 +3280,41 @@ fn test_list_reserve_already_sufficient() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test that a list as long as an index counts refuses to grow.
+///
+/// The list is faked full, over a buffer that isn't there: every path should
+/// fail before touching it.
+#[test]
+fn test_list_full_index_refuses_growth() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc(&arena);
+
+    let mut list = rtdt::List {
+        data: ptr::NonNull::<u32>::dangling().as_ptr() as *const u8,
+        size: rtdt::Index(rtdt::IndexRepr::MAX),
+        capacity: rtdt::Index(rtdt::IndexRepr::MAX),
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+    let mut element = 7u32;
+
+    unsafe {
+        let status = datalove_rt::c::dtlv_rti_list_push_local(
+            rt, list_ptr, list_tydesc, &mut element as *mut u32 as *mut u8, element_tydesc);
+        assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+        let status = datalove_rt::c::dtlv_rti_list_reserve_local(rt, list_ptr, list_tydesc, 1);
+        assert_eq!(status, datalove_rt::c::RtStatus::Error);
+
+        let status = datalove_rt::c::dtlv_rti_list_extend_from_slice_local(
+            rt, list_ptr, list_tydesc, &element as *const u32 as *const u8, 1, element_tydesc);
+        assert_eq!(status, datalove_rt::c::RtStatus::Error);
+    }
+    assert_eq!(list.size, rtdt::Index(rtdt::IndexRepr::MAX));
+    assert_eq!(list.capacity, rtdt::Index(rtdt::IndexRepr::MAX));
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    Ok(())
+}

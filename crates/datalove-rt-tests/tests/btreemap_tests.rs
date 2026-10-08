@@ -3140,3 +3140,37 @@ fn test_btreemap_clone_from_slice_with_duplicates() -> AnyResult<()> {
 
     Ok(())
 }
+
+/// Test that a map as long as an index counts refuses an insert.
+#[test]
+fn test_btreemap_full_index_refuses_insert() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (map_tydesc, key_tydesc, value_tydesc) = create_map_u32_u32_tydesc(&arena);
+
+    // Faked full, with no tree: the insert should fail before looking.
+    let mut map = rtdt::Map {
+        root: ptr::null(),
+        len: rtdt::Index(rtdt::IndexRepr::MAX),
+    };
+    let mut key = 42u32;
+    let mut value = 100u32;
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_btreemap_insert_local(
+            rt,
+            &mut map as *mut rtdt::Map as *mut u8,
+            map_tydesc,
+            &mut key as *mut u32 as *mut u8,
+            key_tydesc,
+            &mut value as *mut u32 as *mut u8,
+            value_tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+    assert!(map.root.is_null());
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    Ok(())
+}

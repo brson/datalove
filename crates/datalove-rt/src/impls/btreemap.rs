@@ -885,6 +885,12 @@ pub unsafe fn btreemap_insert_impl(
         let val_ptr = value_in;
 
         let map_ptr = btreemap_value_mut as *mut Map;
+        // A map as long as an index counts takes nothing more, even an
+        // update: whether the key is new isn't known until it's in.
+        if (*map_ptr).len.0 == rtdt::IndexRepr::MAX {
+            return RtStatus::Error;
+        }
+
         let root = (*map_ptr).root as *mut MapNode;
 
         // If map is empty, create the first leaf.

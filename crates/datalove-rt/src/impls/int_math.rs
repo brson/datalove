@@ -4,6 +4,20 @@ use datalove_rtdt as rtdt;
 use crate::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 
+/// The most limbs an `Int` holds, its size being a signed 32-bit count.
+const MAX_LIMBS: usize = i32::MAX as usize;
+
+/// Write zero for a result too large for an `Int`, and fail.
+///
+/// The zero is so that a caller that goes on to drop the result has a well
+/// formed `Int` to drop.
+fn too_large(result: &mut rtdt::Int) -> RtStatus {
+    result.data = std::ptr::null();
+    result.size_and_sign = 0;
+    result.capacity = rtdt::Index::ZERO;
+    RtStatus::Error
+}
+
 /// Compare magnitudes of two limb arrays.
 /// Returns: -1 if a < b, 0 if a == b, 1 if a > b.
 unsafe fn compare_magnitude(a_limbs: &[u32], b_limbs: &[u32]) -> i32 {
@@ -112,6 +126,11 @@ pub(crate) unsafe fn int_add_impl(
         let b_abs_size = b_size.abs() as usize;
         let a_is_neg = a_size < 0;
         let b_is_neg = b_size < 0;
+
+        // A carry can take the sum a limb past the larger operand.
+        if a_abs_size.max(b_abs_size) >= MAX_LIMBS {
+            return too_large(result);
+        }
 
         // Handle zero cases.
         if a_abs_size == 0 {
@@ -223,6 +242,10 @@ pub(crate) unsafe fn int_mul_impl(
         let b_abs_size = b_size.abs() as usize;
         let a_is_neg = a_size < 0;
         let b_is_neg = b_size < 0;
+
+        if a_abs_size + b_abs_size > MAX_LIMBS {
+            return too_large(result);
+        }
 
         // Handle zero cases.
         if a_abs_size == 0 || b_abs_size == 0 {
@@ -680,6 +703,10 @@ pub(crate) unsafe fn int_from_limbs_impl(
 ) -> RtStatus {
     unsafe {
         let result = &mut *(result_out as *mut rtdt::Int);
+
+        if limb_count as usize > MAX_LIMBS {
+            return too_large(result);
+        }
 
         if limb_count == 0 {
             // Zero value.

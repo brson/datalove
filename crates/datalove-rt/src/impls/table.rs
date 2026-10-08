@@ -140,7 +140,11 @@ pub unsafe fn table_push_row_impl(
 
         // Check if we need to grow.
         if table.len >= table.capacity {
-            let new_capacity = if table.capacity == rtdt::Index::ZERO { 4 } else { table.capacity.0 * 2 };
+            // A table as long as an index counts takes no more rows.
+            if table.capacity.0 == rtdt::IndexRepr::MAX {
+                return RtStatus::Error;
+            }
+            let new_capacity = table.capacity.0.saturating_mul(2).max(4);
             let status = table_grow(rt, table, &column_tydescs, new_capacity);
             if status != RtStatus::Ok {
                 return status;

@@ -745,3 +745,35 @@ fn test_string_capacity_growth() -> AnyResult<()> {
     }
     Ok(())
 }
+
+/// Test that a string as long as an index counts refuses more bytes.
+///
+/// The string is faked full, over a buffer that isn't there: the push should
+/// fail before touching it.
+#[test]
+fn test_string_push_bytes_full_index() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let tydesc = create_string_tydesc();
+
+    let mut string = rtdt::String {
+        data: std::ptr::NonNull::<u8>::dangling().as_ptr(),
+        size: rtdt::Index(rtdt::IndexRepr::MAX),
+        capacity: rtdt::Index(rtdt::IndexRepr::MAX),
+    };
+    let bytes = b"x";
+
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_string_push_bytes_local(
+            rt,
+            &mut string as *mut rtdt::String as *mut u8,
+            &*tydesc,
+            bytes.as_ptr(),
+            bytes.len() as rtdt::IndexRepr,
+        )
+    };
+    assert_eq!(status, RtStatus::Error);
+    assert_eq!(string.size, rtdt::Index(rtdt::IndexRepr::MAX));
+
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    Ok(())
+}

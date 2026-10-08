@@ -79,7 +79,9 @@ pub unsafe fn string_push_bytes_local(
         let string_ptr = string_value_mut as *mut rtdt::String;
         let string = &mut *string_ptr;
 
-        let new_size = string.size.0 + bytes_len;
+        let Some(new_size) = string.size.0.checked_add(bytes_len) else {
+            return RtStatus::Error;
+        };
 
         // Reallocate if needed.
         if new_size > string.capacity.0 {

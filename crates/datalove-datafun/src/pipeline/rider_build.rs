@@ -192,6 +192,10 @@ fn build_uncached(
          # Empty workspace table prevents cargo from treating this as part of\n\
          # the parent workspace.\n\
          [workspace]\n\n\
+         # As the workspace builds the runtime the interpreter links: an\n\
+         # arithmetic overflow the runtime missed aborts rather than wraps.\n\
+         [profile.release]\n\
+         overflow-checks = true\n\n\
          [dependencies]\n",
         kind.crate_type(),
     ));

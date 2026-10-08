@@ -668,3 +668,38 @@ fn test_table_cmp() {
     unsafe { datalove_rt::c::dtlv_rti_table_destroy_local(rt, table2_ptr, table_tydesc) };
     unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
 }
+
+/// Test that a table as long as an index counts refuses another row.
+///
+/// The table is faked full, over a buffer that isn't there: the push should
+/// fail before touching it.
+#[test]
+fn test_table_full_index_refuses_row() {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let table_tydesc = create_table_u32_tydesc(&arena);
+    let row_tydesc = create_tuple_u32_tydesc(&arena);
+
+    let mut table = rtdt::Table {
+        len: rtdt::Index(rtdt::IndexRepr::MAX),
+        capacity: rtdt::Index(rtdt::IndexRepr::MAX),
+        data: ptr::NonNull::<u32>::dangling().as_ptr() as *const u8,
+    };
+
+    #[repr(C)]
+    struct Row { val: u32 }
+    let row = Row { val: 42 };
+    let status = unsafe {
+        datalove_rt::c::dtlv_rti_table_push_row_local(
+            rt,
+            &mut table as *mut rtdt::Table as *mut u8,
+            table_tydesc,
+            &row as *const Row as *const u8,
+            row_tydesc,
+        )
+    };
+    assert_eq!(status, datalove_rt::c::RtStatus::Error);
+    assert_eq!(table.len, rtdt::Index(rtdt::IndexRepr::MAX));
+
+    unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+}
