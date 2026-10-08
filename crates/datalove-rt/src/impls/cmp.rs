@@ -967,6 +967,107 @@ unsafe fn eq_value(
 /// Compare two values for ordering given a shared type descriptor.
 ///
 /// Assumes both values have the same type (tydesc has already been checked).
+/// Two strings, by their bytes.
+#[inline]
+unsafe fn cmp_string(value_a: *const u8, value_b: *const u8) -> crate::c::RtOrdering {
+    unsafe {
+        let str_a = &*(value_a as *const rtdt::String);
+        let str_b = &*(value_b as *const rtdt::String);
+
+        // An empty string's data can be null, which no slice may be made of.
+        if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
+            return crate::c::RtOrdering::Equal;
+        }
+        if str_a.size == rtdt::Index::ZERO {
+            return crate::c::RtOrdering::Less;
+        }
+        if str_b.size == rtdt::Index::ZERO {
+            return crate::c::RtOrdering::Greater;
+        }
+
+        let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
+        let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
+        ordering(bytes_a.cmp(bytes_b))
+    }
+}
+
+#[inline]
+fn ordering(order: std::cmp::Ordering) -> crate::c::RtOrdering {
+    match order {
+        std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
+        std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
+        std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
+    }
+}
+
+/// How the keys of a map or the elements of a set order, decided once for an
+/// operation that compares many of them.
+///
+/// A lookup compares the key it was given with a dozen of the tree's on the way
+/// down, all of one type. `cmp_total` checks that the two descriptors agree
+/// and then dispatches on the type for every one of them; this does both once,
+/// and compares the common key types in line. Anything else takes the general
+/// comparison, so the order is the same either way.
+#[derive(Copy, Clone)]
+pub(crate) enum KeyOrd<'a> {
+    U8,
+    I8,
+    U16,
+    I16,
+    U32,
+    I32,
+    U64,
+    I64,
+    Index,
+    Offset,
+    String,
+    Other(rtdt::TyDescRef<'a>),
+}
+
+impl<'a> KeyOrd<'a> {
+    pub(crate) fn of(tydesc: rtdt::TyDescRef<'a>) -> KeyOrd<'a> {
+        match tydesc.type_tag() {
+            rtdt::TyTag::Bool | rtdt::TyTag::U8 => KeyOrd::U8,
+            rtdt::TyTag::I8 => KeyOrd::I8,
+            rtdt::TyTag::U16 => KeyOrd::U16,
+            rtdt::TyTag::I16 => KeyOrd::I16,
+            rtdt::TyTag::U32 => KeyOrd::U32,
+            rtdt::TyTag::I32 => KeyOrd::I32,
+            rtdt::TyTag::U64 => KeyOrd::U64,
+            rtdt::TyTag::I64 => KeyOrd::I64,
+            rtdt::TyTag::Index => KeyOrd::Index,
+            rtdt::TyTag::Offset => KeyOrd::Offset,
+            rtdt::TyTag::String => KeyOrd::String,
+            _ => KeyOrd::Other(tydesc),
+        }
+    }
+
+    /// Two values of the type this was made for.
+    #[inline]
+    pub(crate) unsafe fn cmp(self, a: *const u8, b: *const u8) -> crate::c::RtOrdering {
+        #[inline]
+        unsafe fn read<T: Ord + Copy>(a: *const u8, b: *const u8) -> crate::c::RtOrdering {
+            unsafe { ordering((*(a as *const T)).cmp(&*(b as *const T))) }
+        }
+        unsafe {
+            match self {
+                KeyOrd::U8 => read::<u8>(a, b),
+                KeyOrd::I8 => read::<i8>(a, b),
+                KeyOrd::U16 => read::<u16>(a, b),
+                KeyOrd::I16 => read::<i16>(a, b),
+                KeyOrd::U32 => read::<u32>(a, b),
+                KeyOrd::I32 => read::<i32>(a, b),
+                KeyOrd::U64 => read::<u64>(a, b),
+                KeyOrd::I64 => read::<i64>(a, b),
+                KeyOrd::Index => read::<rtdt::IndexRepr>(a, b),
+                KeyOrd::Offset => read::<rtdt::OffsetRepr>(a, b),
+                KeyOrd::String => cmp_string(a, b),
+                KeyOrd::Other(tydesc) => cmp_value(a, b, tydesc),
+            }
+        }
+    }
+}
+
 unsafe fn cmp_value(
     value_a: *const u8,
     value_b: *const u8,
@@ -1131,31 +1232,7 @@ unsafe fn cmp_value(
                     _ => crate::c::RtOrdering::Equal,
                 }
             }
-            rtdt::TyTag::String => {
-                let str_a = &*(value_a as *const rtdt::String);
-                let str_b = &*(value_b as *const rtdt::String);
-
-                // Handle empty strings (size 0, data can be null).
-                if str_a.size == rtdt::Index::ZERO && str_b.size == rtdt::Index::ZERO {
-                    return crate::c::RtOrdering::Equal;
-                }
-                if str_a.size == rtdt::Index::ZERO {
-                    return crate::c::RtOrdering::Less;
-                }
-                if str_b.size == rtdt::Index::ZERO {
-                    return crate::c::RtOrdering::Greater;
-                }
-
-                let bytes_a = std::slice::from_raw_parts(str_a.data, str_a.size.as_usize());
-                let bytes_b = std::slice::from_raw_parts(str_b.data, str_b.size.as_usize());
-
-                // Lexicographic comparison.
-                match bytes_a.cmp(bytes_b) {
-                    std::cmp::Ordering::Less => crate::c::RtOrdering::Less,
-                    std::cmp::Ordering::Greater => crate::c::RtOrdering::Greater,
-                    std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
-                }
-            }
+            rtdt::TyTag::String => cmp_string(value_a, value_b),
             rtdt::TyTag::Tuple => {
                 // Lexicographic ordering by fields.
                 for field in td.iter_tuple_fields() {

@@ -16,6 +16,7 @@ pub(crate) struct SetTy<'a> {
     pub elem: rtdt::TyDescRef<'a>,
     pub leaf: &'a rtdt::SetNodeLeafLayout,
     pub internal: &'a rtdt::SetNodeInternalLayout,
+    pub ord: super::cmp::KeyOrd<'a>,
 }
 
 impl<'a> SetTy<'a> {
@@ -24,6 +25,41 @@ impl<'a> SetTy<'a> {
             elem: set_tydesc.set_element_ty(),
             leaf: set_tydesc.set_leaf_layout(),
             internal: set_tydesc.set_internal_layout(),
+            ord: super::cmp::KeyOrd::of(set_tydesc.set_element_ty()),
+        }
+    }
+}
+
+/// Where `element` falls among the first `len` at `elements`: `Ok` with the
+/// position of the one equal to it, or `Err` with the position it would go at.
+///
+/// A binary search, as `btreemap::search_keys` is.
+#[inline]
+unsafe fn search_elements(elements: *const u8, len: usize, element: *const u8, ty: SetTy) -> std::result::Result<usize, usize> {
+    unsafe {
+        let size = ty.elem.size() as usize;
+        let (mut lo, mut hi) = (0, len);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match ty.ord.cmp(element, elements.add(mid * size)) {
+                crate::c::RtOrdering::Less => hi = mid,
+                crate::c::RtOrdering::Greater => lo = mid + 1,
+                crate::c::RtOrdering::Equal => return Ok(mid),
+                crate::c::RtOrdering::Error => unreachable!("two elements of one type always order"),
+            }
+        }
+        Err(lo)
+    }
+}
+
+/// The child of an internal node to descend into for `element`; one equal to
+/// a separator goes right, the separator being the least of that subtree.
+#[inline]
+unsafe fn child_index(keys: *const u8, len: usize, element: *const u8, ty: SetTy) -> usize {
+    unsafe {
+        match search_elements(keys, len, element, ty) {
+            Ok(i) => i + 1,
+            Err(i) => i,
         }
     }
 }
@@ -393,7 +429,7 @@ pub unsafe fn btreeset_build_from_sorted_slice(
         let elem = rtdt::TyDescRef::from_ptr(element_tydesc);
         let leaf = rtdt::layout::compute_set_leaf_node_layout(elem);
         let internal = rtdt::layout::compute_set_internal_node_layout(elem);
-        let ty = SetTy { elem, leaf: &leaf, internal: &internal };
+        let ty = SetTy { elem, leaf: &leaf, internal: &internal, ord: super::cmp::KeyOrd::of(elem) };
 
         // Handle empty case.
         if num_elements == 0 || elements_ptr.is_null() {
@@ -654,30 +690,9 @@ unsafe fn find_leaf_for_element(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, ty);
                     let children_ptr = internal_child_ptrs_ptr(node, ty);
-                    let element_size = ty.elem.size() as usize;
 
                     // Find the child to descend into.
-                    let mut child_idx = 0;
-                    for i in 0..len as usize {
-                        let node_key = keys_ptr.add(i * element_size);
-                        let cmp_result = super::cmp::cmp_total(
-                            element,
-                            ty.elem.as_ptr(),
-                            node_key,
-                            ty.elem.as_ptr(),
-                        );
-                        match cmp_result {
-                            crate::c::RtOrdering::Less => break,
-                            crate::c::RtOrdering::Equal => {
-                                child_idx = i + 1;
-                                break;
-                            }
-                            crate::c::RtOrdering::Greater => {
-                                child_idx = i + 1;
-                            }
-                            crate::c::RtOrdering::Error => break,
-                        }
-                    }
+                    let child_idx = child_index(keys_ptr, len as usize, element, ty);
 
                     node = *children_ptr.add(child_idx);
                 }
@@ -739,34 +754,15 @@ unsafe fn leaf_insert_element(
         let keys_ptr = leaf_keys_ptr(leaf, ty);
         let element_size = ty.elem.size() as usize;
 
-        // Find the insertion position.
-        let mut insert_pos = len as usize;
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * element_size);
-            let cmp_result = super::cmp::cmp_total(
-                element,
-                ty.elem.as_ptr(),
-                node_key,
-                ty.elem.as_ptr(),
-            );
-            match cmp_result {
-                crate::c::RtOrdering::Less => {
-                    insert_pos = i;
-                    break;
-                }
-                crate::c::RtOrdering::Equal => {
-                    // Element already exists, destroy the input and return.
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, element as *mut u8, ty.elem.as_ptr());
-                    return LeafInsertResult::AlreadyExists;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Error => {
-                    insert_pos = i;
-                    break;
-                }
+        let insert_pos = match search_elements(keys_ptr, len as usize, element, ty) {
+            Ok(_) => {
+                // Element already exists, destroy the input and return.
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+                let _ = crate::impls::destroy::any_destroy_local(rt_handle, element as *mut u8, ty.elem.as_ptr());
+                return LeafInsertResult::AlreadyExists;
             }
-        }
+            Err(pos) => pos,
+        };
 
         // Shift elements to make room.
         if insert_pos < len as usize {
@@ -840,7 +836,7 @@ unsafe fn split_leaf(
         }
 
         // Determine which leaf should receive the new element.
-        let cmp_result = super::cmp::cmp_total(element, ty.elem.as_ptr(), separator_key_buf.as_ptr(), ty.elem.as_ptr());
+        let cmp_result = ty.ord.cmp(element, separator_key_buf.as_ptr());
         let insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
                 leaf_insert_element(rt, leaf, element, ty)
@@ -870,7 +866,7 @@ unsafe fn find_leaf_with_path(
     mut node: *mut SetNode,
     element: *const u8,
     ty: SetTy,
-    path: &mut Vec<*mut SetNode>,
+    path: &mut super::btreemap::NodePath<SetNode>,
 ) -> *mut SetNode {
     unsafe {
         loop {
@@ -883,29 +879,8 @@ unsafe fn find_leaf_with_path(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, ty);
                     let children_ptr = internal_child_ptrs_ptr(node, ty);
-                    let element_size = ty.elem.size() as usize;
 
-                    let mut child_idx = 0;
-                    for i in 0..len as usize {
-                        let node_key = keys_ptr.add(i * element_size);
-                        let cmp_result = super::cmp::cmp_total(
-                            element,
-                            ty.elem.as_ptr(),
-                            node_key,
-                            ty.elem.as_ptr(),
-                        );
-                        match cmp_result {
-                            crate::c::RtOrdering::Less => break,
-                            crate::c::RtOrdering::Equal => {
-                                child_idx = i + 1;
-                                break;
-                            }
-                            crate::c::RtOrdering::Greater => {
-                                child_idx = i + 1;
-                            }
-                            crate::c::RtOrdering::Error => break,
-                        }
-                    }
+                    let child_idx = child_index(keys_ptr, len as usize, element, ty);
 
                     node = *children_ptr.add(child_idx);
                 }
@@ -938,12 +913,7 @@ unsafe fn insert_into_internal(
         let mut insert_pos = len as usize;
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * element_size);
-            let cmp_result = super::cmp::cmp_total(
-                separator_key.as_ptr(),
-                ty.elem.as_ptr(),
-                node_key,
-                ty.elem.as_ptr(),
-            );
+            let cmp_result = ty.ord.cmp(separator_key.as_ptr(), node_key);
             match cmp_result {
                 crate::c::RtOrdering::Less => {
                     insert_pos = i;
@@ -1071,12 +1041,7 @@ unsafe fn split_internal_node(
         write_node_len(new_internal, keys_to_move as u32);
 
         // Now insert the pending key/child into the appropriate node.
-        let cmp_result = super::cmp::cmp_total(
-            pending_key.as_ptr(),
-            ty.elem.as_ptr(),
-            separator_key_buf.as_ptr(),
-            ty.elem.as_ptr(),
-        );
+        let cmp_result = ty.ord.cmp(pending_key.as_ptr(), separator_key_buf.as_ptr());
 
         let insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
@@ -1220,10 +1185,10 @@ pub unsafe fn btreeset_insert_data_impl(
         let element_ty = btreeset_tydesc.set_element_ty();
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
-        let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, element_ty.as_ptr(), 1);
-        if slot.is_null() {
+        let Some(mut unpacked) = super::btreemap::UnpackSlot::new(rt, element_ty) else {
             return RtStatus::Error;
-        }
+        };
+        let slot = unpacked.ptr();
 
         let status = crate::impls::boxing::data_into_local(
             rt_handle, data_in, slot, element_ty.as_ptr(),
@@ -1238,7 +1203,7 @@ pub unsafe fn btreeset_insert_data_impl(
         };
 
         // The slot held the element only on the way in.
-        rt.alloc.free(element_ty.size(), element_ty.align(), 1, slot);
+        unpacked.release(rt);
         status
     }
 }
@@ -1284,7 +1249,7 @@ pub unsafe fn btreeset_insert_impl(
         }
 
         // Find the leaf where the element should be inserted.
-        let mut path: Vec<*mut SetNode> = Vec::new();
+        let mut path = super::btreemap::NodePath::new();
         let leaf = find_leaf_with_path(root, element_ptr, ty, &mut path);
 
         // Try to insert into the leaf.
@@ -1439,12 +1404,7 @@ pub unsafe fn btreeset_remove_impl(
         // Find and remove the element from the leaf.
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * element_size);
-            let cmp_result = super::cmp::cmp_total(
-                element_ref,
-                set_element_tydesc,
-                node_key,
-                set_element_tydesc,
-            );
+            let cmp_result = ty.ord.cmp(element_ref, node_key);
 
             match cmp_result {
                 crate::c::RtOrdering::Equal => {
@@ -1629,9 +1589,6 @@ pub unsafe fn btreeset_contains_impl(
         }
 
         let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
-        let set_element_ty = ty.elem;
-        let set_element_tydesc = set_element_ty.as_ptr();
-        let set_element_tydesc_ref = rtdt::TyDescRef::from_ptr(set_element_tydesc);
 
         let set_ptr = btreeset_value_ref as *const Set;
         let root = (*set_ptr).root as *mut SetNode;
@@ -1647,33 +1604,10 @@ pub unsafe fn btreeset_contains_impl(
 
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, ty);
-        let element_size = set_element_tydesc_ref.size() as usize;
 
-        // Search for the element in the leaf.
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * element_size);
-            let cmp_result = super::cmp::cmp_total(
-                element_ref,
-                set_element_tydesc,
-                node_key,
-                set_element_tydesc,
-            );
-
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    // Element found!
-                    *bool_out = 1;
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => {
-                    // Continue searching.
-                    continue;
-                }
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => {
-                    // Element not found.
-                    break;
-                }
-            }
+        if search_elements(keys_ptr, len as usize, element_ref, ty).is_ok() {
+            *bool_out = 1;
+            return RtStatus::Ok;
         }
 
         // Element not found.

@@ -26,6 +26,7 @@ pub(crate) struct MapTy<'a> {
     pub value: rtdt::TyDescRef<'a>,
     pub leaf: &'a MapNodeLeafLayout,
     pub internal: &'a MapNodeInternalLayout,
+    pub ord: super::cmp::KeyOrd<'a>,
 }
 
 impl<'a> MapTy<'a> {
@@ -35,6 +36,117 @@ impl<'a> MapTy<'a> {
             value: map_tydesc.map_value_ty(),
             leaf: map_tydesc.map_leaf_layout(),
             internal: map_tydesc.map_internal_layout(),
+            ord: super::cmp::KeyOrd::of(map_tydesc.map_key_ty()),
+        }
+    }
+}
+
+/// The nodes from a tree's root down to a leaf, for an insert to split back up.
+///
+/// On the stack: it was a `Vec`, allocated by every insert. A non-root node has
+/// at least `MAP_NODE_B` children, and a set's the same, so a tree of as many
+/// entries as an index can count is well under this deep.
+pub(crate) struct NodePath<N> {
+    nodes: [*mut N; 32],
+    len: usize,
+}
+
+impl<N> NodePath<N> {
+    pub(crate) fn new() -> Self {
+        NodePath { nodes: [std::ptr::null_mut(); 32], len: 0 }
+    }
+
+    pub(crate) fn push(&mut self, node: *mut N) {
+        assert!(self.len < self.nodes.len(), "a tree deeper than any index can fill");
+        self.nodes[self.len] = node;
+        self.len += 1;
+    }
+}
+
+impl<N> std::ops::Deref for NodePath<N> {
+    type Target = [*mut N];
+    fn deref(&self) -> &[*mut N] {
+        &self.nodes[..self.len]
+    }
+}
+
+/// Somewhere to unpack a key, value or element out of a `data` on its way into
+/// a tree, which then moves it out again.
+///
+/// On the stack when it fits, as nearly every one does; it was taken from the
+/// allocator and given back on every insert.
+pub(crate) struct UnpackSlot {
+    inline: InlineSlot,
+    heap: *mut u8,
+    size: u32,
+    align: u32,
+}
+
+#[repr(C, align(16))]
+struct InlineSlot([u8; 64]);
+
+impl UnpackSlot {
+    /// A slot for a value of `ty`, or none if the allocator had nothing.
+    pub(crate) unsafe fn new(rt: &mut RtLocal, ty: rtdt::TyDescRef) -> std::option::Option<UnpackSlot> {
+        let (size, align) = (ty.size(), ty.align());
+        let heap = if size as usize <= size_of::<InlineSlot>() && align as usize <= align_of::<InlineSlot>() {
+            std::ptr::null_mut()
+        } else {
+            let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
+            if ptr.is_null() {
+                return None;
+            }
+            ptr
+        };
+        Some(UnpackSlot { inline: InlineSlot([0; 64]), heap, size, align })
+    }
+
+    /// Where the value goes. The slot must not move while this is in use.
+    pub(crate) fn ptr(&mut self) -> *mut u8 {
+        if self.heap.is_null() { self.inline.0.as_mut_ptr() } else { self.heap }
+    }
+
+    /// Give the storage back, whatever it held having been moved out.
+    pub(crate) unsafe fn release(self, rt: &mut RtLocal) {
+        if !self.heap.is_null() {
+            unsafe { rt.alloc.free(self.size, self.align, 1, self.heap) };
+        }
+    }
+}
+
+/// Where `key` falls among the first `len` keys at `keys`: `Ok` with the
+/// position of the one equal to it, or `Err` with the position it would go at.
+///
+/// A binary search. A node holds up to eleven keys, of which a scan compared
+/// half on average, and comparing is most of what a lookup costs.
+#[inline]
+unsafe fn search_keys(keys: *const u8, len: usize, key: *const u8, ty: MapTy) -> std::result::Result<usize, usize> {
+    unsafe {
+        let key_size = ty.key.size() as usize;
+        let (mut lo, mut hi) = (0, len);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            match ty.ord.cmp(key, keys.add(mid * key_size)) {
+                crate::c::RtOrdering::Less => hi = mid,
+                crate::c::RtOrdering::Greater => lo = mid + 1,
+                crate::c::RtOrdering::Equal => return Ok(mid),
+                crate::c::RtOrdering::Error => unreachable!("two keys of one type always order"),
+            }
+        }
+        Err(lo)
+    }
+}
+
+/// The child of an internal node to descend into for `key`.
+///
+/// A separator is the least key in the subtree to its right, so a key equal to
+/// one goes right.
+#[inline]
+unsafe fn child_index(keys: *const u8, len: usize, key: *const u8, ty: MapTy) -> usize {
+    unsafe {
+        match search_keys(keys, len, key, ty) {
+            Ok(i) => i + 1,
+            Err(i) => i,
         }
     }
 }
@@ -423,36 +535,11 @@ unsafe fn find_leaf_for_key(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, ty);
                     let children_ptr = internal_child_ptrs_ptr(node, ty);
-                    let key_size = ty.key.size() as usize;
 
                     // Find the child to descend into.
                     // In a B+tree, separators represent the minimum key in the right subtree,
                     // so Equal should go right.
-                    let mut child_idx = 0;
-                    for i in 0..len as usize {
-                        let node_key = keys_ptr.add(i * key_size);
-                        let cmp_result = super::cmp::cmp_total(
-                            key,
-                            ty.key.as_ptr(),
-                            node_key,
-                            ty.key.as_ptr(),
-                        );
-                        match cmp_result {
-                            crate::c::RtOrdering::Less => break,
-                            crate::c::RtOrdering::Equal => {
-                                // Go to right child (separator is min of right subtree).
-                                child_idx = i + 1;
-                                break;
-                            }
-                            crate::c::RtOrdering::Greater => {
-                                child_idx = i + 1;
-                            }
-                            crate::c::RtOrdering::Error => {
-                                // Should not happen if types match.
-                                break;
-                            }
-                        }
-                    }
+                    let child_idx = child_index(keys_ptr, len as usize, key, ty);
 
                     node = *children_ptr.add(child_idx);
                 }
@@ -482,41 +569,21 @@ unsafe fn leaf_insert_or_update(
         let key_size = ty.key.size() as usize;
         let value_size = ty.value.size() as usize;
 
-        // Find the insertion position using binary search.
-        let mut insert_pos = len as usize;
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                key,
-                ty.key.as_ptr(),
-                node_key,
-                ty.key.as_ptr(),
-            );
-            match cmp_result {
-                crate::c::RtOrdering::Less => {
-                    insert_pos = i;
-                    break;
-                }
-                crate::c::RtOrdering::Equal => {
-                    // Key already exists, update the value.
-                    // Destroy the old value before overwriting.
-                    let value_slot = values_ptr.add(i * value_size);
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
-                    // Move the new value (by-move semantics).
-                    std::ptr::copy_nonoverlapping(value, value_slot, value_size);
-                    // Destroy the input key since we're not using it (key already exists in tree).
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, key as *mut u8, ty.key.as_ptr());
-                    return LeafInsertResult::Updated;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Error => {
-                    // Should not happen.
-                    insert_pos = i;
-                    break;
-                }
+        let insert_pos = match search_keys(keys_ptr, len as usize, key, ty) {
+            Ok(i) => {
+                // Key already exists, update the value.
+                // Destroy the old value before overwriting.
+                let value_slot = values_ptr.add(i * value_size);
+                let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+                let _ = crate::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
+                // Move the new value (by-move semantics).
+                std::ptr::copy_nonoverlapping(value, value_slot, value_size);
+                // Destroy the input key since we're not using it (key already exists in tree).
+                let _ = crate::impls::destroy::any_destroy_local(rt_handle, key as *mut u8, ty.key.as_ptr());
+                return LeafInsertResult::Updated;
             }
-        }
+            Err(pos) => pos,
+        };
 
         // Shift elements to make room.
         if insert_pos < len as usize {
@@ -605,7 +672,7 @@ unsafe fn split_leaf(
         }
 
         // Determine which leaf should receive the new key.
-        let cmp_result = super::cmp::cmp_total(key, ty.key.as_ptr(), separator_key_buf.as_ptr(), ty.key.as_ptr());
+        let cmp_result = ty.ord.cmp(key, separator_key_buf.as_ptr());
         let insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
                 // Key goes in left leaf.
@@ -662,12 +729,7 @@ unsafe fn insert_into_internal(
         let mut insert_pos = len as usize;
         for i in 0..len as usize {
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                separator_key.as_ptr(),
-                ty.key.as_ptr(),
-                node_key,
-                ty.key.as_ptr(),
-            );
+            let cmp_result = ty.ord.cmp(separator_key.as_ptr(), node_key);
             match cmp_result {
                 crate::c::RtOrdering::Less => {
                     insert_pos = i;
@@ -784,12 +846,7 @@ unsafe fn split_internal_node(
         write_node_len(new_node, keys_to_move as u32);
 
         // Now insert the pending key/child into the appropriate node.
-        let cmp_result = super::cmp::cmp_total(
-            pending_key.as_ptr(),
-            ty.key.as_ptr(),
-            separator_key_buf.as_ptr(),
-            ty.key.as_ptr(),
-        );
+        let cmp_result = ty.ord.cmp(pending_key.as_ptr(), separator_key_buf.as_ptr());
 
         let insert_result = match cmp_result {
             crate::c::RtOrdering::Less => {
@@ -865,7 +922,7 @@ pub unsafe fn btreemap_insert_impl(
         }
 
         // Find the leaf where the key should be inserted, keeping track of the path.
-        let mut path: Vec<*mut MapNode> = Vec::new();
+        let mut path = NodePath::new();
         let leaf = find_leaf_with_path(root, key_ptr, ty, &mut path);
 
         // Try to insert into the leaf.
@@ -920,7 +977,7 @@ unsafe fn find_leaf_with_path(
     mut node: *mut MapNode,
     key: *const u8,
     ty: MapTy,
-    path: &mut Vec<*mut MapNode>,
+    path: &mut NodePath<MapNode>,
 ) -> *mut MapNode {
     unsafe {
         loop {
@@ -933,33 +990,11 @@ unsafe fn find_leaf_with_path(
                     let len = read_node_len(node);
                     let keys_ptr = internal_keys_ptr(node, ty);
                     let children_ptr = internal_child_ptrs_ptr(node, ty);
-                    let key_size = ty.key.size() as usize;
 
                     // Find the child to descend into.
                     // In a B+tree, separators represent the minimum key in the right subtree,
                     // so Equal should go right.
-                    let mut child_idx = 0;
-                    for i in 0..len as usize {
-                        let node_key = keys_ptr.add(i * key_size);
-                        let cmp_result = super::cmp::cmp_total(
-                            key,
-                            ty.key.as_ptr(),
-                            node_key,
-                            ty.key.as_ptr(),
-                        );
-                        match cmp_result {
-                            crate::c::RtOrdering::Less => break,
-                            crate::c::RtOrdering::Equal => {
-                                // Go to right child (separator is min of right subtree).
-                                child_idx = i + 1;
-                                break;
-                            }
-                            crate::c::RtOrdering::Greater => {
-                                child_idx = i + 1;
-                            }
-                            crate::c::RtOrdering::Error => break,
-                        }
-                    }
+                    let child_idx = child_index(keys_ptr, len as usize, key, ty);
 
                     node = *children_ptr.add(child_idx);
                 }
@@ -1119,57 +1154,46 @@ pub unsafe fn btreemap_insert_sides_impl(
 
         // A side that arrived packed needs somewhere of the real type to be
         // unpacked into. One that did not is already there.
-        let key_slot = if key_is_data {
-            let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, key_ty.as_ptr(), 1);
-            if slot.is_null() {
-                return RtStatus::Error;
-            }
-            let status = crate::impls::boxing::data_into_local(
-                rt_handle, key_in, slot, key_ty.as_ptr(),
-            );
-            if status != RtStatus::Ok {
-                rt.alloc.free(key_ty.size(), key_ty.align(), 1, slot);
-                return RtStatus::Error;
-            }
-            slot
-        } else {
-            key_in
-        };
-
-        let value_slot = if value_is_data {
-            let slot = crate::c::dtlv_rti_mem_alloc_local(rt_handle, value_ty.as_ptr(), 1);
-            if slot.is_null() {
-                if key_is_data {
-                    rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
+        let mut key_unpacked = None;
+        let mut value_unpacked = None;
+        let status = 'unpack: {
+            let key_slot = if key_is_data {
+                let Some(slot) = UnpackSlot::new(rt, key_ty) else { break 'unpack RtStatus::Error };
+                let slot = key_unpacked.insert(slot).ptr();
+                let status = crate::impls::boxing::data_into_local(
+                    rt_handle, key_in, slot, key_ty.as_ptr(),
+                );
+                if status != RtStatus::Ok {
+                    break 'unpack RtStatus::Error;
                 }
-                return RtStatus::Error;
-            }
-            let status = crate::impls::boxing::data_into_local(
-                rt_handle, value_in, slot, value_ty.as_ptr(),
-            );
-            if status != RtStatus::Ok {
-                rt.alloc.free(value_ty.size(), value_ty.align(), 1, slot);
-                if key_is_data {
-                    rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
-                }
-                return RtStatus::Error;
-            }
-            slot
-        } else {
-            value_in
-        };
+                slot
+            } else {
+                key_in
+            };
 
-        let status = btreemap_insert_impl(
-            rt, btreemap_value_mut, btreemap_tydesc,
-            key_slot, key_ty, value_slot, value_ty,
-        );
+            let value_slot = if value_is_data {
+                let Some(slot) = UnpackSlot::new(rt, value_ty) else { break 'unpack RtStatus::Error };
+                let slot = value_unpacked.insert(slot).ptr();
+                let status = crate::impls::boxing::data_into_local(
+                    rt_handle, value_in, slot, value_ty.as_ptr(),
+                );
+                if status != RtStatus::Ok {
+                    break 'unpack RtStatus::Error;
+                }
+                slot
+            } else {
+                value_in
+            };
+
+            btreemap_insert_impl(
+                rt, btreemap_value_mut, btreemap_tydesc,
+                key_slot, key_ty, value_slot, value_ty,
+            )
+        };
         // A slot held its value only on the way in; the map has it now, so the
         // storage goes back and what it held does not.
-        if key_is_data {
-            rt.alloc.free(key_ty.size(), key_ty.align(), 1, key_slot);
-        }
-        if value_is_data {
-            rt.alloc.free(value_ty.size(), value_ty.align(), 1, value_slot);
+        for slot in [key_unpacked, value_unpacked].into_iter().flatten() {
+            slot.release(rt);
         }
         status
     }
@@ -1232,7 +1256,6 @@ unsafe fn btreemap_get_inner(
         }
 
         // Get key and value type descriptors from map type.
-        let map_key_ty = btreemap_tydesc.map_key_ty();
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
@@ -1244,7 +1267,9 @@ unsafe fn btreemap_get_inner(
         let option_payload_ptr = option_value_out.add(option_layout.payload_offset as usize);
 
         // If map is empty, return None.
-        if root.is_null() {
+        // The key's descriptor is checked once here, where it used to be
+        // checked at every comparison; a key of another type is in no map.
+        if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
             *option_tag_ptr = rtdt::OptionTag::None as u8;
             return RtStatus::Ok;
         }
@@ -1255,59 +1280,38 @@ unsafe fn btreemap_get_inner(
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, ty);
         let values_ptr = leaf_values_ptr(leaf, ty);
-        let key_size = map_key_ty.size() as usize;
         let value_size = map_value_ty.size() as usize;
 
         // Search for the key in the leaf.
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                key_ref,
-                key_tydesc.as_ptr(),
-                node_key,
-                map_key_ty.as_ptr(),
-            );
+        if let Ok(i) = search_keys(keys_ptr, len as usize, key_ref, ty) {
+            // Key found! Clone the value into the option payload. A
+            // caller with no static type for the value asks for it
+            // packed into a `data`, which is the shape it does have.
+            let value_slot = values_ptr.add(i * value_size);
+            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+            let status = if as_data {
+                crate::impls::boxing::data_clone_from_local(
+                    rt_handle,
+                    value_slot,
+                    map_value_ty.as_ptr(),
+                    option_payload_ptr,
+                )
+            } else {
+                crate::impls::clone::clone_value(
+                    rt_handle,
+                    value_slot,
+                    map_value_ty.as_ptr(),
+                    option_payload_ptr,
+                )
+            };
 
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    // Key found! Clone the value into the option payload. A
-                    // caller with no static type for the value asks for it
-                    // packed into a `data`, which is the shape it does have.
-                    let value_slot = values_ptr.add(i * value_size);
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let status = if as_data {
-                        crate::impls::boxing::data_clone_from_local(
-                            rt_handle,
-                            value_slot,
-                            map_value_ty.as_ptr(),
-                            option_payload_ptr,
-                        )
-                    } else {
-                        crate::impls::clone::clone_value(
-                            rt_handle,
-                            value_slot,
-                            map_value_ty.as_ptr(),
-                            option_payload_ptr,
-                        )
-                    };
-
-                    if status != RtStatus::Ok {
-                        return status;
-                    }
-
-                    // Set option tag to Some.
-                    *option_tag_ptr = rtdt::OptionTag::Some as u8;
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => {
-                    // Continue searching.
-                    continue;
-                }
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => {
-                    // Key not found (keys are sorted, so we've passed where it would be).
-                    break;
-                }
+            if status != RtStatus::Ok {
+                return status;
             }
+
+            // Set option tag to Some.
+            *option_tag_ptr = rtdt::OptionTag::Some as u8;
+            return RtStatus::Ok;
         }
 
         // Key not found, return None.
@@ -1536,12 +1540,13 @@ pub unsafe fn btreemap_contains_key_impl(
             return RtStatus::Error;
         }
 
-        let map_key_ty = btreemap_tydesc.map_key_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
         let root = (*map_ptr).root as *mut MapNode;
 
-        if root.is_null() {
+        // The key's descriptor is checked once here, where it used to be
+        // checked at every comparison; a key of another type is in no map.
+        if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
             *result_out = false;
             return RtStatus::Ok;
         }
@@ -1549,25 +1554,10 @@ pub unsafe fn btreemap_contains_key_impl(
         let leaf = find_leaf_for_key(root, key_ref, ty);
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, ty);
-        let key_size = map_key_ty.size() as usize;
 
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                key_ref,
-                key_tydesc.as_ptr(),
-                node_key,
-                map_key_ty.as_ptr(),
-            );
-
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    *result_out = true;
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
-            }
+        if search_keys(keys_ptr, len as usize, key_ref, ty).is_ok() {
+            *result_out = true;
+            return RtStatus::Ok;
         }
 
         *result_out = false;
@@ -1594,13 +1584,14 @@ pub unsafe fn btreemap_get_value_ref_impl(
             return RtStatus::Error;
         }
 
-        let map_key_ty = btreemap_tydesc.map_key_ty();
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
         let root = (*map_ptr).root as *mut MapNode;
 
-        if root.is_null() {
+        // The key's descriptor is checked once here, where it used to be
+        // checked at every comparison; a key of another type is in no map.
+        if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
             *value_ptr_out = std::ptr::null_mut();
             return RtStatus::Ok;
         }
@@ -1609,26 +1600,11 @@ pub unsafe fn btreemap_get_value_ref_impl(
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, ty);
         let values_ptr = leaf_values_ptr(leaf, ty);
-        let key_size = map_key_ty.size() as usize;
         let value_size = map_value_ty.size() as usize;
 
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                key_ref,
-                key_tydesc.as_ptr(),
-                node_key,
-                map_key_ty.as_ptr(),
-            );
-
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    *value_ptr_out = values_ptr.add(i * value_size);
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
-            }
+        if let Ok(i) = search_keys(keys_ptr, len as usize, key_ref, ty) {
+            *value_ptr_out = values_ptr.add(i * value_size);
+            return RtStatus::Ok;
         }
 
         *value_ptr_out = std::ptr::null_mut();
@@ -1657,13 +1633,14 @@ pub unsafe fn btreemap_set_value_impl(
             return RtStatus::Error;
         }
 
-        let map_key_ty = btreemap_tydesc.map_key_ty();
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
         let root = (*map_ptr).root as *mut MapNode;
 
-        if root.is_null() {
+        // The key's descriptor is checked once here, where it used to be
+        // checked at every comparison; a key of another type is in no map.
+        if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
             return RtStatus::Error;
         }
 
@@ -1671,45 +1648,30 @@ pub unsafe fn btreemap_set_value_impl(
         let len = read_node_len(leaf);
         let keys_ptr = leaf_keys_ptr(leaf, ty);
         let values_ptr = leaf_values_ptr(leaf, ty);
-        let key_size = map_key_ty.size() as usize;
         let value_size = map_value_ty.size() as usize;
 
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(
-                key_ref,
-                key_tydesc.as_ptr(),
-                node_key,
-                map_key_ty.as_ptr(),
+        if let Ok(i) = search_keys(keys_ptr, len as usize, key_ref, ty) {
+            let value_slot = values_ptr.add(i * value_size);
+
+            // Destroy old value.
+            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+            let status = crate::impls::destroy::any_destroy_local(
+                rt_handle,
+                value_slot,
+                value_tydesc.as_ptr(),
+            );
+            if status != RtStatus::Ok {
+                return status;
+            }
+
+            // Copy new value in.
+            std::ptr::copy_nonoverlapping(
+                value_in,
+                value_slot,
+                value_size,
             );
 
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    let value_slot = values_ptr.add(i * value_size);
-
-                    // Destroy old value.
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let status = crate::impls::destroy::any_destroy_local(
-                        rt_handle,
-                        value_slot,
-                        value_tydesc.as_ptr(),
-                    );
-                    if status != RtStatus::Ok {
-                        return status;
-                    }
-
-                    // Copy new value in.
-                    std::ptr::copy_nonoverlapping(
-                        value_in,
-                        value_slot,
-                        value_size,
-                    );
-
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
-            }
+            return RtStatus::Ok;
         }
 
         RtStatus::Error
@@ -1745,41 +1707,33 @@ unsafe fn leaf_remove(
         let value_size = ty.value.size() as usize;
 
         // Find the key in the leaf.
-        for i in 0..len as usize {
+        if let Ok(i) = search_keys(keys_ptr, len as usize, key, ty) {
+            // Found the key, destroy it and the value.
+            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let node_key = keys_ptr.add(i * key_size);
-            let cmp_result = super::cmp::cmp_total(key, ty.key.as_ptr(), node_key, ty.key.as_ptr());
+            let value_slot = values_ptr.add(i * value_size);
+            let _ = crate::impls::destroy::any_destroy_local(rt_handle, node_key as *mut u8, ty.key.as_ptr());
+            let _ = crate::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
 
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    // Found the key, destroy it and the value.
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let value_slot = values_ptr.add(i * value_size);
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, node_key as *mut u8, ty.key.as_ptr());
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, value_slot, ty.value.as_ptr());
+            // Shift remaining elements left.
+            if i < (len - 1) as usize {
+                let shift_count = (len - 1) as usize - i;
+                let src_key = keys_ptr.add((i + 1) * key_size);
+                let dst_key = keys_ptr.add(i * key_size);
+                std::ptr::copy(src_key, dst_key, shift_count * key_size);
 
-                    // Shift remaining elements left.
-                    if i < (len - 1) as usize {
-                        let shift_count = (len - 1) as usize - i;
-                        let src_key = keys_ptr.add((i + 1) * key_size);
-                        let dst_key = keys_ptr.add(i * key_size);
-                        std::ptr::copy(src_key, dst_key, shift_count * key_size);
+                let src_val = values_ptr.add((i + 1) * value_size);
+                let dst_val = values_ptr.add(i * value_size);
+                std::ptr::copy(src_val, dst_val, shift_count * value_size);
+            }
 
-                        let src_val = values_ptr.add((i + 1) * value_size);
-                        let dst_val = values_ptr.add(i * value_size);
-                        std::ptr::copy(src_val, dst_val, shift_count * value_size);
-                    }
+            write_node_len(leaf, len - 1);
 
-                    write_node_len(leaf, len - 1);
-
-                    // Check if the leaf underflows.
-                    if len - 1 < MIN_KEYS {
-                        return RemoveResult::Underflow;
-                    } else {
-                        return RemoveResult::Removed;
-                    }
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
+            // Check if the leaf underflows.
+            if len - 1 < MIN_KEYS {
+                return RemoveResult::Underflow;
+            } else {
+                return RemoveResult::Removed;
             }
         }
 
@@ -2283,7 +2237,7 @@ unsafe fn remove_recursive(
                 for i in 0..len as usize {
                     let node_key = keys_ptr.add(i * key_size);
                     let cmp_result =
-                        super::cmp::cmp_total(key, ty.key.as_ptr(), node_key, ty.key.as_ptr());
+                        ty.ord.cmp(key, node_key);
                     match cmp_result {
                         crate::c::RtOrdering::Less => break,
                         crate::c::RtOrdering::Equal => {
@@ -2567,7 +2521,10 @@ pub unsafe fn btreemap_build_from_sorted_slices(
         // out here, once for the whole build.
         let leaf = rtdt::layout::compute_map_leaf_node_layout(key_tydesc, value_tydesc);
         let internal = rtdt::layout::compute_map_internal_node_layout(key_tydesc);
-        let ty = MapTy { key: key_tydesc, value: value_tydesc, leaf: &leaf, internal: &internal };
+        let ty = MapTy {
+            key: key_tydesc, value: value_tydesc, leaf: &leaf, internal: &internal,
+            ord: super::cmp::KeyOrd::of(key_tydesc),
+        };
 
         // Handle empty case.
         if num_entries == 0 || keys_ptr.is_null() || values_ptr.is_null() {
