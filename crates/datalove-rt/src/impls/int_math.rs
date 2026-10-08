@@ -23,79 +23,74 @@ unsafe fn compare_magnitude(a_limbs: &[u32], b_limbs: &[u32]) -> i32 {
 }
 
 /// Add magnitudes: result = a + b (ignoring signs).
+///
+/// Written straight into the runtime's memory, where it was built in a `Vec`
+/// first and copied, which allocated twice. Returns the limbs, how many there
+/// are, and how many were allocated: one more than the longer operand, for a
+/// carry out of the top, unless one operand is zero and there can be none.
 unsafe fn add_magnitude(
     rt: &mut RtLocal,
     a_limbs: &[u32],
     b_limbs: &[u32],
-) -> (*const u32, usize) {
+) -> (*const u32, usize, usize) {
     let max_len = a_limbs.len().max(b_limbs.len());
-    let mut result_limbs = Vec::with_capacity(max_len + 1);
-    let mut carry: u64 = 0;
-
-    for i in 0..max_len {
-        let a_limb = if i < a_limbs.len() { a_limbs[i] as u64 } else { 0 };
-        let b_limb = if i < b_limbs.len() { b_limbs[i] as u64 } else { 0 };
-
-        let sum = a_limb + b_limb + carry;
-        result_limbs.push(sum as u32);
-        carry = sum >> 32;
-    }
-
-    if carry > 0 {
-        result_limbs.push(carry as u32);
-    }
-
-    // Allocate and copy to runtime memory.
-    let result_len = result_limbs.len();
+    let capacity = if a_limbs.is_empty() || b_limbs.is_empty() { max_len } else { max_len + 1 };
     unsafe {
-        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
-        for (i, &limb) in result_limbs.iter().enumerate() {
-            *result_ptr.add(i) = limb;
+        let result = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
+        let mut carry: u64 = 0;
+        for i in 0..max_len {
+            let a_limb = if i < a_limbs.len() { a_limbs[i] as u64 } else { 0 };
+            let b_limb = if i < b_limbs.len() { b_limbs[i] as u64 } else { 0 };
+            let sum = a_limb + b_limb + carry;
+            *result.add(i) = sum as u32;
+            carry = sum >> 32;
         }
-        (result_ptr as *const u32, result_len)
+        let mut len = max_len;
+        if carry > 0 {
+            *result.add(len) = carry as u32;
+            len += 1;
+        }
+        (result as *const u32, len, capacity)
     }
 }
 
-/// Subtract magnitudes: result = a - b (assumes a >= b, ignoring signs).
+/// Subtract magnitudes: result = a - b (assumes a > b, ignoring signs).
+///
+/// Written straight into the runtime's memory, as `add_magnitude` is. Returns
+/// the limbs, how many there are once the leading zeros are dropped, and how
+/// many were allocated, which is as many as `a` has.
 unsafe fn sub_magnitude(
     rt: &mut RtLocal,
     a_limbs: &[u32],
     b_limbs: &[u32],
-) -> (*const u32, usize) {
-    let mut result_limbs = Vec::with_capacity(a_limbs.len());
-    let mut borrow: i64 = 0;
-
-    for i in 0..a_limbs.len() {
-        let a_limb = a_limbs[i] as i64;
-        let b_limb = if i < b_limbs.len() { b_limbs[i] as i64 } else { 0 };
-
-        let diff = a_limb - b_limb - borrow;
-        if diff < 0 {
-            result_limbs.push((diff + (1i64 << 32)) as u32);
-            borrow = 1;
-        } else {
-            result_limbs.push(diff as u32);
-            borrow = 0;
-        }
-    }
-
-    // Remove leading zeros.
-    while result_limbs.len() > 1 && *result_limbs.last().unwrap() == 0 {
-        result_limbs.pop();
-    }
-
-    // Allocate and copy to runtime memory.
-    let result_len = result_limbs.len();
-
-    // Sub_magnitude is only called when magnitudes differ (caller checks cmp != 0).
-    assert!(!(result_len == 1 && result_limbs[0] == 0), "sub_magnitude produced zero result");
-
+) -> (*const u32, usize, usize) {
+    let capacity = a_limbs.len();
     unsafe {
-        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
-        for (i, &limb) in result_limbs.iter().enumerate() {
-            *result_ptr.add(i) = limb;
+        let result = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
+        let mut borrow: i64 = 0;
+        for i in 0..a_limbs.len() {
+            let a_limb = a_limbs[i] as i64;
+            let b_limb = if i < b_limbs.len() { b_limbs[i] as i64 } else { 0 };
+            let diff = a_limb - b_limb - borrow;
+            if diff < 0 {
+                *result.add(i) = (diff + (1i64 << 32)) as u32;
+                borrow = 1;
+            } else {
+                *result.add(i) = diff as u32;
+                borrow = 0;
+            }
         }
-        (result_ptr as *const u32, result_len)
+
+        // Drop leading zeros.
+        let mut len = capacity;
+        while len > 1 && *result.add(len - 1) == 0 {
+            len -= 1;
+        }
+
+        // Sub_magnitude is only called when magnitudes differ (caller checks cmp != 0).
+        assert!(!(len == 1 && *result == 0), "sub_magnitude produced zero result");
+
+        (result as *const u32, len, capacity)
     }
 }
 
@@ -127,20 +122,20 @@ pub(crate) unsafe fn int_add_impl(
                 result.capacity = rtdt::Index::ZERO;
             } else {
                 let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
-                let (ptr, len) = add_magnitude(rt, b_limbs, &[]);
+                let (ptr, len, capacity) = add_magnitude(rt, b_limbs, &[]);
                 result.data = ptr;
                 result.size_and_sign = if b_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
+                result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
             }
             return RtStatus::Ok;
         }
         if b_abs_size == 0 {
             // b is zero, return a.
             let a_limbs = std::slice::from_raw_parts(a.data, a_abs_size);
-            let (ptr, len) = add_magnitude(rt, a_limbs, &[]);
+            let (ptr, len, capacity) = add_magnitude(rt, a_limbs, &[]);
             result.data = ptr;
             result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-            result.capacity = rtdt::Index(len as rtdt::IndexRepr);
+            result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
             return RtStatus::Ok;
         }
 
@@ -149,10 +144,10 @@ pub(crate) unsafe fn int_add_impl(
 
         if a_is_neg == b_is_neg {
             // Same sign: add magnitudes.
-            let (ptr, len) = add_magnitude(rt, a_limbs, b_limbs);
+            let (ptr, len, capacity) = add_magnitude(rt, a_limbs, b_limbs);
             result.data = ptr;
             result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-            result.capacity = rtdt::Index(len as rtdt::IndexRepr);
+            result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
         } else {
             // Different signs: subtract magnitudes.
             let cmp = compare_magnitude(a_limbs, b_limbs);
@@ -163,16 +158,16 @@ pub(crate) unsafe fn int_add_impl(
                 result.capacity = rtdt::Index::ZERO;
             } else if cmp > 0 {
                 // |a| > |b|: result has sign of a.
-                let (ptr, len) = sub_magnitude(rt, a_limbs, b_limbs);
+                let (ptr, len, capacity) = sub_magnitude(rt, a_limbs, b_limbs);
                 result.data = ptr;
                 result.size_and_sign = if a_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
+                result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
             } else {
                 // |a| < |b|: result has sign of b.
-                let (ptr, len) = sub_magnitude(rt, b_limbs, a_limbs);
+                let (ptr, len, capacity) = sub_magnitude(rt, b_limbs, a_limbs);
                 result.data = ptr;
                 result.size_and_sign = if b_is_neg { -(len as i32) } else { len as i32 };
-                result.capacity = rtdt::Index(len as rtdt::IndexRepr);
+                result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
             }
         }
 
@@ -197,26 +192,16 @@ pub(crate) unsafe fn int_sub_impl(
             return int_add_impl(rt, a_in, b_in, result_out);
         }
 
-        // Create negated b: allocate temporary Int for -b.
-        let neg_b_limbs_ptr = rt.alloc.alloc(4, 4, (b_abs_size as u32).into()) as *mut u32;
-        let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
-        let neg_b_limbs = std::slice::from_raw_parts_mut(neg_b_limbs_ptr, b_abs_size);
-        neg_b_limbs.copy_from_slice(b_limbs);
-
-        // Create temporary rtdt::Int for -b.
+        // -b, as a view of b's own limbs with the sign flipped. Addition only
+        // reads it, and it is never destroyed, so the limbs need no copy.
         let neg_b = rtdt::Int {
-            data: neg_b_limbs_ptr as *const u32,
+            data: b.data,
             size_and_sign: -b_size,
-            capacity: rtdt::Index(b_abs_size as rtdt::IndexRepr),
+            capacity: b.capacity,
         };
 
         // Compute a + (-b).
-        let result = int_add_impl(rt, a_in, &neg_b as *const rtdt::Int as *const u8, result_out);
-
-        // Free temporary allocation.
-        rt.alloc.free(4, 4, (b_abs_size as u32).into(), neg_b_limbs_ptr as *mut u8);
-
-        result
+        int_add_impl(rt, a_in, &neg_b as *const rtdt::Int as *const u8, result_out)
     }
 }
 
@@ -250,9 +235,12 @@ pub(crate) unsafe fn int_mul_impl(
         let a_limbs = std::slice::from_raw_parts(a.data, a_abs_size);
         let b_limbs = std::slice::from_raw_parts(b.data, b_abs_size);
 
-        // Grade-school multiplication: result can have up to a_len + b_len limbs.
-        let result_max_len = a_abs_size + b_abs_size;
-        let mut result_limbs = vec![0u32; result_max_len];
+        // Grade-school multiplication, into runtime memory: the result has
+        // up to a_len + b_len limbs.
+        let capacity = a_abs_size + b_abs_size;
+        let result_ptr = rt.alloc.alloc(4, 4, (capacity as u32).into()) as *mut u32;
+        let result_limbs = std::slice::from_raw_parts_mut(result_ptr, capacity);
+        result_limbs.fill(0);
 
         for i in 0..a_abs_size {
             let mut carry: u64 = 0;
@@ -266,17 +254,10 @@ pub(crate) unsafe fn int_mul_impl(
             result_limbs[i + b_abs_size] = carry as u32;
         }
 
-        // Remove leading zeros.
-        while result_limbs.len() > 1 && *result_limbs.last().unwrap() == 0 {
-            result_limbs.pop();
-        }
-
-        let result_len = result_limbs.len();
-
-        // Allocate and copy to runtime memory.
-        let result_ptr = rt.alloc.alloc(4, 4, (result_len as u32).into()) as *mut u32;
-        for (i, &limb) in result_limbs.iter().enumerate() {
-            *result_ptr.add(i) = limb;
+        // Drop leading zeros.
+        let mut result_len = capacity;
+        while result_len > 1 && result_limbs[result_len - 1] == 0 {
+            result_len -= 1;
         }
 
         // Result sign: negative if exactly one operand is negative.
@@ -288,7 +269,7 @@ pub(crate) unsafe fn int_mul_impl(
         } else {
             result_len as i32
         };
-        result.capacity = rtdt::Index(result_len as rtdt::IndexRepr);
+        result.capacity = rtdt::Index(capacity as rtdt::IndexRepr);
 
         RtStatus::Ok
     }
@@ -338,14 +319,14 @@ unsafe fn div_magnitude(
     rt: &mut RtLocal,
     dividend_limbs: &[u32],
     divisor_limbs: &[u32],
-) -> (*const u32, usize) {
+) -> (*const u32, usize, usize) {
     let m = dividend_limbs.len();
     let n = divisor_limbs.len();
 
     // Handle dividend < divisor case.
     if m < n || (m == n && unsafe { compare_magnitude(dividend_limbs, divisor_limbs) } < 0) {
         // Quotient is zero.
-        return (std::ptr::null(), 0);
+        return (std::ptr::null(), 0, 0);
     }
 
     // Handle single-limb divisor.
@@ -355,34 +336,27 @@ unsafe fn div_magnitude(
         // Caller must check for zero divisor before calling div_magnitude.
         assert!(divisor != 0, "div_magnitude called with zero divisor");
 
-        let mut quotient = Vec::with_capacity(m);
+        // Into runtime memory, from the top limb down.
+        let q_ptr = unsafe { rt.alloc.alloc(4, 4, (m as u32).into()) as *mut u32 };
+        let quotient = unsafe { std::slice::from_raw_parts_mut(q_ptr, m) };
         let mut remainder: u64 = 0;
 
         for i in (0..m).rev() {
             let current = (remainder << 32) | (dividend_limbs[i] as u64);
-            quotient.push((current / divisor) as u32);
+            quotient[i] = (current / divisor) as u32;
             remainder = current % divisor;
         }
 
-        quotient.reverse();
-
-        // Remove leading zeros.
-        while quotient.len() > 1 && *quotient.last().unwrap() == 0 {
-            quotient.pop();
+        // Drop leading zeros.
+        let mut q_len = m;
+        while q_len > 1 && quotient[q_len - 1] == 0 {
+            q_len -= 1;
         }
-
-        let q_len = quotient.len();
 
         // Zero quotient is handled by early dividend < divisor check.
         assert!(!(q_len == 1 && quotient[0] == 0), "single-limb division produced zero quotient");
 
-        unsafe {
-            let q_ptr = rt.alloc.alloc(4, 4, (q_len as u32).into()) as *mut u32;
-            for (i, &limb) in quotient.iter().enumerate() {
-                *q_ptr.add(i) = limb;
-            }
-            (q_ptr as *const u32, q_len)
-        }
+        (q_ptr as *const u32, q_len, m)
     } else {
         // Multi-limb division using Knuth's Algorithm D.
         // Normalize: scale so divisor's MSB has high bit set.
@@ -415,7 +389,12 @@ unsafe fn div_magnitude(
             norm_dividend[..m].copy_from_slice(dividend_limbs);
         }
 
-        let mut quotient = vec![0u32; m - n + 1];
+        // The quotient goes into runtime memory; the normalized operands
+        // above are only working space.
+        let q_capacity = m - n + 1;
+        let q_ptr = unsafe { rt.alloc.alloc(4, 4, (q_capacity as u32).into()) as *mut u32 };
+        let quotient = unsafe { std::slice::from_raw_parts_mut(q_ptr, q_capacity) };
+        quotient.fill(0);
 
         // Main division loop.
         for j in (0..=m - n).rev() {
@@ -474,23 +453,16 @@ unsafe fn div_magnitude(
             }
         }
 
-        // Remove leading zeros.
-        while quotient.len() > 1 && *quotient.last().unwrap() == 0 {
-            quotient.pop();
+        // Drop leading zeros.
+        let mut q_len = q_capacity;
+        while q_len > 1 && quotient[q_len - 1] == 0 {
+            q_len -= 1;
         }
-
-        let q_len = quotient.len();
 
         // Zero quotient is handled by early dividend < divisor check.
         assert!(!(q_len == 1 && quotient[0] == 0), "multi-limb division produced zero quotient");
 
-        unsafe {
-            let q_ptr = rt.alloc.alloc(4, 4, (q_len as u32).into()) as *mut u32;
-            for (i, &limb) in quotient.iter().enumerate() {
-                *q_ptr.add(i) = limb;
-            }
-            (q_ptr as *const u32, q_len)
-        }
+        (q_ptr as *const u32, q_len, q_capacity)
     }
 }
 
@@ -541,7 +513,7 @@ pub(crate) unsafe fn int_div_checked_impl(
 
         let a_limbs = std::slice::from_raw_parts(a.data, a_abs_size);
 
-        let (q_ptr, q_len) = div_magnitude(rt, a_limbs, b_limbs);
+        let (q_ptr, q_len, q_capacity) = div_magnitude(rt, a_limbs, b_limbs);
 
         // Handle zero quotient.
         if q_len == 0 {
@@ -560,7 +532,7 @@ pub(crate) unsafe fn int_div_checked_impl(
         } else {
             q_len as i32
         };
-        result.capacity = rtdt::Index(q_len as rtdt::IndexRepr);
+        result.capacity = rtdt::Index(q_capacity as rtdt::IndexRepr);
 
         RtStatus::Ok
     }
