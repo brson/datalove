@@ -4,8 +4,7 @@
 
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
-use rmx::std::hash::{Hash, Hasher};
-use rmx::std::collections::hash_map::DefaultHasher;
+use rmx::std::hash::Hash;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{FunParam, FunSignature, ParsedStatements, StmtFun};
@@ -68,17 +67,11 @@ pub fn parse_module_graph<'db>(
             })
             .collect();
 
-    // Compute recursive content hashes. Named for the AST but taken from the
-    // source text and the dependencies' hashes, which is why no statements go
-    // in: the argument that used to carry them was never read, and building it
-    // cloned every module's statements a second time.
-    let module_content_hashes = compute_module_content_hashes(db, &graph, &resolved_requires);
-
     // Build RiderInterfaces from rider sources inside this tracked function,
     // where salsa tracked struct creation (TypeFunction) is allowed.
     let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &statements_only);
 
-    ParsedModuleGraph::new(db, graph, statements_only, resolved_requires, module_content_hashes, resolved_riders)
+    ParsedModuleGraph::new(db, graph, statements_only, resolved_requires, resolved_riders)
 }
 
 /// Parse all modules in a graph with resolved requires, using parallel execution.
@@ -310,48 +303,6 @@ fn native_stub<'db>(
     )
 }
 
-/// Compute recursive content hashes for each module in the graph.
-///
-/// Each module's hash incorporates:
-/// - The module's source text (not AST)
-/// - The sorted (alias, dependency_hash) pairs for resolved requires
-///
-/// This is a true "content hash" - any change to the source file (including
-/// whitespace) changes the hash. Memoization of typecheck is handled separately
-/// by Salsa based on AST equality.
-fn compute_module_content_hashes<'db>(
-    db: &'db dyn salsa::Database,
-    graph: &ModuleGraph<'db>,
-    resolved_requires: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
-) -> BTreeMap<ModuleId<'db>, u64> {
-    let mut hashes = BTreeMap::new();
-
-    // Process modules in deterministic order.
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let mut hasher = DefaultHasher::new();
-
-        // Hash the source text directly.
-        let source_text = module.source(db).text(db);
-        source_text.hash(&mut hasher);
-
-        // Hash resolved requires with their content hashes (sorted for determinism).
-        if let Some(requires) = resolved_requires.get(&module_id) {
-            let mut dep_hashes: Vec<_> = requires.iter()
-                .filter_map(|(alias, target_id)| {
-                    hashes.get(target_id).map(|h| (alias.text(db).to_string(), *h))
-                })
-                .collect();
-            dep_hashes.sort_by(|a, b| a.0.cmp(&b.0));
-            dep_hashes.hash(&mut hasher);
-        }
-
-        hashes.insert(module_id, hasher.finish());
-    }
-
-    hashes
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -440,202 +391,6 @@ mod tests {
         (builder.build(), ids)
     }
 
-    #[test]
-    fn test_leaf_module_hash_changes_with_source() {
-        let db = Database::default();
-
-        // Create a single module.
-        let (graph1, ids1) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
-        let hash1 = parsed1.module_content_hashes(&db)[&ids1[0]];
-
-        // Create same module with different source.
-        let (graph2, ids2) = build_graph(&db, &[("a", "let x = 2")]);
-        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
-        let hash2 = parsed2.module_content_hashes(&db)[&ids2[0]];
-
-        assert_ne!(hash1, hash2, "hash should change when source changes");
-    }
-
-    #[test]
-    fn test_identical_source_produces_same_hash() {
-        let db = Database::default();
-
-        let (graph1, ids1) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
-        let hash1 = parsed1.module_content_hashes(&db)[&ids1[0]];
-
-        let (graph2, ids2) = build_graph(&db, &[("a", "let x = 1")]);
-        let parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
-        let hash2 = parsed2.module_content_hashes(&db)[&ids2[0]];
-
-        assert_eq!(hash1, hash2, "identical source should produce identical hash");
-    }
-
-    #[test]
-    fn test_dependent_hash_changes_when_dependency_changes() {
-        let db = Database::default();
-
-        // A depends on B (B is leaf).
-        let (graph1, ids1) = build_graph(&db, &[
-            ("b", "fun helper(): i32\n  ret 1\nend fun"),
-            ("a", "require module /test/b\nlet x = b.helper()"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[0]];
-
-        // Same structure but B has different source.
-        let (graph2, ids2) = build_graph(&db, &[
-            ("b", "fun helper(): i32\n  ret 2\nend fun"),
-            ("a", "require module /test/b\nlet x = b.helper()"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[0]];
-
-        // B's hash should change.
-        assert_ne!(hash_b1, hash_b2, "dependency hash should change when its source changes");
-
-        // A's hash should also change (even though A's source is unchanged).
-        assert_ne!(hash_a1, hash_a2, "dependent hash should change when dependency changes");
-    }
-
-    #[test]
-    fn test_unrelated_module_hash_unchanged() {
-        let db = Database::default();
-
-        // A and C are independent, B depends on C.
-        let (graph1, ids1) = build_graph(&db, &[
-            ("c", "fun leaf(): i32\n  ret 1\nend fun"),
-            ("b", "require module /test/c\nlet y = c.leaf()"),
-            ("a", "let x = 100"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[1], vec![("c".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
-
-        // Change C's source.
-        let (graph2, ids2) = build_graph(&db, &[
-            ("c", "fun leaf(): i32\n  ret 999\nend fun"),
-            ("b", "require module /test/c\nlet y = c.leaf()"),
-            ("a", "let x = 100"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
-
-        // A's hash should be unchanged (A doesn't depend on C).
-        assert_eq!(hash_a1, hash_a2, "unrelated module hash should not change");
-    }
-
-    #[test]
-    fn test_transitive_dependency_change_propagates() {
-        let db = Database::default();
-
-        // A -> B -> C (chain of dependencies).
-        let (graph1, ids1) = build_graph(&db, &[
-            ("c", "fun base(): i32\n  ret 1\nend fun"),
-            ("b", "require module /test/c\nfun mid(): i32\n  ret c.base()\nend fun"),
-            ("a", "require module /test/b\nlet x = b.mid()"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[1], vec![("c".to_string(), ids1[0])]);
-        requires1.insert(ids1[2], vec![("b".to_string(), ids1[1])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[1]];
-        let hash_c1 = parsed1.module_content_hashes(&db)[&ids1[0]];
-
-        // Change C (the leaf).
-        let (graph2, ids2) = build_graph(&db, &[
-            ("c", "fun base(): i32\n  ret 42\nend fun"),
-            ("b", "require module /test/c\nfun mid(): i32\n  ret c.base()\nend fun"),
-            ("a", "require module /test/b\nlet x = b.mid()"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
-        requires2.insert(ids2[2], vec![("b".to_string(), ids2[1])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[1]];
-        let hash_c2 = parsed2.module_content_hashes(&db)[&ids2[0]];
-
-        // All hashes should change.
-        assert_ne!(hash_c1, hash_c2, "C hash should change");
-        assert_ne!(hash_b1, hash_b2, "B hash should change (depends on C)");
-        assert_ne!(hash_a1, hash_a2, "A hash should change (transitively depends on C)");
-    }
-
-    #[test]
-    fn test_multiple_dependencies_all_affect_hash() {
-        let db = Database::default();
-
-        // A depends on both B and C.
-        let (graph1, ids1) = build_graph(&db, &[
-            ("b", "fun b_func(): i32\n  ret 1\nend fun"),
-            ("c", "fun c_func(): i32\n  ret 2\nend fun"),
-            ("a", "require module /test/b\nrequire module /test/c\nlet x = b.b_func() + c.c_func()"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[2], vec![
-            ("b".to_string(), ids1[0]),
-            ("c".to_string(), ids1[1]),
-        ]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[2]];
-
-        // Change only C.
-        let (graph2, ids2) = build_graph(&db, &[
-            ("b", "fun b_func(): i32\n  ret 1\nend fun"),
-            ("c", "fun c_func(): i32\n  ret 999\nend fun"),
-            ("a", "require module /test/b\nrequire module /test/c\nlet x = b.b_func() + c.c_func()"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[2], vec![
-            ("b".to_string(), ids2[0]),
-            ("c".to_string(), ids2[1]),
-        ]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[2]];
-
-        assert_ne!(hash_a1, hash_a2, "A's hash should change when any dependency changes");
-    }
-
-    #[test]
-    fn test_alias_name_affects_hash() {
-        let db = Database::default();
-
-        // A depends on B with alias "b".
-        let (graph1, ids1) = build_graph(&db, &[
-            ("dep", "fun helper(): i32\n  ret 1\nend fun"),
-            ("a", "let x = 1"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
-
-        // Same dependency but with different alias "c".
-        let (graph2, ids2) = build_graph(&db, &[
-            ("dep", "fun helper(): i32\n  ret 1\nend fun"),
-            ("a", "let x = 1"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[1], vec![("c".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
-
-        // Different alias should produce different hash (module configuration differs).
-        assert_ne!(hash_a1, hash_a2, "different alias should produce different hash");
-    }
-
     // ========================================================================
     // Salsa Memoization Verification Tests
     // ========================================================================
@@ -694,46 +449,6 @@ mod tests {
         assert!(
             !recompute_queries.is_empty(),
             "changed source should trigger recomputation"
-        );
-    }
-
-    #[test]
-    fn test_salsa_memoization_matches_hash_changes() {
-        let db = LoggingDatabase::new();
-
-        // Create A -> B dependency chain.
-        let (graph1, ids1) = build_graph_logging(&db, &[
-            ("b", "fun helper(): i32\n  ret 1\nend fun"),
-            ("a", "let x = 1"),
-        ]);
-        let mut requires1 = BTreeMap::new();
-        requires1.insert(ids1[1], vec![("b".to_string(), ids1[0])]);
-        let parsed1 = parse_module_graph(&db, graph1, requires1, Vec::new());
-        let hash_a1 = parsed1.module_content_hashes(&db)[&ids1[1]];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&ids1[0]];
-
-        db.clear_events();
-
-        // Change B's source.
-        let (graph2, ids2) = build_graph_logging(&db, &[
-            ("b", "fun helper(): i32\n  ret 999\nend fun"),
-            ("a", "let x = 1"),
-        ]);
-        let mut requires2 = BTreeMap::new();
-        requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
-        let parsed2 = parse_module_graph(&db, graph2, requires2, Vec::new());
-        let hash_a2 = parsed2.module_content_hashes(&db)[&ids2[1]];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&ids2[0]];
-
-        // Verify hash changes match expectations.
-        assert_ne!(hash_b1, hash_b2, "B's hash should change");
-        assert_ne!(hash_a1, hash_a2, "A's hash should change (depends on B)");
-
-        // Verify Salsa recomputed.
-        let recompute_queries = db.executed_queries();
-        assert!(
-            !recompute_queries.is_empty(),
-            "changing B should trigger recomputation"
         );
     }
 
@@ -820,26 +535,22 @@ mod tests {
         }
 
         // First run: both modules should be parsed.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         enable_query_logging();
-        let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
         eprintln!("First run parsed: {:?}", first_parsed);
         assert_eq!(first_parsed.len(), 2, "first run should parse both modules");
 
-        // Capture content hashes after first run.
-        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
-
         // Mutate only B's source text.
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should be re-parsed, A should be cached.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         enable_query_logging();
-        let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
+        parse_module_graph(&db, graph, requires, Vec::new());
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");
@@ -848,13 +559,6 @@ mod tests {
         assert_eq!(second_parsed.len(), 1, "only changed module should re-parse");
         assert!(second_parsed.contains(&"b".to_string()), "b should re-parse");
         assert!(!second_parsed.contains(&"a".to_string()), "a should be cached");
-
-        // Verify content hashes: B changed, A's hash also changes (transitive dependency).
-        // Note: A's hash changes because A depends on B, even though A wasn't re-parsed.
-        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
-        assert_ne!(hash_b1, hash_b2, "B's hash should change (source changed)");
-        assert_ne!(hash_a1, hash_a2, "A's hash changes transitively (depends on B)");
     }
 
     #[test]
@@ -1118,7 +822,7 @@ mod tests {
         }
 
         // First run: both modules should typecheck.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
@@ -1128,15 +832,11 @@ mod tests {
         eprintln!("First run typechecked: {:?}", first_tc);
         assert_eq!(first_tc.len(), 2, "first run should typecheck both modules");
 
-        // Capture content hashes after first run.
-        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
-
         // Mutate only B's source.
         source_b.set_text(&mut db).to("fun helper(): i32\n  ret 999\nend fun".to_string());
 
         // Second run: only B should re-typecheck.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
@@ -1149,13 +849,6 @@ mod tests {
         assert_eq!(second_tc.len(), 1, "only changed module should re-typecheck");
         assert!(second_tc.contains(&"b".to_string()), "b should re-typecheck");
         assert!(!second_tc.contains(&"a".to_string()), "a should be cached");
-
-        // Verify content hashes: B changed, A's hash also changes (transitive dependency).
-        // Note: A's hash changes because A depends on B, even though A wasn't re-typechecked.
-        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
-        assert_ne!(hash_b1, hash_b2, "B's hash should change (source changed)");
-        assert_ne!(hash_a1, hash_a2, "A's hash changes transitively (depends on B)");
     }
 
     #[test]
@@ -1165,15 +858,12 @@ mod tests {
 
         let source_a = bct::input::Source::new(&db, "fun main(): i32\n  ret 1\nend fun".to_string());
         let mut builder = ModuleGraphBuilder::new(&db);
-        let id_a = builder.add_module("a".to_string(), source_a);
+        let _ = builder.add_module("a".to_string(), source_a);
         let graph = builder.build();
 
         // First run.
         let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck(&db, parsed1);
-
-        // Capture content hash after first run.
-        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
 
         // Second run with no changes.
         let parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
@@ -1184,10 +874,6 @@ mod tests {
         let typechecked = get_executed_modules(&log, "typecheck");
         eprintln!("No change, second run: {:?}", typechecked);
         assert_eq!(typechecked.len(), 0, "no changes = fully cached");
-
-        // Verify content hash unchanged.
-        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
-        assert_eq!(hash_a1, hash_a2, "hash unchanged = not re-typechecked");
     }
 
     #[test]
@@ -1214,7 +900,7 @@ mod tests {
         }
 
         // First run.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         let parsed1 = parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
         enable_query_logging();
         let _result1 = resolve_and_typecheck(&db, parsed1);
@@ -1224,16 +910,12 @@ mod tests {
         eprintln!("With imports, first run: {:?}", first_tc);
         assert_eq!(first_tc.len(), 2);
 
-        // Capture content hashes after first run.
-        let hash_a1 = parsed1.module_content_hashes(&db)[&id_a];
-        let hash_b1 = parsed1.module_content_hashes(&db)[&id_b];
-
         // Change only A (the importing module).
         source_a.set_text(&mut db).to(
             "require module /test/b\nimport b.helper\nfun main(): i32\n  ret 42\nend fun".to_string());
 
         // Second run: only A should re-typecheck.
-        let (graph, id_a, id_b, requires) = build(&db, source_a, source_b);
+        let (graph, _, _, requires) = build(&db, source_a, source_b);
         let parsed2 = parse_module_graph(&db, graph, requires, Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
@@ -1243,12 +925,6 @@ mod tests {
         eprintln!("With imports, second run after A change: {:?}", second_tc);
         assert_eq!(second_tc.len(), 1, "only A should re-typecheck");
         assert!(second_tc.contains(&"test/a".to_string()), "a should re-typecheck");
-
-        // Verify content hashes correlate with re-typecheck.
-        let hash_a2 = parsed2.module_content_hashes(&db)[&id_a];
-        let hash_b2 = parsed2.module_content_hashes(&db)[&id_b];
-        assert_ne!(hash_a1, hash_a2, "A's hash changed = A re-typechecked");
-        assert_eq!(hash_b1, hash_b2, "B's hash unchanged = B not re-typechecked");
     }
 
     #[test]

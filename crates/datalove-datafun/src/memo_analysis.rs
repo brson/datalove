@@ -163,6 +163,37 @@ fn parse_sections(content: &str) -> AnyResult<Vec<ParsedSection>> {
     Ok(sections)
 }
 
+/// Each module's source text hashed with the hashes of what it requires, by path.
+///
+/// Recursive, so a module's hash moves when anything it reaches does, and taken
+/// from the text rather than the AST, so a whitespace edit moves it too; whether
+/// salsa then re-typechecks is what the analysis compares this against. Here
+/// rather than in the compiler because nothing else wants it, and computing it
+/// on every parse cost every compile a pass over every module's text.
+fn module_content_hashes(
+    db: &dyn salsa::Database,
+    parsed_graph: datalove_datafun_tycheck::ParsedModuleGraph<'_>,
+) -> BTreeMap<String, u64> {
+    let resolved_requires = parsed_graph.resolved_requires(db);
+    let mut hashes = BTreeMap::new();
+    for module in parsed_graph.graph(db).iter_modules(db) {
+        let module_id = module.id(db);
+        let mut hasher = DefaultHasher::new();
+        module.source(db).text(db).hash(&mut hasher);
+        if let Some(requires) = resolved_requires.get(&module_id) {
+            let mut dep_hashes: Vec<_> = requires.iter()
+                .filter_map(|(alias, target_id)| {
+                    hashes.get(target_id).map(|h| (alias.text(db).to_string(), *h))
+                })
+                .collect();
+            dep_hashes.sort_by(|a, b| a.0.cmp(&b.0));
+            dep_hashes.hash(&mut hasher);
+        }
+        hashes.insert(module_id, hasher.finish());
+    }
+    hashes.into_iter().map(|(id, hash)| (id.path(db).clone(), hash)).collect()
+}
+
 /// Hash a string using DefaultHasher.
 fn hash_string(s: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
@@ -374,10 +405,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .into_iter().collect();
 
         // Get content hashes and errors.
-        let current_hashes: BTreeMap<String, u64> = parsed_graph.module_content_hashes(&db)
-            .iter()
-            .map(|(id, hash)| (id.path(&db).clone(), *hash))
-            .collect();
+        let current_hashes = module_content_hashes(&db, parsed_graph);
         let module_errors: BTreeMap<String, Vec<String>> = typecheck_result.module_errors(&db)
             .iter()
             .map(|(id, errors)| {
