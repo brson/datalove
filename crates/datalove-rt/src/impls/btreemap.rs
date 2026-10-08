@@ -117,23 +117,23 @@ impl UnpackSlot {
 /// Where `key` falls among the first `len` keys at `keys`: `Ok` with the
 /// position of the one equal to it, or `Err` with the position it would go at.
 ///
-/// A binary search. A node holds up to eleven keys, of which a scan compared
-/// half on average, and comparing is most of what a lookup costs.
+/// In order, not by bisection. Bisecting compared fewer keys -- a node holds up
+/// to eleven -- but its branches go either way at random where a scan's go one
+/// way until they stop, and on the store demo and `benchvs/wordfreq` the
+/// mispredictions cost more cycles than the comparisons saved.
 #[inline]
 unsafe fn search_keys(keys: *const u8, len: usize, key: *const u8, ty: MapTy) -> std::result::Result<usize, usize> {
     unsafe {
         let key_size = ty.key.size() as usize;
-        let (mut lo, mut hi) = (0, len);
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            match ty.ord.cmp(key, keys.add(mid * key_size)) {
-                crate::c::RtOrdering::Less => hi = mid,
-                crate::c::RtOrdering::Greater => lo = mid + 1,
-                crate::c::RtOrdering::Equal => return Ok(mid),
-                crate::c::RtOrdering::Error => unreachable!("two keys of one type always order"),
+        for i in 0..len {
+            match ty.ord.cmp(key, keys.add(i * key_size)) {
+                crate::c::RtOrdering::Less => return Err(i),
+                crate::c::RtOrdering::Greater => {}
+                crate::c::RtOrdering::Equal => return Ok(i),
+                crate::c::RtOrdering::Error => unreachable!("two values of one type always order"),
             }
         }
-        Err(lo)
+        Err(len)
     }
 }
 

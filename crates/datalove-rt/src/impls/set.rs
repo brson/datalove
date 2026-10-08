@@ -33,22 +33,20 @@ impl<'a> SetTy<'a> {
 /// Where `element` falls among the first `len` at `elements`: `Ok` with the
 /// position of the one equal to it, or `Err` with the position it would go at.
 ///
-/// A binary search, as `btreemap::search_keys` is.
+/// In order, as `btreemap::search_keys` explains.
 #[inline]
 unsafe fn search_elements(elements: *const u8, len: usize, element: *const u8, ty: SetTy) -> std::result::Result<usize, usize> {
     unsafe {
         let size = ty.elem.size() as usize;
-        let (mut lo, mut hi) = (0, len);
-        while lo < hi {
-            let mid = lo + (hi - lo) / 2;
-            match ty.ord.cmp(element, elements.add(mid * size)) {
-                crate::c::RtOrdering::Less => hi = mid,
-                crate::c::RtOrdering::Greater => lo = mid + 1,
-                crate::c::RtOrdering::Equal => return Ok(mid),
-                crate::c::RtOrdering::Error => unreachable!("two elements of one type always order"),
+        for i in 0..len {
+            match ty.ord.cmp(element, elements.add(i * size)) {
+                crate::c::RtOrdering::Less => return Err(i),
+                crate::c::RtOrdering::Greater => {}
+                crate::c::RtOrdering::Equal => return Ok(i),
+                crate::c::RtOrdering::Error => unreachable!("two values of one type always order"),
             }
         }
-        Err(lo)
+        Err(len)
     }
 }
 
