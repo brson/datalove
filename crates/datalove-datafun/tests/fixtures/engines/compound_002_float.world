@@ -1,0 +1,36 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment on floats: all four bare operators.
+fun f64_ops(a: f64, b: f64): (f64, f64, f64, f64)
+    var sum = a
+    set sum += b
+    var diff = a
+    set diff -= b
+    var prod = a
+    set prod *= b
+    var quot = a
+    set quot /= b
+    ret (sum, diff, prod, quot)
+end fun
+
+fun f32_ops(a: f32, b: f32): (f32, f32, f32, f32)
+    var sum = a
+    set sum += b
+    var diff = a
+    set diff -= b
+    var prod = a
+    set prod *= b
+    var quot = a
+    set quot /= b
+    ret (sum, diff, prod, quot)
+end fun
+
+debuglog f64_ops(7.5, 2.5)
+debuglog f32_ops(7.5, 2.5)
+
+var x: f64 = 1.5
+set x *= x
+set x += 0.25
+debuglog x

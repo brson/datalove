@@ -1,0 +1,41 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment to `mut` and `out` parameters, and to fields of them.
+fun bump(mut x: u32): !()
+    set x +!= 1
+    ret ok ()
+end fun
+
+fun scale(mut x: int, k: int): bool
+    set x *= k
+    ret true
+end fun
+
+fun bump_field(mut p: {a: u32, b: f64}): bool
+    set p.b /= 4.0
+    ret true
+end fun
+
+fun init_then_add(out x: int): bool
+    set x = 40
+    set x += 2
+    ret true
+end fun
+
+var n: u32 = 7
+let _r = bump(mut n)
+debuglog n
+
+var big = 3
+let _s = scale(mut big, 100000000000000000000)
+debuglog big
+
+var p = {a = (: u32 / 1), b = 10.0}
+let _b = bump_field(mut p)
+debuglog p
+
+var o = 0
+let _i = init_then_add(out o)
+debuglog o

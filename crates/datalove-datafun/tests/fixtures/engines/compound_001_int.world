@@ -1,0 +1,53 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment on `int`: the bare operators, and checked and
+// optional division.
+fun int_bare(a: int, b: int): (int, int, int)
+    var sum = a@
+    set sum += b
+    var diff = a@
+    set diff -= b
+    var prod = a
+    set prod *= b
+    ret (sum, diff, prod)
+end fun
+
+fun int_div_checked(a: int, b: int): !int
+    var q = a
+    set q /!= b
+    ret ok q
+end fun
+
+fun int_div_optional(a: int, b: int): ?int
+    var q = a
+    set q /?= b
+    ret some q
+end fun
+
+debuglog int_bare(100000000000000000000, 3)
+debuglog int_bare(-7, 100000000000000000000)
+debuglog int_div_checked(100000000000000000000, 7)
+debuglog int_div_checked(5, 0)
+debuglog int_div_optional(-21, 4)
+debuglog int_div_optional(5, 0)
+
+// The value can be the place itself.
+var y = 12345678901234567890
+set y += y
+debuglog y
+set y *= y
+debuglog y
+set y -= y
+debuglog y
+
+// An accumulator in a loop.
+var total = 0
+var i: u32 = 0
+loop while i .< 100
+    set total += i@
+    set total *= 3
+    set i +!= 1
+end loop
+debuglog total

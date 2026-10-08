@@ -105,6 +105,8 @@ pub struct StmtConst {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtSet {
     pub target: Place,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub op: Option<BinOp>,
     pub value: ExprFun,
 }
 
@@ -680,6 +682,7 @@ impl StmtSet {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtSet<'db>) -> Self {
         StmtSet {
             target: Place::from_ast(db, &ast.target),
+            op: ast.op.map(BinOp::from_ast),
             value: ExprFun::from_ast(db, ast.value),
         }
     }

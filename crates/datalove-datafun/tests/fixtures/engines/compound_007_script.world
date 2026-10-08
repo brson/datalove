@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment to script variables, here and from a later unit.
+var count: u32 = 1
+var total = 10
+set count +!= 1
+set total *= 7
+debuglog (count, total@)
+
+----------
+scriptunit-fragment
+----------
+
+set count *!= 21
+set total -= 1
+debuglog (count, total@)
+
+----------
+scriptunit-expr
+----------
+
+(count, total)

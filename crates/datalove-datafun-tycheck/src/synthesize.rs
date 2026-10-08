@@ -28,7 +28,7 @@ use datalove_datafun_common::generics::{
 // ============================================================================
 
 /// Convert BinOp to its source syntax.
-fn binop_to_str(op: BinOp) -> &'static str {
+pub(crate) fn binop_to_str(op: BinOp) -> &'static str {
     use BinOp::*;
     match op {
         Add => "+",
@@ -538,6 +538,53 @@ fn equality_blocker<'db>(ty: &Type<'db>) -> Option<Type<'db>> {
     }
 }
 
+/// Whether arithmetic operator `op` applies to operands of type `ty`.
+///
+/// The one statement of which arithmetic each type has, for a binary
+/// expression and a compound assignment alike. `bound` is the bound of `ty`
+/// when it is a type parameter.
+///
+/// Floats have the bare operators, and `int` all but bare division. A
+/// fixed-width integer has no bare arithmetic: it overflows, so it has the
+/// checked and optional forms, which say what happens when it does. `int` has
+/// those for division only, which fails on a zero divisor.
+pub(crate) fn arithmetic_admits(
+    op: BinOp,
+    ty: &Type<'_>,
+    bound: Option<datalove_datafun_ast::ast::TypeBound>,
+) -> bool {
+    use datalove_datafun_ast::ast::TypeBound;
+    let float = bound == Some(TypeBound::Float) || is_float_type(ty);
+    let fixed = bound == Some(TypeBound::FixedInt) || is_fixed_int_type(ty);
+    let bigint = is_bigint_type(ty);
+    use BinOp::*;
+    match op {
+        Add | Sub | Mul => float || bigint,
+        Div => float,
+        AddChecked | SubChecked | MulChecked | AddOptional | SubOptional | MulOptional => fixed,
+        DivChecked | DivOptional => fixed || bigint,
+        Lt | Gt | Le | Ge | Eq | Ne | And | Or | Xor => panic!("{op:?} is not arithmetic"),
+    }
+}
+
+/// How an arithmetic operator leaves the function when it fails, if it can.
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub(crate) enum EarlyReturn {
+    /// With an error, for the checked operators: the function returns a result.
+    Error,
+    /// With none, for the optional operators: the function returns an option.
+    None,
+}
+
+pub(crate) fn arithmetic_early_return(op: BinOp) -> Option<EarlyReturn> {
+    use BinOp::*;
+    match op {
+        AddChecked | SubChecked | MulChecked | DivChecked => Some(EarlyReturn::Error),
+        AddOptional | SubOptional | MulOptional | DivOptional => Some(EarlyReturn::None),
+        _ => Option::None,
+    }
+}
+
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -692,92 +739,28 @@ fn synthesize_binop<'db>(
     // Determine result type based on operator.
     use BinOp::*;
     let result_ty = match op {
-        // Basic arithmetic: floats and bigints only.
-        // Fixed ints must use @ to widen, or use checked/optional operators.
-        Add | Sub | Mul => {
-            if float_bounded || is_float_type(&operand_ty) {
-                // Floats return float.
-                lhs_ty
-            } else if is_bigint_type(&operand_ty) {
-                // Bigints return bigint.
-                lhs_ty
-            } else {
-                // Fixed ints and other types are not allowed.
+        // Arithmetic yields its operands' type. Checked and optional operators
+        // yield it directly too, not wrapped: on failure the function returns
+        // early with an error or with none.
+        Add | Sub | Mul | Div
+        | AddChecked | SubChecked | MulChecked | DivChecked
+        | AddOptional | SubOptional | MulOptional | DivOptional => {
+            if !arithmetic_admits(op, &operand_ty, bound) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     binop_to_str(op),
                     &type_to_string(db, &operand_ty)
                 ));
             }
-        }
-
-        // Bare division: only floats (bigints must use /! or /?).
-        Div => {
-            if !float_bounded && !is_float_type(&operand_ty) {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    binop_to_str(op),
-                    &type_to_string(db, &operand_ty)
-                ));
+            match arithmetic_early_return(op) {
+                Some(EarlyReturn::Error) => {
+                    require_result_return_type(ctx, expr, binop_to_str(op))?;
+                }
+                Some(EarlyReturn::None) => {
+                    require_option_return_type(ctx, expr, binop_to_str(op))?;
+                }
+                Option::None => {}
             }
-            lhs_ty
-        }
-
-        // Checked arithmetic: only fixed ints, plus division for bigints.
-        // Checked operators yield element type directly (not wrapped in Result).
-        // On overflow, the function early-returns with an error.
-        AddChecked | SubChecked | MulChecked => {
-            if !fixedint_bounded && !is_fixed_int_type(&operand_ty) {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    binop_to_str(op),
-                    &type_to_string(db, &operand_ty)
-                ));
-            }
-            require_result_return_type(ctx, expr, binop_to_str(op))?;
-            lhs_ty
-        }
-
-        DivChecked => {
-            if !fixedint_bounded
-                && !is_fixed_int_type(&operand_ty)
-                && !is_bigint_type(&operand_ty)
-            {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    binop_to_str(op),
-                    &type_to_string(db, &operand_ty)
-                ));
-            }
-            require_result_return_type(ctx, expr, binop_to_str(op))?;
-            lhs_ty
-        }
-
-        // Optional arithmetic: only fixed ints, early-returns None on overflow.
-        AddOptional | SubOptional | MulOptional => {
-            if !fixedint_bounded && !is_fixed_int_type(&operand_ty) {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    binop_to_str(op),
-                    &type_to_string(db, &operand_ty)
-                ));
-            }
-            require_option_return_type(ctx, expr, binop_to_str(op))?;
-            lhs_ty
-        }
-
-        DivOptional => {
-            if !fixedint_bounded
-                && !is_fixed_int_type(&operand_ty)
-                && !is_bigint_type(&operand_ty)
-            {
-                return Err(ctx.error_invalid_operand_type(
-                    expr,
-                    binop_to_str(op),
-                    &type_to_string(db, &operand_ty)
-                ));
-            }
-            require_option_return_type(ctx, expr, binop_to_str(op))?;
             lhs_ty
         }
 
@@ -1116,7 +1099,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
 /// Anything that is not a parameter is its own type and has no bound; anything
 /// that is a parameter without one admits nothing but moving and dropping, so
 /// it is `None` too and every operator refuses it.
-fn operand_bound<'db>(
+pub(crate) fn operand_bound<'db>(
     ctx: &TypeContext<'db>,
     ty: &Type<'db>,
 ) -> Option<datalove_datafun_ast::ast::TypeBound> {

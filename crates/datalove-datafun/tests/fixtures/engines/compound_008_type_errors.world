@@ -1,0 +1,80 @@
+----------
+module local/test/main
+----------
+
+// Compound assignment takes exactly the operators the binary form does.
+
+// Fixed-width integers have no bare arithmetic.
+fun bare_fixed(a: u32): u32
+    var x = a
+    set x += 1
+    ret x
+end fun
+
+// `int` has no bare division.
+fun bare_int_div(a: int): int
+    var x = a
+    set x /= 2
+    ret x
+end fun
+
+// Floats have no checked arithmetic.
+fun checked_float(a: f64): !f64
+    var x = a
+    set x +!= 1.0
+    ret ok x
+end fun
+
+// Strings have no arithmetic at all.
+fun string_add(a: string): string
+    var x = a
+    set x += "b"
+    ret x
+end fun
+
+// A checked operator needs a function returning a result.
+fun checked_no_result(a: u32): u32
+    var x = a
+    set x +!= 1
+    ret x
+end fun
+
+// An optional operator needs a function returning an option.
+fun optional_in_result(a: u32): !u32
+    var x = a
+    set x +?= 1
+    ret ok x
+end fun
+
+// The value has the place's type.
+fun mismatched(a: u32, b: u64): !u32
+    var x = a
+    set x +!= b
+    ret ok x
+end fun
+
+// A bare map index inserts, and there may be nothing to update.
+fun bare_map_index(m: %{string = int}): %{string = int}
+    var b = m
+    set b["a"] += 1
+    ret b
+end fun
+
+// The place has to be mutable.
+fun immutable(a: int): int
+    let x = a
+    set x += 1
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+
+----------
+scriptunit-expr
+----------
+
+true

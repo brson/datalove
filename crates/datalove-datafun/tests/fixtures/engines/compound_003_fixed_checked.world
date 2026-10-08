@@ -1,0 +1,166 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment on every fixed-width integer, with the checked operators.
+fun ops_u8(a: u8, b: u8): !(u8, u8, u8, u8)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_u16(a: u16, b: u16): !(u16, u16, u16, u16)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_u32(a: u32, b: u32): !(u32, u32, u32, u32)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_u64(a: u64, b: u64): !(u64, u64, u64, u64)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_i8(a: i8, b: i8): !(i8, i8, i8, i8)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_i16(a: i16, b: i16): !(i16, i16, i16, i16)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_i32(a: i32, b: i32): !(i32, i32, i32, i32)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_i64(a: i64, b: i64): !(i64, i64, i64, i64)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_index(a: index, b: index): !(index, index, index, index)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+fun ops_offset(a: offset, b: offset): !(offset, offset, offset, offset)
+    var sum = a
+    set sum +!= b
+    var diff = a
+    set diff -!= b
+    var prod = b
+    set prod *!= b
+    var quot = a
+    set quot /!= b
+    ret ok (sum, diff, prod, quot)
+end fun
+
+debuglog ops_u8(200, 7)
+debuglog ops_u16(60000, 99)
+debuglog ops_u32(4000000000, 7)
+debuglog ops_u64(18000000000000000000, 9)
+debuglog ops_i8(-100, 7)
+debuglog ops_i16(-30000, 99)
+debuglog ops_i32(-2000000000, 13)
+debuglog ops_i64(-9000000000000000000, 11)
+debuglog ops_index(1000, 10)
+debuglog ops_offset(-1000, 10)
+
+// Each operator fails when its result doesn't fit, or on a zero divisor.
+fun add_u8(a: u8, b: u8): !u8
+    var x = a
+    set x +!= b
+    ret ok x
+end fun
+
+fun sub_u16(a: u16, b: u16): !u16
+    var x = a
+    set x -!= b
+    ret ok x
+end fun
+
+fun mul_i32(a: i32, b: i32): !i32
+    var x = a
+    set x *!= b
+    ret ok x
+end fun
+
+fun div_i64(a: i64, b: i64): !i64
+    var x = a
+    set x /!= b
+    ret ok x
+end fun
+
+debuglog add_u8(255, 1)
+debuglog sub_u16(0, 1)
+debuglog mul_i32(2147483647, 2)
+debuglog div_i64(5, 0)
+debuglog div_i64(-9223372036854775808, -1)

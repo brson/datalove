@@ -1,0 +1,1 @@
+((2.75, -2.5), (ok (24, 16, 80, 5), ok (-16, -24, -80, -5), ok (24, 16, 80, 5), ok (-16, -24, -80, -5), er error "arithmetic overflow", er error "division by zero or overflow"), (some (24, 16, 80, 5), none, none))

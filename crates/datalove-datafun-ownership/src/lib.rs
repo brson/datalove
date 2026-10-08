@@ -836,6 +836,32 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// (e.g., operand of a binary operation).
     ///
     /// Returns the binding ID if the expression is a simple move of a binding.
+    /// Check that a binding read at `expr_key` has not been moved out of.
+    ///
+    /// Reports a use after move and gives false if it has, unless auto-adapt
+    /// can clone it at the earlier move instead.
+    fn check_not_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) -> bool {
+        if self.get_state(id) != Some(BindingState::Moved) {
+            return true;
+        }
+        if self.auto_adapt_mode.is_enabled() {
+            // Clone at the earlier move, which leaves the binding live for
+            // this read.
+            if let Some(moved_at) = self.get_moved_at(id) {
+                self.adapt_sites.insert(moved_at);
+            }
+            self.set_state(id, BindingState::Live);
+            return true;
+        }
+        let name = self.bindings[id.0 as usize].name.C();
+        let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
+        let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
+            description: format!("clone `{}` before the earlier use", name),
+        };
+        self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
+        false
+    }
+
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
         // Use salsa ID index for span lookup (not the AST sequential local_index).
         let expr_key = ExprKey::of(self.db, expr);
@@ -1050,24 +1076,8 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                             self.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
                             return None;
                         }
-                        // Check for use after move.
-                        if self.get_state(id) == Some(BindingState::Moved) {
-                            if self.auto_adapt_mode.is_enabled() {
-                                // Clone at the earlier move, which leaves the
-                                // binding live for this read.
-                                if let Some(moved_at) = self.get_moved_at(id) {
-                                    self.adapt_sites.insert(moved_at);
-                                }
-                                self.set_state(id, BindingState::Live);
-                            } else {
-                                let name = self.bindings[id.0 as usize].name.C();
-                                let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
-                                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                                    description: format!("clone `{}` before the earlier use", name),
-                                };
-                                self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
-                                return None;
-                            }
+                        if !self.check_not_moved(id, expr_key) {
+                            return None;
                         }
                         let binding = &self.bindings[id.0 as usize];
                         if is_consumed && !binding.ty.is_copy() {
@@ -1094,21 +1104,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     // Non-zero steps: root is borrowed, index sub-expressions are borrowed.
                     let root_name = place.root.text(self.db);
                     if let Some(id) = self.lookup(root_name) {
-                        if self.get_state(id) == Some(BindingState::Moved) {
-                            if self.auto_adapt_mode.is_enabled() {
-                                if let Some(moved_at) = self.get_moved_at(id) {
-                                    self.adapt_sites.insert(moved_at);
-                                }
-                                self.set_state(id, BindingState::Live);
-                            } else {
-                                let name = self.bindings[id.0 as usize].name.C();
-                                let moved_at = self.get_moved_at(id).unwrap_or(expr_key);
-                                let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
-                                    description: format!("clone `{}` before the earlier use", name),
-                                };
-                                self.errors.push(AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint });
-                            }
-                        }
+                        self.check_not_moved(id, expr_key);
                     } else {
                         self.check_dead_external(root_name, expr_key);
                     }
@@ -1675,12 +1671,21 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
 
     let expr = stmt.value;
 
-    // Analyze moves in the expression. The value is moved into the slot.
-    ctx.analyze_expr_moves(expr, true);
+    // A compound assignment reads the place before it writes it, so the place
+    // has to hold a value, and its value is an operand, which it borrows. A
+    // plain one moves its value into the place.
+    let compound = stmt.op.is_some();
+    if compound {
+        check_compound_target_readable(ctx, stmt);
+    }
+    ctx.analyze_expr_moves(expr, !compound);
 
     // Check for early return operators in the RHS expression AFTER analyzing
     // moves. This ensures bindings consumed by the expression aren't dropped.
-    if ctx.expr_may_early_return(expr) {
+    // A checked or optional compound operator returns early from the same
+    // point, after its value.
+    let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
+    if ctx.expr_may_early_return(expr) || op_may_early_return {
         let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
@@ -1714,6 +1719,25 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
             }
         }
     }
+}
+
+/// Check that the place a compound assignment updates holds a value to read.
+///
+/// The errors point at the value, the nearest thing the statement has to an
+/// expression of its own.
+fn check_compound_target_readable<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>) {
+    let expr_key = ExprKey::of(ctx.db, stmt.value);
+    let root_name = stmt.target.root.text(ctx.db);
+    let Some(id) = ctx.lookup(root_name) else {
+        ctx.check_dead_external(root_name, expr_key);
+        return;
+    };
+    if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
+        let name = ctx.bindings[id.0 as usize].name.C();
+        ctx.errors.push(AnalysisError::ReadUninitialized { expr_key, name });
+        return;
+    }
+    ctx.check_not_moved(id, expr_key);
 }
 
 /// Report every out parameter that has not been written by this exit.

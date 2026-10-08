@@ -1,0 +1,14 @@
+----------
+scriptunit-fragment
+----------
+
+// A key looked up through `[k]!` in a `set` is borrowed, and the statement
+// drops it once the write is done.
+fun f(): !%{string = int}
+    var m: %{string = int} = %{"a" = 1}
+    set m["a"]! = 3
+    set m["a"]! += 4
+    ret ok m
+end fun
+
+debuglog f()

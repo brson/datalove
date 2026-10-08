@@ -1137,6 +1137,44 @@ set m["b"] = "two"    // inserts "b" = "two"
 The RHS can ref-borrow the same collection (e.g., `set a[0]? = a[1]?@`)
 but cannot take mutable or consuming access to it.
 
+**Compound assignment** updates a place with an arithmetic operator:
+
+```datalove
+set total += amount
+set count +!= 1
+set xs[i]!.n *?= 2
+set m[key]! -= 1
+```
+
+`set p op= v` updates the value in `p` with `op` and `v`. It takes exactly
+the operators and types the binary form `p op v` does, with the place's type
+on both sides and as the result:
+
+| Compound | Types |
+|---|---|
+| `+=` `-=` `*=` | `f32`, `f64`, `int`, `T is float` |
+| `/=` | `f32`, `f64`, `T is float` |
+| `+!=` `-!=` `*!=` `/!=` | fixed-width integers, `T is fixedint`; `/!=` also `int` |
+| `+?=` `-?=` `*?=` `/?=` | fixed-width integers, `T is fixedint`; `/?=` also `int` |
+
+As with the binary operators, `!` forms need the function to return a result
+and `?` forms an option, and on failure return early, leaving the place as it
+was (F049). Another operator or type is F026.
+
+The place is evaluated once: its index expressions run, and its lookups
+happen, a single time. The order is:
+
+1. Navigate the place, as for `set`, early-returning on a failed `?` or `!`.
+2. Evaluate the value.
+3. Apply the operator to the place's value and the value.
+4. Store the result in the place.
+
+The place has to hold a value, since it is read: a moved-out variable or an
+unwritten `out` parameter is an error. The value is an operand, so it is
+borrowed rather than consumed, and it may be the place itself (`set x += x`).
+A bare map index is rejected (F074): it inserts a missing key, and then there
+is no value to update.
+
 ### 8.2 Functions
 
 Function definition:

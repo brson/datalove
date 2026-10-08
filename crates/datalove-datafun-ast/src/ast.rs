@@ -251,6 +251,11 @@ pub struct StmtConst<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct StmtSet<'db> {
     pub target: Place<'db>,
+    /// The operator of a compound assignment, `set x += v`, or none for `=`.
+    ///
+    /// Only the arithmetic operators appear here, in their bare, checked and
+    /// optional forms.
+    pub op: Option<BinOp>,
     pub value: ExprFun<'db>,
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,

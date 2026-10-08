@@ -700,13 +700,20 @@ fn lower_set<'db>(
 ) -> Result<(), LowerError> {
     let place = &set_stmt.target;
 
-    if place.steps.is_empty() {
-        lower_set_simple(ctx, place, set_stmt.value)
+    if let Some(op) = set_stmt.op {
+        lower_set_compound(ctx, place, op, set_stmt.value)?;
+    } else if place.steps.is_empty() {
+        lower_set_simple(ctx, place, set_stmt.value)?;
     } else if place_contains_index(place) {
-        lower_set_indexed(ctx, place, set_stmt.value)
+        lower_set_indexed(ctx, place, set_stmt.value)?;
     } else {
-        lower_set_field_path(ctx, place, set_stmt.value)
+        lower_set_field_path(ctx, place, set_stmt.value)?;
     }
+    // A key looked up through `[k]?` or `[k]!` is only borrowed, and is a
+    // temporary to drop once the write is done. The early return drops it on
+    // its own way out.
+    ctx.emit_expr_temp_drops();
+    Ok(())
 }
 
 /// Lower simple variable assignment: `set x = v`.
@@ -723,20 +730,7 @@ fn lower_set_simple<'db>(
     let value_id = lower_expression(ctx, value_expr)?;
     match ctx.lookup_var(&root_name_str) {
         Some(Operand::Slot(slot)) => {
-            let is_copy = ctx.slot_type(slot).expect("slot must have a type").is_copy();
-            if !is_copy {
-                let operand = Operand::Slot(slot);
-                if ctx.is_operand_tracked(operand) {
-                    ctx.emit(Instruction::DropTracked { operand });
-                } else {
-                    ctx.emit(Instruction::Drop { operand });
-                }
-            }
-            if is_copy {
-                ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
-            } else {
-                ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
-            }
+            store_slot(ctx, slot, value_id);
             Ok(())
         }
         Some(Operand::Param(param)) => {
@@ -750,6 +744,59 @@ fn lower_set_simple<'db>(
         }
         _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
     }
+}
+
+/// Replace what a local slot holds with `value_id`, dropping what it held.
+fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
+    let is_copy = ctx.slot_type(slot).expect("slot must have a type").is_copy();
+    if !is_copy {
+        let operand = Operand::Slot(slot);
+        if ctx.is_operand_tracked(operand) {
+            ctx.emit(Instruction::DropTracked { operand });
+        } else {
+            ctx.emit(Instruction::Drop { operand });
+        }
+    }
+    if is_copy {
+        ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(value_id));
+    } else {
+        ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(value_id));
+    }
+}
+
+/// Lower a compound assignment: `set x += v`, `set xs[i]!.n +!= v`.
+///
+/// The place is found once, through the same steps and checks as for any
+/// `set`, so an index is evaluated and looked up once. The operator then reads
+/// the place and the value, and its result replaces what the place held.
+fn lower_set_compound<'db>(
+    ctx: &mut LowerCtx<'db>,
+    place: &ast::Place<'db>,
+    op: ast::BinOp,
+    value_expr: ExprFun<'db>,
+) -> Result<(), LowerError> {
+    let target = lower_place_steps_to_operand(ctx, place, place.steps.len())?;
+    let ty = operand_type(ctx, &target);
+    let expr_temp_mark = ctx.expr_temps_mark();
+    let rhs = lower_operand(ctx, value_expr)?;
+    let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;
+    match target {
+        Operand::Slot(slot) => store_slot(ctx, slot, result),
+        Operand::Param(param) => ctx.emit_param_store(param, Operand::Value(result)),
+        Operand::ExternalSlot { unit, slot } => {
+            if !ty.is_copy() {
+                ctx.emit(Instruction::DropTracked { operand: target });
+                ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(result));
+            } else {
+                ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(result));
+            }
+        }
+        Operand::ValueRef(_) => {
+            ctx.emit(Instruction::RefStore { dest: target, value: Operand::Value(result) });
+        }
+        other => panic!("compound assignment to {other:?}, which is not a place"),
+    }
+    Ok(())
 }
 
 /// Lower set with index steps: `set a[i] = v`, `set a[i]? = v`, etc.

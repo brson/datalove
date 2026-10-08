@@ -1,0 +1,169 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 100000000000000000000int
+                        v1 = const 3int
+                        v2 = call u0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        v3 = const -7int
+                        v4 = const 100000000000000000000int
+                        v5 = call u0(v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const 100000000000000000000int
+                        v7 = const 7int
+                        v8 = call u1(v6, v7)
+                        debuglog v8
+                        drop v8
+                        v9 = const 5int
+                        v10 = const 0int
+                        v11 = call u1(v9, v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const -21int
+                        v13 = const 4int
+                        v14 = call u2(v12, v13)
+                        debuglog v14
+                        drop v14
+                        v15 = const 5int
+                        v16 = const 0int
+                        v17 = call u2(v15, v16)
+                        debuglog v17
+                        drop v17
+                        v18 = const 12345678901234567890int
+                        store.move.tracked s0, v18
+                        v19 = add s0, s0
+                        drop.tracked s0
+                        store.move.tracked s0, v19
+                        debuglog s0
+                        v20 = mul s0, s0
+                        drop.tracked s0
+                        store.move.tracked s0, v20
+                        debuglog s0
+                        v21 = sub s0, s0
+                        drop.tracked s0
+                        store.move.tracked s0, v21
+                        debuglog s0
+                        v22 = const 0int
+                        store.move.tracked s1, v22
+                        v23 = const 0u32
+                        store.copy s2, v23
+                        goto block1
+                    block1:
+                        v24 = const 100u32
+                        v25 = lt s2, v24
+                        branch v25, block2, block5
+                    block2:
+                        v26 = widen s2
+                        v27 = add s1, v26
+                        drop v26
+                        drop.tracked s1
+                        store.move.tracked s1, v27
+                        v28 = const 3int
+                        v29 = mul s1, v28
+                        drop v28
+                        drop.tracked s1
+                        store.move.tracked s1, v29
+                        v30 = const 1u32
+                        v31, v32 = add.checked s2, v30
+                        branch v32, block3, block4
+                    block3:
+                        v33 = const "arithmetic overflow"
+                        v34 = error_from v33
+                        v35 = err v34
+                        drop.tracked s0
+                        drop.tracked s1
+                        unit_early_return v35
+                    block4:
+                        store.copy s2, v31
+                        goto block1
+                    block5:
+                        debuglog s1
+                        unit_end_drop.tracked s0
+                        unit_end_drop.tracked s1
+                        unit_end
+                    
+                    fn int_bare(p0, p1):
+                    block0:
+                        v0 = clone p0
+                        store.move.tracked s0, v0
+                        v1 = add s0, p1
+                        drop.tracked s0
+                        store.move.tracked s0, v1
+                        v2 = clone p0
+                        store.move.tracked s1, v2
+                        v3 = sub s1, p1
+                        drop.tracked s1
+                        store.move.tracked s1, v3
+                        v4 = move p0
+                        store.move.tracked s2, v4
+                        v5 = mul s2, p1
+                        drop.tracked s2
+                        store.move.tracked s2, v5
+                        v6 = load.move.tracked s0
+                        v7 = load.move.tracked s1
+                        v8 = load.move.tracked s2
+                        v9 = pack Tuple3 {v6, v7, v8}
+                        drop p1
+                        return v9
+                    
+                    fn int_div_checked(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1, v2 = div.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "division by zero"
+                        v4 = error_from v3
+                        v5 = err v4
+                        drop p1
+                        drop.tracked s0
+                        return v5
+                    block2:
+                        drop.tracked s0
+                        store.move.tracked s0, v1
+                        v6 = load.move.tracked s0
+                        v7 = ok v6
+                        drop p1
+                        return v7
+                    
+                    fn int_div_optional(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1, v2 = div.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = none
+                        drop p1
+                        drop.tracked s0
+                        return v3
+                    block2:
+                        drop.tracked s0
+                        store.move.tracked s0, v1
+                        v4 = load.move.tracked s0
+                        v5 = some v4
+                        drop p1
+                        return v5
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(100000000000000000003, 99999999999999999997, 300000000000000000000)\n(99999999999999999993, -100000000000000000007, -700000000000000000000)\nok 14285714285714285714\ner error \"division by zero\"\nsome -5\nnone\n24691357802469135780\n609663150129553470007620799500076208400\n0\n386533140549008498277345847324215954526580641350\n"),
+        ),
+    ],
+)

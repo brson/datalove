@@ -1,0 +1,707 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 200u8
+                        v1 = const 7u8
+                        v2 = call u0(v0, v1)
+                        debuglog v2
+                        drop v2
+                        v3 = const 60000u16
+                        v4 = const 99u16
+                        v5 = call u1(v3, v4)
+                        debuglog v5
+                        drop v5
+                        v6 = const 4000000000u32
+                        v7 = const 7u32
+                        v8 = call u2(v6, v7)
+                        debuglog v8
+                        drop v8
+                        v9 = const 18000000000000000000u64
+                        v10 = const 9u64
+                        v11 = call u3(v9, v10)
+                        debuglog v11
+                        drop v11
+                        v12 = const -100i8
+                        v13 = const 7i8
+                        v14 = call u4(v12, v13)
+                        debuglog v14
+                        drop v14
+                        v15 = const -30000i16
+                        v16 = const 99i16
+                        v17 = call u5(v15, v16)
+                        debuglog v17
+                        drop v17
+                        v18 = const -2000000000i32
+                        v19 = const 13i32
+                        v20 = call u6(v18, v19)
+                        debuglog v20
+                        drop v20
+                        v21 = const -9000000000000000000i64
+                        v22 = const 11i64
+                        v23 = call u7(v21, v22)
+                        debuglog v23
+                        drop v23
+                        v24 = const 1000index
+                        v25 = const 10index
+                        v26 = call u8(v24, v25)
+                        debuglog v26
+                        drop v26
+                        v27 = const -1000offset
+                        v28 = const 10offset
+                        v29 = call u9(v27, v28)
+                        debuglog v29
+                        drop v29
+                        v30 = const 255u8
+                        v31 = const 1u8
+                        v32 = call u10(v30, v31)
+                        debuglog v32
+                        drop v32
+                        v33 = const 0u16
+                        v34 = const 1u16
+                        v35 = call u11(v33, v34)
+                        debuglog v35
+                        drop v35
+                        v36 = const 2147483647i32
+                        v37 = const 2i32
+                        v38 = call u12(v36, v37)
+                        debuglog v38
+                        drop v38
+                        v39 = const 5i64
+                        v40 = const 0i64
+                        v41 = call u13(v39, v40)
+                        debuglog v41
+                        drop v41
+                        v42 = const -9223372036854775808i64
+                        v43 = const -1i64
+                        v44 = call u13(v42, v43)
+                        debuglog v44
+                        drop v44
+                        unit_end
+                    
+                    fn ops_u8(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_u16(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_u32(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_u64(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_i8(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero or overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_i16(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero or overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_i32(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero or overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_i64(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero or overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_index(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn ops_offset(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = copy p0
+                        store.copy s1, v6
+                        v7, v8 = sub.checked s1, p1
+                        branch v8, block3, block4
+                    block3:
+                        v9 = const "arithmetic overflow"
+                        v10 = error_from v9
+                        v11 = err v10
+                        return v11
+                    block4:
+                        store.copy s1, v7
+                        v12 = copy p1
+                        store.copy s2, v12
+                        v13, v14 = mul.checked s2, p1
+                        branch v14, block5, block6
+                    block5:
+                        v15 = const "arithmetic overflow"
+                        v16 = error_from v15
+                        v17 = err v16
+                        return v17
+                    block6:
+                        store.copy s2, v13
+                        v18 = copy p0
+                        store.copy s3, v18
+                        v19, v20 = div.checked s3, p1
+                        branch v20, block7, block8
+                    block7:
+                        v21 = const "division by zero or overflow"
+                        v22 = error_from v21
+                        v23 = err v22
+                        return v23
+                    block8:
+                        store.copy s3, v19
+                        v24 = load.copy s0
+                        v25 = load.copy s1
+                        v26 = load.copy s2
+                        v27 = load.copy s3
+                        v28 = pack Tuple4 {v24, v25, v26, v27}
+                        v29 = ok v28
+                        return v29
+                    
+                    fn add_u8(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = add.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = load.copy s0
+                        v7 = ok v6
+                        return v7
+                    
+                    fn sub_u16(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = sub.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = load.copy s0
+                        v7 = ok v6
+                        return v7
+                    
+                    fn mul_i32(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = mul.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = load.copy s0
+                        v7 = ok v6
+                        return v7
+                    
+                    fn div_i64(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1, v2 = div.checked s0, p1
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "division by zero or overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        return v5
+                    block2:
+                        store.copy s0, v1
+                        v6 = load.copy s0
+                        v7 = ok v6
+                        return v7
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok (207, 193, 49, 28)\nok (60099, 59901, 9801, 606)\nok (4000000007, 3999999993, 49, 571428571)\nok (18000000000000000009, 17999999999999999991, 81, 2000000000000000000)\nok (-93, -107, 49, -14)\nok (-29901, -30099, 9801, -303)\nok (-1999999987, -2000000013, 169, -153846153)\nok (-8999999999999999989, -9000000000000000011, 121, -818181818181818181)\nok (1010, 990, 100, 100)\nok (-990, -1010, 100, -100)\ner error \"arithmetic overflow\"\ner error \"arithmetic overflow\"\ner error \"arithmetic overflow\"\ner error \"division by zero or overflow\"\ner error \"division by zero or overflow\"\n"),
+        ),
+    ],
+)

@@ -411,6 +411,11 @@ fn lower_statement_for_script<'db>(
             }
             Ok(())
         }
+        Statement::Set(set_stmt) if set_stmt.op.is_some() => {
+            // A compound assignment finds its place once and writes it back
+            // whatever its root, which the general lowering does.
+            lower_numbered_statement(ctx, stmt, stmt_idx)
+        }
         Statement::Set(set_stmt) => {
             // No export needed for assignment.
             let place = &set_stmt.target;

@@ -398,24 +398,48 @@ impl<'db> Parser<'db> {
         let target = ast::Place { root: name, steps };
         let local_index = self.record_set_span(target_ts.with_end(self.last_byte_end()));
 
-        // Need `=` sigil.
-        if !self.eat_sigil(Sigil::Equals) {
+        // Need `=`, or a compound assignment's operator and `=`.
+        let op = if self.eat_sigil(Sigil::Equals) {
+            None
+        } else if let Some(op) = self.eat_compound_assignment() {
+            Some(op)
+        } else {
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected '=' after set target",
                 "D025",
                 "expected '='"
             );
-        }
+        };
 
         // Parse the value expression.
         let value = self.parse_expr_full();
 
         ast::Statement::Set(ast::StmtSet {
             target,
+            op,
             value,
             local_index,
         })
+    }
+
+    /// Consume a compound assignment sigil, giving the operator it applies.
+    fn eat_compound_assignment(&mut self) -> Option<ast::BinOp> {
+        const COMPOUND: [(Sigil, ast::BinOp); 12] = [
+            (Sigil::PlusEquals, ast::BinOp::Add),
+            (Sigil::MinusEquals, ast::BinOp::Sub),
+            (Sigil::StarEquals, ast::BinOp::Mul),
+            (Sigil::SlashEquals, ast::BinOp::Div),
+            (Sigil::PlusExclamationEquals, ast::BinOp::AddChecked),
+            (Sigil::MinusExclamationEquals, ast::BinOp::SubChecked),
+            (Sigil::StarExclamationEquals, ast::BinOp::MulChecked),
+            (Sigil::SlashExclamationEquals, ast::BinOp::DivChecked),
+            (Sigil::PlusQuestionEquals, ast::BinOp::AddOptional),
+            (Sigil::MinusQuestionEquals, ast::BinOp::SubOptional),
+            (Sigil::StarQuestionEquals, ast::BinOp::MulOptional),
+            (Sigil::SlashQuestionEquals, ast::BinOp::DivOptional),
+        ];
+        COMPOUND.iter().find(|(sigil, _)| self.eat_sigil(*sigil)).map(|(_, op)| *op)
     }
 
     /// Parse place steps for set targets (e.g., `.x.0.y`, `[i]?`).

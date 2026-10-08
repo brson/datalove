@@ -1,0 +1,51 @@
+// Compound assignment on bounded type parameters, which take whichever
+// arithmetic every type the bound admits has.
+fun scaled<T>(a: T, b: T): T with { T is float, }
+  var x = a@
+  set x += b
+  set x *= b
+  set x -= a
+  set x /= b
+  ret x
+end fun
+
+fun stepped<T>(a: T, b: T): !(T, T, T, T) with { T is fixedint, }
+  var sum = a@
+  set sum +!= b
+  var diff = a@
+  set diff -!= b
+  var prod = a@
+  set prod *!= b
+  var quot = a
+  set quot /!= b
+  ret ok (sum, diff, prod, quot)
+end fun
+
+fun stepped_optional<T>(a: T, b: T): ?(T, T, T, T) with { T is fixedint, }
+  var sum = a@
+  set sum +?= b
+  var diff = a@
+  set diff -?= b
+  var prod = a@
+  set prod *?= b
+  var quot = a
+  set quot /?= b
+  ret some (sum, diff, prod, quot)
+end fun
+
+let floats = (scaled(1.5, 2.0), scaled((: f32 / 3.0), (: f32 / 0.5)))
+let fixed = (
+  stepped((: u8 / 20), (: u8 / 4)),
+  stepped((: i64 / -20), (: i64 / 4)),
+  stepped((: index / 20), (: index / 4)),
+  stepped((: offset / -20), (: offset / 4)),
+  stepped((: u8 / 200), (: u8 / 4)),
+  stepped((: i32 / 5), (: i32 / 0)),
+)
+let optional = (
+  stepped_optional((: u16 / 20), (: u16 / 4)),
+  stepped_optional((: i8 / -100), (: i8 / 2)),
+  stepped_optional((: u64 / 3), (: u64 / 0)),
+)
+
+let output = (floats, fixed, optional)

@@ -1231,9 +1231,23 @@ fn lower_binop<'db>(
     let lhs = lower_operand(ctx, binop.lhs)?;
     let rhs = lower_operand(ctx, binop.rhs)?;
 
-    let ast_op = binop.op;
     let result_type = ctx.expr_type(expr);
+    lower_binop_operands(ctx, binop.op, lhs, rhs, result_type, expr_temp_mark)
+}
 
+/// Lower binary operator `ast_op` on operands already lowered.
+///
+/// A checked or optional operator branches to an early return when it fails.
+/// The temporaries recorded since `expr_temp_mark` are the operands', and are
+/// dropped once the operator has read them.
+pub(crate) fn lower_binop_operands<'db>(
+    ctx: &mut LowerCtx<'db>,
+    ast_op: ast::BinOp,
+    lhs: Operand,
+    rhs: Operand,
+    result_type: IrType,
+    expr_temp_mark: usize,
+) -> Result<ValueId, LowerError> {
     let dest = ctx.fresh_value(result_type);
 
     let op = match ast_op {
@@ -1470,7 +1484,8 @@ fn checked_failure_message(op: BinOp, ty: &IrType) -> &'static str {
     match op {
         BinOp::Add | BinOp::Sub | BinOp::Mul => "arithmetic overflow",
         BinOp::Div => match ty {
-            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset => {
+            // A `fixedint` type parameter may turn out to be signed.
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset | IrType::Data => {
                 "division by zero or overflow"
             }
             IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index | IrType::Int => {
@@ -2008,7 +2023,14 @@ pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
             }
         }
         Operand::ExternalSlot { .. } => {
-            todo!("external slot type in place lowering")
+            // An earlier unit's slot has its type recorded under its name,
+            // which is the name it's bound to here.
+            let name = ctx.body.variables.iter()
+                .find_map(|(name, bound)| (bound == op).then_some(name))
+                .expect("an external slot operand comes from a variable bound to it");
+            ctx.external_slot_type(name)
+                .expect("an external slot has a recorded type")
+                .clone()
         }
         Operand::ExternalValue { .. } => {
             todo!("external value type in place lowering")

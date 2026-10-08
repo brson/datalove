@@ -808,10 +808,61 @@ nothing to insert into. Write `[k]?` or `[k]!` to step through an element that i
     }
 
     // No index steps — simple assignment or field projection.
-    if let Err(e) = check_expr(ctx, value, &current_ty) {
+    check_set_value(ctx, stmt, value, &current_ty);
+    Ok(())
+}
+
+/// Check what a `set` writes to a place of type `place_ty`.
+///
+/// A compound assignment, `set x += v`, is the place's type on both sides of
+/// its operator, which has to be arithmetic that type has. Its value is only
+/// read, as an operand is, so it may borrow.
+fn check_set_value<'db>(
+    ctx: &mut TypeContext<'db>,
+    stmt: &StmtSet<'db>,
+    value: ExprFun<'db>,
+    place_ty: &Type<'db>,
+) {
+    let Some(op) = stmt.op else {
+        if let Err(e) = check_expr(ctx, value, place_ty) {
+            ctx.add_error(e);
+        }
+        return;
+    };
+
+    let old_ref_context = ctx.ref_context;
+    ctx.ref_context = true;
+    let checked = check_expr(ctx, value, place_ty);
+    ctx.ref_context = old_ref_context;
+    if let Err(e) = checked {
         ctx.add_error(e);
     }
-    Ok(())
+
+    let op_str = crate::synthesize::binop_to_str(op);
+    let bound = crate::synthesize::operand_bound(ctx, place_ty);
+    if !crate::synthesize::arithmetic_admits(op, place_ty, bound) {
+        let ty = type_to_string(ctx.db, place_ty);
+        let err = ctx.report_set_error(
+            stmt,
+            "F026",
+            fmt!("invalid operand type `{ty}` for operator `{op_str}=`"),
+            "this cannot be updated with that operator",
+            None,
+        );
+        ctx.add_error(err);
+        return;
+    }
+
+    let required = match crate::synthesize::arithmetic_early_return(op) {
+        Some(crate::synthesize::EarlyReturn::Error) => IndexErrorMode::Result,
+        Some(crate::synthesize::EarlyReturn::None) => IndexErrorMode::Option,
+        None => return,
+    };
+    let operator = fmt!("{op_str}=");
+    let what = fmt!("`{operator}`");
+    if let Err(e) = require_return_type_for(ctx, stmt, required, &operator, &what, "this can return early") {
+        ctx.add_error(e);
+    }
 }
 
 /// Typecheck a field step, returning the field's type.
@@ -851,6 +902,17 @@ fn typecheck_set_index<'db>(
     let db = ctx.db;
 
     match idx_step.error_mode {
+        None if stmt.op.is_some() => {
+            let err = ctx.report_set_error(
+                stmt,
+                "F074",
+                S("a compound assignment can't go through a bare index"),
+                "this index needs `?` or `!`",
+                Some("a bare index inserts into a map, where there may be no value to update. \
+Write `[k]?` or `[k]!` to update an element that is already there."),
+            );
+            ctx.add_error(err);
+        }
         None => {
             // Bare index (upsert): only valid for maps.
             match base_ty {
@@ -898,9 +960,7 @@ fn typecheck_set_index<'db>(
             if let Err(e) = check_expr(ctx, idx_step.index, &index_type) {
                 ctx.add_error(e);
             }
-            if let Err(e) = check_expr(ctx, value, &element_ty) {
-                ctx.add_error(e);
-            }
+            check_set_value(ctx, stmt, value, &element_ty);
             // Verify function returns Option or Result depending on error_mode.
             if let Err(e) = require_return_type_for_set(ctx, stmt, error_mode) {
                 ctx.add_error(e);
@@ -918,13 +978,30 @@ fn require_return_type_for_set<'db>(
     stmt: &StmtSet<'db>,
     error_mode: IndexErrorMode,
 ) -> Result<(), TypeError> {
+    let operator = match error_mode {
+        IndexErrorMode::Option => "?",
+        IndexErrorMode::Result => "!",
+    };
+    let what = fmt!("`set` through an index with `{operator}`");
+    require_return_type_for(ctx, stmt, error_mode, operator, &what, "this index can return early")
+}
+
+/// Require the function to return what `operator` in a `set` returns early.
+fn require_return_type_for<'db>(
+    ctx: &mut TypeContext<'db>,
+    stmt: &StmtSet<'db>,
+    error_mode: IndexErrorMode,
+    operator: &str,
+    what: &str,
+    label: &str,
+) -> Result<(), TypeError> {
     let expected_return = ctx.expected_return_type.clone()
         .expect("a set statement is always inside a function or a script, which returns `!()`");
-    let (fits, operator, expected) = match (&error_mode, &expected_return) {
-        (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, "?", "Option"),
-        (IndexErrorMode::Option, _) => (false, "?", "Option"),
-        (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, "!", "Result"),
-        (IndexErrorMode::Result, _) => (false, "!", "Result"),
+    let (fits, expected) = match (&error_mode, &expected_return) {
+        (IndexErrorMode::Option, Type::Datalit(datalit::tycheck::Type::Option(_))) => (true, "Option"),
+        (IndexErrorMode::Option, _) => (false, "Option"),
+        (IndexErrorMode::Result, Type::Datalit(datalit::tycheck::Type::Result(_))) => (true, "Result"),
+        (IndexErrorMode::Result, _) => (false, "Result"),
     };
     if fits {
         return Ok(());
@@ -933,8 +1010,8 @@ fn require_return_type_for_set<'db>(
     Err(ctx.report_set_error(
         stmt,
         "F049",
-        fmt!("`set` through an index with `{operator}` requires function to return {expected}, found `{actual}`"),
-        "this index can return early",
+        fmt!("{what} requires function to return {expected}, found `{actual}`"),
+        label,
         Some(&fmt!("function must return {expected} to use `{operator}`")),
     ))
 }

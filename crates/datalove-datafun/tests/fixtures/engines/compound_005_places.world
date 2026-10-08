@@ -1,0 +1,60 @@
+----------
+scriptunit-fragment
+----------
+
+// Compound assignment through every kind of place: a field, a tuple field, a
+// list, map and tensor element, and fields of elements.
+fun places(): !({n: u32, t: (u32, int)}, [u32], %{string = int}, [|u32, 1|], [{n: u32, total: int}])
+    var s = {n = (: u32 / 1), t = ((: u32 / 2), 3)}
+    set s.n +!= 10
+    set s.t.0 *!= 5
+    set s.t.1 += 1000
+    var xs: [u32] = [1, 2, 3]
+    set xs[(: index / 1)]! +!= 40
+    var m: %{string = int} = %{"a" = 1}
+    set m["a"]! *= 100000000000000000000
+    var t: [|u32, 1|] = [| 10 20 30 |]
+    set t[(: index / 2)]! -!= 5
+    var rows: [{n: u32, total: int}] = [{n = 1, total = 10}, {n = 2, total = 20}]
+    set rows[(: index / 0)]!.n +!= 100
+    set rows[(: index / 1)]!.total -= 25
+    ret ok (s, xs, m, t, rows)
+end fun
+
+debuglog places()
+
+// A failed index returns early before the operator runs; so does the
+// operator, failing on the element.
+fun bump(xs: [u8], i: index): ?[u8]
+    var b = xs
+    set b[i]? +?= 1
+    ret some b
+end fun
+
+debuglog bump([1, 2, 255], (: index / 0))
+debuglog bump([1, 2, 255], (: index / 5))
+debuglog bump([1, 2, 255], (: index / 2))
+
+fun bump_key(m: %{string = int}, k: string): !%{string = int}
+    var b = m
+    set b[k]! += 1
+    ret ok b
+end fun
+
+debuglog bump_key(%{"a" = 1, "b" = 2}, "b")
+debuglog bump_key(%{"a" = 1, "b" = 2}, "c")
+
+// A key is evaluated, and looked up, once.
+fun counted_key(mut calls: u32): !index
+    set calls +!= 1
+    ret ok (: index / 1)
+end fun
+
+fun once(): !([u32], u32)
+    var xs: [u32] = [5, 6, 7]
+    var calls: u32 = 0
+    set xs[counted_key(mut calls)!]! *!= 3
+    ret ok (xs, calls)
+end fun
+
+debuglog once()

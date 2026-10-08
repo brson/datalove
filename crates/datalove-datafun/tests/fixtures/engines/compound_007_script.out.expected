@@ -1,0 +1,111 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        store.copy s0, v0
+                        v1 = const 10int
+                        store.move.tracked s1, v1
+                        v2 = const 1u32
+                        v3, v4 = add.checked s0, v2
+                        branch v4, block1, block2
+                    block1:
+                        v5 = const "arithmetic overflow"
+                        v6 = error_from v5
+                        v7 = err v6
+                        unit_early_return v7
+                    block2:
+                        store.copy s0, v3
+                        v8 = const 7int
+                        v9 = mul s1, v8
+                        drop v8
+                        drop.tracked s1
+                        store.move.tracked s1, v9
+                        v10 = load.copy s0
+                        v11 = clone s1
+                        v12 = pack Tuple2 {v10, v11}
+                        debuglog v12
+                        drop v12
+                        unit_end_drop.tracked s1
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(2, 70)\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 21u32
+                        v1, v2 = mul.checked unit0.s0, v0
+                        branch v2, block1, block2
+                    block1:
+                        v3 = const "arithmetic overflow"
+                        v4 = error_from v3
+                        v5 = err v4
+                        unit_early_return v5
+                    block2:
+                        store.copy.tracked unit0.s0, v1
+                        v6 = const 1int
+                        v7 = sub unit0.s1, v6
+                        drop v6
+                        drop.tracked unit0.s1
+                        store.move.tracked unit0.s1, v7
+                        v8 = copy unit0.s0
+                        v9 = clone unit0.s1
+                        v10 = pack Tuple2 {v8, v9}
+                        debuglog v10
+                        drop v10
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(42, 69)\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = copy unit0.s0
+                        v1 = clone unit0.s1
+                        v2 = pack Tuple2 {v0, v1}
+                        unit_end v2
+                """,
+            ),
+            output: "(42, 69)",
+        ),
+    ],
+)
