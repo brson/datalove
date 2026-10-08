@@ -214,14 +214,3 @@ pub fn compile_link_run(unit: &IrCodeUnit) -> AnyResult<ExecOutput> {
         .map_err(|e| anyhow!("{}", e))?;
     run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
 }
-
-/// Compile, link, and run a script unit with module code units.
-pub fn compile_link_run_with_world(
-    unit: &IrCodeUnit,
-    registry: &FunctionRegistry,
-) -> AnyResult<ExecOutput> {
-    let obj_bytes = compile_script_to_object_with_world(unit, registry)?;
-    let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
-        .map_err(|e| anyhow!("{}", e))?;
-    run_executable(&exe_path).map_err(|e| anyhow!("{}", e))
-}
