@@ -409,7 +409,7 @@ fn lower_sequential(bencher: divan::Bencher) {
             let (parsed, typechecked) = typecheck_through(&db, graph);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential, AutoAdaptMode::Disabled);
             let mut evaluator = InterpCtfeEvaluator::new();
-            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, &mut evaluator, false, false);
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, &mut evaluator, false, false, None);
             let _ = divan::black_box(result);
         });
 }
@@ -431,7 +431,7 @@ fn lower_parallel(bencher: divan::Bencher) {
             let (parsed, typechecked) = typecheck_through(&db, graph);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential, AutoAdaptMode::Disabled);
             let mut evaluator = InterpCtfeEvaluator::new();
-            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, &mut evaluator, false, false);
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, &mut evaluator, false, false, None);
             let _ = divan::black_box(result);
         });
 }

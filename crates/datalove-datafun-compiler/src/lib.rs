@@ -36,6 +36,9 @@ pub mod specialize;
 // Evaluating const bindings, for both pipelines.
 pub mod const_eval;
 
+// Evaluated consts kept across compiles.
+pub mod const_cache;
+
 #[salsa::db]
 #[derive(Default, Clone)]
 pub struct Database {

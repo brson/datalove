@@ -170,6 +170,11 @@ pub struct CompilerOptions {
     /// of phase 5a and only the fixtures and `worldfile_analysis` ever read
     /// them. See `CompiledModules::module_ir_dumps`.
     pub keep_ir_dumps: bool,
+    /// Keep evaluated consts from one compile to the next, by module.
+    ///
+    /// On by default. Off is for measuring what it saves, and for checking a
+    /// recompile against one that evaluates everything.
+    pub cache_consts: bool,
 }
 
 impl Default for CompilerOptions {
@@ -178,6 +183,7 @@ impl Default for CompilerOptions {
             const_inlining: true,
             skip_specialization: false,
             keep_ir_dumps: false,
+            cache_consts: true,
         }
     }
 }

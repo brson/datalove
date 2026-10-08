@@ -22,6 +22,7 @@ use datalove_datafun_const::{
     inline_function_consts, inline_module_functions, promote_function_consts,
 };
 use crate::IrTypeExt;
+use crate::const_cache::ConstCache;
 use crate::const_eval::{
     const_type, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, ConstEvalEnv,
     NamedConstError,
@@ -1373,6 +1374,12 @@ pub fn lower_all_module_functions<'db>(
 /// so it can be called outside of tracked function context.
 ///
 /// The `func_id_map` enables cross-module function calls in const expressions.
+///
+/// With a `cache`, a module whose closure is unchanged since its body consts
+/// last evaluated cleanly takes them from there; see `const_cache`. Those of a
+/// module in `module_level_errors` are not kept, having been evaluated against
+/// module consts that are missing some.
+#[allow(clippy::too_many_arguments)]
 pub fn evaluate_all_module_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -1382,6 +1389,8 @@ pub fn evaluate_all_module_consts<'db>(
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_level_errors: &HashMap<ModuleId<'db>, Vec<String>>,
+    mut cache: Option<&mut ConstCache>,
 ) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
@@ -1390,14 +1399,7 @@ pub fn evaluate_all_module_consts<'db>(
         let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
             continue;
         };
-        let expr_types = single_typecheck.expr_types(db);
-        let call_targets = single_typecheck.call_targets(db);
-
-        // Get lowered functions for this module (if any).
-        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
-            Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
-            None => (&[], HashMap::new()),
-        };
+        let path = module_id.path(db);
 
         let mut consts = Vec::new();
         let mut errors = Vec::new();
@@ -1410,6 +1412,29 @@ pub fn evaluate_all_module_consts<'db>(
             consts.push((name.clone(), ir_type.clone(), SharedConst(Arc::clone(value))));
         }
 
+        let cached = cache.as_deref().and_then(|c| c.body(path)).cloned();
+        let verifying = cache.as_deref().is_some_and(ConstCache::verifying);
+        if let Some(body) = &cached {
+            if !verifying {
+                cache.as_deref_mut().expect("a hit came from the cache").note_reused(path);
+                consts.extend(body.iter().cloned());
+                consts.sort_by(|a, b| a.0.cmp(&b.0));
+                if !consts.is_empty() {
+                    result.insert(*module_id, ModulePreResolvedConsts::new(*module_id, consts));
+                }
+                continue;
+            }
+        }
+
+        let expr_types = single_typecheck.expr_types(db);
+        let call_targets = single_typecheck.call_targets(db);
+
+        // Get lowered functions for this module (if any).
+        let (funcs, func_map): (&[Arc<IrCodeUnit>], HashMap<String, FuncId>) = match lowered_functions.get(module_id) {
+            Some(lf) => (lf.functions.as_slice(), lf.func_name_to_id.iter().cloned().collect()),
+            None => (&[], HashMap::new()),
+        };
+
         // Evaluate function-level consts. A function's const parameters have a
         // value per instantiation rather than one, so the consts naming them
         // wait for the copies.
@@ -1418,6 +1443,7 @@ pub fn evaluate_all_module_consts<'db>(
             func_name_to_id: &func_map, func_id_map, callable: Some(callable),
             data_files: single_typecheck.data_files(db),
         };
+        let mut body = Vec::new();
         for statement in parsed.statements.iter() {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
@@ -1429,11 +1455,28 @@ pub fn evaluate_all_module_consts<'db>(
                     evaluate_body_consts(&mut env, func_stmt, module_level.clone(), const_params);
                 for (name, ir_type, value) in body_consts {
                     // Stored under a qualified name: func_name::const_name.
-                    consts.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
+                    body.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
                 }
                 errors.extend(body_errors.iter().map(|e| format!("{}::{}", func_name, e)));
             }
         }
+        body.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if let Some(cache) = cache.as_deref_mut() {
+            match cached {
+                Some(cached) => {
+                    assert_eq!(cached, body, "the const cache kept stale function consts for {}", path);
+                    cache.note_reused(path);
+                }
+                None => {
+                    cache.note_evaluated(path);
+                    if errors.is_empty() && !module_level_errors.contains_key(module_id) {
+                        cache.store_body(path, body.clone());
+                    }
+                }
+            }
+        }
+        consts.extend(body);
 
         // Sorted, because the module-level ones above were read out of a
         // `HashMap` and this ends up in `lower_module`'s memo key. Two freshly
@@ -1508,6 +1551,7 @@ fn evaluate_module_level_consts<'db>(
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
+    mut cache: Option<&mut ConstCache>,
 ) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> {
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
@@ -1516,6 +1560,19 @@ fn evaluate_module_level_consts<'db>(
         let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
             continue;
         };
+        let path = module_id.path(db);
+        let cached = cache.as_deref().and_then(|c| c.module_level(path)).cloned();
+        let verifying = cache.as_deref().is_some_and(ConstCache::verifying);
+        if let Some(consts) = &cached {
+            if !verifying {
+                cache.as_deref_mut().expect("a hit came from the cache").note_reused(path);
+                if !consts.is_empty() {
+                    result.insert(*module_id, consts.clone());
+                }
+                continue;
+            }
+        }
+
         let expr_types = single_typecheck.expr_types(db);
         let call_targets = single_typecheck.call_targets(db);
 
@@ -1530,6 +1587,7 @@ fn evaluate_module_level_consts<'db>(
             data_files: single_typecheck.data_files(db),
         };
         let mut consts: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
+        let mut failed = false;
         for statement in parsed.statements.iter() {
             if let Statement::Const(const_stmt) = statement {
                 // A module const is outside any function, so there is no return
@@ -1544,8 +1602,26 @@ fn evaluate_module_level_consts<'db>(
                     Ok((ir_type, value)) => {
                         consts.insert(name, (ir_type, value));
                     }
-                    Err(error) => errors_out.entry(*module_id).or_default()
-                        .push(NamedConstError { name, error }.to_string()),
+                    Err(error) => {
+                        failed = true;
+                        errors_out.entry(*module_id).or_default()
+                            .push(NamedConstError { name, error }.to_string());
+                    }
+                }
+            }
+        }
+
+        if let Some(cache) = cache.as_deref_mut() {
+            match cached {
+                Some(cached) => {
+                    assert_eq!(cached, consts, "the const cache kept stale module consts for {}", path);
+                    cache.note_reused(path);
+                }
+                None => {
+                    cache.note_evaluated(path);
+                    if !failed {
+                        cache.store_module_level(path, consts.clone());
+                    }
                 }
             }
         }
@@ -1585,8 +1661,18 @@ pub fn lower_module_graph_with_evaluator<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     skip_const_inlining: bool,
     skip_specialization: bool,
+    mut const_cache: Option<&mut ConstCache>,
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
+    // Keying every module costs a little, and a graph with no consts in it
+    // runs neither const phase, so there is nothing to key them for.
+    if let Some(cache) = const_cache.as_deref_mut() {
+        if graph_declares_consts(db_salsa, parsed_graph) {
+            cache.begin(db_salsa, parsed_graph.graph(db_salsa));
+        } else {
+            cache.begin_without_consts();
+        }
+    }
 
     // Compute func_id_map first (needed for lowering).
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
@@ -1643,7 +1729,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         evaluator.set_module_registry(Arc::clone(module_registry));
         evaluate_module_level_consts(
             db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, module_registry,
-            func_ids, &mut module_const_errors,
+            func_ids, &mut module_const_errors, const_cache.as_deref_mut(),
         )
     };
 
@@ -1697,7 +1783,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
         evaluate_all_module_consts(
             db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions,
-            module_registry, func_ids, &module_consts,
+            module_registry, func_ids, &module_consts, &module_const_errors, const_cache.as_deref_mut(),
         )
     };
 

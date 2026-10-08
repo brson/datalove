@@ -33,6 +33,7 @@ use datalove_datafun_compiler::tracked_lower::{
 };
 use datalove_datafun_tycheck::ParsedModuleGraph;
 use datalove_datafun_ir::CtfeEvaluator;
+use datalove_datafun_compiler::const_cache::{ConstCache, ConstCacheReport};
 use datalove_datafun_interp::{InterpCtfeEvaluator, NativeResolver};
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
@@ -66,6 +67,11 @@ pub struct ModuleCompilationPipeline {
     /// `None` for a pipeline whose consts call none, where reaching one is a
     /// panic. See [`set_natives`](Self::set_natives).
     natives: Option<Arc<dyn NativeResolver>>,
+    /// Consts evaluated by earlier compiles, by module.
+    ///
+    /// Keyed on what the modules say; what the natives do is not in that, so
+    /// setting them empties it. See `const_cache`.
+    const_cache: ConstCache,
 }
 
 impl ModuleCompilationPipeline {
@@ -77,6 +83,7 @@ impl ModuleCompilationPipeline {
             rider_sources: Vec::new(),
             roots: Roots::All,
             natives: None,
+            const_cache: ConstCache::default(),
         }
     }
 
@@ -88,6 +95,18 @@ impl ModuleCompilationPipeline {
     /// carry it on, to the evaluator a script compiles its consts with.
     pub fn set_natives(&mut self, natives: Arc<dyn NativeResolver>) {
         self.natives = Some(natives);
+        self.const_cache.clear();
+    }
+
+    /// Check every const the cache supplies against an evaluation; see
+    /// [`ConstCache::set_verify`].
+    pub fn set_verify_const_cache(&mut self, verify: bool) {
+        self.const_cache.set_verify(verify);
+    }
+
+    /// Which modules the last compile evaluated consts for, and which it reused.
+    pub fn const_cache_report(&self) -> &ConstCacheReport {
+        self.const_cache.last_report()
     }
 
     /// The evaluator to run consts with when the caller does not give one.
@@ -430,8 +449,12 @@ impl ModuleCompilationPipeline {
     }
 
     /// Internal compilation implementation.
+    ///
+    /// The const cache assumes every compile evaluates with the same kind of
+    /// evaluator, which the default and every caller of the `_and_evaluator`
+    /// methods in this crate do.
     fn compile_impl<'db>(
-        &self,
+        &mut self,
         db: &'db dyn DbClone,
         module_graph: ModuleGraph<'db>,
         resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
@@ -445,6 +468,17 @@ impl ModuleCompilationPipeline {
         };
         let output = compiler_compile_modules(db, input, self.rider_sources.clone(), mode);
 
+        // The riders are the part of the world a module's closure does not
+        // cover, so a change to any of them empties the const cache.
+        let mut riders = rmx::blake3::Hasher::new();
+        for (name, source) in &self.rider_sources {
+            for text in [name, source] {
+                riders.update(&(text.len() as u64).to_le_bytes());
+                riders.update(text.as_bytes());
+            }
+        }
+        self.const_cache.set_world(*riders.finalize().as_bytes());
+
         // Only run lowering if analysis succeeded.
         let lowering_result = if output.is_successful() {
             Some(lower_module_graph_with_evaluator(
@@ -456,6 +490,7 @@ impl ModuleCompilationPipeline {
                 evaluator,
                 !self.options.const_inlining,
                 self.options.skip_specialization,
+                self.options.cache_consts.then_some(&mut self.const_cache),
             ))
         } else {
             None

@@ -343,15 +343,34 @@ the world.
 #### What is not tracked, and what stands in the way
 
 `lower_module_graph_with_evaluator` is still a plain function, and the two
-const evaluations under it still run in full on every compile. They cannot be
-tracked as they stand, because they take a `&mut dyn CtfeEvaluator`: an
-evaluator is mutable state with no notion of equality, so it cannot be a memo
-key, and salsa refuses a type parameter on a tracked function, so making it
-generic would not help either. A tracked query would have to build its own
-evaluator, which means reaching the interpreter and the natives from inside
-one. The gates above mean a program with no consts
-never reaches them, which is why an unchanged recompile no longer pays for
-them; a program that does have consts still pays on every compile.
+const evaluations under it are not salsa queries. They cannot be, because they
+take a `&mut dyn CtfeEvaluator`: an evaluator is mutable state with no notion
+of equality, so it cannot be a memo key, and salsa refuses a type parameter on
+a tracked function, so making it generic would not help either. A tracked query
+would have to build its own evaluator, which means reaching the interpreter and
+the natives from inside one.
+
+**They are cached outside salsa instead**, per module, by `ConstCache` in
+`compiler/src/const_cache.rs`, which the pipeline owns and passes down. A
+module's key is a content hash of its source and of everything it requires,
+transitively, plus the world's data files; a const can only call into what its
+module requires, so a module whose closure did not change evaluates to what it
+did before. The riders are hashed by the pipeline and a change to them, or to
+the natives, empties the cache. A module whose consts had an error is not kept.
+`CompilerOptions::cache_consts` turns it off, and `DATALOVE_VERIFY_CONST_CACHE`
+(or `set_verify_const_cache`) evaluates every hit anyway and panics on a
+difference; `tests/const_cache_tests.rs` runs that way, and also holds the
+cache to evaluating exactly the edited module and its requirers.
+
+A compile where every module hits saves a little more than the evaluation. The
+evaluator is never used, and dropping one that has run is not free -- about
+0.35ms on the store demo, which is the interpreter's own state going away. And
+the second lowering stratum and assembly key on the consts, where a reused
+`Arc` compares equal by pointer and a freshly evaluated one by walking the
+value; that was about 0.1ms of the store's two four-thousand-entry maps.
+
+The script compiler's consts are not cached; each script unit evaluates its
+own as it compiles.
 
 `specialize_comptime_functions` has the same obstacle for the same reason: it
 evaluates a comptime function's const bindings once the instantiation is known,

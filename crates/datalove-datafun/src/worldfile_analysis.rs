@@ -135,6 +135,7 @@ pub fn analyze_worldfile_with_hooks(
             const_inlining: !options.skip_const_inlining,
             skip_specialization: options.skip_specialization,
             keep_ir_dumps: true,
+            ..CompilerOptions::default()
         },
     );
 

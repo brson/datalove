@@ -78,6 +78,7 @@ fn one_cold_compile(
         &mut evaluator,
         false,
         false,
+        None,
     );
     split.lower = t.elapsed();
 

@@ -112,3 +112,98 @@ fn one_module_edit(bencher: Bencher) {
         assert!(compiled.is_successful());
     });
 }
+
+// A world whose consts do some work. The one above declares none, so it never
+// evaluates any and cannot show what the const cache saves.
+const CONST_MODULES: usize = 16;
+
+/// What every const module requires: a loop, for the consts to spend time in.
+const SPIN_SOURCE: &str = "\
+fun spin(n: int): int
+  var acc: int = 0
+  var i: int = 0
+  loop while i .< n
+    set acc = acc + i@
+    set i = i + 1
+  end loop
+  ret acc
+end fun
+";
+
+/// A module with module consts and a function-body const, each running `spin`.
+fn const_module_source(module_idx: usize, salt: usize) -> String {
+    let mut source = String::from("require module local/pkg/spin\n");
+    for const_idx in 0..4 {
+        source.push_str(&format!("const K{}: int = spin.spin({})\n", const_idx, 200 + const_idx));
+    }
+    source.push_str(&format!(
+        "fun body_{}(): int\n  const L: int = spin.spin(300)\n  ret L@ + K0@ + {}\nend fun\n",
+        module_idx, salt,
+    ));
+    source
+}
+
+/// A warm pipeline over the const world, caching consts or not.
+fn const_pipeline(cache: bool) -> (Database, ModuleCompilationPipeline) {
+    let db = Database::default();
+    let options = datalove_datafun::pipeline::CompilerOptions {
+        cache_consts: cache,
+        ..Default::default()
+    };
+    let mut pipeline = ModuleCompilationPipeline::new(options);
+    pipeline.add_module(&db, "local", "pkg", "spin", SPIN_SOURCE);
+    for i in 0..CONST_MODULES {
+        pipeline.add_module(&db, "local", "pkg", &format!("c{}", i), &const_module_source(i, 0));
+    }
+    compile_fresh(&db, &mut pipeline);
+    (db, pipeline)
+}
+
+/// Recompiling the const world unchanged, with and without the const cache.
+#[divan::bench(sample_count = 50, args = [false, true])]
+fn consts_unchanged_recompile(bencher: Bencher, cache: bool) {
+    let state = RefCell::new(const_pipeline(cache));
+
+    bencher.bench_local(|| {
+        let mut held = state.borrow_mut();
+        let (db, pipeline) = &mut *held;
+        let (compiled, _) = pipeline.compile(db);
+        assert!(compiled.is_successful());
+    });
+}
+
+/// One const module edited, which nothing requires, with and without the cache.
+#[divan::bench(sample_count = 50, args = [false, true])]
+fn consts_one_module_edit(bencher: Bencher, cache: bool) {
+    let state = RefCell::new(const_pipeline(cache));
+    let salt = RefCell::new(0usize);
+
+    bencher.bench_local(|| {
+        let mut held = state.borrow_mut();
+        let (db, pipeline) = &mut *held;
+        *salt.borrow_mut() += 1;
+        pipeline.update_source(db, "local", "pkg", "c0", &const_module_source(0, *salt.borrow()));
+        let (compiled, _) = pipeline.compile(db);
+        assert!(compiled.is_successful());
+    });
+}
+
+/// The module every const calls into edited, so every const is evaluated again.
+///
+/// The cache's worst case: everything misses, and what it costs to have asked is
+/// all it adds.
+#[divan::bench(sample_count = 50, args = [false, true])]
+fn consts_shared_module_edit(bencher: Bencher, cache: bool) {
+    let state = RefCell::new(const_pipeline(cache));
+    let salt = RefCell::new(0usize);
+
+    bencher.bench_local(|| {
+        let mut held = state.borrow_mut();
+        let (db, pipeline) = &mut *held;
+        *salt.borrow_mut() += 1;
+        let source = format!("{}fun probe(): int\n  ret {}\nend fun\n", SPIN_SOURCE, *salt.borrow());
+        pipeline.update_source(db, "local", "pkg", "spin", &source);
+        let (compiled, _) = pipeline.compile(db);
+        assert!(compiled.is_successful());
+    });
+}
