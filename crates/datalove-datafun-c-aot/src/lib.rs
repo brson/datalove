@@ -73,6 +73,11 @@ pub struct CAotCompiler {
     next_tydesc_id: u32,
     /// Mapping from IrType to tydesc variable name.
     tydesc_names: HashMap<IrType, String>,
+    /// The types the file being written has named a descriptor for.
+    ///
+    /// Each file defines the descriptors it uses, once its functions are
+    /// written and so known, ahead of them.
+    file_tydescs: BTreeSet<IrType>,
     /// One `extern` line per rider function the world can reach.
     ///
     /// Every file gets all of them. A declaration for a function the file does
@@ -99,6 +104,7 @@ impl CAotCompiler {
         Self {
             next_tydesc_id: 0,
             tydesc_names: HashMap::new(),
+            file_tydescs: BTreeSet::new(),
             native_decls: Vec::new(),
             statics: Vec::new(),
             static_index: HashMap::new(),
@@ -198,18 +204,6 @@ impl CAotCompiler {
     ) -> Result<String, CAotError> {
         let mut output = String::new();
 
-        // Emit header.
-        self.emit_header(&mut output)?;
-
-        // Collect types used in this module.
-        let mut types = BTreeSet::new();
-        for unit in units {
-            tydesc::collect_types_from_code_unit(unit, &mut types);
-        }
-
-        // Emit type descriptors.
-        self.emit_tydescs(&mut output, &types)?;
-
         // A module calls into the modules it imports, so it declares every
         // module function, its own included, the same as the script does.
         self.emit_module_declarations(&mut output, modules_by_id);
@@ -220,7 +214,7 @@ impl CAotCompiler {
             self.emit_module_function(&mut output, module_id, unit, registry)?;
         }
 
-        Ok(output)
+        self.finish_file(output)
     }
 
     /// Compile the script to a C source file.
@@ -231,19 +225,6 @@ impl CAotCompiler {
         modules_by_id: &BTreeMap<IrModuleId, Vec<&IrCodeUnit>>,
     ) -> Result<String, CAotError> {
         let mut output = String::new();
-
-        // Emit header.
-        self.emit_header(&mut output)?;
-
-        // Collect types used in script, and in the statics this file builds.
-        let mut types = BTreeSet::new();
-        tydesc::collect_types_from_script_unit(unit, &mut types);
-        for (ty, value) in &self.statics {
-            tydesc::collect_types_from_static(ty, value, &mut types);
-        }
-
-        // Emit type descriptors.
-        self.emit_tydescs(&mut output, &types)?;
 
         self.emit_module_declarations(&mut output, modules_by_id);
         self.emit_static_declarations(&mut output, true);
@@ -278,7 +259,7 @@ impl CAotCompiler {
         // Emit main entry point.
         self.emit_main(&mut output)?;
 
-        Ok(output)
+        self.finish_file(output)
     }
 
     /// Declare the arrays the statics live in: defined in the script's file,
@@ -510,26 +491,39 @@ impl CAotCompiler {
         Ok(())
     }
 
-    /// Emit type descriptors for all types.
-    fn emit_tydescs(&mut self, out: &mut String, types: &BTreeSet<IrType>) -> Result<(), CAotError> {
-        writeln!(out, "// Type descriptors").unwrap();
+    /// Put a file together: the header, then the descriptors for every type
+    /// `body` named one for, then `body`.
+    fn finish_file(&mut self, body: String) -> Result<String, CAotError> {
+        let mut out = String::new();
+        self.emit_header(&mut out)?;
 
-        // We need to emit types in dependency order, so primitive types first.
-        // `sort_by_key` is stable, so ties keep the order they came in; the
-        // types arrive from a `BTreeSet` so that order is the same every run.
+        // A descriptor points at those of the types inside its own, so they
+        // come with it, and first. `sort_by_key` is stable and the set is
+        // ordered, so the order is the same every run.
+        let mut types = BTreeSet::new();
+        for ty in &std::mem::take(&mut self.file_tydescs) {
+            tydesc::collect_type_recursive(ty, &mut types);
+        }
         let mut sorted_types: Vec<_> = types.iter().collect();
         sorted_types.sort_by_key(|t| tydesc::type_depth(t));
 
+        writeln!(out, "// Type descriptors").unwrap();
         for ty in sorted_types {
-            self.emit_tydesc(out, ty)?;
+            self.emit_tydesc(&mut out, ty)?;
         }
-
         writeln!(out).unwrap();
-        Ok(())
+        // Writing them named only types already among them.
+        debug_assert!(self.file_tydescs.is_subset(&types));
+        self.file_tydescs.clear();
+
+        out.push_str(&body);
+        Ok(out)
     }
 
-    /// Get or create the tydesc variable name for a type.
+    /// The tydesc variable name for a type, which the file being written will
+    /// define.
     fn get_tydesc_name(&mut self, ty: &IrType) -> String {
+        self.file_tydescs.insert(ty.clone());
         if let Some(name) = self.tydesc_names.get(ty) {
             return name.clone();
         }

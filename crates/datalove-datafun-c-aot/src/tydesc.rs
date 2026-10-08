@@ -3,112 +3,13 @@
 use std::collections::BTreeSet;
 use std::fmt::Write;
 
-use datalove_datafun_ir::{IrCodeUnit, IrType};
+use datalove_datafun_ir::IrType;
 use datalove_datafun_ir::layout as ir_layout;
 use crate::types::{self, compute_option_layout, compute_result_layout, compute_tuple_field_offsets};
 use crate::CAotCompiler;
 
-/// Collect all types used in a script unit.
-pub fn collect_types_from_script_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
-    collect_types_from_code_unit(unit, types);
-    for nested in &unit.nested_units {
-        collect_types_from_code_unit(nested, types);
-    }
-}
-
-/// Collect all types used in a code unit.
-pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
-    // Collect from value types.
-    for ty in &unit.value_types {
-        collect_type_recursive(ty, types);
-    }
-
-    // Collect from slot types.
-    for ty in &unit.slot_types {
-        collect_type_recursive(ty, types);
-    }
-
-    // Collect from function context if present.
-    if let Some(func_ctx) = unit.function_context() {
-        for ty in &func_ctx.param_types {
-            collect_type_recursive(ty, types);
-        }
-        collect_type_recursive(&func_ctx.return_type, types);
-    }
-
-    // A descriptor handed to a generic that builds a collection names a type
-    // that may appear nowhere else: a `#{string}` built inside a function
-    // returning an index is named only here. Without this the name is emitted
-    // at the call and the definition never is.
-    //
-    // A constant names types its own type does not, as a `data` does what it
-    // holds. These were found only when lowering the literal had left one of
-    // its intermediates' types behind in the unit, which a data file's
-    // constant, read in whole, never does.
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            if let datalove_datafun_ir::Instruction::Const { dest, value } = instr {
-                collect_types_from_static(&unit.value_types[dest.0 as usize], value, types);
-                continue;
-            }
-            let datalove_datafun_ir::Instruction::Call { shape_descriptors, .. } = instr else {
-                continue;
-            };
-            for r in shape_descriptors {
-                if let datalove_datafun_ir::DescriptorRef::Static(ty) = r {
-                    collect_type_recursive(ty, types);
-                }
-            }
-        }
-    }
-
-    // And from the functions defined beside a script unit.
-    for nested in &unit.nested_units {
-        collect_types_from_code_unit(nested, types);
-    }
-}
-
-/// Collect the types a static const of type `ty` needs to be built and
-/// destroyed: its own, and those its value names that its type does not, as
-/// a `data` names what it holds.
-pub fn collect_types_from_static(
-    ty: &IrType,
-    value: &datalove_datafun_ir::ConstValue,
-    types: &mut BTreeSet<IrType>,
-) {
-    use datalove_datafun_ir::ConstValue;
-    collect_type_recursive(ty, types);
-    fn walk(value: &ConstValue, types: &mut BTreeSet<IrType>) {
-        match value {
-            ConstValue::Data { payload_type, value } | ConstValue::Error { payload_type, value } => {
-                collect_type_recursive(payload_type, types);
-                walk(value, types);
-            }
-            ConstValue::List(elements) | ConstValue::Set(elements) | ConstValue::Tuple(elements)
-            | ConstValue::Tensor { elements, .. } => elements.iter().for_each(|e| walk(e, types)),
-            ConstValue::Map(entries) => {
-                for (key, value) in entries {
-                    walk(key, types);
-                    walk(value, types);
-                }
-            }
-            ConstValue::Table { rows, .. } => rows.iter().flatten().for_each(|c| walk(c, types)),
-            ConstValue::Struct(fields) => fields.iter().for_each(|(_, f)| walk(f, types)),
-            ConstValue::OptionSome(inner) | ConstValue::ResultOk(inner)
-            | ConstValue::ResultErr(inner) => walk(inner, types),
-            ConstValue::Enum { payload, .. } => {
-                if let Some(payload) = payload {
-                    walk(payload, types);
-                }
-            }
-            _ => {}
-        }
-    }
-    walk(value, types);
-}
-
 /// Collect a type and all its nested types.
-fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
+pub fn collect_type_recursive(ty: &IrType, types: &mut BTreeSet<IrType>) {
     types.insert(ty.clone());
 
     match ty {
