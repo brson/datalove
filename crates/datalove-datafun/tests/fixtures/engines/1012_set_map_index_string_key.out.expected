@@ -52,13 +52,12 @@ Analysis(
                     block4:
                         v14 = mapvalueref s0[v9]
                         v15 = const 4int
-                        v16 = add *v14, v15
+                        add.assign *v14, v15
                         drop v15
-                        refstore *v14, v16
                         drop v9
-                        v17 = load.move.tracked s0
-                        v18 = ok v17
-                        return v18
+                        v16 = load.move.tracked s0
+                        v17 = ok v16
+                        return v17
                 """,
             ),
             output: "(fragment executed)",

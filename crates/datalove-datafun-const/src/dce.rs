@@ -124,6 +124,8 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::ParamSetFieldTracked { .. } => None,
         Instruction::RefStore { .. } => None,
         Instruction::RefStoreTracked { .. } => None,
+        Instruction::OpAssign { .. } => None,
+        Instruction::OpAssignChecked { overflow, .. } => Some(*overflow),
         Instruction::RefSetField { .. } => None,
         Instruction::RefSetFieldTracked { .. } => None,
 
@@ -494,6 +496,13 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         Instruction::ParamSetField { value, .. }
         | Instruction::ParamSetFieldTracked { value, .. } => add_operand_value(value, used),
 
+        // An update reads its place as well as writing it.
+        Instruction::OpAssign { place, rhs, .. }
+        | Instruction::OpAssignChecked { place, rhs, .. } => {
+            add_operand_value(place, used);
+            add_operand_value(rhs, used);
+        }
+
         // Ref store operations (from inlining mut/out params).
         Instruction::RefStore { dest, value }
         | Instruction::RefStoreTracked { dest, value } => {
@@ -674,7 +683,9 @@ fn has_side_effects(instr: &Instruction) -> bool {
         | Instruction::RefStore { .. }
         | Instruction::RefStoreTracked { .. }
         | Instruction::RefSetField { .. }
-        | Instruction::RefSetFieldTracked { .. } => true,
+        | Instruction::RefSetFieldTracked { .. }
+        | Instruction::OpAssign { .. }
+        | Instruction::OpAssignChecked { .. } => true,
         // Call may have side effects. A comptime call is a call: it prints,
         // writes through a `mut` or an `out`, and is only distinguished from
         // the other by carrying what specialization needs. Left out of here it

@@ -783,6 +783,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 self.compile_unaryop_checked(builder, *dest, *overflow, *op, operand)?;
             }
+            Instruction::OpAssign { place, op, rhs } => {
+                self.compile_op_assign(builder, place, *op, rhs)?;
+            }
+            Instruction::OpAssignChecked { overflow, place, op, rhs } => {
+                self.compile_op_assign_checked(builder, *overflow, place, *op, rhs)?;
+            }
             Instruction::Widen { dest, src } => {
                 self.compile_widen(builder, *dest, src)?;
             }

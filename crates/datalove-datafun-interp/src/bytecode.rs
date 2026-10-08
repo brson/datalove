@@ -171,6 +171,40 @@ impl Ck {
     }
 }
 
+/// The type a checked update in place works on.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CkTy {
+    U32,
+    I32,
+    U64,
+    I64,
+}
+
+impl CkTy {
+    /// The type of a place of `ty`, if the checked updates cover it.
+    fn of(ty: &IrType) -> Option<Self> {
+        let index32 = rtdt::INDEX_SIZE == 4;
+        Some(match ty {
+            IrType::U32 => CkTy::U32,
+            IrType::I32 => CkTy::I32,
+            IrType::U64 => CkTy::U64,
+            IrType::I64 => CkTy::I64,
+            IrType::Index if index32 => CkTy::U32,
+            IrType::Index => CkTy::U64,
+            IrType::Offset if index32 => CkTy::I32,
+            IrType::Offset => CkTy::I64,
+            _ => return None,
+        })
+    }
+
+    fn size(self) -> u32 {
+        match self {
+            CkTy::U32 | CkTy::I32 => 4,
+            CkTy::U64 | CkTy::I64 => 8,
+        }
+    }
+}
+
 /// One instruction of the bytecode.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Op {
@@ -292,6 +326,13 @@ pub(crate) enum Op {
     /// A binary operation the typed ops do not cover, on the IR walker's own
     /// routine with its operands resolved: `rt[at]` holds dst, lhs, rhs.
     BinOpRt { op: BinOp, at: u32 },
+    /// Update a place with `op`, on the IR walker's routine: `rt[at]` holds
+    /// the place and the operand. An `int` is updated in its own buffer.
+    OpAssignRt { op: BinOp, at: u32 },
+    /// Update `place` with checked `kind` and `b`, writing it only if the
+    /// operation doesn't overflow, which goes to `ovf`.
+    CkAssign { ty: CkTy, kind: Ck, place: Loc, b: Loc, ovf: Loc },
+    CkAssignU32I { kind: Ck, place: Loc, imm: u32, ovf: Loc },
 
     Jump { to: u32 },
     BrIf { cond: Loc, then: u32, els: u32 },
@@ -302,6 +343,10 @@ pub(crate) enum Op {
     /// on to `ovf` if it overflowed, `ok` if not.
     CkU32Br { kind: Ck, dst: Loc, a: Loc, b: Loc, ovf: u32, ok: u32 },
     CkU32IBr { kind: Ck, dst: Loc, a: Loc, imm: u32, ovf: u32, ok: u32 },
+    /// A checked update whose overflow flag only a branch reads: on to `ovf`,
+    /// the place as it was, if it overflowed, and to `ok` if not.
+    CkAssignBr { ty: CkTy, kind: Ck, place: Loc, b: Loc, ovf: u32, ok: u32 },
+    CkAssignU32IBr { kind: Ck, place: Loc, imm: u32, ovf: u32, ok: u32 },
     /// Unwrap a result whose flag only a branch reads: on `Ok`, its payload
     /// to `ok` and on to `then`; otherwise its error to `err` and on to the
     /// next op, the start of the block the branch takes then.
@@ -1007,6 +1052,15 @@ impl<'a> Lowering<'a> {
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 self.lower_checked(*dest, *overflow, *op, lhs, rhs)
             }
+            Instruction::OpAssign { place, op, rhs } => {
+                let (Some(p), Some(r)) = (self.rt_operand(place), self.rt_operand(rhs)) else { return false };
+                let at = self.rt_push(&[p, r]);
+                self.emit(Op::OpAssignRt { op: *op, at });
+                true
+            }
+            Instruction::OpAssignChecked { overflow, place, op, rhs } => {
+                self.lower_checked_assign(*overflow, *op, place, rhs)
+            }
             // A reference to a const, where the reference has no descriptor
             // word to write.
             Instruction::StaticRef { dest, value } => {
@@ -1439,6 +1493,28 @@ impl<'a> Lowering<'a> {
         true
     }
 
+    /// A checked update of a place, for the widths of 32 and 64 bits. The
+    /// others, and division, run on the IR walker.
+    fn lower_checked_assign(&mut self, overflow: ValueId, op: BinOp, place: &Operand, rhs: &Operand) -> bool {
+        let (Some(ty), Some(place), Some(b)) = (self.typed(place), self.loc(place), self.loc(rhs)) else {
+            return false;
+        };
+        let kind = match op {
+            BinOp::Add => Ck::Add,
+            BinOp::Sub => Ck::Sub,
+            BinOp::Mul => Ck::Mul,
+            _ => return false,
+        };
+        let Some(ty) = CkTy::of(ty) else { return false };
+        let ovf = self.value_loc(overflow);
+        if matches!(ty, CkTy::U32) && let Some(imm) = self.imm_u32(rhs) {
+            self.emit(Op::CkAssignU32I { kind, place, imm, ovf });
+            return true;
+        }
+        self.emit(Op::CkAssign { ty, kind, place, b, ovf });
+        true
+    }
+
     fn lower_intrinsic(&mut self, dest: ValueId, intrinsic: IntrinsicId, args: &[Operand]) -> bool {
         if let ([x], IntrinsicId::U64ToIndex) = (args, intrinsic) {
             let Some(src) = self.loc(x) else { return false };
@@ -1613,7 +1689,9 @@ impl Lowering<'_> {
                         }
                     }
                     Instruction::RefStore { dest, .. } | Instruction::RefStoreTracked { dest, .. }
-                    | Instruction::RefSetField { dest, .. } | Instruction::RefSetFieldTracked { dest, .. } => {
+                    | Instruction::RefSetField { dest, .. } | Instruction::RefSetFieldTracked { dest, .. }
+                    | Instruction::OpAssign { place: dest, .. }
+                    | Instruction::OpAssignChecked { place: dest, .. } => {
                         if let Operand::Value(id) | Operand::ValueRef(id) = dest {
                             pinned[id.0 as usize] = true;
                         }
@@ -1711,6 +1789,8 @@ impl Lowering<'_> {
             Op::AddCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Add, dst, a, imm, ovf: then, ok: els },
             Op::SubCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Sub, dst, a, imm, ovf: then, ok: els },
             Op::MulCkU32I { dst, ovf, a, imm } if ovf.0 == want => Op::CkU32IBr { kind: Ck::Mul, dst, a, imm, ovf: then, ok: els },
+            Op::CkAssign { ty, kind, place, b, ovf } if ovf.0 == want => Op::CkAssignBr { ty, kind, place, b, ovf: then, ok: els },
+            Op::CkAssignU32I { kind, place, imm, ovf } if ovf.0 == want => Op::CkAssignU32IBr { kind, place, imm, ovf: then, ok: els },
             Op::CmpI32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI32 { cmp, a, b, then, els },
             Op::CmpU64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU64 { cmp, a, b, then, els },
             Op::CmpI64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI64 { cmp, a, b, then, els },
@@ -1733,7 +1813,12 @@ impl Op {
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::Jump { .. }
             | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
             | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. }
-            | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. } => {}
+            | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. }
+            | Op::OpAssignRt { .. } => {}
+            Op::CkAssign { ty, place, b, ovf, .. } => { f(place, ty.size()); f(b, ty.size()); f(ovf, 1) }
+            Op::CkAssignU32I { place, ovf, .. } => { f(place, 4); f(ovf, 1) }
+            Op::CkAssignBr { ty, place, b, .. } => { f(place, ty.size()); f(b, ty.size()) }
+            Op::CkAssignU32IBr { place, .. } => f(place, 4),
             Op::CopyAt { dst, src, offset, len } => { f(dst, len); f(src, offset + len) }
             Op::FieldRef { dst, src, offset } => { f(dst, 8); f(src, offset) }
             Op::StaticRef { dst, .. } => f(dst, 8),
@@ -1817,7 +1902,8 @@ impl Op {
             Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
             | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
             | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. } => { f(then); f(els) }
-            Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. } => { f(ovf); f(ok) }
+            Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. }
+            | Op::CkAssignBr { ovf, ok, .. } | Op::CkAssignU32IBr { ovf, ok, .. } => { f(ovf); f(ok) }
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. }
             | Op::Const1 { .. } | Op::Const4 { .. } | Op::ConstPool { .. } | Op::ConstString { .. }
             | Op::Copy1 { .. } | Op::Copy4 { .. } | Op::Copy8 { .. } | Op::CopyN { .. }
@@ -1838,7 +1924,8 @@ impl Op {
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. }
             | Op::Drop { .. } | Op::DropTracked { .. } | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. }
-            | Op::Widen { .. } | Op::BinOpRt { .. } | Op::Switch { .. }
+            | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. }
+            | Op::CkAssign { .. } | Op::CkAssignU32I { .. } | Op::Switch { .. }
             | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. } => {}
         }
     }
@@ -1887,7 +1974,7 @@ impl BcFunction {
                 }
                 Op::ListElementRefRt { at: i, .. } | Op::EraseRt { at: i } | Op::ReifyRt { at: i }
                 | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. }
-                | Op::MapGetRt { at: i, .. } => {
+                | Op::OpAssignRt { at: i, .. } | Op::MapGetRt { at: i, .. } => {
                     in_table(i, self.rt.len(), "routine operands");
                     // Unused entries of a triple are padding, with no descriptor.
                     for (loc, desc) in self.rt[i as usize] {
@@ -1967,7 +2054,8 @@ fn compact(ops: &mut Vec<Op>, removed: &[bool], switches: &mut [SwitchTable], en
 /// A conditional branch's then and else targets.
 fn branch_targets(op: &mut Op) -> (&mut u32, &mut u32) {
     match op {
-        Op::CkU32Br { ovf: then, ok: els, .. } | Op::CkU32IBr { ovf: then, ok: els, .. } => (then, els),
+        Op::CkU32Br { ovf: then, ok: els, .. } | Op::CkU32IBr { ovf: then, ok: els, .. }
+        | Op::CkAssignBr { ovf: then, ok: els, .. } | Op::CkAssignU32IBr { ovf: then, ok: els, .. } => (then, els),
         Op::BrIf { then, els, .. }
         | Op::BrCmpU8 { then, els, .. }
         | Op::BrCmpU32I { then, els, .. }
@@ -2074,6 +2162,36 @@ unsafe fn rt_value(frame: &Frame, base: *mut u8, (loc, desc): (Loc, Desc)) -> cr
 unsafe fn rt_dest(frame: &Frame, base: *mut u8, operand: (Loc, Desc)) -> Destination {
     let val = unsafe { rt_value(frame, base, operand) };
     Destination { ptr: val.ptr, tydesc: val.tydesc }
+}
+
+/// A checked update of `place` with `b`, written only if it doesn't
+/// overflow. Gives whether it did.
+#[inline(always)]
+unsafe fn ck_assign(base: *mut u8, ty: CkTy, kind: Ck, place: Loc, b: Loc) -> bool {
+    unsafe {
+        match ty {
+            CkTy::U32 => ck_assign_as::<u32>(base, kind, place, rd(base, b)),
+            CkTy::I32 => ck_assign_as::<i32>(base, kind, place, rd(base, b)),
+            CkTy::U64 => ck_assign_as::<u64>(base, kind, place, rd(base, b)),
+            CkTy::I64 => ck_assign_as::<i64>(base, kind, place, rd(base, b)),
+        }
+    }
+}
+
+#[inline(always)]
+unsafe fn ck_assign_as<T: Copy + CheckedIntOps>(base: *mut u8, kind: Ck, place: Loc, b: T) -> bool {
+    unsafe {
+        let a = rd::<T>(base, place);
+        let (r, o) = match kind {
+            Ck::Add => a.overflowing_add_impl(b),
+            Ck::Sub => a.overflowing_sub_impl(b),
+            Ck::Mul => a.overflowing_mul_impl(b),
+        };
+        if !o {
+            wr(base, place, r);
+        }
+        o
+    }
 }
 
 #[inline(always)]
@@ -2355,8 +2473,20 @@ impl IrInterpreter {
                     }
                     Op::ConstString { .. } | Op::ListElementRefRt { .. } | Op::EraseRt { .. }
                     | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
-                    | Op::Widen { .. } | Op::BinOpRt { .. } | Op::MapGetRt { .. } => {
+                    | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. } | Op::MapGetRt { .. } => {
                         self.run_routine_op(*ops.add(pc), bc, &mut regs.frame, base)
+                    }
+                    Op::CkAssign { ty, kind, place, b, ovf } => wr(base, ovf, ck_assign(base, ty, kind, place, b)),
+                    Op::CkAssignU32I { kind, place, imm, ovf } => {
+                        wr(base, ovf, ck_assign_as::<u32>(base, kind, place, imm))
+                    }
+                    Op::CkAssignBr { ty, kind, place, b, ovf, ok } => {
+                        pc = if ck_assign(base, ty, kind, place, b) { ovf } else { ok } as usize;
+                        continue;
+                    }
+                    Op::CkAssignU32IBr { kind, place, imm, ovf, ok } => {
+                        pc = if ck_assign_as::<u32>(base, kind, place, imm) { ovf } else { ok } as usize;
+                        continue;
                     }
                     Op::Jump { to } => {
                         pc = to as usize;
@@ -2758,6 +2888,11 @@ impl IrInterpreter {
                     let [d, a, b] = bc.rt[at as usize];
                     let (lhs, rhs) = (rt_value(frame, base, a), rt_value(frame, base, b));
                     self.execute_binop(op, &lhs, &rhs, rt_dest(frame, base, d));
+                }
+                Op::OpAssignRt { op, at } => {
+                    let [p, r, _] = bc.rt[at as usize];
+                    let (place, rhs) = (rt_value(frame, base, p), rt_value(frame, base, r));
+                    self.execute_op_assign(op, &place, &rhs);
                 }
                 op => unreachable!("{:?} is not a routine op", op),
             }

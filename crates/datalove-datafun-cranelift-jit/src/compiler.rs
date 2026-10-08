@@ -714,6 +714,10 @@ fn trampoline_all_runtime_imports(
     tramp(jit_module, &mut runtime.int_mul, c::dtlv_rti_int_mul as *const u8)?;
     tramp(jit_module, &mut runtime.int_div, c::dtlv_rti_int_div_checked as *const u8)?;
     tramp(jit_module, &mut runtime.int_neg, c::dtlv_rti_int_neg as *const u8)?;
+    tramp(jit_module, &mut runtime.int_add_assign, c::dtlv_rti_int_add_assign as *const u8)?;
+    tramp(jit_module, &mut runtime.int_sub_assign, c::dtlv_rti_int_sub_assign as *const u8)?;
+    tramp(jit_module, &mut runtime.int_mul_assign, c::dtlv_rti_int_mul_assign as *const u8)?;
+    tramp(jit_module, &mut runtime.int_div_assign, c::dtlv_rti_int_div_assign_checked as *const u8)?;
     tramp(jit_module, &mut runtime.int_from_fixed, c::dtlv_rti_int_from_fixed as *const u8)?;
     tramp(jit_module, &mut runtime.int_from_limbs, c::dtlv_rti_int_from_limbs as *const u8)?;
     tramp(jit_module, &mut runtime.int_cmp, c::dtlv_rti_cmp_local as *const u8)?;
@@ -813,6 +817,10 @@ fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
     jit_builder.symbol("dtlv_rti_int_mul", c::dtlv_rti_int_mul as *const u8);
     jit_builder.symbol("dtlv_rti_int_div_checked", c::dtlv_rti_int_div_checked as *const u8);
     jit_builder.symbol("dtlv_rti_int_neg", c::dtlv_rti_int_neg as *const u8);
+    jit_builder.symbol("dtlv_rti_int_add_assign", c::dtlv_rti_int_add_assign as *const u8);
+    jit_builder.symbol("dtlv_rti_int_sub_assign", c::dtlv_rti_int_sub_assign as *const u8);
+    jit_builder.symbol("dtlv_rti_int_mul_assign", c::dtlv_rti_int_mul_assign as *const u8);
+    jit_builder.symbol("dtlv_rti_int_div_assign_checked", c::dtlv_rti_int_div_assign_checked as *const u8);
     jit_builder.symbol("dtlv_rti_int_from_fixed", c::dtlv_rti_int_from_fixed as *const u8);
     jit_builder.symbol("dtlv_rti_int_from_limbs", c::dtlv_rti_int_from_limbs as *const u8);
     jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);

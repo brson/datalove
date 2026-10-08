@@ -1259,6 +1259,38 @@ pub enum Instruction {
         rhs: Operand,
     },
 
+    /// Update a place with a binary operator: `place = place op rhs`.
+    ///
+    /// What `set p op= v` lowers to, for an operator that cannot fail. `place`
+    /// is a slot, a parameter, an earlier unit's slot, or a reference to the
+    /// place, as for `RefStore`. Its type is `f32`, `f64` or `int`, never
+    /// `Data`: an erased type's arithmetic is a store of a `BinOp`'s result.
+    ///
+    /// The place's value is replaced where it is. For an `int` that can mean
+    /// reusing its buffer, and `rhs` may be the place itself.
+    ///
+    /// **Ownership:** Borrows `rhs`. The place owns its new value as it did
+    /// the old one, which the instruction drops.
+    OpAssign {
+        place: Operand,
+        op: BinOp,
+        rhs: Operand,
+    },
+
+    /// Update a place with a checked binary operator, if it succeeds.
+    ///
+    /// As `OpAssign`, for an operator that can fail: `overflow` is true if it
+    /// did, and the place is left as it was. Fixed-width integers, and `int`
+    /// for division by zero.
+    ///
+    /// **Ownership:** As `OpAssign`. Produces `overflow`.
+    OpAssignChecked {
+        overflow: ValueId,
+        place: Operand,
+        op: BinOp,
+        rhs: Operand,
+    },
+
     /// Checked unary operation (produces Copy result + overflow flag).
     ///
     /// **Ownership:** Borrows `operand`, produces `dest` and `overflow`.
@@ -2057,6 +2089,10 @@ impl Instruction {
             | I::UnitEndDropTracked { operand } | I::DebugLog { operand } => f(operand),
             I::BinOp { lhs, rhs, .. } | I::BinOpChecked { lhs, rhs, .. } => {
                 f(lhs);
+                f(rhs);
+            }
+            I::OpAssign { place, rhs, .. } | I::OpAssignChecked { place, rhs, .. } => {
+                f(place);
                 f(rhs);
             }
             I::Call { args, .. } | I::ComptimeCall { args, .. } | I::Intrinsic { args, .. } => {

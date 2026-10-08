@@ -767,8 +767,9 @@ fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
 /// Lower a compound assignment: `set x += v`, `set xs[i]!.n +!= v`.
 ///
 /// The place is found once, through the same steps and checks as for any
-/// `set`, so an index is evaluated and looked up once. The operator then reads
-/// the place and the value, and its result replaces what the place held.
+/// `set`, so an index is evaluated and looked up once. Then one instruction
+/// updates it in place. An erased type's arithmetic is the runtime's, by its
+/// descriptor, so for one the operator's result is stored back instead.
 fn lower_set_compound<'db>(
     ctx: &mut LowerCtx<'db>,
     place: &ast::Place<'db>,
@@ -779,6 +780,9 @@ fn lower_set_compound<'db>(
     let ty = operand_type(ctx, &target);
     let expr_temp_mark = ctx.expr_temps_mark();
     let rhs = lower_operand(ctx, value_expr)?;
+    if ty != IrType::Data {
+        return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
+    }
     let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;
     match target {
         Operand::Slot(slot) => store_slot(ctx, slot, result),

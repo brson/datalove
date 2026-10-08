@@ -199,6 +199,50 @@ pub unsafe fn dtlv_rti_int_div_checked(rt: LocalRtHandle, a_in: *const u8, a_tyd
     unsafe { (crate::table(rt).dtlv_rti_int_div_checked)(rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_int_add_assign`](crate::table::RtiTable::dtlv_rti_int_add_assign).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_int_add_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_int_add_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_int_sub_assign`](crate::table::RtiTable::dtlv_rti_int_sub_assign).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_int_sub_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_int_sub_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_int_mul_assign`](crate::table::RtiTable::dtlv_rti_int_mul_assign).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_int_mul_assign(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_int_mul_assign)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_int_div_assign_checked`](crate::table::RtiTable::dtlv_rti_int_div_assign_checked).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_int_div_assign_checked(rt: LocalRtHandle, a_mut: *mut u8, a_tydesc: *const rtdt::TyDesc, b_in: *const u8, b_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_int_div_assign_checked)(rt, a_mut, a_tydesc, b_in, b_tydesc) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_int_from_fixed`](crate::table::RtiTable::dtlv_rti_int_from_fixed).
 ///
 /// # Safety

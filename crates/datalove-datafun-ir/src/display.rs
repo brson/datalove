@@ -380,6 +380,12 @@ impl fmt::Display for Instruction {
             Instruction::BinOpChecked { dest, overflow, op, lhs, rhs } => {
                 write!(f, "{}, {} = {}.checked {}, {}", dest, overflow, op, lhs, rhs)
             }
+            Instruction::OpAssign { place, op, rhs } => {
+                write!(f, "{}.assign {}, {}", op, place, rhs)
+            }
+            Instruction::OpAssignChecked { overflow, place, op, rhs } => {
+                write!(f, "{} = {}.assign.checked {}, {}", overflow, op, place, rhs)
+            }
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 write!(f, "{}, {} = {}.checked {}", dest, overflow, op, operand)
             }

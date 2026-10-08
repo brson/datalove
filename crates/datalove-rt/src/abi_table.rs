@@ -34,6 +34,10 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_int_mul: c::dtlv_rti_int_mul,
     dtlv_rti_int_neg: c::dtlv_rti_int_neg,
     dtlv_rti_int_div_checked: c::dtlv_rti_int_div_checked,
+    dtlv_rti_int_add_assign: c::dtlv_rti_int_add_assign,
+    dtlv_rti_int_sub_assign: c::dtlv_rti_int_sub_assign,
+    dtlv_rti_int_mul_assign: c::dtlv_rti_int_mul_assign,
+    dtlv_rti_int_div_assign_checked: c::dtlv_rti_int_div_assign_checked,
     dtlv_rti_int_from_fixed: c::dtlv_rti_int_from_fixed,
     dtlv_rti_int_from_limbs: c::dtlv_rti_int_from_limbs,
     dtlv_rti_any_destroy_local: c::dtlv_rti_any_destroy_local,
@@ -152,6 +156,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 129,
+    datalove_rti::table::EXPORTED == 133,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

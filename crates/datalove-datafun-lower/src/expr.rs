@@ -1304,6 +1304,70 @@ pub(crate) fn lower_binop_operands<'db>(
     Ok(dest)
 }
 
+/// How a checked or optional operator leaves the function when it fails.
+enum Failure {
+    Error,
+    None,
+}
+
+/// Lower an update of `place` with `ast_op` and `rhs`, already lowered, as
+/// one instruction: what `set p op= v` is, for a place of a concrete type.
+///
+/// A checked or optional operator branches on its failure to an early return,
+/// as its binary form does, leaving the place as it was. The temporaries
+/// recorded since `expr_temp_mark` are the operand's, dropped once it's read.
+pub(crate) fn lower_op_assign<'db>(
+    ctx: &mut LowerCtx<'db>,
+    ast_op: ast::BinOp,
+    place: Operand,
+    rhs: Operand,
+    ty: &IrType,
+    expr_temp_mark: usize,
+) -> Result<(), LowerError> {
+    let (op, failure) = match ast_op {
+        ast::BinOp::Add => (BinOp::Add, None),
+        ast::BinOp::Sub => (BinOp::Sub, None),
+        ast::BinOp::Mul => (BinOp::Mul, None),
+        ast::BinOp::Div => (BinOp::Div, None),
+        ast::BinOp::AddChecked => (BinOp::Add, Some(Failure::Error)),
+        ast::BinOp::SubChecked => (BinOp::Sub, Some(Failure::Error)),
+        ast::BinOp::MulChecked => (BinOp::Mul, Some(Failure::Error)),
+        ast::BinOp::DivChecked => (BinOp::Div, Some(Failure::Error)),
+        ast::BinOp::AddOptional => (BinOp::Add, Some(Failure::None)),
+        ast::BinOp::SubOptional => (BinOp::Sub, Some(Failure::None)),
+        ast::BinOp::MulOptional => (BinOp::Mul, Some(Failure::None)),
+        ast::BinOp::DivOptional => (BinOp::Div, Some(Failure::None)),
+        other => panic!("{other:?} in a compound assignment, which typecheck refuses"),
+    };
+    let Some(failure) = failure else {
+        ctx.emit(Instruction::OpAssign { place, op, rhs });
+        ctx.emit_expr_temp_drops_since(expr_temp_mark);
+        return Ok(());
+    };
+
+    let overflow = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::OpAssignChecked { overflow, place, op, rhs });
+    let early_return_block = ctx.fresh_block();
+    let continue_block = ctx.fresh_block();
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(overflow),
+        then_block: early_return_block,
+        then_args: Vec::new(),
+        else_block: continue_block,
+        else_args: Vec::new(),
+    });
+
+    ctx.start_block(early_return_block);
+    match failure {
+        Failure::Error => ctx.emit_early_return_err_message(checked_failure_message(op, ty), false),
+        Failure::None => ctx.emit_early_return_none(false),
+    }
+
+    ctx.start_block(continue_block);
+    ctx.emit_expr_temp_drops_since(expr_temp_mark);
+    Ok(())
+}
+
 /// Lower a unary operation expression.
 fn lower_unaryop<'db>(
     ctx: &mut LowerCtx<'db>,

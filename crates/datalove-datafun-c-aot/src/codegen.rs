@@ -312,6 +312,12 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::UnaryOpChecked { dest, overflow, op, operand } => {
                 self.emit_unaryop_checked(out, *dest, *overflow, *op, operand)?;
             }
+            Instruction::OpAssign { place, op, rhs } => {
+                self.emit_op_assign(out, place, *op, rhs)?;
+            }
+            Instruction::OpAssignChecked { overflow, place, op, rhs } => {
+                self.emit_op_assign_checked(out, *overflow, place, *op, rhs)?;
+            }
             Instruction::Widen { dest, src } => {
                 self.emit_widen(out, *dest, src)?;
             }
@@ -1344,6 +1350,90 @@ impl<'a> FunctionCodegenContext<'a> {
 
         writeln!(out, "    *(bool_t*){} = {}(*({c_ty}*){}, *({c_ty}*){}, ({c_ty}*){});",
             overflow_addr, builtin, lhs_addr, rhs_addr, dest_addr).unwrap();
+        Ok(())
+    }
+
+    /// Emit `OpAssign`: update a place with an operator that can't fail.
+    ///
+    /// An `int` is updated by the runtime, in its own buffer when it has room;
+    /// a float in place.
+    fn emit_op_assign(&mut self, out: &mut String, place: &Operand, op: BinOp, rhs: &Operand) -> Result<(), CAotError> {
+        let place_addr = self.operand_addr(place);
+        let rhs_addr = self.operand_addr(rhs);
+        let ty = self.operand_type(place).clone();
+        if matches!(ty, IrType::Int) {
+            let func = match op {
+                BinOp::Add => "dtlv_rti_int_add_assign",
+                BinOp::Sub => "dtlv_rti_int_sub_assign",
+                BinOp::Mul => "dtlv_rti_int_mul_assign",
+                _ => panic!("{:?} on an `int` place, which the typechecker refuses", op),
+            };
+            let tydesc = self.tydesc_name(&IrType::Int);
+            writeln!(out, "    {func}(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc});").unwrap();
+            return Ok(());
+        }
+        let op_str = match (op, &ty) {
+            (BinOp::Add, IrType::F32 | IrType::F64) => "+=",
+            (BinOp::Sub, IrType::F32 | IrType::F64) => "-=",
+            (BinOp::Mul, IrType::F32 | IrType::F64) => "*=",
+            (BinOp::Div, IrType::F32 | IrType::F64) => "/=",
+            _ => panic!("{:?} on a {:?} place, which lowering doesn't emit as an update", op, ty),
+        };
+        let c_ty = types::ir_type_to_c(&ty);
+        writeln!(out, "    *({c_ty}*){place_addr} {op_str} *({c_ty}*){rhs_addr};").unwrap();
+        Ok(())
+    }
+
+    /// Emit `OpAssignChecked`: update a place with a checked operator, if it
+    /// succeeds, leaving it as it was if not.
+    fn emit_op_assign_checked(
+        &mut self,
+        out: &mut String,
+        overflow: ValueId,
+        place: &Operand,
+        op: BinOp,
+        rhs: &Operand,
+    ) -> Result<(), CAotError> {
+        let overflow_addr = self.value_addr(overflow);
+        let place_addr = self.operand_addr(place);
+        let rhs_addr = self.operand_addr(rhs);
+        let ty = self.operand_type(place).clone();
+        if matches!(ty, IrType::Int) {
+            assert_eq!(op, BinOp::Div, "checked {:?} on an `int` place, which the typechecker refuses", op);
+            let tydesc = self.tydesc_name(&IrType::Int);
+            writeln!(out, "    *(bool_t*){overflow_addr} = \
+                dtlv_rti_int_div_assign_checked(rt, {place_addr}, &{tydesc}, {rhs_addr}, &{tydesc}) != 1;").unwrap();
+            return Ok(());
+        }
+
+        let c_ty = types::ir_type_to_c(&ty);
+        let (a, b) = (format!("*({c_ty}*){place_addr}"), format!("*({c_ty}*){rhs_addr}"));
+        let failed = match op {
+            // The builtins check against the type their result points to, at
+            // every width.
+            BinOp::Add => format!("__builtin_add_overflow({a}, {b}, &__r)"),
+            BinOp::Sub => format!("__builtin_sub_overflow({a}, {b}, &__r)"),
+            BinOp::Mul => format!("__builtin_mul_overflow({a}, {b}, &__r)"),
+            // A zero divisor, and a signed type's least value over -1, have no
+            // answer, and have to be caught before the divide, which faults.
+            BinOp::Div => {
+                let signed_min = match ty {
+                    IrType::I8 => Some("INT8_MIN"),
+                    IrType::I16 => Some("INT16_MIN"),
+                    IrType::I32 => Some("INT32_MIN"),
+                    IrType::I64 => Some("INT64_MIN"),
+                    IrType::Offset => Some("DTLV_OFFSET_MIN"),
+                    _ => None,
+                };
+                let overflows = match signed_min {
+                    Some(min) => format!(" || ({a} == {min} && {b} == -1)"),
+                    None => String::new(),
+                };
+                format!("({b} == 0{overflows} ? 1 : (__r = {a} / {b}, 0))")
+            }
+            _ => panic!("{:?} as a checked update; only Add, Sub, Mul and Div can fail", op),
+        };
+        writeln!(out, "    {{ {c_ty} __r; bool_t __o = {failed}; *(bool_t*){overflow_addr} = __o; if (!__o) {a} = __r; }}").unwrap();
         Ok(())
     }
 

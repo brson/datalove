@@ -1797,3 +1797,149 @@ fn test_int_results_too_large() -> AnyResult<()> {
     }
     Ok(())
 }
+
+// ============================================================================
+// In-Place Update Tests
+// ============================================================================
+
+type BinaryIntOp = unsafe extern "C-unwind" fn(
+    *mut u8, *const u8, *const datalove_rtdt::TyDesc, *const u8, *const datalove_rtdt::TyDesc,
+    *mut u8, *const datalove_rtdt::TyDesc,
+) -> RtStatus;
+
+type AssignIntOp = unsafe extern "C-unwind" fn(
+    *mut u8, *mut u8, *const datalove_rtdt::TyDesc, *const u8, *const datalove_rtdt::TyDesc,
+) -> RtStatus;
+
+/// Values around the edges of a limb, either sign, and several limbs long.
+///
+/// Datalit instantiates an int through an `i128`, which bounds the longest.
+const ASSIGN_VALUES: [&str; 12] = [
+    "0", "1", "-1", "4294967295", "-4294967295", "4294967296", "-4294967296",
+    "18446744073709551615", "-18446744073709551616", "79228162514264337593543950335",
+    "-170141183460469231731687303715884105727", "12345678901234567890123456789",
+];
+
+/// Instantiate every value in `ASSIGN_VALUES`, once each.
+fn assign_values<'db>(
+    db: &'db Database,
+    rt: &Runtime,
+    tydesc_table: &mut TyDescTable<'db>,
+) -> AnyResult<(Vec<*const u8>, *const datalove_rtdt::TyDesc)> {
+    let mut values = Vec::new();
+    let mut tydesc = std::ptr::null();
+    for expr in ASSIGN_VALUES {
+        let (value, value_tydesc) = instantiate_int(db, rt, tydesc_table, &fmt!(": int / {expr}"))?;
+        values.push(value);
+        tydesc = value_tydesc;
+    }
+    Ok((values, tydesc))
+}
+
+/// Clone an int into a new allocation, to update or compare.
+unsafe fn clone_int(rt: &Runtime, value: *const u8, tydesc: *const datalove_rtdt::TyDesc) -> *const u8 {
+    unsafe {
+        let copy = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc, 1);
+        let status = datalove_rt::c::dtlv_rti_clone_local(rt.handle(), value, tydesc, copy, tydesc);
+        assert_eq!(status, RtStatus::Ok);
+        copy
+    }
+}
+
+/// Check that each update in place agrees with its binary operator.
+///
+/// Every value is updated by every other through a run of operators, so that
+/// the in-place additions and subtractions see a place with a spare limb, as
+/// one left by an earlier addition has, and go through the carries, borrows
+/// and sign changes that it has room for.
+#[test]
+fn test_int_assign_agrees_with_binary_ops() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    let add: (BinaryIntOp, AssignIntOp) = (datalove_rt::c::dtlv_rti_int_add, datalove_rt::c::dtlv_rti_int_add_assign);
+    let sub: (BinaryIntOp, AssignIntOp) = (datalove_rt::c::dtlv_rti_int_sub, datalove_rt::c::dtlv_rti_int_sub_assign);
+    let mul: (BinaryIntOp, AssignIntOp) = (datalove_rt::c::dtlv_rti_int_mul, datalove_rt::c::dtlv_rti_int_mul_assign);
+    let div: (BinaryIntOp, AssignIntOp) = (datalove_rt::c::dtlv_rti_int_div_checked, datalove_rt::c::dtlv_rti_int_div_assign_checked);
+    let run = [add, add, sub, sub, sub, add, mul, add, sub, div, sub, sub, add];
+
+    let (values, tydesc) = assign_values(&db, &rt, &mut tydesc_table)?;
+    for (&a, a_expr) in values.iter().zip(ASSIGN_VALUES) {
+        for (&b, b_expr) in values.iter().zip(ASSIGN_VALUES) {
+            let place = unsafe { clone_int(&rt, a, tydesc) };
+            let mut expected = unsafe { clone_int(&rt, a, tydesc) };
+            for (step, (binary, assign)) in run.iter().enumerate() {
+                unsafe {
+                    let next = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc, 1);
+                    let binary_status = binary(rt.handle(), expected, tydesc, b, tydesc, next, tydesc);
+                    let assign_status = assign(rt.handle(), place as *mut u8, tydesc, b, tydesc);
+                    assert_eq!(binary_status, assign_status, "{a_expr} and {b_expr}, step {step}");
+                    if binary_status == RtStatus::Ok {
+                        cleanup_value(&rt, expected, tydesc);
+                        expected = next;
+                    } else {
+                        cleanup_value(&rt, next, tydesc);
+                    }
+                    let eq = datalove_rt::c::dtlv_rti_eq_local(
+                        std::ptr::null_mut(), place, tydesc, expected, tydesc);
+                    assert!(matches!(eq, RtEq::Equals), "{a_expr} and {b_expr}, step {step}");
+                }
+            }
+            unsafe {
+                cleanup_value(&rt, place, tydesc);
+                cleanup_value(&rt, expected, tydesc);
+            }
+        }
+    }
+    for value in values {
+        unsafe { cleanup_value(&rt, value, tydesc) };
+    }
+    Ok(())
+}
+
+/// Check that a place can be updated with itself.
+#[test]
+fn test_int_assign_from_itself() -> AnyResult<()> {
+    let db = Database::default();
+    let rt = Runtime::new();
+    let mut tydesc_table = TyDescTable::new(&db);
+
+    // Doubled twice, the second time with the spare limb the first left, then
+    // squared and cancelled.
+    let run: [(BinaryIntOp, AssignIntOp); 4] = [
+        (datalove_rt::c::dtlv_rti_int_add, datalove_rt::c::dtlv_rti_int_add_assign),
+        (datalove_rt::c::dtlv_rti_int_add, datalove_rt::c::dtlv_rti_int_add_assign),
+        (datalove_rt::c::dtlv_rti_int_mul, datalove_rt::c::dtlv_rti_int_mul_assign),
+        (datalove_rt::c::dtlv_rti_int_sub, datalove_rt::c::dtlv_rti_int_sub_assign),
+    ];
+    let (values, tydesc) = assign_values(&db, &rt, &mut tydesc_table)?;
+    for (&a, a_expr) in values.iter().zip(ASSIGN_VALUES) {
+        let place = unsafe { clone_int(&rt, a, tydesc) };
+        let mut expected = unsafe { clone_int(&rt, a, tydesc) };
+        for (step, (binary, assign)) in run.iter().enumerate() {
+            unsafe {
+                let next = datalove_rt::c::dtlv_rti_mem_alloc_local(rt.handle(), tydesc, 1);
+                let status = binary(rt.handle(), expected, tydesc, expected, tydesc, next, tydesc);
+                assert_eq!(status, RtStatus::Ok);
+                cleanup_value(&rt, expected, tydesc);
+                expected = next;
+                let status = assign(rt.handle(), place as *mut u8, tydesc, place, tydesc);
+                assert_eq!(status, RtStatus::Ok);
+                let eq = datalove_rt::c::dtlv_rti_eq_local(
+                    std::ptr::null_mut(), place, tydesc, expected, tydesc);
+                assert!(matches!(eq, RtEq::Equals), "{a_expr}, step {step}");
+            }
+        }
+        unsafe {
+            cleanup_value(&rt, place, tydesc);
+            cleanup_value(&rt, expected, tydesc);
+        }
+    }
+    for value in values {
+        unsafe { cleanup_value(&rt, value, tydesc) };
+    }
+    Ok(())
+}
+
+

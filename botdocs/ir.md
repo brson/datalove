@@ -425,6 +425,8 @@ ownership. "Borrows" means the operand survives; "consumes" means it does not.
 | `UnaryOp { dest, op, operand }` | `v0 = neg v1` | Borrows |
 | `BinOpChecked { dest, overflow, op, lhs, rhs }` | `v0, v1 = add.checked v2, v3` | Borrows both |
 | `UnaryOpChecked { dest, overflow, op, operand }` | `v0, v1 = neg.checked v2` | Borrows |
+| `OpAssign { place, op, rhs }` | `add.assign s0, v1` | Borrows `rhs`; updates the place |
+| `OpAssignChecked { overflow, place, op, rhs }` | `v0 = add.assign.checked s0, v1` | Borrows `rhs`; updates the place unless it fails |
 | `Widen { dest, src }` | `v0 = widen v1` | Borrows; produces an `Int` |
 | `WidenFixed { dest, src }` | `v0 = widen_fixed v1` | Borrows; both copy |
 | `Clone { dest, src }` | `v0 = clone v1` | Borrows; deep copy, the `@` operator |
@@ -433,6 +435,14 @@ ownership. "Borrows" means the operand survives; "consumes" means it does not.
 BitXor Shl Shr LogicAnd LogicOr LogicXor`; `UnaryOp` covers `Neg Not BitNot
 LogicNot`. The checked forms produce the result and a separate overflow flag,
 and the branch on that flag is what the source's `+!` and `+?` become.
+
+`OpAssign` and `OpAssignChecked` are what `set p op= v` lowers to: the place,
+a slot, parameter or reference as for `RefStore`, is updated where it is. An
+`int` place is updated by the runtime, which reuses its buffer when it has room
+(`dtlv_rti_int_add_assign` and its siblings), and `rhs` may be the place itself.
+A checked update that fails leaves the place as it was. Their types are `f32`,
+`f64`, `int` and the fixed-width integers; an erased place's arithmetic goes
+through a `BinOp` and a store, since the runtime picks it by descriptor.
 
 `WidenFixed` zero-extends an unsigned source and sign-extends a signed one.
 

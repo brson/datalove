@@ -86,6 +86,17 @@ pub fn map_operands_in_instruction(
             lhs: replace_operand(lhs),
             rhs: replace_operand(rhs),
         },
+        Instruction::OpAssign { place, op, rhs } => Instruction::OpAssign {
+            place: replace_operand(place),
+            op: *op,
+            rhs: replace_operand(rhs),
+        },
+        Instruction::OpAssignChecked { overflow, place, op, rhs } => Instruction::OpAssignChecked {
+            overflow: *overflow,
+            place: replace_operand(place),
+            op: *op,
+            rhs: replace_operand(rhs),
+        },
         Instruction::UnaryOpChecked {
             dest,
             overflow,

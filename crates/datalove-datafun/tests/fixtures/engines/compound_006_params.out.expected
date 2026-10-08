@@ -41,46 +41,42 @@ Analysis(
                     fn bump(p0):
                     block0:
                         v0 = const 1u32
-                        v1, v2 = add.checked p0, v0
-                        branch v2, block1, block2
+                        v1 = add.assign.checked p0, v0
+                        branch v1, block1, block2
                     block1:
-                        v3 = const "arithmetic overflow"
-                        v4 = error_from v3
-                        v5 = err v4
-                        return v5
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
                     block2:
-                        store p0, v1
-                        v6 = pack () {}
-                        v7 = ok v6
-                        return v7
+                        v5 = pack () {}
+                        v6 = ok v5
+                        return v6
                     
                     fn scale(p0, p1):
                     block0:
-                        v0 = mul p0, p1
-                        store p0, v0
-                        v1 = const true
+                        mul.assign p0, p1
+                        v0 = const true
                         drop p1
-                        return v1
+                        return v0
                     
                     fn bump_field(p0):
                     block0:
                         v0 = getfieldref p0.1
                         v1 = const 4f64
-                        v2 = div *v0, v1
-                        refstore *v0, v2
-                        v3 = const true
-                        return v3
+                        div.assign *v0, v1
+                        v2 = const true
+                        return v2
                     
                     fn init_then_add(p0):
                     block0:
                         v0 = const 40int
                         store.tracked p0, v0
                         v1 = const 2int
-                        v2 = add p0, v1
+                        add.assign p0, v1
                         drop v1
-                        store.tracked p0, v2
-                        v3 = const true
-                        return v3
+                        v2 = const true
+                        return v2
                 """,
             ),
             output: "(fragment executed)",

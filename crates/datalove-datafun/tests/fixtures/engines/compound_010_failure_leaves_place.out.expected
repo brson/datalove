@@ -1,0 +1,169 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 4294967295u32
+                        store.copy s0, v0
+                        v1 = call u0(s0)
+                        v2 = load.copy s0
+                        v3 = pack Tuple2 {v1, v2}
+                        debuglog v3
+                        drop v3
+                        v4 = const 41u32
+                        store.copy s1, v4
+                        v5 = call u0(s1)
+                        v6 = load.copy s1
+                        v7 = pack Tuple2 {v5, v6}
+                        debuglog v7
+                        drop v7
+                        v8 = const 4611686018427387904i64
+                        v9 = pack Struct0 {v8}
+                        store.copy s2, v9
+                        v10 = const 4i64
+                        v11 = call u1(s2, v10)
+                        v12 = load.copy s2
+                        v13 = pack Tuple2 {v11, v12}
+                        debuglog v13
+                        v14 = const -2i64
+                        v15 = call u1(s2, v14)
+                        v16 = load.copy s2
+                        v17 = pack Tuple2 {v15, v16}
+                        debuglog v17
+                        v18 = const 255u8
+                        store.copy s3, v18
+                        v19 = call u2(s3)
+                        v20 = load.copy s3
+                        v21 = pack Tuple2 {v19, v20}
+                        debuglog v21
+                        drop v21
+                        v22 = const 100000000000000000000int
+                        store.move.tracked s4, v22
+                        v23 = const 0int
+                        v24 = call u3(s4, v23)
+                        v25 = clone s4
+                        v26 = pack Tuple2 {v24, v25}
+                        debuglog v26
+                        drop v26
+                        v27 = const 8int
+                        v28 = call u3(s4, v27)
+                        v29 = load.move.tracked s4
+                        v30 = pack Tuple2 {v28, v29}
+                        debuglog v30
+                        drop v30
+                        v31 = const 5u64
+                        v32 = const 50u64
+                        v33 = list [v31, v32]
+                        store.move.tracked s5, v33
+                        v34 = const 0index
+                        v35 = call u4(s5, v34)
+                        v36 = clone s5
+                        v37 = pack Tuple2 {v35, v36}
+                        debuglog v37
+                        drop v37
+                        v38 = const 1index
+                        v39 = call u4(s5, v38)
+                        v40 = load.move.tracked s5
+                        v41 = pack Tuple2 {v39, v40}
+                        debuglog v41
+                        drop v41
+                        unit_end_drop.tracked s4
+                        unit_end_drop.tracked s5
+                        unit_end
+                    
+                    fn bump_u32(p0):
+                    block0:
+                        v0 = const 1u32
+                        v1 = add.assign.checked p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = pack () {}
+                        v6 = ok v5
+                        return v6
+                    
+                    fn scale_i64(p0, p1):
+                    block0:
+                        v0 = getfieldref p0.0
+                        v1 = mul.assign.checked *v0, p1
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = pack () {}
+                        v4 = some v3
+                        return v4
+                    
+                    fn bump_u8(p0):
+                    block0:
+                        v0 = const 1u8
+                        v1 = add.assign.checked p0, v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "arithmetic overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = pack () {}
+                        v6 = ok v5
+                        return v6
+                    
+                    fn halve(p0, p1):
+                    block0:
+                        v0 = div.assign.checked p0, p1
+                        branch v0, block1, block2
+                    block1:
+                        v1 = const "division by zero"
+                        v2 = error_from v1
+                        v3 = err v2
+                        drop p1
+                        return v3
+                    block2:
+                        v4 = pack () {}
+                        v5 = ok v4
+                        drop p1
+                        return v5
+                    
+                    fn step_all(p0, p1):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        return v1
+                    block2:
+                        v2 = listelementref p0[p1]
+                        v3 = const 10u64
+                        v4 = sub.assign.checked *v2, v3
+                        branch v4, block3, block4
+                    block3:
+                        v5 = none
+                        return v5
+                    block4:
+                        v6 = pack () {}
+                        v7 = some v6
+                        return v7
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(er error \"arithmetic overflow\", 4294967295)\n(ok (), 42)\n(none, {n = 4611686018427387904})\n(some (), {n = -9223372036854775808})\n(er error \"arithmetic overflow\", 255)\n(er error \"division by zero\", 100000000000000000000)\n(ok (), 12500000000000000000)\n(none, [5, 50])\n(some (), [5, 40])\n"),
+        ),
+    ],
+)

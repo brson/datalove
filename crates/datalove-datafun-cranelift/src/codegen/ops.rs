@@ -1,6 +1,6 @@
 //! Binary and unary operation instruction compilation.
 
-use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder};
+use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
@@ -570,6 +570,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder, dest, overflow_dest, op, lhs, rhs);
         }
 
+        let lhs_val = self.get_operand_value(builder, lhs)?;
+        let rhs_val = self.get_operand_value(builder, rhs)?;
+        let (result, overflow) = Self::checked_values(builder, op, dest_ty, lhs_val, rhs_val);
+        self.values.insert(dest, result);
+        self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// The result of checked `op` on fixed-width integers of type `ty`, and
+    /// whether it overflowed, in which case the result is not the answer.
+    fn checked_values(
+        builder: &mut FunctionBuilder,
+        op: BinOp,
+        ty: &IrType,
+        lhs_val: cl_ir::Value,
+        rhs_val: cl_ir::Value,
+    ) -> (cl_ir::Value, cl_ir::Value) {
+        let dest_ty = ty;
         // Only supported for fixed-width integers.
         let (is_signed, bits, cl_ty) = match dest_ty {
             IrType::I8 => (true, 8, cl_types::I8),
@@ -588,10 +606,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        let lhs_val = self.get_operand_value(builder, lhs)?;
-        let rhs_val = self.get_operand_value(builder, rhs)?;
-
-        let (result, overflow) = match op {
+        match op {
             BinOp::Add => {
                 let result = builder.ins().iadd(lhs_val, rhs_val);
                 let overflow = if is_signed {
@@ -701,11 +716,114 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             _ => {
                 panic!("{:?} as a checked operation; only Add, Sub, Mul and Div can overflow", op);
             }
-        };
+        }
+    }
 
-        self.values.insert(dest, result);
+    /// Compile `OpAssign`: update a place with an operator that can't fail.
+    ///
+    /// A float is read, computed and stored back. An `int` is updated by the
+    /// runtime, in its own buffer when it has room.
+    pub(super) fn compile_op_assign(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        place: &Operand,
+        op: BinOp,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let ty = self.get_operand_type(place)?;
+        if matches!(ty, IrType::Int) {
+            let runtime = self.runtime.ok_or_else(|| {
+                CraneliftError::Codegen("Int OpAssign requires runtime imports".into())
+            })?;
+            let func_id = match op {
+                BinOp::Add => runtime.int_add_assign,
+                BinOp::Sub => runtime.int_sub_assign,
+                BinOp::Mul => runtime.int_mul_assign,
+                _ => panic!("{:?} on an `int` place, which the typechecker refuses", op),
+            };
+            self.call_int_assign(builder, func_id, place, rhs)?;
+            return Ok(());
+        }
+
+        let place_ptr = self.get_operand_ptr(builder, place)?;
+        let old = self.get_operand_value(builder, place)?;
+        let rhs_val = self.get_operand_value(builder, rhs)?;
+        let new = match (op, &ty) {
+            (BinOp::Add, IrType::F32 | IrType::F64) => builder.ins().fadd(old, rhs_val),
+            (BinOp::Sub, IrType::F32 | IrType::F64) => builder.ins().fsub(old, rhs_val),
+            (BinOp::Mul, IrType::F32 | IrType::F64) => builder.ins().fmul(old, rhs_val),
+            (BinOp::Div, IrType::F32 | IrType::F64) => builder.ins().fdiv(old, rhs_val),
+            _ => panic!("{:?} on a {:?} place, which lowering doesn't emit as an update", op, ty),
+        };
+        builder.ins().store(MemFlagsData::new(), new, place_ptr, 0);
+        Ok(())
+    }
+
+    /// Compile `OpAssignChecked`: update a place with a checked operator, if
+    /// it succeeds.
+    ///
+    /// A fixed-width integer stores back the old value when the operator
+    /// overflowed, so the place is as it was without a branch. An `int`
+    /// divides through the runtime, which leaves it be on a zero divisor.
+    pub(super) fn compile_op_assign_checked(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        overflow_dest: ValueId,
+        place: &Operand,
+        op: BinOp,
+        rhs: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let ty = self.get_operand_type(place)?;
+        if matches!(ty, IrType::Int) {
+            assert_eq!(op, BinOp::Div, "checked {:?} on an `int` place, which the typechecker refuses", op);
+            let runtime = self.runtime.ok_or_else(|| {
+                CraneliftError::Codegen("Int OpAssignChecked requires runtime imports".into())
+            })?;
+            let status = self.call_int_assign(builder, runtime.int_div_assign, place, rhs)?;
+            // RtStatus::Ok is 1; anything else is the zero divisor.
+            let ok = builder.ins().iconst(cl_types::I8, 1);
+            let overflow = builder.ins().icmp(cl_ir::condcodes::IntCC::NotEqual, status, ok);
+            self.values.insert(overflow_dest, overflow);
+            return Ok(());
+        }
+
+        let place_ptr = self.get_operand_ptr(builder, place)?;
+        let old = self.get_operand_value(builder, place)?;
+        let rhs_val = self.get_operand_value(builder, rhs)?;
+        let (result, overflow) = Self::checked_values(builder, op, &ty, old, rhs_val);
+        let kept = builder.ins().select(overflow, old, result);
+        builder.ins().store(MemFlagsData::new(), kept, place_ptr, 0);
         self.values.insert(overflow_dest, overflow);
         Ok(())
+    }
+
+    /// Call one of the runtime's `int` updates on a place, giving its status.
+    fn call_int_assign(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        func_id: cranelift_module::FuncId,
+        place: &Operand,
+        rhs: &Operand,
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("Int OpAssign requires runtime handle".into())
+        })?;
+        let place_ptr = self.get_operand_ptr(builder, place)?;
+        let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
+
+        let int_tydesc_id = self.tydesc(&IrType::Int)?;
+        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
+        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+
+        let func_ref = self.module.declare_func_in_func(func_id, builder.func);
+        let call = builder.ins().call(func_ref, &[
+            rt_handle,
+            place_ptr,
+            int_tydesc_ptr,
+            rhs_ptr,
+            int_tydesc_ptr,
+        ]);
+        Ok(builder.inst_results(call)[0])
     }
 
     /// Compile checked bigint division through the runtime.

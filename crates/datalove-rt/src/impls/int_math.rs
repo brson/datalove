@@ -298,6 +298,189 @@ pub(crate) unsafe fn int_mul_impl(
     }
 }
 
+// ============================================================================
+// Updates in place
+// ============================================================================
+
+/// Add `b` into `a`: a = a + b, in `a`'s own buffer where it has room.
+///
+/// What `set a += b` runs. A sum takes a limb more than the longer operand, for
+/// the carry, and addition leaves that limb spare when it doesn't use it, so a
+/// running total mostly fits where it is: no allocation, nothing freed.
+pub(crate) unsafe fn int_add_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
+    unsafe {
+        let b = &*(b_in as *const rtdt::Int);
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b.data, b.size_and_sign)
+    }
+}
+
+/// Subtract `b` from `a`: a = a - b, in `a`'s own buffer where it has room.
+pub(crate) unsafe fn int_sub_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
+    unsafe {
+        let b = &*(b_in as *const rtdt::Int);
+        add_assign_signed(rt, &mut *(a_mut as *mut rtdt::Int), b.data, -b.size_and_sign)
+    }
+}
+
+/// Add the limbs at `b_data`, with signed size `b_size`, into `a`.
+///
+/// `b_data` may be `a`'s own buffer, for `set a += a`: each limb of `b` is read
+/// before the same limb of `a` is written, and nothing is read back after.
+/// So the limbs go through raw pointers, never slices that would overlap.
+unsafe fn add_assign_signed(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const u32, b_size: i32) -> RtStatus {
+    let a_len = a.size_and_sign.unsigned_abs() as usize;
+    let b_len = b_size.unsigned_abs() as usize;
+    if b_len == 0 {
+        return RtStatus::Ok;
+    }
+    // A zero holds no buffer to work in.
+    if a_len == 0 {
+        return unsafe { add_assign_elsewhere(rt, a, b_data, b_size) };
+    }
+    let a_neg = a.size_and_sign < 0;
+    let b_neg = b_size < 0;
+    let capacity = a.capacity.as_usize();
+
+    unsafe {
+        let a_data = a.data as *mut u32;
+        if a_neg == b_neg {
+            // The magnitudes add, keeping the sign.
+            let max_len = a_len.max(b_len);
+            if max_len >= MAX_LIMBS {
+                return RtStatus::Error;
+            }
+            if max_len + 1 > capacity {
+                return add_assign_elsewhere(rt, a, b_data, b_size);
+            }
+            let mut carry: u64 = 0;
+            for i in 0..max_len {
+                let a_limb = if i < a_len { *a_data.add(i) as u64 } else { 0 };
+                let b_limb = if i < b_len { *b_data.add(i) as u64 } else { 0 };
+                let sum = a_limb + b_limb + carry;
+                *a_data.add(i) = sum as u32;
+                carry = sum >> 32;
+            }
+            let mut len = max_len;
+            if carry > 0 {
+                *a_data.add(len) = carry as u32;
+                len += 1;
+            }
+            a.size_and_sign = if a_neg { -(len as i32) } else { len as i32 };
+            return RtStatus::Ok;
+        }
+
+        // The magnitudes subtract, the smaller from the larger, whose sign the
+        // result takes. Equal ones cancel.
+        let order = compare_magnitude(
+            std::slice::from_raw_parts(a_data, a_len),
+            std::slice::from_raw_parts(b_data, b_len),
+        );
+        if order == 0 {
+            set_zero(rt, a);
+            return RtStatus::Ok;
+        }
+        let (len, negative) = if order > 0 {
+            let mut borrow: i64 = 0;
+            for i in 0..a_len {
+                let b_limb = if i < b_len { *b_data.add(i) as i64 } else { 0 };
+                let diff = *a_data.add(i) as i64 - b_limb - borrow;
+                borrow = (diff < 0) as i64;
+                *a_data.add(i) = (diff + (borrow << 32)) as u32;
+            }
+            (a_len, a_neg)
+        } else {
+            if b_len > capacity {
+                return add_assign_elsewhere(rt, a, b_data, b_size);
+            }
+            let mut borrow: i64 = 0;
+            for i in 0..b_len {
+                let a_limb = if i < a_len { *a_data.add(i) as i64 } else { 0 };
+                let diff = *b_data.add(i) as i64 - a_limb - borrow;
+                borrow = (diff < 0) as i64;
+                *a_data.add(i) = (diff + (borrow << 32)) as u32;
+            }
+            (b_len, b_neg)
+        };
+        let mut len = len;
+        while *a_data.add(len - 1) == 0 {
+            len -= 1;
+        }
+        a.size_and_sign = if negative { -(len as i32) } else { len as i32 };
+        RtStatus::Ok
+    }
+}
+
+/// Add into `a` through a new buffer, for a sum that doesn't fit `a`'s.
+unsafe fn add_assign_elsewhere(rt: &mut RtLocal, a: &mut rtdt::Int, b_data: *const u32, b_size: i32) -> RtStatus {
+    let b = rtdt::Int {
+        data: b_data,
+        size_and_sign: b_size,
+        capacity: rtdt::Index::ZERO,
+    };
+    unsafe {
+        let mut sum = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+        let status = int_add_impl(
+            rt,
+            a as *const rtdt::Int as *const u8,
+            &b as *const rtdt::Int as *const u8,
+            sum.as_mut_ptr() as *mut u8,
+        );
+        if status != RtStatus::Ok {
+            return status;
+        }
+        replace(rt, a, sum.assume_init());
+    }
+    RtStatus::Ok
+}
+
+/// Multiply `a` by `b`: a = a * b.
+///
+/// A product is built apart from its operands, which it reads to the end, so
+/// this replaces `a`'s buffer rather than reusing it.
+pub(crate) unsafe fn int_mul_assign_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
+    unsafe {
+        let mut product = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+        let status = int_mul_impl(rt, a_mut, b_in, product.as_mut_ptr() as *mut u8);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        replace(rt, &mut *(a_mut as *mut rtdt::Int), product.assume_init());
+    }
+    RtStatus::Ok
+}
+
+/// Divide `a` by `b`: a = a / b, leaving `a` as it was if `b` is zero.
+pub(crate) unsafe fn int_div_assign_checked_impl(rt: &mut RtLocal, a_mut: *mut u8, b_in: *const u8) -> RtStatus {
+    unsafe {
+        let mut quotient = std::mem::MaybeUninit::<rtdt::Int>::uninit();
+        let status = int_div_checked_impl(rt, a_mut, b_in, quotient.as_mut_ptr() as *mut u8);
+        if status != RtStatus::Ok {
+            // The quotient is a zero, holding nothing to free.
+            return status;
+        }
+        replace(rt, &mut *(a_mut as *mut rtdt::Int), quotient.assume_init());
+    }
+    RtStatus::Ok
+}
+
+/// Free `a`'s buffer and give it `value` instead.
+unsafe fn replace(rt: &mut RtLocal, a: &mut rtdt::Int, value: rtdt::Int) {
+    if !a.data.is_null() && a.capacity > rtdt::Index::ZERO {
+        unsafe { rt.alloc.free(4, 4, a.capacity.0, a.data as *mut u8) };
+    }
+    *a = value;
+}
+
+/// Make `a` zero, as every other operation writes it: holding no buffer.
+unsafe fn set_zero(rt: &mut RtLocal, a: &mut rtdt::Int) {
+    let zero = rtdt::Int {
+        data: std::ptr::null(),
+        size_and_sign: 0,
+        capacity: rtdt::Index::ZERO,
+    };
+    unsafe { replace(rt, a, zero) };
+}
+
 /// Negate a bigint: -a.
 pub(crate) unsafe fn int_neg_impl(
     rt: &mut RtLocal,

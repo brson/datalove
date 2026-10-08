@@ -1,0 +1,59 @@
+----------
+scriptunit-fragment
+----------
+
+// A checked or optional update that fails leaves the place as it was, which a
+// caller sees through a `mut` parameter.
+fun bump_u32(mut x: u32): !()
+    set x +!= 1
+    ret ok ()
+end fun
+
+fun scale_i64(mut p: {n: i64}, k: i64): ?()
+    set p.n *?= k
+    ret some ()
+end fun
+
+fun bump_u8(mut x: u8): !()
+    set x +!= 1
+    ret ok ()
+end fun
+
+fun halve(mut x: int, d: int): !()
+    set x /!= d
+    ret ok ()
+end fun
+
+fun step_all(mut xs: [u64], i: index): ?()
+    set xs[i]? -?= 10
+    ret some ()
+end fun
+
+var a: u32 = 4294967295
+let ra = bump_u32(mut a)
+debuglog (ra, a)
+var b: u32 = 41
+let rb = bump_u32(mut b)
+debuglog (rb, b)
+
+var p = {n = (: i64 / 4611686018427387904)}
+let rp = scale_i64(mut p, 4)
+debuglog (rp, p)
+let rq = scale_i64(mut p, -2)
+debuglog (rq, p)
+
+var c: u8 = 255
+let rc = bump_u8(mut c)
+debuglog (rc, c)
+
+var big = 100000000000000000000
+let rd = halve(mut big, 0)
+debuglog (rd, big@)
+let re = halve(mut big, 8)
+debuglog (re, big)
+
+var xs: [u64] = [5, 50]
+let rx = step_all(mut xs, (: index / 0))
+debuglog (rx, xs@)
+let ry = step_all(mut xs, (: index / 1))
+debuglog (ry, xs)

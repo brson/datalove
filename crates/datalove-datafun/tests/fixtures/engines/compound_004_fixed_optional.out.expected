@@ -80,521 +80,477 @@ Analysis(
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_u16(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_u32(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_u64(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_i8(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_i16(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_i32(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_i64(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_index(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn ops_offset(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = copy p0
-                        store.copy s1, v4
-                        v5, v6 = sub.checked s1, p1
-                        branch v6, block3, block4
+                        v3 = copy p0
+                        store.copy s1, v3
+                        v4 = sub.assign.checked s1, p1
+                        branch v4, block3, block4
                     block3:
-                        v7 = none
-                        return v7
+                        v5 = none
+                        return v5
                     block4:
-                        store.copy s1, v5
-                        v8 = copy p1
-                        store.copy s2, v8
-                        v9, v10 = mul.checked s2, p1
-                        branch v10, block5, block6
+                        v6 = copy p1
+                        store.copy s2, v6
+                        v7 = mul.assign.checked s2, p1
+                        branch v7, block5, block6
                     block5:
+                        v8 = none
+                        return v8
+                    block6:
+                        v9 = copy p0
+                        store.copy s3, v9
+                        v10 = div.assign.checked s3, p1
+                        branch v10, block7, block8
+                    block7:
                         v11 = none
                         return v11
-                    block6:
-                        store.copy s2, v9
-                        v12 = copy p0
-                        store.copy s3, v12
-                        v13, v14 = div.checked s3, p1
-                        branch v14, block7, block8
-                    block7:
-                        v15 = none
-                        return v15
                     block8:
-                        store.copy s3, v13
-                        v16 = load.copy s0
-                        v17 = load.copy s1
-                        v18 = load.copy s2
-                        v19 = load.copy s3
-                        v20 = pack Tuple4 {v16, v17, v18, v19}
-                        v21 = some v20
-                        return v21
+                        v12 = load.copy s0
+                        v13 = load.copy s1
+                        v14 = load.copy s2
+                        v15 = load.copy s3
+                        v16 = pack Tuple4 {v12, v13, v14, v15}
+                        v17 = some v16
+                        return v17
                     
                     fn add_u8(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = add.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = add.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = load.copy s0
-                        v5 = some v4
-                        return v5
+                        v3 = load.copy s0
+                        v4 = some v3
+                        return v4
                     
                     fn sub_u16(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = sub.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = sub.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = load.copy s0
-                        v5 = some v4
-                        return v5
+                        v3 = load.copy s0
+                        v4 = some v3
+                        return v4
                     
                     fn mul_i32(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = mul.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = mul.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = load.copy s0
-                        v5 = some v4
-                        return v5
+                        v3 = load.copy s0
+                        v4 = some v3
+                        return v4
                     
                     fn div_i64(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1, v2 = div.checked s0, p1
-                        branch v2, block1, block2
+                        v1 = div.assign.checked s0, p1
+                        branch v1, block1, block2
                     block1:
-                        v3 = none
-                        return v3
+                        v2 = none
+                        return v2
                     block2:
-                        store.copy s0, v1
-                        v4 = load.copy s0
-                        v5 = some v4
-                        return v5
+                        v3 = load.copy s0
+                        v4 = some v3
+                        return v4
                 """,
             ),
             output: "(fragment executed)",

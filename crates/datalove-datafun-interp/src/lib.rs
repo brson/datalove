@@ -1067,6 +1067,18 @@ impl IrInterpreter {
                 frame.mark_param_live(*param);
                 Self::mark_source_dropped_local(value, frame);
             }
+            Instruction::OpAssign { place, op, rhs } => {
+                let place_val = self.read_operand(place, frame, frames);
+                let rhs_val = self.read_operand(rhs, frame, frames);
+                self.execute_op_assign(*op, &place_val, &rhs_val);
+            }
+            Instruction::OpAssignChecked { overflow, place, op, rhs } => {
+                let place_val = self.read_operand(place, frame, frames);
+                let rhs_val = self.read_operand(rhs, frame, frames);
+                let overflow_slot = frame.value_dest(*overflow);
+                self.execute_op_assign_checked(*op, &place_val, &rhs_val, overflow_slot);
+                frame.mark_value_live(*overflow);
+            }
             Instruction::RefStore { dest, value } => {
                 // Store through a reference operand. Used after inlining mut params.
                 // The destination is always precise (initialized), so always destroy old value.
@@ -1515,6 +1527,8 @@ impl IrInterpreter {
             | Instruction::UnaryOpChecked { .. }
             | Instruction::DataBorrow { .. }
             | Instruction::RefStore { .. }
+            | Instruction::OpAssign { .. }
+            | Instruction::OpAssignChecked { .. }
             | Instruction::DropViaRef { .. }
             | Instruction::Nop => {
                 unreachable!("{:?} is executed by execute_warm", instr)

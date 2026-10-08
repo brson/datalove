@@ -430,6 +430,9 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_int_mul(void* rt, const void* a_in, const dtlv_tydesc_t* a_tydesc, const void* b_in, const dtlv_tydesc_t* b_tydesc, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_int_div_checked(void* rt, const void* a_in, const dtlv_tydesc_t* a_tydesc, const void* b_in, const dtlv_tydesc_t* b_tydesc, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_int_neg(void* rt, const void* a_in, const dtlv_tydesc_t* a_tydesc, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
+        for name in ["dtlv_rti_int_add_assign", "dtlv_rti_int_sub_assign", "dtlv_rti_int_mul_assign", "dtlv_rti_int_div_assign_checked"] {
+            writeln!(out, "extern uint8_t {name}(void* rt, void* a_mut, const dtlv_tydesc_t* a_tydesc, const void* b_in, const dtlv_tydesc_t* b_tydesc);").unwrap();
+        }
         writeln!(out, "extern uint8_t dtlv_rti_int_from_fixed(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_int_from_limbs(void* rt, const uint32_t* limbs_ptr, uint32_t limb_count, uint8_t negative, void* result_out, const dtlv_tydesc_t* result_tydesc);").unwrap();
         writeln!(out, "extern int8_t dtlv_rti_cmp_local(void* rt, const void* a_ref, const dtlv_tydesc_t* a_tydesc, const void* b_ref, const dtlv_tydesc_t* b_tydesc);").unwrap();

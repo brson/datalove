@@ -90,6 +90,14 @@ pub struct RuntimeImports {
     pub int_div: FuncId,
     /// `dtlv_rti_int_neg(rt, a_in, a_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_neg: FuncId,
+    /// `dtlv_rti_int_add_assign(rt, a_mut, a_tydesc, b_in, b_tydesc) -> RtStatus`
+    pub int_add_assign: FuncId,
+    /// `dtlv_rti_int_sub_assign(rt, a_mut, a_tydesc, b_in, b_tydesc) -> RtStatus`
+    pub int_sub_assign: FuncId,
+    /// `dtlv_rti_int_mul_assign(rt, a_mut, a_tydesc, b_in, b_tydesc) -> RtStatus`
+    pub int_mul_assign: FuncId,
+    /// `dtlv_rti_int_div_assign_checked(rt, a_mut, a_tydesc, b_in, b_tydesc) -> RtStatus`
+    pub int_div_assign: FuncId,
     /// `dtlv_rti_int_from_fixed(rt, src_in, src_tydesc, result_out, result_tydesc) -> RtStatus`
     pub int_from_fixed: FuncId,
     /// `dtlv_rti_int_from_limbs(rt, limbs_ptr, limb_count, negative, result_out, result_tydesc) -> RtStatus`
@@ -550,6 +558,18 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_int_neg", Linkage::Import, &int_unary_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_neg: {}", e)))?;
 
+        // An update in place takes the same five words as a unary operation:
+        // (rt, a_mut, a_tydesc, b_in, b_tydesc) -> u8.
+        let declare_assign = |module: &mut M, name: &str| {
+            module
+                .declare_function(name, Linkage::Import, &int_unary_sig())
+                .map_err(|e| CraneliftError::Module(format!("declare {}: {}", name, e)))
+        };
+        let int_add_assign = declare_assign(module, "dtlv_rti_int_add_assign")?;
+        let int_sub_assign = declare_assign(module, "dtlv_rti_int_sub_assign")?;
+        let int_mul_assign = declare_assign(module, "dtlv_rti_int_mul_assign")?;
+        let int_div_assign = declare_assign(module, "dtlv_rti_int_div_assign_checked")?;
+
         let int_from_fixed = module
             .declare_function("dtlv_rti_int_from_fixed", Linkage::Import, &int_unary_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_int_from_fixed: {}", e)))?;
@@ -917,6 +937,10 @@ impl RuntimeImports {
             int_mul,
             int_div,
             int_neg,
+            int_add_assign,
+            int_sub_assign,
+            int_mul_assign,
+            int_div_assign,
             int_from_fixed,
             int_from_limbs,
             int_cmp,

@@ -438,6 +438,98 @@ pub unsafe extern "C-unwind" fn dtlv_rti_int_div_checked(
     }
 }
 
+/// Add a bigint into another in place: a = a + b.
+///
+/// `b` may be `a` itself.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_add_assign(
+    rt: LocalRtHandle,
+    a_mut: *mut u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!a_mut.is_null(), "a_mut is null");
+    debug_assert!(!b_in.is_null(), "b_in is null");
+    debug_assert_aligned(a_mut, a_tydesc, "int_add_assign:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_add_assign:b");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_add_assign_impl(rt_ref, a_mut, b_in)
+    }
+}
+
+/// Subtract a bigint from another in place: a = a - b.
+///
+/// `b` may be `a` itself.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_sub_assign(
+    rt: LocalRtHandle,
+    a_mut: *mut u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!a_mut.is_null(), "a_mut is null");
+    debug_assert!(!b_in.is_null(), "b_in is null");
+    debug_assert_aligned(a_mut, a_tydesc, "int_sub_assign:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_sub_assign:b");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_sub_assign_impl(rt_ref, a_mut, b_in)
+    }
+}
+
+/// Multiply a bigint by another in place: a = a * b.
+///
+/// `b` may be `a` itself.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_mul_assign(
+    rt: LocalRtHandle,
+    a_mut: *mut u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!a_mut.is_null(), "a_mut is null");
+    debug_assert!(!b_in.is_null(), "b_in is null");
+    debug_assert_aligned(a_mut, a_tydesc, "int_mul_assign:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_mul_assign:b");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_mul_assign_impl(rt_ref, a_mut, b_in)
+    }
+}
+
+/// Divide a bigint by another in place: a = a / b.
+///
+/// Returns RtStatus::Error, leaving `a` as it was, if b is zero.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_int_div_assign_checked(
+    rt: LocalRtHandle,
+    a_mut: *mut u8,
+    a_tydesc: *const rtdt::TyDesc,
+    b_in: *const u8,
+    b_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!a_mut.is_null(), "a_mut is null");
+    debug_assert!(!b_in.is_null(), "b_in is null");
+    debug_assert_aligned(a_mut, a_tydesc, "int_div_assign_checked:a");
+    debug_assert_aligned(b_in, b_tydesc, "int_div_assign_checked:b");
+
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::int_math::int_div_assign_checked_impl(rt_ref, a_mut, b_in)
+    }
+}
+
 /// Widen a fixed-width integer to Int (bigint).
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_int_from_fixed(

@@ -24,11 +24,9 @@ Analysis(
                         debuglog v5
                         v6 = const 1.5f64
                         store.copy s0, v6
-                        v7 = mul s0, s0
-                        store.copy s0, v7
-                        v8 = const 0.25f64
-                        v9 = add s0, v8
-                        store.copy s0, v9
+                        mul.assign s0, s0
+                        v7 = const 0.25f64
+                        add.assign s0, v7
                         debuglog s0
                         unit_end
                     
@@ -36,51 +34,43 @@ Analysis(
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1 = add s0, p1
-                        store.copy s0, v1
+                        add.assign s0, p1
+                        v1 = copy p0
+                        store.copy s1, v1
+                        sub.assign s1, p1
                         v2 = copy p0
-                        store.copy s1, v2
-                        v3 = sub s1, p1
-                        store.copy s1, v3
-                        v4 = copy p0
-                        store.copy s2, v4
-                        v5 = mul s2, p1
-                        store.copy s2, v5
-                        v6 = copy p0
-                        store.copy s3, v6
-                        v7 = div s3, p1
-                        store.copy s3, v7
-                        v8 = load.copy s0
-                        v9 = load.copy s1
-                        v10 = load.copy s2
-                        v11 = load.copy s3
-                        v12 = pack Tuple4 {v8, v9, v10, v11}
-                        return v12
+                        store.copy s2, v2
+                        mul.assign s2, p1
+                        v3 = copy p0
+                        store.copy s3, v3
+                        div.assign s3, p1
+                        v4 = load.copy s0
+                        v5 = load.copy s1
+                        v6 = load.copy s2
+                        v7 = load.copy s3
+                        v8 = pack Tuple4 {v4, v5, v6, v7}
+                        return v8
                     
                     fn f32_ops(p0, p1):
                     block0:
                         v0 = copy p0
                         store.copy s0, v0
-                        v1 = add s0, p1
-                        store.copy s0, v1
+                        add.assign s0, p1
+                        v1 = copy p0
+                        store.copy s1, v1
+                        sub.assign s1, p1
                         v2 = copy p0
-                        store.copy s1, v2
-                        v3 = sub s1, p1
-                        store.copy s1, v3
-                        v4 = copy p0
-                        store.copy s2, v4
-                        v5 = mul s2, p1
-                        store.copy s2, v5
-                        v6 = copy p0
-                        store.copy s3, v6
-                        v7 = div s3, p1
-                        store.copy s3, v7
-                        v8 = load.copy s0
-                        v9 = load.copy s1
-                        v10 = load.copy s2
-                        v11 = load.copy s3
-                        v12 = pack Tuple4 {v8, v9, v10, v11}
-                        return v12
+                        store.copy s2, v2
+                        mul.assign s2, p1
+                        v3 = copy p0
+                        store.copy s3, v3
+                        div.assign s3, p1
+                        v4 = load.copy s0
+                        v5 = load.copy s1
+                        v6 = load.copy s2
+                        v7 = load.copy s3
+                        v8 = pack Tuple4 {v4, v5, v6, v7}
+                        return v8
                 """,
             ),
             output: "(fragment executed)",

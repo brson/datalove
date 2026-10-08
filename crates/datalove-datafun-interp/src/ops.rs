@@ -754,6 +754,69 @@ impl IrInterpreter {
         }
     }
 
+    /// Update the value at `place` with `op` and `rhs`, which `set p op= v` runs.
+    ///
+    /// An `int` is updated by the runtime in its own buffer. A float operator
+    /// reads both operands before writing, so the place is its own destination.
+    pub(crate) fn execute_op_assign(&mut self, op: BinOp, place: &Value, rhs: &Value) {
+        use datalove_rt::c::RtStatus;
+
+        unsafe {
+            if (*place.tydesc).type_tag != rtdt::TyTag::Int {
+                self.execute_binop(op, place, rhs, Destination { ptr: place.ptr, tydesc: place.tydesc });
+                return;
+            }
+            let rt_handle = self.runtime.handle();
+            let status = match op {
+                BinOp::Add => datalove_rt::c::dtlv_rti_int_add_assign(
+                    rt_handle, place.ptr, place.tydesc, rhs.ptr, rhs.tydesc,
+                ),
+                BinOp::Sub => datalove_rt::c::dtlv_rti_int_sub_assign(
+                    rt_handle, place.ptr, place.tydesc, rhs.ptr, rhs.tydesc,
+                ),
+                BinOp::Mul => datalove_rt::c::dtlv_rti_int_mul_assign(
+                    rt_handle, place.ptr, place.tydesc, rhs.ptr, rhs.tydesc,
+                ),
+                _ => unreachable!("{:?} on an int place, which typecheck refuses", op),
+            };
+            if status != RtStatus::Ok {
+                unreachable!("unexpected runtime failure {:?}", status);
+            }
+        }
+    }
+
+    /// Update the value at `place` with checked `op` and `rhs`, if it succeeds.
+    ///
+    /// The result goes to scratch first, and to the place only if the operator
+    /// didn't fail: a failure leaves the place as it was.
+    pub(crate) fn execute_op_assign_checked(
+        &mut self,
+        op: BinOp,
+        place: &Value,
+        rhs: &Value,
+        overflow_dest: Destination,
+    ) {
+        use datalove_rt::c::RtStatus;
+
+        unsafe {
+            if (*place.tydesc).type_tag == rtdt::TyTag::Int {
+                assert_eq!(op, BinOp::Div, "checked {:?} on an int place, which typecheck refuses", op);
+                let status = datalove_rt::c::dtlv_rti_int_div_assign_checked(
+                    self.runtime.handle(), place.ptr, place.tydesc, rhs.ptr, rhs.tydesc,
+                );
+                *(overflow_dest.ptr as *mut bool) = status != RtStatus::Ok;
+                return;
+            }
+            let mut scratch = 0u64;
+            let scratch_dest = Destination { ptr: &mut scratch as *mut u64 as *mut u8, tydesc: place.tydesc };
+            self.execute_binop_checked(op, place, rhs, scratch_dest, overflow_dest);
+            if !*(overflow_dest.ptr as *const bool) {
+                let size = (*place.tydesc).size as usize;
+                std::ptr::copy_nonoverlapping(scratch_dest.ptr, place.ptr, size);
+            }
+        }
+    }
+
     /// Checked bigint division via the runtime.
     ///
     /// Division is the only checked bigint operation: the others cannot

@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 129;
+pub const EXPORTED: usize = 133;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 129;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0xa446857af5cd2846;
+pub const TABLE_SHAPE: u64 = 0x83f60747d28d2a36;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -46,6 +46,10 @@ pub struct RtiTable {
     pub dtlv_rti_int_mul: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_int_neg: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_int_div_checked: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_int_add_assign: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_int_sub_assign: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_int_mul_assign: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_int_div_assign_checked: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_int_from_fixed: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_int_from_limbs: unsafe extern "C-unwind" fn(LocalRtHandle, *const u32, u32, bool, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_any_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
