@@ -1,3 +1,10 @@
+## 2026/10/08 Saturating and wrapping math ops
+
+zig-style `+|`, `+%` operators.
+still might be nice in a scripting language, especially to avoid `?` and `!`.
+also the compound versions, `+|=`, `+%=`.
+
+
 ## 2026/10/07 Collection iteration
 
 Iterating maps and sets is expensive because it requires reindexing every item.
