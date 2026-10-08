@@ -42,6 +42,8 @@ whitespace, a _word_, or a _sigil_.
 A word is a run of alphanumeric characters and `_`,
 so keywords, names and the digits of numbers are all words;
 numeric literals are assembled from words and `.` sigils by the parser.
+Words take letters and digits of any script,
+though a name must be ASCII.
 
 A sigil is a punctuation token drawn from a fixed set,
 matched longest first,

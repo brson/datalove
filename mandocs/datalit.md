@@ -106,10 +106,10 @@ Comments are whitespace.
 
 Identifiers name struct fields, table columns,
 and atom, term and enum variants.
-An identifier is a run of letters, digits and `_`
+An identifier is a run of ASCII letters, digits and `_`
 not beginning with a digit.
-Letters are Unicode alphabetic characters, so `café` is an identifier,
-and digits are Unicode numeric characters, so `x²` is one too.
+Strings and comments may hold any text, but names are ASCII:
+`café` and `x²` are errors.
 
 These words start an expression:
 
@@ -149,9 +149,8 @@ comment        = line_comment | block_comment ;
 line_comment   = "//", { ? any char except newline ? } ;
 block_comment  = "/*", { block_comment | ? any char ? }, "*/" ;
 
-ident          = ident_start, { ident_start | ident_digit } ;
-ident_start    = ? any Unicode alphabetic character ? | "_" ;
-ident_digit    = ? any Unicode numeric character ? ;
+ident          = ident_start, { ident_start | digit } ;
+ident_start    = "a" .. "z" | "A" .. "Z" | "_" ;
 digit          = "0" .. "9" ;
 hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
 ```
@@ -1078,5 +1077,4 @@ Will be revisited.
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
 - Need to think harder about float total order and ergonomics.
-- Identifier char range is too wide - x² shouldn't be an ident.
 - Spelling the 1-tuple `(T)` without a trailing `,` seems inconsistent.
