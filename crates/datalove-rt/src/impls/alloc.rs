@@ -142,26 +142,32 @@ mod unix_impl {
                     self.alloc_small(total_size, align)
                 };
 
-                // Track allocation for leak detection. Ignore mode reports
-                // nothing, so it skips the bookkeeping entirely rather than
-                // paying a hash insert on every allocation.
+                // Ignore mode keeps no record, and pays only this test.
                 if !ptr.is_null() && self.leak_check_mode != LeakCheckMode::Ignore {
-                    let backtrace = if self.leak_check_mode == LeakCheckMode::PanicWithBacktrace {
-                        Some(std::backtrace::Backtrace::capture())
-                    } else {
-                        None
-                    };
-
-                    self.active_allocations.insert(ptr, AllocationInfo {
-                        size,
-                        align: align as u32,
-                        count: count as u32, // Truncate for tracking (leak detection only)
-                        backtrace,
-                    });
+                    self.track(ptr, size, align, count);
                 }
 
                 ptr
             }
+        }
+
+        /// Record an allocation for leak detection.
+        ///
+        /// Out of line, so that `alloc` stays small enough to inline.
+        #[cold]
+        fn track(&mut self, ptr: *mut u8, size: u32, align: usize, count: IndexRepr) {
+            let backtrace = if self.leak_check_mode == LeakCheckMode::PanicWithBacktrace {
+                Some(std::backtrace::Backtrace::capture())
+            } else {
+                None
+            };
+
+            self.active_allocations.insert(ptr, AllocationInfo {
+                size,
+                align: align as u32,
+                count: count as u32, // Truncate for tracking (leak detection only)
+                backtrace,
+            });
         }
 
         pub unsafe fn free(&mut self, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) {
@@ -175,11 +181,26 @@ mod unix_impl {
 
             let align = align.max(std::mem::align_of::<*mut u8>() as u32) as usize;
 
-            // Remove from tracking and validate. Nothing is recorded in
-            // Ignore mode, so there is nothing to remove or check.
-            if self.leak_check_mode == LeakCheckMode::Ignore {
-                // Nothing tracked.
-            } else if let Some(info) = self.active_allocations.remove(&ptr) {
+            // Nothing is recorded in Ignore mode, so there is nothing to
+            // remove or check.
+            if self.leak_check_mode != LeakCheckMode::Ignore {
+                self.untrack(ptr, size, align, count);
+            }
+
+            unsafe {
+                if total_size > MAX_SMALL_SIZE {
+                    self.free_large(ptr);
+                } else {
+                    self.free_small(total_size, align, ptr);
+                }
+            }
+        }
+
+        /// Remove an allocation from the leak record, checking `free`'s
+        /// arguments against what it was allocated with.
+        #[cold]
+        fn untrack(&mut self, ptr: *mut u8, size: u32, align: usize, count: IndexRepr) {
+            if let Some(info) = self.active_allocations.remove(&ptr) {
                 if info.size != size || info.align != align as u32 || info.count != count as u32 {
                     let msg = format!(
                         "free() parameter mismatch: ptr={:p}, expected (size={}, align={}, count={}), got (size={}, align={}, count={})",
@@ -200,16 +221,9 @@ mod unix_impl {
                     LeakCheckMode::Ignore => unreachable!(),
                 }
             }
-
-            unsafe {
-                if total_size > MAX_SMALL_SIZE {
-                    self.free_large(ptr);
-                } else {
-                    self.free_small(total_size, align, ptr);
-                }
-            }
         }
 
+        #[inline]
         unsafe fn alloc_small(&mut self, size: usize, align: usize) -> *mut u8 {
             let size_class_idx = size_to_class_index(size.max(align));
 
@@ -225,6 +239,7 @@ mod unix_impl {
             }
         }
 
+        #[inline]
         unsafe fn free_small(&mut self, size: usize, align: usize, ptr: *mut u8) {
             let size_class_idx = size_to_class_index(size.max(align));
             unsafe {
@@ -280,6 +295,7 @@ mod unix_impl {
             }
         }
 
+        #[cold]
         unsafe fn allocate_page_for_size_class(&mut self, size_class_idx: usize) {
             let block_size = SIZE_CLASSES[size_class_idx];
 
@@ -312,6 +328,7 @@ mod unix_impl {
             }
         }
 
+        #[inline]
         unsafe fn pop_free_list(&mut self, size_class_idx: usize) -> Option<*mut u8> {
             let head = self.free_lists[size_class_idx];
             if head.is_null() {
@@ -325,6 +342,7 @@ mod unix_impl {
             }
         }
 
+        #[inline]
         unsafe fn push_free_list(&mut self, size_class_idx: usize, ptr: *mut u8) {
             let node = ptr as *mut FreeListNode;
             unsafe {
@@ -405,13 +423,18 @@ mod unix_impl {
         }
     }
 
-    fn size_to_class_index(size: usize) -> usize {
-        for (i, &class_size) in SIZE_CLASSES.iter().enumerate() {
-            if size <= class_size {
-                return i;
-            }
-        }
-        panic!("size exceeds maximum small allocation size");
+    /// The size class serving `size` bytes: the smallest whose blocks hold it.
+    ///
+    /// The classes are the powers of two from 8, so this is the bit width of
+    /// `size - 1`, less three. It was a search of the classes in order, run on
+    /// every allocation and every free.
+    #[inline]
+    pub(super) fn size_to_class_index(size: usize) -> usize {
+        debug_assert!(size <= MAX_SMALL_SIZE, "size exceeds maximum small allocation size");
+        let size = size.max(SIZE_CLASSES[0]);
+        let index = (usize::BITS - (size - 1).leading_zeros()) as usize - 3;
+        debug_assert!(size <= SIZE_CLASSES[index] && (index == 0 || size > SIZE_CLASSES[index - 1]));
+        index
     }
 
     unsafe fn align_up_ptr(ptr: *mut u8, align: usize) -> *mut u8 {
@@ -772,6 +795,16 @@ mod tests {
 
             rt.free(65536, 16, 1, ptr);
             rt.shutdown();
+        }
+    }
+
+    /// Every small size gets the smallest class that holds it.
+    #[test]
+    #[cfg(not(target_arch = "wasm32"))]
+    fn test_size_class_index_is_smallest_fit() {
+        for size in 1..=MAX_SMALL_SIZE {
+            let expected = SIZE_CLASSES.iter().position(|&class| size <= class).unwrap();
+            assert_eq!(unix_impl::size_to_class_index(size), expected, "size {size}");
         }
     }
 
