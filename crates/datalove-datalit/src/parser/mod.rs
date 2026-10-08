@@ -15,9 +15,11 @@ use bct::{
     source_map,
     lexer,
     bracer,
+    parser_util,
 };
 
 use crate::ast;
+use datalove_diagnostic::DiagnosticBuilderExt;
 use state::Parser;
 
 pub use type_hint::{parse_type_hint, TypeHintStream};
@@ -32,6 +34,12 @@ pub fn parse<'db>(
     let source_text = chunk.text(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
+    let chunk_text = chunk.text(db).as_str(db);
+    for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
+        parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
+            .code("D043")
+            .emit_parse();
+    }
     parse_bracer(db, bracer, source_text)
 }
 

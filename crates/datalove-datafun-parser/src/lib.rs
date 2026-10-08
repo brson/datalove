@@ -13,6 +13,7 @@ use bct::{
     input::Source,
     module_graph::ModuleId,
     bracer::{Bracer, TreeToken},
+    parser_util,
     split,
     text::{Text, TextSpan},
     source_map,
@@ -52,6 +53,7 @@ pub fn parse_with_module_id<'db>(
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
+    emit_non_ascii_name_errors(db, bracer, source_text);
     parse_bracer(db, bracer, source_text, module_id)
 }
 
@@ -66,6 +68,7 @@ pub fn parse_expr<'db>(
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
+    emit_non_ascii_name_errors(db, bracer, source_text);
     // Expressions don't have module context.
     parse_bracer_expr(db, bracer, source_text)
 }
@@ -131,6 +134,21 @@ fn emit_bracer_errors<'db>(
                     .emit_parse();
             }
         }
+    }
+}
+
+/// Emit parse diagnostics for names written outside ASCII.
+fn emit_non_ascii_name_errors<'db>(
+    db: &'db dyn Db,
+    bracer: Bracer<'db>,
+    source_text: Text<'db>,
+) {
+    let chunk_lex = bracer.chunk(db);
+    let chunk_text = chunk_lex.chunk(db).text(db).as_str(db);
+    for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
+        parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
+            .code("P075")
+            .emit_parse();
     }
 }
 

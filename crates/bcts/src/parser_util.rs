@@ -4,8 +4,9 @@
 
 use crate::{
     bracer::{BracerIter, TreeToken},
-    lexer::{Sigil, TokenKind},
-    text::{InternedText, TextSpan},
+    diagnostic::DiagnosticBuilder,
+    lexer::{Sigil, Token, TokenKind},
+    text::{InternedText, Text, TextSpan},
 };
 
 use rmx::std::ops::Range;
@@ -525,12 +526,47 @@ fn number_word<'a>(token: &TreeToken<'_>, chunk_text: &'a str) -> Option<&'a str
     is_number_word(word).then_some(word)
 }
 
-/// Whether a word is an identifier: one that begins with a letter or `_`.
+/// Whether a word is an identifier: one that does not begin a number.
 ///
-/// A word is letters, digits and underscores, so this is the same as saying
-/// it does not begin with a digit, of any script.
+/// A name is ASCII letters, digits and `_`, beginning with a letter or `_`.
+/// The lexer reads letters and digits of any script into a word, though, so
+/// that `café` is one word rather than `caf` and a stray character. Such a
+/// word is still taken for the name it was meant to be, and
+/// [`non_ascii_names`] reports it once rather than every parser that meets
+/// it refusing it in its own words.
 pub fn is_identifier(word: &str) -> bool {
-    word.starts_with(|c: char| c.is_alphabetic() || c == '_')
+    !is_number_word(word)
+}
+
+/// The spans of the words that are names written outside ASCII.
+///
+/// A number is left out, since anything after its digits is a suffix and the
+/// number reports a suffix it does not know.
+pub fn non_ascii_names<'a>(
+    tokens: &'a [Token],
+    chunk_text: &'a str,
+) -> impl Iterator<Item = Range<usize>> + 'a {
+    tokens.iter().filter_map(move |token| {
+        let word = token.word_str(chunk_text)?;
+        (!word.is_ascii() && !is_number_word(word)).then(|| token.span())
+    })
+}
+
+/// The diagnostic for a name written outside ASCII.
+///
+/// Built here so that both languages say the same thing, as with
+/// [`crate::split::stray_delimiter_error`].
+pub fn non_ascii_name_error<'db>(
+    db: &'db dyn crate::Db,
+    text: Text<'db>,
+    span: Range<usize>,
+    chunk_text: &str,
+) -> DiagnosticBuilder<'db> {
+    let word = &chunk_text[span.C()];
+    let ch = word.chars().find(|c| !c.is_ascii()).X();
+    DiagnosticBuilder::error(db, &fmt!("`{word}` is not an ASCII name"))
+        .primary_label(TextSpan::new(text, span), &fmt!("`{ch}` is not ASCII"))
+        .note("a name is ASCII letters, digits and `_`, and does not begin with a digit")
 }
 
 /// Whether a word is written as a hex literal.
@@ -829,5 +865,40 @@ mod tests {
         assert_eq!(glued("a- b"), (true, false, false));
         // A comment between two tokens separates them as a space would.
         assert_eq!(glued("a/*c*/-b"), (false, true, false));
+    }
+
+    #[test]
+    fn test_non_ascii_names() {
+        let ref db = crate::Database::default();
+        let names = |text: &str| -> Vec<String> {
+            let source = Source::new(db, text.S());
+            let chunk = basic_source_map(db, source);
+            let chunk_text = chunk.text(db).as_str(db);
+            let lexed = lex_chunk(db, chunk);
+            non_ascii_names(lexed.tokens(db), chunk_text)
+                .map(|span| chunk_text[span].S())
+                .collect()
+        };
+
+        assert!(names("let a_1 = b").is_empty());
+        // A whole word, wherever the character outside ASCII is in it.
+        assert_eq!(names("let caf\u{e9} = \u{e9}t\u{e9}"), ["caf\u{e9}", "\u{e9}t\u{e9}"]);
+        // A word that begins with a digit of another script, or a superscript,
+        // is no number, so it is a name.
+        assert_eq!(names("\u{663} \u{b2}x"), ["\u{663}", "\u{b2}x"]);
+        // A number reports its own suffix.
+        assert!(names("1\u{e9}").is_empty());
+        // Strings and comments are anything.
+        assert!(names("\"caf\u{e9}\" // caf\u{e9}").is_empty());
+    }
+
+    #[test]
+    fn test_is_identifier() {
+        assert!(is_identifier("a"));
+        assert!(is_identifier("_1"));
+        assert!(!is_identifier("1a"));
+        // Taken for the name it was meant to be, and reported apart.
+        assert!(is_identifier("caf\u{e9}"));
+        assert!(is_identifier("\u{663}"));
     }
 }

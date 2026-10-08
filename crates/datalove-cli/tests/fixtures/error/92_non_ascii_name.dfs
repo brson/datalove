@@ -1,0 +1,3 @@
+// A name is ASCII; strings and comments are anything — café.
+let café = "café"
+let output = café

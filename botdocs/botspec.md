@@ -5,6 +5,7 @@
 - [1. Introduction](#user-content-1-introduction)
 - [2. Lexical Conventions](#user-content-2-lexical-conventions)
   - [2.4 Spacing](#user-content-24-spacing)
+  - [2.5 Names](#user-content-25-names)
 - [3. Types](#user-content-3-types)
 - [4. Type Hints](#user-content-4-type-hints)
 - [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
@@ -217,6 +218,29 @@ subtracts.
 This is what settles how many elements a tensor literal's innermost axis has,
 that being the one place in the language where members are separated by nothing
 at all (Section 3.2).
+
+### 2.5 Names
+
+A name is ASCII letters, digits and `_`, and does not begin with a digit:
+`[A-Za-z_][A-Za-z0-9_]*`. Strings and comments may hold any text.
+
+A name written with a letter or digit outside ASCII is refused (P075 in
+Datafun, D043 in Datalit), once for each place it is written, and the parse
+goes on as though it were a name. Letters and digits of any script are read
+into one word, so the whole of `café` is reported rather than `caf` followed by
+a stray character. A word that begins with an ASCII digit is a number, whose
+letters are a suffix and are reported as one (Section 2.4).
+
+```datalove
+let café = 1       // error: `café` is not an ASCII name
+let x = "café"     // a string may hold anything
+```
+
+Names are ASCII because they leave the language: a native rider defines its
+functions under symbols made from them (Section 9.5), and the AOT backends
+write them into generated code. Text that looks the same can also be different
+code points -- `é` precomposed or as `e` and a combining accent, a Latin `a` or
+a Cyrillic one -- and two such names would be two names.
 
 ## 3. Types
 

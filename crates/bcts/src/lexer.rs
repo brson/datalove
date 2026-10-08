@@ -879,7 +879,9 @@ fn test_lex_chunk() {
 /// Smart quotes and an em-dash pasted for a minus are the ones a person
 /// actually produces, and the error path is what a live-reloading editor
 /// relies on to report rather than die. Letters are not among them:
-/// `is_word_start` is `is_alphanumeric`, so `café` is a word.
+/// `is_word_start` is `is_alphanumeric`, so `café` is a word. A name is
+/// ASCII, but that is for the parser to report, which can say so of the whole
+/// name; see `parser_util::non_ascii_names`.
 #[test]
 fn test_lex_multibyte_error() {
     fn dbglex(s: &str) -> String {
