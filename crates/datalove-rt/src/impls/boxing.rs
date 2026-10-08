@@ -247,20 +247,18 @@ unsafe fn convert(
             TyTag::Tuple => {
                 let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
                 let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
-                let src_layout = rtdt::layout::compute_tuple_layout(src_ty);
-                let dst_layout = rtdt::layout::compute_tuple_layout(dst_ty);
-                if src_layout.field_offsets.len() != dst_layout.field_offsets.len() {
+                if src_ty.tuple_info().num_fields() != dst_ty.tuple_info().num_fields() {
                     return RtStatus::Error;
                 }
-                let src_fields: Vec<_> = src_ty.iter_tuple_fields().collect();
-                let dst_fields: Vec<_> = dst_ty.iter_tuple_fields().collect();
-                for i in 0..src_layout.field_offsets.len() {
+                // The descriptors carry each field's offset, so neither side's
+                // layout is worked out again, nor its fields gathered up.
+                for (src_field, dst_field) in src_ty.iter_tuple_fields().zip(dst_ty.iter_tuple_fields()) {
                     let status = convert(
                         rt,
-                        src_in.add(src_layout.field_offsets[i] as usize),
-                        src_fields[i].tydesc().as_ptr(),
-                        dst_out.add(dst_layout.field_offsets[i] as usize),
-                        dst_fields[i].tydesc().as_ptr(),
+                        src_in.add(src_field.offset() as usize),
+                        src_field.tydesc().as_ptr(),
+                        dst_out.add(dst_field.offset() as usize),
+                        dst_field.tydesc().as_ptr(),
                         dir,
                     );
                     if status != RtStatus::Ok {
@@ -272,20 +270,18 @@ unsafe fn convert(
             TyTag::Struct => {
                 let src_ty = rtdt::TyDescRef::from_ptr(src_tydesc);
                 let dst_ty = rtdt::TyDescRef::from_ptr(dst_tydesc);
-                let src_layout = rtdt::layout::compute_struct_layout(src_ty);
-                let dst_layout = rtdt::layout::compute_struct_layout(dst_ty);
-                if src_layout.field_offsets.len() != dst_layout.field_offsets.len() {
+                if src_ty.struct_info().num_fields() != dst_ty.struct_info().num_fields() {
                     return RtStatus::Error;
                 }
-                let src_fields: Vec<_> = src_ty.iter_struct_fields().collect();
-                let dst_fields: Vec<_> = dst_ty.iter_struct_fields().collect();
-                for i in 0..src_layout.field_offsets.len() {
+                // The descriptors carry each field's offset, so neither side's
+                // layout is worked out again, nor its fields gathered up.
+                for (src_field, dst_field) in src_ty.iter_struct_fields().zip(dst_ty.iter_struct_fields()) {
                     let status = convert(
                         rt,
-                        src_in.add(src_layout.field_offsets[i] as usize),
-                        src_fields[i].tydesc().as_ptr(),
-                        dst_out.add(dst_layout.field_offsets[i] as usize),
-                        dst_fields[i].tydesc().as_ptr(),
+                        src_in.add(src_field.offset() as usize),
+                        src_field.tydesc().as_ptr(),
+                        dst_out.add(dst_field.offset() as usize),
+                        dst_field.tydesc().as_ptr(),
                         dir,
                     );
                     if status != RtStatus::Ok {
@@ -390,18 +386,14 @@ pub unsafe fn needs_erasure(
                 })
             }
             TyTag::Tuple => {
-                let src_fields: Vec<_> = src_ty.iter_tuple_fields().collect();
-                let dst_fields: Vec<_> = dst_ty.iter_tuple_fields().collect();
-                src_fields.len() != dst_fields.len()
-                    || src_fields.iter().zip(dst_fields.iter()).any(|(s, d)| {
+                src_ty.tuple_info().num_fields() != dst_ty.tuple_info().num_fields()
+                    || src_ty.iter_tuple_fields().zip(dst_ty.iter_tuple_fields()).any(|(s, d)| {
                         needs_erasure(s.tydesc().as_ptr(), d.tydesc().as_ptr())
                     })
             }
             TyTag::Struct => {
-                let src_fields: Vec<_> = src_ty.iter_struct_fields().collect();
-                let dst_fields: Vec<_> = dst_ty.iter_struct_fields().collect();
-                src_fields.len() != dst_fields.len()
-                    || src_fields.iter().zip(dst_fields.iter()).any(|(s, d)| {
+                src_ty.struct_info().num_fields() != dst_ty.struct_info().num_fields()
+                    || src_ty.iter_struct_fields().zip(dst_ty.iter_struct_fields()).any(|(s, d)| {
                         needs_erasure(s.tydesc().as_ptr(), d.tydesc().as_ptr())
                     })
             }
