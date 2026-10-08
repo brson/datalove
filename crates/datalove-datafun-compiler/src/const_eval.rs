@@ -7,10 +7,8 @@
 //! straight off when it is a literal or names a const already evaluated, and
 //! the unit is run by the CTFE evaluator. Both pipelines do it through here.
 
-use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fmt;
-use std::rc::Rc;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, ExprKey, Statement, StmtFun};
@@ -30,7 +28,7 @@ pub struct ConstEvalEnv<'a, 'db> {
     pub db: &'db dyn salsa::Database,
     pub expr_types: &'db ExprTypes<'db>,
     pub call_targets: &'db CallTargets<'db>,
-    pub evaluator: &'a Rc<RefCell<dyn CtfeEvaluator>>,
+    pub evaluator: &'a mut dyn CtfeEvaluator,
     /// The functions a const may call, lowered already.
     pub lowered: &'a [Arc<IrCodeUnit>],
     pub func_name_to_id: &'a HashMap<String, FuncId>,
@@ -129,7 +127,7 @@ pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> Result<IrTyp
 /// evaluated in each copy. `func_return_type` is what an early-return
 /// operator in it is checked against.
 pub fn evaluate_const<'db>(
-    env: &ConstEvalEnv<'_, 'db>,
+    env: &mut ConstEvalEnv<'_, 'db>,
     init: ExprFun<'db>,
     ty: &IrType,
     resolved: &HashMap<String, (IrType, Arc<ConstValue>)>,
@@ -157,7 +155,7 @@ pub fn evaluate_const<'db>(
                     return Err(ConstError::Cycle(missing));
                 }
             }
-            evaluate_const_unit(&unit, ty, env.evaluator)
+            evaluate_const_unit(&unit, ty, &mut *env.evaluator)
                 .map(Some)
                 .map_err(ConstError::Ctfe)
         }
@@ -173,7 +171,7 @@ pub fn evaluate_const<'db>(
 /// instantiation gives its parameters values in `scope` instead and defers
 /// nothing.
 pub fn evaluate_body_consts<'db>(
-    env: &ConstEvalEnv<'_, 'db>,
+    env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &StmtFun<'db>,
     mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     mut deferred: BTreeSet<String>,
@@ -239,7 +237,7 @@ fn first_uncallable_target(unit: &IrCodeUnit, callable: &ModuleFunctionRegistry)
 /// Returns the values under their local names, which is how the copy's
 /// `const_values` records them, and the errors, each naming the function.
 pub fn evaluate_instantiation_consts<'db>(
-    env: &ConstEvalEnv<'_, 'db>,
+    env: &mut ConstEvalEnv<'_, 'db>,
     func_stmt: &StmtFun<'db>,
     mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     comptime_param_indices: &[usize],

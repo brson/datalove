@@ -25,7 +25,6 @@
 use rmx::prelude::*;
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
-use std::rc::Rc;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{ExprFun, Statement};
@@ -137,7 +136,7 @@ impl<'db> CompiledModules<'db> {
     pub fn script_compiler(
         &self,
         db: &'db dyn salsa::Database,
-        ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+        ctfe_evaluator: Box<dyn CtfeEvaluator>,
     ) -> Option<ScriptCompiler<'db>> {
         if self.has_errors() {
             return None;
@@ -158,7 +157,7 @@ impl<'db> CompiledModules<'db> {
             last_script: None,
             unit_records: Vec::new(),
             last_source: None,
-            ctfe_evaluator,
+            ctfe_evaluator: RefCell::new(ctfe_evaluator),
             skip_const_inlining: false,
             skip_specialization: false,
             shared_context: self.shared.clone(),
@@ -184,8 +183,7 @@ impl<'db> CompiledModules<'db> {
             Some(natives) => evaluator.with_native_resolver(natives.clone()),
             None => evaluator,
         };
-        let evaluator = Rc::new(RefCell::new(evaluator));
-        self.script_compiler(db, evaluator)
+        self.script_compiler(db, Box::new(evaluator))
     }
 
     /// Create a script compiler that takes up a session an edit interrupted.
@@ -282,7 +280,9 @@ pub struct ScriptCompiler<'db> {
     unit_records: Vec<UnitLowerRecord>,
     last_source: Option<bct::input::Source>,
     /// CTFE evaluator for const expression evaluation.
-    ctfe_evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    ///
+    /// In a `RefCell` because the phases that evaluate consts take `&self`.
+    ctfe_evaluator: RefCell<Box<dyn CtfeEvaluator>>,
     /// When true, const bindings in functions are lowered as let bindings.
     skip_const_inlining: bool,
     /// When true, comptime calls are left naming the original function.
@@ -1358,14 +1358,15 @@ impl<'db> ScriptCompiler<'db> {
             })
             .collect();
 
-        let env = self.const_env(expr_types, call_targets, lowered_funcs);
+        let mut evaluator = self.ctfe_evaluator.borrow_mut();
+        let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
         for binding in &const_graph.bindings {
             let expr = const_exprs[binding.stmt_id.0 as usize];
 
             // A script unit returns `!()`, so a script-level const may use `!`;
             // if it does return early, evaluation reports it.
             let value = evaluate_const(
-                &env, expr, &binding.ir_type, &resolved_consts_map,
+                &mut env, expr, &binding.ir_type, &resolved_consts_map,
                 Some(IrType::Result(Box::new(IrType::Unit))), &Default::default(),
             ).map_err(|e| match e {
                 ConstError::Lowering(e) => ConstEvalError::LoweringFailed {
@@ -1393,7 +1394,8 @@ impl<'db> ScriptCompiler<'db> {
         script_level_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         lowered_funcs: &LoweredFunctions,
     ) -> ScriptFunctionConstsResult {
-        let env = self.const_env(expr_types, call_targets, lowered_funcs);
+        let mut evaluator = self.ctfe_evaluator.borrow_mut();
+        let mut env = self.const_env(&mut **evaluator, expr_types, call_targets, lowered_funcs);
         let mut consts = HashMap::new();
         let mut errors = Vec::new();
 
@@ -1407,7 +1409,7 @@ impl<'db> ScriptCompiler<'db> {
                 .map(|p| p.name.text(self.db).to_string())
                 .collect();
             let (body_consts, body_errors) =
-                evaluate_body_consts(&env, func_stmt, script_level_consts.clone(), const_params);
+                evaluate_body_consts(&mut env, func_stmt, script_level_consts.clone(), const_params);
             for (name, ir_type, value) in body_consts {
                 // Stored under a qualified name: func_name::const_name.
                 consts.insert(format!("{}::{}", func_name, name), (ir_type, value));
@@ -1693,23 +1695,25 @@ impl<'db> ScriptCompiler<'db> {
         }) else {
             return (HashMap::new(), Vec::new());
         };
-        let env = ConstEvalEnv {
+        let mut evaluator = self.ctfe_evaluator.borrow_mut();
+        let mut env = ConstEvalEnv {
             db: self.db,
             expr_types,
             call_targets,
-            evaluator: &self.ctfe_evaluator,
+            evaluator: &mut **evaluator,
             lowered,
             func_name_to_id,
             func_id_map: self.shared_context.func_id_map,
             callable: None,
             data_files: self.env.data(self.db),
         };
-        evaluate_instantiation_consts(&env, func_stmt, scope, comptime_param_indices, values)
+        evaluate_instantiation_consts(&mut env, func_stmt, scope, comptime_param_indices, values)
     }
 
     /// What this unit's consts are evaluated against.
     fn const_env<'a>(
         &'a self,
+        evaluator: &'a mut dyn CtfeEvaluator,
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         lowered_funcs: &'a LoweredFunctions,
@@ -1718,7 +1722,7 @@ impl<'db> ScriptCompiler<'db> {
             db: self.db,
             expr_types,
             call_targets,
-            evaluator: &self.ctfe_evaluator,
+            evaluator,
             lowered: &lowered_funcs.functions,
             func_name_to_id: &lowered_funcs.func_name_to_id,
             func_id_map: self.shared_context.func_id_map,

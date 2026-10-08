@@ -9,8 +9,6 @@ use rmx::std::collections::{BTreeMap, HashMap};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{ParsedStatements, Statement};
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::sync::Arc;
 use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, SharedConst, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
@@ -1379,7 +1377,7 @@ pub fn evaluate_all_module_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
@@ -1415,8 +1413,8 @@ pub fn evaluate_all_module_consts<'db>(
         // Evaluate function-level consts. A function's const parameters have a
         // value per instantiation rather than one, so the consts naming them
         // wait for the copies.
-        let env = ConstEvalEnv {
-            db, expr_types, call_targets, evaluator: &evaluator, lowered: funcs,
+        let mut env = ConstEvalEnv {
+            db, expr_types, call_targets, evaluator, lowered: funcs,
             func_name_to_id: &func_map, func_id_map, callable: Some(callable),
             data_files: single_typecheck.data_files(db),
         };
@@ -1428,7 +1426,7 @@ pub fn evaluate_all_module_consts<'db>(
                     .map(|p| p.name.text(db).S())
                     .collect();
                 let (body_consts, body_errors) =
-                    evaluate_body_consts(&env, func_stmt, module_level.clone(), const_params);
+                    evaluate_body_consts(&mut env, func_stmt, module_level.clone(), const_params);
                 for (name, ir_type, value) in body_consts {
                     // Stored under a qualified name: func_name::const_name.
                     consts.push((format!("{}::{}", func_name, name), ir_type, SharedConst(value)));
@@ -1505,7 +1503,7 @@ fn evaluate_module_level_consts<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
@@ -1526,7 +1524,7 @@ fn evaluate_module_level_consts<'db>(
             None => (&[], HashMap::new()),
         };
 
-        let env = ConstEvalEnv {
+        let mut env = ConstEvalEnv {
             db, expr_types, call_targets, evaluator, lowered: funcs,
             func_name_to_id: &func_map, func_id_map, callable: Some(callable),
             data_files: single_typecheck.data_files(db),
@@ -1539,7 +1537,7 @@ fn evaluate_module_level_consts<'db>(
                 // const parameters for it to name.
                 let name = const_stmt.name.text(db).S();
                 let evaluated = const_type(&env, const_stmt.value).and_then(|ty| {
-                    evaluate_const(&env, const_stmt.value, &ty, &consts, None, &Default::default())
+                    evaluate_const(&mut env, const_stmt.value, &ty, &consts, None, &Default::default())
                         .map(|value| (ty, value.expect("nothing is deferred at module level")))
                 });
                 match evaluated {
@@ -1584,7 +1582,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
-    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     skip_const_inlining: bool,
     skip_specialization: bool,
 ) -> ModuleGraphLoweringResult<'db> {
@@ -1642,9 +1640,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
         let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
-        evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
+        evaluator.set_module_registry(Arc::clone(module_registry));
         evaluate_module_level_consts(
-            db_salsa, parsed_graph, typecheck_result, &evaluator, &lowered_functions, module_registry,
+            db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions, module_registry,
             func_ids, &mut module_const_errors,
         )
     };
@@ -1695,10 +1693,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
         let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
-        evaluator.borrow_mut().set_module_registry(Arc::clone(module_registry));
+        evaluator.set_module_registry(Arc::clone(module_registry));
 
         evaluate_all_module_consts(
-            db_salsa, parsed_graph, typecheck_result, evaluator.clone(), &lowered_functions,
+            db_salsa, parsed_graph, typecheck_result, evaluator, &lowered_functions,
             module_registry, func_ids, &module_consts,
         )
     };
@@ -1715,7 +1713,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         (lowered_modules, Vec::new())
     } else {
         specialize_module_graph(
-            db_salsa, parsed_graph, typecheck_result, &evaluator, func_id_map,
+            db_salsa, parsed_graph, typecheck_result, evaluator, func_id_map,
             &module_consts, lowered_modules,
         )
     };
@@ -1854,7 +1852,7 @@ fn specialize_module_graph<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     func_id_map: FuncIdMap<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
     modules: LoweredModules<'db>,
@@ -1866,7 +1864,7 @@ fn specialize_module_graph<'db>(
     // What the instantiations' consts can call. The same memo phase 5b asked
     // for, when it ran, and given to the evaluator in case it did not.
     let callable = ctfe_module_registry(db, parsed_graph, modules.clone(), func_id_map);
-    evaluator.borrow_mut().set_module_registry(Arc::clone(callable));
+    evaluator.set_module_registry(Arc::clone(callable));
 
     let (lowered_functions, errors) = specialize_comptime_functions(
         db, parsed_graph, typecheck_result, evaluator, callable, func_id_lookup(db, func_id_map),
@@ -1897,7 +1895,7 @@ fn specialize_comptime_functions<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
@@ -2000,7 +1998,7 @@ fn specialize_comptime_functions<'db>(
                         typecheck_module_results.get(module_id),
                     ) {
                         let func_name_to_id = module_funcs.func_name_to_id.iter().cloned().collect();
-                        let env = ConstEvalEnv {
+                        let mut env = ConstEvalEnv {
                             db,
                             expr_types: single_typecheck.expr_types(db),
                             call_targets: single_typecheck.call_targets(db),
@@ -2012,7 +2010,7 @@ fn specialize_comptime_functions<'db>(
                             data_files: single_typecheck.data_files(db),
                         };
                         let (evaluated, const_errors) = evaluate_instantiation_consts(
-                            &env,
+                            &mut env,
                             func_stmt,
                             module_consts.get(module_id).cloned().unwrap_or_default(),
                             &mono.comptime_param_indices,

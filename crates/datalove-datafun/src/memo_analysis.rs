@@ -10,8 +10,6 @@ use rmx::std::hash::{Hash, Hasher};
 use rmx::std::collections::hash_map::DefaultHasher;
 use serde::{Serialize, Deserialize};
 
-use std::cell::RefCell;
-use std::rc::Rc;
 
 use datalove_datafun_compiler::Database;
 use datalove_datafun_compiler::module_graph::parse_module_graph;
@@ -366,10 +364,10 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .into_iter().collect();
 
         enable_query_logging();
-        let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+        let mut evaluator = InterpCtfeEvaluator::new();
         let lowering_result = lower_module_graph_with_evaluator(
             &db, parsed_graph, typecheck_result, ownership_analysis,
-            ParallelMode::Sequential, evaluator, false, false,
+            ParallelMode::Sequential, &mut evaluator, false, false,
         );
         let lower_log = disable_query_logging();
         let lowered_modules: BTreeSet<String> = get_executed_modules(&lower_log, "lower")

@@ -4,10 +4,8 @@
 //! lowers them to IR, and outputs the serialized IR for snapshot testing.
 
 use rmx::prelude::*;
-use std::cell::RefCell;
 use std::path::Path;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use datalove_datafun as datafun;
 use datalove_datafun_pkg::package_load_worldfile::{self, WorldfileSection};
@@ -180,7 +178,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // Evaluate const bindings using CTFE with "lower then evaluate" pattern.
                 let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
-                    let evaluator: Rc<RefCell<dyn datalove_datafun_ir::CtfeEvaluator>> = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+                    let mut evaluator = InterpCtfeEvaluator::new();
                     let mut resolved = ResolvedConsts::new();
                     let mut resolved_consts_map: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
                     let mut ctfe_error = None;
@@ -214,7 +212,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                         let value = match lower_result {
                             Ok((None, Some(v))) => v,
                             Ok((Some(unit), None)) => {
-                                match evaluate_const_unit(&unit, &binding.ir_type, &evaluator) {
+                                match evaluate_const_unit(&unit, &binding.ir_type, &mut evaluator) {
                                     Ok(v) => v,
                                     Err(e) => {
                                         ctfe_error = Some(format!("CTFE error: {}", e));

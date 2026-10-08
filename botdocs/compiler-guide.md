@@ -344,8 +344,12 @@ the world.
 
 `lower_module_graph_with_evaluator` is still a plain function, and the two
 const evaluations under it still run in full on every compile. They cannot be
-tracked as they stand, because they take a `Rc<RefCell<dyn CtfeEvaluator>>` and
-a trait object is not a memo key. The gates above mean a program with no consts
+tracked as they stand, because they take a `&mut dyn CtfeEvaluator`: an
+evaluator is mutable state with no notion of equality, so it cannot be a memo
+key, and salsa refuses a type parameter on a tracked function, so making it
+generic would not help either. A tracked query would have to build its own
+evaluator, which means reaching the interpreter and the natives from inside
+one. The gates above mean a program with no consts
 never reaches them, which is why an unchanged recompile no longer pays for
 them; a program that does have consts still pays on every compile.
 
@@ -1709,7 +1713,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     mode: ParallelMode,
-    evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
     skip_const_inlining: bool,
     skip_specialization: bool,
 ) -> ModuleGraphLoweringResult<'db>

@@ -722,8 +722,7 @@ pub trait CtfeEvaluator {
 }
 ```
 
-The interpreter implements it; `NoopCtfeEvaluator` is what a minimal
-compilation context gets, and it fails every call. The registry is what lets a
+The interpreter implements it, and is the only thing that does. The registry is what lets a
 const expression call a function in another module, and it holds the riders'
 native units as well, so a const can call a native.
 

@@ -3155,21 +3155,6 @@ pub trait CtfeEvaluator {
     fn set_module_registry(&mut self, registry: std::sync::Arc<ModuleFunctionRegistry>);
 }
 
-/// Placeholder CTFE evaluator that always returns an error.
-///
-/// Used when no interpreter is available (e.g., in minimal compilation contexts).
-pub struct NoopCtfeEvaluator;
-
-impl CtfeEvaluator for NoopCtfeEvaluator {
-    fn evaluate(&mut self, _unit: &IrCodeUnit, _result_type: &IrType) -> Result<ConstValue, CtfeError> {
-        Err(CtfeError::InterpError("CTFE evaluator not configured".to_string()))
-    }
-
-    fn set_module_registry(&mut self, _registry: std::sync::Arc<ModuleFunctionRegistry>) {
-        // No-op: this evaluator doesn't support module function calls.
-    }
-}
-
 // ============================================================================
 // CTFE Memoization Types
 // ============================================================================

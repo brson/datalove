@@ -3,8 +3,6 @@
 use std::collections::BTreeMap;
 use bct::input::Source;
 use bct::module_graph::ModuleGraphBuilder;
-use std::cell::RefCell;
-use std::rc::Rc;
 use datalove_datafun_compiler::{
     Database,
     compile::{compile_modules, ModuleCompilationInput},
@@ -410,8 +408,8 @@ fn lower_sequential(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential, AutoAdaptMode::Disabled);
-            let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, evaluator, false, false);
+            let mut evaluator = InterpCtfeEvaluator::new();
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Sequential, &mut evaluator, false, false);
             let _ = divan::black_box(result);
         });
 }
@@ -432,8 +430,8 @@ fn lower_parallel(bencher: divan::Bencher) {
             let graph = setup_graph(&db, &srcs);
             let (parsed, typechecked) = typecheck_through(&db, graph);
             let ownership = analyze_module_graph_with_mode(&db, parsed, typechecked, ParallelMode::Sequential, AutoAdaptMode::Disabled);
-            let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
-            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, evaluator, false, false);
+            let mut evaluator = InterpCtfeEvaluator::new();
+            let result = lower_module_graph_with_evaluator(&db, parsed, typechecked, ownership, ParallelMode::Parallel, &mut evaluator, false, false);
             let _ = divan::black_box(result);
         });
 }

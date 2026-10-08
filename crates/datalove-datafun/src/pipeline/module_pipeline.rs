@@ -34,8 +34,6 @@ use datalove_datafun_compiler::tracked_lower::{
 use datalove_datafun_tycheck::ParsedModuleGraph;
 use datalove_datafun_ir::CtfeEvaluator;
 use datalove_datafun_interp::{InterpCtfeEvaluator, NativeResolver};
-use std::cell::RefCell;
-use std::rc::Rc;
 use datalove_datafun_tycheck::{DbClone, ParallelMode, parallel_mode_from_env};
 use datalove_datafun_compiler::module_graph::{ModuleGraph, ModuleId};
 use datalove_datafun_interp::ModuleFunctionRegistry;
@@ -93,12 +91,11 @@ impl ModuleCompilationPipeline {
     }
 
     /// The evaluator to run consts with when the caller does not give one.
-    fn ctfe_evaluator(&self) -> Rc<RefCell<dyn CtfeEvaluator>> {
-        let evaluator = match &self.natives {
+    fn ctfe_evaluator(&self) -> InterpCtfeEvaluator {
+        match &self.natives {
             Some(natives) => InterpCtfeEvaluator::new().with_native_resolver(natives.clone()),
             None => InterpCtfeEvaluator::new(),
-        };
-        Rc::new(RefCell::new(evaluator))
+        }
     }
 
     /// Create a pipeline from worldfile sections.
@@ -374,8 +371,8 @@ impl ModuleCompilationPipeline {
         db: &'db dyn DbClone,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
-        let evaluator = self.ctfe_evaluator();
-        self.compile_fresh_with_mode_and_evaluator(db, mode, evaluator)
+        let mut evaluator = self.ctfe_evaluator();
+        self.compile_fresh_with_mode_and_evaluator(db, mode, &mut evaluator)
     }
 
     /// Compile all modules with explicit parallelism mode and custom CTFE evaluator.
@@ -383,7 +380,7 @@ impl ModuleCompilationPipeline {
         &mut self,
         db: &'db dyn DbClone,
         mode: ParallelMode,
-        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+        evaluator: &mut dyn CtfeEvaluator,
     ) -> CompiledModules<'db> {
         let path_deps = extract_dependencies(&self.world, db.as_salsa_db(), &self.roots);
         let (module_graph, resolved_requires) =
@@ -409,8 +406,8 @@ impl ModuleCompilationPipeline {
         db: &'db mut D,
         mode: ParallelMode,
     ) -> (CompiledModules<'db>, &'db D) {
-        let evaluator = self.ctfe_evaluator();
-        self.compile_with_mode_and_evaluator(db, mode, evaluator)
+        let mut evaluator = self.ctfe_evaluator();
+        self.compile_with_mode_and_evaluator(db, mode, &mut evaluator)
     }
 
     /// Compile all modules with explicit parallelism mode and custom CTFE evaluator (incremental).
@@ -418,7 +415,7 @@ impl ModuleCompilationPipeline {
         &mut self,
         db: &'db mut D,
         mode: ParallelMode,
-        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+        evaluator: &mut dyn CtfeEvaluator,
     ) -> (CompiledModules<'db>, &'db D) {
         // Extract dependencies first (reads from db).
         let path_deps = extract_dependencies(&self.world, db, &self.roots);
@@ -439,7 +436,7 @@ impl ModuleCompilationPipeline {
         module_graph: ModuleGraph<'db>,
         resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
         mode: ParallelMode,
-        evaluator: Rc<RefCell<dyn CtfeEvaluator>>,
+        evaluator: &mut dyn CtfeEvaluator,
     ) -> CompiledModules<'db> {
         // Run parsing, typechecking, and ownership analysis.
         let input = ModuleCompilationInput {

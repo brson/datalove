@@ -10,9 +10,7 @@
 //! crate, keeping the two concerns separate, and a const that is a literal is
 //! read off there without coming here at all.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
-use std::rc::Rc;
 use std::sync::Arc;
 use datalove_datafun_ir::{ConstValue, IrType, IrCodeUnit, CtfeEvaluator, CtfeError};
 
@@ -38,7 +36,7 @@ impl ScriptFunctionConstsResult {
 pub fn evaluate_const_unit(
     unit: &IrCodeUnit,
     ir_type: &IrType,
-    evaluator: &Rc<RefCell<dyn CtfeEvaluator>>,
+    evaluator: &mut dyn CtfeEvaluator,
 ) -> Result<Arc<ConstValue>, CtfeError> {
-    evaluator.borrow_mut().evaluate(unit, ir_type).map(Arc::new)
+    evaluator.evaluate(unit, ir_type).map(Arc::new)
 }

@@ -23,8 +23,6 @@ use datalove_datafun_compiler::compile::{ModuleCompilationInput, compile_modules
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use datalove_datafun_tycheck::ParallelMode;
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 /// A local module that calls into the system library, as a real one would.
@@ -70,14 +68,14 @@ fn one_cold_compile(
     split.check = t.elapsed();
 
     let t = Instant::now();
-    let evaluator = Rc::new(RefCell::new(InterpCtfeEvaluator::new()));
+    let mut evaluator = InterpCtfeEvaluator::new();
     let _lowering = lower_module_graph_with_evaluator(
         &db,
         output.parsed_graph,
         output.typecheck_result,
         output.ownership_analysis,
         ParallelMode::Sequential,
-        evaluator,
+        &mut evaluator,
         false,
         false,
     );
