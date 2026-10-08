@@ -24,6 +24,34 @@ pub unsafe fn clone_value(
     }
 }
 
+/// Clone `count` values of `ty` laid out one after another, from `src` to
+/// `dst`.
+///
+/// Values that own nothing are copied in one go. Otherwise each is cloned, and
+/// if one fails those already cloned are destroyed, leaving `dst` holding
+/// nothing.
+pub(crate) unsafe fn clone_array(
+    rt: LocalRtHandle,
+    src: *const u8,
+    dst: *mut u8,
+    count: usize,
+    ty: rtdt::TyDescRef,
+) -> RtStatus {
+    let size = ty.size() as usize;
+    if ty.is_plain() {
+        unsafe { std::ptr::copy_nonoverlapping(src, dst, count * size) };
+        return RtStatus::Ok;
+    }
+    for i in 0..count {
+        let status = unsafe { clone_impl(rt, src.add(i * size), ty, dst.add(i * size)) };
+        if status != RtStatus::Ok {
+            unsafe { crate::impls::destroy::destroy_array(rt, dst, i, ty) };
+            return status;
+        }
+    }
+    RtStatus::Ok
+}
+
 /// Internal clone implementation.
 unsafe fn clone_impl(
     rt: LocalRtHandle,
@@ -117,6 +145,15 @@ unsafe fn clone_impl(
         }
 
         // Tuple - recursively clone each field.
+        // A compound value that owns nothing is its bytes, which saves walking
+        // its parts. Asked only here: nothing else that is plain needs a walk,
+        // and asking first, for every value, cost the string paths their
+        // inlining.
+        TyTag::Tuple | TyTag::Struct | TyTag::Enum | TyTag::Term | TyTag::Option if ty.is_plain() => {
+            unsafe { std::ptr::copy_nonoverlapping(value_in, value_out, ty.size() as usize) };
+            RtStatus::Ok
+        }
+
         TyTag::Tuple => {
             for field in ty.iter_tuple_fields() {
                 let field_in = unsafe { value_in.add(field.offset() as usize) };
@@ -204,27 +241,35 @@ unsafe fn clone_impl(
                 let elem_align = elem_ty.align();
                 let new_data = unsafe { rt_ref.alloc.alloc(elem_size, elem_align, list_in.size.0) };
 
-                // Clone each element.
-                for i in 0..list_in.size.0 {
-                    let offset = (i as usize) * (elem_size as usize);
-                    let elem_in = unsafe { list_in.data.add(offset) };
-                    let elem_out = unsafe { new_data.add(offset) };
+                // Elements that own nothing are copied in one go.
+                if elem_ty.is_plain() {
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(
+                            list_in.data, new_data, list_in.size.as_usize() * elem_size as usize);
+                    }
+                } else {
+                    // Clone each element.
+                    for i in 0..list_in.size.0 {
+                        let offset = (i as usize) * (elem_size as usize);
+                        let elem_in = unsafe { list_in.data.add(offset) };
+                        let elem_out = unsafe { new_data.add(offset) };
 
-                    let status = unsafe {
-                        clone_impl(rt, elem_in, elem_ty, elem_out)
-                    };
+                        let status = unsafe {
+                            clone_impl(rt, elem_in, elem_ty, elem_out)
+                        };
 
-                    if status != RtStatus::Ok {
-                        // Clone failed. Destroy successfully cloned elements and free buffer.
-                        unsafe {
-                            for j in 0..i {
-                                let cleanup_offset = (j as usize) * (elem_size as usize);
-                                let elem_to_destroy = new_data.add(cleanup_offset);
-                                let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
+                        if status != RtStatus::Ok {
+                            // Clone failed. Destroy successfully cloned elements and free buffer.
+                            unsafe {
+                                for j in 0..i {
+                                    let cleanup_offset = (j as usize) * (elem_size as usize);
+                                    let elem_to_destroy = new_data.add(cleanup_offset);
+                                    let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
+                                }
+                                rt_ref.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
                             }
-                            rt_ref.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
+                            return status;
                         }
-                        return status;
                     }
                 }
 
@@ -822,6 +867,7 @@ mod tests {
     fn make_u32_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::U32,
+            flags: 0,
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -833,6 +879,7 @@ mod tests {
     fn make_f32_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::F32,
+            flags: 0,
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -844,6 +891,7 @@ mod tests {
     fn make_bool_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::Bool,
+            flags: 0,
             size: 1,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -855,6 +903,7 @@ mod tests {
     fn make_int_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::Int,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Int>() as u32,
             align: std::mem::align_of::<rtdt::Int>() as u32,
             type_info: rtdt::TyInfo {
@@ -866,6 +915,7 @@ mod tests {
     fn make_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo {
@@ -1191,6 +1241,7 @@ mod tests {
 
         let tuple_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tuple,
+            flags: 0,
             size: 8,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -1234,6 +1285,7 @@ mod tests {
 
         let list_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::List,
+            flags: 0,
             size: std::mem::size_of::<rtdt::List>() as u32,
             align: std::mem::align_of::<rtdt::List>() as u32,
             type_info: rtdt::TyInfo {
@@ -1281,6 +1333,7 @@ mod tests {
 
             let list_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::List,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::List>() as u32,
                 align: std::mem::align_of::<rtdt::List>() as u32,
                 type_info: rtdt::TyInfo {
@@ -1363,6 +1416,7 @@ mod tests {
 
         let option_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: 8,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -1415,6 +1469,7 @@ mod tests {
 
             let option_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Option,
+                flags: 0,
                 size: 8,
                 align: 4,
                 type_info: rtdt::TyInfo {
@@ -1468,6 +1523,7 @@ mod tests {
 
         let map_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Map,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
@@ -1509,6 +1565,7 @@ mod tests {
 
         let set_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Set,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {

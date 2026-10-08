@@ -566,6 +566,7 @@ mod tests {
     fn make_tydesc(size: u32, align: u32) -> TyDesc {
         TyDesc {
             type_tag: TyTag::U8,
+            flags: 0,
             size,
             align,
             type_info: TyInfo {

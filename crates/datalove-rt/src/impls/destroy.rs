@@ -5,6 +5,23 @@ use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Destroys any type of value, freeing allocations recursively.
+/// Destroy `count` values of `ty` laid out one after another, which for values
+/// that own nothing is nothing.
+pub(crate) unsafe fn destroy_array(
+    rt: LocalRtHandle,
+    values: *mut u8,
+    count: usize,
+    ty: rtdt::TyDescRef,
+) {
+    if ty.is_plain() {
+        return;
+    }
+    let size = ty.size() as usize;
+    for i in 0..count {
+        let _ = unsafe { any_destroy_local(rt, values.add(i * size), ty.as_ptr()) };
+    }
+}
+
 pub unsafe fn any_destroy_local(
     rt: LocalRtHandle,
     value_in: *mut u8,
@@ -67,8 +84,8 @@ pub unsafe fn any_destroy_local(
                 let element_ty = ty.list_element_ty();
                 let element_tydesc = element_ty.as_ptr();
 
-                // Recursively destroy each element.
-                if !list.data.is_null() && list.size > rtdt::Index::ZERO {
+                // Recursively destroy each element, unless they own nothing.
+                if !list.data.is_null() && list.size > rtdt::Index::ZERO && !element_ty.is_plain() {
                     let element_size = element_ty.size() as usize;
                     for i in 0..list.size.0 {
                         let element_ptr = (list.data as *mut u8).add((i as usize) * element_size);
@@ -158,6 +175,12 @@ pub unsafe fn any_destroy_local(
             }
 
             // Tuple - recursively destroy fields.
+            // A compound value that owns nothing has nothing to destroy, and
+            // its parts need not be walked to find that out. Asked only here,
+            // as `clone_impl` explains.
+            rtdt::TyTag::Tuple | rtdt::TyTag::Struct | rtdt::TyTag::Enum | rtdt::TyTag::Term
+            | rtdt::TyTag::Option if ty.is_plain() => RtStatus::Ok,
+
             rtdt::TyTag::Tuple => {
                 for field in ty.iter_tuple_fields() {
                     let field_ptr = value_in.add(field.offset() as usize);
@@ -250,6 +273,7 @@ pub unsafe fn any_destroy_local(
                         // fixme this is pretty sketchy!
                         let error_tydesc = rtdt::TyDesc {
                             type_tag: rtdt::TyTag::Error,
+                            flags: 0,
                             size: std::mem::size_of::<rtdt::Error>() as u32,
                             align: std::mem::align_of::<rtdt::Error>() as u32,
                             type_info: rtdt::TyInfo {
@@ -349,6 +373,7 @@ mod tests {
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo {
@@ -361,6 +386,7 @@ mod tests {
     unsafe fn create_u32_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::U32,
+            flags: 0,
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -463,6 +489,7 @@ mod tests {
 
             let tuple_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
+                flags: 0,
                 size: std::mem::size_of::<TupleU32String>() as u32,
                 align: std::mem::align_of::<TupleU32String>() as u32,
                 type_info: rtdt::TyInfo {
@@ -522,6 +549,7 @@ mod tests {
     unsafe fn create_data_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::Data,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Data>() as u32,
             align: std::mem::align_of::<rtdt::Data>() as u32,
             type_info: rtdt::TyInfo {
@@ -534,6 +562,7 @@ mod tests {
     unsafe fn create_error_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::Error,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Error>() as u32,
             align: std::mem::align_of::<rtdt::Error>() as u32,
             type_info: rtdt::TyInfo {
@@ -572,6 +601,7 @@ mod tests {
         let data_tydesc = unsafe { create_data_tydesc() };
         let f64_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::F64,
+            flags: 0,
             size: 8,
             align: 8,
             type_info: rtdt::TyInfo {
@@ -702,6 +732,7 @@ mod tests {
         let error_tydesc = unsafe { create_error_tydesc() };
         let i64_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::I64,
+            flags: 0,
             size: 8,
             align: 8,
             type_info: rtdt::TyInfo {

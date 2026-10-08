@@ -645,6 +645,7 @@ mod tests {
     fn make_tydesc(type_tag: TyTag) -> TyDesc {
         TyDesc {
             type_tag,
+            flags: 0,
             size: 0,
             align: 0,
             type_info: TyInfo {

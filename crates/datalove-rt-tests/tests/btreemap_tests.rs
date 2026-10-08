@@ -61,6 +61,7 @@ impl Drop for TyDescArena {
 fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -76,6 +77,7 @@ fn create_option_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const
     // Create the option tydesc first with placeholder size/align.
     let option_tydesc = arena.alloc_mut(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Option,
+        flags: 0,
         size: 0,
         align: 0,
         type_info: rtdt::TyInfo {
@@ -106,6 +108,7 @@ fn create_map_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *cons
 
     let map_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
@@ -716,6 +719,7 @@ fn test_btreemap_insert_reverse_order() -> AnyResult<()> {
 fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
+        flags: 0,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {
@@ -731,6 +735,7 @@ fn create_map_string_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc,
 
     let map_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
@@ -2823,6 +2828,7 @@ fn create_tuple_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *co
 
     let tuple_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
+        flags: 0,
         size: 8,
         align: 4,
         type_info: rtdt::TyInfo {

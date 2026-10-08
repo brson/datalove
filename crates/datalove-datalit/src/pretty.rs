@@ -34,6 +34,7 @@ pub fn pretty_print_runtime_value<'db>(
         // Create string tydesc.
         let string_tydesc = datalove_rtdt::TyDesc {
             type_tag: datalove_rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<datalove_rtdt::String>() as u32,
             align: std::mem::align_of::<datalove_rtdt::String>() as u32,
             type_info: datalove_rtdt::TyInfo {

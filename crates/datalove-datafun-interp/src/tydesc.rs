@@ -50,7 +50,10 @@ impl IrTyDescTable {
         if let Some(&ptr) = self.cache.get(ty) {
             return ptr;
         }
-        let tydesc = self.create_tydesc(ty);
+        let mut tydesc = self.create_tydesc(ty);
+        // The descriptors it points to were made first, so its own flags can
+        // be read off them.
+        tydesc.flags = tydesc.computed_flags();
         self.tydescs.push(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const TyDesc;
         self.cache.insert(ty.clone(), ptr);
@@ -61,6 +64,7 @@ impl IrTyDescTable {
         match ty {
             IrType::Unit => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -73,102 +77,119 @@ impl IrTyDescTable {
             }),
             IrType::Bool => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Bool,
+                flags: 0,
                 size: 1,
                 align: 1,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::U8 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::U8,
+                flags: 0,
                 size: 1,
                 align: 1,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::U16 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::U16,
+                flags: 0,
                 size: 2,
                 align: 2,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::U32 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::U32,
+                flags: 0,
                 size: 4,
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::U64 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::U64,
+                flags: 0,
                 size: 8,
                 align: 8,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::I8 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::I8,
+                flags: 0,
                 size: 1,
                 align: 1,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::I16 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::I16,
+                flags: 0,
                 size: 2,
                 align: 2,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::I32 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::I32,
+                flags: 0,
                 size: 4,
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::I64 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::I64,
+                flags: 0,
                 size: 8,
                 align: 8,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::Index => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Index,
+                flags: 0,
                 size: rtdt::INDEX_SIZE,
                 align: rtdt::INDEX_ALIGN,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::Offset => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Offset,
+                flags: 0,
                 size: rtdt::INDEX_SIZE,
                 align: rtdt::INDEX_ALIGN,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::Int => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Int,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::Int>() as u32,
                 align: std::mem::align_of::<rtdt::Int>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::F32 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::F32,
+                flags: 0,
                 size: 4,
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::F64 => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::F64,
+                flags: 0,
                 size: 8,
                 align: 8,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::String => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::String,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::String>() as u32,
                 align: std::mem::align_of::<rtdt::String>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::Data => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Data,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::Data>() as u32,
                 align: std::mem::align_of::<rtdt::Data>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
             IrType::Error => Box::new(TyDesc {
                 type_tag: rtdt::TyTag::Error,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::Error>() as u32,
                 align: std::mem::align_of::<rtdt::Error>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -204,7 +225,7 @@ impl IrTyDescTable {
         let fields_ptr = self.tuple_fields.last().unwrap().as_ptr();
 
         Box::new(TyDesc {
-            type_tag: rtdt::TyTag::Tuple,  // Use Tuple tag to store inner tydesc
+            type_tag: rtdt::TyTag::Tuple, flags: 0,  // Use Tuple tag to store inner tydesc
             size: std::mem::size_of::<*const u8>() as u32,
             align: std::mem::align_of::<*const u8>() as u32,
             type_info: rtdt::TyInfo {
@@ -230,6 +251,7 @@ impl IrTyDescTable {
         let layout = unsafe {
             let temp_tydesc = TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -252,6 +274,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Tuple,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -291,6 +314,7 @@ impl IrTyDescTable {
         let layout = unsafe {
             let temp_tydesc = TyDesc {
                 type_tag: rtdt::TyTag::Struct,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -313,6 +337,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Struct,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -353,6 +378,7 @@ impl IrTyDescTable {
         let layout = unsafe {
             let temp_tydesc = TyDesc {
                 type_tag: rtdt::TyTag::Enum,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -375,6 +401,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Enum,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -391,6 +418,7 @@ impl IrTyDescTable {
         let name_ref = self.field_names.last().unwrap();
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Atom,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -412,6 +440,7 @@ impl IrTyDescTable {
         let name_ref = self.field_names.last().unwrap();
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Term,
+            flags: 0,
             size,
             align,
             type_info: rtdt::TyInfo {
@@ -428,6 +457,7 @@ impl IrTyDescTable {
         let element_tydesc = self.get_or_create(elem);
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::List,
+            flags: 0,
             size: std::mem::size_of::<rtdt::List>() as u32,
             align: std::mem::align_of::<rtdt::List>() as u32,
             type_info: rtdt::TyInfo {
@@ -440,6 +470,7 @@ impl IrTyDescTable {
         let element_tydesc = self.get_or_create(elem);
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Set,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
@@ -453,6 +484,7 @@ impl IrTyDescTable {
         let value_tydesc = self.get_or_create(val);
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Map,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
@@ -466,6 +498,7 @@ impl IrTyDescTable {
 
         let temp_tydesc = TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -479,6 +512,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -492,6 +526,7 @@ impl IrTyDescTable {
 
         let temp_tydesc = TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -505,6 +540,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -517,6 +553,7 @@ impl IrTyDescTable {
         let element_tydesc = self.get_or_create(elem);
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Tensor,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Tensor>() as u32,
             align: std::mem::align_of::<rtdt::Tensor>() as u32,
             type_info: rtdt::TyInfo {
@@ -554,6 +591,7 @@ impl IrTyDescTable {
 
         Box::new(TyDesc {
             type_tag: rtdt::TyTag::Table,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Table>() as u32,
             align: std::mem::align_of::<rtdt::Table>() as u32,
             type_info: rtdt::TyInfo {

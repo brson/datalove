@@ -419,6 +419,7 @@ mod tests {
     fn make_u32_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::U32,
+            flags: 0,
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo {
@@ -443,6 +444,7 @@ mod tests {
         ];
         let table_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Table,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Table>() as u32,
             align: std::mem::align_of::<rtdt::Table>() as u32,
             type_info: rtdt::TyInfo {
@@ -475,12 +477,14 @@ mod tests {
     fn test_element_ptr_calculation() {
         let td1 = rtdt::TyDesc {
             type_tag: rtdt::TyTag::U32,
+            flags: 0,
             size: 4,
             align: 4,
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
         };
         let td2 = rtdt::TyDesc {
             type_tag: rtdt::TyTag::U64,
+            flags: 0,
             size: 8,
             align: 8,
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },

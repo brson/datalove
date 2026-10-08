@@ -948,6 +948,7 @@ mod tests {
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo {
@@ -990,6 +991,7 @@ mod tests {
             let true_val = rtdt::Bool(1);
             let true_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Bool,
+                flags: 0,
                 size: 1,
                 align: 1,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -1028,6 +1030,7 @@ mod tests {
             let val = rtdt::U32(42);
             let tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::U32,
+                flags: 0,
                 size: 4,
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -1066,6 +1069,7 @@ mod tests {
             let val = rtdt::F32(3.14);
             let tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::F32,
+                flags: 0,
                 size: 4,
                 align: 4,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },

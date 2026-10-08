@@ -54,13 +54,20 @@ impl<'db> TyDescTable<'db> {
     }
 
     /// Get or create a TyDesc for the given type.
+    /// Keep a descriptor, filling in its flags first: the descriptors it points
+    /// to are made before it is.
+    fn keep(&mut self, mut tydesc: Box<rtdt::TyDesc>) {
+        tydesc.flags = tydesc.computed_flags();
+        self.tydescs.push(tydesc);
+    }
+
     pub fn get_or_create(&mut self, ty: &Type<'db>) -> *const rtdt::TyDesc {
         if let Some(&ptr) = self.cache.get(ty) {
             return ptr;
         }
 
         let tydesc = self.create_tydesc(ty);
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.cache.insert(ty.C(), ptr);
         ptr
@@ -90,6 +97,7 @@ impl<'db> TyDescTable<'db> {
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -117,6 +125,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tuple,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -127,7 +136,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         ptr
     }
@@ -157,6 +166,7 @@ impl<'db> TyDescTable<'db> {
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Struct,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -187,6 +197,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Struct,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -197,7 +208,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         ptr
     }
@@ -212,6 +223,7 @@ impl<'db> TyDescTable<'db> {
             Type::Bool => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Bool,
+                    flags: 0,
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
@@ -222,6 +234,7 @@ impl<'db> TyDescTable<'db> {
             Type::U8 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::U8,
+                    flags: 0,
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
@@ -232,6 +245,7 @@ impl<'db> TyDescTable<'db> {
             Type::I8 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::I8,
+                    flags: 0,
                     size: 1,
                     align: 1,
                     type_info: rtdt::TyInfo {
@@ -242,6 +256,7 @@ impl<'db> TyDescTable<'db> {
             Type::U16 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::U16,
+                    flags: 0,
                     size: 2,
                     align: 2,
                     type_info: rtdt::TyInfo {
@@ -252,6 +267,7 @@ impl<'db> TyDescTable<'db> {
             Type::I16 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::I16,
+                    flags: 0,
                     size: 2,
                     align: 2,
                     type_info: rtdt::TyInfo {
@@ -262,6 +278,7 @@ impl<'db> TyDescTable<'db> {
             Type::U32 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::U32,
+                    flags: 0,
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
@@ -272,6 +289,7 @@ impl<'db> TyDescTable<'db> {
             Type::I32 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::I32,
+                    flags: 0,
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
@@ -282,6 +300,7 @@ impl<'db> TyDescTable<'db> {
             Type::U64 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::U64,
+                    flags: 0,
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
@@ -292,6 +311,7 @@ impl<'db> TyDescTable<'db> {
             Type::I64 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::I64,
+                    flags: 0,
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
@@ -302,6 +322,7 @@ impl<'db> TyDescTable<'db> {
             Type::Index => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Index,
+                    flags: 0,
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
@@ -312,6 +333,7 @@ impl<'db> TyDescTable<'db> {
             Type::Offset => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Offset,
+                    flags: 0,
                     size: rtdt::INDEX_SIZE,
                     align: rtdt::INDEX_ALIGN,
                     type_info: rtdt::TyInfo {
@@ -322,6 +344,7 @@ impl<'db> TyDescTable<'db> {
             Type::F32 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::F32,
+                    flags: 0,
                     size: 4,
                     align: 4,
                     type_info: rtdt::TyInfo {
@@ -332,6 +355,7 @@ impl<'db> TyDescTable<'db> {
             Type::F64 => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::F64,
+                    flags: 0,
                     size: 8,
                     align: 8,
                     type_info: rtdt::TyInfo {
@@ -342,6 +366,7 @@ impl<'db> TyDescTable<'db> {
             Type::Int => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Int,
+                    flags: 0,
                     size: std::mem::size_of::<rtdt::Int>() as u32,
                     align: std::mem::align_of::<rtdt::Int>() as u32,
                     type_info: rtdt::TyInfo {
@@ -352,6 +377,7 @@ impl<'db> TyDescTable<'db> {
             Type::String => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::String,
+                    flags: 0,
                     size: std::mem::size_of::<rtdt::String>() as u32,
                     align: std::mem::align_of::<rtdt::String>() as u32,
                     type_info: rtdt::TyInfo {
@@ -362,6 +388,7 @@ impl<'db> TyDescTable<'db> {
             Type::Data => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Data,
+                    flags: 0,
                     size: std::mem::size_of::<rtdt::Data>() as u32,
                     align: std::mem::align_of::<rtdt::Data>() as u32,
                     type_info: rtdt::TyInfo {
@@ -372,6 +399,7 @@ impl<'db> TyDescTable<'db> {
             Type::Error => {
                 Box::new(rtdt::TyDesc {
                     type_tag: rtdt::TyTag::Error,
+                    flags: 0,
                     size: std::mem::size_of::<rtdt::Error>() as u32,
                     align: std::mem::align_of::<rtdt::Error>() as u32,
                     type_info: rtdt::TyInfo {
@@ -418,6 +446,7 @@ impl<'db> TyDescTable<'db> {
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Tuple,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -445,6 +474,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tuple,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -482,6 +512,7 @@ impl<'db> TyDescTable<'db> {
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Struct,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -512,6 +543,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Struct,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -529,6 +561,7 @@ impl<'db> TyDescTable<'db> {
         let name = atom.name.as_str(self.db);
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Atom,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -547,6 +580,7 @@ impl<'db> TyDescTable<'db> {
         let name = term.name.as_str(self.db);
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Term,
+            flags: 0,
             size: payload_ref.size(),
             align: payload_ref.align(),
             type_info: rtdt::TyInfo {
@@ -588,6 +622,7 @@ impl<'db> TyDescTable<'db> {
         let layout = unsafe {
             let temp_tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::Enum,
+                flags: 0,
                 size: 0,
                 align: 1,
                 type_info: rtdt::TyInfo {
@@ -608,6 +643,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Enum,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -626,6 +662,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::List,
+            flags: 0,
             size: std::mem::size_of::<rtdt::List>() as u32,
             align: std::mem::align_of::<rtdt::List>() as u32,
             type_info: rtdt::TyInfo {
@@ -642,6 +679,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Tensor,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Tensor>() as u32,
             align: std::mem::align_of::<rtdt::Tensor>() as u32,
             type_info: rtdt::TyInfo {
@@ -665,6 +703,7 @@ impl<'db> TyDescTable<'db> {
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -678,6 +717,7 @@ impl<'db> TyDescTable<'db> {
         // Create final TyDesc with computed layout.
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -685,7 +725,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_option_cache.insert(inner_tydesc, ptr);
         ptr
@@ -706,6 +746,7 @@ impl<'db> TyDescTable<'db> {
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -719,6 +760,7 @@ impl<'db> TyDescTable<'db> {
         // Create final TyDesc with computed layout.
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Option,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -739,6 +781,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Map,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
@@ -754,6 +797,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Set,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
@@ -782,6 +826,7 @@ impl<'db> TyDescTable<'db> {
 
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Table,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Table>() as u32,
             align: std::mem::align_of::<rtdt::Table>() as u32,
             type_info: rtdt::TyInfo {
@@ -805,6 +850,7 @@ impl<'db> TyDescTable<'db> {
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -820,6 +866,7 @@ impl<'db> TyDescTable<'db> {
         // Create final TyDesc with computed layout.
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {
@@ -829,7 +876,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_result_cache.insert(inner_tydesc, ptr);
         ptr
@@ -854,6 +901,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::List,
+            flags: 0,
             size: std::mem::size_of::<rtdt::List>() as u32,
             align: std::mem::align_of::<rtdt::List>() as u32,
             type_info: rtdt::TyInfo {
@@ -861,7 +909,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_list_cache.insert(element_tydesc, ptr);
         ptr
@@ -883,6 +931,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Map,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Map>() as u32,
             align: std::mem::align_of::<rtdt::Map>() as u32,
             type_info: rtdt::TyInfo {
@@ -890,7 +939,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_map_cache.insert(cache_key, ptr);
         ptr
@@ -907,6 +956,7 @@ impl<'db> TyDescTable<'db> {
 
         let tydesc = Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Set,
+            flags: 0,
             size: std::mem::size_of::<rtdt::Set>() as u32,
             align: std::mem::align_of::<rtdt::Set>() as u32,
             type_info: rtdt::TyInfo {
@@ -914,7 +964,7 @@ impl<'db> TyDescTable<'db> {
             },
         });
 
-        self.tydescs.push(tydesc);
+        self.keep(tydesc);
         let ptr = &**self.tydescs.last().unwrap() as *const rtdt::TyDesc;
         self.runtime_set_cache.insert(element_tydesc, ptr);
         ptr
@@ -928,6 +978,7 @@ impl<'db> TyDescTable<'db> {
         // Create temporary TyDesc to compute layout.
         let temp_tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: 0,
             align: 1,
             type_info: rtdt::TyInfo {
@@ -943,6 +994,7 @@ impl<'db> TyDescTable<'db> {
         // Create final TyDesc with computed layout.
         Box::new(rtdt::TyDesc {
             type_tag: rtdt::TyTag::Result,
+            flags: 0,
             size: layout.size,
             align: layout.align,
             type_info: rtdt::TyInfo {

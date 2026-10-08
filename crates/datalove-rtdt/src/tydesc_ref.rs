@@ -212,6 +212,19 @@ impl<'a> TyDescRef<'a> {
         }
     }
 
+    /// Whether a value of this type owns nothing, so that a bitwise copy is a
+    /// clone and destroying it does nothing.
+    ///
+    /// Read from the descriptor. A producer may leave it clear, which only
+    /// costs speed; debug builds check that one set is right.
+    #[inline]
+    pub fn is_plain(&self) -> bool {
+        let plain = self.inner.flags & TyDesc::PLAIN != 0;
+        debug_assert!(!plain || self.inner.computed_flags() & TyDesc::PLAIN != 0,
+            "a descriptor marked plain whose type owns something");
+        plain
+    }
+
     /// The layout of this map's leaf nodes.
     ///
     /// Read from the descriptor, which every producer fills in; debug builds

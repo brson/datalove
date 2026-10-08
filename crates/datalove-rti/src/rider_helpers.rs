@@ -72,6 +72,7 @@ pub unsafe fn write_option_some_string(
         } else {
             let tydesc = rtdt::TyDesc {
                 type_tag: rtdt::TyTag::String,
+                flags: 0,
                 size: std::mem::size_of::<rtdt::String>() as u32,
                 align: std::mem::align_of::<rtdt::String>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -153,6 +154,7 @@ unsafe fn write_string_at(rt: LocalRtHandle, dest: *mut u8, s: &str) -> RtStatus
     } else {
         let tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -239,6 +241,7 @@ unsafe fn destroy_string(rt: LocalRtHandle, s: *mut rtdt::String) {
     if !s_ref.data.is_null() && s_ref.capacity.0 != 0 {
         let tydesc = rtdt::TyDesc {
             type_tag: rtdt::TyTag::String,
+            flags: 0,
             size: std::mem::size_of::<rtdt::String>() as u32,
             align: std::mem::align_of::<rtdt::String>() as u32,
             type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -346,6 +349,7 @@ pub unsafe fn write_option_int_from_str(
 
     let tydesc = rtdt::TyDesc {
         type_tag: rtdt::TyTag::Int,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Int>() as u32,
         align: std::mem::align_of::<rtdt::Int>() as u32,
         type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },

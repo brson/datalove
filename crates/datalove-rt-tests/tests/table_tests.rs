@@ -62,6 +62,7 @@ impl Drop for TyDescArena {
 fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -73,6 +74,7 @@ fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 fn create_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U64,
+        flags: 0,
         size: 8,
         align: 8,
         type_info: rtdt::TyInfo {
@@ -95,6 +97,7 @@ fn create_table_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Table,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Table>() as u32,
         align: std::mem::align_of::<rtdt::Table>() as u32,
         type_info: rtdt::TyInfo {
@@ -127,6 +130,7 @@ fn create_table_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Table,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Table>() as u32,
         align: std::mem::align_of::<rtdt::Table>() as u32,
         type_info: rtdt::TyInfo {
@@ -153,6 +157,7 @@ fn create_tuple_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -184,6 +189,7 @@ fn create_tuple_u32_u64_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
+        flags: 0,
         size: 16,
         align: 8,
         type_info: rtdt::TyInfo {

@@ -149,11 +149,13 @@ pub fn emit_tydesc(
 ) -> Result<(), crate::CAotError> {
     let layout = types::ir_type_to_crepr(ty).layout();
     let tag = type_tag(ty);
+    // `TyDesc::PLAIN` where a value of the type owns nothing.
+    let flags = if ty.is_copy() { datalove_rtdt::TyDesc::PLAIN } else { 0 };
 
     match ty {
         IrType::Unit => {
             // Unit is a zero-field tuple.
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = 0, .align = 1, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};", name).unwrap();
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .flags = {flags}, .size = 0, .align = 1, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};", name).unwrap();
         }
 
         // Primitive types with no type_info.
@@ -161,13 +163,13 @@ pub fn emit_tydesc(
         IrType::U32 | IrType::I32 | IrType::U64 | IrType::I64 |
         IrType::Index | IrType::Offset | IrType::F32 | IrType::F64 |
         IrType::Int | IrType::String | IrType::Data | IrType::Error => {
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .size = {}, .align = {}, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};",
                 name, tag, layout.size, layout.align).unwrap();
         }
 
         IrType::List(elem) => {
             let elem_tydesc = compiler.get_tydesc_name(elem);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x50, .size = {}, .align = {}, .type_info = {{ .list = {{ .element_tydesc = &{} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x50, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .list = {{ .element_tydesc = &{} }} }} }};",
                 name, layout.size, layout.align, elem_tydesc).unwrap();
         }
 
@@ -176,7 +178,7 @@ pub fn emit_tydesc(
             let e = types::ir_type_to_crepr(elem).layout();
             let leaf = datalove_rtdt::layout::set_leaf_node_layout(e.size, e.align);
             let internal = datalove_rtdt::layout::set_internal_node_layout(e.size, e.align);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x53, .size = {}, .align = {}, .type_info = {{ .set = {{ .element_tydesc = &{}, \
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x53, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .set = {{ .element_tydesc = &{}, \
                 .leaf = {{ {}, {}, {}, {} }}, .internal = {{ {}, {}, {}, {} }} }} }} }};",
                 name, layout.size, layout.align, elem_tydesc,
                 leaf.size, leaf.align, leaf.next_leaf_offset, leaf.keys_offset,
@@ -190,7 +192,7 @@ pub fn emit_tydesc(
             let v = types::ir_type_to_crepr(val).layout();
             let leaf = datalove_rtdt::layout::map_leaf_node_layout(k.size, k.align, v.size, v.align);
             let internal = datalove_rtdt::layout::map_internal_node_layout(k.size, k.align);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x52, .size = {}, .align = {}, .type_info = {{ .map = {{ .key_tydesc = &{}, .value_tydesc = &{}, \
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x52, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .map = {{ .key_tydesc = &{}, .value_tydesc = &{}, \
                 .leaf = {{ {}, {}, {}, {}, {} }}, .internal = {{ {}, {}, {}, {} }} }} }} }};",
                 name, layout.size, layout.align, key_tydesc, val_tydesc,
                 leaf.size, leaf.align, leaf.next_leaf_offset, leaf.keys_offset, leaf.values_offset,
@@ -202,7 +204,7 @@ pub fn emit_tydesc(
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit field array.
@@ -214,7 +216,7 @@ pub fn emit_tydesc(
                 }
                 writeln!(out, " }};").unwrap();
 
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = {}, .fields = {} }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = {}, .fields = {} }} }} }};",
                     name, layout.size, layout.align, fields.len(), fields_name).unwrap();
             }
         }
@@ -225,7 +227,7 @@ pub fn emit_tydesc(
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = DANGLING(dtlv_struct_field_t), .num_fields = 0 }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = DANGLING(dtlv_struct_field_t), .num_fields = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit field array.
@@ -238,7 +240,7 @@ pub fn emit_tydesc(
                 }
                 writeln!(out, " }};").unwrap();
 
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = {}, .num_fields = {} }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x41, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .struct_ = {{ .fields = {}, .num_fields = {} }} }} }};",
                     name, layout.size, layout.align, fields_name, fields.len()).unwrap();
             }
         }
@@ -247,7 +249,7 @@ pub fn emit_tydesc(
             let variants_name = format!("{}_variants", name);
 
             if variants.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = DANGLING(dtlv_enum_variant_t), .num_variants = 0 }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = DANGLING(dtlv_enum_variant_t), .num_variants = 0 }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Each variant's payload is placed at its own alignment, matching
@@ -269,19 +271,19 @@ pub fn emit_tydesc(
                 }
                 writeln!(out, " }};").unwrap();
 
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = {}, .num_variants = {} }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x42, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .enum_ = {{ .variants = {}, .num_variants = {} }} }} }};",
                     name, layout.size, layout.align, variants_name, variants.len()).unwrap();
             }
         }
 
         IrType::Atom(atom_name) => {
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x43, .size = 0, .align = 1, .type_info = {{ .atom = {{ .name = \"{}\", .name_len = {} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x43, .flags = {flags}, .size = 0, .align = 1, .type_info = {{ .atom = {{ .name = \"{}\", .name_len = {} }} }} }};",
                 name, atom_name, atom_name.len()).unwrap();
         }
 
         IrType::Term(term_name, payload_ty) => {
             let payload_tydesc = compiler.get_tydesc_name(payload_ty);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x44, .size = {}, .align = {}, .type_info = {{ .term = {{ .name = \"{}\", .name_len = {}, .payload = &{} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x44, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .term = {{ .name = \"{}\", .name_len = {}, .payload = &{} }} }} }};",
                 name, layout.size, layout.align, term_name, term_name.len(), payload_tydesc).unwrap();
         }
 
@@ -289,7 +291,7 @@ pub fn emit_tydesc(
             let inner_tydesc = compiler.get_tydesc_name(inner);
             let opt_layout = compute_option_layout(inner);
             let payload_offset = ir_layout::option_payload_offset(inner);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{}, .payload_offset = {} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, opt_layout.size, opt_layout.align, inner_tydesc, payload_offset).unwrap();
         }
 
@@ -297,13 +299,13 @@ pub fn emit_tydesc(
             let ok_tydesc = compiler.get_tydesc_name(ok);
             let res_layout = compute_result_layout(ok);
             let payload_offset = ir_layout::result_payload_offset(ok);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{}, .payload_offset = {} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, res_layout.size, res_layout.align, ok_tydesc, payload_offset).unwrap();
         }
 
         IrType::Tensor(elem, rank) => {
             let elem_tydesc = compiler.get_tydesc_name(elem);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x54, .size = {}, .align = {}, .type_info = {{ .tensor = {{ .element_tydesc = &{}, .rank = {} }} }} }};",
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x54, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .tensor = {{ .element_tydesc = &{}, .rank = {} }} }} }};",
                 name, layout.size, layout.align, elem_tydesc, rank).unwrap();
         }
 
@@ -312,7 +314,7 @@ pub fn emit_tydesc(
             let num_cols = columns.len();
 
             if columns.is_empty() {
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = 0, .columns = DANGLING(dtlv_table_column_t) }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = 0, .columns = DANGLING(dtlv_table_column_t) }} }} }};",
                     name, layout.size, layout.align).unwrap();
             } else {
                 // Emit column info array (TyInfoTableColumn: name, name_len, tydesc).
@@ -325,7 +327,7 @@ pub fn emit_tydesc(
                 }
                 writeln!(out, "}};").unwrap();
 
-                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = {}, .columns = {} }} }} }};",
+                writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x55, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .table = {{ .num_columns = {}, .columns = {} }} }} }};",
                     name, layout.size, layout.align, num_cols, cols_name).unwrap();
             }
         }
@@ -333,7 +335,7 @@ pub fn emit_tydesc(
         IrType::Ref(inner) => {
             // Ref is just a pointer - emit as a primitive.
             let _inner_tydesc = compiler.get_tydesc_name(inner);
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x10, .size = 8, .align = 8, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};", name).unwrap();
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x10, .flags = {flags}, .size = 8, .align = 8, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};", name).unwrap();
         }
     }
 

@@ -6,6 +6,7 @@ use datalove_rtdt::*;
 fn make_tydesc(type_tag: TyTag) -> TyDesc {
     TyDesc {
         type_tag,
+        flags: 0,
         size: 8,
         align: 8,
         type_info: TyInfo {

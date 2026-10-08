@@ -44,6 +44,7 @@ impl Drop for TyDescArena {
 fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -58,6 +59,7 @@ fn create_list_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const r
 
     let list_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::List,
+        flags: 0,
         size: std::mem::size_of::<rtdt::List>() as u32,
         align: std::mem::align_of::<rtdt::List>() as u32,
         type_info: rtdt::TyInfo {
@@ -76,6 +78,7 @@ fn create_tensor_u32_tydesc(arena: &TyDescArena, rank: u32) -> (*const rtdt::TyD
 
     let tensor_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tensor,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Tensor>() as u32,
         align: std::mem::align_of::<rtdt::Tensor>() as u32,
         type_info: rtdt::TyInfo {
@@ -2251,6 +2254,7 @@ fn create_result_tensor_u32_tydesc(arena: &TyDescArena, rank: u32) -> (*const rt
 
     let tensor_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tensor,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Tensor>() as u32,
         align: std::mem::align_of::<rtdt::Tensor>() as u32,
         type_info: rtdt::TyInfo {
@@ -2272,6 +2276,7 @@ fn create_result_tensor_u32_tydesc(arena: &TyDescArena, rank: u32) -> (*const rt
 
     let result_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Result,
+        flags: 0,
         size: total_size,
         align: payload_align,
         type_info: rtdt::TyInfo {

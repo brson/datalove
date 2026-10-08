@@ -84,9 +84,16 @@ const TYINFO_TABLE_COLUMN_TYDESC_OFFSET: usize = std::mem::offset_of!(TyInfoTabl
 const TYDESC_SIZE: usize = size_of::<TyDesc>();
 const TYDESC_ALIGN: usize = align_of::<TyDesc>();
 const OFFSET_TYPE_TAG: usize = offset_of!(TyDesc, type_tag);
+const OFFSET_FLAGS: usize = offset_of!(TyDesc, flags);
 const OFFSET_SIZE: usize = offset_of!(TyDesc, size);
 const OFFSET_ALIGN: usize = offset_of!(TyDesc, align);
 const OFFSET_TYPE_INFO: usize = offset_of!(TyDesc, type_info);
+
+/// The flags of a type's descriptor, which the runtime's own descriptors
+/// work out from their structure and these from the type.
+fn flags_of(ty: &IrType) -> u8 {
+    if ty.is_copy() { TyDesc::PLAIN } else { 0 }
+}
 
 /// Write a `u32` into descriptor bytes.
 fn put_u32(bytes: &mut [u8], at: usize, value: u32) {
@@ -258,6 +265,8 @@ impl TyDescEmitter {
         let align = align_of::<RtList>() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&list_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
 
@@ -311,6 +320,8 @@ impl TyDescEmitter {
         let align = align_of::<RtSet>() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&set_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
         put_set_layouts(&mut bytes, elem_ty);
@@ -367,6 +378,8 @@ impl TyDescEmitter {
         let align = align_of::<RtMap>() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&map_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
         put_map_layouts(&mut bytes, key_ty, val_ty);
@@ -427,6 +440,8 @@ impl TyDescEmitter {
         let align = align_of::<RtTensor>() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&tensor_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
 
@@ -485,6 +500,8 @@ impl TyDescEmitter {
         let tag = TyTag::Option as u8;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&option_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&total_size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&overall_align.to_le_bytes());
 
@@ -539,6 +556,8 @@ impl TyDescEmitter {
         let tag = TyTag::Result as u8;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&result_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&total_size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&overall_align.to_le_bytes());
 
@@ -624,6 +643,8 @@ impl TyDescEmitter {
         // Build the TyDesc for the ref type.
         let mut bytes = vec![0u8; TYDESC_SIZE];
         bytes[OFFSET_TYPE_TAG] = TyTag::Tuple as u8;
+        // As the runtime reads it: a tuple of the referenced type.
+        bytes[OFFSET_FLAGS] = flags_of(&inner_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&8u32.to_le_bytes()); // Pointer size
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&8u32.to_le_bytes()); // Pointer align
 
@@ -727,6 +748,8 @@ impl TyDescEmitter {
         let num_fields = field_types.len() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
 
@@ -882,6 +905,8 @@ impl TyDescEmitter {
         let num_fields = fields.len() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
 
@@ -1034,6 +1059,8 @@ impl TyDescEmitter {
         let num_variants = variants.len() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
 
@@ -1099,6 +1126,7 @@ impl TyDescEmitter {
         // Build TyDesc bytes.
         let mut bytes = vec![0u8; TYDESC_SIZE];
         bytes[OFFSET_TYPE_TAG] = TyTag::Atom as u8;
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&0u32.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&1u32.to_le_bytes());
 
@@ -1164,6 +1192,7 @@ impl TyDescEmitter {
         let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
         let mut bytes = vec![0u8; TYDESC_SIZE];
         bytes[OFFSET_TYPE_TAG] = TyTag::Term as u8;
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&layout.size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&layout.align.to_le_bytes());
 
@@ -1309,6 +1338,8 @@ impl TyDescEmitter {
         let align = align_of::<RtTable>() as u32;
 
         bytes[OFFSET_TYPE_TAG] = tag;
+
+        bytes[OFFSET_FLAGS] = flags_of(&original_ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
 
@@ -1376,6 +1407,7 @@ impl TyDescEmitter {
 
         // Write fields.
         bytes[OFFSET_TYPE_TAG] = tag;
+        bytes[OFFSET_FLAGS] = flags_of(&ty);
         bytes[OFFSET_SIZE..OFFSET_SIZE + 4].copy_from_slice(&size.to_le_bytes());
         bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&align.to_le_bytes());
         // type_info is zero-filled (nothing variant for scalars).

@@ -222,12 +222,8 @@ unsafe fn destroy_tree_recursive(
 
                 // Destroy all keys in the internal node.
                 let keys_ptr = internal_keys_ptr(node, ty);
-                let key_size = ty.elem.size() as usize;
                 let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                for i in 0..len as usize {
-                    let key_slot = keys_ptr.add(i * key_size);
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.elem.as_ptr());
-                }
+                crate::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.elem);
 
                 // Recursively destroy children.
                 let children_ptr = internal_child_ptrs_ptr(node, ty);
@@ -239,14 +235,10 @@ unsafe fn destroy_tree_recursive(
             SetNodeTag::Leaf => {
                 let len = read_node_len(node);
                 let keys_ptr = leaf_keys_ptr(node, ty);
-                let key_size = ty.elem.size() as usize;
                 let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
                 // Destroy all keys in the leaf node.
-                for i in 0..len as usize {
-                    let key_slot = keys_ptr.add(i * key_size);
-                    let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.elem.as_ptr());
-                }
+                crate::impls::destroy::destroy_array(rt_handle, keys_ptr, len as usize, ty.elem);
             }
         }
 
@@ -285,22 +277,12 @@ unsafe fn clone_tree_recursive(
 
                 let keys_ptr = internal_keys_ptr(node as *mut SetNode, ty);
                 let new_keys_ptr = internal_keys_ptr(new_node, ty);
-                let key_size = ty.elem.size() as usize;
 
                 // Clone all keys.
-                for i in 0..len as usize {
-                    let key_src = keys_ptr.add(i * key_size);
-                    let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::impls::clone::clone_value(rt_handle, key_src, ty.elem.as_ptr(), key_dst);
-                    if status != RtStatus::Ok {
-                        // Destroy already-cloned keys.
-                        for j in 0..i {
-                            let key_slot = new_keys_ptr.add(j * key_size);
-                            let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.elem.as_ptr());
-                        }
-                        free_node(rt, new_node, ty);
-                        return std::ptr::null_mut();
-                    }
+                let status = crate::impls::clone::clone_array(rt_handle, keys_ptr, new_keys_ptr, len as usize, ty.elem);
+                if status != RtStatus::Ok {
+                    free_node(rt, new_node, ty);
+                    return std::ptr::null_mut();
                 }
 
                 // Recursively clone all children.
@@ -319,10 +301,7 @@ unsafe fn clone_tree_recursive(
                     *new_children_ptr.add(i) = new_child;
                     if new_child.is_null() && !child.is_null() {
                         // Destroy all keys.
-                        for j in 0..len as usize {
-                            let key_slot = new_keys_ptr.add(j * key_size);
-                            let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.elem.as_ptr());
-                        }
+                        crate::impls::destroy::destroy_array(rt_handle, new_keys_ptr, len as usize, ty.elem);
                         // Destroy already-cloned children (including current one which is null).
                         for j in 0..=i {
                             let cloned_child = *new_children_ptr.add(j);
@@ -350,22 +329,12 @@ unsafe fn clone_tree_recursive(
 
                 let keys_ptr = leaf_keys_ptr(node as *mut SetNode, ty);
                 let new_keys_ptr = leaf_keys_ptr(new_leaf, ty);
-                let key_size = ty.elem.size() as usize;
 
                 // Clone all keys.
-                for i in 0..len as usize {
-                    let key_src = keys_ptr.add(i * key_size);
-                    let key_dst = new_keys_ptr.add(i * key_size);
-                    let status = crate::impls::clone::clone_value(rt_handle, key_src, ty.elem.as_ptr(), key_dst);
-                    if status != RtStatus::Ok {
-                        // Destroy already-cloned keys.
-                        for j in 0..i {
-                            let key_slot = new_keys_ptr.add(j * key_size);
-                            let _ = crate::impls::destroy::any_destroy_local(rt_handle, key_slot, ty.elem.as_ptr());
-                        }
-                        free_node(rt, new_leaf, ty);
-                        return std::ptr::null_mut();
-                    }
+                let status = crate::impls::clone::clone_array(rt_handle, keys_ptr, new_keys_ptr, len as usize, ty.elem);
+                if status != RtStatus::Ok {
+                    free_node(rt, new_leaf, ty);
+                    return std::ptr::null_mut();
                 }
 
                 // Initialize next_leaf to null; will be linked after tree is cloned.

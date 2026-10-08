@@ -59,6 +59,8 @@ const fn abi_version() -> u64 {
     let hash = mix(hash, align_of::<rtdt::TyDesc>() as u64);
     let hash = mix(hash, size_of::<rtdt::TyInfo>() as u64);
     let hash = mix(hash, offset_of!(rtdt::TyDesc, type_tag) as u64);
+    let hash = mix(hash, offset_of!(rtdt::TyDesc, flags) as u64);
+    let hash = mix(hash, rtdt::TyDesc::PLAIN as u64);
     let hash = mix(hash, offset_of!(rtdt::TyDesc, size) as u64);
     let hash = mix(hash, offset_of!(rtdt::TyDesc, align) as u64);
     let hash = mix(hash, offset_of!(rtdt::TyDesc, type_info) as u64);

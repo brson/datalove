@@ -3016,6 +3016,7 @@ impl IrInterpreter {
                     }
                     let row_tydesc = rtdt::TyDesc {
                         type_tag: rtdt::TyTag::Tuple,
+                        flags: 0,
                         size: row_size,
                         align: row_max_align,
                         type_info: rtdt::TyInfo {

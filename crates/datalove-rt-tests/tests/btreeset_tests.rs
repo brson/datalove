@@ -53,6 +53,7 @@ impl Drop for TyDescArena {
 fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -66,6 +67,7 @@ fn create_set_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rt
 
     let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
@@ -79,6 +81,7 @@ fn create_set_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const rt
 fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
+        flags: 0,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {
@@ -92,6 +95,7 @@ fn create_set_string_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc, *const
 
     let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {
@@ -3398,6 +3402,7 @@ fn create_tuple_u32_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Tuple,
+        flags: 0,
         size: 8,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -3415,6 +3420,7 @@ fn create_set_tuple_u32_u32_tydesc(arena: &TyDescArena) -> (*const rtdt::TyDesc,
 
     let set_tydesc = arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Set,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Set>() as u32,
         align: std::mem::align_of::<rtdt::Set>() as u32,
         type_info: rtdt::TyInfo {

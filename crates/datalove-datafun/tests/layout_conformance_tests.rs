@@ -230,3 +230,23 @@ fn map_and_set_node_layouts_agree() {
         }
     }
 }
+
+/// A descriptor is marked plain exactly where the type is copy.
+///
+/// The interpreter's table works the flag out from the descriptors a type's
+/// own points to, and the AOT backends from `IrType::is_copy`, so the two have
+/// to agree. A type left unmarked is only slower, which is why this checks
+/// both ways rather than relying on the runtime's check of a set flag.
+#[test]
+fn plain_flag_is_copy() {
+    let mut table = IrTyDescTable::new();
+    let mut types = corpus();
+    types.push(IrType::Tuple(vec![IrType::U32, IrType::String]));
+    types.push(IrType::Option(Box::new(IrType::List(Box::new(IrType::U8)))));
+    types.push(IrType::Struct(vec![(String::from("a"), IrType::I64), (String::from("b"), IrType::F64)]));
+    for ty in types {
+        let tydesc = table.get_or_create(&ty);
+        let plain = unsafe { (*tydesc).flags & rtdt::TyDesc::PLAIN != 0 };
+        assert_eq!(plain, ty.is_copy(), "plain flag disagrees for {:?}", ty);
+    }
+}

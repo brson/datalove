@@ -1912,6 +1912,7 @@ mod tests {
     fn make_tydesc(type_tag: rtdt::TyTag) -> rtdt::TyDesc {
         rtdt::TyDesc {
             type_tag,
+            flags: 0,
             size: match type_tag {
                 rtdt::TyTag::U8 | rtdt::TyTag::I8 => 1,
                 rtdt::TyTag::U16 | rtdt::TyTag::I16 => 2,

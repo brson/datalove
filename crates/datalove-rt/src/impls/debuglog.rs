@@ -8,6 +8,7 @@ use crate::impls::rt_local::{RtLocal, DebugOutputMode};
 fn create_string_tydesc() -> rtdt::TyDesc {
     rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
+        flags: 0,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {

@@ -386,6 +386,7 @@ impl CAotCompiler {
 
         writeln!(out, "struct dtlv_tydesc {{").unwrap();
         writeln!(out, "    uint8_t type_tag;").unwrap();
+        writeln!(out, "    uint8_t flags;").unwrap();
         writeln!(out, "    uint32_t size;").unwrap();
         writeln!(out, "    uint32_t align;").unwrap();
         writeln!(out, "    dtlv_tyinfo_t type_info;").unwrap();

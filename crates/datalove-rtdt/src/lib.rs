@@ -807,9 +807,57 @@ pub struct Error {
 #[repr(C)]
 pub struct TyDesc {
     pub type_tag: TyTag,
+    /// Facts about the type that let the runtime skip walking its values.
+    ///
+    /// In the padding after the tag, so a descriptor is no bigger for it. A
+    /// clear bit only means the runtime does not know, and takes the general
+    /// path, so a producer that leaves this zero is slow rather than wrong.
+    pub flags: u8,
     pub size: u32,
     pub align: u32,
     pub type_info: TyInfo,
+}
+
+impl TyDesc {
+    /// The value owns nothing: a bitwise copy of it is a clone, and destroying
+    /// it does nothing. `IrType::is_copy`, carried to run time.
+    pub const PLAIN: u8 = 1;
+
+    /// The flags this descriptor's type has, worked out from its structure.
+    ///
+    /// For a producer to fill `flags` with once the descriptors it points to
+    /// are built.
+    pub fn computed_flags(&self) -> u8 {
+        if is_plain(self) { TyDesc::PLAIN } else { 0 }
+    }
+}
+
+/// Whether a value of this type owns nothing, from the type's structure.
+fn is_plain(td: &TyDesc) -> bool {
+    let component = |ptr: *const TyDesc| ptr.is_null() || is_plain(unsafe { &*ptr });
+    match td.type_tag {
+        TyTag::Bool | TyTag::U8 | TyTag::I8 | TyTag::U16 | TyTag::I16 | TyTag::U32
+        | TyTag::I32 | TyTag::U64 | TyTag::I64 | TyTag::Index | TyTag::Offset
+        | TyTag::F32 | TyTag::F64 | TyTag::Atom => true,
+        TyTag::Int | TyTag::List | TyTag::String | TyTag::Map | TyTag::Set
+        | TyTag::Tensor | TyTag::Table | TyTag::Data | TyTag::Error => false,
+        // The error side of a result is an `error`, which is boxed.
+        TyTag::Result => false,
+        TyTag::Option => component(unsafe { td.type_info.option.inner_tydesc }),
+        TyTag::Term => component(unsafe { td.type_info.term.payload }),
+        TyTag::Tuple => {
+            let info = unsafe { td.type_info.tuple };
+            (0..info.num_fields as usize).all(|i| component(unsafe { (*info.fields.add(i)).tydesc }))
+        }
+        TyTag::Struct => {
+            let info = unsafe { td.type_info.struct_ };
+            (0..info.num_fields as usize).all(|i| component(unsafe { (*info.fields.add(i)).tydesc }))
+        }
+        TyTag::Enum => {
+            let info = unsafe { td.type_info.enum_ };
+            (0..info.num_variants as usize).all(|i| component(unsafe { (*info.variants.add(i)).payload }))
+        }
+    }
 }
 
 /// The descriptor for a type that packs into a `data`'s own words.
@@ -835,6 +883,7 @@ pub fn packed_tydesc(tag: TyTag) -> core::option::Option<*const TyDesc> {
         ($name:ident, $tag:expr, $size:expr) => {{
             static $name: Packed = Packed(TyDesc {
                 type_tag: $tag,
+                flags: TyDesc::PLAIN,
                 size: $size,
                 align: $size,
                 type_info: TyInfo { nothing: TyInfoNothing { unused: 0 } },

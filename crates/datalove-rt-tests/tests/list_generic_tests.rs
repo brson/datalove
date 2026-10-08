@@ -53,6 +53,7 @@ impl Drop for TyDescArena {
 fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -62,6 +63,7 @@ fn create_u32_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
+        flags: 0,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -71,6 +73,7 @@ fn create_string_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
 fn create_data_tydesc(arena: &TyDescArena) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Data,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Data>() as u32,
         align: std::mem::align_of::<rtdt::Data>() as u32,
         type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
@@ -83,6 +86,7 @@ fn create_list_tydesc(
 ) -> *const rtdt::TyDesc {
     arena.alloc(rtdt::TyDesc {
         type_tag: rtdt::TyTag::List,
+        flags: 0,
         size: std::mem::size_of::<rtdt::List>() as u32,
         align: std::mem::align_of::<rtdt::List>() as u32,
         type_info: rtdt::TyInfo {
@@ -97,6 +101,7 @@ fn create_option_tydesc(
 ) -> *const rtdt::TyDesc {
     let option_tydesc = arena.alloc_mut(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Option,
+        flags: 0,
         size: 0,
         align: 0,
         type_info: rtdt::TyInfo {
