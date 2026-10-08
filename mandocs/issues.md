@@ -17,12 +17,6 @@ Only vars that aren't initialized in their declaration actually need them.
 Others can by precisely analyzed like let bindings.
 
 
-## 2026/10/03 const evaluation caching
-
-Runs in the interpreter so not memoized.
-Can we cache results manually?
-
-
 ## 2026/10/03 Revisit prefix op precedence
 
 > Prefix operators bind tighter than postfix operators,
