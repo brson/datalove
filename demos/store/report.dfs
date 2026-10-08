@@ -8,5 +8,5 @@ let lines = report.lines()!
 var i: index = 0
 loop while i .< list.len(ref lines)
     debuglog lines[i]!
-    set i = i +! 1
+    set i +!= 1
 end loop

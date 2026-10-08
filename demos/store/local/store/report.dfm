@@ -44,7 +44,7 @@ fun text_row(ref cells: [string], ref widths: [index], texts: index): !string
         else
             call string.push_str(mut out, ref fmt.right(ref cells[i]!, widths[i]!)!)
         end if
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -86,7 +86,7 @@ fun categories(): ![string]
                 set returned = returns[j]!.1
                 set shipped = returns[j]!.2
             end if
-            set j = j +! 1
+            set j +!= 1
         end loop
         call list.push(mut out, row(ref [
             category,
@@ -95,7 +95,7 @@ fun categories(): ![string]
             fmt.percent(margin, revenue)!,
             fmt.percent(returned, shipped)!,
         ], ref widths)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -120,7 +120,7 @@ fun months(): ![string]
             change(previous, revenue)!,
         ], ref widths)!)
         set previous = revenue
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -154,7 +154,7 @@ fun products(): ![string]
             fmt.count(rows[i]!.0)!,
             fmt.money(rows[i]!.2)!,
         ], ref widths, 2)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -174,7 +174,7 @@ fun customers(): ![string]
             fmt.count(rows[i]!.2)!,
             fmt.money(rows[i]!.0)!,
         ], ref widths, 2)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     call list.push(mut out, "")
     let widths: [index] = [36, 10]
@@ -197,7 +197,7 @@ fun countries(): ![string]
             fmt.count(rows[i]!.2)!,
             fmt.money(rows[i]!.0 /! rows[i]!.2)!,
         ], ref widths)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -216,7 +216,7 @@ fun tiers(): ![string]
             fmt.money(rows[i]!.3)!,
             fmt.money(rows[i]!.3 /! rows[i]!.2)!,
         ], ref widths)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok out
 end fun
@@ -234,7 +234,7 @@ fun baskets(): ![string]
             db.product_name(pairs[i]!.2)!,
             fmt.count(pairs[i]!.0)!,
         ], ref widths, 2)!)
-        set i = i +! 1
+        set i +!= 1
     end loop
     call list.push(mut out, "")
     let widths: [index] = [36, 10]

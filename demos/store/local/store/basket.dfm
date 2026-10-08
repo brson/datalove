@@ -24,12 +24,12 @@ fun top_pairs(n: index): ![(u64, u32, u32)]
                     let second = db.line_product(o, b)!
                     let pair = ord.sorted_pair(first, second)
                     let _ = sales.add(mut together, pair, 1)!
-                    set b = b +! 1
+                    set b +!= 1
                 end loop
-                set a = a +! 1
+                set a +!= 1
             end loop
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
 
     var rows: [(u64, u32, u32)] = []
@@ -38,7 +38,7 @@ fun top_pairs(n: index): ![(u64, u32, u32)]
     loop while i .< list.len(ref pairs)
         let pair = pairs[i]!
         call list.push(mut rows, (map.get_or(ref together, ref pair, 0), pair.0, pair.1))
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok list.take(ref list.reversed(ref ord.sorted(ref rows)), n)
 end fun
@@ -50,12 +50,12 @@ fun multi_item(): !(u64, u64)
     var o: index = 0
     loop while o .< db.order_count()
         if db.is_sale(o)!
-            set all = all +! 1
+            set all +!= 1
             if db.line_count(o)! .> 1
-                set multi = multi +! 1
+                set multi +!= 1
             end if
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
     ret ok (multi, all)
 end fun

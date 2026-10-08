@@ -37,7 +37,7 @@ fun vocabulary(): ![string]
     call string.push_str(mut word, ref syllables[index.from_u32(icall bitand_u32(icall shr_u32(i, : u32 / 4), : u32 / 15))]!)
     call string.push_str(mut word, ref syllables[index.from_u32(icall shr_u32(i, : u32 / 8))]!)
     call list.push(mut vocab, word)
-    set i = i +! 1
+    set i +!= 1
   end loop
   ret ok vocab
 end fun
@@ -63,7 +63,7 @@ fun generate(ref vocab: [string]): !string
     else
       call string.push_str(mut text, ref " ")
     end if
-    set i = i +! 1
+    set i +!= 1
   end loop
   ret ok text
 end fun
@@ -77,7 +77,7 @@ fun count(ref text: string): !%{string = u32}
     let lower = string.to_ascii_lowercase(ref words[i]!)
     let seen = map.get_or(ref counts, ref lower, : u32 / 0)
     call map.insert(mut counts, lower, seen +! 1)
-    set i = i +! 1
+    set i +!= 1
   end loop
   ret ok counts
 end fun
@@ -93,7 +93,7 @@ fun top_checksum(ref counts: %{string = u32}): !u32
   var i: index = 0
   loop while i .< list.len(ref words)
     call list.push(mut ranked, (u32.max_value() -! seen[i]!, words[i]!@))
-    set i = i +! 1
+    set i +!= 1
   end loop
   let sorted = ord.sorted(ref ranked)
 
@@ -107,9 +107,9 @@ fun top_checksum(ref counts: %{string = u32}): !u32
         let wide: u32 = byte@
         set sum = icall add_wrapping_u32(icall mul_wrapping_u32(sum, : u32 / 31), wide)
       end if
-      set j = j +! 1
+      set j +!= 1
     end loop
-    set r = r +! 1
+    set r +!= 1
   end loop
   ret ok sum
 end fun

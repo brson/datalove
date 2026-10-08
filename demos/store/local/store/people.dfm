@@ -20,7 +20,7 @@ fun top_customers(n: index): ![(u64, u32, u64)]
             let _ = sales.add(mut spent, customer, sales.order_revenue(o)!)!
             let _ = sales.add(mut orders, customer, 1)!
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
 
     var rows: [(u64, u32, u64)] = []
@@ -29,7 +29,7 @@ fun top_customers(n: index): ![(u64, u32, u64)]
     loop while i .< list.len(ref customers)
         let customer = customers[i]!
         call list.push(mut rows, (map.get_or(ref spent, ref customer, 0), customer, map.get_or(ref orders, ref customer, 0)))
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok list.take(ref list.reversed(ref ord.sorted(ref rows)), n)
 end fun
@@ -51,7 +51,7 @@ fun by_country(): ![(u64, string, u64)]
             end if
             let _ = set.insert(mut buyers[country]!, customer)
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
 
     var rows: [(u64, string, u64)] = []
@@ -62,7 +62,7 @@ fun by_country(): ![(u64, string, u64)]
         let r = map.get_or(ref revenue, ref country, 0)
         let b = set.len(ref buyers[country]!)
         call list.push(mut rows, (r, country, u64.from_index(b)))
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok list.reversed(ref ord.sorted(ref rows))
 end fun
@@ -73,7 +73,7 @@ fun by_tier(): ![(string, u64, u64, u64)]
     var c: index = 0
     loop while c .< db.customer_count()
         let _ = sales.add(mut members, db.customer_tier(db.customer_id_at(c)!)!, 1)!
-        set c = c +! 1
+        set c +!= 1
     end loop
 
     var spent: %{string = u64} = %{}
@@ -89,7 +89,7 @@ fun by_tier(): ![(string, u64, u64, u64)]
                 let _ = sales.add(mut buying, tier@, 1)!
             end if
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
 
     var rows: [(string, u64, u64, u64)] = []
@@ -101,7 +101,7 @@ fun by_tier(): ![(string, u64, u64, u64)]
         let b = map.get_or(ref buying, ref tier, 0)
         let s = map.get_or(ref spent, ref tier, 0)
         call list.push(mut rows, (tier, m, b, s))
-        set i = i +! 1
+        set i +!= 1
     end loop
     ret ok rows
 end fun
@@ -117,7 +117,7 @@ fun loyalty(): !(u64, u64, u64, u64)
         if db.is_sale(o)!
             call list.push(mut visits, (db.order_customer(o)!, db.order_day(o)!))
         end if
-        set o = o +! 1
+        set o +!= 1
     end loop
     let visits = ord.sorted(ref visits)
 
@@ -135,13 +135,13 @@ fun loyalty(): !(u64, u64, u64, u64)
                 break
             end if
             let gap: u64 = (visits[j]!.1 -! visits[j -! 1]!.1)@
-            set gap_days = gap_days +! gap
-            set gaps = gaps +! 1
-            set j = j +! 1
+            set gap_days +!= gap
+            set gaps +!= 1
+            set j +!= 1
         end loop
-        set buyers = buyers +! 1
+        set buyers +!= 1
         if j -! first .> 1
-            set repeat = repeat +! 1
+            set repeat +!= 1
         end if
         set i = j
     end loop
