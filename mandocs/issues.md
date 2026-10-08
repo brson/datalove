@@ -1,3 +1,8 @@
+## 2026/10/08 runtime rtstatus results are mostly ignored
+
+probably need to trigger an abort
+
+
 ## 2026/10/06 const arguments probably should require `const` annotation
 
 like ref etc
