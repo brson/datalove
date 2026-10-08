@@ -1,3 +1,17 @@
+## 2026/10/08 Lossless mixed-type math ops
+
+Being able to do
+
+```
+set sum += i
+```
+
+where sum is a bigint and i is not would be a strong surface-level semantic
+leading to an optimization, not requiring a peephole for small bigint consts.
+would prefer to have it at the typecheck level for mixed-type ops
+and not a general widening feature (widening would imply i gets converted to a bigint, defeating the optimization).
+
+
 ## 2026/10/08 Saturating and wrapping math ops
 
 zig-style `+|`, `+%` operators.
