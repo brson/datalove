@@ -1,3 +1,8 @@
+## 2026/10/08 sys/std/int functions take args by val
+
+seems like a lot of them should be ref
+
+
 ## 2026/10/08 runtime rtstatus results are mostly ignored
 
 probably need to trigger an abort
