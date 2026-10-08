@@ -36,12 +36,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
 
         // Get TyDesc for the inner type.
-        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for inner type {:?}",
-                inner_ty
-            ))
-        })?;
+        let inner_tydesc_id = self.tydesc(&inner_ty)?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
@@ -89,12 +84,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
 
         // Get TyDesc for the inner type.
-        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for inner type {:?}",
-                inner_ty
-            ))
-        })?;
+        let inner_tydesc_id = self.tydesc(&inner_ty)?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
@@ -170,16 +160,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_ty = self.get_operand_type(src)?;
-        let src_tydesc_id = self.tydesc_emitter.get(&src_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", src_ty))
-        })?;
+        let src_tydesc_id = self.tydesc(&src_ty)?;
         let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
         let src_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
 
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let dest_tydesc_id = self.tydesc_emitter.get(&dest_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", dest_ty))
-        })?;
+        let dest_tydesc_id = self.tydesc(&dest_ty)?;
         let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
         let dest_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, dest_tydesc_gv);
 

@@ -148,12 +148,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get TyDesc for the param type.
-        let tydesc_id = self.tydesc_emitter.get(param_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for param type {:?}",
-                param_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(param_ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
@@ -241,12 +236,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("ParamStoreTracked requires runtime handle parameter".into())
         })?;
 
-        let tydesc_id = self.tydesc_emitter.get(param_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for param type {:?}",
-                param_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(param_ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
@@ -304,12 +294,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("RefStore requires runtime handle parameter".into())
         })?;
 
-        let tydesc_id = self.tydesc_emitter.get(&dest_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for ref store type {:?}",
-                dest_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&dest_ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
@@ -387,12 +372,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("RefSetField requires runtime handle parameter".into())
         })?;
 
-        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for ref set field type {:?}",
-                current_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&current_ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);

@@ -187,9 +187,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?.int_from_limbs;
 
         // Get Int TyDesc.
-        let tydesc_id = self.tydesc_emitter.get(&datalove_datafun_ir::IrType::Int).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Int".into())
-        })?;
+        let tydesc_id = self.tydesc(&datalove_datafun_ir::IrType::Int)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -243,9 +241,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get String TyDesc.
-        let tydesc_id = self.tydesc_emitter.get(&IrType::String).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for String".into())
-        })?;
+        let tydesc_id = self.tydesc(&IrType::String)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -500,9 +496,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
         let inner_ir_type = payload_type.clone();
-        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
-        })?;
+        let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
@@ -563,9 +557,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
         let inner_ir_type = payload_type.clone();
-        let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
-        })?;
+        let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
         let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
         let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
@@ -660,9 +652,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for List element".into())
-        })?;
+        let elem_tydesc_id = self.tydesc(&element_type)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
@@ -751,15 +741,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Tensor constant requires runtime imports".into())
         })?;
 
-        let tensor_tydesc_id = self.tydesc_emitter.get(&tensor_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Tensor constant".into())
-        })?;
+        let tensor_tydesc_id = self.tydesc(&tensor_type)?;
         let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
         let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
 
-        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Tensor element".into())
-        })?;
+        let elem_tydesc_id = self.tydesc(&element_type)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
@@ -826,18 +812,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc_emitter.get(&element_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Set element".into())
-        })?;
+        let elem_tydesc_id = self.tydesc(&element_type)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
         // Inserted one at a time, as a set literal is, so that the elements
         // need not arrive sorted or once each. One scratch slot holds each
         // element on its way in; the insert takes it or lets it go.
-        let set_tydesc_id = self.tydesc_emitter.get(&IrType::Set(Box::new(element_type.clone()))).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Set constant".into())
-        })?;
+        let set_tydesc_id = self.tydesc(&IrType::Set(Box::new(element_type.clone())))?;
         let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
         let set_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, set_tydesc_gv);
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
@@ -902,24 +884,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Get key TyDesc.
-        let key_tydesc_id = self.tydesc_emitter.get(&key_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Map key".into())
-        })?;
+        let key_tydesc_id = self.tydesc(&key_type)?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
         let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
         // Get value TyDesc.
-        let val_tydesc_id = self.tydesc_emitter.get(&value_type).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Map value".into())
-        })?;
+        let val_tydesc_id = self.tydesc(&value_type)?;
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
         let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
 
         // Inserted one at a time, as a map literal is; see
         // `build_set_const_at`. A later entry for a key replaces an earlier.
-        let map_tydesc_id = self.tydesc_emitter
-            .get(&IrType::Map(Box::new(key_type.clone()), Box::new(value_type.clone())))
-            .ok_or_else(|| CraneliftError::Codegen("TyDesc not found for Map constant".into()))?;
+        let map_tydesc_id = self.tydesc(&IrType::Map(Box::new(key_type.clone()), Box::new(value_type.clone())))?;
         let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
         let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
@@ -977,9 +953,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let columns = columns.clone();
 
         // Get Table TyDesc.
-        let table_tydesc_id = self.tydesc_emitter.get(ty).ok_or_else(|| {
-            CraneliftError::Codegen("TyDesc not found for Table".into())
-        })?;
+        let table_tydesc_id = self.tydesc(ty)?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
         let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
 
@@ -991,9 +965,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // been for a long time, so the runtime asserted on the tag and every
         // table constant died where it was built.
         let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
-        let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
-        })?;
+        let row_tydesc_id = self.tydesc(&row_ty)?;
         let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
         let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
 
@@ -1126,9 +1098,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("Int constant requires runtime imports".into())
                 })?.int_from_limbs;
 
-                let tydesc_id = self.tydesc_emitter.get(&IrType::Int).ok_or_else(|| {
-                    CraneliftError::Codegen("TyDesc not found for Int".into())
-                })?;
+                let tydesc_id = self.tydesc(&IrType::Int)?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                 let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -1158,9 +1128,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("String constant requires runtime imports".into())
                 })?;
 
-                let tydesc_id = self.tydesc_emitter.get(&IrType::String).ok_or_else(|| {
-                    CraneliftError::Codegen("TyDesc not found for String".into())
-                })?;
+                let tydesc_id = self.tydesc(&IrType::String)?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                 let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -1276,9 +1244,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();
-                let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
-                    CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
-                })?;
+                let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
                 let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
                 let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 
@@ -1314,9 +1280,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();
-                let inner_tydesc_id = self.tydesc_emitter.get(&inner_ir_type).ok_or_else(|| {
-                    CraneliftError::Codegen(format!("TyDesc not found for inner type {:?}", inner_ir_type))
-                })?;
+                let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
                 let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
                 let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
 

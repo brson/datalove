@@ -1,7 +1,7 @@
 //! JIT compiler wrapping Cranelift's JITModule.
 
 use std::any::Any;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -18,7 +18,7 @@ use datalove_datafun_interp::{ExecutionContext, FuncIdentity, FunctionRegistry, 
 use datalove_datafun_cranelift::codegen::{self, build_signature_for_func, uses_sret};
 use datalove_datafun_cranelift::CraneliftError;
 use datalove_datafun_cranelift::runtime::RuntimeImports;
-use datalove_datafun_cranelift::tydesc_emit::{self, TyDescEmitter};
+use datalove_datafun_cranelift::tydesc_emit::TyDescEmitter;
 use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
 
 use crate::trampoline::{self, EncodedFuncKey};
@@ -262,10 +262,6 @@ impl JitCompiler {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
-        // Collect types from main function and all callees for TyDesc emission.
-        let mut types = BTreeSet::new();
-        tydesc_emit::collect_types_from_code_unit(func, &mut types);
-
         // Create stubs for each callee.
         let mut local_funcs: HashMap<CodeUnitId, codegen::LocalCallee> = HashMap::new();
         let mut external_funcs: HashMap<(u32, CodeUnitId), codegen::LocalCallee> = HashMap::new();
@@ -274,9 +270,6 @@ impl JitCompiler {
         for code_ref in callees {
             // Look up the callee's IR to get its signature.
             let callee_ir = ctx.get_unit(&code_ref, registry);
-
-            // Collect types from callee for TyDesc emission.
-            tydesc_emit::collect_types_from_code_unit(&callee_ir, &mut types);
 
             // Native rider functions: create local trampoline stubs that use
             // indirect calls via absolute address. Direct imports would require
@@ -319,17 +312,13 @@ impl JitCompiler {
             }
         }
 
-        // Emit TyDescs for all collected types.
-        self.tydesc_emitter.emit_all(&mut self.jit_module, types)
-            .map_err(|e| codegen_err("tydesc emit", e))?;
-
         // Build a FunctionCompiler with stub mappings.
-        let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+        let mut compiler = codegen::FunctionCompiler::new_with_runtime(
             func,
             self.isa.as_ref(),
             &mut self.jit_module,
             self.runtime.clone(),
-            self.tydesc_emitter.clone(),
+            &mut self.tydesc_emitter,
             Some(registry),
         );
         compiler.set_local_funcs(local_funcs);

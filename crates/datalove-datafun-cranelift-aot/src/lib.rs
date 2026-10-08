@@ -5,11 +5,11 @@
 //!
 //! # Architecture
 //!
-//! The AOT compiler uses a three-pass approach for whole-world compilation:
+//! The AOT compiler uses a two-pass approach for whole-world compilation:
 //!
-//! 1. **Type collection**: Collect all types from all functions and script units.
-//! 2. **Declaration**: Declare all functions and emit all type descriptors upfront.
-//! 3. **Definition**: Compile function bodies with full call graph visibility.
+//! 1. **Declaration**: Declare all functions.
+//! 2. **Definition**: Compile function bodies with full call graph visibility,
+//!    emitting each type descriptor the first time a body needs it.
 //!
 //! # Key types
 //!
@@ -118,9 +118,10 @@ impl AotCompiler {
         ).map_err(|e| AotError::Module(format!("object builder error: {}", e)))?;
 
         let mut obj_module = ObjectModule::new(obj_builder);
+        let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
 
         for func in &module.functions {
-            self.compile_function(&mut obj_module, func)?;
+            self.compile_function(&mut obj_module, &mut tydesc_emitter, func)?;
         }
 
         Ok(obj_module.finish())
@@ -128,43 +129,25 @@ impl AotCompiler {
 
     /// Compile an IR script unit to an object file.
     ///
-    /// This method collects types only from the script unit itself. For whole-world
-    /// compilation with modules, use `compile_script_unit_with_world_types` instead.
+    /// For a script that calls into modules, use `compile_script_unit_in_world`.
     ///
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
     pub fn compile_script_unit(&mut self, unit: &IrCodeUnit) -> Result<ObjectProduct, AotError> {
-        let types = tydesc_emit::collect_types_from_script_unit(unit);
         let empty_registry = datalove_datafun_ir::FunctionRegistry::new();
-        self.compile_script_unit_with_types(unit, types, &empty_registry)
+        self.compile_script_unit_in_world(unit, &empty_registry)
     }
 
-    /// Compile an IR script unit with pre-collected world types.
-    ///
-    /// Use this when compiling in a world with modules. Pass types collected from
-    /// all module functions and prior script units.
+    /// Compile an IR script unit, and the module functions in `registry`, to
+    /// an object file.
     ///
     /// Generates:
     /// - `__script_body(rt: *mut u8)` - The script body that takes runtime handle
     /// - `main()` - Entry point that initializes runtime, runs body, cleans up
-    pub fn compile_script_unit_with_world_types<'a>(
+    pub fn compile_script_unit_in_world(
         &mut self,
         unit: &IrCodeUnit,
-        world_units: impl Iterator<Item = &'a IrCodeUnit>,
-        registry: &datalove_datafun_ir::FunctionRegistry,
-    ) -> Result<ObjectProduct, AotError> {
-        // Collect types from world code units and the script unit.
-        let mut types = tydesc_emit::collect_types_from_script_unit(unit);
-        tydesc_emit::collect_types_from_code_units(world_units, &mut types);
-        self.compile_script_unit_with_types(unit, types, registry)
-    }
-
-    /// Compile an IR script unit with pre-collected types.
-    fn compile_script_unit_with_types(
-        &mut self,
-        unit: &IrCodeUnit,
-        types: std::collections::BTreeSet<IrType>,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
         let obj_builder = ObjectBuilder::new(
@@ -179,9 +162,9 @@ impl AotCompiler {
         let call_conv = self.isa.default_call_conv();
         let runtime_imports = runtime::RuntimeImports::declare(&mut obj_module, call_conv)?;
 
-        // Emit all TyDescs upfront (whole-world compilation).
+        // Shared by every function compiled into the object, so that each
+        // descriptor is emitted once.
         let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
-        tydesc_emitter.emit_all(&mut obj_module, types)?;
 
         // The script body, as a function the codegen can compile.
         let body_func = self.script_unit_to_function(unit);
@@ -268,12 +251,12 @@ impl AotCompiler {
         for func in &unit.nested_units {
             let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
             let cl_func_id = local_funcs[&func_id].func_id;
-            let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+            let mut compiler = codegen::FunctionCompiler::new_with_runtime(
                 func,
                 self.isa.as_ref(),
                 &mut obj_module,
                 runtime_imports.clone(),
-                tydesc_emitter.clone(),
+                &mut tydesc_emitter,
                 Some(registry),
             );
             compiler.set_local_funcs(local_funcs.clone());
@@ -291,12 +274,12 @@ impl AotCompiler {
                 continue;
             }
 
-            let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+            let mut compiler = codegen::FunctionCompiler::new_with_runtime(
                 ir_unit,
                 self.isa.as_ref(),
                 &mut obj_module,
                 runtime_imports.clone(),
-                tydesc_emitter.clone(),
+                &mut tydesc_emitter,
                 Some(registry),
             );
             compiler.set_local_funcs(local_funcs.clone());
@@ -316,24 +299,24 @@ impl AotCompiler {
                 .map_err(|e| AotError::Module(format!("declare {}: {}", name, e)));
             let init_id = declare("__dtlv_statics_init")?;
             let fini_id = declare("__dtlv_statics_fini")?;
-            codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+            codegen::FunctionCompiler::new_with_runtime(
                 &empty, self.isa.as_ref(), &mut obj_module,
-                runtime_imports.clone(), tydesc_emitter.clone(), Some(registry),
+                runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
             ).compile_static_init(init_id, &statics)?;
-            codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+            codegen::FunctionCompiler::new_with_runtime(
                 &empty, self.isa.as_ref(), &mut obj_module,
-                runtime_imports.clone(), tydesc_emitter.clone(), Some(registry),
+                runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
             ).compile_static_fini(fini_id, &statics)?;
             Some((init_id, fini_id))
         };
 
         // Compile the body function with pre-populated local_funcs and module_funcs.
-        let mut compiler = codegen::FunctionCompiler::new_with_runtime_and_tydescs(
+        let mut compiler = codegen::FunctionCompiler::new_with_runtime(
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
             runtime_imports,
-            tydesc_emitter,
+            &mut tydesc_emitter,
             Some(registry),
         );
         compiler.set_local_funcs(local_funcs);
@@ -460,9 +443,10 @@ impl AotCompiler {
     fn compile_function(
         &mut self,
         module: &mut ObjectModule,
+        tydesc_emitter: &mut tydesc_emit::TyDescEmitter,
         func: &IrCodeUnit,
     ) -> Result<(), AotError> {
-        let compiler = codegen::FunctionCompiler::new(func, self.isa.as_ref(), module);
+        let compiler = codegen::FunctionCompiler::new(func, self.isa.as_ref(), module, tydesc_emitter);
         compiler.compile()?;
         Ok(())
     }

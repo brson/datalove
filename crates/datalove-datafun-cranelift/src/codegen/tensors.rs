@@ -199,11 +199,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let rt_handle = self.rt_handle_param.ok_or_else(|| {
                         CraneliftError::Codegen("TensorGet aggregate requires runtime handle".into())
                     })?;
-                    let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-                        CraneliftError::Codegen(format!(
-                            "TyDesc not found for element type {:?}", elem_ty
-                        ))
-                    })?;
+                    let tydesc_id = self.tydesc(&elem_ty)?;
                     let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                     let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -257,11 +253,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
                 CraneliftError::Codegen("TensorGet hyperplane requires runtime handle".into())
             })?;
-            let tydesc_id = self.tydesc_emitter.get(&tensor_ty).ok_or_else(|| {
-                CraneliftError::Codegen(format!(
-                    "TyDesc not found for tensor type {:?}", tensor_ty
-                ))
-            })?;
+            let tydesc_id = self.tydesc(&tensor_ty)?;
             let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
             let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -317,11 +309,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("TensorSet requires runtime handle".into())
         })?;
-        let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for element type {:?}", elem_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&elem_ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 

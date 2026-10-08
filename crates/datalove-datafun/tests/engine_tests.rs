@@ -223,7 +223,7 @@ fn run_exe(exe: &Path) -> Result<String, String> {
 fn cranelift_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -> Result<String, String> {
     let mut compiler = AotCompiler::new_for_host().map_err(|e| e.to_string())?;
     let product = compiler
-        .compile_script_unit_with_world_types(unit, registry.iter_all_code_units(), registry)
+        .compile_script_unit_in_world(unit, registry)
         .map_err(|e| format!("compile failed: {e}"))?;
     let object = product.emit().map_err(|e| format!("emit failed: {e}"))?;
     let exe = dir.join("test");

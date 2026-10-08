@@ -119,14 +119,13 @@ pub fn compile_script_to_object(unit: &IrCodeUnit) -> AnyResult<Vec<u8>> {
 }
 
 /// Compile a script unit with module code units to object bytes.
-pub fn compile_script_to_object_with_world<'a>(
+pub fn compile_script_to_object_with_world(
     unit: &IrCodeUnit,
-    world_units: impl Iterator<Item = &'a IrCodeUnit>,
     registry: &FunctionRegistry,
 ) -> AnyResult<Vec<u8>> {
     let mut compiler = AotCompiler::new_for_host()
         .map_err(|e| anyhow!("failed to create AOT compiler: {}", e))?;
-    let product = compiler.compile_script_unit_with_world_types(unit, world_units, registry)
+    let product = compiler.compile_script_unit_in_world(unit, registry)
         .map_err(|e| anyhow!("AOT compilation failed: {}", e))?;
     let obj_bytes = product.emit()
         .map_err(|e| anyhow!("failed to emit object: {}", e))?;
@@ -217,12 +216,11 @@ pub fn compile_link_run(unit: &IrCodeUnit) -> AnyResult<ExecOutput> {
 }
 
 /// Compile, link, and run a script unit with module code units.
-pub fn compile_link_run_with_world<'a>(
+pub fn compile_link_run_with_world(
     unit: &IrCodeUnit,
-    world_units: impl Iterator<Item = &'a IrCodeUnit>,
     registry: &FunctionRegistry,
 ) -> AnyResult<ExecOutput> {
-    let obj_bytes = compile_script_to_object_with_world(unit, world_units, registry)?;
+    let obj_bytes = compile_script_to_object_with_world(unit, registry)?;
     let (exe_path, _dir) = link_object_to_temp_executable(&obj_bytes)
         .map_err(|e| anyhow!("{}", e))?;
     run_executable(&exe_path).map_err(|e| anyhow!("{}", e))

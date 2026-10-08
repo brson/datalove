@@ -46,12 +46,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Look up pre-emitted TyDesc for the actual (non-ref) type.
-        let tydesc_id = self.tydesc_emitter.get(&actual_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?} - should have been emitted upfront",
-                actual_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&actual_ty)?;
 
         // Get address of tydesc.
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
@@ -94,12 +89,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_ptr = self.get_operand_ptr(builder, operand)?;
 
         // Look up pre-emitted TyDesc.
-        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?} - should have been emitted upfront",
-                ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&ty)?;
 
         // Get address of tydesc.
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
@@ -173,12 +163,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Look up pre-emitted TyDesc.
-        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?} - should have been emitted upfront",
-                ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
@@ -238,11 +223,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let ref_ptr = self.get_value_as_ref_ptr(builder, ref_value)?;
 
         // Get tydesc for inner type.
-        let tydesc_id = self.tydesc_emitter.get(inner_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for inner type {:?}", inner_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(inner_ty)?;
 
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);

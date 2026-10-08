@@ -330,8 +330,9 @@ pub struct FunctionCompiler<'a, M: Module> {
     next_var: u32,
     /// Runtime function imports (optional, for functions that need runtime calls).
     runtime: Option<RuntimeImports>,
-    /// TyDesc emitter for runtime type info.
-    tydesc_emitter: TyDescEmitter,
+    /// The module's type descriptors, shared by every function compiled into
+    /// it. A descriptor is emitted the first time codegen asks for it.
+    tydesc_emitter: &'a mut TyDescEmitter,
     /// Runtime handle (implicit first parameter to all functions).
     rt_handle_param: Option<cl_ir::Value>,
     /// Sret pointer (implicit second parameter for aggregate returns).
@@ -398,6 +399,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
+        tydesc_emitter: &'a mut TyDescEmitter,
     ) -> Self {
         let func_ctx = func.function_context()
             .expect("FunctionCompiler requires a function code unit");
@@ -431,7 +433,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             frame_slot: None,
             next_var: 0,
             runtime: None,
-            tydesc_emitter: TyDescEmitter::new(),
+            tydesc_emitter,
             rt_handle_param: None,
             sret_param: None,
             return_slot: return_slot_values(func),
@@ -441,66 +443,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Create a new function compiler with runtime imports.
     ///
-    /// Use this for functions that may need runtime calls (like DebugLog).
-    ///
     /// Panics if the code unit is not a function.
     pub fn new_with_runtime(
         func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
         runtime: RuntimeImports,
-    ) -> Self {
-        let func_ctx = func.function_context()
-            .expect("FunctionCompiler requires a function code unit");
-
-        let layout = FrameLayout::compute(
-            &func_ctx.param_types,
-            &func.value_types,
-            &func.slot_types,
-            &func.tracked_slots,
-            &func_ctx.tracked_params,
-        );
-
-        Self {
-            func,
-            func_ctx,
-            layout,
-            isa,
-            module,
-            values: HashMap::new(),
-            blocks: HashMap::new(),
-            param_values: HashMap::new(),
-            descriptor_values: HashMap::new(),
-            shape_descriptor_values: Vec::new(),
-            ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
-            ref_desc_values: HashMap::new(),
-            local_funcs: HashMap::new(),
-            external_funcs: HashMap::new(),
-            module_funcs: HashMap::new(),
-            registry: None,
-            slot_vars: HashMap::new(),
-            frame_slot: None,
-            next_var: 0,
-            runtime: Some(runtime),
-            tydesc_emitter: TyDescEmitter::new(),
-            rt_handle_param: None,
-            sret_param: None,
-            return_slot: return_slot_values(func),
-            static_consts: StaticConsts::new(),
-        }
-    }
-
-    /// Create a new function compiler with runtime imports and pre-populated TyDescs.
-    ///
-    /// Use this when TyDescs have been emitted upfront (whole-world compilation).
-    ///
-    /// Panics if the code unit is not a function.
-    pub fn new_with_runtime_and_tydescs(
-        func: &'a IrCodeUnit,
-        isa: &'a dyn TargetIsa,
-        module: &'a mut M,
-        runtime: RuntimeImports,
-        tydesc_emitter: TyDescEmitter,
+        tydesc_emitter: &'a mut TyDescEmitter,
         registry: Option<&'a FunctionRegistry>,
     ) -> Self {
         let func_ctx = func.function_context()
@@ -541,6 +490,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
         }
+    }
+
+    /// The descriptor for a type, emitted the first time anything asks.
+    ///
+    /// On demand rather than collected beforehand: a list made up front had to
+    /// foresee every type codegen would reach for, and each one it missed --
+    /// a payload inside a constant, the row of an empty table -- was a
+    /// function that would not compile.
+    pub(crate) fn tydesc(&mut self, ty: &IrType) -> Result<cranelift_module::DataId, CraneliftError> {
+        self.tydesc_emitter.emit(self.module, ty)
     }
 
     /// Compile the function and return the Cranelift FuncId.
@@ -1125,9 +1084,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         self.compile_static_pass(func_id, |this, builder, addr, ty, _value| {
             let runtime = this.runtime.expect("static const functions are compiled with runtime imports");
-            let tydesc_id = this.tydesc_emitter.get(ty).ok_or_else(|| {
-                CraneliftError::Codegen(format!("no descriptor emitted for a static {:?}", ty))
-            })?;
+            let tydesc_id = this.tydesc(ty)?;
             let tydesc_gv = this.module.declare_data_in_func(tydesc_id, builder.func);
             let tydesc = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
             let destroy = this.module.declare_func_in_func(runtime.destroy_local, builder.func);
@@ -1619,7 +1576,8 @@ mod tests {
             vec![IrType::I32],
         );
 
-        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
+        let mut tydescs = TyDescEmitter::new();
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1661,7 +1619,8 @@ mod tests {
             vec![IrType::I32, IrType::I32, IrType::Bool],
         );
 
-        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
+        let mut tydescs = TyDescEmitter::new();
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1695,7 +1654,8 @@ mod tests {
             vec![IrType::I32, IrType::I32],
         );
 
-        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
+        let mut tydescs = TyDescEmitter::new();
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }
@@ -1776,7 +1736,8 @@ mod tests {
             nested_units: vec![],
         };
 
-        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module);
+        let mut tydescs = TyDescEmitter::new();
+        let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
         let result = compiler.compile();
         assert!(result.is_ok(), "compile failed: {:?}", result.err());
     }

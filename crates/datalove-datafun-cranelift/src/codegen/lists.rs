@@ -221,11 +221,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("ListGet aggregate requires runtime handle".into())
                 })?;
-                let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-                    CraneliftError::Codegen(format!(
-                        "TyDesc not found for element type {:?}", elem_ty
-                    ))
-                })?;
+                let tydesc_id = self.tydesc(&elem_ty)?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                 let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -300,10 +296,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             None => {
                 let size = types::ir_type_to_cranelift(&elem_ty).layout().size;
-                let tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-                    CraneliftError::Codegen(format!(
-                        "TyDesc not found for element type {:?}", elem_ty))
-                })?;
+                let tydesc_id = self.tydesc(&elem_ty)?;
                 let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                 (builder.ins().iconst(PTR_TYPE, size as i64),
                  builder.ins().symbol_value(PTR_TYPE, gv))

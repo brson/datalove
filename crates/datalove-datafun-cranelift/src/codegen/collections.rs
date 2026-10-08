@@ -104,16 +104,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let list_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get List TyDesc.
-        let list_tydesc_id = self.tydesc_emitter.get(&list_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for {:?}", list_ty))
-        })?;
+        let list_tydesc_id = self.tydesc(&list_ty)?;
         let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
         let list_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, list_tydesc_gv);
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
-        })?;
+        let elem_tydesc_id = self.tydesc(&elem_ty)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
@@ -279,16 +275,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let set_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Set TyDesc.
-        let set_tydesc_id = self.tydesc_emitter.get(&set_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for {:?}", set_ty))
-        })?;
+        let set_tydesc_id = self.tydesc(&set_ty)?;
         let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
         let set_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, set_tydesc_gv);
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
-        })?;
+        let elem_tydesc_id = self.tydesc(&elem_ty)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
@@ -353,23 +345,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let map_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Map TyDesc.
-        let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for {:?}", map_ty))
-        })?;
+        let map_tydesc_id = self.tydesc(&map_ty)?;
         let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
         let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
 
         // Get key TyDesc.
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
+        let key_tydesc_id = self.tydesc(&key_ty)?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
         let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
         // Get value TyDesc.
-        let val_tydesc_id = self.tydesc_emitter.get(&val_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for value type {:?}", val_ty))
-        })?;
+        let val_tydesc_id = self.tydesc(&val_ty)?;
         let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
         let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
 
@@ -429,16 +415,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tensor_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Tensor TyDesc.
-        let tensor_tydesc_id = self.tydesc_emitter.get(&tensor_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for {:?}", tensor_ty))
-        })?;
+        let tensor_tydesc_id = self.tydesc(&tensor_ty)?;
         let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
         let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc_emitter.get(&elem_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for element type {:?}", elem_ty))
-        })?;
+        let elem_tydesc_id = self.tydesc(&elem_ty)?;
         let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
         let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
 
@@ -549,16 +531,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let table_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
         // Get Table TyDesc.
-        let table_tydesc_id = self.tydesc_emitter.get(&table_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for {:?}", table_ty))
-        })?;
+        let table_tydesc_id = self.tydesc(&table_ty)?;
         let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
         let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
 
         // Get row (tuple) TyDesc.
-        let row_tydesc_id = self.tydesc_emitter.get(&row_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for row type {:?}", row_ty))
-        })?;
+        let row_tydesc_id = self.tydesc(&row_ty)?;
         let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
         let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
 

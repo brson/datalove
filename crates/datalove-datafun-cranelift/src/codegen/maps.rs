@@ -64,18 +64,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let map_tydesc_ptr = match self.operand_ref_desc(map) {
             Some(desc) => desc,
             None => {
-                let map_tydesc_id = self.tydesc_emitter.get(&map_ty).ok_or_else(|| {
-                    CraneliftError::Codegen(
-                        format!("TyDesc not found for map type {:?}", map_ty))
-                })?;
+                let map_tydesc_id = self.tydesc(&map_ty)?;
                 let gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
                 builder.ins().symbol_value(PTR_TYPE, gv)
             }
         };
 
-        let key_tydesc_id = self.tydesc_emitter.get(&key_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for key type {:?}", key_ty))
-        })?;
+        let key_tydesc_id = self.tydesc(&key_ty)?;
         let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
         let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
 
@@ -97,9 +92,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         ty: &IrType,
     ) -> Result<cl_ir::Value, CraneliftError> {
-        let tydesc_id = self.tydesc_emitter.get(ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", ty))
-        })?;
+        let tydesc_id = self.tydesc(ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
     }

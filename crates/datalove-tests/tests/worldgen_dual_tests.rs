@@ -299,9 +299,8 @@ fn aot_compile_link_run(
         }
     };
 
-    let product = match compiler.compile_script_unit_with_world_types(
+    let product = match compiler.compile_script_unit_in_world(
         ir_unit,
-        registry.iter_all_code_units(),
         registry,
     ) {
         Ok(p) => p,

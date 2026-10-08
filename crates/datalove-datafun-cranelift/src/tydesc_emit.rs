@@ -3,14 +3,15 @@
 //! Emits type descriptors as static data in the object file,
 //! using layout from `rtdt::TyDesc` directly.
 //!
-//! Since datalove does whole-world compilation, all types are known
-//! ahead of time. TyDescs are emitted upfront in a single pass.
+//! A descriptor is emitted the first time codegen asks for one, along with the
+//! descriptors it points to, and the emitter is shared by every function
+//! compiled into a module so that each is emitted once.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::HashMap;
 use std::mem::{align_of, offset_of, size_of};
 
 use cranelift_module::{DataDescription, DataId, Linkage, Module};
-use datalove_datafun_ir::{IrCodeUnit, IrType};
+use datalove_datafun_ir::IrType;
 use datalove_datafun_ir::layout as ir_layout;
 use datalove_rtdt::{
     List as RtList, Map as RtMap, Set as RtSet, Table as RtTable, Tensor as RtTensor, TyDesc,
@@ -1344,86 +1345,6 @@ impl TyDescEmitter {
         Ok(data_id)
     }
 
-    /// Emit TyDescs for all types upfront.
-    ///
-    /// Call this before codegen to populate the cache. After this,
-    /// use `get()` for lookup-only access during codegen.
-    pub fn emit_all<M: Module>(
-        &mut self,
-        module: &mut M,
-        types: impl IntoIterator<Item = IrType>,
-    ) -> Result<(), CraneliftError> {
-        for ty in types {
-            // Skip types we can't emit - they'll error at use site if needed.
-            if self.can_emit(&ty) {
-                self.emit(module, &ty)?;
-            }
-        }
-        Ok(())
-    }
-
-    /// Look up a previously-emitted TyDesc.
-    ///
-    /// Returns None if the type was not emitted. Panics are appropriate
-    /// during codegen since all types should have been emitted upfront.
-    pub fn get(&self, ty: &IrType) -> Option<DataId> {
-        self.tydescs.get(ty).copied()
-    }
-
-    /// Check if a type can be emitted as a TyDesc.
-    fn can_emit(&self, ty: &IrType) -> bool {
-        match ty {
-            // Simple types.
-            IrType::Unit
-            | IrType::Bool
-            | IrType::U8
-            | IrType::I8
-            | IrType::U16
-            | IrType::I16
-            | IrType::U32
-            | IrType::I32
-            | IrType::U64
-            | IrType::I64
-            | IrType::Index
-            | IrType::Offset
-            | IrType::F32
-            | IrType::F64
-            | IrType::Int
-            | IrType::String
-            | IrType::Data
-            | IrType::Error => true,
-
-            // Collection types - can emit if element types can be emitted.
-            IrType::List(elem_ty) => self.can_emit(elem_ty),
-            IrType::Set(elem_ty) => self.can_emit(elem_ty),
-            IrType::Map(key_ty, val_ty) => self.can_emit(key_ty) && self.can_emit(val_ty),
-            IrType::Tensor(elem_ty, _rank) => self.can_emit(elem_ty),
-
-            // Option/Result types - can emit if inner type can be emitted.
-            IrType::Option(inner_ty) => self.can_emit(inner_ty),
-            IrType::Result(ok_ty) => self.can_emit(ok_ty),
-
-            // Tuple/Struct types - can emit if all field types can be emitted.
-            IrType::Tuple(field_types) => field_types.iter().all(|t| self.can_emit(t)),
-            IrType::Struct(fields) => fields.iter().all(|(_, t)| self.can_emit(t)),
-
-            // Enum types - can emit if all payload types can be emitted.
-            IrType::Enum(variants) => variants.iter().all(|(_, payload)| {
-                payload.as_ref().map_or(true, |t| self.can_emit(t))
-            }),
-            // Atom has no payload, always emittable.
-            IrType::Atom(_) => true,
-            // Term can emit if payload can be emitted.
-            IrType::Term(_, payload) => self.can_emit(payload),
-
-            // Ref types - can emit if inner type can be emitted.
-            IrType::Ref(inner_ty) => self.can_emit(inner_ty),
-
-            // Table types - can emit if all column types can be emitted.
-            IrType::Table(columns) => columns.iter().all(|(_, t)| self.can_emit(t)),
-        }
-    }
-
     /// Build the raw bytes for a TyDesc.
     fn build_tydesc_bytes(&self, ty: &IrType) -> Result<Vec<u8>, CraneliftError> {
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -1466,180 +1387,6 @@ impl TyDescEmitter {
 impl Default for TyDescEmitter {
     fn default() -> Self {
         Self::new()
-    }
-}
-
-/// Collect all types from a code unit for TyDesc emission.
-pub fn collect_types_from_code_unit(unit: &IrCodeUnit, types: &mut BTreeSet<IrType>) {
-    // Collect from unit's value and slot types.
-    for ty in &unit.value_types {
-        types.insert(ty.clone());
-    }
-    for ty in &unit.slot_types {
-        types.insert(ty.clone());
-    }
-
-    // Collect from function context if present.
-    if let Some(func_ctx) = unit.function_context() {
-        for ty in &func_ctx.param_types {
-            types.insert(ty.clone());
-        }
-    }
-
-    // Collect from native context if present.
-    if let Some(native_ctx) = unit.native_context() {
-        for ty in &native_ctx.param_types {
-            types.insert(ty.clone());
-        }
-        types.insert(native_ctx.return_type.clone());
-    }
-
-    // A descriptor handed to a generic that builds a collection names a type
-    // that may appear nowhere else: a `#{string}` built inside a function
-    // returning an index is named only here. Without this the emitter makes no
-    // descriptor for it and codegen has nothing to point at.
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            let datalove_datafun_ir::Instruction::Call { shape_descriptors, .. } = instr else {
-                continue;
-            };
-            for r in shape_descriptors {
-                if let datalove_datafun_ir::DescriptorRef::Static(ty) = r {
-                    types.insert(ty.clone());
-                }
-            }
-        }
-    }
-
-    // A constant can name a type its own does not. The value of a `data` is
-    // `Data` and says nothing about what it holds, and what it holds is
-    // packed against a descriptor for that: a const of a `data` over a list of
-    // `i64` was the only mention of `[i64]` in its unit, and the emitter made
-    // no descriptor for it.
-    //
-    // Only a constant whose type has a `data` or `error` in it can hold one,
-    // so the rest are not walked: a dataset is a constant of hundreds of
-    // thousands of values, and every function reading it names it.
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            let (dest, value) = match instr {
-                datalove_datafun_ir::Instruction::Const { dest, value } => (dest, value),
-                datalove_datafun_ir::Instruction::StaticRef { dest, value } => (dest, &***value),
-                _ => continue,
-            };
-            if can_hold_payload(&unit.value_types[dest.0 as usize]) {
-                collect_types_from_const_value(value, types);
-            }
-        }
-    }
-
-    // Recursively collect from nested units.
-    for nested in &unit.nested_units {
-        collect_types_from_code_unit(nested, types);
-    }
-}
-
-/// Whether a value of this type can have a `data` or `error` inside it.
-fn can_hold_payload(ty: &IrType) -> bool {
-    match ty {
-        IrType::Data | IrType::Error => true,
-        // The error side of a result is an `error`.
-        IrType::Result(_) => true,
-        IrType::Tuple(fields) => fields.iter().any(can_hold_payload),
-        IrType::Struct(fields) => fields.iter().any(|(_, ty)| can_hold_payload(ty)),
-        IrType::Enum(variants) => variants.iter().any(|(_, ty)| ty.as_ref().is_some_and(can_hold_payload)),
-        IrType::Table(columns) => columns.iter().any(|(_, ty)| can_hold_payload(ty)),
-        IrType::Term(_, ty) | IrType::List(ty) | IrType::Set(ty) | IrType::Option(ty)
-        | IrType::Tensor(ty, _) | IrType::Ref(ty) => can_hold_payload(ty),
-        IrType::Map(key, value) => can_hold_payload(key) || can_hold_payload(value),
-        IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
-        | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
-        | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Atom(_) => false,
-    }
-}
-
-/// Collect the types a constant names, which its own type may not.
-fn collect_types_from_const_value(
-    value: &datalove_datafun_ir::ConstValue,
-    types: &mut BTreeSet<IrType>,
-) {
-    use datalove_datafun_ir::ConstValue;
-    match value {
-        ConstValue::Data { payload_type, value }
-        | ConstValue::Error { payload_type, value } => {
-            types.insert((**payload_type).clone());
-            collect_types_from_const_value(value, types);
-        }
-        ConstValue::List(elements)
-        | ConstValue::Set(elements)
-        | ConstValue::Tuple(elements)
-        | ConstValue::Tensor { elements, .. } => {
-            for element in elements {
-                collect_types_from_const_value(element, types);
-            }
-        }
-        ConstValue::Map(entries) => {
-            for (key, value) in entries {
-                collect_types_from_const_value(key, types);
-                collect_types_from_const_value(value, types);
-            }
-        }
-        ConstValue::Table { rows, .. } => {
-            for row in rows {
-                for cell in row {
-                    collect_types_from_const_value(cell, types);
-                }
-            }
-        }
-        ConstValue::Struct(fields) => {
-            for (_, field) in fields {
-                collect_types_from_const_value(field, types);
-            }
-        }
-        ConstValue::OptionSome(inner)
-        | ConstValue::ResultOk(inner)
-        | ConstValue::ResultErr(inner) => collect_types_from_const_value(inner, types),
-        ConstValue::Enum { payload, .. } => {
-            if let Some(payload) = payload {
-                collect_types_from_const_value(payload, types);
-            }
-        }
-        ConstValue::Unit
-        | ConstValue::Bool(_)
-        | ConstValue::U8(_)
-        | ConstValue::I8(_)
-        | ConstValue::U16(_)
-        | ConstValue::I16(_)
-        | ConstValue::U32(_)
-        | ConstValue::I32(_)
-        | ConstValue::U64(_)
-        | ConstValue::I64(_)
-        | ConstValue::Index(_)
-        | ConstValue::Offset(_)
-        | ConstValue::F32(_)
-        | ConstValue::F64(_)
-        | ConstValue::Int { .. }
-        | ConstValue::String(_)
-        | ConstValue::OptionNone => {}
-    }
-}
-
-/// Collect all types from a script unit for upfront TyDesc emission.
-pub fn collect_types_from_script_unit(unit: &IrCodeUnit) -> BTreeSet<IrType> {
-    let mut types = BTreeSet::new();
-    collect_types_from_code_unit(unit, &mut types);
-    types
-}
-
-/// Collect types from an iterator of code units.
-///
-/// Use this to collect types from module functions in a ScriptEnvironment.
-pub fn collect_types_from_code_units<'a>(
-    units: impl Iterator<Item = &'a IrCodeUnit>,
-    types: &mut BTreeSet<IrType>,
-) {
-    for unit in units {
-        collect_types_from_code_unit(unit, types);
     }
 }
 

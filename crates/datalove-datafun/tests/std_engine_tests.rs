@@ -209,7 +209,6 @@ fn run_aot(
     // AOT compile with world types.
     let obj_bytes = pipeline_aot::compile_script_to_object_with_world(
         &ir_unit,
-        registry.iter_all_code_units(),
         &registry,
     ).map_err(|e| format!("AOT compile error: {}", e))?;
 

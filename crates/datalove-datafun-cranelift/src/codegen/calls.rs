@@ -293,9 +293,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::Ref(inner) => inner.as_ref().clone(),
             other => other.clone(),
         };
-        let tydesc_id = self.tydesc_emitter.get(&ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!("TyDesc not found for type {:?}", ty))
-        })?;
+        let tydesc_id = self.tydesc(&ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
     }
@@ -513,11 +511,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
 
-        let dest_tydesc_id = self.tydesc_emitter.get(dest_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for return type {:?} in native call", dest_ty
-            ))
-        })?;
+        let dest_tydesc_id = self.tydesc(dest_ty)?;
         let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
         let dest_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, dest_tydesc_gv);
 

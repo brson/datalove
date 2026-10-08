@@ -81,12 +81,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             let dst_addr = builder.ins().iadd_imm_s(base, offsets[i] as i64);
 
                             // Look up pre-emitted TyDesc.
-                            let tydesc_id = self.tydesc_emitter.get(field_ty).ok_or_else(|| {
-                                CraneliftError::Codegen(format!(
-                                    "TyDesc not found for type {:?} - should have been emitted upfront",
-                                    field_ty
-                                ))
-                            })?;
+                            let tydesc_id = self.tydesc(field_ty)?;
                             let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                             let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -481,12 +476,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Destroy old field value before overwriting (handles move types).
         // Get TyDesc for the field type.
-        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?}",
-                current_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&current_ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
@@ -605,10 +595,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let tydesc_ptr = match current_desc {
             Some(desc) => desc,
             None => {
-                let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-                    CraneliftError::Codegen(
-                        format!("TyDesc not found for type {:?}", current_ty))
-                })?;
+                let tydesc_id = self.tydesc(&current_ty)?;
                 let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
                 builder.ins().symbol_value(PTR_TYPE, gv)
             }
@@ -729,12 +716,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.switch_to_block(destroy_block);
         builder.seal_block(destroy_block);
 
-        let tydesc_id = self.tydesc_emitter.get(&current_ty).ok_or_else(|| {
-            CraneliftError::Codegen(format!(
-                "TyDesc not found for type {:?}",
-                current_ty
-            ))
-        })?;
+        let tydesc_id = self.tydesc(&current_ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
