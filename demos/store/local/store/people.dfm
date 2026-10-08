@@ -44,9 +44,12 @@ fun by_country(): ![(u64, string, u64)]
             let customer = db.order_customer(o)!
             let country = db.customer_country(customer)!
             let _ = sales.add(mut revenue, country@, sales.order_revenue(o)!)!
-            var seen = map.get_or(ref buyers, ref country, #{})
-            let _ = set.insert(mut seen, customer)
-            call map.insert(mut buyers, country, seen)
+            // Added to where it is, since reading the set out and putting it
+            // back copied and freed the whole of it for every sale.
+            if not (map.contains_key(ref buyers, ref country))
+                set buyers[country@] = #{}
+            end if
+            let _ = set.insert(mut buyers[country]!, customer)
         end if
         set o = o +! 1
     end loop
@@ -57,8 +60,8 @@ fun by_country(): ![(u64, string, u64)]
     loop while i .< list.len(ref countries)
         let country = countries[i]!@
         let r = map.get_or(ref revenue, ref country, 0)
-        let b = map.get_or(ref buyers, ref country, #{})
-        call list.push(mut rows, (r, country, u64.from_index(set.len(ref b))))
+        let b = set.len(ref buyers[country]!)
+        call list.push(mut rows, (r, country, u64.from_index(b)))
         set i = i +! 1
     end loop
     ret ok list.reversed(ref ord.sorted(ref rows))

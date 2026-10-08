@@ -591,4 +591,14 @@ data files. None stopped it; each cost a detour.
   empty map there and says why.
 - **An `index` does not widen with `@`,** so counting into a `u64` takes
   `u64.from_index`, where a `u32` widens with `@`.
+- **`not` before a qualified call does not parse.** `not list.is_empty(ref
+  xs)` is P072, "only a function can be called", pointing at `not
+  list.is_empty`; `not t()` is fine, and so is `not (list.is_empty(ref xs))`.
+- **Updating a collection held in a map by reading it out copies it.** The
+  natural `var s = map.get_or(ref m, ref k, #{})`, change `s`, `map.insert(mut
+  m, k, s)` clones the whole collection out and destroys the old one, every
+  time. `people.by_country` did that for a set of customers per country on
+  every sale, and it was 14% of the interpreter's run. In place it is `set
+  m[k@] = #{}` when absent, then `set.insert(mut m[k]!, x)`. Nothing points
+  the writer from the first to the second.
 
