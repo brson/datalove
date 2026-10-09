@@ -1114,7 +1114,7 @@ impl TypecheckStdCommand {
 
 impl DocsCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use megaspace_pipeliner::{DocSet, RssConfig, Site};
+        use megaspace_pipeliner::{DocSet, PostsConfig, Site};
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = PathBuf::from(manifest_dir);
@@ -1136,10 +1136,11 @@ impl DocsCommand {
                 static_assets,
                 extra_context: &[("cross_link_label", "Botdocs")],
                 link_context: &[("cross_link_url", "../botdocs/README.md")],
-                posts: Some(RssConfig {
+                posts: Some(PostsConfig {
                     site_title: "Datalove",
                     site_description: "Updates from Datalove",
                     base_url: "https://datalove-language.net",
+                    excerpt_bytes: 600,
                 }),
             },
             DocSet {

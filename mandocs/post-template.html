@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Posts - Datalove</title>
-    <meta name="description" content="Latest news and updates from Datalove.">
+    <title>{{ title }} - Datalove</title>
+    <meta name="description" content="{{ post.summary }}">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <!-- Code fonts -->
@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Vollkorn:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ path_prefix }}style.css">
-    <link rel="alternate" type="application/rss+xml" title="Datalove Posts" href="posts.xml">
+    <link rel="alternate" type="application/rss+xml" title="Datalove Posts" href="{{ path_prefix }}posts.xml">
 </head>
 <body>
     <nav id="navbar">
@@ -32,29 +32,20 @@
         </div>
     </nav>
     <main>
-        <h1>Posts</h1>
-        <p class="rss-link"><a href="posts.xml">RSS</a></p>
-
-        <section class="feed-list">
-            {% for post in posts %}
-            <article class="post" id="{{ post.slug }}">
-                <header class="post-header">
-                    <h2 class="post-title"><a href="{{ post.url }}">{{ post.title }}</a></h2>
-                    <div class="post-meta">
-                        <span class="post-date">{{ post.date }}</span>
-                        <span class="post-category category-{{ post.category }}">{{ post.category }}</span>
-                    </div>
-                </header>
-
-                <div class="post-content">
-                    {{ post.excerpt_html | safe }}
+        <article class="post">
+            <header class="post-header">
+                <h1 class="post-title">{{ post.title }}</h1>
+                <div class="post-meta">
+                    <span class="post-date">{{ post.date }}</span>
+                    <span class="post-category category-{{ post.category }}">{{ post.category }}</span>
                 </div>
-                {% if post.truncated %}
-                <p class="post-more"><a href="{{ post.url }}">Read more</a></p>
-                {% endif %}
-            </article>
-            {% endfor %}
-        </section>
+            </header>
+
+            <div class="post-content">
+                {{ content | safe }}
+            </div>
+        </article>
+        <p class="rss-link"><a href="{{ posts_url }}">All posts</a> &middot; <a href="{{ path_prefix }}posts.xml">RSS</a></p>
     </main>
     <script data-manual src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
     <script src="{{ path_prefix }}datalove-prism.js"></script>
