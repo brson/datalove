@@ -16,11 +16,15 @@
 //!
 //! The loop (`run_body`) makes a call one of these ways, the cheapest first:
 //!
-//! - **Planned** (`valid_plan`, `enter_planned`): an `Op::CallFast` whose
-//!   site has a `Plan` made in this code epoch -- a statically typed call to a
-//!   bytecode body of the same unit or a module. It pushes the callee's frame,
-//!   writes the arguments, saves the caller in an `Activation` and carries on
-//!   in the callee in the same loop.
+//! - **Planned** (`valid_plan`, `enter_planned`, `call_planned_native`): an
+//!   `Op::CallFast` whose site has a `Plan` made in this code epoch, for any
+//!   call that hands over no shapes and whose arguments suit it. To a bytecode
+//!   body of the same unit or a module, it pushes the callee's frame, writes
+//!   the arguments, saves the caller in an `Activation` and carries on in the
+//!   callee in the same loop. To a rider function, directly or through a
+//!   forwarder, it fills in the C words and calls it. An argument the
+//!   lowering resolved is read from its place; one whose type has a `data`
+//!   in it, by an `ArgRecipe`, as `fast_call` reads it.
 //! - **Fast, unplanned** (`run_fast_call` → `fast_call`): any other
 //!   `Op::CallFast`. `fast_call` refreshes the site's `CallCache` (making the
 //!   plan, if the call can have one, for next time) and then makes the call:
@@ -442,6 +446,9 @@ pub(crate) struct CallCache {
     /// an address only names a body within an epoch.
     address: usize,
     epoch: u64,
+    /// The native table's generation when it was found, which a native's
+    /// plan holds the function of.
+    generation: u64,
     /// Its layout; none for a native.
     layout: Option<std::rc::Rc<IrLayout>>,
     /// Whether the call's arguments suit the fast path for it.
@@ -454,26 +461,37 @@ pub(crate) struct CallCache {
     plan: Option<Plan>,
 }
 
-/// A call to a bytecode body in the same unit or a module, with statically
-/// typed arguments, worked out once.
+/// A call worked out once, made by the loop without asking anything again.
 ///
-/// What is left for each call is to check that the callee is still the body
-/// this was made for, push its frame, write the arguments and switch to it.
-struct Plan {
+/// What is left for each call is to check that the callee is still what this
+/// was made for, and to read the arguments as their recipes say.
+enum Plan {
+    Body(BodyPlan),
+    Native(NativePlan),
+}
+
+/// A call to a bytecode body in the same unit or a module: push its frame,
+/// write the arguments and switch to it.
+struct BodyPlan {
     layout: std::rc::Rc<IrLayout>,
     bc: std::rc::Rc<BcFunction>,
     func: *const IrCodeUnit,
     /// How the call names the callee, in the caller's body.
     code_ref: *const CodeRef,
-    /// Each argument: where it is in the caller's frame, where its `Value`
-    /// goes in the callee's, and its descriptor as the callee's frame holds
-    /// it once entered -- the callee's own for an owned parameter, the
-    /// argument's for a borrowed one.
-    params: Box<[PlannedParam]>,
+    params: PlannedParams,
 }
 
-/// One argument of a planned call.
-struct PlannedParam {
+/// The arguments of a planned call to a body.
+enum PlannedParams {
+    /// Every one where the lowering resolved it, which is most calls outside
+    /// generic code, each a place and a descriptor.
+    At(Box<[AtParam]>),
+    /// Some read as the IR walker reads them.
+    Recipes(Box<[PlannedParam]>),
+}
+
+/// One argument of a planned call to a body, where the lowering resolved it.
+struct AtParam {
     /// Where the argument is in the caller's frame.
     src: Loc,
     /// Where its `Value` goes in the callee's.
@@ -483,6 +501,56 @@ struct PlannedParam {
     /// Where the callee's frame keeps a copy of it, and its size, if it does;
     /// see `IrLayout::param_copies`.
     copy: Option<(u32, u32)>,
+}
+
+/// One argument of a planned call to a body, by its recipe.
+struct PlannedParam {
+    /// How to read it, and with what descriptor the callee's frame holds it
+    /// once entered: the callee's own for an owned parameter, the argument's
+    /// for a borrowed one.
+    arg: ArgRecipe,
+    /// Where its `Value` goes in the callee's frame.
+    value: u32,
+    /// Where the callee's frame keeps a copy of it, and its size, if it does;
+    /// see `IrLayout::param_copies`.
+    copy: Option<(u32, u32)>,
+}
+
+/// A call to a rider function, directly or through a forwarder: the words its
+/// C ABI takes, from the arguments as the recipes read them.
+struct NativePlan {
+    fn_ptr: *const (),
+    /// The native table's generation the function was found in, outside of
+    /// which it may be another's.
+    generation: u64,
+    args: Box<[ArgRecipe]>,
+    /// The result's descriptor, as the native's own call would give it.
+    dest_tydesc: *const rtdt::TyDesc,
+}
+
+/// How a planned call reads one argument, and what it hands over.
+#[derive(Clone, Copy)]
+struct ArgRecipe {
+    src: ArgSource,
+    /// Read through a `data` wrapper, as a borrowed argument from a generic
+    /// caller is.
+    unwrap: bool,
+    /// The descriptor to hand over in place of the one read.
+    retype: Option<*const rtdt::TyDesc>,
+    /// Read through a wrapper again, after retyping: a forwarder's borrowed
+    /// parameter passed on to its native.
+    unwrap_again: bool,
+}
+
+/// Where a planned call's argument is.
+#[derive(Clone, Copy)]
+enum ArgSource {
+    /// At a place in the caller's frame, holding what the descriptor says,
+    /// as the lowering resolved it.
+    At(Loc, *const rtdt::TyDesc),
+    /// The operand, read at the call as the IR walker reads it: one whose
+    /// type, a `data` in it, only the running frame says.
+    Read(Operand),
 }
 
 /// What a fast call did.
@@ -2138,12 +2206,23 @@ impl IrInterpreter {
                     Op::Call { block, index } => tri!(self.run_general_call(regs, block, index)),
                     Op::CallFast { site } => {
                         let call = &bc.calls[site as usize];
-                        if let Some(plan) = self.valid_plan(call) {
-                            pc = tri!(self.enter_planned(regs, call, plan, base, pc.wrapping_add(1)));
-                            bc = &*regs.bc;
-                            ops = bc.ops.as_ptr();
-                            base = regs.frame.base_ptr();
-                            continue;
+                        match self.valid_plan(call) {
+                            Some(Plan::Body(plan)) => {
+                                pc = tri!(self.enter_planned(regs, call, plan, base, pc.wrapping_add(1)));
+                                bc = &*regs.bc;
+                                ops = bc.ops.as_ptr();
+                                base = regs.frame.base_ptr();
+                                continue;
+                            }
+                            // Outside the generation it was found in, the
+                            // function may be another's, which the slow path
+                            // finds again.
+                            Some(Plan::Native(plan)) if plan.generation == self.native_table.generation() => {
+                                self.call_planned_native(regs, call, plan, base);
+                                pc = pc.wrapping_add(1);
+                                continue;
+                            }
+                            _ => {}
                         }
                         if let Some(resume) = tri!(self.run_fast_call(regs, call, base, pc)) {
                             pc = resume;
@@ -2504,7 +2583,7 @@ impl IrInterpreter {
         &mut self,
         regs: &mut Regs<'r>,
         call: &FastCall,
-        plan: &Plan,
+        plan: &BodyPlan,
         base: *mut u8,
         resume: usize,
     ) -> Result<usize, InterpError> {
@@ -2518,18 +2597,42 @@ impl IrInterpreter {
         // left (`release_retired_call_caches`).
         let mut frame = unsafe { self.frame_stack.push_borrowed(&plan.layout) }?;
         let callee_base = frame.base_ptr();
-        for param in plan.params.iter() {
-            // SAFETY: `src` was lowered against the caller's frame, which
-            // `base` is, and `value` and `copy` are places in the callee's.
-            unsafe {
-                let mut ptr = param.src.at(base);
-                if let Some((at, size)) = param.copy {
-                    let copy = callee_base.add(at as usize);
-                    copy_bytes(ptr, copy, size as usize);
-                    ptr = copy;
+        let mut scratch = None;
+        match &plan.params {
+            PlannedParams::At(params) => for param in params.iter() {
+                // SAFETY: `src` was lowered against the caller's frame, which
+                // `base` is, and `value` and `copy` are places in the callee's.
+                unsafe {
+                    let mut ptr = param.src.at(base);
+                    if let Some((at, size)) = param.copy {
+                        let copy = callee_base.add(at as usize);
+                        copy_bytes(ptr, copy, size as usize);
+                        ptr = copy;
+                    }
+                    (callee_base.add(param.value as usize) as *mut crate::value::Value)
+                        .write(crate::value::Value { ptr, tydesc: param.tydesc });
                 }
-                (callee_base.add(param.value as usize) as *mut crate::value::Value)
-                    .write(crate::value::Value { ptr, tydesc: param.tydesc });
+            },
+            PlannedParams::Recipes(params) => {
+                // Allocated only if an argument is read through a wrapper.
+                let mut read: crate::BorrowScratch = Vec::new();
+                for param in params.iter() {
+                    // SAFETY: the recipe was made against the caller's frame,
+                    // which `base` is, and `value` and `copy` are places in
+                    // the callee's.
+                    unsafe {
+                        let mut arg = self.arg_value(&param.arg, base, &regs.frame, regs.frames, &mut read);
+                        if let Some((at, size)) = param.copy {
+                            let copy = callee_base.add(at as usize);
+                            copy_bytes(arg.ptr, copy, size as usize);
+                            arg.ptr = copy;
+                        }
+                        (callee_base.add(param.value as usize) as *mut crate::value::Value).write(arg);
+                    }
+                }
+                if !read.is_empty() {
+                    scratch = Some(Box::new(read));
+                }
             }
         }
         frame.stop_keeping_liveness();
@@ -2545,9 +2648,65 @@ impl IrInterpreter {
             ctx: None,
             // SAFETY: lowered against the caller's frame.
             dest: Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc },
-            scratch: None,
+            scratch,
         };
         Ok(self.switch_to(regs, callee, resume))
+    }
+
+    /// An argument of a planned call, as its recipe reads it from the caller's
+    /// frame, `base`.
+    ///
+    /// # Safety
+    ///
+    /// The recipe was made against the frame `base` is.
+    #[inline(always)]
+    unsafe fn arg_value(
+        &self,
+        recipe: &ArgRecipe,
+        base: *mut u8,
+        frame: &Frame,
+        frames: &FrameStore,
+        scratch: &mut crate::BorrowScratch,
+    ) -> crate::value::Value {
+        let mut arg = match recipe.src {
+            // SAFETY: the caller's.
+            ArgSource::At(loc, tydesc) => crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc },
+            ArgSource::Read(operand) => self.read_operand(&operand, frame, frames),
+        };
+        if recipe.unwrap {
+            arg = IrInterpreter::borrow_through_wrapper(arg, scratch);
+        }
+        if let Some(tydesc) = recipe.retype {
+            arg.tydesc = tydesc;
+        }
+        if recipe.unwrap_again {
+            arg = IrInterpreter::borrow_through_wrapper(arg, scratch);
+        }
+        arg
+    }
+
+    /// Make a planned call to a rider function: its C words straight from the
+    /// arguments, and the call.
+    #[inline(never)]
+    fn call_planned_native(&mut self, regs: &mut Regs<'_>, call: &FastCall, plan: &NativePlan, base: *mut u8) {
+        let n = plan.args.len();
+        let len = 1 + 2 * n + 2;
+        let mut words = [0usize; MAX_C_WORDS];
+        let mut scratch: crate::BorrowScratch = Vec::new();
+        words[0] = self.runtime.handle() as usize;
+        for (i, recipe) in plan.args.iter().enumerate() {
+            // SAFETY: the recipe was made against the caller's frame.
+            let arg = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames, &mut scratch) };
+            words[1 + 2 * i] = arg.ptr as usize;
+            words[2 + 2 * i] = arg.tydesc as usize;
+        }
+        // SAFETY: the destination was lowered against the caller's frame.
+        words[1 + 2 * n] = unsafe { call.dest.at(base) } as usize;
+        words[2 + 2 * n] = plan.dest_tydesc as usize;
+        // SAFETY: the table registered this as a rider function in the
+        // generation the plan was checked against, and holds its code until
+        // that changes.
+        unsafe { call_c(plan.fn_ptr, &words[..len]) };
     }
 
     /// Pop every frame the loop pushed, on the way out with an error.
@@ -2883,6 +3042,107 @@ impl IrInterpreter {
         f(self.runtime.handle(), args, dest, shapes)
     }
 
+    /// The plan for a call whose arguments suit it and that hands over no
+    /// shapes: a body, a rider function, or a forwarder to one.
+    ///
+    /// Each argument is read as `fast_call` would read it, so the plan makes
+    /// the same call: from where the lowering resolved it, or as the IR walker
+    /// reads its operand, through a wrapper if it is borrowed; then, for a
+    /// forwarder, as the forwarder's own call reads its parameter.
+    #[allow(clippy::too_many_arguments)]
+    fn make_plan(
+        &mut self,
+        call: &FastCall,
+        ir_args: &[Operand],
+        callee: &IrCodeUnit,
+        code_ref: &CodeRef,
+        callee_ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        layout: Option<&std::rc::Rc<IrLayout>>,
+        forward: Option<&std::rc::Rc<BcFunction>>,
+    ) -> Option<Plan> {
+        // The argument as the call reads it, `mode` being the parameter's.
+        let read = |i: usize, mode: ParamMode| match &call.resolved {
+            Some(resolved) => ArgRecipe {
+                src: ArgSource::At(resolved[i].0, resolved[i].1),
+                unwrap: false, retype: None, unwrap_again: false,
+            },
+            None => ArgRecipe {
+                src: ArgSource::Read(ir_args[i]),
+                unwrap: matches!(mode, ParamMode::Ref | ParamMode::Mut),
+                retype: None, unwrap_again: false,
+            },
+        };
+        let native_plan = |this: &Self, native: &datalove_datafun_ir::NativeContext, args: Box<[ArgRecipe]>, dest_tydesc| {
+            let NativeTarget::C(fn_ptr) = this.native_table.lookup(native.symbol()).ok()? else { return None };
+            (1 + 2 * args.len() + 2 <= MAX_C_WORDS).then(|| Plan::Native(NativePlan {
+                fn_ptr, generation: this.native_table.generation(), args, dest_tydesc,
+            }))
+        };
+        match (layout, forward) {
+            // A rider function.
+            (None, _) => {
+                let CodeUnitContext::Native(native) = &callee.context else { unreachable!("a body without a layout is a native") };
+                let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
+                let args = (0..call.args.len()).map(|i| read(i, mode(i))).collect();
+                native_plan(self, native, args, call.dest_tydesc)
+            }
+            // A forwarder: each argument as its frame would hold it -- an owned
+            // one with its own descriptor -- then as its call reads that.
+            (Some(layout), Some(wrapper)) => {
+                let inner = &wrapper.calls[0];
+                let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
+                    unreachable!("a forwarder is a call")
+                };
+                let native_body = Self::resolve_callee(inner, inner_ref, callee_ctx, registry);
+                let CodeUnitContext::Native(native) = &native_body.context else {
+                    unreachable!("a forwarder calls a native")
+                };
+                let args = (0..call.args.len()).map(|i| {
+                    let mut recipe = read(i, layout.param_modes[i]);
+                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out) {
+                        recipe.retype = Some(layout.param_tydescs[i]);
+                    }
+                    match &inner.resolved {
+                        Some(resolved) => recipe.retype = Some(resolved[i].1),
+                        None => recipe.unwrap_again = matches!(
+                            native.param_modes.get(i).copied().unwrap_or(ParamMode::In),
+                            ParamMode::Ref | ParamMode::Mut,
+                        ),
+                    }
+                    recipe
+                }).collect();
+                native_plan(self, native, args, inner.dest_tydesc)
+            }
+            // A body, whose frame holds an owned argument with its own
+            // descriptor and a borrowed one with the argument's.
+            (Some(layout), None) => Some(Plan::Body(BodyPlan {
+                layout: std::rc::Rc::clone(layout),
+                bc: self.bytecode_for(layout, callee),
+                func: callee,
+                code_ref,
+                params: match &call.resolved {
+                    Some(resolved) => PlannedParams::At(layout.param_modes.iter().enumerate().map(|(i, mode)| AtParam {
+                        src: resolved[i].0,
+                        value: layout.param_offsets[i],
+                        tydesc: match mode {
+                            ParamMode::In | ParamMode::Out => layout.param_tydescs[i],
+                            ParamMode::Ref | ParamMode::Mut => resolved[i].1,
+                        },
+                        copy: layout.param_copies[i],
+                    }).collect()),
+                    None => PlannedParams::Recipes(layout.param_modes.iter().enumerate().map(|(i, mode)| {
+                        let mut arg = read(i, *mode);
+                        if matches!(mode, ParamMode::In | ParamMode::Out) {
+                            arg.retype = Some(layout.param_tydescs[i]);
+                        }
+                        PlannedParam { arg, value: layout.param_offsets[i], copy: layout.param_copies[i] }
+                    }).collect()),
+                },
+            })),
+        }
+    }
+
     /// Make a fast call, or say the general path has to.
     ///
     /// Does what `execute_call_site` does for a call whose arguments are in
@@ -2920,7 +3180,9 @@ impl IrInterpreter {
             let mut site = call.site.borrow_mut();
             let cache = &mut site.callee;
             match &*cache {
-                Some(c) if c.address == address && c.epoch == self.code_epoch => {
+                Some(c) if c.address == address && c.epoch == self.code_epoch
+                    && c.generation == self.native_table.generation() =>
+                {
                     (c.layout.clone(), c.suits, c.forward.clone())
                 }
                 _ => {
@@ -2940,27 +3202,14 @@ impl IrInterpreter {
                             (Some(layout), suits, forward)
                         }
                     };
-                    let plan = match (&layout, &call.resolved, &forward, code_ref) {
-                        (_, _, _, CodeRef::External { .. }) | (None, ..) | (_, None, ..) | (_, _, Some(_), _) => None,
-                        _ if !suits => None,
-                        (Some(layout), Some(resolved), None, _) => Some(Plan {
-                            layout: std::rc::Rc::clone(layout),
-                            bc: self.bytecode_for(layout, callee),
-                            func: callee,
-                            code_ref,
-                            params: layout.param_modes.iter().enumerate().map(|(i, mode)| PlannedParam {
-                                src: resolved[i].0,
-                                value: layout.param_offsets[i],
-                                tydesc: match mode {
-                                    ParamMode::In | ParamMode::Out => layout.param_tydescs[i],
-                                    ParamMode::Ref | ParamMode::Mut => resolved[i].1,
-                                },
-                                copy: layout.param_copies[i],
-                            }).collect(),
-                        }),
+                    let plan = if suits && shape_descriptors.is_empty() && !matches!(code_ref, CodeRef::External { .. }) {
+                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref())
+                    } else {
+                        None
                     };
                     let fresh = CallCache {
-                        address, epoch: self.code_epoch, layout: layout.clone(), suits, forward: forward.clone(), plan,
+                        address, epoch: self.code_epoch, generation: self.native_table.generation(),
+                        layout: layout.clone(), suits, forward: forward.clone(), plan,
                     };
                     // A planned call's frame borrows its layout and bytecode
                     // from the plan, so a replaced one is kept.
