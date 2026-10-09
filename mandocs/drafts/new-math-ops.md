@@ -217,7 +217,52 @@ the left-hand and right-hand side of an assigment.
 In most prior cases this didn't matter since they were simple without many potential side-effects.
 But that wasn't true for assignment to index projections.
 
-todo
+Compound assignment works on any place `set` can write,
+including elements reached through `?` and `!` index steps:
+
+```datalove
+set counts[w]! += 1
+set grid[r]?[c]? *= 2
+set rows[i]!.total +!= amount
+```
+
+The place is evaluated once, so each key is computed and each lookup done a single time,
+and the update happens in the element where it lies.
+A bare map index, `set m[k] += 1`, is rejected:
+a bare index means upsert, and it isn't obvious what upserting means for every compound op
+(start from zero? what's zero for `*=`?).
+For now counting goes through a library function, `map.add`, which does the upsert-from-zero
+in one lookup.
+
+The old order reached the place first, then evaluated the right-hand side.
+Reaching an element means checking its index and taking a reference to it,
+so a right-hand side that grew the collection reallocated it out from under that reference:
+
+```datalove
+set xs[0]? += grow(mut xs) // Wrote through a freed buffer.
+```
+
+Plain `set xs[0]?.n = grow(mut xs)` had the same use-after-free;
+compound assignment just made it common.
+Now every `set`, plain or compound, evaluates in one order:
+
+1. the right-hand side,
+2. the index keys, left to right,
+3. the lookups that reach the place, which run none of the program's code,
+4. the write, or the compound op.
+
+All of the program's own code runs before any reference into the place exists,
+so the example above writes into the grown list,
+and an index the right-hand side pushes into range is in range when it's checked.
+This is also Rust's order for plain assignment and for compound assignment on primitives.
+
+Some consequences:
+the right-hand side's effects happen even if a lookup then fails;
+when both could fail, the right-hand side's error wins;
+and what the right-hand side moves is gone by the time the place is reached,
+so `set m[k]? = k` is now a use-after-move and needs `k@`.
+The cost is that the right-hand side can't be evaluated directly into the place,
+which matters only for plain `=` and only as a possible future optimization.
 
 
 
