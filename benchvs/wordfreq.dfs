@@ -75,8 +75,7 @@ fun count(ref text: string): !%{string = u32}
   var i: index = 0
   loop while i .< list.len(ref words)
     let lower = string.to_ascii_lowercase(ref words[i]!)
-    let seen = map.get_or(ref counts, ref lower, : u32 / 0)
-    call map.insert(mut counts, lower, seen +! 1)
+    let _ = map.add(mut counts, ref lower, : u32 / 1)!
     set i +!= 1
   end loop
   ret ok counts

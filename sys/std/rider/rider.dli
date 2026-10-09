@@ -122,6 +122,9 @@ native fun map_clear<K, V>(mut self: %{K = V}) with { K is ord, }
 native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
 native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
 native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
+// Add to the value under a key, from zero if it's absent, in one lookup. False
+// if the sum overflowed, which leaves the map as it was.
+native fun map_add<K, V>(mut self: %{K = V}, ref key: K, amount: V): bool with { K is ord, V is fixedint, }
 native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 // Reaching an entry by position, which is what gives a map the same reach a
 // list has: everything written over a collection here is a loop over `len` and

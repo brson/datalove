@@ -23,7 +23,7 @@ fun top_pairs(n: index): ![(u64, u32, u32)]
                 loop while b .< lines
                     let second = db.line_product(o, b)!
                     let pair = ord.sorted_pair(first, second)
-                    let _ = sales.add(mut together, pair, 1)!
+                    let _ = sales.add(mut together, ref pair, 1)!
                     set b +!= 1
                 end loop
                 set a +!= 1

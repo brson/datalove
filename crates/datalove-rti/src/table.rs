@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 133;
+pub const EXPORTED: usize = 134;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 133;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x83f60747d28d2a36;
+pub const TABLE_SHAPE: u64 = 0xd5ffeece65d7e4b7;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -77,6 +77,7 @@ pub struct RtiTable {
     pub dtlv_rti_btreemap_clone_from_slice_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, rtdt::IndexRepr, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_build_from_sorted_slices_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const rtdt::TyDesc, *mut u8, *mut u8, rtdt::IndexRepr) -> RtStatus,
     pub dtlv_rti_btreemap_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_btreemap_add_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
     pub dtlv_rti_btreemap_insert_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_remove_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_key_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc, bool) -> RtStatus,

@@ -17,8 +17,8 @@ fun top_customers(n: index): ![(u64, u32, u64)]
     loop while o .< db.order_count()
         if db.is_sale(o)!
             let customer = db.order_customer(o)!
-            let _ = sales.add(mut spent, customer, sales.order_revenue(o)!)!
-            let _ = sales.add(mut orders, customer, 1)!
+            let _ = sales.add(mut spent, ref customer, sales.order_revenue(o)!)!
+            let _ = sales.add(mut orders, ref customer, 1)!
         end if
         set o +!= 1
     end loop
@@ -43,7 +43,7 @@ fun by_country(): ![(u64, string, u64)]
         if db.is_sale(o)!
             let customer = db.order_customer(o)!
             let country = db.customer_country(customer)!
-            let _ = sales.add(mut revenue, country@, sales.order_revenue(o)!)!
+            let _ = sales.add(mut revenue, ref country, sales.order_revenue(o)!)!
             // Added to where it is, since reading the set out and putting it
             // back copied and freed the whole of it for every sale.
             if not (map.contains_key(ref buyers, ref country))
@@ -72,7 +72,7 @@ fun by_tier(): ![(string, u64, u64, u64)]
     var members: %{string = u64} = %{}
     var c: index = 0
     loop while c .< db.customer_count()
-        let _ = sales.add(mut members, db.customer_tier(db.customer_id_at(c)!)!, 1)!
+        let _ = sales.add(mut members, ref db.customer_tier(db.customer_id_at(c)!)!, 1)!
         set c +!= 1
     end loop
 
@@ -84,9 +84,9 @@ fun by_tier(): ![(string, u64, u64, u64)]
         if db.is_sale(o)!
             let customer = db.order_customer(o)!
             let tier = db.customer_tier(customer)!
-            let _ = sales.add(mut spent, tier@, sales.order_revenue(o)!)!
+            let _ = sales.add(mut spent, ref tier, sales.order_revenue(o)!)!
             if map.insert_if_absent(mut buyers, customer, true)
-                let _ = sales.add(mut buying, tier@, 1)!
+                let _ = sales.add(mut buying, ref tier, 1)!
             end if
         end if
         set o +!= 1

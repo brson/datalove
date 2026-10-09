@@ -1,0 +1,53 @@
+require module sys/std/map
+import map.add
+
+// `map.add` counts from zero under a new key and adds in place under an old
+// one. The key is borrowed, so a string key is still the caller's after.
+fun words(): !(%{string = u32}, string)
+  var counts: %{string = u32} = %{}
+  let word = "apple"
+  let _ = add(mut counts, ref word, : u32 / 1)!
+  let _ = add(mut counts, ref "pear", : u32 / 5)!
+  let _ = add(mut counts, ref word, : u32 / 1)!
+  ret ok (counts, word)
+end fun
+
+// Every fixed-width value type.
+fun widths(): !(%{u8 = i8}, %{i16 = u16}, %{u32 = i32}, %{i64 = u64}, %{index = offset})
+  var a: %{u8 = i8} = %{}
+  let _ = add(mut a, ref : u8 / 1, : i8 / -100)!
+  let _ = add(mut a, ref : u8 / 1, : i8 / -28)!
+  var b: %{i16 = u16} = %{}
+  let _ = add(mut b, ref : i16 / -1, : u16 / 65000)!
+  var c: %{u32 = i32} = %{}
+  let _ = add(mut c, ref : u32 / 7, : i32 / 2147483000)!
+  let _ = add(mut c, ref : u32 / 7, : i32 / 647)!
+  var d: %{i64 = u64} = %{}
+  let _ = add(mut d, ref : i64 / 0, : u64 / 18446744073709551000)!
+  var e: %{index = offset} = %{}
+  let _ = add(mut e, ref : index / 3, : offset / -5)!
+  let _ = add(mut e, ref : index / 3, : offset / 2)!
+  ret ok (a, b, c, d, e)
+end fun
+
+// An overflow fails and leaves the map as it was, which the caller sees.
+fun bump(mut counts: %{string = u8}, ref key: string, n: u8): !()
+  ret add(mut counts, ref key, n)
+end fun
+
+var small: %{string = u8} = %{"x" = 250}
+let fits = bump(mut small, ref "x", : u8 / 5)
+let overflows = bump(mut small, ref "x", : u8 / 1)
+let new_key_at_max = bump(mut small, ref "y", : u8 / 255)
+
+// From a caller generic over the value, whose amount arrives boxed.
+fun tally<V>(mut totals: %{string = V}, ref key: string, amount: V): !() with { V is fixedint, }
+  ret add(mut totals, ref key, amount)
+end fun
+
+var generic: %{string = u16} = %{}
+let g1 = tally(mut generic, ref "k", : u16 / 30000)
+let g2 = tally(mut generic, ref "k", : u16 / 30000)
+let g3 = tally(mut generic, ref "k", : u16 / 30000)
+
+let output = (words(), widths(), (fits, overflows, new_key_at_max, small), (g1, g2, g3, generic))

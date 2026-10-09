@@ -1383,6 +1383,24 @@ pub extern "C-unwind" fn dlr_std__map_insert(
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn dlr_std__map_add(
+    rt: *mut u8,
+    map_ptr: *mut u8, map_td: *const u8,
+    key_ptr: *const u8, key_td: *const u8,
+    amount_ptr: *mut u8, amount_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    unsafe {
+        datalove_rti::call::dtlv_rti_btreemap_add_local(
+            rt, map_ptr, map_td as *const rtdt::TyDesc,
+            key_ptr, key_td as *const rtdt::TyDesc,
+            amount_ptr, amount_td as *const rtdt::TyDesc,
+            out as *mut bool,
+        ) as u8
+    }
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn dlr_std__map_remove(
     rt: *mut u8,
     map_ptr: *mut u8, map_td: *const u8,

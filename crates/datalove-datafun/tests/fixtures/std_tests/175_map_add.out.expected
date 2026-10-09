@@ -1,0 +1,1 @@
+(ok (%{"apple" = 2, "pear" = 5}, "apple"), ok (%{1 = -128}, %{-1 = 65000}, %{7 = 2147483647}, %{0 = 18446744073709551000}, %{3 = -3}), (ok (), er error "arithmetic overflow", ok (), %{"x" = 255, "y" = 255}), (ok (), ok (), er error "arithmetic overflow", %{"k" = 60000}))

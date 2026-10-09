@@ -863,6 +863,113 @@ unsafe fn split_internal_node(
     }
 }
 
+/// Add `amount` to the value under a key, counting from zero if it's absent.
+///
+/// One walk down the tree finds the key and adds into its value in place,
+/// where `get` and then `insert` walk it twice. The key is borrowed, and
+/// cloned only if it's new. The value type is a fixed-width integer, and a
+/// sum that overflows leaves the map as it was and writes false to `fit_out`.
+///
+/// The amount is consumed. It arrives as itself or, from a caller that knew
+/// its type only as a type parameter, boxed in a `data`.
+pub unsafe fn btreemap_add_impl(
+    rt: &mut RtLocal,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: rtdt::TyDescRef,
+    key_ref: *const u8,
+    key_tydesc: rtdt::TyDescRef,
+    amount_in: *mut u8,
+    amount_tydesc: rtdt::TyDescRef,
+    fit_out: *mut bool,
+) -> RtStatus {
+    unsafe {
+        let ty = MapTy::of(btreemap_tydesc);
+        let value_ty = btreemap_tydesc.map_value_ty();
+        assert!(super::cmp::eq_tydesc(key_tydesc, ty.key), "a key of the map's own type");
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+
+        // Every fixed-width integer fits in eight bytes.
+        let mut amount = 0u64;
+        let amount_ptr = &mut amount as *mut u64 as *mut u8;
+        if amount_tydesc.type_tag() == rtdt::TyTag::Data && value_ty.type_tag() != rtdt::TyTag::Data {
+            let status = super::boxing::data_into_local(rt_handle, amount_in, amount_ptr, value_ty.as_ptr());
+            if status != RtStatus::Ok {
+                return status;
+            }
+        } else {
+            std::ptr::copy_nonoverlapping(amount_in, amount_ptr, value_ty.size() as usize);
+        }
+
+        let map_ptr = btreemap_value_mut as *mut Map;
+        let root = (*map_ptr).root as *mut MapNode;
+        if !root.is_null() {
+            let leaf = find_leaf_for_key(root, key_ref, ty);
+            let len = read_node_len(leaf) as usize;
+            if let Ok(i) = search_keys(leaf_keys_ptr(leaf, ty), len, key_ref, ty) {
+                let value = leaf_values_ptr(leaf, ty).add(i * value_ty.size() as usize);
+                *fit_out = add_fixed_in_place(value_ty.type_tag(), value, amount_ptr);
+                return RtStatus::Ok;
+            }
+        }
+
+        // A new key: its clone goes in with the amount, which zero plus it is.
+        let mut key = vec![0u64; (ty.key.size() as usize).div_ceil(8)];
+        let key_ptr = key.as_mut_ptr() as *mut u8;
+        let status = super::clone::clone_value(rt_handle, key_ref, key_tydesc.as_ptr(), key_ptr);
+        if status != RtStatus::Ok {
+            return status;
+        }
+        *fit_out = true;
+        btreemap_insert_impl(
+            rt,
+            btreemap_value_mut,
+            btreemap_tydesc,
+            key_ptr,
+            key_tydesc,
+            amount_ptr,
+            value_ty,
+        )
+    }
+}
+
+/// Add the fixed-width integer at `amount` into the one at `value`, if the
+/// sum fits. Gives whether it did.
+unsafe fn add_fixed_in_place(tag: rtdt::TyTag, value: *mut u8, amount: *const u8) -> bool {
+    unsafe fn add<T: Copy + CheckedAdd>(value: *mut u8, amount: *const u8) -> bool {
+        unsafe {
+            let sum = (*(value as *const T)).checked(*(amount as *const T));
+            if let Some(sum) = sum {
+                *(value as *mut T) = sum;
+            }
+            sum.is_some()
+        }
+    }
+    trait CheckedAdd: Sized {
+        fn checked(self, other: Self) -> std::option::Option<Self>;
+    }
+    macro_rules! checked_add {
+        ($($t:ty),*) => { $(impl CheckedAdd for $t {
+            fn checked(self, other: Self) -> std::option::Option<Self> { self.checked_add(other) }
+        })* };
+    }
+    checked_add!(u8, i8, u16, i16, u32, i32, u64, i64);
+    unsafe {
+        match tag {
+            rtdt::TyTag::U8 => add::<u8>(value, amount),
+            rtdt::TyTag::I8 => add::<i8>(value, amount),
+            rtdt::TyTag::U16 => add::<u16>(value, amount),
+            rtdt::TyTag::I16 => add::<i16>(value, amount),
+            rtdt::TyTag::U32 => add::<u32>(value, amount),
+            rtdt::TyTag::I32 => add::<i32>(value, amount),
+            rtdt::TyTag::U64 => add::<u64>(value, amount),
+            rtdt::TyTag::I64 => add::<i64>(value, amount),
+            rtdt::TyTag::Index => add::<rtdt::IndexRepr>(value, amount),
+            rtdt::TyTag::Offset => add::<rtdt::OffsetRepr>(value, amount),
+            other => panic!("adding into a map of {:?}, which isn't a fixed-width integer", other),
+        }
+    }
+}
+
 /// Insert a key-value pair into the BTreeMap.
 pub unsafe fn btreemap_insert_impl(
     rt: &mut RtLocal,

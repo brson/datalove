@@ -1103,6 +1103,42 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_destroy_local(
     }
 }
 
+/// Add an amount to the value under a key, counting from zero if it's absent.
+///
+/// The key is borrowed, and cloned only if it's new. The amount is consumed,
+/// as itself or boxed in a `data`. Writes whether the sum fit to `fit_out`;
+/// one that didn't leaves the map as it was.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_add_local(
+    rt: LocalRtHandle,
+    btreemap_value_mut: *mut u8,
+    btreemap_tydesc: *const rtdt::TyDesc,
+    key_ref: *const u8,
+    key_tydesc: *const rtdt::TyDesc,
+    amount_in: *mut u8,
+    amount_tydesc: *const rtdt::TyDesc,
+    fit_out: *mut bool,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!btreemap_value_mut.is_null(), "btreemap_value_mut is null");
+    debug_assert!(!key_ref.is_null(), "key_ref is null");
+    debug_assert!(!amount_in.is_null(), "amount_in is null");
+    debug_assert!(!fit_out.is_null(), "fit_out is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        crate::impls::btreemap::btreemap_add_impl(
+            rt_ref,
+            btreemap_value_mut,
+            rtdt::TyDescRef::from_ptr(btreemap_tydesc),
+            key_ref,
+            rtdt::TyDescRef::from_ptr(key_tydesc),
+            amount_in,
+            rtdt::TyDescRef::from_ptr(amount_tydesc),
+            fit_out,
+        )
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_local(
     rt: LocalRtHandle,

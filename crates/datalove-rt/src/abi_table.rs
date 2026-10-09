@@ -65,6 +65,7 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_btreemap_clone_from_slice_local: c::dtlv_rti_btreemap_clone_from_slice_local,
     dtlv_rti_btreemap_build_from_sorted_slices_local: c::dtlv_rti_btreemap_build_from_sorted_slices_local,
     dtlv_rti_btreemap_destroy_local: c::dtlv_rti_btreemap_destroy_local,
+    dtlv_rti_btreemap_add_local: c::dtlv_rti_btreemap_add_local,
     dtlv_rti_btreemap_insert_local: c::dtlv_rti_btreemap_insert_local,
     dtlv_rti_btreemap_remove_local: c::dtlv_rti_btreemap_remove_local,
     dtlv_rti_btreemap_key_at_local: c::dtlv_rti_btreemap_key_at_local,
@@ -156,6 +157,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 133,
+    datalove_rti::table::EXPORTED == 134,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

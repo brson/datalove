@@ -14,6 +14,7 @@ import std.map_clear
 import std.map_contains_key
 import std.map_get
 import std.map_insert
+import std.map_add
 import std.map_remove
 import std.map_key_at
 import std.map_value_at
@@ -62,6 +63,19 @@ end fun
 // Drop every entry.
 fun clear<K, V>(mut self: %{K = V}) with { K is ord, }
   call map_clear(mut self)
+end fun
+
+// Add to the value under a key, as `+!` would, counting from zero if the key
+// is new.
+//
+// One lookup, where `get_or` and then `insert` take two, and the key is
+// borrowed: it's cloned only if it's new. A sum that overflows fails, leaving
+// the map as it was.
+fun add<K, V>(mut self: %{K = V}, ref key: K, amount: V): !() with { K is ord, V is fixedint, }
+  if map_add(mut self, ref key, amount)
+    ret ok ()
+  end if
+  ret er(error "arithmetic overflow")
 end fun
 
 // The value under a key, or a default if there is none.

@@ -51,9 +51,9 @@ fun by_category(): ![(u64, string, u64, u64)]
             loop while l .< db.line_count(o)!
                 let category = db.product_category(db.line_product(o, l)!)!
                 let qty: u64 = db.line_qty(o, l)!@
-                let _ = add(mut revenue, category@, db.line_revenue(o, l)!)!
-                let _ = add(mut cost, category@, db.line_cost(o, l)!)!
-                let _ = add(mut units, category, qty)!
+                let _ = add(mut revenue, ref category, db.line_revenue(o, l)!)!
+                let _ = add(mut cost, ref category, db.line_cost(o, l)!)!
+                let _ = add(mut units, ref category, qty)!
                 set l +!= 1
             end loop
         end if
@@ -83,8 +83,8 @@ fun by_month(): ![(u32, u64, u64)]
     loop while o .< db.order_count()
         if db.is_sale(o)!
             let month = db.order_day(o)! /! 30
-            let _ = add(mut revenue, month, order_revenue(o)!)!
-            let _ = add(mut sales, month, 1)!
+            let _ = add(mut revenue, ref month, order_revenue(o)!)!
+            let _ = add(mut sales, ref month, 1)!
         end if
         set o +!= 1
     end loop
@@ -111,8 +111,8 @@ fun top_products(n: index): ![(u64, u32, u64)]
             loop while l .< db.line_count(o)!
                 let product = db.line_product(o, l)!
                 let qty: u64 = db.line_qty(o, l)!@
-                let _ = add(mut units, product, qty)!
-                let _ = add(mut revenue, product, db.line_revenue(o, l)!)!
+                let _ = add(mut units, ref product, qty)!
+                let _ = add(mut revenue, ref product, db.line_revenue(o, l)!)!
                 set l +!= 1
             end loop
         end if
@@ -142,10 +142,10 @@ fun returns_by_category(): ![(string, u64, u64)]
         loop while l .< db.line_count(o)!
             let category = db.product_category(db.line_product(o, l)!)!
             if is_return
-                let _ = add(mut returned, category@, 1)!
+                let _ = add(mut returned, ref category, 1)!
             end if
             if is_return or is_sale
-                let _ = add(mut shipped, category@, 1)!
+                let _ = add(mut shipped, ref category, 1)!
             end if
             set l +!= 1
         end loop
@@ -177,8 +177,6 @@ fun order_revenue(o: index): !u64
 end fun
 
 // Add to a running total under a key, starting it at nothing.
-fun add<K>(mut totals: %{K = u64}, key: K, amount: u64): !() with { K is ord, }
-    let seen = map.get_or(ref totals, ref key, 0)
-    call map.insert(mut totals, key, seen +! amount)
-    ret ok ()
+fun add<K>(mut totals: %{K = u64}, ref key: K, amount: u64): !() with { K is ord, }
+    ret map.add(mut totals, ref key, amount)
 end fun

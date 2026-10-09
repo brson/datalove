@@ -518,6 +518,17 @@ pub unsafe fn dtlv_rti_btreemap_destroy_local(rt: LocalRtHandle, value_in: *mut 
     unsafe { (crate::table(rt).dtlv_rti_btreemap_destroy_local)(rt, value_in, tydesc) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_btreemap_add_local`](crate::table::RtiTable::dtlv_rti_btreemap_add_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_add_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, amount_in: *mut u8, amount_tydesc: *const rtdt::TyDesc, fit_out: *mut bool) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_add_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc, amount_in, amount_tydesc, fit_out) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_btreemap_insert_local`](crate::table::RtiTable::dtlv_rti_btreemap_insert_local).
 ///
 /// # Safety
