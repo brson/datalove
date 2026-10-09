@@ -1,6 +1,8 @@
 #!/bin/bash
 
-set +euxo pipefail
+set -euxo pipefail
+
+cd "$(dirname "$0")/.."
 
 TOOLCHAIN=1.95.0
 rustup default $TOOLCHAIN
