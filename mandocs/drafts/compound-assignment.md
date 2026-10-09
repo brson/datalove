@@ -64,9 +64,9 @@ a task, only expand complexity as I better understand the need.
 So Datalove only supports a few built-in math operations today:
 binary addition, subtraction, multiplication, division, and unary negation (`+`, `-`, `*`, `/`, unary `-`).
 Though because one of Datalove's principles insists on strict
-[numeric correctness](principles.md#user-content-numerical-correctness)
+[numeric correctness](../principles.md#user-content-numerical-correctness)
 the exact formulation of these is
-[pretty quirky](datafun.md#user-content-numerics).
+[quirky](../datafun.md#user-content-numerics).
 
 So on the `sum` benchmark,
 after squeezing out all the basic performance blunders in the allocator and the bigint implementation
@@ -108,7 +108,7 @@ todo
 
 Imminently pattern-matchable.
 But one of Datalove's principles is that
-[nothing happens that is not written](principles.md#user-content-nothing-happens-that-is-not-written).
+[nothing happens that was not written](../principles.md#user-content-nothing-happens-that-was-not-written).
 I much prefer the language to have surface constructs that map to
 the required underlying performance mechanisms.
 That both makes the language's performance characteristics clear,
@@ -301,4 +301,29 @@ Secondly, this round of work revealed that the standard library
 widely uses an unideal pattern for loop counters:
 
 ```datalove
+fun repeated<T>(ref elem: T, n: index): [T]
+  var built: [T] = []
+  var i: index = : index / 0
+  loop while i .< n
+    call push(mut built, elem@)
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
 ```
+
+This maintains an `index`-type loop induction variable `i`
+and uses wrapping additon to increment it
+with the `add_wrapping_index` intrinsic.
+The main problem here is the wrapping math to avoid handling overflow.
+It does this to avoid the `+?` operator,
+a checked operator that requires the containing function to return an option type.
+It's provably not possible for the `index` to overflow _here_,
+but needing to use explicit wrapping for loop iteration leaves lots of room for accidental errors,
+the reader needing to think hard about the meaning of every instance it occurs.
+
+While I expect to add built-in saturating and wrapping math ops,
+`+|` and `+%` ala Zig,
+the solution here is a looping construct that iterates collections.
+So that's probably coming pretty soon.
+

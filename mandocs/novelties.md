@@ -178,4 +178,3 @@ Worldfiles can also describe a sequence of edits to modules,
 for testing incremental recompilation,
 and can be generated randomly (`datalove worldgen`)
 for fuzzing the compiler.
-See [Worlds](worlds.md).
