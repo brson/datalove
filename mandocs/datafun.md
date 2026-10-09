@@ -40,7 +40,6 @@ For detail see additional documentation (which does not exist).
 - [Modules, packages, libraries and the workspace](#user-content-modules-packages-libraries-and-the-workspace)
 - [Constants and compile-time evaluation](#user-content-constants-and-compile-time-evaluation)
 - [Generics](#user-content-generics)
-- [Scripts and interactive units](#user-content-scripts-and-interactive-units)
 
 </div>
 
@@ -1668,16 +1667,9 @@ which can mean boxing them onto the heap.
 
 This costs some run-time performance in exchange for compile time.
 Adding a new call to a generic function compiles nothing new,
-which keeps the interactive and incremental compilation described in
-[Scripts and interactive units](#user-content-scripts-and-interactive-units) fast.
+which keeps interactive and incremental compilation fast.
 The choice is not visible in the meaning of programs,
 except that it is why a type parameter is never a copy type.
 
 This is the opposite of [const parameters](#user-content-const-parameters),
 which make a copy of the function for each const argument.
-
-
-
-
-
-## Scripts and interactive units

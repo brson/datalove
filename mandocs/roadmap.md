@@ -15,12 +15,80 @@ and the language can perform no direct I/O.
 
 
 
+## Checkpoint 2 - Interactive scripts
+
+Focus on ergonomic scripting experience and the REPL.
+
+- [ ] UX
+- [ ] module and script compile reactivity
+- [ ] script interpreter reactivity
+- [ ] script unit undo/redo
+- [ ] assert statements
+- [ ] auto-adapt and other conveniences
+- [ ] rational numbers
+- [ ] monadic math ops
+- [ ] ?/! polymorphism
+- [ ] type sythesis for all literal forms
+- [ ] enum subtyping
+- [ ] filesystem workspaces
+- [ ] multiple concurrent interactive scripts
+- [ ] std docs, in-repl docs, generated docs
+- [ ] pipeline tools
+
+
+
+## In progress
+
+- bytecode
+- backend optimization
+- human docs
+- reactive scripts
+- repl ux
+
+
+
+
+## On deck
+
+- collection iteration
+- saturating and wrapping math ops
+
+
+
+
+## Backburner
+
+- tensor std features
+- assert and using it in favor of hacks in test harnesses
+- closures
+- table row polymorphism, column projections etc
+- doc generator and std docs
+- simple multithreading
+- testable docs
+- tree-sitter
+- 128-bit ints
+- fix rt error/alloc semantics
+- inline/jit tuning
+- allocation statistics
+- jit statistics
+- sourceless parsing
+- lsp - needs a project/workspace concept
+- deterministic builds - compiler pipeline is already deterministic
+- wasm-component backend
+- improve runtime implementation unsafety
+
+
+
+
+### Retired checkpoints
+
+
 ## Checkpoint 1 - Compiler Architecture
 
 Initial prototype.
 Thorough compiler architecture, bare language.
 
-- [ ] basic documentation
+- [x] basic documentation
 - [x] diagnostics
 - [x] tensors and tables
 - [x] indexing
@@ -40,83 +108,3 @@ Thorough compiler architecture, bare language.
 - [x] field projections
 - [x] match for enums
 
-
-
-
-## In progress
-
-- bytecode
-- backend optimization
-- human docs
-- reactive scripts
-- repl ux
-
-
-## On deck
-
-- collection iteration
-- saturating and wrapping math ops
-
-
-## Checkpoint 2 - REPL
-
-Focus on ergonomic REPL experience.
-
-- [ ] UX
-- [ ] module and script compile reactivity
-- [ ] script interpreter reactivity
-- [ ] script unit undo/redo
-- [ ] assert statements
-- [ ] auto-adapt and other conveniences
-- [ ] rational numbers
-- [ ] monadic math ops
-- [ ] ?/! polymorphism
-- [ ] type sythesis for all literal forms
-- [ ] enum subtyping
-- [ ] filesystem workspaces
-- [ ] multiple concurrent interactive scripts
-- [ ] std docs, in-repl docs, generated docs
-
-
-
-
-## Backburner
-
-- tensor std features
-- assert and using it in favor of hacks in test harnesses
-- closures
-- table row polymorphism, column projections etc
-- doc generator and std docs
-- multiple scripts
-- pipeline tools
-- simple multithreading
-- testable docs
-- tree-sitter
-- 128-bit ints
-- fix rt error/alloc semantics
-- inline/jit tuning
-- allocation statistics
-- jit statistics
-- sourceless parsing
-- lsp - needs a project/workspace concept
-- deterministic builds - compiler pipeline is already deterministic
-- wasm-component backend
-- improve runtime implementation unsafety
-
-
-
-
-## Far future wants
-
-- datalog rule and reduction sugar
-- gadts
-- heap types and global heap
-- named types
-- first-class type variables
-- termination proofs
-- refinement types
-- autodiff
-- zipper heaps
-- virtualized I/O
-- linear types with explicit dtors
-- bidirectionality, multi-determinism, choice-points ala mercury
