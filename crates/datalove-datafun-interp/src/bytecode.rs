@@ -342,9 +342,6 @@ pub(crate) enum Op {
     /// A comparison whose only use is the branch on it.
     BrCmpU8 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpU32I { cmp: Cmp, a: Loc, imm: u32, then: u32, els: u32 },
-    /// A `u32` remainder, `a % b`, whose only use is comparing it with an
-    /// immediate to branch on.
-    BrRemU32I { cmp: Cmp, a: Loc, b: Loc, imm: u32, then: u32, els: u32 },
     /// Checked `u32` arithmetic whose overflow flag only a branch reads:
     /// on to `ovf` if it overflowed, `ok` if not.
     CkU32Br { kind: Ck, dst: Loc, a: Loc, b: Loc, ovf: u32, ok: u32 },
@@ -1766,7 +1763,6 @@ impl Op {
             Op::BrIf { cond, .. } => f(cond, 1),
             Op::BrCmpU8 { a, b, .. } => { f(a, 1); f(b, 1) }
             Op::BrCmpU32I { a, .. } => f(a, 4),
-            Op::BrRemU32I { a, b, .. } => { f(a, 4); f(b, 4) }
             Op::CkU32Br { dst, a, b, .. } => { f(dst, 4); f(a, 4); f(b, 4) }
             Op::CkU32IBr { dst, a, .. } => { f(dst, 4); f(a, 4) }
             Op::BrCmpU32 { a, b, .. } | Op::BrCmpI32 { a, b, .. } => { f(a, 4); f(b, 4) }
@@ -1786,7 +1782,6 @@ impl Op {
             Op::Jump { to } | Op::EdgeIr { to, .. } => f(to),
             Op::UnwrapOkBr { then, .. } => f(then),
             Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
-            | Op::BrRemU32I { then, els, .. }
             | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
             | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. } => { f(then); f(els) }
             Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. }
@@ -2338,11 +2333,6 @@ impl IrInterpreter {
                     }
                     Op::BrCmpU32I { cmp, a, imm, then, els } => {
                         pc = if cmp.apply(rd::<u32>(base, a), imm) { then } else { els } as usize;
-                        continue;
-                    }
-                    Op::BrRemU32I { cmp, a, b, imm, then, els } => {
-                        let rem = rd::<u32>(base, a) % rd::<u32>(base, b);
-                        pc = if cmp.apply(rem, imm) { then } else { els } as usize;
                         continue;
                     }
                     Op::CkU32Br { kind, dst, a, b, ovf, ok } => {
