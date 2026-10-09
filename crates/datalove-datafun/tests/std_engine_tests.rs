@@ -291,6 +291,12 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
             db, compiled, descriptor, &script_text, Engine::Bytecode, None, "Bytecode")
             .map(|(value, _)| value);
 
+        // The bytecode without its optimization pass, for the pass's rules to
+        // be checked against.
+        let plain_result = run_with_executor(
+            db, compiled, descriptor, &script_text, Engine::PlainBytecode, None, "PlainBytecode")
+            .map(|(value, _)| value);
+
         // The JIT.
         //
         // Caught rather than allowed to propagate, so that a jit that panics on
@@ -327,6 +333,7 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
         let mut mismatches = Vec::new();
         for (name, result) in [
             ("Bytecode", &bytecode_result),
+            ("PlainBytecode", &plain_result),
             ("JIT", &jit_result),
             ("AOT", &aot_result),
             ("C AOT", &c_aot_result),

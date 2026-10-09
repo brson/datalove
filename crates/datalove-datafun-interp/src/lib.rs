@@ -102,15 +102,20 @@ pub enum Engine {
     IrWalker,
     /// Register bytecode lowered from the IR.
     Bytecode,
+    /// The bytecode as lowered, without its optimization pass: what the
+    /// pass's rules are tested against.
+    PlainBytecode,
 }
 
 impl Engine {
-    /// The engine `DATALOVE_INTERP` names, `ir` or `bc`, or else the bytecode.
+    /// The engine `DATALOVE_INTERP` names, `ir`, `bc` or `bc-plain`, or else
+    /// the bytecode.
     pub fn from_env() -> Engine {
         match std::env::var("DATALOVE_INTERP").as_deref() {
             Ok("bc") | Err(_) => Engine::Bytecode,
+            Ok("bc-plain") => Engine::PlainBytecode,
             Ok("ir") => Engine::IrWalker,
-            Ok(other) => panic!("DATALOVE_INTERP is `{other}`, not `ir` or `bc`"),
+            Ok(other) => panic!("DATALOVE_INTERP is `{other}`, not `ir`, `bc` or `bc-plain`"),
         }
     }
 }
@@ -557,7 +562,7 @@ impl IrInterpreter {
         frames: &mut FrameStore,
         code_ref: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
-        if self.engine == Engine::Bytecode {
+        if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode) {
             let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();
             return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);
@@ -574,7 +579,7 @@ impl IrInterpreter {
         if let Some((lowered_from, bc)) = layout.bytecode.get() && *lowered_from == address {
             return Rc::clone(bc);
         }
-        let (bc, escapes) = bytecode::lower(func, layout);
+        let (bc, escapes) = bytecode::lower(func, layout, self.engine == Engine::Bytecode);
         self.bc_stats.record(&bc, escapes);
         if std::env::var_os("DATALOVE_BC_DUMP").is_some() {
             eprintln!("{}:\n{}", func.name, bc.dump(func));

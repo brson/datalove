@@ -1933,7 +1933,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |
 | `ir_serial_tests` | IR serialization round-trip |
-| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the JIT, a chaos dispatcher, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
+| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode_opt.rs`), the JIT, a chaos dispatcher, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
 | `aot_layout_tests` | Cranelift AOT layout compatibility |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |

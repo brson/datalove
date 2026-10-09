@@ -6,6 +6,8 @@
 //! observed. See `botdocs/plan-engine-tests.md`.
 //!
 //! - **bytecode**: the whole analysis again, function bodies on the bytecode.
+//! - **plain**: the same on the bytecode as lowered, without its optimization
+//!   pass, so that every rule of the pass is checked against what it rewrote.
 //! - **jit**: the IR walker with a JIT compiling every function on its first call.
 //! - **chaos**: the bytecode under an `OptimizingDispatcher` that compiles,
 //!   and uses the JIT at random, seeded from the fixture.
@@ -52,6 +54,7 @@ static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) };
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Differential {
     Bytecode,
+    Plain,
     Jit,
     Chaos,
     Aot,
@@ -61,8 +64,9 @@ enum Differential {
 }
 
 impl Differential {
-    const ALL: [Differential; 7] = [
+    const ALL: [Differential; 8] = [
         Differential::Bytecode,
+        Differential::Plain,
         Differential::Jit,
         Differential::Chaos,
         Differential::Aot,
@@ -74,6 +78,7 @@ impl Differential {
     fn name(self) -> &'static str {
         match self {
             Differential::Bytecode => "bytecode",
+            Differential::Plain => "plain",
             Differential::Jit => "jit",
             Differential::Chaos => "chaos",
             Differential::Aot => "aot",
@@ -271,7 +276,7 @@ fn check(path: &Path) -> Result<String, String> {
         if skip.contains(&engine) {
             continue;
         }
-        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::NoConst | Differential::NoSpec) {
+        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec) {
             continue;
         }
         let variant = match engine {
@@ -293,6 +298,7 @@ fn check(path: &Path) -> Result<String, String> {
         }
         let interpreted = match engine {
             Differential::Bytecode => Some(Setup { engine: Engine::Bytecode, dispatcher: None }),
+            Differential::Plain => Some(Setup { engine: Engine::PlainBytecode, dispatcher: None }),
             Differential::Jit => Some(Setup {
                 engine: Engine::IrWalker,
                 dispatcher: Some(Box::new(JitEngine::new(1).map_err(|e| e.to_string())?)),
