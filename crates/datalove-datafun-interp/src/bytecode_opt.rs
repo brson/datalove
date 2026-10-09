@@ -20,7 +20,9 @@
 //! 4. `fuse_returns`: a result wrapped only to be returned is written into the
 //!    caller's slot.
 //! 5. `hoist_constants`: a constant written in a loop is written once on entry.
-//! 6. `duplicate_short_branches`: a jump to a short block ending in a branch
+//! 6. `coalesce_copies`: an op whose result only the next op copies writes
+//!    where the copy would have.
+//! 7. `duplicate_short_branches`: a jump to a short block ending in a branch
 //!    becomes a copy of that block.
 //!
 //! The pass can be left out, for `Engine::PlainBytecode`, which the engine
@@ -79,6 +81,9 @@ pub(super) fn optimize(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
         fuse_returns(&mut blocks[b], facts);
     }
     let prologue = hoist_constants(blocks, facts);
+    for block in blocks.iter_mut() {
+        coalesce_copies(block, facts);
+    }
     duplicate_short_branches(blocks);
     prologue
 }
@@ -237,10 +242,52 @@ fn hoist_constants(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
     prologue
 }
 
+/// 6. An op whose result only the next op copies, writing where the copy would
+/// have.
+///
+/// Matches an op with one result, which it writes after reading every operand,
+/// followed by a copy of that result, where the copy is the result's only
+/// reader -- as a store into a variable, or an edge's argument into a block's
+/// parameter, compiles to. The op writes the copy's destination instead.
+/// Saves the copy. Writing after reading is what lets the destination be one
+/// of the op's own operands, as it is in `set i = f(i)`.
+fn coalesce_copies(block: &mut Vec<Op>, facts: &Facts) {
+    let mut i = 1;
+    while i < block.len() {
+        if let Some((dst, src)) = copy_of(&block[i])
+            && facts.read_once(src)
+            && let Some(result) = single_result(&mut block[i - 1])
+            && result.0 == src.0
+        {
+            *result = dst;
+            block.remove(i);
+            continue;
+        }
+        i += 1;
+    }
+}
+
+/// The one place an op writes, for an op that writes one and reads all of its
+/// operands before it does.
+fn single_result(op: &mut Op) -> Option<&mut Loc> {
+    match op {
+        Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. }
+        | Op::Copy1 { dst, .. } | Op::Copy4 { dst, .. } | Op::Copy8 { dst, .. } | Op::CopyN { dst, .. }
+        | Op::CmpU32I { dst, .. } | Op::CmpU8 { dst, .. } | Op::CmpU32 { dst, .. } | Op::CmpI32 { dst, .. }
+        | Op::CmpU64 { dst, .. } | Op::CmpI64 { dst, .. }
+        | Op::AddWrapU32 { dst, .. } | Op::SubWrapU32 { dst, .. } | Op::MulWrapU32 { dst, .. }
+        | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. } | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. }
+        | Op::AddWrapIndex { dst, .. } | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. }
+        | Op::ZextU8U32 { dst, .. } | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. }
+        | Op::NotBool { dst, .. } => Some(dst),
+        _ => None,
+    }
+}
+
 /// The most ops a block may have for a jump to it to be replaced by a copy.
 const SHORT_BRANCH: usize = 4;
 
-/// 6. A jump to a short block that ends in a branch, replaced by a copy of the
+/// 7. A jump to a short block that ends in a branch, replaced by a copy of the
 /// block.
 ///
 /// Matches a block ending in a jump to another, of at most `SHORT_BRANCH` ops,
