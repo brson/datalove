@@ -20,6 +20,8 @@
 //! 4. `fuse_returns`: a result wrapped only to be returned is written into the
 //!    caller's slot.
 //! 5. `hoist_constants`: a constant written in a loop is written once on entry.
+//! 6. `duplicate_short_branches`: a jump to a short block ending in a branch
+//!    becomes a copy of that block.
 //!
 //! The pass can be left out, for `Engine::PlainBytecode`, which the engine
 //! tests run every fixture on, so that each rule is checked against the ops
@@ -77,6 +79,7 @@ pub(super) fn optimize(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
         fuse_returns(&mut blocks[b], facts);
     }
     let prologue = hoist_constants(blocks, facts);
+    duplicate_short_branches(blocks);
     prologue
 }
 
@@ -232,4 +235,48 @@ fn hoist_constants(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
         });
     }
     prologue
+}
+
+/// The most ops a block may have for a jump to it to be replaced by a copy.
+const SHORT_BRANCH: usize = 4;
+
+/// 6. A jump to a short block that ends in a branch, replaced by a copy of the
+/// block.
+///
+/// Matches a block ending in a jump to another, of at most `SHORT_BRANCH` ops,
+/// that ends in a two-way branch and has nothing in it that a second copy
+/// would change the meaning of. The copy runs the same ops in the same order
+/// the jump would have reached, so saves the jump's dispatch. The back edge of
+/// a loop is the common case: its body then ends in the loop's test rather
+/// than a jump back to it.
+fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
+    for b in 0..blocks.len() {
+        let Some(&Op::Jump { to }) = blocks[b].last() else { continue };
+        let target = &blocks[to as usize];
+        if to as usize == b || target.len() > SHORT_BRANCH || !target.last().is_some_and(two_way) {
+            continue;
+        }
+        if !target.iter().all(duplicable) {
+            continue;
+        }
+        let copy = target.clone();
+        blocks[b].pop();
+        blocks[b].extend(copy);
+    }
+}
+
+/// Whether an op is a branch to two blocks, with nothing falling through.
+fn two_way(op: &Op) -> bool {
+    matches!(op, Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
+        | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::CkU32Br { .. }
+        | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. })
+}
+
+/// Whether an op means the same wherever it is: not a call, which a call site
+/// is cached for, nor an escape to the IR walker, which runs an instruction
+/// by its place in the IR, nor one that falls through or leaves the body.
+fn duplicable(op: &Op) -> bool {
+    !matches!(op, Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::EdgeIr { .. }
+        | Op::UnwrapOkBr { .. } | Op::Switch { .. } | Op::Jump { .. }
+        | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. })
 }
