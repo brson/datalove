@@ -22,7 +22,7 @@ home here.
 - [A failed `set m[k]!` on a map says "index out of bounds"](#user-content-a-failed-set-mk-on-a-map-says-index-out-of-bounds)
 - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
 - [Nothing takes a value back out of data or error](#user-content-nothing-takes-a-value-back-out-of-data-or-error)
-- [One function per name, so no prelude](#user-content-one-function-per-name-so-no-prelude)
+- [One function per name, so no prelude](#user-content-one-function-per-name-so-no-prelude-of-imports)
 - [Borrowed enum payloads and tables inside a generic were never probed](#user-content-borrowed-enum-payloads-and-tables-inside-a-generic-were-never-probed)
 - [Nothing proves the suite runs with leak checking on](#user-content-nothing-proves-the-suite-runs-with-leak-checking-on)
 - [The allocator maps a page per large block and keeps every small page](#user-content-the-allocator-maps-a-page-per-large-block-and-keeps-every-small-page)

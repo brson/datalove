@@ -1114,7 +1114,7 @@ impl TypecheckStdCommand {
 
 impl DocsCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        use megaspace_pipeliner::{DocSetConfig, RssConfig};
+        use megaspace_pipeliner::{DocSet, RssConfig, Site};
 
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let manifest_path = PathBuf::from(manifest_dir);
@@ -1123,51 +1123,38 @@ impl DocsCommand {
             .and_then(|p| p.parent())
             .ok_or_else(|| anyhow!("Failed to find project root"))?;
 
-        let static_assets = &["style.css", "template.html", "datalove-logo.svg", "datalove-prism.js"];
+        let static_assets = &["style.css", "datalove-logo.svg", "datalove-prism.js"];
 
-        // Build mandocs -> docs/.
         let mandocs_dir = project_root.join("mandocs");
-        let mandocs_out = project_root.join("docs");
-        let mandocs_extra: &[(&str, &str)] = &[
-            ("cross_link_url", "bot/index.html"),
-            ("cross_link_label", "Botdocs"),
+        let botdocs_dir = project_root.join("botdocs");
+        let output_dir = project_root.join("docs");
+
+        let doc_sets = [
+            DocSet {
+                input_dir: &mandocs_dir,
+                mount: "",
+                static_assets,
+                extra_context: &[("cross_link_label", "Botdocs")],
+                link_context: &[("cross_link_url", "../botdocs/README.md")],
+                posts: Some(RssConfig {
+                    site_title: "Datalove",
+                    site_description: "Updates from Datalove",
+                    base_url: "https://datalove-language.net",
+                }),
+            },
+            DocSet {
+                input_dir: &botdocs_dir,
+                mount: "bot",
+                static_assets,
+                extra_context: &[("cross_link_label", "Mandocs")],
+                link_context: &[("cross_link_url", "../mandocs/README.md")],
+                posts: None,
+            },
         ];
 
-        megaspace_pipeliner::build_docs(&DocSetConfig {
-            input_dir: &mandocs_dir,
-            output_dir: &mandocs_out,
-            static_assets,
-            extra_context: mandocs_extra,
-        })?;
+        Site { output_dir: &output_dir, doc_sets: &doc_sets }.build()?;
 
-        megaspace_pipeliner::build_posts(
-            &mandocs_dir,
-            &mandocs_out,
-            &RssConfig {
-                site_title: "Datalove",
-                site_description: "Updates from Datalove",
-                base_url: "https://datalove.dev",
-            },
-            mandocs_extra,
-        )?;
-
-        println!("Documentation generated in {}", mandocs_out.display());
-
-        // Build botdocs -> docs/bot/.
-        let botdocs_dir = project_root.join("botdocs");
-        let botdocs_out = project_root.join("docs").join("bot");
-
-        megaspace_pipeliner::build_docs(&DocSetConfig {
-            input_dir: &botdocs_dir,
-            output_dir: &botdocs_out,
-            static_assets,
-            extra_context: &[
-                ("cross_link_url", "../index.html"),
-                ("cross_link_label", "Mandocs"),
-            ],
-        })?;
-
-        println!("Documentation generated in {}", botdocs_out.display());
+        println!("Documentation generated in {}", output_dir.display());
 
         Ok(())
     }

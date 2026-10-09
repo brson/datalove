@@ -26,7 +26,7 @@
               onclick="document.getElementById('navbar').classList.toggle('expanded')"></span>
         <div class="nav-links">
             {{ nav_html | safe }}
-            <a href="{{ path_prefix }}{{ cross_link_url }}" class="nav-toggle">{{ cross_link_label }}</a>
+            <a href="{{ cross_link_url }}" class="nav-toggle">{{ cross_link_label }}</a>
         </div>
     </nav>
     <main>
