@@ -52,7 +52,7 @@ end if
 
 This is a bigint benchmark that simply sums the numbers from 1 to 30 million,
 so once the interpreter is reasonably tuned generally it becomes primarily
-a test of bigint efficiency. Bigints are primarily implement in the runtime in Rust,
+a test of bigint efficiency. Bigints are implemented in the runtime in Rust,
 where performance is about representation (are all numbers on the heap? are small numbers
 packed into the stack?) and algorithmic efficiency.
 But because bigints are non-copyable types that live on the heap (Datalove bigints are always on the heap),
@@ -90,17 +90,16 @@ end fun
 
 That `set total = total + i@` is the whole story.
 Binary ops borrow their operands so themselves don't require a clone,
-but they do produce a fresh value, a bigint `+` always performs an allocation.
+but they do produce a fresh value, a bigint `+` always performs an allocation
+(furthermore, because both sides of addition require bigints,
+we have to promote the `u32` counter to `int`, another allocation).
 It _seems_ like we could instead do that operation in place directly into `total`
 without reallocating.
-Furthermore, because both sides of addition require bigints,
-we have to promote the `u32` counter to `int`, another allocation.
 
-Two seperate issues.
 To address the allocating math operator that immediately assigns to one of its operands
 here we _could_ do a fairly simple
 peephole optimization on `set total = total + <something>`,
-the IR for which looks like
+the bytecode for which looks like
 
 ```
 todo
@@ -113,7 +112,7 @@ I much prefer the language to have surface constructs that map to
 the required underlying performance mechanisms.
 That both makes the language's performance characteristics clear,
 and lets the compiler avoid accumulating passes that slowly eat at compile times.
-and the surface operation for this is obvious: compound assignment.
+And the surface operation for this is obvious: compound assignment.
 
 ```datalove
 set total += i@
@@ -122,16 +121,10 @@ set total += i@
 This common operation, assign `total + i@` to `total`,
 implies exactly the optimization needed.
 
-Aside: one might think "well, even if we _have_ this construct
-it would be _nice_ if the compiler optimized `set total + total + i@` _anyway_.
-Maybe it would, but I'm kinda thinking no:
-let's instead teach the compiler to analyze the possibility of doing this optimization,
-but emit a note suggesting to do it by hand.
-I strongly value implementation simplicity and a straightforward mapping from source to executable.
-
-Another aside! Even though optimizing bigint math is our motivator,
+Aside: even though optimizing bigint math is our motivator,
 having compound assignment should be a win for all types for the bytecode
 interpreter too, since it can fuse the math and the assigment into a single opcode.
+Further aside: I'll probably end up doing the peephole optimization anyway...
 
 
 ## In-place bigint math
@@ -209,7 +202,7 @@ Writing this explanation and doing the implementation (having an LLM do the impl
 brought yet more dogfooding wins:
 the actual existing implementation did not have a sensible evaluation order for
 the left-hand and right-hand side of an assigment.
-In most prior cases this didn't matter since they were simple without many potential side-effects.
+In most prior cases this didn't matter since they were simple without potential side-effects.
 But that wasn't true for assignment to index projections.
 
 Compound assignment works on any place `set` can write,
@@ -224,10 +217,9 @@ set rows[i]!.total +!= amount
 The place is evaluated once, so each key is computed and each lookup done a single time,
 and the update happens in the element where it lies.
 A bare map index, `set m[k] += 1`, is rejected:
-a bare index means upsert, and it isn't obvious what upserting means for every compound op
-(start from zero? what's zero for `*=`?).
-For now counting goes through a library function, `map.add`, which does the upsert-from-zero
-in one lookup.
+a set on a bare index means upsert,
+and it isn't obvious that's desirable nor what upserting means for every compound op
+(start from zero? is that useful for `*=`?).
 
 The old order reached the place first, then evaluated the right-hand side.
 Reaching an element means checking its index and taking a reference to it,
@@ -249,15 +241,12 @@ Now every `set`, plain or compound, evaluates in one order:
 All of the program's own code runs before any reference into the place exists,
 so the example above writes into the grown list,
 and an index the right-hand side pushes into range is in range when it's checked.
-This is also Rust's order for plain assignment and for compound assignment on primitives.
 
 Some consequences:
 the right-hand side's effects happen even if a lookup then fails;
 when both could fail, the right-hand side's error wins;
 and what the right-hand side moves is gone by the time the place is reached,
-so `set m[k]? = k` is now a use-after-move and needs `k@`.
-The cost is that the right-hand side can't be evaluated directly into the place,
-which matters only for plain `=` and only as a possible future optimization.
+so `set m[k]? = k` is a use-after-move and needs `k@`.
 
 
 ## Datalove's current math ops
