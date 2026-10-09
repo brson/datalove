@@ -1,8 +1,8 @@
-# New and optimizable math ops
+# Compound assignment
 
 Recently I've been proving the performance potential of language model
-with some simple benchmarks and a simple representative demonstration app
-(the details of which aren't super important).
+with some simple benchmarks and a simple representative demonstration app,
+the details of which aren't important.
 I have been focusing on the bytecode interpreter and the JIT,
 including compilation time and the runtime.
 As with writing the high-level docs for the website,
@@ -203,11 +203,6 @@ immediately improved reduced time spent on the `sum` benchmark by about 45% on e
 But not completely eliminating them.
 
 
-## Mixed-type math ops
-
-
-
-
 ## Compound assignment to index projections
 
 Writing this explanation and doing the implementation (having an LLM do the implementation...)
@@ -265,13 +260,45 @@ The cost is that the right-hand side can't be evaluated directly into the place,
 which matters only for plain `=` and only as a possible future optimization.
 
 
+## Datalove's current math ops
 
----
 
-todo
 
-how does bigint do the compound math in place?
-compound assignment to index projection places
-todo mixed-type math ops
-saturating and wrapping ops
-full list of current math ops
+## Future work
+
+Several other near-term language additions were suggested
+by this round of profiling.
+As mentioned previously,
+math binops require both operands to have the same type,
+and when the type is a bigint,
+that means they both need to be on the heap.
+
+```datalove
+fun sum_to(limit: u32): !int
+  var total: int = 0
+  var i: u32 = 1
+  loop while i <= limit
+    set total = total + i@
+    set i = i +! 1
+  end loop
+  ret ok total
+end fun
+```
+
+Often one of side of these ops doesn't need to be large:
+the `i` in the above is a `u32` but must be widened to `int`,
+an expensive thing to do in a loop.
+To make that cheap I could give big ints a small-size optimization,
+but I'm disinclined to add the representational complexity and additional branching,
+and as always don't prefer performance to rely on optimizations that aren't implied by
+the surface language.
+I'm instead thinking of having binops support limited mixed-type operations,
+where the two sides can have different types, where one losslessy converts to the other
+(I suspect Datalove will also eventually get auto-widening of numerics in general,
+at least as a mode that is active for interactive/script use).
+
+Secondly, this round of work revealed that the standard library
+widely uses an unideal pattern for loop counters:
+
+```datalove
+```
