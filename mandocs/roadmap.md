@@ -45,18 +45,17 @@ Thorough compiler architecture, bare language.
 
 ## In progress
 
+- bytecode
+- backend optimization
 - human docs
-- const param specialization - mostly done?
-- fully reactive scripts, undo/redo
+- reactive scripts
+- repl ux
 
 
 ## On deck
 
-- tensor std features
-- assert and using it in favor of hacks in test harnesses
-- closures
-- table row polymorphism, column projections etc
-
+- collection iteration
+- saturating and wrapping math ops
 
 
 ## Checkpoint 2 - REPL
@@ -83,7 +82,10 @@ Focus on ergonomic REPL experience.
 
 ## Backburner
 
-- filesystem workspaces
+- tensor std features
+- assert and using it in favor of hacks in test harnesses
+- closures
+- table row polymorphism, column projections etc
 - doc generator and std docs
 - multiple scripts
 - pipeline tools
