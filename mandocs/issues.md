@@ -1,3 +1,14 @@
+## 2026/10/08 can't call !() functions as statements
+
+```
+call foo()!
+```
+
+doesn't parse.
+This is for nullary functions that could error.
+Needs to be an exception for call statements.
+
+
 ## 2026/10/08 sys/std/int functions take args by val
 
 seems like a lot of them should be ref
