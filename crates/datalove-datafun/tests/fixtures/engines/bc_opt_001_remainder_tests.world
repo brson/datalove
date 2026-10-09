@@ -1,0 +1,52 @@
+----------
+scriptunit-fragment
+----------
+
+// Branches on a remainder compared with a constant, which the bytecode fuses
+// into one op, for every comparison, against zero and not.
+fun classify(n: u32): u32
+    var kinds: u32 = 0
+    if icall rem_u32(n, : u32 / 2) == 0
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 1)
+    end if
+    if icall rem_u32(n, : u32 / 3) != 0
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 10)
+    end if
+    if icall rem_u32(n, : u32 / 7) .< 3
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 100)
+    end if
+    if icall rem_u32(n, : u32 / 7) <= 3
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 1000)
+    end if
+    if icall rem_u32(n, : u32 / 5) .> 2
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 10000)
+    end if
+    if icall rem_u32(n, : u32 / 5) >= 4
+        set kinds = icall add_wrapping_u32(kinds, : u32 / 100000)
+    end if
+    ret kinds
+end fun
+
+// Trial division, whose test is in a loop.
+fun count_primes(limit: u32): u32
+    var count: u32 = 0
+    var n: u32 = 2
+    loop while n <= limit
+        var d: u32 = 2
+        var prime = true
+        loop while icall mul_wrapping_u32(d, d) <= n
+            if icall rem_u32(n, d) == 0
+                set prime = false
+            end if
+            set d = icall add_wrapping_u32(d, : u32 / 1)
+        end loop
+        if prime
+            set count = icall add_wrapping_u32(count, : u32 / 1)
+        end if
+        set n = icall add_wrapping_u32(n, : u32 / 1)
+    end loop
+    ret count
+end fun
+
+debuglog (classify(0), classify(1), classify(6), classify(10), classify(13), classify(34), classify(4294967295))
+debuglog count_primes(1000)

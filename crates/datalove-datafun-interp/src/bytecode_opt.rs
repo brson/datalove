@@ -16,13 +16,15 @@
 //!    immediate in the op, and the constant's op goes once no op reads it.
 //! 2. `fuse_branches`: an op whose flag only the block's branch reads becomes
 //!    one op with the branch.
-//! 3. `fold_copies`: a copy only a `WrapOk` reads is read past.
-//! 4. `fuse_returns`: a result wrapped only to be returned is written into the
+//! 3. `fuse_remainder_tests`: a remainder only a fused comparison against an
+//!    immediate reads becomes part of it.
+//! 4. `fold_copies`: a copy only a `WrapOk` reads is read past.
+//! 5. `fuse_returns`: a result wrapped only to be returned is written into the
 //!    caller's slot.
-//! 5. `hoist_constants`: a constant written in a loop is written once on entry.
-//! 6. `coalesce_copies`: an op whose result only the next op copies writes
+//! 6. `hoist_constants`: a constant written in a loop is written once on entry.
+//! 7. `coalesce_copies`: an op whose result only the next op copies writes
 //!    where the copy would have.
-//! 7. `duplicate_short_branches`: a jump to a short block ending in a branch
+//! 8. `duplicate_short_branches`: a jump to a short block ending in a branch
 //!    becomes a copy of that block.
 //!
 //! The pass can be left out, for `Engine::PlainBytecode`, which the engine
@@ -77,6 +79,7 @@ pub(super) fn optimize(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
     absorb_immediates(blocks, facts);
     for b in 0..blocks.len() {
         fuse_branches(&mut blocks[b], b, facts);
+        fuse_remainder_tests(&mut blocks[b], facts);
         fold_copies(&mut blocks[b], facts);
         fuse_returns(&mut blocks[b], facts);
     }
@@ -170,7 +173,24 @@ fn fuse_branches(block: &mut Vec<Op>, b: usize, facts: &Facts) {
     block.push(fused);
 }
 
-/// 3. A copy that only the `WrapOk` after it reads, read past.
+/// 3. A remainder that only a fused comparison against an immediate reads,
+/// folded into it.
+///
+/// Matches a `u32` remainder followed by a branch comparing its result, which
+/// nothing else reads, with an immediate, as a divisibility test compiles to.
+/// Saves the remainder's store and load and a dispatch.
+fn fuse_remainder_tests(block: &mut Vec<Op>, facts: &Facts) {
+    let [.., Op::RemU32 { dst, a, b }, Op::BrCmpU32I { cmp, a: tested, imm, then, els }] = *block.as_slice() else {
+        return;
+    };
+    if tested.0 != dst.0 || !facts.read_once(dst) {
+        return;
+    }
+    block.truncate(block.len() - 2);
+    block.push(Op::BrRemU32I { cmp, a, b, imm, then, els });
+}
+
+/// 4. A copy that only the `WrapOk` after it reads, read past.
 ///
 /// Matches a copy into a value read once, by the next op, a `WrapOk`. The
 /// copy's source still holds what it copied, so the wrap reads that. Saves
@@ -200,7 +220,7 @@ fn copy_of(op: &Op) -> Option<(Loc, Loc)> {
     }
 }
 
-/// 4. A result wrapped only to be returned, written straight into the caller's
+/// 5. A result wrapped only to be returned, written straight into the caller's
 /// slot.
 ///
 /// Matches a `WrapOk` whose result only the `Return` after it reads. Saves the
@@ -218,7 +238,7 @@ fn fuse_returns(block: &mut Vec<Op>, facts: &Facts) {
     block.push(Op::ReturnOk { src, at, len });
 }
 
-/// 5. A constant written in a loop, written once on entry instead.
+/// 6. A constant written in a loop, written once on entry instead.
 ///
 /// Matches a constant's op, in a block that is in a loop, writing a value
 /// nothing else writes. Saves its execution at every iteration, for one at
@@ -242,7 +262,7 @@ fn hoist_constants(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
     prologue
 }
 
-/// 6. An op whose result only the next op copies, writing where the copy would
+/// 7. An op whose result only the next op copies, writing where the copy would
 /// have.
 ///
 /// Matches an op with one result, which it writes after reading every operand,
@@ -287,7 +307,7 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
 /// The most ops a block may have for a jump to it to be replaced by a copy.
 const SHORT_BRANCH: usize = 4;
 
-/// 7. A jump to a short block that ends in a branch, replaced by a copy of the
+/// 8. A jump to a short block that ends in a branch, replaced by a copy of the
 /// block.
 ///
 /// Matches a block ending in a jump to another, of at most `SHORT_BRANCH` ops,
@@ -316,7 +336,7 @@ fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
 fn two_way(op: &Op) -> bool {
     matches!(op, Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
         | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::CkU32Br { .. }
-        | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. })
+        | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. } | Op::BrRemU32I { .. })
 }
 
 /// Whether an op means the same wherever it is: not a call, which a call site
