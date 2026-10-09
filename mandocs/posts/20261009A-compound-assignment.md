@@ -1,4 +1,8 @@
-# Compound assignment
+---
+title: "Compound assignment and bigints"
+category: dev
+summary: "Compound assignment leads to bigint optimization"
+---
 
 Recently I've been proving the performance potential of the language model
 with some simple benchmarks and a simple representative demonstration app,
