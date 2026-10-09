@@ -120,7 +120,11 @@ impl UnpackSlot {
 /// In order, not by bisection. Bisecting compared fewer keys -- a node holds up
 /// to eleven -- but its branches go either way at random where a scan's go one
 /// way until they stop, and on the store demo and `benchvs/wordfreq` the
-/// mispredictions cost more cycles than the comparisons saved.
+/// mispredictions cost more cycles than the comparisons saved. Bisecting only
+/// string keys, where a comparison costs most, did no better: `wordfreq` ran
+/// 10% fewer instructions and took 35% more mispredictions, which a branchless
+/// bisection didn't reduce, since they come from inside the string compare.
+/// Cycles came out between -4% and +1% across the engines.
 #[inline]
 unsafe fn search_keys(keys: *const u8, len: usize, key: *const u8, ty: MapTy) -> std::result::Result<usize, usize> {
     unsafe {
