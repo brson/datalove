@@ -309,6 +309,10 @@ pub(crate) enum Op {
 
     /// Whether `index` is inside the list at `list`.
     ListBoundsCheck { dst: Loc, list: Loc, index: Loc },
+    /// Copy element `index` of the list at `list`, `size` bytes, to `dst`, if
+    /// the index is in bounds, and say whether it was: a ListGet of an
+    /// element type that owns nothing, so a copy is the clone.
+    ListGetCopy { dst: Loc, valid: Loc, list: Loc, index: Loc, size: u32 },
     /// Replace element `index` of the list at `list` with the `size` bytes at
     /// `value`, if the index is in bounds, and say whether it was: a ListSet
     /// of an element type that owns nothing, so nothing to destroy either way.
@@ -1179,6 +1183,18 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::ListBoundsCheck { dst: self.value_loc(*is_valid), list: l, index: i });
                 true
             }
+            Instruction::ListGet { dest, is_valid, list, index } => {
+                let (Some(IrType::List(elem)), Some(l), Some(i)) =
+                    (self.typed(list), self.loc(list), self.loc(index)) else { return false };
+                if !elem.is_copy() {
+                    return false;
+                }
+                let size = layout_of(elem).size;
+                self.emit(Op::ListGetCopy {
+                    dst: self.value_loc(*dest), valid: self.value_loc(*is_valid), list: l, index: i, size,
+                });
+                true
+            }
             Instruction::ListSet { is_valid, list, index, value } => {
                 let (Some(IrType::List(elem)), Some(l), Some(i), Some(v)) =
                     (self.typed(list), self.loc(list), self.loc(index), self.loc(value)) else { return false };
@@ -1938,6 +1954,9 @@ impl Op {
             Op::ListBoundsCheck { dst, list, index } => {
                 f(dst, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
             }
+            Op::ListGetCopy { dst, valid, list, index, size } => {
+                f(dst, size); f(valid, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
+            }
             Op::ListSetCopy { valid, list, index, value, size } => {
                 f(valid, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I); f(value, size)
             }
@@ -2001,7 +2020,7 @@ impl Op {
             | Op::ShrU32 { .. } | Op::ShlU32 { .. } | Op::AndU32 { .. }
             | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::U64ToIndex { .. }
             | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
-            | Op::ListBoundsCheck { .. } | Op::ListSetCopy { .. }
+            | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
             | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
@@ -2450,6 +2469,16 @@ impl IrInterpreter {
                     Op::ListBoundsCheck { dst, list, index } => {
                         let list = &*(list.at(base) as *const rtdt::List);
                         wr(base, dst, rd::<rtdt::IndexRepr>(base, index) < list.size.0);
+                    }
+                    Op::ListGetCopy { dst, valid, list, index, size } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        let i = rd::<rtdt::IndexRepr>(base, index);
+                        let in_bounds = i < list.size.0;
+                        if in_bounds {
+                            let elem = (list.data as *const u8).add(i as usize * size as usize);
+                            copy_bytes(elem, dst.at(base), size as usize);
+                        }
+                        wr(base, valid, in_bounds);
                     }
                     Op::ListSetCopy { valid, list, index, value, size } => {
                         let list = &*(list.at(base) as *const rtdt::List);
