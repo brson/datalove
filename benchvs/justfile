@@ -16,7 +16,7 @@ javadir := aotdir / "java"
 # to be on PATH. It warns on stderr that it runs "an unsupported
 # configuration", as V8's test shell does; it runs at V8's full speed.
 
-benches := "fib sum primes wordfreq"
+benches := "fib sum primes wordfreq sieve mandelbrot nbody"
 
 # Build datalove CLI in release mode, AOT-compile every bench, and compile
 # the Java ones.

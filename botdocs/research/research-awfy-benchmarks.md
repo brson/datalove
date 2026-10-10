@@ -91,6 +91,41 @@ measure.
 | DeltaBlue | Objects, or a large arena rewrite | A constraint graph of variables and constraints pointing at each other, over a six-way class hierarchy; as arenas and enums it would be a different program |
 | CD | Objects, or a large arena rewrite | A red-black tree with parent links, plus vector arithmetic; 854 lines, the largest |
 
+## Ported so far
+
+Mandelbrot, NBody and Sieve are in `benchvs` (October 2026), each in datalove,
+Python, Julia, Java and JavaScript. Java, JavaScript and Python follow AWFY's;
+Julia's is written to match. Each runs AWFY's verified size -- Sieve to 5000
+(669), Mandelbrot at 750 (50), NBody for 250,000 steps (-0.1690859889909308)
+-- a number of times and prints the total, so that a JIT cannot discard the
+earlier runs. All eight implementations print the same total, NBody's
+included: every one does AWFY's floating-point operations in AWFY's order, and
+prints the shortest round-trip form of a double.
+
+What the first timings showed, in ms (mean of three):
+
+| Bench | interp | JIT | AOT | Python | Julia | Java | V8 |
+|---|---|---|---|---|---|---|---|
+| Sieve (x10,000) | 6883 | 2036 | 1885 | 3935 | 300 | 109 | 155 |
+| Mandelbrot (x4) | 6817 | 2606 | 537 | 5239 | 414 | 392 | 276 |
+| NBody (x6) | 8511 | 511 | 421 | 5045 | 280 | 108 | 125 |
+
+And why, from a profile of each:
+
+- **Sieve, 19x Java.** A list element written in compiled code is a call to
+  the runtime (`dtlv_rti_element_write_local`), not a store; and
+  `list.repeated`, generic, boxes each of the 5000 flags into a `data` and out
+  again, about a third of the run.
+- **NBody, 4.7x Java.** Close to half of the compiled `advance` is calls to the
+  runtime's generic destroy (`any_destroy_local`), though every value there is
+  an `f64` or a struct of them, and owns nothing.
+- **Mandelbrot, 1.4x Java compiled, but 6.7x tiered.** With every function
+  compiled at its first call it runs in 546 ms; tiered, in 2606. Its two inner
+  loops need what their enclosing loop defines, so OSR refuses them, and the
+  outer loop runs 750 times a call, under the threshold of 1000: the first call
+  or so is interpreted. This is the program OSR's refusal of inner loops was
+  waiting for.
+
 ## Additions that would open the rest
 
 Modest, in the order they unlock the most:
@@ -115,8 +150,8 @@ wrote them, but are not a modest addition.
 
 ## Order of work suggested
 
-1. Mandelbrot, NBody and Sieve: the floating-point and array-store coverage
-   `benchvs` lacks, a page each, with AWFY's Java and JavaScript as they are.
+1. Mandelbrot, NBody and Sieve (done): the floating-point and array-store
+   coverage `benchvs` lacked.
 2. Richards: the first application-shaped benchmark, and the test of whether
    arena-and-enum style datalove holds up against Java and V8 on that shape.
 3. Permute, Queens, Bounce and Towers, which are cheap once the first are in.

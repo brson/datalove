@@ -1,0 +1,50 @@
+// Sieve benchmark - count the primes up to 5000 with a sieve of Eratosthenes,
+// many times over. From Are We Fast Yet (github.com/smarr/are-we-fast-yet),
+// whose Sieve counts 669 each time.
+//
+// Prints the sum of the counts. Uses wrapping arithmetic intrinsics to avoid
+// overflow check overhead.
+
+require module sys/std/list
+
+const ITERATIONS: u32 = 10000
+const SIZE: index = 5000
+
+fun sieve(mut flags: [bool], size: index): !u32
+  var prime_count: u32 = 0
+  var i: index = 2
+  loop while i <= size
+    if flags[icall sub_wrapping_index(i, : index / 1)]!
+      set prime_count = icall add_wrapping_u32(prime_count, : u32 / 1)
+      var k = icall add_wrapping_index(i, i)
+      loop while k <= size
+        set flags[icall sub_wrapping_index(k, : index / 1)]! = false
+        set k = icall add_wrapping_index(k, i)
+      end loop
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok prime_count
+end fun
+
+fun benchmark(): !u32
+  var flags = list.repeated(ref true, SIZE)
+  ret sieve(mut flags, SIZE)
+end fun
+
+fun run(): !u32
+  var total: u32 = 0
+  var n: u32 = 0
+  loop while n .< ITERATIONS
+    set total = icall add_wrapping_u32(total, benchmark()!)
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret ok total
+end fun
+
+let result = run()
+if result |value|
+  debuglog(value)
+else |err|
+  debuglog(false)
+end if
