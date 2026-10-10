@@ -2392,13 +2392,19 @@ impl IrInterpreter {
         if unsafe { (*val.tydesc).type_tag } != rtdt::TyTag::Data {
             return val;
         }
-        scratch.push(Box::new(0u64));
-        let slot = scratch.last_mut().expect("just pushed").as_mut() as *mut u64 as *mut u8;
+        // Only a value the wrapper keeps in its own words is unpacked, so only
+        // that takes a box; one on the heap is lent where it is. This runs on
+        // every call that passes a wrapped container on.
         let mut inner_ptr: *const u8 = std::ptr::null();
         let mut inner_tydesc: *const rtdt::TyDesc = std::ptr::null();
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_borrow(
-                val.ptr, slot, &mut inner_ptr, &mut inner_tydesc)
+        let held_inline = unsafe { (*(val.ptr as *const rtdt::Data)).tag() }
+            != rtdt::anypack::Tag::TwoPointers;
+        let status = if held_inline {
+            scratch.push(Box::new(0u64));
+            let slot = scratch.last_mut().expect("just pushed").as_mut() as *mut u64 as *mut u8;
+            unsafe { datalove_rt::c::dtlv_rti_data_borrow(val.ptr, slot, &mut inner_ptr, &mut inner_tydesc) }
+        } else {
+            unsafe { datalove_rt::c::dtlv_rti_data_parts(val.ptr, &mut inner_ptr, &mut inner_tydesc) }
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok,
             "borrowing through a wrapper that holds nothing to borrow");
