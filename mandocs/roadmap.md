@@ -39,9 +39,6 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## In progress
 
-- bytecode
-- backend optimization
-- human docs
 - reactive scripts
 - repl ux
 
