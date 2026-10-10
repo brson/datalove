@@ -36,6 +36,7 @@
 - [Datalog-Style Programming with Atoms/Terms/Enums](research/research-datalog.md)
 - [Temporal Types](research/research-temporal-types.md)
 - [Lowering to WebAssembly Components](research/research-webcomponents.md)
+- [Are We Fast Yet for benchvs](research/research-awfy-benchmarks.md)
 
 ---
 
