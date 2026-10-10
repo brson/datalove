@@ -2561,6 +2561,15 @@ impl<'a> FunctionCodegenContext<'a> {
             if modes.get(i) != Some(&ParamMode::Out) {
                 continue;
             }
+            // A copy type owns nothing to destroy; through a reference, what
+            // is destroyed is what it points at.
+            let pointee = match self.operand_type(arg) {
+                datalove_datafun_ir::IrType::Ref(inner) => inner.as_ref(),
+                other => other,
+            };
+            if pointee.is_copy() {
+                continue;
+            }
             let addr = self.operand_addr(arg);
             let tydesc = self.operand_tydesc(arg);
 
@@ -3028,6 +3037,10 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_drop(&mut self, out: &mut String, operand: &Operand, tracked: bool) -> Result<(), CAotError> {
         let addr = self.operand_addr(operand);
         let ty = self.operand_type(operand).clone();
+        // A copy type owns nothing to destroy.
+        if ty.is_copy() {
+            return Ok(());
+        }
         let tydesc = self.tydesc_name(&ty);
 
         if tracked {

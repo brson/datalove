@@ -4,7 +4,6 @@ use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
-use cranelift_codegen::ir::types as cl_types;
 use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ParamMode, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
@@ -136,57 +135,32 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("out parameter requires runtime handle".into())
-        })?;
-        let destroy = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen(
-                "out parameter requires runtime imports".into()))?
-            .destroy_local;
-
         for (i, arg) in args.iter().enumerate() {
             if modes.get(i) != Some(&ParamMode::Out) {
                 continue;
             }
-            let ptr = self.get_operand_ptr(builder, arg)?;
-            let tydesc = self.operand_tydesc(builder, arg)?;
-            let destroy_ref = self.module.declare_func_in_func(destroy, builder.func);
-
             // A destination that is tracked says for itself whether it holds
             // anything. This function's own out parameter, passed straight on,
             // was cleared by whoever called this one; an uninitialized `var`
             // has never held anything at all, and its slot is 0xFF poison, so
             // clearing it would call `free` on the poison. Freeing what was
             // never allocated is worse than leaking.
-            let guard = match arg {
+            // What is destroyed is the destination: through a reference, what
+            // it points at, as `operand_tydesc` describes it.
+            let ty = match self.get_operand_type(arg)? {
+                IrType::Ref(inner) => *inner,
+                other => other,
+            };
+            if ty.is_copy() {
+                continue;
+            }
+            let ptr = self.get_operand_ptr(builder, arg)?;
+            let tydesc = self.operand_tydesc(builder, arg)?;
+            let tracked = match arg {
                 Operand::Param(param) => self.param_tracking_byte_offset(*param),
                 other => self.tracking_byte_offset(other),
             };
-            let Some(track_offset) = guard else {
-                builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
-                continue;
-            };
-
-            let frame_slot = self.frame_slot.ok_or_else(|| {
-                CraneliftError::Codegen("out parameter tracking requires frame slot".into())
-            })?;
-            let track_addr = frame_slot.addr(builder, track_offset as i32);
-            let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
-            let live = builder.ins().iconst(cl_types::I8, datalove_datafun_ir::frame_layout::tracking::LIVE as i64);
-            let is_live = builder.ins().icmp(
-                cranelift_codegen::ir::condcodes::IntCC::Equal, track_val, live);
-
-            let destroy_block = builder.create_block();
-            let after_block = builder.create_block();
-            builder.ins().brif(is_live, destroy_block, &[], after_block, &[]);
-
-            builder.switch_to_block(destroy_block);
-            builder.seal_block(destroy_block);
-            builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
-            builder.ins().jump(after_block, &[]);
-
-            builder.switch_to_block(after_block);
-            builder.seal_block(after_block);
+            self.destroy_value(builder, ptr, &ty, Some(tydesc), tracked)?;
         }
         Ok(())
     }

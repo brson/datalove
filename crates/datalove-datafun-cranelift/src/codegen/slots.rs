@@ -138,24 +138,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // For mut params, destroy the old value first.
         // (Out params would be uninitialized, but we don't track that at compile time.)
-        // Call destroy_local on the existing value.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("ParamStore requires runtime imports".into()))?
-            .destroy_local;
-
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("ParamStore requires runtime handle parameter".into())
-        })?;
-
-        // Get TyDesc for the param type.
-        let tydesc_id = self.tydesc(param_ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // Call destroy_local(rt_handle, value_ptr, tydesc).
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, param_ptr, tydesc_addr]);
+        self.destroy_value(builder, param_ptr, param_ty, None, None)?;
 
         // Now store the new value.
         match repr {
@@ -185,9 +168,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         param: ParamId,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        use datalove_datafun_ir::frame_layout::tracking;
-        use cranelift_codegen::ir::types as cl_types;
-
         // Get the param pointer (points to caller's data).
         let param_ptr = self.param_values.get(&param).copied().ok_or_else(|| {
             CraneliftError::Codegen(format!("undefined param: {:?}", param))
@@ -202,53 +182,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "ParamStoreTracked: param {:?} has no tracking byte", param
             )))?;
 
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("ParamStoreTracked requires frame slot".into())
-        })?;
-
-        // Load tracking byte.
-        let track_addr = frame_slot.addr(builder, track_offset as i32);
-        let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
-
-        // Check if initialized (LIVE).
-        let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-        let is_init = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            track_val,
-            live_const,
-        );
-
-        // Create blocks for conditional destroy.
-        let destroy_block = builder.create_block();
-        let store_block = builder.create_block();
-
-        builder.ins().brif(is_init, destroy_block, &[], store_block, &[]);
-
-        // Destroy block: destroy old value, then jump to store.
-        builder.switch_to_block(destroy_block);
-        builder.seal_block(destroy_block);
-
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("ParamStoreTracked requires runtime imports".into()))?
-            .destroy_local;
-
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("ParamStoreTracked requires runtime handle parameter".into())
-        })?;
-
-        let tydesc_id = self.tydesc(param_ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, param_ptr, tydesc_addr]);
-
-        builder.ins().jump(store_block, &[]);
-
-        // Store block: store new value, mark as LIVE.
-        builder.switch_to_block(store_block);
-        builder.seal_block(store_block);
+        // Destroy the old value if there is one, then store the new one and
+        // mark the param as LIVE.
+        self.destroy_value(builder, param_ptr, param_ty, None, Some(track_offset))?;
 
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
@@ -286,22 +222,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let repr = types::ir_type_to_cranelift(&dest_ty);
 
         // Destroy the old value first.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("RefStore requires runtime imports".into()))?
-            .destroy_local;
-
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("RefStore requires runtime handle parameter".into())
-        })?;
-
-        let tydesc_id = self.tydesc(&dest_ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // Call destroy_local(rt_handle, value_ptr, tydesc).
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, dest_ptr, tydesc_addr]);
+        self.destroy_value(builder, dest_ptr, &dest_ty, None, None)?;
 
         // Now store the new value.
         match repr {
@@ -364,22 +285,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let repr = types::ir_type_to_cranelift(&current_ty);
 
         // Destroy the old value first.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("RefSetField requires runtime imports".into()))?
-            .destroy_local;
-
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("RefSetField requires runtime handle parameter".into())
-        })?;
-
-        let tydesc_id = self.tydesc(&current_ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // Call destroy_local(rt_handle, field_ptr, tydesc).
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_addr]);
+        self.destroy_value(builder, current_addr, &current_ty, None, None)?;
 
         // Now store the new value.
         match repr {

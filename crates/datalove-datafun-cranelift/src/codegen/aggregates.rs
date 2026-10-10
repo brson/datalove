@@ -475,20 +475,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Destroy old field value before overwriting (handles move types).
-        // Get TyDesc for the field type.
-        let tydesc_id = self.tydesc(&current_ty)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // Call destroy_local on old field value.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("SetField requires runtime imports".into()))?
-            .destroy_local;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("SetField requires runtime handle parameter".into())
-        })?;
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
+        self.destroy_value(builder, current_addr, &current_ty, None, None)?;
 
         // Store new value at target address.
         let val = self.get_operand_value(builder, value)?;
@@ -498,14 +485,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(_) => {
                 builder.ins().store(MemFlagsData::new(), val, current_addr, 0);
             }
-            CraneliftRepr::Aggregate(_) => {
-                // Call move_value runtime function.
-                let move_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| CraneliftError::Codegen("SetField aggregate requires runtime imports".into()))?
-                    .move_value;
-                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
-                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
-            }
+            CraneliftRepr::Aggregate(_) => self.move_into(builder, val, &current_ty, current_addr)?,
         }
 
         Ok(())
@@ -602,8 +582,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Destroy old field value before overwriting.
-        let destroy_ref = self.module.declare_func_in_func(runtime.destroy_local, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
+        self.destroy_value(builder, current_addr, &current_ty, Some(tydesc_ptr), None)?;
 
         let val = self.get_operand_value(builder, value)?;
 
@@ -645,9 +624,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         field_path: &[u32],
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        use datalove_datafun_ir::frame_layout::tracking;
-        use cranelift_codegen::ir::types as cl_types;
-
         // Get base address and type from param.
         let addr = self.param_values.get(param).copied().ok_or_else(|| {
             CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
@@ -690,50 +666,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 "ParamSetFieldTracked: param {:?} has no tracking byte", param
             )))?;
 
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("ParamSetFieldTracked requires frame slot".into())
-        })?;
-
-        // Load tracking byte.
-        let track_addr = frame_slot.addr(builder, track_offset as i32);
-        let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
-
-        // Check if initialized (LIVE).
-        let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-        let is_init = builder.ins().icmp(
-            cranelift_codegen::ir::condcodes::IntCC::Equal,
-            track_val,
-            live_const,
-        );
-
-        // Create blocks for conditional destroy.
-        let destroy_block = builder.create_block();
-        let store_block = builder.create_block();
-
-        builder.ins().brif(is_init, destroy_block, &[], store_block, &[]);
-
-        // Destroy block: destroy old field value, then jump to store.
-        builder.switch_to_block(destroy_block);
-        builder.seal_block(destroy_block);
-
-        let tydesc_id = self.tydesc(&current_ty)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("ParamSetFieldTracked requires runtime imports".into()))?
-            .destroy_local;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("ParamSetFieldTracked requires runtime handle parameter".into())
-        })?;
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-        builder.ins().call(destroy_ref, &[rt_handle, current_addr, tydesc_ptr]);
-
-        builder.ins().jump(store_block, &[]);
-
-        // Store block: store new value at target address.
-        builder.switch_to_block(store_block);
-        builder.seal_block(store_block);
+        // Destroy the old field value if the param holds one, then store.
+        self.destroy_value(builder, current_addr, &current_ty, None, Some(track_offset))?;
 
         let val = self.get_operand_value(builder, value)?;
         let field_repr = types::ir_type_to_cranelift(&current_ty);
@@ -742,18 +676,35 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(_) => {
                 builder.ins().store(MemFlagsData::new(), val, current_addr, 0);
             }
-            CraneliftRepr::Aggregate(_) => {
-                let move_func_id = self.runtime.as_ref()
-                    .ok_or_else(|| CraneliftError::Codegen("ParamSetFieldTracked aggregate requires runtime imports".into()))?
-                    .move_value;
-                let move_ref = self.module.declare_func_in_func(move_func_id, builder.func);
-                builder.ins().call(move_ref, &[rt_handle, val, tydesc_ptr, current_addr]);
-            }
+            CraneliftRepr::Aggregate(_) => self.move_into(builder, val, &current_ty, current_addr)?,
         }
 
         // Mark param as LIVE.
         self.mark_param_live(builder, *param);
 
+        Ok(())
+    }
+
+    /// Move the aggregate of type `ty` at `src` into `dest`, through the
+    /// runtime, which knows how to move each type.
+    fn move_into(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        src: cranelift_codegen::ir::Value,
+        ty: &IrType,
+        dest: cranelift_codegen::ir::Value,
+    ) -> Result<(), CraneliftError> {
+        let move_value = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("moving an aggregate requires runtime imports".into()))?
+            .move_value;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("moving an aggregate requires the runtime handle".into())
+        })?;
+        let tydesc_id = self.tydesc(ty)?;
+        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+        let tydesc = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        let move_ref = self.module.declare_func_in_func(move_value, builder.func);
+        builder.ins().call(move_ref, &[rt_handle, src, tydesc, dest]);
         Ok(())
     }
 }

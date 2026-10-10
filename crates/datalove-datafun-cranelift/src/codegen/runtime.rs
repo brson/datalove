@@ -64,44 +64,83 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Compile a Drop instruction.
+    /// Destroy the value of type `ty` at `ptr`, which is the runtime's to do.
     ///
-    /// Calls dtlv_rti_any_destroy_local to destroy the value.
+    /// Nothing is emitted for a copy type: it owns nothing, and calling the
+    /// runtime to free nothing was half of what NBody's `advance` did. `tydesc`
+    /// is the descriptor the caller has worked out at run time, inside a
+    /// generic; otherwise `ty`'s own is used. Given `tracked`, the offset of a
+    /// tracking byte, the value is destroyed only if that byte says the place
+    /// holds one.
+    pub(super) fn destroy_value(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        ptr: cl_ir::Value,
+        ty: &IrType,
+        tydesc: Option<cl_ir::Value>,
+        tracked: Option<u32>,
+    ) -> Result<(), CraneliftError> {
+        if ty.is_copy() {
+            return Ok(());
+        }
+        let destroy = self.runtime.as_ref()
+            .ok_or_else(|| CraneliftError::Codegen("destroying a value requires runtime imports".into()))?
+            .destroy_local;
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("destroying a value requires the runtime handle".into())
+        })?;
+
+        let after = match tracked {
+            None => None,
+            Some(offset) => {
+                use datalove_datafun_ir::frame_layout::tracking;
+                let frame = self.frame_slot.ok_or_else(|| {
+                    CraneliftError::Codegen("a tracking byte requires a frame".into())
+                })?;
+                let track_addr = frame.addr(builder, offset as i32);
+                let track = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), track_addr, 0);
+                let live = builder.ins().iconst(cl_ir::types::I8, tracking::LIVE as i64);
+                let is_live = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, track, live);
+                let destroy_block = builder.create_block();
+                let after = builder.create_block();
+                builder.ins().brif(is_live, destroy_block, &[], after, &[]);
+                builder.switch_to_block(destroy_block);
+                builder.seal_block(destroy_block);
+                Some(after)
+            }
+        };
+
+        let tydesc = match tydesc {
+            Some(tydesc) => tydesc,
+            None => {
+                let id = self.tydesc(ty)?;
+                let gv = self.module.declare_data_in_func(id, builder.func);
+                builder.ins().symbol_value(PTR_TYPE, gv)
+            }
+        };
+        let destroy_ref = self.module.declare_func_in_func(destroy, builder.func);
+        builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
+
+        if let Some(after) = after {
+            builder.ins().jump(after, &[]);
+            builder.switch_to_block(after);
+            builder.seal_block(after);
+        }
+        Ok(())
+    }
+
+    /// Compile a Drop instruction.
     pub(super) fn compile_drop(
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<(), CraneliftError> {
-        // Need runtime imports for destroy.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("Drop requires runtime imports".into()))?
-            .destroy_local;
-
-        // Need runtime handle.
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("Drop requires runtime handle parameter".into())
-        })?;
-
-        // Get the type of the operand.
         let ty = self.get_operand_type(operand)?;
-
-        // Get pointer to the value.
+        if ty.is_copy() {
+            return Ok(());
+        }
         let value_ptr = self.get_operand_ptr(builder, operand)?;
-
-        // Look up pre-emitted TyDesc.
-        let tydesc_id = self.tydesc(&ty)?;
-
-        // Get address of tydesc.
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // Declare destroy function in this function.
-        let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);
-
-        // Call dtlv_rti_any_destroy_local(rt, value_ptr, tydesc).
-        builder.ins().call(destroy_ref, &[rt_handle, value_ptr, tydesc_addr]);
-
-        Ok(())
+        self.destroy_value(builder, value_ptr, &ty, None, None)
     }
 
     /// Compile a DropTracked instruction.
