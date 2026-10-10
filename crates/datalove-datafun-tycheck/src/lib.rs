@@ -305,7 +305,8 @@ pub enum PendingDiagnostic<'db> {
 /// Move types (require ownership transfer):
 /// - Int (bigint with heap-allocated limbs)
 /// - String, List, Map, Set, Tensor (heap-allocated collections)
-/// - Option/Result containing move types
+/// - Option containing a move type
+/// - Result, whose error is an `error`
 /// - Data, Error
 pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> bool {
     use datalove_datalit::tycheck::Type as DatalitType;
@@ -344,9 +345,10 @@ pub fn is_copy_type<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ty
             struct_ty.fields.iter().all(|f| is_copy_type(db, &f.ty))
         }
 
-        // Option/Result are copy if inner type is copy.
+        // Option is copy if its inner type is. Result never is: its error
+        // case holds an `error`, which owns a message.
         DatalitType::Option(opt) => is_copy_type(db, &opt.inner_type),
-        DatalitType::Result(res) => is_copy_type(db, &res.inner_type),
+        DatalitType::Result(_) => false,
 
         // Tables are not copy (they contain heap-allocated data).
         DatalitType::Table(_) => false,

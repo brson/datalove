@@ -1,0 +1,6 @@
+// A result is not a copy type whatever it holds: its error case owns a
+// message. Reading one out of a struct would copy that message's pointer
+// and free it twice.
+var s: {r: !u32, n: u32} = {r = ok (: u32 / 1), n = 1}
+let a = s.r
+let b = s.n

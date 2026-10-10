@@ -1,0 +1,34 @@
+{
+  "diagnostics": [
+    {
+      "code": "F070",
+      "labels": [
+        {
+          "message": "this would move the field out",
+          "span": [
+            232,
+            234
+          ],
+          "text": ".r"
+        }
+      ],
+      "message": "a field of type `!u32` cannot be read out of what holds it",
+      "notes": [
+        "the field's type is not a copy type, so reading it would move it while the aggregate still holds it. Borrow it with `ref`, or clone it out with `@`."
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "field_type": "!u32",
+      "kind": "NonCopyFieldProjection"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "u32"
+    }
+  ]
+}
