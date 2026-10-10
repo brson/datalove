@@ -31,8 +31,8 @@ use std::time::Instant;
 
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
-    CallDispatcher, DispatchCallContext, Destination, DispatchResult, ExecutionContext, FuncIdentity,
-    FunctionRegistry, InterpError, IrInterpreter, Value,
+    CallDispatcher, CompiledEntry, DispatchCallContext, Destination, DispatchResult, ExecutionContext,
+    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -118,10 +118,65 @@ impl JitEngine {
 
     /// Count a call in `stats` if calls are being counted.
     #[inline]
-    pub(crate) fn note_call(&mut self, key: FuncIdentity, func: &IrCodeUnit, from: CallFrom, native: bool) {
+    pub(crate) fn note_call(&mut self, key: FuncIdentity, func: &IrCodeUnit, from: CallFrom, native: bool, weight: u32) {
         if self.count_calls {
-            self.stats.count_call(key, &func.name, from, native);
+            self.stats.count_call(key, &func.name, from, native, weight);
         }
+    }
+
+    /// How a planned call site is to make its calls to `func`; see
+    /// `CallDispatcher::site_policy`.
+    ///
+    /// Compiled code is entered, a function that will not be compiled is
+    /// interpreted, and one that may be is counted for as many calls as it
+    /// lacks of the threshold. A site does not wait longer than that to offer
+    /// a call, so with one site calling it the function is compiled on the
+    /// call it would have been anyway; with several, each counts on its own,
+    /// and the first to finish offers what it counted.
+    pub fn site_policy(&self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        match self.states.get(&func) {
+            Some(FunctionState::Compiled { code_ptr, uses_sret, .. }) => {
+                SitePolicy::Enter(CompiledEntry { code_ptr: *code_ptr, uses_sret: *uses_sret })
+            }
+            Some(FunctionState::Interpreted { call_count: u32::MAX }) => SitePolicy::Interpret,
+            Some(FunctionState::Interpreted { call_count }) => {
+                SitePolicy::Count(self.threshold.saturating_sub(*call_count).max(1))
+            }
+            None if !bridge::enterable(body) => SitePolicy::Interpret,
+            None => SitePolicy::Count(self.threshold.max(1)),
+        }
+    }
+
+    /// Enter compiled code from a planned call; see
+    /// `CallDispatcher::call_compiled`.
+    pub fn call_compiled(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) {
+        if self.count_calls {
+            self.stats.functions.get_mut(&func)
+                .expect("a compiled function has its stats")
+                .entered += 1;
+        }
+        // What the code's stubs call back into the interpreter with, for the
+        // length of the call. A planned call is never to a function of an
+        // earlier unit, so the callee runs in the caller's context.
+        let mut dispatch_ctx = DispatchContext {
+            jit_engine: self,
+            interp: call_ctx.interp,
+            exec_ctx: call_ctx.exec_ctx,
+            registry: call_ctx.registry,
+            frames: call_ctx.frames,
+        };
+        // SAFETY: the context outlives the call, and is cleared after it.
+        unsafe { set_dispatch_context(&mut dispatch_ctx) };
+        // SAFETY: the interpreter planned `words` from the signature the code
+        // was compiled to.
+        unsafe { bridge::call_words(entry.code_ptr, words) };
+        clear_dispatch_context();
     }
 
     /// Register a native rider function symbol for JIT resolution.
@@ -150,8 +205,10 @@ impl JitEngine {
         self.threshold
     }
 
-    /// Count a call to `func`, compiling it once it is hot.
+    /// Count `weight` calls to `func`, compiling it once it is hot.
     ///
+    /// The weight is more than one for a call a planned call site offers on
+    /// behalf of the ones it made without asking (`SitePolicy::Count`).
     /// `ctx` is the context `func` runs in, which is where the callees its
     /// stubs name are looked up. A function the backend declines, or one too
     /// wide to be entered from the interpreter, is marked so that it is not
@@ -161,6 +218,7 @@ impl JitEngine {
         &mut self,
         key: FuncIdentity,
         func: &IrCodeUnit,
+        weight: u32,
         ctx: &ExecutionContext<'_>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
@@ -186,7 +244,7 @@ impl JitEngine {
             FunctionState::Interpreted { call_count } => call_count,
         };
         // u32::MAX means permanently interpreted.
-        *call_count = call_count.saturating_add(1);
+        *call_count = call_count.saturating_add(weight).min(u32::MAX - 1);
         if *call_count < self.threshold || *call_count == u32::MAX {
             return Ok(Recorded::Interpret);
         }
@@ -237,20 +295,24 @@ impl JitEngine {
     ) -> JitDispatch {
         let key = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
         let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
-        match self.record_call(key, func, &callee_ctx, call_ctx.registry, call_ctx.interp) {
+        match self.record_call(key, func, call_ctx.weight, &callee_ctx, call_ctx.registry, call_ctx.interp) {
             Err(e) => JitDispatch {
                 result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
             },
             Ok(Recorded::Interpret) => {
-                self.note_call(key, func, CallFrom::Interpreter, false);
+                self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight);
                 JitDispatch { result: DispatchResult::NotHandled }
             }
             Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
                 if !use_compiled() {
-                    self.note_call(key, func, CallFrom::Interpreter, false);
+                    self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight);
                     return JitDispatch { result: DispatchResult::NotHandled };
                 }
-                self.note_call(key, func, CallFrom::Interpreter, true);
+                // Of what the call stands for, the rest ran in the interpreter.
+                if call_ctx.weight > 1 {
+                    self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight - 1);
+                }
+                self.note_call(key, func, CallFrom::Interpreter, true, 1);
                 let descriptor_params = &func.function_context()
                     .expect("a compiled function is a function")
                     .descriptor_params;
@@ -376,7 +438,7 @@ mod tests {
         let registry = FunctionRegistry::new();
         let key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(0) };
         let mut interp = IrInterpreter::new();
-        jit.record_call(key, func, &ctx, &registry, &mut interp).expect("compilation failed")
+        jit.record_call(key, func, 1, &ctx, &registry, &mut interp).expect("compilation failed")
     }
 
     #[test]
@@ -434,7 +496,7 @@ mod tests {
         let ctx = ExecutionContext::new(0, std::slice::from_ref(&func));
         let registry = FunctionRegistry::new();
         let key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(0) };
-        let recorded = jit.record_call(key, &func, &ctx, &registry, &mut interp)
+        let recorded = jit.record_call(key, &func, 1, &ctx, &registry, &mut interp)
             .expect("compilation failed");
         assert!(matches!(recorded, Recorded::Compiled { .. }), "refused rather than compiled");
 
@@ -650,7 +712,7 @@ mod tests {
         // Compile main() with context (creates stub for identity()).
         let main_key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(1) };
         let Recorded::Compiled { code_ptr, uses_sret, .. } = jit
-            .record_call(main_key, &main_fn, &ctx, &registry, &mut IrInterpreter::new())
+            .record_call(main_key, &main_fn, 1, &ctx, &registry, &mut IrInterpreter::new())
             .expect("compilation failed")
         else {
             panic!("should compile on first call");
@@ -718,6 +780,21 @@ impl CallDispatcher for JitEngine {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
         self.dispatch_with(code_ref, func, args, ret_dest, rt_handle, call_ctx, || true).result
+    }
+
+    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        JitEngine::site_policy(self, func, body)
+    }
+
+    fn call_compiled(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        JitEngine::call_compiled(self, func, entry, words, call_ctx);
+        Ok(())
     }
 
     fn as_any(&self) -> &dyn Any {

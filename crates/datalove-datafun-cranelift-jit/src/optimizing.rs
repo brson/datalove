@@ -11,8 +11,8 @@ use std::hash::{Hash, Hasher};
 
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
-    CallDispatcher, DispatchCallContext, DispatchResult, Destination,
-    Value,
+    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, Destination, FuncIdentity,
+    InterpError, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -277,6 +277,33 @@ impl CallDispatcher for OptimizingDispatcher {
         }
 
         DispatchResult::NotHandled
+    }
+
+    /// The engine's policy when tuned. In chaos mode a site draws, each time
+    /// it asks, between the engine's policy -- entering compiled code, or
+    /// counting -- and offering every call, so that the planned calls and the
+    /// offered ones both run, and mix.
+    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        if !self.config.jit_enabled {
+            return SitePolicy::Interpret;
+        }
+        let use_probability = self.chaos.as_ref().map(|c| c.use_jit);
+        if self.rng.roll(use_probability) {
+            self.jit.site_policy(func, body)
+        } else {
+            SitePolicy::EveryCall
+        }
+    }
+
+    fn call_compiled(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        self.jit.call_compiled(func, entry, words, call_ctx);
+        Ok(())
     }
 
     fn as_any(&self) -> &dyn Any {

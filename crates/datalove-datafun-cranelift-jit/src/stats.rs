@@ -73,12 +73,15 @@ impl JitStats {
 
     /// Count a call that reached the jit, by where it came from and whether
     /// compiled code ran it.
-    pub(crate) fn count_call(&mut self, key: FuncIdentity, name: &str, from: CallFrom, native: bool) {
+    ///
+    /// `weight` is how many calls it stands for; see `JitEngine::record_call`.
+    pub(crate) fn count_call(&mut self, key: FuncIdentity, name: &str, from: CallFrom, native: bool, weight: u32) {
         let f = self.function(key, name);
+        let weight = weight as u64;
         match (from, native) {
-            (CallFrom::Interpreter, false) => f.interpreted += 1,
-            (CallFrom::Interpreter, true) => f.entered += 1,
-            (CallFrom::Native, false) => f.exited += 1,
+            (CallFrom::Interpreter, false) => f.interpreted += weight,
+            (CallFrom::Interpreter, true) => f.entered += weight,
+            (CallFrom::Native, false) => f.exited += weight,
             // The compiling call of a function first called from compiled
             // code; after it the caller's stub calls the code directly.
             (CallFrom::Native, true) => {}

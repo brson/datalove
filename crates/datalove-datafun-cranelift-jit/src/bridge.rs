@@ -8,8 +8,9 @@ use datalove_datafun_ir::{IrCodeUnit, ParamId};
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
-/// Maximum number of function parameters supported by direct dispatch.
-const MAX_DIRECT_ARGS: usize = 8;
+/// Maximum number of function parameters supported by direct dispatch: all of
+/// the entry words but the runtime handle and `sret`.
+const MAX_DIRECT_ARGS: usize = datalove_datafun_interp::MAX_ENTRY_WORDS - 2;
 
 /// How many words entering `func` takes, beside the runtime handle and `sret`.
 ///
@@ -111,16 +112,17 @@ pub unsafe fn call_jit(
     }
 
     // All functions return void (results written via sret pointer).
-    let total_args = arg_idx;
-    unsafe { dispatch_void(code_ptr, &raw_args, total_args) }
+    unsafe { call_words(code_ptr, &raw_args[..arg_idx]) }
 }
 
-/// Dispatch a JIT call. All functions return void (sret convention).
-unsafe fn dispatch_void(
-    code_ptr: *const u8,
-    args: &[usize; MAX_DIRECT_ARGS + 2],
-    arg_count: usize,
-) {
+/// Enter compiled code with the words it takes, as `call_jit` lays them out.
+///
+/// # Safety
+///
+/// `code_ptr` is compiled code whose signature is `args`, one `usize` each.
+pub unsafe fn call_words(code_ptr: *const u8, args: &[usize]) {
+    let arg_count = args.len();
+
     type Fn1 = unsafe extern "C" fn(usize);
     type Fn2 = unsafe extern "C" fn(usize, usize);
     type Fn3 = unsafe extern "C" fn(usize, usize, usize);

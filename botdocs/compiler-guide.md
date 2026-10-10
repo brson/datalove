@@ -1623,7 +1623,15 @@ that crossed the threshold. It counts calls only, so a loop in a function called
 once is never compiled. Compiled code calls each callee through a stub with the
 callee's signature, which calls the callee's code directly once it is compiled
 and goes through `__jit_dispatch_call` until then; going through the dispatcher
-every time had been over 80% of the time on recursive `fib`, 5x slower. About a third of stdlib-shaped execution is in the native
+every time had been over 80% of the time on recursive `fib`, 5x slower. The
+other direction, a call from the bytecode into compiled code, is planned at the
+call site like a call to a native (`Plan::Jit` in `bytecode.rs`): the site asks
+the dispatcher once for a `SitePolicy` -- enter this code, count so many calls
+and then offer one, interpret, or offer every call -- and makes its calls by
+that without asking again. Offering every call through the general path had
+been about 30% of the store demo at a threshold of 100, ten times what the
+compiled code it called took, and with a dispatcher installed it had taken
+every other call, to natives and interpreted functions too, off its plan. About a third of stdlib-shaped execution is in the native
 runtime, which the JIT cannot speed up, so it is near its ceiling of about 1.8x
 there; arithmetic-shaped code is over 90% interpreter, which is where the 85x
 comes from. The interpreter's call path takes frames off a `FrameStack`

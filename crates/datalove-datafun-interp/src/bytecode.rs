@@ -16,15 +16,23 @@
 //!
 //! The loop (`run_body`) makes a call one of these ways, the cheapest first:
 //!
-//! - **Planned** (`valid_plan`, `enter_planned`, `call_planned_native`): an
-//!   `Op::CallFast` whose site has a `Plan` made in this code epoch, for any
-//!   call that hands over no shapes and whose arguments suit it. To a bytecode
-//!   body of the same unit or a module, it pushes the callee's frame, writes
-//!   the arguments, saves the caller in an `Activation` and carries on in the
-//!   callee in the same loop. To a rider function, directly or through a
-//!   forwarder, it fills in the C words and calls it. An argument the
-//!   lowering resolved is read from its place; one whose type has a `data`
-//!   in it, by an `ArgRecipe`, as `fast_call` reads it.
+//! - **Planned** (`valid_plan`, `enter_planned`, `call_planned_native`,
+//!   `call_planned_jit`): an `Op::CallFast` whose site has a `Plan` made in
+//!   this code epoch, for any call that hands over no shapes and whose
+//!   arguments suit it. To a bytecode body of the same unit or a module, it
+//!   pushes the callee's frame, writes the arguments, saves the caller in an
+//!   `Activation` and carries on in the callee in the same loop. To a rider
+//!   function, directly or through a forwarder, it fills in the C words and
+//!   calls it. To a body the dispatcher has compiled, it fills in the words
+//!   the code is entered with and has the dispatcher enter it. An argument
+//!   the lowering resolved is read from its place; one whose type has a
+//!   `data` in it, by an `ArgRecipe`, as `fast_call` reads it.
+//!
+//!   With a dispatcher installed, a site plans a call to a body as the
+//!   dispatcher's `SitePolicy` for it says: interpret it, count calls and
+//!   offer every so many as one (`Planned::Offer`), enter compiled code, or
+//!   plan nothing and offer every call. Calls to natives are planned as
+//!   without one, since a dispatcher is never offered those.
 //! - **Fast, unplanned** (`run_fast_call` → `fast_call`): any other
 //!   `Op::CallFast`. `fast_call` refreshes the site's `CallCache` (making the
 //!   plan, if the call can have one, for next time) and then makes the call:
@@ -35,8 +43,8 @@
 //!     back as `Called::Enter`, which `switch_to` turns into an activation the loop
 //!     carries on in;
 //!   - and anything it does not suit -- an `out` argument, a moved argument
-//!     with a tracking byte, a dispatcher installed -- it hands back as
-//!     `Called::General`.
+//!     with a tracking byte, a body while a dispatcher is installed -- it
+//!     hands back as `Called::General`.
 //! - **General** (`run_general_call`): an `Op::Call`, or a fast call handed
 //!   back. `execute_call`, as the IR walker makes it, which runs a bytecode
 //!   callee in a loop of its own, nested on the Rust stack.
@@ -459,6 +467,26 @@ pub(crate) struct CallCache {
     /// The call worked out, if it is one the loop can make without asking
     /// anything again; see `Plan`.
     plan: Option<Plan>,
+    /// The dispatcher epoch the plan was made in, if a dispatcher was
+    /// installed, whose `SitePolicy` it follows.
+    ///
+    /// A plan made with none is good while there is none, and a body plan
+    /// stays good with one too until the dispatcher is asked; one made with a
+    /// dispatcher is good under that dispatcher, and its body plans when there
+    /// is none, which is while compiled code that dispatcher entered calls back
+    /// into the interpreter.
+    dispatcher: Option<u64>,
+}
+
+impl CallCache {
+    /// Whether the site has to ask the dispatcher, installed in `epoch`, how to
+    /// make its calls before it can plan them.
+    fn needs_policy(&self, epoch: u64) -> bool {
+        if self.dispatcher != Some(epoch) {
+            return true;
+        }
+        matches!(&self.plan, Some(Plan::Body(BodyPlan { countdown: Some(c), .. })) if c.left.get() == 0)
+    }
 }
 
 /// A call worked out once, made by the loop without asking anything again.
@@ -468,6 +496,7 @@ pub(crate) struct CallCache {
 enum Plan {
     Body(BodyPlan),
     Native(NativePlan),
+    Jit(JitPlan),
 }
 
 /// A call to a bytecode body in the same unit or a module: push its frame,
@@ -479,6 +508,38 @@ struct BodyPlan {
     /// How the call names the callee, in the caller's body.
     code_ref: *const CodeRef,
     params: PlannedParams,
+    /// The calls left until the dispatcher is to be offered one, under
+    /// `SitePolicy::Count`.
+    countdown: Option<Countdown>,
+}
+
+/// Calls a planned site makes before offering one to the dispatcher.
+struct Countdown {
+    /// Left to make. Zero once the last was offered, until the site asks the
+    /// dispatcher again.
+    left: std::cell::Cell<u32>,
+    /// How many it started with, which the offered call stands for.
+    batch: u32,
+}
+
+/// What a planned call site is to do with this call; see `valid_plan`.
+enum Planned<'c> {
+    Body(&'c BodyPlan),
+    Native(&'c NativePlan),
+    Jit(&'c JitPlan),
+    /// Offer it to the dispatcher by the general path, as standing for this
+    /// many calls.
+    Offer(u32),
+}
+
+/// A call to a function the dispatcher compiled: the words it is entered
+/// with, from the arguments as the recipes read them.
+struct JitPlan {
+    func: crate::dispatch::FuncIdentity,
+    entry: crate::dispatch::CompiledEntry,
+    args: Box<[ArgRecipe]>,
+    /// The parameters whose descriptors follow the arguments, in order.
+    descriptor_params: Box<[u32]>,
 }
 
 /// The arguments of a planned call to a body.
@@ -2207,7 +2268,7 @@ impl IrInterpreter {
                     Op::CallFast { site } => {
                         let call = &bc.calls[site as usize];
                         match self.valid_plan(call) {
-                            Some(Plan::Body(plan)) => {
+                            Some(Planned::Body(plan)) => {
                                 pc = tri!(self.enter_planned(regs, call, plan, base, pc.wrapping_add(1)));
                                 bc = &*regs.bc;
                                 ops = bc.ops.as_ptr();
@@ -2217,8 +2278,21 @@ impl IrInterpreter {
                             // Outside the generation it was found in, the
                             // function may be another's, which the slow path
                             // finds again.
-                            Some(Plan::Native(plan)) if plan.generation == self.native_table.generation() => {
+                            Some(Planned::Native(plan)) if plan.generation == self.native_table.generation() => {
                                 self.call_planned_native(regs, call, plan, base);
+                                pc = pc.wrapping_add(1);
+                                continue;
+                            }
+                            Some(Planned::Jit(plan)) => {
+                                tri!(self.call_planned_jit(regs, call, plan, base));
+                                pc = pc.wrapping_add(1);
+                                continue;
+                            }
+                            Some(Planned::Offer(weight)) => {
+                                self.call_weight = weight;
+                                let result = self.run_general_call(regs, call.block, call.index);
+                                self.call_weight = 1;
+                                tri!(result);
                                 pc = pc.wrapping_add(1);
                                 continue;
                             }
@@ -2559,21 +2633,49 @@ impl IrInterpreter {
         }
     }
 
-    /// The plan for a call, if it has one and it still holds: no dispatcher
-    /// installed, and no body replaced since it was made.
+    /// The plan for a call, if it has one and it still holds: no body
+    /// replaced since it was made, and if a dispatcher is installed, made by
+    /// what it said (`CallCache::dispatcher`).
     ///
     /// Within one code epoch no body changes -- bodies are replaced only
     /// between units, and doing so starts a new epoch -- so a call site that
     /// found its callee in this epoch has the callee it would find again.
+    ///
+    /// Counts the call down, for a site counting calls for the dispatcher.
     #[inline(always)]
-    fn valid_plan<'c>(&self, call: &'c FastCall) -> Option<&'c Plan> {
+    fn valid_plan<'c>(&self, call: &'c FastCall) -> Option<Planned<'c>> {
         // SAFETY: see `FastCall::site`: only the slow path writes it, and
         // nothing holds the plan across the slow path.
         let cache = unsafe { &*call.site.as_ptr() }.callee.as_ref()?;
-        if cache.epoch != self.code_epoch || self.call_dispatcher.borrow().is_some() {
+        if cache.epoch != self.code_epoch {
             return None;
         }
-        cache.plan.as_ref()
+        let dispatched = self.call_dispatcher.borrow().is_some();
+        match cache.plan.as_ref()? {
+            Plan::Native(plan) => Some(Planned::Native(plan)),
+            // With no dispatcher to count for or enter compiled code through,
+            // a body is interpreted, and compiled code is left to the slow
+            // path, which interprets it.
+            Plan::Body(plan) if !dispatched => Some(Planned::Body(plan)),
+            Plan::Jit(_) if !dispatched => None,
+            _ if cache.dispatcher != Some(self.dispatcher_epoch.get()) => None,
+            Plan::Body(plan) => match &plan.countdown {
+                None => Some(Planned::Body(plan)),
+                Some(countdown) => match countdown.left.get() {
+                    // Offered, and the site has to ask again.
+                    0 => None,
+                    1 => {
+                        countdown.left.set(0);
+                        Some(Planned::Offer(countdown.batch))
+                    }
+                    left => {
+                        countdown.left.set(left - 1);
+                        Some(Planned::Body(plan))
+                    }
+                },
+            },
+            Plan::Jit(plan) => Some(Planned::Jit(plan)),
+        }
     }
 
     /// Make a planned call: push the callee's frame, write the arguments and
@@ -2707,6 +2809,48 @@ impl IrInterpreter {
         // generation the plan was checked against, and holds its code until
         // that changes.
         unsafe { call_c(plan.fn_ptr, &words[..len]) };
+    }
+
+    /// Make a planned call into compiled code: the words it is entered with
+    /// straight from the arguments, and the call, through the dispatcher.
+    #[inline(never)]
+    fn call_planned_jit(&mut self, regs: &mut Regs<'_>, call: &FastCall, plan: &JitPlan, base: *mut u8) -> Result<(), InterpError> {
+        let mut words = [0usize; crate::dispatch::MAX_ENTRY_WORDS];
+        let mut len = 0;
+        let mut push = |word: usize| {
+            words[len] = word;
+            len += 1;
+        };
+        let mut scratch: crate::BorrowScratch = Vec::new();
+        push(self.runtime.handle() as usize);
+        if plan.entry.uses_sret {
+            // SAFETY: the destination was lowered against the caller's frame.
+            push(unsafe { call.dest.at(base) } as usize);
+        }
+        let mut args = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() };
+            crate::dispatch::MAX_ENTRY_WORDS];
+        for (i, recipe) in plan.args.iter().enumerate() {
+            // SAFETY: the recipe was made against the caller's frame.
+            args[i] = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames, &mut scratch) };
+            push(args[i].ptr as usize);
+        }
+        for &param in plan.descriptor_params.iter() {
+            push(args[param as usize].tydesc as usize);
+        }
+
+        let mut dispatcher = self.call_dispatcher.borrow_mut().take()
+            .expect("a planned call into compiled code is made with its dispatcher installed");
+        let call_ctx = crate::dispatch::DispatchCallContext {
+            exec_ctx: &regs.ctx,
+            registry: regs.registry,
+            frames: &mut *regs.frames,
+            interp: self,
+            shape_descriptors: &[],
+            weight: 1,
+        };
+        let result = dispatcher.call_compiled(plan.func, plan.entry, &words[..len], call_ctx);
+        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+        result
     }
 
     /// Pop every frame the loop pushed, on the way out with an error.
@@ -3060,7 +3204,9 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         layout: Option<&std::rc::Rc<IrLayout>>,
         forward: Option<&std::rc::Rc<BcFunction>>,
+        policy: Option<crate::dispatch::SitePolicy>,
     ) -> Option<Plan> {
+        use crate::dispatch::SitePolicy;
         // The argument as the call reads it, `mode` being the parameter's.
         let read = |i: usize, mode: ParamMode| match &call.resolved {
             Some(resolved) => ArgRecipe {
@@ -3114,9 +3260,35 @@ impl IrInterpreter {
                 }).collect();
                 native_plan(self, native, args, inner.dest_tydesc)
             }
+            // A body the dispatcher wants to see every call to.
+            (Some(_), None) if matches!(policy, Some(SitePolicy::EveryCall)) => None,
+            // A body compiled, entered as the dispatcher would enter it from
+            // the call's arguments: each as the caller has it, descriptor and
+            // all, which is what a call offered to it is handed.
+            (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_))) => {
+                let Some(SitePolicy::Enter(entry)) = policy else { unreachable!() };
+                let args: Box<[ArgRecipe]> = layout.param_modes.iter().enumerate()
+                    .map(|(i, mode)| read(i, *mode))
+                    .collect();
+                let function = callee.function_context().expect("a body with a layout is a function");
+                let descriptor_params: Box<[u32]> = function.descriptor_params.iter().map(|p| p.0).collect();
+                let width = 1 + entry.uses_sret as usize + args.len() + descriptor_params.len();
+                (function.descriptor_shapes.is_empty() && width <= crate::dispatch::MAX_ENTRY_WORDS)
+                    .then(|| Plan::Jit(JitPlan {
+                        func: crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
+                        entry, args, descriptor_params,
+                    }))
+            }
             // A body, whose frame holds an owned argument with its own
             // descriptor and a borrowed one with the argument's.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
+                countdown: match policy {
+                    Some(SitePolicy::Count(n)) => Some(Countdown {
+                        left: std::cell::Cell::new(n.max(1)),
+                        batch: n.max(1),
+                    }),
+                    _ => None,
+                },
                 layout: std::rc::Rc::clone(layout),
                 bc: self.bytecode_for(layout, callee),
                 func: callee,
@@ -3147,9 +3319,9 @@ impl IrInterpreter {
     ///
     /// Does what `execute_call_site` does for a call whose arguments are in
     /// this frame, with no `out` parameter among them and none moved that the
-    /// frame would have to record, and none of what it would skip: no
-    /// dispatcher is installed, so there is nothing to offer the call to and
-    /// no optimized body to run instead.
+    /// frame would have to record. A call to a body while a dispatcher is
+    /// installed is left to the general path, which offers it; what the
+    /// dispatcher says about such calls is what the site's plan follows.
     ///
     /// A native is called here. A bytecode body is not run here: its frame is
     /// pushed and entered and handed back, for the loop to run without
@@ -3166,9 +3338,10 @@ impl IrInterpreter {
         frames: &mut FrameStore,
         caller: &'r IrCodeUnit,
     ) -> Result<Called<'r>, InterpError> {
-        if self.call_dispatcher.borrow().is_some() {
-            return Ok(Called::General);
-        }
+        // A dispatcher is asked how this site is to make its calls to a body,
+        // which the plan made here then follows; this call it is offered.
+        let dispatched = self.call_dispatcher.borrow().is_some();
+        let dispatcher_epoch = self.dispatcher_epoch.get();
         let Instruction::Call { func: code_ref, args: ir_args, shape_descriptors, .. } =
             &caller.blocks[call.block as usize].instructions[call.index as usize] else {
             unreachable!("a fast call is a call")
@@ -3181,7 +3354,8 @@ impl IrInterpreter {
             let cache = &mut site.callee;
             match &*cache {
                 Some(c) if c.address == address && c.epoch == self.code_epoch
-                    && c.generation == self.native_table.generation() =>
+                    && c.generation == self.native_table.generation()
+                    && !(dispatched && c.needs_policy(dispatcher_epoch)) =>
                 {
                     (c.layout.clone(), c.suits, c.forward.clone())
                 }
@@ -3202,14 +3376,22 @@ impl IrInterpreter {
                             (Some(layout), suits, forward)
                         }
                     };
-                    let plan = if suits && shape_descriptors.is_empty() && !matches!(code_ref, CodeRef::External { .. }) {
-                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref())
+                    let plannable = suits && shape_descriptors.is_empty() && !matches!(code_ref, CodeRef::External { .. });
+                    let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
+                        let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
+                        self.call_dispatcher.borrow_mut().as_mut()
+                            .expect("installed")
+                            .site_policy(identity, callee)
+                    });
+                    let plan = if plannable {
+                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy)
                     } else {
                         None
                     };
                     let fresh = CallCache {
                         address, epoch: self.code_epoch, generation: self.native_table.generation(),
                         layout: layout.clone(), suits, forward: forward.clone(), plan,
+                        dispatcher: dispatched.then_some(dispatcher_epoch),
                     };
                     // A planned call's frame borrows its layout and bytecode
                     // from the plan, so a replaced one is kept.
@@ -3220,7 +3402,9 @@ impl IrInterpreter {
                 }
             }
         };
-        if !suits {
+        // A body goes to the dispatcher, which a native, or a forwarder to
+        // one, never does.
+        if !suits || (dispatched && layout.is_some() && forward.is_none()) {
             return Ok(Called::General);
         }
         let dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };

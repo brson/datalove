@@ -61,7 +61,10 @@ pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
-pub use dispatch::{CallDispatcher, DispatchCallContext, DispatchResult, FuncIdentity};
+pub use dispatch::{
+    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, SitePolicy,
+    MAX_ENTRY_WORDS,
+};
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
 
@@ -158,6 +161,13 @@ pub struct IrInterpreter {
     /// Optional call dispatcher for JIT integration.
     /// Uses RefCell to allow passing &mut self to dispatch_call.
     call_dispatcher: RefCell<Option<Box<dyn CallDispatcher>>>,
+    /// Counts the dispatchers installed, so that a call site planned by what
+    /// one said is not trusted under another; see `bytecode::CallCache`.
+    pub(crate) dispatcher_epoch: std::cell::Cell<u64>,
+    /// How many calls the next call offered to the dispatcher stands for; see
+    /// `DispatchCallContext::weight`. One but while a planned site hands over
+    /// the calls it counted.
+    pub(crate) call_weight: u32,
     /// Temporary view tensors (capacity_elems=0) created by TensorIndexRef.
     /// Kept alive for the duration of the ref's usage.
     temp_view_tensors: Vec<Box<rtdt::Tensor>>,
@@ -264,6 +274,8 @@ impl IrInterpreter {
             frame_stack: FrameStack::new(),
             retired_call_caches: Vec::new(),
             call_dispatcher: RefCell::new(call_dispatcher),
+            dispatcher_epoch: std::cell::Cell::new(0),
+            call_weight: 1,
             temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
             engine: Engine::from_env(),
@@ -290,11 +302,13 @@ impl IrInterpreter {
     /// Returns the dispatcher if one was set, leaving None in its place.
     /// Useful for inspecting dispatcher state (like JIT stats) after execution.
     pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
+        self.dispatcher_epoch.set(self.dispatcher_epoch.get() + 1);
         self.call_dispatcher.borrow_mut().take()
     }
 
     /// Set or replace the call dispatcher.
     pub fn set_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
+        self.dispatcher_epoch.set(self.dispatcher_epoch.get() + 1);
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
     }
 
@@ -2533,6 +2547,7 @@ impl IrInterpreter {
 
         // Capture rt_handle before borrowing self for the context.
         let rt_handle = self.runtime.handle();
+        let weight = std::mem::replace(&mut self.call_weight, 1);
 
         let call_ctx = dispatch::DispatchCallContext {
             exec_ctx: ctx,
@@ -2540,6 +2555,7 @@ impl IrInterpreter {
             frames,
             interp: self,
             shape_descriptors,
+            weight,
         };
 
         let result = match dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx) {

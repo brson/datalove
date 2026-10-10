@@ -215,9 +215,9 @@ pub unsafe extern "C" fn __jit_dispatch_call(
 
     // Count the call, which may compile the callee. Once it is compiled its
     // stubs call it directly and no longer come here.
-    match ctx.jit_engine.record_call(key, ir_unit, &callee_ctx, ctx.registry, ctx.interp) {
+    match ctx.jit_engine.record_call(key, ir_unit, 1, &callee_ctx, ctx.registry, ctx.interp) {
         Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
-            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, true);
+            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, true, 1);
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
@@ -227,7 +227,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             }
         }
         Ok(Recorded::Interpret) => {
-            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, false);
+            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, false, 1);
             // An `in` argument that is not copied belongs to the interpreter
             // now, which destroys it; the compiled caller does not touch it
             // after the call.

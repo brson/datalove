@@ -5,8 +5,8 @@ program shaped like an application, using the store demo (`demos/store`) as
 the workload, and for adding on-stack replacement (OSR), which the demo shows
 the JIT needs.
 
-> **This is a plan.** Steps 0 and 1 are done (October 2026); the rest is not
-> started. The numbers are from a release build on 4 CPUs.
+> **This is a plan.** Steps 0, 1 and 2 are done (October 2026); the rest is
+> not started. The numbers are from a release build on 4 CPUs.
 
 ## Contents
 
@@ -41,11 +41,11 @@ iterations, and `db.build_*_slots`, which run under CTFE at compile time.
 
 | Engine | Wall time | Compiled | Codegen |
 |---|---|---|---|
-| Interpreter (bytecode) | 898 ms | - | - |
-| `--jit` (threshold 1) | 608 ms | 86 | 68 ms |
-| `--jit-threshold 2` | 758 ms | 66 | 21 ms |
-| `--jit-threshold 100` | 982 ms | 44 | 12 ms |
-| AOT executable | 235 ms | - | - |
+| Interpreter (bytecode) | 904 ms | - | - |
+| `--jit` (threshold 1) | 613 ms | 86 | 67 ms |
+| `--jit-threshold 2` | 619 ms | 63 | 21 ms |
+| `--jit-threshold 100` | 709 ms | 40 | 11 ms |
+| AOT executable | 236 ms | - | - |
 
 At 20,000 orders; the [grid](#user-content-the-baseline-grid) has the rest. Compiling the program, which reads the data and evaluates
 the id maps under CTFE, is about 300 ms of every `script` run (`--time`
@@ -53,10 +53,12 @@ prints it), so the threshold-1 JIT runs the report in about 300 ms, of which
 about 70 ms is codegen and some of the rest is `JitEngine::new`. That is within
 reach of AOT, at the price of compiling every function called even once.
 
-**A threshold of 100 is slower than not having the JIT,** because 3.4 million
-calls cross from the interpreter into compiled code and each costs about ten
-times what the compiled function then does; see [Making the crossings
-cheap](#user-content-making-the-crossings-cheap).
+**A threshold of 100 is 1.28x the interpreter, and threshold 1 is 1.47x.**
+What is left between them is the loops: under a threshold the queries that
+run them are called once and stay interpreted, which is what
+[OSR](#user-content-osr) is for. Before calls into compiled code were planned,
+a threshold of 100 was slower than having no JIT at all; see [Making the
+crossings cheap](#user-content-making-the-crossings-cheap).
 
 **Codegen of the first function costs about 4 ms** whatever it is
 (`db.order_count`, 72 bytes, is the most expensive function to compile in the
@@ -89,9 +91,10 @@ one untimed `--jit-stats` run per threshold gives what was compiled and the
 crossings. It writes `target/store-grid/grid.json`, and is what to rerun after
 each later step. The results are [below](#user-content-the-baseline-grid).
 
-**2. Make every threshold at least as fast as the interpreter.** Profiled
-(see [Making the crossings cheap](#user-content-making-the-crossings-cheap));
-not started. Done when no threshold loses to the interpreter.
+**2. Make every threshold at least as fast as the interpreter (done).** See
+[Making the crossings cheap](#user-content-making-the-crossings-cheap). Every
+threshold from 2 up now beats the interpreter at every size; threshold 1
+still loses at 2,000 orders, to its codegen rather than to crossings.
 
 **3. OSR,** below. Checked by `just check` in the demo, which diffs the report
 against `check.py`, and by chaos mode taking OSR at random back-edges in
@@ -110,66 +113,66 @@ program, then record it in the compiler guide's performance notes.
 
 ## The baseline grid
 
-From `just grid` at commit `53f839f3`, on a quiet machine. Times in ms,
-medians of 7 rounds (3 at 200,000). Wall is the whole process; compile and run
-are what `--time` reports; the last three columns are from one `--jit-stats`
-run.
+From `just grid` with planned calls into compiled code (step 2), on a quiet
+machine. Times in ms, medians of 7 rounds (3 at 200,000). Wall is the whole
+process; compile and run are what `--time` reports; the last three columns
+are from one `--jit-stats` run.
 
 **2,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 154 | 66 | 75 | 1.00x | - | - | - |
-| jit t=1 | 170 | 67 | 91 | 0.90x | 86 | 60 | 122 |
-| jit t=2 | 155 | 67 | 74 | 1.00x | 66 | 20 | 266,020 |
-| jit t=10 | 180 | 67 | 98 | 0.86x | 57 | 16 | 402,770 |
-| jit t=100 | 178 | 69 | 94 | 0.87x | 44 | 11 | 403,227 |
-| jit t=1000 | 178 | 68 | 95 | 0.87x | 37 | 9 | 389,285 |
-| aot | 35 | - | - | 4.45x | - | - | - |
+| interp | 154 | 68 | 75 | 1.00x | - | - | - |
+| jit t=1 | 179 | 71 | 94 | 0.86x | 86 | 62 | 122 |
+| jit t=2 | 143 | 71 | 59 | 1.08x | 63 | 20 | 244,449 |
+| jit t=10 | 149 | 70 | 68 | 1.03x | 49 | 15 | 368,025 |
+| jit t=100 | 146 | 71 | 64 | 1.05x | 39 | 10 | 366,373 |
+| jit t=1000 | 147 | 71 | 64 | 1.05x | 31 | 8 | 351,053 |
+| aot | 36 | - | - | 4.33x | - | - | - |
 
 **20,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 898 | 266 | 595 | 1.00x | - | - | - |
-| jit t=1 | 608 | 269 | 297 | 1.48x | 86 | 68 | 123 |
-| jit t=2 | 758 | 269 | 449 | 1.19x | 66 | 21 | 2,363,019 |
-| jit t=10 | 969 | 268 | 656 | 0.93x | 58 | 17 | 3,383,535 |
-| jit t=100 | 982 | 273 | 664 | 0.91x | 44 | 12 | 3,384,049 |
-| jit t=1000 | 949 | 271 | 639 | 0.95x | 37 | 11 | 3,370,008 |
-| aot | 235 | - | - | 3.83x | - | - | - |
+| interp | 904 | 272 | 586 | 1.00x | - | - | - |
+| jit t=1 | 613 | 276 | 296 | 1.47x | 86 | 67 | 123 |
+| jit t=2 | 619 | 275 | 304 | 1.46x | 63 | 21 | 2,230,818 |
+| jit t=10 | 708 | 276 | 398 | 1.28x | 50 | 16 | 3,193,880 |
+| jit t=100 | 709 | 276 | 394 | 1.28x | 40 | 11 | 3,192,246 |
+| jit t=1000 | 704 | 277 | 390 | 1.28x | 33 | 9 | 3,176,700 |
+| aot | 236 | - | - | 3.83x | - | - | - |
 
 **200,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 7315 | 2352 | 4686 | 1.00x | - | - | - |
-| jit t=1 | 4622 | 2418 | 1884 | 1.58x | 86 | 108 | 123 |
-| jit t=2 | 6385 | 2379 | 3657 | 1.15x | 66 | 22 | 22,578,685 |
-| jit t=10 | 7640 | 2371 | 4959 | 0.96x | 58 | 17 | 29,446,718 |
-| jit t=100 | 7886 | 2394 | 5164 | 0.93x | 44 | 12 | 29,447,225 |
-| jit t=1000 | 7764 | 2401 | 4974 | 0.94x | 37 | 10 | 29,433,391 |
-| aot | 1831 | - | - | 4.00x | - | - | - |
+| interp | 7307 | 2432 | 4595 | 1.00x | - | - | - |
+| jit t=1 | 4654 | 2494 | 1839 | 1.57x | 86 | 103 | 123 |
+| jit t=2 | 5002 | 2447 | 2273 | 1.46x | 63 | 21 | 21,743,927 |
+| jit t=10 | 5558 | 2432 | 2835 | 1.31x | 50 | 17 | 28,500,058 |
+| jit t=100 | 5554 | 2433 | 2839 | 1.32x | 41 | 11 | 28,498,444 |
+| jit t=1000 | 5535 | 2442 | 2815 | 1.32x | 33 | 9 | 28,482,960 |
+| aot | 1765 | - | - | 4.14x | - | - | - |
 
 What it says:
 
-- **No threshold of 10 or more beats the interpreter at any size,** and they
-  lose by about the same at every size, 4-14%. The crossings grow with the
-  data, about 150 per order, so the loss is per call rather than a fixed cost.
-  Step 2 is the first thing to do; nothing tuned on top of today's crossings
-  means much.
+- **Every threshold from 2 up beats the interpreter at every size,** 1.03-1.08x
+  at 2,000 orders and 1.3-1.46x past that. Before step 2 the ones from 10 up
+  lost at every size, by 4-14%.
+- **The thresholds from 10 up are all alike,** about 1.3x, because the same
+  functions get compiled under all of them and the code worth compiling is in
+  loops none of them reach. Threshold 2 does better because it catches the
+  queries the report calls twice.
 - **Compiling everything wins once the run is long enough,** and only then:
-  2x on the running phase at 20,000 and 2.5x at 200,000, but at 2,000 its 60
-  ms of codegen is most of the whole interpreted run of 75 ms. That is the
-  trade a threshold exists to make, and today no threshold makes it, because
-  the code worth compiling is in loops. Cheaper codegen (`opt_level`) would
-  move the break-even down.
-- **Threshold 2 sits between** because it catches the queries the report
-  calls twice and the functions they call, and leaves the rest crossing.
-- **AOT is the ceiling, at 3.8-4.5x,** and threshold 1 is about 60 ms of
-  running from it at 20,000 once codegen is taken out.
+  at 2,000 orders its 62 ms of codegen is most of the interpreted run of 75
+  ms, and it is the one setting slower than the interpreter. Cheaper codegen
+  (`opt_level`) would move the break-even down.
+- **AOT is the ceiling, at 3.8-4.3x.**
 
-Two things the first run of the grid found, both fixed before this one:
+Before step 2, at 20,000 orders: thresholds 10, 100 and 1000 ran at 0.93x,
+0.91x and 0.95x the interpreter, and threshold 2 at 1.19x.
+
+Two things the first run of the grid found, both fixed before step 2:
 
 - **The compile phase was 13% slower under `--jit` at 200,000 orders,** 2,615
   against 2,307 ms, which was not the jit: `--jit` ran the whole command on a
@@ -266,7 +269,30 @@ to keep its present coverage. This is what takes the tax off calls the JIT
 never compiles, and with B it makes the dispatcher something the loop asks
 rarely rather than on every call.
 
-B and C together are the change that matters: B alone still pays step 1 for
+**What was done: B and C.** A site planning a call to a body under a
+dispatcher asks it for a `SitePolicy` (`CallDispatcher::site_policy`) and
+follows it: `Enter` gives a `Plan::Jit`, made from the argument recipes a
+native plan uses and entered through `CallDispatcher::call_compiled`; `Count`
+gives a body plan with a countdown, whose last call goes by the general path
+with `DispatchCallContext::weight` saying how many it stands for, after which
+the site asks again; `Interpret` gives a plain body plan; `EveryCall` plans
+nothing, as before. `JitEngine` enters compiled code, interprets what it will
+not compile, and otherwise counts for as many calls as the function lacks of
+the threshold, so a function called from one site is compiled on the call it
+would have been. Chaos mode draws at each asking between the engine's policy
+and `EveryCall`. A plan made under one dispatcher is not trusted under
+another (`IrInterpreter::dispatcher_epoch`). Calls to natives keep their plans
+under a dispatcher, since one is never offered those.
+
+After it, the same profile has no `execute_call_site` or `get_unit` in it; a
+crossing is `call_planned_jit` (4.7%), `JitEngine::call_compiled` (1.5%), the
+dispatcher's forwarding (0.9%) and `call_words` (0.5%), about 7.5% of the run
+against 30%. `call_planned_jit` takes the dispatcher out of its `RefCell` and
+puts it back each call, so that compiled code can call back into the
+interpreter, and builds the words afresh; how the 4.7% divides between those
+has not been measured. A is not done.
+
+B and C together were the change that mattered: B alone still pays step 1 for
 every call that is not into compiled code, and C alone makes the interpreted
 calls cheap but leaves the crossings as they are. A is worth doing anyway, for
 the paths that remain, and is small enough to measure first. The other
