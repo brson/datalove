@@ -4,9 +4,6 @@ default:
 # Path to datalove CLI.
 datalove := "../target/release/datalove"
 
-# Julia from juliaup, or override with `just julia=... run`.
-julia := env_var("HOME") / ".juliaup/bin/julia"
-
 # The interpreter uv resolves, invoked directly so uv's startup is not timed.
 python := `uv python find`
 
@@ -23,11 +20,11 @@ build:
 
 # Run all benchmarks.
 run: build
-    for b in {{benches}}; do just julia={{julia}} bench-one $b; done
+    for b in {{benches}}; do just bench-one $b; done
 
 # Run one benchmark by name.
 bench name: build
-    just julia={{julia}} bench-one {{name}}
+    just bench-one {{name}}
 
 # The JIT twice: compiling every function on its first call, and tiered as
 # `--jit` is by default, compiling hot functions and entering hot loops.
@@ -44,13 +41,13 @@ bench-one name:
         -n 'datalove-jit' '{{datalove}} script --jit {{name}}.dfs' \
         -n 'datalove-aot' '{{aotdir}}/{{name}}' \
         -n 'python' '{{python}} {{name}}.py' \
-        -n 'julia' '{{julia}} --startup-file=no {{name}}.jl'
+        -n 'julia' 'julia --startup-file=no {{name}}.jl'
     @echo ""
 
 # Time every implementation, splitting datalove's into compiling and running,
 # and keep the result in ../target/benchvs/history; see record.py.
 record *names: build
-    JULIA={{julia}} PYTHON={{python}} uv run --no-project record.py {{names}}
+    PYTHON={{python}} uv run --no-project record.py {{names}}
 
 # Compare two recordings, the latest two by default, flagging what moved.
 compare *files:
@@ -68,7 +65,7 @@ check: build
             "$({{datalove}} script --jit $b.dfs 2>&1)"
             "$({{aotdir}}/$b 2>&1)"
             "$({{python}} $b.py)"
-            "$({{julia}} --startup-file=no $b.jl)"
+            "$(julia --startup-file=no $b.jl)"
         )
         echo "$b: ${outs[*]}"
         for o in "${outs[@]}"; do
