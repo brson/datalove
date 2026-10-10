@@ -343,6 +343,10 @@ ul, ol {
     margin: var(--baseline) 0;
 }
 
+li > ul, li > ol {
+    margin: 0;
+}
+
 li {
     margin: 0 0;
     list-style-position: outside;
