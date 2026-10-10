@@ -1,0 +1,23 @@
+----------
+scriptunit-fragment
+----------
+
+// Replacing whole elements that own nothing: a scalar and a struct of
+// scalars, in bounds and past the end. The compiled backends store these
+// inline rather than through the runtime.
+fun set_flag(a: [bool], i: index): ?[bool]
+    var b = a
+    set b[i]? = false
+    ret some b
+end fun
+
+fun set_point(a: [{x: f64, n: u32}], i: index): ?[{x: f64, n: u32}]
+    var b = a
+    set b[i]? = {x = 2.5, n = 7}
+    ret some b
+end fun
+
+debuglog set_flag([true, true, true], (: index / 1))
+debuglog set_flag([true, true, true], (: index / 3))
+debuglog set_point([{x = 1.0, n = 1}, {x = 2.0, n = 2}], (: index / 1))
+debuglog set_point([{x = 1.0, n = 1}, {x = 2.0, n = 2}], (: index / 9))

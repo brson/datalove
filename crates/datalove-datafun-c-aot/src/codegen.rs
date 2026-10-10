@@ -3213,7 +3213,30 @@ impl<'a> FunctionCodegenContext<'a> {
                 "ListSet on non-list type: {:?}", list_ty
             ))),
         };
-        let _ = elem_ty;
+        // An element type known here that owns nothing is a bounds check and
+        // a store: nothing to destroy, in bounds or out.
+        if self.operand_ref_desc(list).is_none() && elem_ty.is_copy() {
+            let is_valid_addr = self.value_addr(is_valid);
+            let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
+            writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
+                is_valid_addr, index_addr, list_addr, size_offset).unwrap();
+            let elem_repr = types::ir_type_to_crepr(&elem_ty);
+            let elem_addr = format!("(*(uint8_t**){} + (size_t)*(index_t*){} * {})",
+                list_addr, index_addr, elem_repr.layout().size);
+            match elem_repr {
+                CRepr::Scalar(c_ty) => {
+                    writeln!(out, "    if (*(bool_t*){is_valid_addr}) *({c_ty}*){elem_addr} = *({c_ty}*){value_addr};").unwrap();
+                }
+                CRepr::Aggregate(layout) => {
+                    if layout.size > 0 {
+                        writeln!(out, "    if (*(bool_t*){}) memcpy({}, {}, {});",
+                            is_valid_addr, elem_addr, value_addr, layout.size).unwrap();
+                    }
+                }
+            }
+            return Ok(());
+        }
+
         // The runtime checks the index, destroys what was there, decides
         // whether the value in hand is wrapped, in the slot's shape already,
         // or the slot's shape with `data` at some position inside it, and

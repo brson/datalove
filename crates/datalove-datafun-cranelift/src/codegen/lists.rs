@@ -257,7 +257,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// The runtime checks the index, destroys the old element and stores the
     /// new one in whatever shape it arrived, or destroys the new one if the
-    /// index is past the end; the status says which.
+    /// index is past the end; the status says which. Where the element type is
+    /// known here and owns nothing, that is a bounds check and a store, and
+    /// those are emitted instead.
     pub(super) fn compile_list_set(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -266,6 +268,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         index: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
+        let elem_ty = match self.get_operand_type(list)? {
+            IrType::List(e) => *e,
+            IrType::Ref(inner) => match *inner {
+                IrType::List(e) => *e,
+                other => unreachable!("ListSet on a reference to {other:?}"),
+            },
+            other => unreachable!("ListSet on {other:?}"),
+        };
+        if self.operand_ref_desc(list).is_none() && elem_ty.is_copy() {
+            return self.compile_list_set_copy(builder, is_valid, list, index, value, &elem_ty);
+        }
+
         let set = self.runtime.as_ref().ok_or_else(|| {
             CraneliftError::Codegen("ListSet requires runtime imports".into())
         })?.list_set_erased;
@@ -273,6 +287,48 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let list_tydesc = self.operand_tydesc(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
         self.compile_checked_set(builder, is_valid, set, [list_ptr, list_tydesc, idx], value)
+    }
+
+    /// A ListSet of an element that owns nothing, whose type the static type
+    /// says: there is nothing to destroy either side, in bounds or out.
+    fn compile_list_set_copy(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        is_valid: ValueId,
+        list: &Operand,
+        index: &Operand,
+        value: &Operand,
+        elem_ty: &IrType,
+    ) -> Result<(), CraneliftError> {
+        self.compile_list_bounds_check(builder, is_valid, list, index)?;
+        let valid = self.values[&is_valid];
+
+        let write_block = builder.create_block();
+        let after = builder.create_block();
+        builder.ins().brif(valid, write_block, &[], after, &[]);
+        builder.switch_to_block(write_block);
+        builder.seal_block(write_block);
+
+        let list_ptr = self.get_operand_ptr(builder, list)?;
+        let idx = self.get_operand_value(builder, index)?;
+        let repr = types::ir_type_to_cranelift(elem_ty);
+        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, repr.layout().size);
+        match repr {
+            CraneliftRepr::Scalar(_) => {
+                let val = self.get_operand_value(builder, value)?;
+                builder.ins().store(MemFlagsData::new(), val, elem_addr, 0);
+            }
+            CraneliftRepr::Aggregate(layout) => {
+                let src = self.get_operand_ptr(builder, value)?;
+                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), elem_addr, src, size);
+            }
+        }
+        builder.ins().jump(after, &[]);
+
+        builder.switch_to_block(after);
+        builder.seal_block(after);
+        Ok(())
     }
 
     /// Call one of the runtime's checked writes, `set`, with `args` between
