@@ -641,8 +641,8 @@ impl fmt::Display for Instruction {
             Instruction::ListBoundsCheck { is_valid, list, index } => {
                 write!(f, "{} = listboundscheck {}[{}]", is_valid, list, index)
             }
-            Instruction::ListSet { list, index, value } => {
-                write!(f, "listset {}[{}] = {}", list, index, value)
+            Instruction::ListSet { is_valid, list, index, value } => {
+                write!(f, "{} = listset {}[{}] = {}", is_valid, list, index, value)
             }
             Instruction::ListElementRef { dest, list, index } => {
                 write!(f, "{} = listelementref {}[{}]", dest, list, index)
@@ -653,8 +653,8 @@ impl fmt::Display for Instruction {
             Instruction::MapContainsKey { is_valid, map, key } => {
                 write!(f, "{} = mapcontainskey {}[{}]", is_valid, map, key)
             }
-            Instruction::MapSetValue { map, key, value } => {
-                write!(f, "mapsetvalue {}[{}] = {}", map, key, value)
+            Instruction::MapSetValue { is_valid, map, key, value } => {
+                write!(f, "{} = mapsetvalue {}[{}] = {}", is_valid, map, key, value)
             }
             Instruction::MapValueRef { dest, map, key } => {
                 write!(f, "{} = mapvalueref {}[{}]", dest, map, key)
@@ -668,8 +668,8 @@ impl fmt::Display for Instruction {
             Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
                 write!(f, "{} = tensorboundscheck {}[{}]", is_valid, tensor, index)
             }
-            Instruction::TensorSet { tensor, index, value } => {
-                write!(f, "tensorset {}[{}] = {}", tensor, index, value)
+            Instruction::TensorSet { is_valid, tensor, index, value } => {
+                write!(f, "{} = tensorset {}[{}] = {}", is_valid, tensor, index, value)
             }
             Instruction::TensorIndexRef { dest, tensor, index } => {
                 write!(f, "{} = tensorindexref {}[{}]", dest, tensor, index)

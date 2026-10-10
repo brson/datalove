@@ -59,7 +59,7 @@ Analysis(
                         return v5
                     block2:
                         v6 = listelementref s0[p1]
-                        v7 = listboundscheck *v6[p2]
+                        v7 = listset *v6[p2] = v1
                         branch v7, block4, block3
                     block3:
                         v8 = const "index out of bounds"
@@ -68,7 +68,6 @@ Analysis(
                         drop.tracked s0
                         return v10
                     block4:
-                        listset *v6[p2] = v1
                         v11 = load.move.tracked s0
                         v12 = ok v11
                         return v12

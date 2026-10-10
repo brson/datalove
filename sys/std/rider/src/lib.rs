@@ -1218,8 +1218,8 @@ pub extern "C-unwind" fn dlr_std__list_set(
             rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
         )
     };
-    let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
-    unsafe { write_result(_out, placed) };
+    // The runtime has taken the element either way.
+    unsafe { write_result(_out, status == datalove_rti::RtStatus::Ok) };
     OK
 }
 

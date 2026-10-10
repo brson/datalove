@@ -957,8 +957,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::ListBoundsCheck { is_valid, list, index } => {
                 self.compile_list_bounds_check(builder, *is_valid, list, index)?;
             }
-            Instruction::ListSet { list, index, value } => {
-                self.compile_list_set(builder, list, index, value)?;
+            Instruction::ListSet { is_valid, list, index, value } => {
+                self.compile_list_set(builder, *is_valid, list, index, value)?;
             }
             Instruction::ListElementRef { dest, list, index } => {
                 self.compile_list_element_ref(builder, *dest, list, index)?;
@@ -969,8 +969,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::MapContainsKey { is_valid, map, key } => {
                 self.compile_map_contains_key(builder, *is_valid, map, key)?;
             }
-            Instruction::MapSetValue { map, key, value } => {
-                self.compile_map_set_value(builder, map, key, value)?;
+            Instruction::MapSetValue { is_valid, map, key, value } => {
+                self.compile_map_set_value(builder, *is_valid, map, key, value)?;
             }
             Instruction::MapValueRef { dest, map, key } => {
                 self.compile_map_value_ref(builder, *dest, map, key)?;
@@ -984,8 +984,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::TensorBoundsCheck { is_valid, tensor, index } => {
                 self.compile_tensor_bounds_check(builder, *is_valid, tensor, index)?;
             }
-            Instruction::TensorSet { tensor, index, value } => {
-                self.compile_tensor_set(builder, tensor, index, value)?;
+            Instruction::TensorSet { is_valid, tensor, index, value } => {
+                self.compile_tensor_set(builder, *is_valid, tensor, index, value)?;
             }
             Instruction::TensorIndexRef { dest, tensor, index } => {
                 self.compile_tensor_index_ref(builder, *dest, tensor, index)?;

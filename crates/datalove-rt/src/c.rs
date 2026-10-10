@@ -1560,8 +1560,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_push_erased_local(
 /// slot's erased shape, and moved as it stands otherwise -- the same three
 /// cases `dtlv_rti_list_push_erased_local` decides between, for a slot whose
 /// address the caller worked out rather than one a collection owns.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_element_write_local(
+unsafe fn write_element(
     rt: LocalRtHandle,
     slot_out: *mut u8,
     slot_tydesc: *const rtdt::TyDesc,
@@ -1593,6 +1592,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_element_write_local(
 /// Replace a map value, where the key or the value may have arrived in the
 /// erased shape.
 /// See `borrow_lookup_key` and `dtlv_rti_list_push_erased_local`.
+///
+/// Takes the value whatever happens: a key the map does not hold is `Error`,
+/// with the map as it was and the value destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_erased_local(
     rt: LocalRtHandle,
@@ -1616,22 +1618,27 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_erased_local(
         // Taken out of the wrapper rather than borrowed from it: the map
         // keeps the value, so the wrapper has given it up and its own
         // allocation goes with it. Borrowing would leave the box behind.
+        // Whichever shape the value ends up in is destroyed if it did not
+        // land.
+        let set_or_destroy = |value: *mut u8, value_tydesc: *const rtdt::TyDesc| {
+            let status = dtlv_rti_btreemap_set_value_local(
+                rt, btreemap_value_mut, btreemap_tydesc, key, key_ty, value, value_tydesc);
+            if status != RtStatus::Ok {
+                crate::impls::destroy::any_destroy_local(rt, value, value_tydesc);
+            }
+            status
+        };
         if unwraps_the_element(value_tydesc, value_ty) {
             return unwrapped_then(rt, value_in, value_ty.as_ptr(), |scratch| {
-                dtlv_rti_btreemap_set_value_local(
-                    rt, btreemap_value_mut, btreemap_tydesc, key, key_ty,
-                    scratch, value_ty.as_ptr())
+                set_or_destroy(scratch, value_ty.as_ptr())
             });
         }
         if crate::impls::boxing::needs_erasure(value_ty.as_ptr(), value_tydesc) {
             return reified_then(rt, value_in, value_tydesc, value_ty.as_ptr(), |scratch| {
-                dtlv_rti_btreemap_set_value_local(
-                    rt, btreemap_value_mut, btreemap_tydesc, key, key_ty,
-                    scratch, value_ty.as_ptr())
+                set_or_destroy(scratch, value_ty.as_ptr())
             });
         }
-        dtlv_rti_btreemap_set_value_local(
-            rt, btreemap_value_mut, btreemap_tydesc, key, key_ty, value_in, value_tydesc)
+        set_or_destroy(value_in, value_tydesc)
     }
 }
 
@@ -1687,6 +1694,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_erased_local(
 
 /// Replace an element with one that may have arrived in the erased shape.
 /// See `dtlv_rti_list_push_erased_local`.
+///
+/// Takes the element whatever happens: an index past the end is `Error`, with
+/// the list as it was and the element destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_set_erased_local(
     rt: LocalRtHandle,
@@ -1699,6 +1709,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_set_erased_local(
     debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
     debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
     unsafe {
+        if index >= (*(list_value_mut as *const rtdt::List)).size.0 {
+            crate::impls::destroy::any_destroy_local(rt, element_in, element_tydesc);
+            return RtStatus::Error;
+        }
         let list_ty = rtdt::TyDescRef::from_ptr(list_tydesc);
         let elem_ty = list_ty.list_element_ty();
         if unwraps_the_element(element_tydesc, elem_ty) {
@@ -2930,7 +2944,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     rt: LocalRtHandle,
     tensor_value_ref: *const u8,
     tensor_tydesc: *const rtdt::TyDesc,
-    indices_ptr: *const u32,
+    indices_ptr: *const rtdt::IndexRepr,
     element_value_out: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
@@ -2958,22 +2972,26 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
     }
 }
 
+/// Replace the element at `indices`, one per axis, moving the new one in.
+///
+/// An index past the end of its axis is `Error`, with the tensor as it was and
+/// the element still the caller's.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     rt: LocalRtHandle,
-    tensor_value_ref: *mut u8,
+    tensor_value_mut: *mut u8,
     tensor_tydesc: *const rtdt::TyDesc,
-    indices_ptr: *const u32,
-    element_ref: *const u8,
+    indices_ptr: *const rtdt::IndexRepr,
+    element_in: *mut u8,
     element_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!tensor_value_ref.is_null(), "tensor_value_ref is null");
+    debug_assert!(!tensor_value_mut.is_null(), "tensor_value_mut is null");
     debug_assert!(!tensor_tydesc.is_null(), "tensor_tydesc is null");
     debug_assert!(!indices_ptr.is_null(), "indices_ptr is null");
-    debug_assert!(!element_ref.is_null(), "element_ref is null");
-    debug_assert_aligned(tensor_value_ref, tensor_tydesc, "tensor_set:tensor");
-    debug_assert_aligned(element_ref, element_tydesc, "tensor_set:element");
+    debug_assert!(!element_in.is_null(), "element_in is null");
+    debug_assert_aligned(tensor_value_mut, tensor_tydesc, "tensor_set:tensor");
+    debug_assert_aligned(element_in, element_tydesc, "tensor_set:element");
     unsafe {
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let tensor_tydesc_ref = rtdt::TyDescRef::from_ptr(tensor_tydesc);
@@ -2983,11 +3001,40 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
         );
         crate::impls::tensor::tensor_set_impl(
             rt_ref,
-            tensor_value_ref,
+            tensor_value_mut,
             tensor_tydesc_ref,
             indices_ptr,
-            element_ref,
+            element_in,
         )
+    }
+}
+
+/// Replace the element at `indices`, one per axis, with one that may have
+/// arrived in the erased shape. See `dtlv_rti_list_set_erased_local`.
+///
+/// Takes the element whatever happens: an index past the end of its axis is
+/// `Error`, with the tensor as it was and the element destroyed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_erased_local(
+    rt: LocalRtHandle,
+    tensor_value_mut: *mut u8,
+    tensor_tydesc: *const rtdt::TyDesc,
+    indices_ptr: *const rtdt::IndexRepr,
+    element_in: *mut u8,
+    element_tydesc: *const rtdt::TyDesc,
+) -> RtStatus {
+    debug_assert!(!tensor_tydesc.is_null(), "tensor_tydesc is null");
+    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
+    unsafe {
+        let tensor_ty = rtdt::TyDescRef::from_ptr(tensor_tydesc);
+        match crate::impls::tensor::tensor_element_slot(tensor_value_mut, tensor_ty, indices_ptr) {
+            Some(slot) => write_element(
+                rt, slot, tensor_ty.tensor_element_ty().as_ptr(), element_in, element_tydesc),
+            None => {
+                crate::impls::destroy::any_destroy_local(rt, element_in, element_tydesc);
+                RtStatus::Error
+            }
+        }
     }
 }
 

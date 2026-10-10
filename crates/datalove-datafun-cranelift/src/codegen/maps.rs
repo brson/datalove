@@ -265,11 +265,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a MapSetValue instruction.
     ///
-    /// Key must exist (caller checks). Calls runtime to destroy old value and
-    /// store new value.
+    /// The runtime looks the key up, destroys the old value and stores the new
+    /// one, or destroys the new one if the key is not there.
     pub(super) fn compile_map_set_value(
         &mut self,
         builder: &mut FunctionBuilder,
+        is_valid: ValueId,
         map: &Operand,
         key: &Operand,
         value: &Operand,
@@ -279,7 +280,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
         let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value_erased, builder.func);
-        builder.ins().call(func_ref, &[
+        let call = builder.ins().call(func_ref, &[
             s.rt_handle,
             s.map_ptr,
             s.map_tydesc_ptr,
@@ -288,6 +289,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             value_ptr,
             value_tydesc_ptr,
         ]);
+        let status = builder.inst_results(call)[0];
+        let ok = datalove_rt::c::RtStatus::Ok as i64;
+        let found = builder.ins().icmp_imm_u(cl_ir::condcodes::IntCC::Equal, status, ok);
+        self.values.insert(is_valid, found);
 
         Ok(())
     }

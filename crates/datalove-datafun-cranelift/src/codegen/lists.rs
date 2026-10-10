@@ -255,71 +255,47 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a ListSet instruction.
     ///
-    /// Bounds are assumed already checked. Destroys the old element and stores
-    /// the new value.
+    /// The runtime checks the index, destroys the old element and stores the
+    /// new one in whatever shape it arrived, or destroys the new one if the
+    /// index is past the end; the status says which.
     pub(super) fn compile_list_set(
         &mut self,
         builder: &mut FunctionBuilder,
+        is_valid: ValueId,
         list: &Operand,
         index: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let list_ty = self.get_operand_type(list)?;
-        let elem_ty = match &list_ty {
-            IrType::List(e) => e.as_ref().clone(),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "ListSet on non-list type: {:?}", list_ty
-            ))),
-        };
-        let runtime = self.runtime.ok_or_else(|| {
+        let set = self.runtime.as_ref().ok_or_else(|| {
             CraneliftError::Codegen("ListSet requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("ListSet requires runtime handle".into())
-        })?;
-
+        })?.list_set_erased;
         let list_ptr = self.get_operand_ptr(builder, list)?;
+        let list_tydesc = self.operand_tydesc(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
+        self.compile_checked_set(builder, is_valid, set, [list_ptr, list_tydesc, idx], value)
+    }
 
-        // Inside a generic the static element type is a `data`, so neither the
-        // stride nor the width of what is written comes from it.
-        let (elem_size, elem_desc) = match self.operand_ref_desc(list) {
-            Some(desc) => {
-                let elem_fn = self.module
-                    .declare_func_in_func(runtime.element_tydesc, builder.func);
-                let call = builder.ins().call(elem_fn, &[desc]);
-                let elem_desc = builder.inst_results(call)[0];
-                let size_offset = std::mem::offset_of!(datalove_rtdt::TyDesc, size) as i32;
-                let size = builder.ins().load(
-                    cl_types::I32, MemFlagsData::new(), elem_desc, size_offset);
-                (builder.ins().uextend(PTR_TYPE, size), elem_desc)
-            }
-            None => {
-                let size = types::ir_type_to_cranelift(&elem_ty).layout().size;
-                let tydesc_id = self.tydesc(&elem_ty)?;
-                let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                (builder.ins().iconst(PTR_TYPE, size as i64),
-                 builder.ins().symbol_value(PTR_TYPE, gv))
-            }
-        };
-
-        // Compute element address.
-        let data_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), list_ptr, 0);
-        let idx_wide = if INDEX_TYPE != PTR_TYPE {
-            builder.ins().uextend(PTR_TYPE, idx)
-        } else {
-            idx
-        };
-        let offset = builder.ins().imul(idx_wide, elem_size);
-        let elem_addr = builder.ins().iadd(data_ptr, offset);
-
-        // The runtime destroys what was there and decides which shape the value
-        // in hand is in.
+    /// Call one of the runtime's checked writes, `set`, with `args` between
+    /// the runtime handle and the value, and take `is_valid` from its status.
+    pub(super) fn compile_checked_set(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        is_valid: ValueId,
+        set: cranelift_module::FuncId,
+        args: [cl_ir::Value; 3],
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let rt_handle = self.rt_handle_param.ok_or_else(|| {
+            CraneliftError::Codegen("a collection write requires the runtime handle".into())
+        })?;
         let value_ptr = self.get_operand_ptr(builder, value)?;
         let value_tydesc = self.operand_tydesc(builder, value)?;
-        let write_ref = self.module.declare_func_in_func(runtime.element_write, builder.func);
-        builder.ins().call(write_ref, &[rt_handle, elem_addr, elem_desc, value_ptr, value_tydesc]);
-
+        let set_ref = self.module.declare_func_in_func(set, builder.func);
+        let call = builder.ins().call(set_ref, &[rt_handle, args[0], args[1], args[2], value_ptr, value_tydesc]);
+        let status = builder.inst_results(call)[0];
+        let ok = datalove_rt::c::RtStatus::Ok as i64;
+        let landed = builder.ins().icmp_imm_u(cl_ir::condcodes::IntCC::Equal, status, ok);
+        self.values.insert(is_valid, landed);
         Ok(())
     }
 

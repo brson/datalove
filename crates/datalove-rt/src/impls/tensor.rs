@@ -391,86 +391,38 @@ pub unsafe fn tensor_init_impl(
 
 /// Gets an element at the specified indices by cloning it.
 ///
-/// Validates indices, computes linear offset, and clones element to output.
+/// An index past the end of its axis is `Error`.
 pub unsafe fn tensor_get_impl(
     rt_ref: &mut RtLocal,
     tensor_value_ref: *const u8,
     tensor_tydesc_ref: TyDescRef,
-    // u32 x rank
-    indices_ptr: *const u32,
+    indices_ptr: *const rtdt::IndexRepr,
     element_value_out: *mut u8,
 ) -> RtStatus {
     unsafe {
-        if tensor_value_ref.is_null() || indices_ptr.is_null() || element_value_out.is_null() {
+        let Some(element_ptr) = tensor_element_slot(tensor_value_ref as *mut u8, tensor_tydesc_ref, indices_ptr) else {
             return RtStatus::Error;
-        }
-
-        let element_ty = tensor_tydesc_ref.tensor_element_ty();
-        let rank = tensor_tydesc_ref.tensor_rank();
-
-        let tensor_ptr = tensor_value_ref as *const rtdt::Tensor;
-        let ptr_base = (*tensor_ptr).ptr_base;
-        let offset_elems = (*tensor_ptr).offset_elems;
-        let shape_ptr = (*tensor_ptr).shape;
-        let strides_ptr = (*tensor_ptr).strides;
-
-        // These are programming errors (use-after-destroy, use-after-move).
-        assert!(!ptr_base.is_null(), "tensor_get: ptr_base is null");
-        assert!(!shape_ptr.is_null(), "tensor_get: shape is null");
-        assert!(!strides_ptr.is_null(), "tensor_get: strides is null");
-        assert!(rank > 0, "tensor_get: rank is 0");
-
-        // Validate indices and compute linear offset.
-        let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
-        let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
-        let strides_slice = std::slice::from_raw_parts(strides_ptr, rank as usize);
-
-        let mut linear_offset = offset_elems.0;
-        for i in 0..rank as usize {
-            let index = indices_slice[i] as rtdt::IndexRepr;
-            let dim = shape_slice[i].0;
-
-            if index >= dim {
-                return RtStatus::Error;
-            }
-
-            linear_offset = linear_offset.saturating_add(index.saturating_mul(strides_slice[i].0));
-        }
-
-        // Compute element pointer.
-        let element_size = element_ty.size() as usize;
-        let element_ptr = ptr_base.add(linear_offset as usize * element_size);
-
-        // Clone element to output buffer.
+        };
         let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = crate::impls::clone::clone_value(
+        crate::impls::clone::clone_value(
             rt_handle,
             element_ptr,
-            element_ty.as_ptr(),
+            tensor_tydesc_ref.tensor_element_ty().as_ptr(),
             element_value_out,
-        );
-
-        status
+        )
     }
 }
 
-/// Sets an element at the specified indices.
+/// Where the element at `indices` is, or `None` if an index is past the end
+/// of its axis.
 ///
-/// Validates indices, destroys old value, and clones new value into place.
-pub unsafe fn tensor_set_impl(
-    rt_ref: &mut RtLocal,
+/// `indices` has one entry per axis.
+pub unsafe fn tensor_element_slot(
     tensor_value_ref: *mut u8,
     tensor_tydesc_ref: TyDescRef,
-    // fixme in pointer
-    indices_ptr: *const u32,
-    // fixme in pointer
-    value_ptr: *const u8,
-) -> RtStatus {
+    indices_ptr: *const rtdt::IndexRepr,
+) -> Option<*mut u8> {
     unsafe {
-        if tensor_value_ref.is_null() || indices_ptr.is_null() || value_ptr.is_null() {
-            return RtStatus::Error;
-        }
-
         let element_ty = tensor_tydesc_ref.tensor_element_ty();
         let rank = tensor_tydesc_ref.tensor_rank();
 
@@ -481,33 +433,46 @@ pub unsafe fn tensor_set_impl(
         let strides_ptr = (*tensor_ptr).strides;
 
         // These are programming errors (use-after-destroy, use-after-move).
-        assert!(!ptr_base.is_null(), "tensor_set: ptr_base is null");
-        assert!(!shape_ptr.is_null(), "tensor_set: shape is null");
-        assert!(!strides_ptr.is_null(), "tensor_set: strides is null");
-        assert!(rank > 0, "tensor_set: rank is 0");
+        assert!(!ptr_base.is_null(), "tensor element: ptr_base is null");
+        assert!(!shape_ptr.is_null(), "tensor element: shape is null");
+        assert!(!strides_ptr.is_null(), "tensor element: strides is null");
+        assert!(rank > 0, "tensor element: rank is 0");
 
-        // Validate indices and compute linear offset.
         let indices_slice = std::slice::from_raw_parts(indices_ptr, rank as usize);
         let shape_slice = std::slice::from_raw_parts(shape_ptr, rank as usize);
         let strides_slice = std::slice::from_raw_parts(strides_ptr, rank as usize);
 
         let mut linear_offset = offset_elems.0;
         for i in 0..rank as usize {
-            let index = indices_slice[i] as rtdt::IndexRepr;
-            let dim = shape_slice[i].0;
-
-            if index >= dim {
-                return RtStatus::Error;
+            let index = indices_slice[i];
+            if index >= shape_slice[i].0 {
+                return None;
             }
-
             linear_offset = linear_offset.saturating_add(index.saturating_mul(strides_slice[i].0));
         }
 
-        // Compute element pointer.
         let element_size = element_ty.size() as usize;
-        let element_ptr = ptr_base.add(linear_offset as usize * element_size);
+        Some((ptr_base as *mut u8).add(linear_offset as usize * element_size))
+    }
+}
 
-        // Destroy old value at this location.
+/// Replace the element at the specified indices, moving the new value in.
+///
+/// Destroys the old value. An index past the end of its axis is `Error`, with
+/// the tensor as it was and the value still the caller's.
+pub unsafe fn tensor_set_impl(
+    rt_ref: &mut RtLocal,
+    tensor_value_ref: *mut u8,
+    tensor_tydesc_ref: TyDescRef,
+    indices_ptr: *const rtdt::IndexRepr,
+    value_in: *mut u8,
+) -> RtStatus {
+    unsafe {
+        let Some(element_ptr) = tensor_element_slot(tensor_value_ref, tensor_tydesc_ref, indices_ptr) else {
+            return RtStatus::Error;
+        };
+        let element_ty = tensor_tydesc_ref.tensor_element_ty();
+
         let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::impls::destroy::any_destroy_local(
             rt_handle,
@@ -518,15 +483,8 @@ pub unsafe fn tensor_set_impl(
             return status;
         }
 
-        // Clone new value into this location.
-        let status = crate::impls::clone::clone_value(
-            rt_handle,
-            value_ptr,
-            element_ty.as_ptr(),
-            element_ptr,
-        );
-
-        status
+        std::ptr::copy_nonoverlapping(value_in as *const u8, element_ptr, element_ty.size() as usize);
+        RtStatus::Ok
     }
 }
 

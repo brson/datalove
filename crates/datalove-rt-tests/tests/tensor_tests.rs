@@ -1094,7 +1094,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
     // Set each element to a new value.
     for i in 0..5 {
         let indices = [i];
-        let new_value = 100 + i * 10;
+        let new_value = 100 + i as u32 * 10;
 
         let status = unsafe {
             datalove_rt::c::dtlv_rti_tensor_set_local(
@@ -1102,7 +1102,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &new_value as *const u32 as *const u8,
+                &mut { new_value } as *mut u32 as *mut u8,
                 element_tydesc as *const rtdt::TyDesc,
             )
         };
@@ -1127,7 +1127,7 @@ fn test_tensor_set_1d() -> AnyResult<()> {
         assert_eq!(status, datalove_rt::c::RtStatus::Ok);
 
         let mut value = unsafe { element_value.assume_init() };
-        assert_eq!(value, 100 + i * 10);
+        assert_eq!(value, 100 + i as u32 * 10);
 
         // Destroy the cloned element.
         let status = unsafe {
@@ -1212,7 +1212,7 @@ fn test_tensor_set_2d_row_major() -> AnyResult<()> {
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &new_value as *const u32 as *const u8,
+                &mut { new_value } as *mut u32 as *mut u8,
                 element_tydesc as *const rtdt::TyDesc,
             )
         };
@@ -1324,7 +1324,7 @@ fn test_tensor_set_2d_col_major() -> AnyResult<()> {
             &mut tensor as *mut rtdt::Tensor as *mut u8,
             tensor_tydesc as *const rtdt::TyDesc,
             indices.as_ptr(),
-            &new_value as *const u32 as *const u8,
+            &mut { new_value } as *mut u32 as *mut u8,
             element_tydesc as *const rtdt::TyDesc,
         )
     };
@@ -1427,7 +1427,7 @@ fn test_tensor_set_3d() -> AnyResult<()> {
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &new_value as *const u32 as *const u8,
+                &mut { new_value } as *mut u32 as *mut u8,
                 element_tydesc as *const rtdt::TyDesc,
             )
         };
@@ -1535,7 +1535,7 @@ fn test_tensor_set_out_of_bounds() -> AnyResult<()> {
                 &mut tensor as *mut rtdt::Tensor as *mut u8,
                 tensor_tydesc as *const rtdt::TyDesc,
                 indices.as_ptr(),
-                &new_value as *const u32 as *const u8,
+                &mut { new_value } as *mut u32 as *mut u8,
                 element_tydesc as *const rtdt::TyDesc,
             )
         };

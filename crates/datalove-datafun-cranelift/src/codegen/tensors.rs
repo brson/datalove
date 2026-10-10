@@ -280,49 +280,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Compile a TensorSet instruction.
+    /// Compile a TensorSet instruction, rank 1 only.
     ///
-    /// Rank 1 only, bounds already checked. Destroys old element, stores new value.
+    /// As ListSet: the runtime checks the index and writes, or destroys the
+    /// value if the index is past the end. A rank 1 tensor's indices are the
+    /// one index, so its address is the indices array.
     pub(super) fn compile_tensor_set(
         &mut self,
         builder: &mut FunctionBuilder,
+        is_valid: ValueId,
         tensor: &Operand,
         index: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let tensor_ty = self.get_operand_type(tensor)?;
-        let elem_ty = match &tensor_ty {
-            IrType::Tensor(e, _) => e.as_ref().clone(),
-            _ => return Err(CraneliftError::Codegen(format!(
-                "TensorSet on non-tensor type: {:?}", tensor_ty
-            ))),
-        };
-        let tensor_ptr = self.get_operand_ptr(builder, tensor)?;
-        let idx = self.get_operand_value(builder, index)?;
-        let (elem_size, dynamic_desc) = self.tensor_elem_width(builder, tensor, &elem_ty)?;
-
-        let elem_addr = self.compute_tensor_element_addr(builder, tensor_ptr, idx, elem_size);
-
-        let runtime = self.runtime.ok_or_else(|| {
+        let set = self.runtime.as_ref().ok_or_else(|| {
             CraneliftError::Codegen("TensorSet requires runtime imports".into())
-        })?;
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("TensorSet requires runtime handle".into())
-        })?;
-        let tydesc_id = self.tydesc(&elem_ty)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
-
-        // The runtime destroys what was there and decides which shape the value
-        // in hand is in: wrapped, the slot's own, or the slot's with `data` at
-        // some position inside it.
-        let elem_desc = dynamic_desc.unwrap_or(tydesc_ptr);
-        let value_ptr = self.get_operand_ptr(builder, value)?;
-        let value_tydesc = self.operand_tydesc(builder, value)?;
-        let write_ref = self.module.declare_func_in_func(runtime.element_write, builder.func);
-        builder.ins().call(write_ref, &[rt_handle, elem_addr, elem_desc, value_ptr, value_tydesc]);
-
-        Ok(())
+        })?.tensor_set_erased;
+        let tensor_ptr = self.get_operand_ptr(builder, tensor)?;
+        let tensor_tydesc = self.operand_tydesc(builder, tensor)?;
+        let indices = self.get_operand_ptr(builder, index)?;
+        self.compile_checked_set(builder, is_valid, set, [tensor_ptr, tensor_tydesc, indices], value)
     }
 
     /// Compile a TensorIndexRef instruction.

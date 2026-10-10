@@ -1769,32 +1769,24 @@ impl IrInterpreter {
                 }
                 // If invalid, dest is uninitialized — caller must not use it.
             }
-            Instruction::ListSet { list, index, value } => {
+            Instruction::ListSet { is_valid, list, index, value } => {
                 let list_val = self.read_operand(list, frame, frames);
                 let idx_val = self.read_operand(index, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                let (list_struct, element_tydesc, element_size) =
-                    unsafe { list_element_info(&list_val) };
-
-                // Compute element pointer.
-                let element_ptr = unsafe { (list_struct.data as *mut u8).add(idx as usize * element_size) };
-
-                // The runtime destroys what was there and decides which shape
-                // the value in hand is in: wrapped, the slot's own, or the
-                // slot's with `data` at some position inside it. Inside a
-                // generic it is the first, and copying its bytes as the element
-                // stores the wrapper's tag where the value belongs.
-                let rt_handle = self.runtime.handle();
+                // The runtime checks the index, destroys what was there and
+                // decides which shape the value in hand is in: wrapped, the
+                // slot's own, or the slot's with `data` at some position inside
+                // it. It takes the value whether or not it lands.
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_element_write_local(
-                        rt_handle, element_ptr, element_tydesc,
-                        value_val.ptr, value_val.tydesc)
+                    datalove_rt::c::dtlv_rti_list_set_erased_local(
+                        self.runtime.handle(), list_val.ptr as *mut u8, list_val.tydesc,
+                        idx, value_val.ptr as *mut u8, value_val.tydesc)
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "ListSet failed");
-
-                // Mark value operand as consumed (moved into list).
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = status == datalove_rt::c::RtStatus::Ok; }
+                frame.mark_value_live(*is_valid);
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::MapGet { dest, is_valid, map, key } => {
@@ -1833,7 +1825,7 @@ impl IrInterpreter {
                 unsafe { *(is_valid_dest.ptr as *mut bool) = found; }
                 frame.mark_value_live(*is_valid);
             }
-            Instruction::MapSetValue { map, key, value } => {
+            Instruction::MapSetValue { is_valid, map, key, value } => {
                 let map_val = self.read_operand(map, frame, frames);
                 let key_val = self.read_operand(key, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
@@ -1842,7 +1834,8 @@ impl IrInterpreter {
 
                 // Both sides by their own descriptors: the key may have arrived
                 // packed and the value may be in the erased shape. See the
-                // MapGet above and `dtlv_rti_element_write_local`.
+                // MapGet above and `dtlv_rti_list_set_erased_local`. The runtime
+                // takes the value whether or not the key is there.
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
                     datalove_rt::c::dtlv_rti_btreemap_set_value_erased_local(
@@ -1855,7 +1848,9 @@ impl IrInterpreter {
                         value_val.tydesc,
                     )
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapSetValue failed");
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = status == datalove_rt::c::RtStatus::Ok; }
+                frame.mark_value_live(*is_valid);
 
                 // Mark value operand as consumed (moved into map).
                 Self::mark_source_dropped_local(value, frame);
@@ -1995,36 +1990,21 @@ impl IrInterpreter {
                     frame.mark_value_live(*dest);
                 }
             }
-            Instruction::TensorSet { tensor, index, value } => {
+            Instruction::TensorSet { is_valid, tensor, index, value } => {
                 let tensor_val = self.read_operand(tensor, frame, frames);
                 let idx_val = self.read_operand(index, frame, frames);
                 let value_val = self.read_operand(value, frame, frames);
-                let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                let tensor_struct = unsafe { &*(tensor_val.ptr as *const rtdt::Tensor) };
-                let element_tydesc = unsafe { (*tensor_val.tydesc).type_info.tensor.element_tydesc };
-                let element_size = unsafe { (*element_tydesc).size as usize };
-
-                // Compute element address (rank 1 only, bounds already checked).
-                let strides_ptr = tensor_struct.strides;
-                let offset = tensor_struct.offset_elems.0;
-                let stride0 = unsafe { (*strides_ptr).0 };
-                let linear_offset = offset.saturating_add(idx.saturating_mul(stride0));
-                let element_ptr = unsafe {
-                    (tensor_struct.ptr_base as *mut u8).add(linear_offset as usize * element_size)
-                };
-
-                // As in ListSet: the runtime destroys what was there and
-                // decides which shape the value in hand is in.
-                let rt_handle = self.runtime.handle();
+                // As ListSet. Rank 1 only, so the index is the indices array.
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_element_write_local(
-                        rt_handle, element_ptr, element_tydesc,
-                        value_val.ptr, value_val.tydesc)
+                    datalove_rt::c::dtlv_rti_tensor_set_erased_local(
+                        self.runtime.handle(), tensor_val.ptr as *mut u8, tensor_val.tydesc,
+                        idx_val.ptr as *const rtdt::IndexRepr,
+                        value_val.ptr as *mut u8, value_val.tydesc)
                 };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "TensorSet failed");
-
-                // Mark value operand as consumed.
+                let is_valid_dest = frame.value_dest(*is_valid);
+                unsafe { *(is_valid_dest.ptr as *mut bool) = status == datalove_rt::c::RtStatus::Ok; }
+                frame.mark_value_live(*is_valid);
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::TensorIndexRef { dest, tensor, index } => {

@@ -595,22 +595,32 @@ binding has to survive the line that made it, and the AOT backends drop.
 |---|---|---|
 | `ListGet { dest, is_valid, list, index }` | `v0, v1 = listget v2[v3]` | Borrows both; `dest` valid only if `is_valid` |
 | `ListBoundsCheck { is_valid, list, index }` | `v0 = listboundscheck v1[v2]` | Borrows both |
-| `ListSet { list, index, value }` | `listset v0[v1] = v2` | Mutably borrows the list, consumes `value` |
+| `ListSet { is_valid, list, index, value }` | `v0 = listset v1[v2] = v3` | Mutably borrows the list, consumes `value` whatever the outcome |
 | `ListElementRef { dest, list, index }` | `v0 = listelementref v1[v2]` | Borrows; produces a `Ref` |
 | `MapGet { dest, is_valid, map, key }` | `v0, v1 = mapget v2[v3]` | Borrows both |
 | `MapContainsKey { is_valid, map, key }` | `v0 = mapcontainskey v1[v2]` | Borrows both |
-| `MapSetValue { map, key, value }` | `mapsetvalue v0[v1] = v2` | Key must exist |
+| `MapSetValue { is_valid, map, key, value }` | `v0 = mapsetvalue v1[v2] = v3` | Consumes `value` whatever the outcome |
 | `MapValueRef { dest, map, key }` | `v0 = mapvalueref v1[v2]` | Key must exist; produces a `Ref` |
 | `MapUpsert { map, key, value }` | `mapupsert v0[v1] = v2` | Consumes key and value; always succeeds |
 | `TensorGet { dest, is_valid, tensor, index }` | `v0, v1 = tensorget v2[v3]` | Borrows both |
 | `TensorBoundsCheck { is_valid, tensor, index }` | `v0 = tensorboundscheck v1[v2]` | Borrows both |
-| `TensorSet { tensor, index, value }` | `tensorset v0[v1] = v2` | Rank 1 only |
+| `TensorSet { is_valid, tensor, index, value }` | `v0 = tensorset v1[v2] = v3` | Rank 1 only; consumes `value` whatever the outcome |
 | `TensorIndexRef { dest, tensor, index }` | `v0 = tensorindexref v1[v2]` | Borrows; produces a `Ref` |
 
-The reference-producing and the `Set` forms all assume the bounds or the key
-have already been checked, by the matching check instruction. That split is what
-lets the source's `a[i]?` lower to a check, a branch to the early-return path,
-and then an access that cannot fail.
+The reference-producing forms assume the bounds or the key have already been
+checked, by the matching check instruction: the source's `a[i]?.f` lowers to a
+check, a branch to the early-return path, and then a reference that cannot
+fail. A reference into a collection is a borrowed place, and nothing is
+half-done between the check and it.
+
+The `Set` forms check for themselves, as the runtime's own `list_set` does:
+one operation that either replaces the element and sets `is_valid`, or leaves
+the collection as it was, destroys the value and clears it. `set a[i]? = v`
+lowers to the write and a branch on its `is_valid`. Splitting a write into a
+check, or a drop of the old element, and a store would leave a state between
+the two that the runtime does not know about. How a backend implements the one
+operation -- through the runtime, or with the check and a store inline where
+the types allow -- is its own business.
 
 `TensorGet` at rank 1 clones the element; at higher ranks it produces an owned
 sub-tensor. `TensorIndexRef` at rank 1 points at the element; at higher ranks it
@@ -1036,9 +1046,9 @@ assume.
    instruction that consumes it or by a `Drop`.
 7. A tracked destination is written only by a `Tracked` variant, and a precise
    one only by a precise variant.
-8. An access instruction that assumes a check -- `ListSet`, `MapSetValue`,
-   `MapValueRef`, `TensorSet`, and the element-reference forms -- is dominated
-   by the matching check instruction and by the branch that acted on it.
+8. An access instruction that assumes a check -- `MapValueRef` and the
+   element-reference forms -- is dominated by the matching check instruction
+   and by the branch that acted on it.
 9. A `Reify` reads a `data` that a matching `DataFrom` or `Erase` wrote. It is
     a move, and nothing verifies the type at run time.
 10. An enum's `variant_index` indexes the type's variants **sorted by name**.

@@ -661,17 +661,6 @@ pub unsafe fn dtlv_rti_list_push_erased_local(rt: LocalRtHandle, list_value_mut:
     unsafe { (crate::table(rt).dtlv_rti_list_push_erased_local)(rt, list_value_mut, list_tydesc, element_in, element_tydesc) }
 }
 
-/// Calls [`RtiTable::dtlv_rti_element_write_local`](crate::table::RtiTable::dtlv_rti_element_write_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_element_write_local(rt: LocalRtHandle, slot_out: *mut u8, slot_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_element_write_local)(rt, slot_out, slot_tydesc, value_in, value_tydesc) }
-}
-
 /// Calls [`RtiTable::dtlv_rti_btreemap_set_value_erased_local`](crate::table::RtiTable::dtlv_rti_btreemap_set_value_erased_local).
 ///
 /// # Safety
@@ -1196,7 +1185,7 @@ pub unsafe fn dtlv_rti_tensor_destroy_local(rt: LocalRtHandle, tensor_value_in: 
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const u32, element_value_out: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_value_out: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_get_local)(rt, tensor_value_ref, tensor_tydesc, indices_ptr, element_value_out, element_tydesc) }
 }
 
@@ -1207,8 +1196,19 @@ pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *co
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_ref: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const u32, element_ref: *const u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_tensor_set_local)(rt, tensor_value_ref, tensor_tydesc, indices_ptr, element_ref, element_tydesc) }
+pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_tensor_set_local)(rt, tensor_value_mut, tensor_tydesc, indices_ptr, element_in, element_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_tensor_set_erased_local`](crate::table::RtiTable::dtlv_rti_tensor_set_erased_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_tensor_set_erased_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_tensor_set_erased_local)(rt, tensor_value_mut, tensor_tydesc, indices_ptr, element_in, element_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_tensor_transpose_local`](crate::table::RtiTable::dtlv_rti_tensor_transpose_local).

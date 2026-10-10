@@ -30,7 +30,7 @@ Analysis(
                         v0 = move p0
                         store.move.tracked s0, v0
                         v1 = copy p2
-                        v2 = listboundscheck s0[p1]
+                        v2 = listset s0[p1] = v1
                         branch v2, block2, block1
                     block1:
                         v3 = const "index out of bounds"
@@ -39,7 +39,6 @@ Analysis(
                         drop.tracked s0
                         return v5
                     block2:
-                        listset s0[p1] = v1
                         v6 = load.move.tracked s0
                         v7 = ok v6
                         return v7

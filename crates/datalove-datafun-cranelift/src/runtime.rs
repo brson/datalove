@@ -34,8 +34,10 @@ pub struct RuntimeImports {
     pub map_contains_key_erased: FuncId,
     /// `dtlv_rti_btreemap_get_value_ref_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
     pub map_get_value_ref_erased: FuncId,
-    /// `dtlv_rti_element_write_local(rt, slot, slot_td, value, value_td) -> RtStatus`
-    pub element_write: FuncId,
+    /// `dtlv_rti_list_set_erased_local(rt, list, list_td, index, value, value_td) -> RtStatus`
+    pub list_set_erased: FuncId,
+    /// `dtlv_rti_tensor_set_erased_local(rt, tensor, tensor_td, indices, value, value_td) -> RtStatus`
+    pub tensor_set_erased: FuncId,
     /// `dtlv_rti_btreemap_set_value_erased_local(rt, map, map_td, key, key_td, value, value_td)`
     pub map_set_value_erased: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
@@ -876,12 +878,33 @@ impl RuntimeImports {
             .map_err(|e| CraneliftError::Module(
                 format!("declare dtlv_rti_btreemap_get_value_ref_erased_local: {}", e)))?;
 
-        // Writing a value into a slot whose type the caller names, whatever
-        // shape the value arrived in.
-        let element_write = module
-            .declare_function("dtlv_rti_element_write_local", Linkage::Import, &erasure_sig())
-            .map_err(|e| CraneliftError::Module(
-                format!("declare dtlv_rti_element_write_local: {}", e)))?;
+        // Replacing an element, whatever shape the value arrived in; each
+        // checks the index and takes the value whether or not it lands.
+        let list_set_erased = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));      // list
+            sig.params.push(AbiParam::new(PTR_TYPE));      // list tydesc
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // index
+            sig.params.push(AbiParam::new(PTR_TYPE));      // value
+            sig.params.push(AbiParam::new(PTR_TYPE));      // value tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_list_set_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_list_set_erased_local: {}", e)))?
+        };
+        let tensor_set_erased = {
+            let mut sig = module.make_signature();
+            for _ in 0..6 {
+                sig.params.push(AbiParam::new(PTR_TYPE));  // rt, tensor, tydesc, indices, value, tydesc
+            }
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module
+                .declare_function("dtlv_rti_tensor_set_erased_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_tensor_set_erased_local: {}", e)))?
+        };
 
         let map_set_value_erased = {
             let mut sig = module.make_signature();
@@ -923,7 +946,8 @@ impl RuntimeImports {
             element_tydesc,
             map_contains_key_erased,
             map_get_value_ref_erased,
-            element_write,
+            list_set_erased,
+            tensor_set_erased,
             map_set_value_erased,
             mem_alloc_raw,
             mem_free_raw,

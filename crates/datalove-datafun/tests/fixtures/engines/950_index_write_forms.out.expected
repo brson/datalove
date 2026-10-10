@@ -94,15 +94,13 @@ Analysis(
                         debuglog *v24
                         v25 = const 50int
                         v26 = const 0index
-                        v27 = listboundscheck s0[v26]
+                        v27 = listset s0[v26] = v25
                         branch v27, block12, block11
                     block11:
                         v28 = none
-                        drop v25
                         drop.tracked s0
                         return v28
                     block12:
-                        listset s0[v26] = v25
                         v29 = const 0index
                         v30 = listboundscheck s0[v29]
                         branch v30, block14, block13
@@ -144,15 +142,13 @@ Analysis(
                         debuglog *v11
                         v12 = const 50int
                         v13 = const 1u32
-                        v14 = mapcontainskey s0[v13]
+                        v14 = mapsetvalue s0[v13] = v12
                         branch v14, block6, block5
                     block5:
                         v15 = none
-                        drop v12
                         drop.tracked s0
                         return v15
                     block6:
-                        mapsetvalue s0[v13] = v12
                         v16 = const 1u32
                         v17 = mapcontainskey s0[v16]
                         branch v17, block8, block7

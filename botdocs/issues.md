@@ -211,15 +211,6 @@ uses of the name neither fail nor report again. The typechecker has no such
 type: `datalit::tycheck::Type::Error` is the language's `error` type, not a
 poison type.
 
-## A failed `set m[k]!` on a map says "index out of bounds"
-
-**Reasoned about** from the code. Reading `m[k]!` fails with `"key not found"`
-(`lower/src/expr.rs` picks the message by collection kind), but the `set` path,
-`emit_fallible_index_check` in `lower/src/stmt.rs`, emits `MapContainsKey` for a
-map and then hard-codes `"index out of bounds"` for the error. The fix is to
-pick the message the way `expr.rs` does, then drop the exception botspec §7.3
-notes.
-
 ## Compile-time evaluation has no limits
 
 **Reproduced.** CTFE runs the ordinary interpreter (`InterpCtfeEvaluator`) with

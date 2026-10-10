@@ -445,7 +445,8 @@ pub fn map_operands_in_instruction(
             list: replace_operand(list),
             index: replace_operand(index),
         },
-        Instruction::ListSet { list, index, value } => Instruction::ListSet {
+        Instruction::ListSet { is_valid, list, index, value } => Instruction::ListSet {
+            is_valid: *is_valid,
             list: replace_operand(list),
             index: replace_operand(index),
             value: replace_operand(value),
@@ -466,7 +467,8 @@ pub fn map_operands_in_instruction(
             map: replace_operand(map),
             key: replace_operand(key),
         },
-        Instruction::MapSetValue { map, key, value } => Instruction::MapSetValue {
+        Instruction::MapSetValue { is_valid, map, key, value } => Instruction::MapSetValue {
+            is_valid: *is_valid,
             map: replace_operand(map),
             key: replace_operand(key),
             value: replace_operand(value),
@@ -492,7 +494,8 @@ pub fn map_operands_in_instruction(
             tensor: replace_operand(tensor),
             index: replace_operand(index),
         },
-        Instruction::TensorSet { tensor, index, value } => Instruction::TensorSet {
+        Instruction::TensorSet { is_valid, tensor, index, value } => Instruction::TensorSet {
+            is_valid: *is_valid,
             tensor: replace_operand(tensor),
             index: replace_operand(index),
             value: replace_operand(value),

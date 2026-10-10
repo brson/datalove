@@ -18,6 +18,8 @@ var words: [string] = ["a", "c"]
 let ins_ok = insert(mut words, (: index / 1), "b")
 let ins_end = insert(mut words, (: index / 3), "d")
 let ins_oob = insert(mut words, (: index / 99), "nope")
+let rep_ok = replace(mut words, (: index / 3), "e")
+let rep_oob = replace(mut words, (: index / 99), "gone")
 
 // Removing gives the element up, so what comes back owns what it holds.
 let taken = remove(mut words, (: index / 0))
@@ -26,5 +28,5 @@ let taken_oob = remove(mut words, (: index / 50))
 call reserve(mut nums, (: index / 16))
 
 let output = ((set_ok, set_oob), first(ref nums), last(ref nums),
-              (ins_ok, ins_end, ins_oob),
+              (ins_ok, ins_end, ins_oob), (rep_ok, rep_oob),
               taken, taken_oob, len(ref words), first(ref words), last(ref words))

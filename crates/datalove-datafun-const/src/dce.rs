@@ -140,20 +140,20 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         // List indexing
         Instruction::ListGet { dest, .. } => Some(*dest),
         Instruction::ListBoundsCheck { is_valid, .. } => Some(*is_valid),
-        Instruction::ListSet { .. } => None,
+        Instruction::ListSet { is_valid, .. } => Some(*is_valid),
         Instruction::ListElementRef { dest, .. } => Some(*dest),
 
         // Map indexing
         Instruction::MapGet { dest, .. } => Some(*dest),
         Instruction::MapContainsKey { is_valid, .. } => Some(*is_valid),
-        Instruction::MapSetValue { .. } => None,
+        Instruction::MapSetValue { is_valid, .. } => Some(*is_valid),
         Instruction::MapValueRef { dest, .. } => Some(*dest),
         Instruction::MapUpsert { .. } => None,
 
         // Tensor indexing
         Instruction::TensorGet { dest, .. } => Some(*dest),
         Instruction::TensorBoundsCheck { is_valid, .. } => Some(*is_valid),
-        Instruction::TensorSet { .. } => None,
+        Instruction::TensorSet { is_valid, .. } => Some(*is_valid),
         Instruction::TensorIndexRef { dest, .. } => Some(*dest),
 
         // Misc
@@ -533,7 +533,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(list, used);
             add_operand_value(index, used);
         }
-        Instruction::ListSet { list, index, value } => {
+        Instruction::ListSet { list, index, value, .. } => {
             add_operand_value(list, used);
             add_operand_value(index, used);
             add_operand_value(value, used);
@@ -550,7 +550,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(map, used);
             add_operand_value(key, used);
         }
-        Instruction::MapSetValue { map, key, value } => {
+        Instruction::MapSetValue { map, key, value, .. } => {
             add_operand_value(map, used);
             add_operand_value(key, used);
             add_operand_value(value, used);
@@ -572,7 +572,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
             add_operand_value(tensor, used);
             add_operand_value(index, used);
         }
-        Instruction::TensorSet { tensor, index, value } => {
+        Instruction::TensorSet { tensor, index, value, .. } => {
             add_operand_value(tensor, used);
             add_operand_value(index, used);
             add_operand_value(value, used);

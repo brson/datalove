@@ -1874,12 +1874,17 @@ pub enum Instruction {
         index: Operand,
     },
 
-    /// Set a list element (assumes bounds already checked).
+    /// Replace a list element, if the index is in bounds.
     ///
-    /// Destroys old element, stores new value.
+    /// In bounds, destroys the old element, stores `value` and sets `is_valid`
+    /// to true. Past the end, destroys `value`, leaves the list as it was and
+    /// sets `is_valid` to false. One operation, as the runtime's `list_set` is:
+    /// no state between the check and the write is visible.
     ///
-    /// **Ownership:** Borrows `list` mutably, borrows `index`, consumes `value`.
+    /// **Ownership:** Borrows `list` mutably, borrows `index`, consumes `value`
+    /// whatever the outcome, produces `is_valid`.
     ListSet {
+        is_valid: ValueId,
         list: Operand,
         index: Operand,
         value: Operand,
@@ -1921,12 +1926,16 @@ pub enum Instruction {
         key: Operand,
     },
 
-    /// Set the value for an existing key in a map.
+    /// Replace the value for a key, if the map holds the key.
     ///
-    /// Destroys old value, stores new value. Key must exist (caller checks).
+    /// As `ListSet`: if the key is there, destroys its old value, stores
+    /// `value` and sets `is_valid`; if not, destroys `value`, leaves the map as
+    /// it was and clears `is_valid`.
     ///
-    /// **Ownership:** Borrows `map` mutably, borrows `key`, consumes `value`.
+    /// **Ownership:** Borrows `map` mutably, borrows `key`, consumes `value`
+    /// whatever the outcome, produces `is_valid`.
     MapSetValue {
+        is_valid: ValueId,
         map: Operand,
         key: Operand,
         value: Operand,
@@ -1984,12 +1993,16 @@ pub enum Instruction {
         index: Operand,
     },
 
-    /// Set a tensor element at axis-0 index (rank 1 only, bounds already checked).
+    /// Replace a tensor element at an axis-0 index (rank 1 only), if the index
+    /// is in bounds.
     ///
-    /// Destroys old element, stores new value.
+    /// As `ListSet`: in bounds, destroys the old element, stores `value` and
+    /// sets `is_valid`; past the end, destroys `value` and clears `is_valid`.
     ///
-    /// **Ownership:** Borrows `tensor` mutably, borrows `index`, consumes `value`.
+    /// **Ownership:** Borrows `tensor` mutably, borrows `index`, consumes
+    /// `value` whatever the outcome, produces `is_valid`.
     TensorSet {
+        is_valid: ValueId,
         tensor: Operand,
         index: Operand,
         value: Operand,
@@ -2139,7 +2152,7 @@ impl Instruction {
                 f(list);
                 f(index);
             }
-            I::ListSet { list, index, value } => {
+            I::ListSet { list, index, value, .. } => {
                 f(list);
                 f(index);
                 f(value);
@@ -2149,7 +2162,7 @@ impl Instruction {
                 f(map);
                 f(key);
             }
-            I::MapSetValue { map, key, value } | I::MapUpsert { map, key, value } => {
+            I::MapSetValue { map, key, value, .. } | I::MapUpsert { map, key, value } => {
                 f(map);
                 f(key);
                 f(value);
@@ -2159,7 +2172,7 @@ impl Instruction {
                 f(tensor);
                 f(index);
             }
-            I::TensorSet { tensor, index, value } => {
+            I::TensorSet { tensor, index, value, .. } => {
                 f(tensor);
                 f(index);
                 f(value);

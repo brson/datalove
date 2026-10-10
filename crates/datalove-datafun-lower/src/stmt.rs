@@ -853,22 +853,26 @@ fn lower_set_indexed<'db>(
             let value = take_value(ctx, value);
             ctx.emit(Instruction::MapUpsert { map: base_op, key: key_op, value });
         } else {
-            // Fallible index: set a[i]? = v / set a[i]! = v.
+            // Fallible index: set a[i]? = v / set a[i]! = v. The write checks
+            // the index itself and takes the value whether or not it lands, so
+            // the early return has nothing of the value's to drop.
             let error_mode = idx.error_mode.unwrap();
             let base_type = operand_type(ctx, &base_op);
-            emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode, true)?;
+            let base_op = super::expr::open_container(ctx, base_op, &base_type);
             let value = take_value(ctx, value);
+            let is_valid = ctx.fresh_value(IrType::Bool);
             match &base_type {
                 IrType::Map(_, _) => {
-                    ctx.emit(Instruction::MapSetValue { map: base_op, key: key_op, value });
+                    ctx.emit(Instruction::MapSetValue { is_valid, map: base_op, key: key_op, value });
                 }
                 IrType::Tensor(_, _) => {
-                    ctx.emit(Instruction::TensorSet { tensor: base_op, index: key_op, value });
+                    ctx.emit(Instruction::TensorSet { is_valid, tensor: base_op, index: key_op, value });
                 }
                 _ => {
-                    ctx.emit(Instruction::ListSet { list: base_op, index: key_op, value });
+                    ctx.emit(Instruction::ListSet { is_valid, list: base_op, index: key_op, value });
                 }
             }
+            emit_index_failure_branch(ctx, is_valid, &base_type, error_mode, true);
         }
     } else {
         // Last step is a field, but chain contains index -- use ref-based approach.
@@ -906,14 +910,12 @@ fn lower_set_field_path<'db>(
     }
 }
 
-/// Emit the early return block for an out-of-bounds index.
+/// Emit the validity check and early-return scaffolding for a fallible index
+/// that takes a reference: a read, or a step through an element to a field.
 ///
-/// Must be called with the early return block already started. Emits the
-/// appropriate None or Err value and terminates the block with a return.
-/// Emit the validity check and early-return scaffolding for fallible index operations.
-///
-/// Emits ListBoundsCheck or MapContainsKey based on collection type,
-/// branches on the result, emits an early-return block, and starts the continue block.
+/// Emits ListBoundsCheck, TensorBoundsCheck or MapContainsKey by collection
+/// type, branches on the result, emits an early-return block, and starts the
+/// continue block. A write to the element itself checks as it writes instead.
 /// `set_target` says the index is a step of a `set`'s place, whose early return
 /// drops by the statement's own schedule.
 pub(crate) fn emit_fallible_index_check(
@@ -949,7 +951,19 @@ pub(crate) fn emit_fallible_index_check(
             });
         }
     }
+    emit_index_failure_branch(ctx, is_valid, collection_type, error_mode, set_target);
+    Ok(())
+}
 
+/// Branch on `is_valid`, returning early with none or an error where it is
+/// false, and go on in a fresh block where it is true.
+fn emit_index_failure_branch(
+    ctx: &mut LowerCtx,
+    is_valid: ValueId,
+    collection_type: &IrType,
+    error_mode: ast::IndexErrorMode,
+    set_target: bool,
+) {
     let early_return_block = ctx.fresh_block();
     let continue_block = ctx.fresh_block();
     ctx.finish_block(Terminator::Branch {
@@ -973,7 +987,6 @@ pub(crate) fn emit_fallible_index_check(
     }
 
     ctx.start_block(continue_block);
-    Ok(())
 }
 
 /// Emit a reference to a collection element (list element or map value).

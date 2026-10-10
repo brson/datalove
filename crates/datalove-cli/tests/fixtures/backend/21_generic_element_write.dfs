@@ -8,10 +8,11 @@
 // `set` -- `list.set` through the rider was already right, which is why nothing
 // in `sys/std` showed it.
 //
-// `dtlv_rti_element_write_local` is the one place that decides now: it destroys
-// what was there against the slot's real descriptor, then unwraps a value that
-// came wrapped whole, converts one that came in the slot's erased shape, and
-// moves one that is already what the slot wants.
+// The runtime's erased set functions (`dtlv_rti_list_set_erased_local` and
+// its tensor and map kin) decide now: each destroys what was there against
+// the slot's real descriptor, then unwraps a value that came wrapped whole,
+// converts one that came in the slot's erased shape, and moves one that is
+// already what the slot wants.
 //
 // The address was wrong too, for the same reason it was wrong for a read: a
 // stride taken from a static element type that says `data`.
