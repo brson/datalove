@@ -17,7 +17,7 @@ home here.
 - [No table module, and none can be written](#user-content-no-table-module-and-none-can-be-written)
 - [A unit that fails part way through leaves its index to the next one](#user-content-a-unit-that-fails-part-way-through-leaves-its-index-to-the-next-one)
 - [The loop check asks where a binding ended up, not whether its move repeats](#user-content-the-loop-check-asks-where-a-binding-ended-up-not-whether-its-move-repeats)
-- [The jit cannot see a loop, and the C backend is built at -O0](#user-content-the-jit-cannot-see-a-loop-and-the-c-backend-is-built-at--o0)
+- [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
 - [A `let` that fails to typecheck leaves its name undefined](#user-content-a-let-that-fails-to-typecheck-leaves-its-name-undefined)
 - [A failed `set m[k]!` on a map says "index out of bounds"](#user-content-a-failed-set-mk-on-a-map-says-index-out-of-bounds)
 - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
@@ -168,16 +168,13 @@ ended up. Two things depend on the present rule and would have to move with it:
 Loop exits themselves are settled: see `merge_loop_exits`, D014, and
 `std_tests/152_owned_past_a_loop_exit`.
 
-## The jit cannot see a loop, and the C backend is built at -O0
+## No inlining in Cranelift, and the C backend is built at -O0
 
-**Reasoned from the code; the speedups are measured.** Four gaps in what the
-compiled tiers do, each cheap to state and none started.
+**Reasoned from the code; the speedups are measured.** Gaps in what the
+compiled tiers do, each cheap to state and none started. (Another, that the
+JIT could not see a loop in a function called once, is fixed by OSR; see
+[Tuning the JIT](plan-jit-tuning.md#user-content-osr).)
 
-- **No back-edge counting and no OSR.** `JitEngine::record_call` counts calls
-  and only calls, and compiled code is entered only at a call. A function called
-  once that loops ten million times is never compiled. `loop_arith`'s 86x exists
-  because its loop sits in a function called twenty times; move it up a level and
-  the speedup is 1.0x.
 - **No inlining in Cranelift.** Nothing implements
   `cranelift_codegen::inline::Inline` or calls `Context::inline`, so neither the
   jit nor the cranelift AOT backend inlines. A call between two compiled

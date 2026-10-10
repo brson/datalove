@@ -287,6 +287,10 @@ struct ScriptCommand {
     /// Compile a function on this call to it rather than the first.
     #[arg(long, value_name = "CALLS", requires = "jit")]
     jit_threshold: Option<u32>,
+    /// Go on in compiled code from a loop once it has run this many times,
+    /// in a function not yet compiled.
+    #[arg(long, value_name = "ITERATIONS", requires = "jit")]
+    jit_osr_threshold: Option<u32>,
     /// Print to stderr what the JIT compiled and how calls crossed between it
     /// and the interpreter. Implies `--time`.
     #[arg(long, requires = "jit")]
@@ -636,6 +640,9 @@ impl ScriptCommand {
                 .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;
             if self.jit_stats {
                 dispatcher.jit_mut().count_calls();
+            }
+            if let Some(iterations) = self.jit_osr_threshold {
+                dispatcher.jit_mut().set_osr_threshold(iterations);
             }
             Some(Box::new(dispatcher))
         } else {

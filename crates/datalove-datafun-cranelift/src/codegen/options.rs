@@ -267,7 +267,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(track_offset) = self.layout.values[dest.0 as usize].tracking_byte {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
-            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
+            let frame_addr = frame_slot.addr(builder, 0);
 
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
@@ -310,7 +310,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for EnumVariant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
 
         // Write discriminant (variant_index as u32) at offset 0.
         let disc_val = builder.ins().iconst(cl_types::I32, variant_index as i64);
@@ -399,7 +399,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for EnumPayload".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
                 let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
                 builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload_addr, size);
                 self.values.insert(dest, dest_addr);
@@ -479,7 +479,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if ok_track_offset.is_some() || err_track_offset.is_some() {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
-            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
+            let frame_addr = frame_slot.addr(builder, 0);
 
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);

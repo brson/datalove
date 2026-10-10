@@ -75,6 +75,18 @@ pub enum SitePolicy {
     Enter(CompiledEntry),
 }
 
+/// What the interpreter is to do about a loop it has run a while.
+#[derive(Clone, Copy, Debug)]
+pub enum LoopPolicy {
+    /// Run this many more iterations, then ask again.
+    Count(u32),
+    /// Run it in the interpreter, and do not ask again.
+    Interpret,
+    /// Enter compiled code at the loop's header, through `enter_loop`, which
+    /// runs the rest of the call.
+    Enter(CompiledEntry),
+}
+
 /// Result of dispatching a call.
 pub enum DispatchResult {
     /// Call was handled by the dispatcher.
@@ -157,6 +169,39 @@ pub trait CallDispatcher {
     ) -> Result<(), InterpError> {
         let _ = (func, entry, words, call_ctx);
         unreachable!("a dispatcher that gives no compiled entries was asked to enter one")
+    }
+
+    /// What to do about the loop headed by `header` in `func`, whose body is
+    /// `body`, now that the interpreter has run `iterations` more of it.
+    ///
+    /// Asked by a frame running the body, at the header, whose state is
+    /// therefore that of entering it. `call_ctx` is that frame's: the context
+    /// it runs in, and so what compiled code would call back into the
+    /// interpreter with.
+    fn loop_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        header: datalove_datafun_ir::BlockId,
+        iterations: u32,
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<LoopPolicy, InterpError> {
+        let _ = (func, body, header, iterations, call_ctx);
+        Ok(LoopPolicy::Interpret)
+    }
+
+    /// Enter `entry`, which `loop_policy` gave for `func`, with `words`: the
+    /// runtime handle, where the result goes if the code takes it, and the
+    /// frame. The code runs the rest of the call, result and all.
+    fn enter_loop(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        let _ = (func, entry, words, call_ctx);
+        unreachable!("a dispatcher that compiles no loops was asked to enter one")
     }
 
     /// Convert to Any for downcasting.

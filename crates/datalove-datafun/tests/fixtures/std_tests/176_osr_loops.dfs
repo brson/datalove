@@ -1,0 +1,120 @@
+// Loops entered partway through a call, from the interpreter's frame, under
+// the JIT's OSR: each of these, run with every loop entered early, has to
+// give what the interpreter gives.
+
+require module sys/std/list
+require module sys/std/map
+
+// Carried scalars, a slot and a parameter.
+fun sum_squares(n: u64): !u64
+    var total: u64 = 0
+    var i: u64 = 0
+    loop while i .< n
+        set total +!= i *! i
+        set i +!= 1
+    end loop
+    ret ok total
+end fun
+
+// An inner loop that needs what the outer one defines, so that only the
+// outer loop's header can be entered; and one that needs nothing of it.
+fun triangle(n: u64): !u64
+    var total: u64 = 0
+    var i: u64 = 0
+    loop while i .< n
+        let width = i +! 1
+        var j: u64 = 0
+        loop while j .< width
+            set total +!= 1
+            set j +!= 1
+        end loop
+        set i +!= 1
+    end loop
+    ret ok total
+end fun
+
+fun grid(n: u64): !u64
+    var total: u64 = 0
+    var i: u64 = 0
+    loop while i .< n
+        var j: u64 = 0
+        loop while j .< n
+            set total +!= j
+            set j +!= 1
+        end loop
+        set i +!= 1
+    end loop
+    ret ok total
+end fun
+
+// Owned values made in the loop and kept past it.
+fun evens(n: u32): ![u32]
+    var out: [u32] = []
+    var i: u32 = 0
+    loop while i .< n
+        call list.push(mut out, i *! 2)
+        set i +!= 1
+    end loop
+    ret ok out
+end fun
+
+fun counts(ref words: [string]): !%{string = u32}
+    var seen: %{string = u32} = %{}
+    var i: index = 0
+    loop while i .< list.len(ref words)
+        let _ = map.add(mut seen, ref words[i]!@, 1)!
+        set i = icall add_wrapping_index(i, : index / 1)
+    end loop
+    ret ok seen
+end fun
+
+// A borrowed parameter read on every iteration.
+fun total(ref xs: [u64]): !u64
+    var sum: u64 = 0
+    var i: index = 0
+    loop while i .< list.len(ref xs)
+        set sum +!= xs[i]!
+        set i = icall add_wrapping_index(i, : index / 1)
+    end loop
+    ret ok sum
+end fun
+
+// An error from inside the loop, after it has been entered.
+fun overflow_at(start: u8): !u8
+    var x: u8 = start
+    loop
+        set x +!= 1
+    end loop
+    ret ok x
+end fun
+
+// A generic function's loop, whose descriptors come from the frame.
+fun count<T>(ref xs: [T]): index
+    var n: index = 0
+    var i: index = 0
+    loop while i .< list.len(ref xs)
+        set n = icall add_wrapping_index(n, : index / 1)
+        set i = icall add_wrapping_index(i, : index / 1)
+    end loop
+    ret n
+end fun
+
+// A loop left by `break`, from the middle.
+fun first_over(ref xs: [u64], limit: u64): !index
+    var i: index = 0
+    loop while i .< list.len(ref xs)
+        if xs[i]! .> limit
+            break
+        end if
+        set i = icall add_wrapping_index(i, : index / 1)
+    end loop
+    ret ok i
+end fun
+
+let xs: [u64] = [5, 1, 9, 30, 2, 70, 4]
+let words = ["a", "b", "a", "c", "b", "a"]
+let output = (
+    sum_squares(10), sum_squares(10), triangle(8), grid(6),
+    evens(5), counts(ref words), total(ref xs), total(ref xs),
+    overflow_at(250), count(ref xs), count(ref words), first_over(ref xs, 20),
+)

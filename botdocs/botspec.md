@@ -2109,8 +2109,9 @@ is expected is a mismatch rather than a conversion, and the same in reverse;
 | `docs` | Generate HTML documentation from `mandocs/` |
 
 `script` takes `--jit` to compile hot functions rather than interpreting them,
-with `--jit-threshold` to say how many calls make a function hot and
-`--jit-stats` to report what was compiled; `--time` prints how long compiling
+with `--jit-threshold` to say how many calls make a function hot,
+`--jit-osr-threshold` how many iterations make a loop worth entering in compiled
+code partway through a call, and `--jit-stats` to report what was compiled; `--time` prints how long compiling
 and running took. `aot-compile` takes `--link`, `--run` and `--c`, the last emitting C and
 compiling that rather than emitting an object file directly. `script`,
 `script-ir`, `script-world` and `aot-compile` each take `--no-sys` to leave the

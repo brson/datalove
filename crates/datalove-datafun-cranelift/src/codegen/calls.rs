@@ -170,7 +170,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let frame_slot = self.frame_slot.ok_or_else(|| {
                 CraneliftError::Codegen("out parameter tracking requires frame slot".into())
             })?;
-            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let track_addr = frame_slot.addr(builder, track_offset as i32);
             let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
             let live = builder.ins().iconst(cl_types::I8, datalove_datafun_ir::frame_layout::tracking::LIVE as i64);
             let is_live = builder.ins().icmp(
@@ -340,7 +340,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 CraneliftError::Codegen("no frame slot for sret return value".into())
             })?;
             let dest_offset = self.layout.value_offset(dest.0);
-            let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+            let ptr = frame_slot.addr(builder, dest_offset as i32);
             call_args.push(ptr);
 
             // For aggregates, the pointer IS the value (used by downstream as address).
@@ -362,7 +362,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 CraneliftError::Codegen("no frame slot for a unit return".into())
             })?;
             let dest_offset = self.layout.value_offset(dest.0);
-            let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+            let ptr = frame_slot.addr(builder, dest_offset as i32);
             self.values.insert(dest, ptr);
         }
 
@@ -434,7 +434,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             if let CraneliftRepr::Scalar(scalar_ty) = types::ir_type_to_cranelift(dest_ty) {
                 let frame_slot = self.frame_slot.unwrap();
                 let dest_offset = self.layout.value_offset(dest.0);
-                let ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let ptr = frame_slot.addr(builder, dest_offset as i32);
                 let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), ptr, 0);
                 self.values.insert(dest, loaded);
             }
@@ -509,7 +509,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for native call result".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         let dest_tydesc_id = self.tydesc(dest_ty)?;
         let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);

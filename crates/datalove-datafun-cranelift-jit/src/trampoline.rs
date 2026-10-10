@@ -19,10 +19,11 @@
 use std::cell::RefCell;
 use std::ptr::NonNull;
 
-use datalove_datafun_ir::{CodeUnitId, IrModuleId};
+use datalove_datafun_ir::{BlockId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{
-    Destination, ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, IrInterpreter,
-    Value,
+    CallDispatcher, CompiledEntry, Destination, DispatchCallContext, DispatchResult,
+    ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, InterpError, IrInterpreter,
+    LoopPolicy, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
@@ -48,26 +49,33 @@ thread_local! {
     static DISPATCH_CONTEXT: RefCell<Option<NonNull<DispatchContext<'static>>>> = const { RefCell::new(None) };
 }
 
-/// Set the dispatch context for JIT trampolines.
+/// The dispatch context a `set_dispatch_context` replaced, to be put back.
+#[must_use = "the context replaced has to be restored"]
+pub struct PreviousContext(Option<NonNull<DispatchContext<'static>>>);
+
+/// Set the dispatch context for JIT trampolines, until restored.
+///
+/// Contexts nest: compiled code can call into the interpreter, which can
+/// enter compiled code again, with a context of its own, before returning to
+/// the code with the first.
 ///
 /// # Safety
 ///
 /// The context must remain valid for the duration of JIT execution.
-/// Caller must call `clear_dispatch_context` before the context is dropped.
-pub unsafe fn set_dispatch_context(ctx: &mut DispatchContext<'_>) {
+/// Caller must call `restore_dispatch_context` with what this returns before
+/// the context is dropped.
+pub unsafe fn set_dispatch_context(ctx: &mut DispatchContext<'_>) -> PreviousContext {
     // SAFETY: We're extending the lifetime, but caller guarantees validity.
     let ptr = unsafe {
         NonNull::new_unchecked(ctx as *mut DispatchContext<'_> as *mut DispatchContext<'static>)
     };
-    DISPATCH_CONTEXT.with(|cell| {
-        *cell.borrow_mut() = Some(ptr);
-    });
+    PreviousContext(DISPATCH_CONTEXT.with(|cell| cell.borrow_mut().replace(ptr)))
 }
 
-/// Clear the dispatch context.
-pub fn clear_dispatch_context() {
+/// Put back the dispatch context a `set_dispatch_context` replaced.
+pub fn restore_dispatch_context(previous: PreviousContext) {
     DISPATCH_CONTEXT.with(|cell| {
-        *cell.borrow_mut() = None;
+        *cell.borrow_mut() = previous.0;
     });
 }
 
@@ -228,6 +236,10 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         }
         Ok(Recorded::Interpret) => {
             ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, false, 1);
+            // The engine, for what the interpreter calls in turn: the
+            // dispatcher it belongs to is out of the interpreter for as long as
+            // the compiled code calling this runs.
+            ctx.interp.lend_dispatcher(Box::new(LentEngine(&mut *ctx.jit_engine)));
             // An `in` argument that is not copied belongs to the interpreter
             // now, which destroys it; the compiled caller does not touch it
             // after the call.
@@ -241,11 +253,86 @@ pub unsafe extern "C" fn __jit_dispatch_call(
                 ctx.registry,
                 ctx.frames,
             );
+            drop(ctx.interp.reclaim_dispatcher());
             if let Err(e) = result {
                 panic!("JIT dispatch: interpreter call failed: {:?}", e);
             }
         }
         Err(e) => panic!("JIT dispatch: compiling {} failed: {}", ir_unit.name, e),
+    }
+}
+
+/// A `JitEngine` lent to the interpreter while compiled code calls into it;
+/// see `IrInterpreter::lend_dispatcher`.
+///
+/// Holds the engine by the pointer the trampoline's context has to it, which
+/// nothing else uses until the interpreter returns and the loan is taken back.
+struct LentEngine(*mut JitEngine);
+
+impl LentEngine {
+    fn engine(&mut self) -> &mut JitEngine {
+        // SAFETY: lent for the length of one interpreter call, during which
+        // the trampoline that lent it does not use it.
+        unsafe { &mut *self.0 }
+    }
+}
+
+impl CallDispatcher for LentEngine {
+    fn dispatch_call(
+        &mut self,
+        code_ref: &CodeRef,
+        func: &IrCodeUnit,
+        args: &[Value],
+        ret_dest: Destination,
+        rt_handle: LocalRtHandle,
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> DispatchResult {
+        self.engine().dispatch_call(code_ref, func, args, ret_dest, rt_handle, call_ctx)
+    }
+
+    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        self.engine().site_policy(func, body)
+    }
+
+    fn call_compiled(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        self.engine().call_compiled(func, entry, words, call_ctx);
+        Ok(())
+    }
+
+    fn loop_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        header: BlockId,
+        iterations: u32,
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<LoopPolicy, InterpError> {
+        self.engine().loop_policy(func, body, header, iterations, call_ctx)
+    }
+
+    fn enter_loop(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        self.engine().enter_loop(func, entry, words, call_ctx);
+        Ok(())
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
     }
 }
 

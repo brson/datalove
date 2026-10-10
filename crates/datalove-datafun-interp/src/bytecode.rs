@@ -228,6 +228,10 @@ pub(crate) enum Op {
     /// Make the call that is instruction `index` of block `block`, straight
     /// into the call path rather than through the IR walker's dispatch.
     Call { block: u32, index: u32 },
+    /// Count an iteration of the loop `loops[at]` heads, the first op of its
+    /// header: where the frame is as entering the header, which is where
+    /// compiled code can take over (`IrInterpreter::loop_hot`).
+    LoopHead { at: u32 },
     /// Make the call described by `calls[site]`, whose arguments are all in
     /// this frame, without the general call path. Takes the general one whenever
     /// a dispatcher is installed, so the JIT sees every call.
@@ -713,6 +717,21 @@ pub(crate) struct BcFunction {
     pool: Vec<u8>,
     switches: Vec<SwitchTable>,
     statics: Vec<StaticSlot>,
+    /// What each `LoopHead` counts.
+    loops: Vec<LoopCounter>,
+}
+
+/// A loop header's count of iterations, toward asking the dispatcher whether
+/// to go on in compiled code from there.
+///
+/// One per body rather than per frame, so it counts the loop's iterations in
+/// every call running it.
+struct LoopCounter {
+    header: BlockId,
+    /// Iterations left until the dispatcher is asked again.
+    left: std::cell::Cell<u32>,
+    /// How many there were when it was last set, which the asking reports.
+    batch: std::cell::Cell<u32>,
 }
 
 /// A const a `StaticRef` op names, and where the pool put it.
@@ -820,6 +839,7 @@ struct Lowering<'a> {
     /// Whether each block is in a loop, where hoisting a constant out of it
     /// saves work rather than adding it to every call.
     in_loop: Vec<bool>,
+    loops: Vec<LoopCounter>,
     /// The block being lowered, and the instruction in it.
     block: usize,
     index: usize,
@@ -997,9 +1017,19 @@ impl<'a> Lowering<'a> {
     fn lower(mut self) -> (BcFunction, u32) {
         let func = self.func;
         self.count_uses();
+        let headers = self.loop_headers();
         for (b, block) in func.blocks.iter().enumerate() {
             self.block = b;
             self.cur = b;
+            if headers[b] {
+                let at = self.loops.len() as u32;
+                self.loops.push(LoopCounter {
+                    header: block.id,
+                    left: std::cell::Cell::new(1),
+                    batch: std::cell::Cell::new(1),
+                });
+                self.emit(Op::LoopHead { at });
+            }
             for (i, instr) in block.instructions.iter().enumerate() {
                 self.index = i;
                 if !self.lower_instruction(instr) {
@@ -1078,7 +1108,7 @@ impl<'a> Lowering<'a> {
         let escapes = self.escapes;
         (BcFunction {
             func: self.func, ops, entry, pool: self.pool, switches: self.switches, calls: self.calls,
-            descs: self.descs, rt: self.rt, statics: self.statics,
+            descs: self.descs, rt: self.rt, statics: self.statics, loops: self.loops,
         }, escapes)
     }
 
@@ -1779,6 +1809,34 @@ impl Lowering<'_> {
         self.in_loop = self.loop_blocks();
     }
 
+    /// Which blocks head a loop: in one, and entered by an edge from a block
+    /// at or after them, which is how a loop's body goes back to its top.
+    fn loop_headers(&self) -> Vec<bool> {
+        let blocks = &self.func.blocks;
+        let mut headers = vec![false; blocks.len()];
+        for (b, block) in blocks.iter().enumerate() {
+            let mut back = |target: BlockId| {
+                let t = target.0 as usize;
+                if t <= b && self.in_loop[t] {
+                    headers[t] = true;
+                }
+            };
+            match &block.terminator {
+                Terminator::Goto { target, .. } => back(*target),
+                Terminator::Branch { then_block, else_block, .. } => {
+                    back(*then_block);
+                    back(*else_block);
+                }
+                Terminator::Switch { cases, default, .. } => {
+                    cases.iter().for_each(|(_, t)| back(*t));
+                    back(*default);
+                }
+                _ => {}
+            }
+        }
+        headers
+    }
+
     /// Which blocks can reach themselves.
     fn loop_blocks(&self) -> Vec<bool> {
         let blocks = &self.func.blocks;
@@ -1821,7 +1879,7 @@ impl Op {
     fn places(&self, f: &mut impl FnMut(Loc, u32)) {
         const I: u32 = rtdt::INDEX_SIZE;
         match *self {
-            Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::Jump { .. }
+            Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::Jump { .. } | Op::LoopHead { .. }
             | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
             | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. }
@@ -1937,7 +1995,8 @@ impl Op {
             | Op::Drop { .. } | Op::DropTracked { .. } | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. }
             | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. }
             | Op::CkAssign { .. } | Op::CkAssignU32I { .. } | Op::Switch { .. }
-            | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. } => {}
+            | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
+            | Op::LoopHead { .. } => {}
         }
     }
 }
@@ -1979,6 +2038,7 @@ impl BcFunction {
                 }
                 Op::EdgeIr { block, .. } | Op::ReturnIr { block } => in_table(block, func.blocks.len(), "block"),
                 Op::CallFast { site } => in_table(site, self.calls.len(), "call site"),
+                Op::LoopHead { at } => in_table(at, self.loops.len(), "loop"),
                 Op::StaticRef { slot, .. } => in_table(slot, self.statics.len(), "static"),
                 Op::ConstPool { at: pool_at, len, .. } | Op::ConstString { at: pool_at, len, .. } => {
                     assert!(pool_at + len <= self.pool.len() as u32, "{}: op {} reads past the pool", func.name, at);
@@ -2049,6 +2109,7 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout, optimize: bool) -> (Bc
         const_u32: Vec::new(),
         pinned: Vec::new(),
         in_loop: Vec::new(),
+        loops: Vec::new(),
         block: 0,
         index: 0,
     }
@@ -2468,6 +2529,16 @@ impl IrInterpreter {
                         pc = if ck_assign(base, ty, kind, place, b) { ovf } else { ok } as usize;
                         continue;
                     }
+                    Op::LoopHead { at } => {
+                        let counter = &bc.loops[at as usize];
+                        let left = counter.left.get();
+                        if left > 1 {
+                            counter.left.set(left - 1);
+                        } else if tri!(self.loop_hot(regs, counter, base)) {
+                            // Compiled code ran the rest of the call.
+                            ret!();
+                        }
+                    }
                     Op::CkAssignU32IBr { kind, place, imm, ovf, ok } => {
                         pc = if ck_assign_as::<u32>(base, kind, place, imm) { ovf } else { ok } as usize;
                         continue;
@@ -2849,6 +2920,84 @@ impl IrInterpreter {
             weight: 1,
         };
         let result = dispatcher.call_compiled(plan.func, plan.entry, &words[..len], call_ctx);
+        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
+        result
+    }
+
+    /// Ask the dispatcher about a loop whose counter ran out, and go on in
+    /// compiled code if it says to. Returns whether it did, in which case the
+    /// call is over, its result written.
+    ///
+    /// The frame is the running one, at the loop's header.
+    #[inline(never)]
+    fn loop_hot(&mut self, regs: &mut Regs<'_>, counter: &LoopCounter, base: *mut u8) -> Result<bool, InterpError> {
+        // How long to go before asking again when there is nothing to ask:
+        // long enough to cost nothing, and a dispatcher may yet be installed.
+        const UNASKED: u32 = 1 << 16;
+        let set = |n: u32| {
+            counter.left.set(n);
+            counter.batch.set(n);
+        };
+        if self.call_dispatcher.borrow().is_none() {
+            set(UNASKED);
+            return Ok(false);
+        }
+        // A script unit's loops stay in the interpreter: only a function has
+        // a frame compiled code can carry on in.
+        let Some(code_ref) = regs.code_ref else {
+            set(u32::MAX);
+            return Ok(false);
+        };
+        if regs.func.function_context().is_none() {
+            set(u32::MAX);
+            return Ok(false);
+        }
+        let func = crate::dispatch::FuncIdentity::of(code_ref, regs.ctx.unit());
+        let iterations = counter.batch.get();
+
+        let mut dispatcher = self.call_dispatcher.borrow_mut().take().expect("installed");
+        let call_ctx = crate::dispatch::DispatchCallContext {
+            exec_ctx: &regs.ctx,
+            registry: regs.registry,
+            frames: &mut *regs.frames,
+            interp: self,
+            shape_descriptors: &[],
+            weight: 1,
+        };
+        let result = match dispatcher.loop_policy(func, regs.func, counter.header, iterations, call_ctx) {
+            Err(e) => Err(e),
+            Ok(crate::dispatch::LoopPolicy::Count(n)) => {
+                set(n.max(1));
+                Ok(false)
+            }
+            Ok(crate::dispatch::LoopPolicy::Interpret) => {
+                set(u32::MAX);
+                Ok(false)
+            }
+            Ok(crate::dispatch::LoopPolicy::Enter(entry)) => {
+                // The next call to run the loop asks again, and is told the
+                // same at once.
+                set(1);
+                let mut words = [self.runtime.handle() as usize, 0, 0];
+                let len = if entry.uses_sret {
+                    words[1] = regs.ret_dest.ptr as usize;
+                    words[2] = base as usize;
+                    3
+                } else {
+                    words[1] = base as usize;
+                    2
+                };
+                let call_ctx = crate::dispatch::DispatchCallContext {
+                    exec_ctx: &regs.ctx,
+                    registry: regs.registry,
+                    frames: &mut *regs.frames,
+                    interp: self,
+                    shape_descriptors: &[],
+                    weight: 1,
+                };
+                dispatcher.enter_loop(func, entry, &words[..len], call_ctx).map(|()| true)
+            }
+        };
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
         result
     }

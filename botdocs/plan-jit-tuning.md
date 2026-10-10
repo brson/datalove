@@ -5,8 +5,8 @@ program shaped like an application, using the store demo (`demos/store`) as
 the workload, and for adding on-stack replacement (OSR), which the demo shows
 the JIT needs.
 
-> **This is a plan.** Steps 0, 1 and 2 are done (October 2026); the rest is
-> not started. The numbers are from a release build on 4 CPUs.
+> **This is a plan.** Steps 0 to 3 are done (October 2026); the rest is not
+> started. The numbers are from a release build on 4 CPUs.
 
 ## Contents
 
@@ -41,11 +41,11 @@ iterations, and `db.build_*_slots`, which run under CTFE at compile time.
 
 | Engine | Wall time | Compiled | Codegen |
 |---|---|---|---|
-| Interpreter (bytecode) | 904 ms | - | - |
-| `--jit` (threshold 1) | 613 ms | 86 | 67 ms |
-| `--jit-threshold 2` | 619 ms | 63 | 21 ms |
-| `--jit-threshold 100` | 709 ms | 40 | 11 ms |
-| AOT executable | 236 ms | - | - |
+| Interpreter (bytecode) | 866 ms | - | - |
+| `--jit` (threshold 1) | 571 ms | 86 | 63 ms |
+| `--jit-threshold 2` | 555 ms | 65 | 43 ms |
+| `--jit-threshold 100` | 550 ms | 43 | 34 ms |
+| AOT executable | 228 ms | - | - |
 
 At 20,000 orders; the [grid](#user-content-the-baseline-grid) has the rest. Compiling the program, which reads the data and evaluates
 the id maps under CTFE, is about 300 ms of every `script` run (`--time`
@@ -53,12 +53,12 @@ prints it), so the threshold-1 JIT runs the report in about 300 ms, of which
 about 70 ms is codegen and some of the rest is `JitEngine::new`. That is within
 reach of AOT, at the price of compiling every function called even once.
 
-**A threshold of 100 is 1.28x the interpreter, and threshold 1 is 1.47x.**
-What is left between them is the loops: under a threshold the queries that
-run them are called once and stay interpreted, which is what
-[OSR](#user-content-osr) is for. Before calls into compiled code were planned,
-a threshold of 100 was slower than having no JIT at all; see [Making the
-crossings cheap](#user-content-making-the-crossings-cheap).
+**A threshold of 100 is 1.57x the interpreter, ahead of threshold 1 at
+1.52x,** since [OSR](#user-content-osr) enters the queries' loops, called once,
+in compiled code. Before OSR it was 1.28x, and before calls into compiled code
+were planned it was slower than having no JIT at all; see [Making the
+crossings cheap](#user-content-making-the-crossings-cheap). Codegen now
+includes the entries compiled at loops.
 
 **Codegen of the first function costs about 4 ms** whatever it is
 (`db.order_count`, 72 bytes, is the most expensive function to compile in the
@@ -96,10 +96,9 @@ each later step. The results are [below](#user-content-the-baseline-grid).
 threshold from 2 up now beats the interpreter at every size; threshold 1
 still loses at 2,000 orders, to its codegen rather than to crossings.
 
-**3. OSR,** below. Checked by `just check` in the demo, which diffs the report
-against `check.py`, and by chaos mode taking OSR at random back-edges in
-`engine_tests`. Done when a threshold of 100 with OSR runs the report close to
-the threshold-1 time while compiling far fewer than 86 functions.
+**3. OSR (done),** [below](#user-content-osr). The goal was a threshold of 100
+with OSR running the report close to the threshold-1 time while compiling far
+fewer than 86 functions; it runs it faster than threshold 1, compiling 39.
 
 **4. Tune.** Sweep the call threshold, the back-edge threshold -- or one
 counter of calls plus back-edges over some k, as HotSpot does -- and
@@ -113,63 +112,67 @@ program, then record it in the compiler guide's performance notes.
 
 ## The baseline grid
 
-From `just grid` with planned calls into compiled code (step 2), on a quiet
-machine. Times in ms, medians of 7 rounds (3 at 200,000). Wall is the whole
-process; compile and run are what `--time` reports; the last three columns
-are from one `--jit-stats` run.
+From `just grid` with OSR (step 3) at its default threshold of 1000
+iterations, on a quiet machine. Times in ms, medians of 7 rounds (3 at
+200,000). Wall is the whole process; compile and run are what `--time`
+reports; the last three columns are from one `--jit-stats` run, codegen
+including the entries compiled at loops.
 
 **2,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 154 | 68 | 75 | 1.00x | - | - | - |
-| jit t=1 | 179 | 71 | 94 | 0.86x | 86 | 62 | 122 |
-| jit t=2 | 143 | 71 | 59 | 1.08x | 63 | 20 | 244,449 |
-| jit t=10 | 149 | 70 | 68 | 1.03x | 49 | 15 | 368,025 |
-| jit t=100 | 146 | 71 | 64 | 1.05x | 39 | 10 | 366,373 |
-| jit t=1000 | 147 | 71 | 64 | 1.05x | 31 | 8 | 351,053 |
-| aot | 36 | - | - | 4.33x | - | - | - |
+| interp | 148 | 62 | 76 | 1.00x | - | - | - |
+| jit t=1 | 162 | 62 | 87 | 0.91x | 86 | 57 | 122 |
+| jit t=2 | 150 | 62 | 76 | 0.99x | 65 | 40 | 72,205 |
+| jit t=10 | 148 | 63 | 74 | 1.00x | 53 | 38 | 77,309 |
+| jit t=100 | 144 | 63 | 70 | 1.03x | 42 | 33 | 76,163 |
+| jit t=1000 | 146 | 63 | 72 | 1.01x | 33 | 31 | 68,257 |
+| aot | 34 | - | - | 4.37x | - | - | - |
 
 **20,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 904 | 272 | 586 | 1.00x | - | - | - |
-| jit t=1 | 613 | 276 | 296 | 1.47x | 86 | 67 | 123 |
-| jit t=2 | 619 | 275 | 304 | 1.46x | 63 | 21 | 2,230,818 |
-| jit t=10 | 708 | 276 | 398 | 1.28x | 50 | 16 | 3,193,880 |
-| jit t=100 | 709 | 276 | 394 | 1.28x | 40 | 11 | 3,192,246 |
-| jit t=1000 | 704 | 277 | 390 | 1.28x | 33 | 9 | 3,176,700 |
-| aot | 236 | - | - | 3.83x | - | - | - |
+| interp | 866 | 252 | 582 | 1.00x | - | - | - |
+| jit t=1 | 571 | 249 | 284 | 1.52x | 86 | 63 | 123 |
+| jit t=2 | 555 | 249 | 273 | 1.56x | 65 | 43 | 71,518 |
+| jit t=10 | 555 | 248 | 271 | 1.56x | 54 | 39 | 76,836 |
+| jit t=100 | 550 | 248 | 266 | 1.57x | 43 | 34 | 75,717 |
+| jit t=1000 | 556 | 249 | 272 | 1.56x | 36 | 33 | 68,138 |
+| aot | 228 | - | - | 3.80x | - | - | - |
 
 **200,000 orders**
 
 | Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
 |---|---|---|---|---|---|---|---|
-| interp | 7307 | 2432 | 4595 | 1.00x | - | - | - |
-| jit t=1 | 4654 | 2494 | 1839 | 1.57x | 86 | 103 | 123 |
-| jit t=2 | 5002 | 2447 | 2273 | 1.46x | 63 | 21 | 21,743,927 |
-| jit t=10 | 5558 | 2432 | 2835 | 1.31x | 50 | 17 | 28,500,058 |
-| jit t=100 | 5554 | 2433 | 2839 | 1.32x | 41 | 11 | 28,498,444 |
-| jit t=1000 | 5535 | 2442 | 2815 | 1.32x | 33 | 9 | 28,482,960 |
-| aot | 1765 | - | - | 4.14x | - | - | - |
+| interp | 7120 | 2218 | 4636 | 1.00x | - | - | - |
+| jit t=1 | 4373 | 2258 | 1805 | 1.63x | 86 | 95 | 123 |
+| jit t=2 | 4264 | 2236 | 1771 | 1.67x | 65 | 43 | 71,144 |
+| jit t=10 | 4230 | 2205 | 1767 | 1.68x | 54 | 40 | 76,581 |
+| jit t=100 | 4232 | 2212 | 1759 | 1.68x | 44 | 35 | 75,486 |
+| jit t=1000 | 4264 | 2220 | 1775 | 1.67x | 36 | 33 | 67,964 |
+| aot | 1714 | - | - | 4.15x | - | - | - |
 
 What it says:
 
-- **Every threshold from 2 up beats the interpreter at every size,** 1.03-1.08x
-  at 2,000 orders and 1.3-1.46x past that. Before step 2 the ones from 10 up
-  lost at every size, by 4-14%.
-- **The thresholds from 10 up are all alike,** about 1.3x, because the same
-  functions get compiled under all of them and the code worth compiling is in
-  loops none of them reach. Threshold 2 does better because it catches the
-  queries the report calls twice.
-- **Compiling everything wins once the run is long enough,** and only then:
-  at 2,000 orders its 62 ms of codegen is most of the interpreted run of 75
-  ms, and it is the one setting slower than the interpreter. Cheaper codegen
-  (`opt_level`) would move the break-even down.
-- **AOT is the ceiling, at 3.8-4.3x.**
+- **Every threshold from 2 up runs the report faster than compiling
+  everything,** 1.56-1.68x the interpreter past 2,000 orders against 1.52-1.63x
+  for threshold 1, compiling 33-54 functions rather than 86. Before OSR they
+  were 1.28-1.46x.
+- **The thresholds are all alike now,** because the loops decide it: a query
+  is entered at its loop whatever the threshold for calls.
+- **Calls into compiled code fell from 3.2 million to about 75,000,** since
+  the loops making them are compiled too.
+- **At 2,000 orders it is about even with the interpreter,** and threshold 1
+  still loses: codegen, 31-57 ms, is a large share of a 75 ms run. The OSR
+  threshold and `opt_level` are what step 4 has to tune for that.
+- **AOT is the ceiling, at 3.8-4.4x.** At 200,000 orders the JIT's running
+  phase, 1.76 s, is about what AOT's whole run is, 1.71 s; what is left between
+  them is the front end, which compiles the program for the JIT on every run.
 
-Before step 2, at 20,000 orders: thresholds 10, 100 and 1000 ran at 0.93x,
+Before OSR, at 20,000 orders: threshold 100 ran at 1.28x and threshold 1 at
+1.47x. Before step 2, at 20,000 orders: thresholds 10, 100 and 1000 ran at 0.93x,
 0.91x and 0.95x the interpreter, and threshold 2 at 1.19x.
 
 Two things the first run of the grid found, both fixed before step 2:
@@ -303,35 +306,90 @@ whatever its callees are.
 
 ## OSR
 
-Two facts about this codebase make OSR smaller than it usually is.
+Done (step 3). Two facts about this codebase made it smaller than OSR usually
+is.
 
 **No way back.** The JIT does not speculate, so compiled code never needs to
 leave for the interpreter. OSR goes one way, interpreter to compiled code, and
 the hard half of OSR elsewhere -- materializing an interpreter frame from
 compiled state -- does not arise.
 
-**One frame layout.** `IrLayout` lays out the interpreter's frames and
-compiled code's frame slot alike: values, slots and tracking bytes at the same
-offsets. A loop's carried values are block parameters, which have fixed places
-in the frame, so at a loop header the whole of the loop's state is in the
+**One frame layout.** Both sides lay a function's frame out with
+`FrameLayout::compute` from the same types: values, slots and tracking bytes
+at the same offsets. A loop's carried values are block parameters, which have
+fixed places in the frame, so at a loop header the loop's state is in the
 frame bytes.
 
-The sketch:
+How it works:
 
-- **Count back-edges.** In the bytecode, a `Jump` to a lower pc; in the IR
-  walker, a `Goto` or `Branch` to a block that dominates it. Keyed by
-  `(FuncIdentity, header block)`.
-- **Compile an entry at the header.** At the threshold, compile a variant of
-  the function taking `(rt, frame, [sret])`, whose entry block loads the
-  header's block parameters from `frame` and jumps to the header. It uses the
-  interpreter's frame bytes in place rather than its own stack slot, so a
-  reference into the frame stays good; that means codegen's
-  `stack_addr(frame_slot, offset)` becomes an address off a frame base that is
-  either the stack slot or the parameter.
-- **Return as the function.** The variant returns into the caller's
-  destination, and the interpreter pops the frame as if the call had returned.
-  Compile the ordinary entry at the same time, so the next call starts native.
+- **Counting.** The bytecode starts every loop header with an
+  `Op::LoopHead`, which counts down a `LoopCounter` in the body's
+  `BcFunction`, shared by every call running it. A header is an in-loop block
+  entered by an edge from a block at or after it. When a header is copied
+  into its latch by `duplicate_short_branches`, the op is copied with it, and
+  the frame is as entering the header wherever it runs. When the count runs
+  out, `IrInterpreter::loop_hot` asks the dispatcher for a `LoopPolicy` --
+  count so many more, interpret, or enter -- reporting how many iterations it
+  counted. With no dispatcher it asks again every 65,536.
+- **Deciding.** `JitEngine::loop_policy` sums iterations per `(function,
+  header)` against `osr_threshold` (`--jit-osr-threshold`, default 1000) and
+  then compiles an entry there for the frame that asked; later frames to ask
+  are given the same entry at once. Only a function's frame is entered, not a
+  script unit's.
+- **Compiling.** `FunctionCompiler::compile_osr_as` compiles the blocks
+  reachable from the header, entered by a block of its own taking `(rt,
+  [sret], frame)`. The frame is a `FrameBase::Ptr`: every frame address is
+  formed off the interpreter's frame instead of the code's own stack slot, so
+  references into it stay good. The entry block loads the parameters'
+  pointers and descriptors and the shape descriptors from where the
+  interpreter keeps them (`OsrSpec`), and the header's block parameters from
+  their places, and jumps to the header. A value defined before the loop is
+  read from its place in the frame the first time compiled code asks for it,
+  inserted before the entry's jump; a scalar constant is made again instead,
+  since the bytecode folds `u32` constants into what reads them and may never
+  write them to the frame.
+- **Refusing.** If the code reached defines a value the header needs -- an
+  inner loop's header, needing what the enclosing loop's body defines -- there
+  would be two places it comes from with nothing to choose between them, so
+  `osr_check` refuses the header (a liveness pass over the reached blocks,
+  with what each block's compilation defined). The outer loop's header is
+  then the one entered, which compiles both loops. A reference whose
+  descriptor only its projection works out is refused too.
+- **Entering.** The interpreter calls the entry with its frame and the call's
+  result destination; the code runs the rest of the call, and the
+  interpreter returns from the frame as it does after a `Return`.
 
-What to test, beyond the demo: a reference live across the header, owned
-values with tracking bytes, nested loops where only the inner one is hot, and
-a `!` return after entering.
+What it took beyond the sketch:
+
+- **A dispatcher for compiled code's callees.** A call the dispatcher makes
+  takes it out of the interpreter for as long as the call runs, so compiled
+  code calling an interpreted function through `__jit_dispatch_call` used to
+  run it with no JIT at all: nothing it called was counted, entered or
+  compiled. With the query loops compiled, `ord.sorted` went that way, and
+  the 613,000 calls it makes to `ord.greater_at` ran interpreted instead of
+  compiled; OSR made the demo slower until the trampoline lent the engine to
+  the interpreter for the call (`IrInterpreter::lend_dispatcher`,
+  `LentEngine`). That made the trampoline's thread-local context nest, so
+  `set_dispatch_context` now returns the context it replaced for
+  `restore_dispatch_context` to put back.
+- **Not done:** compiling the function's ordinary entry at the same time.
+  The function is compiled by its own call count, as before.
+
+Tested by an `osr` engine in `engine_tests` (no function compiled by its
+calls, every function's loops entered after one to three iterations, by the
+fixture's seed), the same at two iterations in `std_engine_tests`, where the
+library's loops are, and `std_tests/176_osr_loops`: carried scalars, an
+inner loop refused and one entered, owned values made in the loop, a
+borrowed parameter, an error from inside the loop, a generic function (one
+entry for both instantiations, its descriptors from the frame) and a
+`break`. Chaos mode enters loops at random. The engine fixtures have few
+loops in functions -- eight -- so the library is where the coverage is.
+
+Known rough edges:
+
+- An aggregate parameter of the header is passed as its own address, which
+  the header then copies onto itself.
+- Compiled code's entries, ordinary and OSR, are kept by `FuncIdentity`, and
+  nothing forgets them when bodies are replaced.
+- Every call from compiled code into the interpreter allocates two `Vec`s and
+  probes the layout cache; with OSR there are many more of those.

@@ -122,7 +122,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for an indexed element".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
         let size = builder.ins().iconst(
             PTR_TYPE, std::mem::size_of::<datalove_rtdt::Data>() as i64);
         builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload, size);
@@ -206,7 +206,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for ListGet aggregate dest".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 

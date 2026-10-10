@@ -173,7 +173,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for erasure result".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Whether the source is a place this frame tracks, which is what says
         // it may be holding nothing.
@@ -201,7 +201,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let frame = self.frame_slot.ok_or_else(|| {
                     CraneliftError::Codegen("tracked erasure requires frame slot".into())
                 })?;
-                let track_addr = builder.ins().stack_addr(PTR_TYPE, frame, track_offset as i32);
+                let track_addr = frame.addr(builder, track_offset as i32);
                 let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
                 let live_const = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
                 let is_live = builder.ins().icmp(

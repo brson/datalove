@@ -79,7 +79,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BlockId, ConstValue, FunctionContext, FunctionRegistry, IrCodeUnit, ParamMode,
+    BlockId, ConstValue, FunctionContext, FunctionRegistry, IrBlock, IrCodeUnit, ParamMode,
     IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
     Terminator, ValueId,
 };
@@ -323,8 +323,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Cranelift variables for mutable slots (SlotId).
     #[allow(dead_code)]
     slot_vars: HashMap<SlotId, Variable>,
-    /// Stack slot for frame data (aggregates, spilled values).
-    frame_slot: Option<cl_ir::StackSlot>,
+    /// Where the frame is: values, slots and tracking bytes, as `layout` says.
+    frame_slot: Option<FrameBase>,
     /// Next variable index for Cranelift.
     #[allow(dead_code)]
     next_var: u32,
@@ -344,6 +344,10 @@ pub struct FunctionCompiler<'a, M: Module> {
     static_consts: StaticConsts,
     /// The stack memory constants are built in; see `constants::ConstScratch`.
     const_scratch: constants::ConstScratchArea,
+    /// Where to enter, if this is an OSR entry rather than the function.
+    osr_spec: Option<OsrSpec>,
+    /// What compiling the OSR entry keeps, while it compiles.
+    osr: Option<OsrState>,
 }
 
 /// The values a function builds straight into its caller's result slot: each
@@ -378,19 +382,128 @@ fn return_slot_values(func: &IrCodeUnit) -> std::collections::HashSet<ValueId> {
         .collect()
 }
 
+/// The blocks reachable from `from`, itself included.
+fn reachable_from(func: &IrCodeUnit, from: BlockId) -> std::collections::HashSet<BlockId> {
+    let mut seen = std::collections::HashSet::new();
+    let mut work = vec![from];
+    while let Some(id) = work.pop() {
+        if !seen.insert(id) {
+            continue;
+        }
+        let block = func.blocks.iter().find(|b| b.id == id).expect("a block of the function");
+        work.extend(successors(&block.terminator));
+    }
+    seen
+}
+
+/// The blocks a terminator goes on to.
+fn successors(term: &Terminator) -> Vec<BlockId> {
+    match term {
+        Terminator::Goto { target, .. } => vec![*target],
+        Terminator::Branch { then_block, else_block, .. } => vec![*then_block, *else_block],
+        Terminator::Switch { cases, default, .. } => {
+            cases.iter().map(|(_, b)| *b).chain(std::iter::once(*default)).collect()
+        }
+        Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => vec![],
+    }
+}
+
+/// Whether a constant is one scalar an OSR entry makes again; see
+/// `OsrState::consts`.
+fn is_scalar_const(value: &ConstValue) -> bool {
+    matches!(value,
+        ConstValue::Bool(_) | ConstValue::U8(_) | ConstValue::U16(_) | ConstValue::U32(_)
+        | ConstValue::U64(_) | ConstValue::I8(_) | ConstValue::I16(_) | ConstValue::I32(_)
+        | ConstValue::I64(_) | ConstValue::Index(_) | ConstValue::Offset(_)
+        | ConstValue::F32(_) | ConstValue::F64(_))
+}
+
+/// The bits of an integer or boolean constant, for `iconst`.
+fn scalar_const_bits(value: &ConstValue) -> i64 {
+    match value {
+        ConstValue::Bool(b) => *b as i64,
+        ConstValue::U8(v) => *v as i64,
+        ConstValue::U16(v) => *v as i64,
+        ConstValue::U32(v) => *v as i64,
+        ConstValue::U64(v) => *v as i64,
+        ConstValue::I8(v) => *v as i64,
+        ConstValue::I16(v) => *v as i64,
+        ConstValue::I32(v) => *v as i64,
+        ConstValue::I64(v) => *v,
+        ConstValue::Index(v) => *v as i64,
+        ConstValue::Offset(v) => *v as i64,
+        other => unreachable!("{:?} is not an integer constant", other),
+    }
+}
+
+/// Where a function's frame is.
+///
+/// Its own stack slot, or, for code entered partway through from the
+/// interpreter (on-stack replacement), the interpreter's frame for the call,
+/// which has the same layout and goes on being used in place.
+#[derive(Clone, Copy)]
+pub(crate) enum FrameBase {
+    Slot(cl_ir::StackSlot),
+    Ptr(cl_ir::Value),
+}
+
+/// An entry into a function at one of its loop headers rather than at its
+/// start, from the interpreter's frame for a call already running it
+/// (on-stack replacement).
+///
+/// The code takes the runtime handle, the `sret` pointer if the function has
+/// one, and the frame, and carries on in the frame in place: values, slots
+/// and tracking bytes are where `FrameLayout` puts them in both. The rest is
+/// where the interpreter keeps it, which this says.
+pub struct OsrSpec {
+    /// The block entered, a loop header.
+    pub header: BlockId,
+    /// Where each parameter's `Value` is: its pointer, then its descriptor.
+    pub param_offsets: Vec<u32>,
+    /// Where the shape descriptors are, one word each.
+    pub shape_offset: u32,
+}
+
+/// What compiling an OSR entry keeps; see `OsrSpec`.
+struct OsrState {
+    /// The blocks reachable from the header, which are all that is compiled.
+    reachable: std::collections::HashSet<BlockId>,
+    /// The interpreter's frame.
+    frame: cl_ir::Value,
+    /// The entry block's jump to the header, before which a value defined
+    /// before the loop is read in, the first time something asks for it.
+    entry_jump: cl_ir::Inst,
+    /// Those values, read in.
+    materialized: std::cell::RefCell<HashMap<ValueId, cl_ir::Value>>,
+    /// The scalar constants, which are made again rather than read: the
+    /// bytecode folds a constant into what reads it and may never write it to
+    /// the frame.
+    consts: HashMap<ValueId, ConstValue>,
+}
+
+impl FrameBase {
+    /// The address `offset` bytes into the frame.
+    pub(crate) fn addr(self, builder: &mut FunctionBuilder, offset: i32) -> cl_ir::Value {
+        match self {
+            FrameBase::Slot(slot) => builder.ins().stack_addr(PTR_TYPE, slot, offset),
+            FrameBase::Ptr(base) => builder.ins().iadd_imm_s(base, offset as i64),
+        }
+    }
+}
+
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Where an option or result is built: in the caller's result slot if it
     /// is one `return_slot_values` found, otherwise in this frame.
     fn wrap_dest_addr(
         &self,
         builder: &mut FunctionBuilder,
-        frame_slot: cl_ir::StackSlot,
+        frame_slot: FrameBase,
         dest: ValueId,
         dest_offset: u32,
     ) -> cl_ir::Value {
         match self.sret_param {
             Some(sret) if self.return_slot.contains(&dest) => sret,
-            _ => builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32),
+            _ => frame_slot.addr(builder, dest_offset as i32),
         }
     }
 
@@ -441,6 +554,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
             const_scratch: constants::ConstScratchArea::default(),
+            osr_spec: None,
+            osr: None,
         }
     }
 
@@ -493,6 +608,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
             const_scratch: constants::ConstScratchArea::default(),
+            osr_spec: None,
+            osr: None,
         }
     }
 
@@ -541,6 +658,29 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.compile_body(func_id, sig)
     }
 
+    /// Compile an entry into the function at a loop header, from an
+    /// interpreter frame; see `OsrSpec`.
+    ///
+    /// Only what can be reached from the header is compiled. Refused, as
+    /// `CraneliftError::Unsupported`, where a value the loop needs is made
+    /// inside the code reached -- by an enclosing loop's body, for an inner
+    /// loop's header -- since there would be two places it comes from and
+    /// nothing to choose between them; and where one is a reference whose
+    /// descriptor only its making works out.
+    pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<FuncId, CraneliftError> {
+        let mut sig = cl_ir::Signature::new(self.isa.default_call_conv());
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+        if uses_sret(&self.func_ctx.return_type) {
+            sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+        }
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+        let func_id = self.module
+            .declare_function(symbol, Linkage::Export, &sig)
+            .map_err(|e| CraneliftError::Module(format!("declare function: {}", e)))?;
+        self.osr_spec = Some(spec);
+        self.compile_body(func_id, sig)
+    }
+
     /// Compile a function that has already been declared.
     ///
     /// Use this for two-pass compilation where functions are declared first.
@@ -561,18 +701,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut fb_ctx = FunctionBuilderContext::new();
         let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
 
+        // The blocks to compile: every one, or for an OSR entry, those the
+        // header reaches.
+        let reachable = self.osr_spec.as_ref().map(|spec| reachable_from(self.func, spec.header));
+        let compiled = |id: BlockId| reachable.as_ref().is_none_or(|r| r.contains(&id));
+
         // Create frame stack slot if needed.
-        if self.layout.frame_size > 0 {
+        if self.layout.frame_size > 0 && self.osr_spec.is_none() {
             let slot_data = cl_ir::StackSlotData::new(
                 cl_ir::StackSlotKind::ExplicitSlot,
                 self.layout.frame_size,
                 types::align_shift(self.layout.frame_align),
             );
-            self.frame_slot = Some(builder.create_sized_stack_slot(slot_data));
+            self.frame_slot = Some(FrameBase::Slot(builder.create_sized_stack_slot(slot_data)));
         }
 
         // Create blocks with their parameters.
         for block in &self.func.blocks {
+            if !compiled(block.id) {
+                continue;
+            }
             let cl_block = builder.create_block();
 
             // Add block params for IR block params.
@@ -590,83 +738,93 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.blocks.insert(block.id, cl_block);
         }
 
-        // Set up entry block with parameters.
-        let entry_block = self.blocks[&BlockId(0)];
-        builder.append_block_params_for_function_params(entry_block);
-        builder.switch_to_block(entry_block);
-        // Don't seal yet - wait until all blocks are compiled for loop back-edges.
-
-        // Extract block parameters.
-        // Layout: [rt_handle, sret? (if aggregate return), user_param_0, user_param_1, ...]
-        let param_values: Vec<_> = builder.block_params(entry_block).to_vec();
-
-        // First param is always rt_handle (implicit).
-        self.rt_handle_param = Some(param_values[0]);
-
-        // Check if this function uses sret.
-        let has_sret = uses_sret(&self.func_ctx.return_type);
-        let user_param_start = if has_sret {
-            // Second param is sret pointer.
-            self.sret_param = Some(param_values[1]);
-            2
+        if self.osr_spec.is_some() {
+            self.enter_osr(&mut builder, reachable.clone().expect("an OSR entry has its reachable blocks"));
         } else {
-            1
-        };
+            // Set up entry block with parameters.
+            let entry_block = self.blocks[&BlockId(0)];
+            builder.append_block_params_for_function_params(entry_block);
+            builder.switch_to_block(entry_block);
+            // Don't seal yet - wait until all blocks are compiled for loop back-edges.
 
-        // User params start after implicit params, and the descriptors the
-        // caller supplied follow them.
-        let user_param_count = self.func_ctx.param_types.len();
-        for (i, &val) in param_values[user_param_start..].iter().take(user_param_count).enumerate() {
-            let param_id = ParamId(i as u32);
-            // Track param values for get_operand_value.
-            self.param_values.insert(param_id, val);
-        }
-        let descriptor_start = user_param_start + user_param_count;
-        for (&param_id, &val) in self.func_ctx.descriptor_params.iter()
-            .zip(param_values[descriptor_start..].iter())
-        {
-            self.descriptor_values.insert(param_id, val);
-        }
-        let shape_start = descriptor_start + self.func_ctx.descriptor_params.len();
-        self.shape_descriptor_values = param_values[shape_start..].iter().copied()
-            .take(self.func_ctx.descriptor_shapes.len())
-            .collect();
+            // Extract block parameters.
+            // Layout: [rt_handle, sret? (if aggregate return), user_param_0, user_param_1, ...]
+            let param_values: Vec<_> = builder.block_params(entry_block).to_vec();
 
-        // Initialize aggregate slots and tracking bytes region.
-        // - Aggregate slots: 0xFF poison makes uninitialized reads obvious
-        // - Tracking bytes: 0x00 (UNINIT), so DropTracked skips them
-        if let Some(frame_slot) = self.frame_slot {
-            // Fill aggregate slots with 0xFF poison pattern.
-            for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
-                let repr = types::ir_type_to_cranelift(slot_ty);
-                if let CraneliftRepr::Aggregate(layout) = repr {
-                    let slot_offset = self.layout.slot_offset(slot_idx as u32);
-                    let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
-                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                    let poison = builder.ins().iconst(cl_types::I8, 0xFF_u8 as i64);
-                    builder.call_memset(self.isa.frontend_config(), addr, poison, size);
+            // First param is always rt_handle (implicit).
+            self.rt_handle_param = Some(param_values[0]);
+
+            // Check if this function uses sret.
+            let has_sret = uses_sret(&self.func_ctx.return_type);
+            let user_param_start = if has_sret {
+                // Second param is sret pointer.
+                self.sret_param = Some(param_values[1]);
+                2
+            } else {
+                1
+            };
+
+            // User params start after implicit params, and the descriptors the
+            // caller supplied follow them.
+            let user_param_count = self.func_ctx.param_types.len();
+            for (i, &val) in param_values[user_param_start..].iter().take(user_param_count).enumerate() {
+                let param_id = ParamId(i as u32);
+                // Track param values for get_operand_value.
+                self.param_values.insert(param_id, val);
+            }
+            let descriptor_start = user_param_start + user_param_count;
+            for (&param_id, &val) in self.func_ctx.descriptor_params.iter()
+                .zip(param_values[descriptor_start..].iter())
+            {
+                self.descriptor_values.insert(param_id, val);
+            }
+            let shape_start = descriptor_start + self.func_ctx.descriptor_params.len();
+            self.shape_descriptor_values = param_values[shape_start..].iter().copied()
+                .take(self.func_ctx.descriptor_shapes.len())
+                .collect();
+
+            // Initialize aggregate slots and tracking bytes region.
+            // - Aggregate slots: 0xFF poison makes uninitialized reads obvious
+            // - Tracking bytes: 0x00 (UNINIT), so DropTracked skips them
+            if let Some(frame_slot) = self.frame_slot {
+                // Fill aggregate slots with 0xFF poison pattern.
+                for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
+                    let repr = types::ir_type_to_cranelift(slot_ty);
+                    if let CraneliftRepr::Aggregate(layout) = repr {
+                        let slot_offset = self.layout.slot_offset(slot_idx as u32);
+                        let addr = frame_slot.addr(&mut builder, slot_offset as i32);
+                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                        let poison = builder.ins().iconst(cl_types::I8, 0xFF_u8 as i64);
+                        builder.call_memset(self.isa.frontend_config(), addr, poison, size);
+                    }
+                }
+
+                // Zero-init tracking bytes.
+                if self.layout.tracking_count > 0 {
+                    let track_addr = frame_slot.addr(&mut builder, self.layout.tracking_offset as i32);
+                    let size = builder.ins().iconst(PTR_TYPE, self.layout.tracking_count as i64);
+                    let zero = builder.ins().iconst(cl_types::I8, 0);
+                    builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
                 }
             }
-
-            // Zero-init tracking bytes.
-            if self.layout.tracking_count > 0 {
-                let track_addr = builder.ins().stack_addr(
-                    PTR_TYPE,
-                    frame_slot,
-                    self.layout.tracking_offset as i32,
-                );
-                let size = builder.ins().iconst(PTR_TYPE, self.layout.tracking_count as i64);
-                let zero = builder.ins().iconst(cl_types::I8, 0);
-                builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
-            }
         }
+
+        // Per block, for an OSR entry, the values compiling it defined; see
+        // `osr_check`.
+        let mut defined: HashMap<BlockId, std::collections::HashSet<ValueId>> = HashMap::new();
 
         // Compile each block.
         for ir_block in &self.func.blocks {
+            if !compiled(ir_block.id) {
+                continue;
+            }
             let cl_block = self.blocks[&ir_block.id];
+            let before: Option<std::collections::HashSet<ValueId>> =
+                self.osr.is_some().then(|| self.values.keys().copied().collect());
 
-            // Switch to block (entry already switched).
-            if ir_block.id != BlockId(0) {
+            // Switch to block (entry already switched, unless this is an OSR
+            // entry, whose entry is its own).
+            if ir_block.id != BlockId(0) || self.osr.is_some() {
                 builder.switch_to_block(cl_block);
 
                 // Map block params to IR ValueIds.
@@ -698,7 +856,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             // Aggregate: block param is PTR to source. Copy to local frame.
                             let frame_slot = self.frame_slot.expect("aggregate block param requires frame slot");
                             let dest_offset = self.layout.value_offset(ir_value_id.0);
-                            let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                            let dest_addr = frame_slot.addr(&mut builder, dest_offset as i32);
 
                             // memcpy from incoming pointer to local frame location.
                             let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
@@ -723,6 +881,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // Compile terminator.
             self.compile_terminator(&mut builder, &ir_block.terminator)?;
+
+            if let Some(before) = before {
+                let new = self.values.keys().filter(|v| !before.contains(v)).copied().collect();
+                defined.insert(ir_block.id, new);
+            }
+        }
+        if self.osr.is_some() {
+            self.osr_check(&defined)?;
         }
 
         // Seal all blocks now that all predecessors are known (required for loops).
@@ -1193,16 +1359,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 CraneliftError::Codegen("no frame slot for slot operand".into())
             })?;
             let slot_offset = self.layout.slot_offset(slot_id.0);
-            let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+            let addr = frame_slot.addr(builder, slot_offset as i32);
             return Ok(addr);
         }
 
         // ValueRef: the stored value is a pointer - return it directly.
         // This is used for ref/mut/out params to get the dereferenced location.
         if let Operand::ValueRef(vid) = operand {
-            return self.values.get(vid).copied().ok_or_else(|| {
-                CraneliftError::Codegen(format!("undefined value: {:?}", vid))
-            });
+            return self.value(builder, *vid);
         }
 
         let ty = self.get_operand_type(operand)?;
@@ -1229,7 +1393,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let frame_slot = self.frame_slot.ok_or_else(|| {
                         CraneliftError::Codegen("no frame slot for value spill".into())
                     })?;
-                    let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, offset as i32);
+                    let addr = frame_slot.addr(builder, offset as i32);
                     builder.ins().store(MemFlagsData::new(), val, addr, 0);
                     return Ok(addr);
                 }
@@ -1257,16 +1421,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         op: &Operand,
     ) -> Result<cl_ir::Value, CraneliftError> {
         match op {
-            Operand::Value(vid) => {
-                self.values.get(vid).copied().ok_or_else(|| {
-                    CraneliftError::Codegen(format!("undefined value: {:?}", vid))
-                })
-            }
+            Operand::Value(vid) => self.value(builder, *vid),
             Operand::ValueRef(vid) => {
                 // ValueRef: the stored value is a pointer. Dereference it.
-                let ptr = self.values.get(vid).copied().ok_or_else(|| {
-                    CraneliftError::Codegen(format!("undefined value: {:?}", vid))
-                })?;
+                let ptr = self.value(builder, *vid)?;
 
                 // Get the inner type (the type being pointed to).
                 let ref_ty = &self.func.value_types[vid.0 as usize];
@@ -1321,12 +1479,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 match repr {
                     CraneliftRepr::Scalar(cl_ty) => {
-                        let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                        let addr = frame_slot.addr(builder, slot_offset as i32);
                         Ok(builder.ins().load(cl_ty, MemFlagsData::new(), addr, 0))
                     }
                     CraneliftRepr::Aggregate(_) => {
                         // Aggregate: return pointer to slot location.
-                        Ok(builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32))
+                        Ok(frame_slot.addr(builder, slot_offset as i32))
                     }
                 }
             }
@@ -1398,7 +1556,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(track_offset) = self.tracking_byte_offset(operand) {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
-            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let track_addr = frame_slot.addr(builder, track_offset as i32);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             builder.ins().store(MemFlagsData::new(), live_val, track_addr, 0);
         }
@@ -1415,7 +1573,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(track_offset) = self.tracking_byte_offset(operand) {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
-            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let track_addr = frame_slot.addr(builder, track_offset as i32);
             let moved_val = builder.ins().iconst(cl_types::I8, tracking::MOVED as i64);
             builder.ins().store(MemFlagsData::new(), moved_val, track_addr, 0);
         }
@@ -1443,7 +1601,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(track_offset) = self.param_tracking_byte_offset(pid) {
             let frame_slot = self.frame_slot
                 .expect("tracking requires frame slot");
-            let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+            let track_addr = frame_slot.addr(builder, track_offset as i32);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             builder.ins().store(MemFlagsData::new(), live_val, track_addr, 0);
         }
@@ -1454,13 +1612,169 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// For ref values, the stored cranelift value IS the pointer.
     fn get_value_as_ref_ptr(
         &self,
-        _builder: &mut FunctionBuilder,
+        builder: &mut FunctionBuilder,
         vid: ValueId,
     ) -> Result<cl_ir::Value, CraneliftError> {
         // GetFieldRef stores the pointer directly in self.values.
-        self.values.get(&vid).copied().ok_or_else(|| {
-            CraneliftError::Codegen(format!("ref value {:?} not found", vid))
-        })
+        self.value(builder, vid)
+    }
+
+    /// The Cranelift value for `vid`: what defined it, or in an OSR entry, for
+    /// one defined before the loop, what the interpreter's frame holds.
+    fn value(&self, builder: &mut FunctionBuilder, vid: ValueId) -> Result<cl_ir::Value, CraneliftError> {
+        if let Some(v) = self.values.get(&vid) {
+            return Ok(*v);
+        }
+        let Some(osr) = &self.osr else {
+            return Err(CraneliftError::Codegen(format!("undefined value: {:?}", vid)));
+        };
+        if let Some(v) = osr.materialized.borrow().get(&vid) {
+            return Ok(*v);
+        }
+        if self.ref_descs.contains_key(&vid) {
+            return Err(CraneliftError::Unsupported(format!(
+                "entering a loop that needs reference {:?}, whose descriptor is worked out where it is made", vid)));
+        }
+        use cranelift_codegen::cursor::{Cursor, FuncCursor};
+        let ty = &self.func.value_types[vid.0 as usize];
+        let offset = self.layout.value_offset(vid.0) as i32;
+        let mut pos = FuncCursor::new(builder.func).at_inst(osr.entry_jump);
+        let v = match (types::ir_type_to_cranelift(ty), osr.consts.get(&vid)) {
+            (CraneliftRepr::Scalar(cl_ty), Some(c)) => match c {
+                ConstValue::F32(f) => pos.ins().f32const(f.0),
+                ConstValue::F64(f) => pos.ins().f64const(f.0),
+                c => pos.ins().iconst(cl_ty, scalar_const_bits(c)),
+            },
+            (CraneliftRepr::Scalar(cl_ty), None) => {
+                pos.ins().load(cl_ty, MemFlagsData::trusted(), osr.frame, offset)
+            }
+            (CraneliftRepr::Aggregate(_), _) => pos.ins().iadd_imm_s(osr.frame, offset as i64),
+        };
+        osr.materialized.borrow_mut().insert(vid, v);
+        Ok(v)
+    }
+
+    /// Set up an OSR entry's own entry block: the parameters and descriptors
+    /// from where the interpreter keeps them, and a jump to the header with
+    /// its parameters as the frame holds them.
+    fn enter_osr(&mut self, builder: &mut FunctionBuilder, reachable: std::collections::HashSet<BlockId>) {
+        let spec = self.osr_spec.as_ref().expect("an OSR entry");
+        let entry = builder.create_block();
+        builder.append_block_params_for_function_params(entry);
+        builder.switch_to_block(entry);
+        let params = builder.block_params(entry).to_vec();
+        self.rt_handle_param = Some(params[0]);
+        let has_sret = uses_sret(&self.func_ctx.return_type);
+        if has_sret {
+            self.sret_param = Some(params[1]);
+        }
+        let frame = params[if has_sret { 2 } else { 1 }];
+        self.frame_slot = Some(FrameBase::Ptr(frame));
+
+        let flags = MemFlagsData::trusted();
+        let word = types::PTR_SIZE as i32;
+        for (i, &offset) in spec.param_offsets.iter().enumerate() {
+            let ptr = builder.ins().load(PTR_TYPE, flags, frame, offset as i32);
+            self.param_values.insert(ParamId(i as u32), ptr);
+        }
+        for &param in &self.func_ctx.descriptor_params {
+            let offset = spec.param_offsets[param.0 as usize] as i32 + word;
+            let tydesc = builder.ins().load(PTR_TYPE, flags, frame, offset);
+            self.descriptor_values.insert(param, tydesc);
+        }
+        self.shape_descriptor_values = (0..self.func_ctx.descriptor_shapes.len())
+            .map(|k| builder.ins().load(PTR_TYPE, flags, frame, spec.shape_offset as i32 + k as i32 * word))
+            .collect();
+
+        // The header's parameters as an edge into it would pass them: a
+        // scalar itself, an aggregate by its address.
+        let header = self.func.blocks.iter().find(|b| b.id == spec.header)
+            .expect("the header is a block of the function");
+        let args: Vec<cranelift_codegen::ir::BlockArg> = header.params.iter().map(|&v| {
+            let offset = self.layout.value_offset(v.0) as i32;
+            let arg = match types::ir_type_to_cranelift(&self.func.value_types[v.0 as usize]) {
+                CraneliftRepr::Scalar(cl_ty) => builder.ins().load(cl_ty, flags, frame, offset),
+                CraneliftRepr::Aggregate(_) => builder.ins().iadd_imm_s(frame, offset as i64),
+            };
+            cranelift_codegen::ir::BlockArg::from(arg)
+        }).collect();
+        let entry_jump = builder.ins().jump(self.blocks[&spec.header], &args);
+
+        let consts = self.func.blocks.iter()
+            .flat_map(|b| &b.instructions)
+            .filter_map(|instr| match instr {
+                Instruction::Const { dest, value } if is_scalar_const(value) => Some((*dest, value.clone())),
+                _ => None,
+            })
+            .collect();
+        self.osr = Some(OsrState {
+            reachable,
+            frame,
+            entry_jump,
+            materialized: std::cell::RefCell::new(HashMap::new()),
+            consts,
+        });
+    }
+
+    /// Refuse an OSR entry whose header needs a value that the code it
+    /// reaches defines: an enclosing loop's, or one asked for before the block
+    /// defining it was compiled, either way read from the frame where the
+    /// code also makes it.
+    ///
+    /// `defined` is, per block compiled, what compiling it defined.
+    fn osr_check(&self, defined: &HashMap<BlockId, std::collections::HashSet<ValueId>>) -> Result<(), CraneliftError> {
+        let osr = self.osr.as_ref().expect("an OSR entry");
+        let spec = self.osr_spec.as_ref().expect("an OSR entry");
+        let all: std::collections::HashSet<ValueId> = defined.values().flatten().copied().collect();
+        if let Some(v) = osr.materialized.borrow().keys().find(|v| all.contains(v)) {
+            return Err(CraneliftError::Unsupported(format!(
+                "entering a loop at {:?} that uses {:?} before the code it reaches defines it", spec.header, v)));
+        }
+
+        // What each block uses that it does not itself define, then live-in
+        // sets by the usual backward iteration over the reached blocks.
+        let blocks: Vec<&IrBlock> = self.func.blocks.iter().filter(|b| osr.reachable.contains(&b.id)).collect();
+        let mut uses: HashMap<BlockId, std::collections::HashSet<ValueId>> = HashMap::new();
+        for block in &blocks {
+            let mut used = std::collections::HashSet::new();
+            let mut add = |op: &Operand| {
+                if let Operand::Value(v) | Operand::ValueRef(v) = op {
+                    used.insert(*v);
+                }
+            };
+            block.instructions.iter().for_each(|i| i.for_each_operand(&mut add));
+            block.terminator.for_each_operand(&mut add);
+            let own = &defined[&block.id];
+            used.retain(|v| !own.contains(v));
+            uses.insert(block.id, used);
+        }
+        let mut live_in: HashMap<BlockId, std::collections::HashSet<ValueId>> = uses.clone();
+        loop {
+            let mut changed = false;
+            for block in blocks.iter().rev() {
+                let mut live: std::collections::HashSet<ValueId> = successors(&block.terminator).into_iter()
+                    .filter_map(|s| live_in.get(&s))
+                    .flatten()
+                    .copied()
+                    .collect();
+                let own = &defined[&block.id];
+                live.retain(|v| !own.contains(v));
+                live.extend(uses[&block.id].iter().copied());
+                let entry = live_in.get_mut(&block.id).expect("every reached block");
+                if live.len() != entry.len() {
+                    *entry = live;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        match live_in[&spec.header].iter().find(|v| all.contains(v)) {
+            Some(v) => Err(CraneliftError::Unsupported(format!(
+                "entering a loop at {:?} that needs {:?}, which an enclosing loop defines", spec.header, v))),
+            None => Ok(()),
+        }
     }
 
     /// Emit a zero constant for a scalar Cranelift type.
@@ -1491,7 +1805,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(track_offset) = self.layout.values[dest.0 as usize].tracking_byte {
             use datalove_datafun_ir::frame_layout::tracking;
             let frame_slot = self.frame_slot.expect("tracking requires frame slot");
-            let frame_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, 0);
+            let frame_addr = frame_slot.addr(builder, 0);
             let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
             let uninit_val = builder.ins().iconst(cl_types::I8, tracking::UNINIT as i64);
             let track_addr = builder.ins().iadd_imm_s(frame_addr, track_offset as i64);

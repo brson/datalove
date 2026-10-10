@@ -259,6 +259,32 @@ impl JitCompiler {
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
     ) -> Result<(*const u8, bool, usize), JitError> {
+        self.compile_entry(func, ctx, registry, interp, None)
+    }
+
+    /// Compile an entry into `func` at a loop header, for a frame the
+    /// interpreter is running it in; see `codegen::OsrSpec`. Returns the code,
+    /// whether it takes `sret`, and an estimate of its size.
+    pub fn compile_osr<'a>(
+        &mut self,
+        func: &IrCodeUnit,
+        ctx: &ExecutionContext<'a>,
+        registry: &FunctionRegistry,
+        interp: &mut IrInterpreter,
+        spec: codegen::OsrSpec,
+    ) -> Result<(*const u8, bool, usize), JitError> {
+        self.compile_entry(func, ctx, registry, interp, Some(spec))
+    }
+
+    /// Compile `func`, entered at its start or, given `osr`, at a loop header.
+    fn compile_entry<'a>(
+        &mut self,
+        func: &IrCodeUnit,
+        ctx: &ExecutionContext<'a>,
+        registry: &FunctionRegistry,
+        interp: &mut IrInterpreter,
+        osr: Option<codegen::OsrSpec>,
+    ) -> Result<(*const u8, bool, usize), JitError> {
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
@@ -327,8 +353,10 @@ impl JitCompiler {
         compiler.set_static_consts(static_consts_of(func, interp));
 
         // Compile and get the Cranelift FuncId.
-        let cl_func_id = compiler.compile_as(&unique_symbol(func))
-            .map_err(|e| codegen_err("compile", e))?;
+        let cl_func_id = match osr {
+            None => compiler.compile_as(&unique_symbol(func)),
+            Some(spec) => compiler.compile_osr_as(&unique_symbol(func), spec),
+        }.map_err(|e| codegen_err("compile", e))?;
 
         // Finalize to get executable code.
         self.jit_module.finalize_definitions()

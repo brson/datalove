@@ -149,7 +149,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for Unit constant".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
-                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let base = frame_slot.addr(builder, dest_offset as i32);
                 self.values.insert(dest, base);
                 return Ok(());
             }
@@ -293,7 +293,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for Int constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let base = frame_slot.addr(builder, dest_offset as i32);
 
         // Need runtime handle.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -347,7 +347,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for String constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let base = frame_slot.addr(builder, dest_offset as i32);
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -428,7 +428,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for Option constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let base = frame_slot.addr(builder, dest_offset as i32);
 
         // Write None tag (1) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 1);
@@ -517,7 +517,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for Atom constant".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
-                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let base = frame_slot.addr(builder, dest_offset as i32);
                 self.values.insert(dest, base);
                 Ok(())
             }
@@ -599,7 +599,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for Error constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let base = frame_slot.addr(builder, dest_offset as i32);
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -655,7 +655,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for Data constant".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let base = frame_slot.addr(builder, dest_offset as i32);
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -710,7 +710,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen(format!("no frame slot for {} constant", what))
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        Ok(builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32))
+        Ok(frame_slot.addr(builder, dest_offset as i32))
     }
 
     /// The declared type of a value, which is what a constant is written as.

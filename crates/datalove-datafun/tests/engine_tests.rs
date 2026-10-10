@@ -11,6 +11,10 @@
 //! - **jit**: the IR walker with a JIT compiling every function on its first call.
 //! - **chaos**: the bytecode under an `OptimizingDispatcher` that compiles,
 //!   and uses the JIT at random, seeded from the fixture.
+//! - **osr**: the bytecode under a `JitEngine` that compiles no function by its
+//!   calls and enters every loop of one after one to three iterations, chosen
+//!   by the fixture's seed: each function's loops, and what runs after them,
+//!   in code entered partway through the call.
 //! - **aot**: the Cranelift AOT backend, for a program of one script fragment
 //!   and no expressions that the reference ran to completion; its stderr must
 //!   be the reference's debug log.
@@ -47,6 +51,13 @@ use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks};
 
 /// Functions the chaos dispatcher JIT-compiled, over the whole corpus.
 static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
+/// Entries at loop headers it compiled, and loop headers it could not enter.
+static CHAOS_LOOPS: AtomicU32 = AtomicU32::new(0);
+static CHAOS_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
+/// The same for the `osr` engine, and the `jit` one, whose loops are compiled
+/// with their functions and so should never be.
+static ENGINE_LOOPS: AtomicU32 = AtomicU32::new(0);
+static ENGINE_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
 /// Fixtures each engine ran, in the order of `Differential::ALL`.
 static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) }; Differential::ALL.len()];
 
@@ -57,6 +68,7 @@ enum Differential {
     Plain,
     Jit,
     Chaos,
+    Osr,
     Aot,
     C,
     NoConst,
@@ -64,11 +76,12 @@ enum Differential {
 }
 
 impl Differential {
-    const ALL: [Differential; 8] = [
+    const ALL: [Differential; 9] = [
         Differential::Bytecode,
         Differential::Plain,
         Differential::Jit,
         Differential::Chaos,
+        Differential::Osr,
         Differential::Aot,
         Differential::C,
         Differential::NoConst,
@@ -81,6 +94,7 @@ impl Differential {
             Differential::Plain => "plain",
             Differential::Jit => "jit",
             Differential::Chaos => "chaos",
+            Differential::Osr => "osr",
             Differential::Aot => "aot",
             Differential::C => "c",
             Differential::NoConst => "noconst",
@@ -126,7 +140,13 @@ impl ExecutorHooks for Setup {
             return;
         };
         if let Some(chaos) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
-            CHAOS_COMPILED.fetch_add(chaos.jit().stats().compiled_count, Ordering::Relaxed);
+            let stats = chaos.jit().stats();
+            CHAOS_COMPILED.fetch_add(stats.compiled_count, Ordering::Relaxed);
+            CHAOS_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
+            CHAOS_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
+        } else if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
+            ENGINE_LOOPS.fetch_add(jit.stats().osr_compiled_count, Ordering::Relaxed);
+            ENGINE_LOOPS_REFUSED.fetch_add(jit.stats().osr_refused_count, Ordering::Relaxed);
         }
     }
 }
@@ -309,6 +329,14 @@ fn check(path: &Path) -> Result<String, String> {
                     OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?,
                 )),
             }),
+            Differential::Osr => Some(Setup {
+                engine: Engine::Bytecode,
+                dispatcher: Some({
+                    let mut jit = JitEngine::new(u32::MAX).map_err(|e| e.to_string())?;
+                    jit.set_osr_threshold(1 + (seed % 3) as u32);
+                    Box::new(jit)
+                }),
+            }),
             Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec => None,
         };
         if let Some(setup) = interpreted {
@@ -350,9 +378,20 @@ fn report() -> Result<(), String> {
         return Ok(());
     }
     let compiled = CHAOS_COMPILED.load(Ordering::Relaxed);
-    println!("chaos: {compiled} functions JIT-compiled");
+    let loops = CHAOS_LOOPS.load(Ordering::Relaxed);
+    let refused = CHAOS_LOOPS_REFUSED.load(Ordering::Relaxed);
+    println!("chaos: {compiled} functions JIT-compiled, {loops} loops entered ({refused} refused)");
     if compiled == 0 {
         return Err("the chaos dispatcher never engaged: 0 compiled".to_string());
+    }
+    if loops == 0 {
+        return Err("the chaos dispatcher never entered a loop".to_string());
+    }
+    let osr = ENGINE_LOOPS.load(Ordering::Relaxed);
+    let osr_refused = ENGINE_LOOPS_REFUSED.load(Ordering::Relaxed);
+    println!("osr: {osr} loops entered ({osr_refused} refused)");
+    if osr == 0 {
+        return Err("the osr engine never entered a loop".to_string());
     }
     Ok(())
 }

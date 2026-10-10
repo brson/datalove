@@ -23,6 +23,11 @@ pub struct JitStats {
     pub total_compile_time: Duration,
     /// Total generated code size in bytes.
     pub total_code_size: usize,
+    /// Entries compiled at a loop header, for a frame already running the loop
+    /// (on-stack replacement), counted in the totals above as well.
+    pub osr_compiled_count: u32,
+    /// Loop headers the backend could not enter at.
+    pub osr_refused_count: u32,
     /// Functions the backend declined, which are interpreted instead.
     ///
     /// Not failures: a refusal is `JitError::Unsupported`, and a failure is
@@ -51,6 +56,11 @@ pub struct FunctionStats {
     pub entered: u64,
     /// Calls from compiled code that the interpreter ran.
     pub exited: u64,
+    /// How long compiling entries at its loops took, if any were compiled.
+    pub osr_compile_time: Option<Duration>,
+    /// Frames that went on in compiled code from one of its loops, counted
+    /// with the calls.
+    pub loops_entered: u64,
 }
 
 /// Where a call the jit is offered comes from.
@@ -110,6 +120,9 @@ impl JitStats {
             self.total_compile_time.as_secs_f64() * 1e3, self.total_code_size);
         let _ = writeln!(out, "jit: calls through the dispatcher: {interpreted} interpreted, \
             {entered} interpreter -> native, {exited} native -> interpreter");
+        let loops_entered: u64 = self.functions.values().map(|f| f.loops_entered).sum();
+        let _ = writeln!(out, "jit: loops: {} entries compiled ({} refused), {} frames entered them",
+            self.osr_compiled_count, self.osr_refused_count, loops_entered);
 
         let mut by_calls: Vec<_> = self.functions.iter()
             .filter(|(_, f)| f.interpreted + f.entered + f.exited > 0)
@@ -129,16 +142,22 @@ impl JitStats {
             }
         }
 
+        // Compiled whole, at a loop, or both; ordered by the time for both.
+        let ms = |t: Option<Duration>| match t {
+            Some(t) => format!("{:.2}ms", t.as_secs_f64() * 1e3),
+            None => "-".to_owned(),
+        };
         let mut by_codegen: Vec<_> = self.functions.iter()
-            .filter_map(|(key, f)| f.compile_time.map(|t| (t, key, f)))
+            .filter(|(_, f)| f.compile_time.is_some() || f.osr_compile_time.is_some())
+            .map(|(key, f)| (f.compile_time.unwrap_or_default() + f.osr_compile_time.unwrap_or_default(), key, f))
             .collect();
         by_codegen.sort_by_key(|(t, key, f)| (std::cmp::Reverse(*t), name(key, f)));
         if !by_codegen.is_empty() {
             let _ = writeln!(out, "\njit: longest to compile");
-            let _ = writeln!(out, "{:>9} {:>8}  function", "codegen", "bytes");
-            for (t, key, f) in by_codegen.iter().take(top) {
-                let _ = writeln!(out, "{:>9} {:>8}  {}",
-                    format!("{:.2}ms", t.as_secs_f64() * 1e3), f.code_size, name(key, f));
+            let _ = writeln!(out, "{:>9} {:>8} {:>9} {:>8}  function", "codegen", "bytes", "loops", "entered");
+            for (_, key, f) in by_codegen.iter().take(top) {
+                let _ = writeln!(out, "{:>9} {:>8} {:>9} {:>8}  {}",
+                    ms(f.compile_time), f.code_size, ms(f.osr_compile_time), f.loops_entered, name(key, f));
             }
         }
         out

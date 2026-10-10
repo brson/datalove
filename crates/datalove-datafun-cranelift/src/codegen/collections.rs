@@ -65,7 +65,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for ListNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
         let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, list_ptr, list_tydesc_ptr, dest_ptr]);
 
@@ -101,7 +101,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for ListNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let list_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let list_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Get List TyDesc.
         let list_tydesc_id = self.tydesc(&list_ty)?;
@@ -237,7 +237,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for a built collection".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
         let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, built_ptr, tydesc_ptr, dest_ptr]);
         self.values.insert(dest, dest_ptr);
@@ -272,7 +272,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for SetNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let set_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let set_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Get Set TyDesc.
         let set_tydesc_id = self.tydesc(&set_ty)?;
@@ -342,7 +342,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for MapNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let map_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let map_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Get Map TyDesc.
         let map_tydesc_id = self.tydesc(&map_ty)?;
@@ -412,7 +412,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for TensorNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let tensor_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let tensor_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Get Tensor TyDesc.
         let tensor_tydesc_id = self.tydesc(&tensor_ty)?;
@@ -528,7 +528,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("no frame slot for TableNew".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let table_ptr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let table_ptr = frame_slot.addr(builder, dest_offset as i32);
 
         // Get Table TyDesc.
         let table_tydesc_id = self.tydesc(&table_ty)?;

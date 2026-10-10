@@ -20,7 +20,7 @@ pub(crate) mod trampoline;
 pub mod optimizing;
 pub mod stats;
 
-pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
+pub use trampoline::{DispatchContext, PreviousContext, set_dispatch_context, restore_dispatch_context};
 pub use optimizing::{OptimizingDispatcher, DispatcherConfig, DispatcherMode};
 pub use stats::{CallFrom, FunctionStats, JitStats};
 
@@ -29,10 +29,10 @@ use std::any::Any;
 use rustc_hash::FxHashMap;
 use std::time::Instant;
 
-use datalove_datafun_ir::{CodeRef, IrCodeUnit};
+use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, Destination, DispatchResult, ExecutionContext,
-    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, SitePolicy, Value,
+    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, LoopPolicy, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -95,7 +95,26 @@ pub struct JitEngine {
     stats: JitStats,
     /// Whether to count each call offered to the jit in `stats`.
     count_calls: bool,
+    /// Iterations of a loop, in all the calls running it, before the frame
+    /// that runs the last of them goes on in compiled code.
+    osr_threshold: u32,
+    /// What has been decided about each loop the interpreter has asked about,
+    /// by its function and header.
+    loops: FxHashMap<(FuncIdentity, BlockId), LoopState>,
 }
+
+/// What the jit has decided about a loop.
+enum LoopState {
+    /// Iterations counted so far.
+    Counting(u32),
+    /// Compiled, to be entered at its header.
+    Compiled(CompiledEntry),
+    /// The backend cannot enter it there; see `codegen::OsrSpec`.
+    Refused,
+}
+
+/// Loop iterations before compiling an entry at the loop, unless set.
+pub const DEFAULT_OSR_THRESHOLD: u32 = 1000;
 
 impl JitEngine {
     /// Create a new JIT engine with the specified compilation threshold.
@@ -106,7 +125,101 @@ impl JitEngine {
             threshold,
             stats: JitStats::default(),
             count_calls: false,
+            osr_threshold: DEFAULT_OSR_THRESHOLD,
+            loops: FxHashMap::default(),
         })
+    }
+
+    /// Set how many iterations of a loop make it worth entering compiled code
+    /// at its header.
+    pub fn set_osr_threshold(&mut self, iterations: u32) {
+        self.osr_threshold = iterations;
+    }
+
+    /// What to do about a loop the interpreter has run `iterations` more of;
+    /// see `CallDispatcher::loop_policy`.
+    ///
+    /// Counts toward the threshold across every call running the loop, and
+    /// once it is reached compiles an entry at the header for the frame that
+    /// asked, which every later frame to ask is given too.
+    pub fn loop_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        header: BlockId,
+        iterations: u32,
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<LoopPolicy, InterpError> {
+        let state = self.loops.entry((func, header)).or_insert(LoopState::Counting(0));
+        let counted = match state {
+            LoopState::Compiled(entry) => return Ok(LoopPolicy::Enter(*entry)),
+            LoopState::Refused => return Ok(LoopPolicy::Interpret),
+            LoopState::Counting(n) => {
+                *n = n.saturating_add(iterations);
+                *n
+            }
+        };
+        if counted < self.osr_threshold {
+            return Ok(LoopPolicy::Count(self.osr_threshold - counted));
+        }
+
+        let layout = call_ctx.interp.layout_for(func, body);
+        let spec = datalove_datafun_cranelift::codegen::OsrSpec {
+            header,
+            param_offsets: layout.param_offsets.clone(),
+            shape_offset: layout.shape_offset,
+        };
+        let start = Instant::now();
+        let compiled = self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec);
+        let (state, policy) = match compiled {
+            Ok((code_ptr, uses_sret, code_size)) => {
+                let compile_time = start.elapsed();
+                self.stats.osr_compiled_count += 1;
+                self.stats.total_compile_time += compile_time;
+                self.stats.total_code_size += code_size;
+                let f = self.stats.function(func, &body.name);
+                *f.osr_compile_time.get_or_insert_default() += compile_time;
+                let entry = CompiledEntry { code_ptr, uses_sret };
+                (LoopState::Compiled(entry), LoopPolicy::Enter(entry))
+            }
+            Err(JitError::Unsupported(_)) => {
+                self.stats.osr_refused_count += 1;
+                (LoopState::Refused, LoopPolicy::Interpret)
+            }
+            Err(e) => return Err(InterpError::RuntimeError(e.to_string())),
+        };
+        self.loops.insert((func, header), state);
+        Ok(policy)
+    }
+
+    /// Enter a loop's compiled code for the frame at its header; see
+    /// `CallDispatcher::enter_loop`.
+    pub fn enter_loop(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) {
+        if self.count_calls {
+            self.stats.functions.get_mut(&func)
+                .expect("a loop compiled has its function's stats")
+                .loops_entered += 1;
+        }
+        let mut dispatch_ctx = DispatchContext {
+            jit_engine: self,
+            interp: call_ctx.interp,
+            exec_ctx: call_ctx.exec_ctx,
+            registry: call_ctx.registry,
+            frames: call_ctx.frames,
+        };
+        // SAFETY: the context outlives the call, and is cleared after it.
+        let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
+        // SAFETY: the words are the runtime handle, the result's place if the
+        // code takes one, and the frame of a call to the function at the
+        // header the code enters at.
+        unsafe { bridge::call_words(entry.code_ptr, words) };
+        restore_dispatch_context(previous);
     }
 
     /// Count every call offered to the jit, by function, in `stats`.
@@ -172,11 +285,11 @@ impl JitEngine {
             frames: call_ctx.frames,
         };
         // SAFETY: the context outlives the call, and is cleared after it.
-        unsafe { set_dispatch_context(&mut dispatch_ctx) };
+        let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
         // SAFETY: the interpreter planned `words` from the signature the code
         // was compiled to.
         unsafe { bridge::call_words(entry.code_ptr, words) };
-        clear_dispatch_context();
+        restore_dispatch_context(previous);
     }
 
     /// Register a native rider function symbol for JIT resolution.
@@ -327,7 +440,7 @@ impl JitEngine {
                     frames: call_ctx.frames,
                 };
                 // SAFETY: the context outlives the call, and is cleared after it.
-                unsafe { set_dispatch_context(&mut dispatch_ctx) };
+                let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
                 // SAFETY: code_ptr is compiled code for `func`, whose arguments
                 // these are.
                 unsafe {
@@ -336,7 +449,7 @@ impl JitEngine {
                         descriptor_params, shape_descriptors,
                     )
                 };
-                clear_dispatch_context();
+                restore_dispatch_context(previous);
                 JitDispatch { result: DispatchResult::Handled(Ok(())) }
             }
         }
@@ -735,7 +848,7 @@ mod tests {
 
         // Set the dispatch context.
         // SAFETY: context is valid for the duration of the call.
-        unsafe { set_dispatch_context(&mut dispatch_ctx) };
+        let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
 
         // Prepare return destination.
         let mut result: usize = 0;
@@ -762,7 +875,7 @@ mod tests {
         }
 
         // Clear dispatch context.
-        clear_dispatch_context();
+        restore_dispatch_context(previous);
 
         // Verify result: identity(42) = 42.
         assert_eq!(result as i32, 42, "identity(42) should equal 42");
@@ -794,6 +907,28 @@ impl CallDispatcher for JitEngine {
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> Result<(), InterpError> {
         JitEngine::call_compiled(self, func, entry, words, call_ctx);
+        Ok(())
+    }
+
+    fn loop_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        header: BlockId,
+        iterations: u32,
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<LoopPolicy, InterpError> {
+        JitEngine::loop_policy(self, func, body, header, iterations, call_ctx)
+    }
+
+    fn enter_loop(
+        &mut self,
+        func: FuncIdentity,
+        entry: CompiledEntry,
+        words: &[usize],
+        call_ctx: DispatchCallContext<'_, '_>,
+    ) -> Result<(), InterpError> {
+        JitEngine::enter_loop(self, func, entry, words, call_ctx);
         Ok(())
     }
 

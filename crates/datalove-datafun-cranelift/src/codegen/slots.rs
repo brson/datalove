@@ -42,14 +42,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftRepr::Scalar(_cl_ty) => {
                 // Scalar: store value directly.
                 let val = self.get_operand_value(builder, value)?;
-                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let addr = frame_slot.addr(builder, slot_offset as i32);
                 builder.ins().store(MemFlagsData::new(), val, addr, 0);
             }
             CraneliftRepr::Aggregate(layout) => {
                 // Aggregate: copy bytes from source to destination.
                 // The old value (if any) is destroyed by explicit drop.tracked in the IR
                 // before this store instruction.
-                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let dest_addr = frame_slot.addr(builder, slot_offset as i32);
                 let src_ptr = self.get_operand_ptr(builder, value)?;
                 let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
                 builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
@@ -88,7 +88,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match repr {
             CraneliftRepr::Scalar(cl_ty) => {
                 // Scalar: load value directly.
-                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let addr = frame_slot.addr(builder, slot_offset as i32);
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), addr, 0);
                 self.values.insert(dest, val);
             }
@@ -104,9 +104,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // to -- would otherwise drop the fresh value and leave the
                 // old one, freeing one thing twice. The other backends copy
                 // here for the same reason.
-                let src = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let src = frame_slot.addr(builder, slot_offset as i32);
                 let dest_offset = self.layout.value_offset(dest.0);
-                let dst = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let dst = frame_slot.addr(builder, dest_offset as i32);
                 if layout.size > 0 {
                     let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
                     builder.call_memcpy(self.isa.frontend_config(), dst, src, size);
@@ -207,7 +207,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Load tracking byte.
-        let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+        let track_addr = frame_slot.addr(builder, track_offset as i32);
         let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
 
         // Check if initialized (LIVE).

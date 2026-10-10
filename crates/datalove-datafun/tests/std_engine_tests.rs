@@ -1,8 +1,9 @@
 //! Standard library tests across all backends.
 //!
 //! Runs each `.dfs` fixture on the IR walker, checked against the expected
-//! output, and on the bytecode, the JIT, Cranelift AOT and C AOT, each compared
-//! with the IR walker. The worldfile corpus has the same arrangement in
+//! output, and on the bytecode, the JIT (under the IR walker and under the
+//! bytecode), the JIT entering every loop partway through (OSR), Cranelift
+//! AOT and C AOT, each compared with the IR walker. The worldfile corpus has the same arrangement in
 //! `engine_tests`; this one is the standard library's.
 //!
 //! The C backend is here because it was not, and fell seven months behind on
@@ -305,23 +306,36 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
         // a spawned thread, which caught the panic as a side effect of joining
         // and was there for a Cranelift relocation problem that the jit's own
         // arena fixed.
-        let jit_result: Result<String, String> = std::panic::catch_unwind(|| {
-            let jit = JitEngine::new(1)
-                .map_err(|e| format!("JIT engine creation failed: {}", e))?;
-            let (value, _) = run_with_executor(
-                db, compiled, descriptor, &script_text, Engine::IrWalker, Some(Box::new(jit)), "JIT")?;
-            Ok(value)
-        })
-        .unwrap_or_else(|panic| {
-            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                s.to_string()
-            } else if let Some(s) = panic.downcast_ref::<String>() {
-                s.clone()
-            } else {
-                "unknown panic".to_string()
-            };
-            Err(format!("JIT panicked: {}", msg))
-        });
+        let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, name: &str| {
+            std::panic::catch_unwind(|| {
+                let mut jit = JitEngine::new(threshold)
+                    .map_err(|e| format!("JIT engine creation failed: {}", e))?;
+                if let Some(iterations) = osr_threshold {
+                    jit.set_osr_threshold(iterations);
+                }
+                let (value, _) = run_with_executor(
+                    db, compiled, descriptor, &script_text, engine, Some(Box::new(jit)), name)?;
+                Ok(value)
+            })
+            .unwrap_or_else(|panic| {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "unknown panic".to_string()
+                };
+                Err(format!("{name} panicked: {}", msg))
+            })
+        };
+        let jit_result: Result<String, String> = under_jit(Engine::IrWalker, 1, None, "JIT");
+        // The bytecode with the JIT, which it calls into from planned call
+        // sites; and with the JIT compiling no function by its calls and
+        // entering every loop at its second iteration instead, so that the
+        // library's loops and everything after them run in code entered
+        // partway through a call.
+        let bytecode_jit_result = under_jit(Engine::Bytecode, 1, None, "Bytecode JIT");
+        let osr_result = under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR");
 
         // Cranelift AOT.
         let aot_result = run_aot(db, compiled, &script_text, &rider_lib_paths);
@@ -335,6 +349,8 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
             ("Bytecode", &bytecode_result),
             ("PlainBytecode", &plain_result),
             ("JIT", &jit_result),
+            ("Bytecode JIT", &bytecode_jit_result),
+            ("OSR", &osr_result),
             ("AOT", &aot_result),
             ("C AOT", &c_aot_result),
         ] {

@@ -1520,7 +1520,9 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
 - **CTFE** (`interp/src/ctfe.rs`) is the interpreter used at compile time.
   `InterpCtfeEvaluator::with_module_registry` gives const expressions access to
   cross-module function calls.
-- **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count.
+- **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count, and enters a
+  loop's compiled code partway through a call once the loop has run often
+  enough (on-stack replacement; see [Tuning the JIT](plan-jit-tuning.md#user-content-osr)).
   `OptimizingDispatcher` executes native code when a function is compiled, and
   otherwise counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
   `Chaos` makes seeded pseudo-random decisions for testing. `script --jit` runs
@@ -1619,8 +1621,10 @@ perhaps 1% and is open.
 **The JIT** is about 85x on a tight arithmetic loop and 2-3.5x on call-heavy code.
 It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, registering every
 runtime symbol) and compiles synchronously at `opt_level = "speed"` in the dispatch
-that crossed the threshold. It counts calls only, so a loop in a function called
-once is never compiled. Compiled code calls each callee through a stub with the
+that crossed the threshold. A loop in a function called once is compiled by
+OSR: the bytecode counts iterations at the loop's header, and past
+`--jit-osr-threshold` (default 1000) the frame goes on in code compiled from the
+header, which runs the rest of the call. Compiled code calls each callee through a stub with the
 callee's signature, which calls the callee's code directly once it is compiled
 and goes through `__jit_dispatch_call` until then; going through the dispatcher
 every time had been over 80% of the time on recursive `fib`, 5x slower. The
@@ -1947,11 +1951,11 @@ Most live in `crates/datalove-datafun/tests`.
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |
 | `ir_serial_tests` | IR serialization round-trip |
-| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode_opt.rs`), the JIT, a chaos dispatcher, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
+| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode_opt.rs`), the JIT, a chaos dispatcher, a JIT that enters every function's loops early by OSR and compiles nothing else, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
 | `aot_layout_tests` | Cranelift AOT layout compatibility |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |
-| `std_engine_tests` | The `sys/std` library, compiled from `sys/` on disk, its fixtures in `fixtures/std_tests/` run on the IR walker and compared on the bytecode, the JIT and both AOT backends. The only suite that puts a rider call, a bigint or a type parameter through the C backend |
+| `std_engine_tests` | The `sys/std` library, compiled from `sys/` on disk, its fixtures in `fixtures/std_tests/` run on the IR walker and compared on the bytecode, the JIT under the IR walker and under the bytecode, the JIT entering every loop at its second iteration (OSR), and both AOT backends. The only suite that puts a rider call, a bigint or a type parameter through the C backend |
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-sys-packages`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |

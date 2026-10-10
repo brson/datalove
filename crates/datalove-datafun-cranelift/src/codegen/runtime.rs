@@ -136,7 +136,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("DropTracked requires frame slot".into())
         })?;
 
-        let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+        let track_addr = frame_slot.addr(builder, track_offset as i32);
         let track_byte = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), track_addr, 0);
 
         // Check if LIVE (0x01).

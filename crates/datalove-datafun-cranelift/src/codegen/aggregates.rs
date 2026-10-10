@@ -52,7 +52,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
 
                 let dest_offset = self.layout.value_offset(dest.0);
-                let base = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let base = frame_slot.addr(builder, dest_offset as i32);
 
                 // Get field offsets.
                 let field_types: Vec<_> = match dest_ty {
@@ -235,7 +235,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             CraneliftError::Codegen("GetField aggregate requires frame slot".into())
                         })?;
                         let dest_offset = self.layout.value_offset(dest.0);
-                        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
 
                         // Emit memcpy for the field.
                         let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
@@ -291,7 +291,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("a generic field read requires a frame slot".into())
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
 
         let read_fn = self.module.declare_func_in_func(runtime.field_read, builder.func);
         builder.ins().call(read_fn, &[rt_handle, dest_addr, dest_tydesc, base, base_desc, index]);
@@ -433,7 +433,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for set_field".into())
                 })?;
                 let slot_offset = self.layout.slot_offset(slot_id.0);
-                let addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, slot_offset as i32);
+                let addr = frame_slot.addr(builder, slot_offset as i32);
                 let ty = self.func.slot_types.get(slot_id.0 as usize)
                     .cloned()
                     .ok_or_else(|| CraneliftError::Codegen(format!("slot {:?} type not found", slot_id)))?;
@@ -695,7 +695,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
 
         // Load tracking byte.
-        let track_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, track_offset as i32);
+        let track_addr = frame_slot.addr(builder, track_offset as i32);
         let track_val = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
 
         // Check if initialized (LIVE).

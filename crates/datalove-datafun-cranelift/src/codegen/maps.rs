@@ -214,7 +214,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftError::Codegen("no frame slot for MapGet aggregate dest".into())
                 })?;
                 let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = builder.ins().stack_addr(PTR_TYPE, frame_slot, dest_offset as i32);
+                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 

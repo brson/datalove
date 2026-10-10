@@ -62,8 +62,8 @@ pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{
-    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, SitePolicy,
-    MAX_ENTRY_WORDS,
+    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, LoopPolicy,
+    SitePolicy, MAX_ENTRY_WORDS,
 };
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
@@ -304,6 +304,27 @@ impl IrInterpreter {
     pub fn take_dispatcher(&self) -> Option<Box<dyn CallDispatcher>> {
         self.dispatcher_epoch.set(self.dispatcher_epoch.get() + 1);
         self.call_dispatcher.borrow_mut().take()
+    }
+
+    /// Install `dispatcher` in place of the one taken out to make a call,
+    /// while that call runs, standing in for it.
+    ///
+    /// A call the dispatcher made takes it out of the interpreter for as long
+    /// as the call runs, so that the dispatcher and the interpreter can each
+    /// be borrowed. Compiled code calling back into the interpreter would run
+    /// with no dispatcher at all, and nothing it called could be compiled or
+    /// entered, unless something stands in. What stands in has to act for the
+    /// same dispatcher, since plans made while it does are kept: the
+    /// dispatcher epoch does not change.
+    pub fn lend_dispatcher(&self, dispatcher: Box<dyn CallDispatcher>) {
+        let mut slot = self.call_dispatcher.borrow_mut();
+        assert!(slot.is_none(), "a dispatcher lent while one is installed");
+        *slot = Some(dispatcher);
+    }
+
+    /// Take back what `lend_dispatcher` installed.
+    pub fn reclaim_dispatcher(&self) -> Box<dyn CallDispatcher> {
+        self.call_dispatcher.borrow_mut().take().expect("a dispatcher was lent")
     }
 
     /// Set or replace the call dispatcher.
