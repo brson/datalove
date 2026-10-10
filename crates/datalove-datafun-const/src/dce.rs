@@ -133,6 +133,7 @@ pub fn instruction_dest(instr: &Instruction) -> Option<ValueId> {
         Instruction::Drop { .. } => None,
         Instruction::DropTracked { .. } => None,
         Instruction::DropViaRef { .. } => None,
+        Instruction::DropField { .. } => None,
         Instruction::UnitEndDrop { .. } => None,
         Instruction::UnitEndDropTracked { .. } => None,
 
@@ -398,6 +399,7 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         | Instruction::UnaryOpChecked { operand, .. }
         | Instruction::Drop { operand }
         | Instruction::DropTracked { operand }
+        | Instruction::DropField { base: operand, .. }
         | Instruction::UnitEndDrop { operand }
         | Instruction::UnitEndDropTracked { operand }
         | Instruction::DebugLog { operand } => add_operand_value(operand, used),
@@ -667,6 +669,7 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::Drop { .. }
         | Instruction::DropTracked { .. }
         | Instruction::DropViaRef { .. }
+        | Instruction::DropField { .. }
         | Instruction::UnitEndDrop { .. }
         | Instruction::UnitEndDropTracked { .. } => true,
         // Store instructions have side effects.

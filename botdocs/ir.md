@@ -347,6 +347,14 @@ reference-like operand.
 For an `out` parameter the **caller** destroys the existing value before the
 call, with `DropViaRef`.
 
+No store destroys what its destination held. Lowering emits the destroy as its
+own instruction in front of the store, and only where the stored type owns
+something (`IrType::is_copy` is false): `drop` for a slot or a `mut`
+parameter, `drop.tracked` for a tracked slot or an `out` parameter, `drop.ref`
+through a reference, and `drop.field` for a field of any of them. A store of a
+copy type, an `f64` or a struct of them, is then a bare write in every engine,
+and no backend decides for itself whether a store needs a destroy.
+
 ### IrModule and SymbolTable
 
 ```rust
@@ -548,10 +556,10 @@ a trailing comma run where the outermost extent is 1, so that the rank survives.
 | `SlotStoreMoveTracked { dest, value }` | `store.move.tracked s0, v1` | Consumes; writes LIVE |
 | `SetField { slot, field_path, value }` | `setfield s0.1.0, v1` | Consumes `value` |
 | `SetFieldTracked { slot, field_path, value }` | `setfield.tracked s0.1, v1` | Consumes; writes LIVE |
-| `ParamStore { param, value }` | `store p0, v1` | Consumes; destroys the old value |
-| `ParamStoreTracked { param, value }` | `store.tracked p0, v1` | Consumes; checks the tracking byte first |
+| `ParamStore { param, value }` | `store p0, v1` | Consumes |
+| `ParamStoreTracked { param, value }` | `store.tracked p0, v1` | Consumes; writes LIVE |
 | `ParamSetField { param, field_path, value }` | `setfield p0.1, v1` | Consumes |
-| `ParamSetFieldTracked { param, field_path, value }` | `setfield.tracked p0.1, v1` | Consumes |
+| `ParamSetFieldTracked { param, field_path, value }` | `setfield.tracked p0.1, v1` | Consumes; writes LIVE |
 | `RefStore { dest, value }` | `refstore v0, v1` | Consumes |
 | `RefStoreTracked { dest, value }` | `refstore.tracked v0, v1` | Consumes; writes LIVE |
 | `RefSetField { dest, field_path, value }` | `refsetfield v0.1, v1` | Consumes |
@@ -563,6 +571,9 @@ a trailing comma run where the outermost extent is 1, so that the rank survives.
 A `field_path` is the chain of field indices from the root to the target, so
 `set a.x.0.y = v` carries three of them.
 
+None of these destroys what was at the destination; a drop in front of the
+store does, when the type owns something.
+
 ### Drops
 
 | Instruction | Printed | Ownership |
@@ -570,6 +581,7 @@ A `field_path` is the chain of field indices from the root to the target, so
 | `Drop { operand }` | `drop v0` | Consumes |
 | `DropTracked { operand }` | `drop.tracked s0` | Consumes if the tracking byte says LIVE |
 | `DropViaRef { ref_value }` | `drop.ref v0` | Destroys the referent, not the reference |
+| `DropField { base, field_path }` | `drop.field s0.1` | Destroys the field of a slot, parameter or referent; not `base` |
 | `UnitEndDrop { operand }` | `unit_end_drop v0` | See below |
 | `UnitEndDropTracked { operand }` | `unit_end_drop.tracked s0` | See below |
 

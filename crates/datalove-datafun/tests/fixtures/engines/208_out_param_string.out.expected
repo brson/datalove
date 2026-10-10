@@ -15,6 +15,7 @@ Analysis(
                     fn init_string(p0):
                     block0:
                         v0 = const "hello"
+                        drop.tracked p0
                         store.tracked p0, v0
                         v1 = const true
                         return v1

@@ -67,6 +67,7 @@ Analysis(
                     block2:
                         v4 = listelementref s0[p1]
                         v5 = getfieldref *v4.0
+                        drop.ref v5
                         refstore *v5, v1
                         v6 = load.move.tracked s0
                         v7 = some v6

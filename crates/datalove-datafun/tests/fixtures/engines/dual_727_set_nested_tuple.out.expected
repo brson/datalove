@@ -21,6 +21,7 @@ Analysis(
                         v4 = pack Tuple2 {v2, v3}
                         store.move.tracked s0, v4
                         v5 = const 99int
+                        drop.field s0.0.1
                         setfield.tracked s0.0.1, v5
                         v6 = getfieldref s0.0
                         v7 = getfieldref *v6.1

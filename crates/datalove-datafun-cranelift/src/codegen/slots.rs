@@ -120,8 +120,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a ParamStore instruction.
     ///
-    /// Stores a value to a mut/out param (writes to caller's memory).
-    /// For mut params, destroys the old value first.
+    /// Stores a value to a mut/out param (writes to caller's memory). What it
+    /// held, a `drop` in front destroyed.
     pub(super) fn compile_param_store(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -136,9 +136,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let param_ty = &self.func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_cranelift(param_ty);
 
-        // For mut params, destroy the old value first.
-        // (Out params would be uninitialized, but we don't track that at compile time.)
-        self.destroy_value(builder, param_ptr, param_ty, None, None)?;
 
         // Now store the new value.
         match repr {
@@ -160,8 +157,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a ParamStoreTracked instruction.
     ///
-    /// For Out params: caller destroys before call, so first write sees
-    /// uninitialized memory. Check tracking byte before destroying.
+    /// Stores the value and marks the param live; what it held, a
+    /// `drop.tracked` in front destroyed.
     pub(super) fn compile_param_store_tracked(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -175,16 +172,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let param_ty = &self.func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_cranelift(param_ty);
-
-        // Get tracking byte offset (should exist for tracked params).
-        let track_offset = self.param_tracking_byte_offset(param)
-            .ok_or_else(|| CraneliftError::Codegen(format!(
-                "ParamStoreTracked: param {:?} has no tracking byte", param
-            )))?;
-
-        // Destroy the old value if there is one, then store the new one and
-        // mark the param as LIVE.
-        self.destroy_value(builder, param_ptr, param_ty, None, Some(track_offset))?;
 
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
@@ -221,8 +208,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_ty = self.get_operand_type(dest)?;
         let repr = types::ir_type_to_cranelift(&dest_ty);
 
-        // Destroy the old value first.
-        self.destroy_value(builder, dest_ptr, &dest_ty, None, None)?;
 
         // Now store the new value.
         match repr {
@@ -284,8 +269,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let repr = types::ir_type_to_cranelift(&current_ty);
 
-        // Destroy the old value first.
-        self.destroy_value(builder, current_addr, &current_ty, None, None)?;
 
         // Now store the new value.
         match repr {

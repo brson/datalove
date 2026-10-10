@@ -1242,8 +1242,47 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Emit SetField or SetFieldTracked based on slot tracking.
+    /// Destroy what `place` holds -- or its field at `field_path`, if that is
+    /// not empty -- before a store of `value` overwrites it, if the value's
+    /// type, which is the place's, owns anything. A store does not destroy;
+    /// see "Stores do not destroy" on `Instruction`.
+    ///
+    /// For a parameter or a field, or through a reference. A slot's own drop
+    /// is `store_slot`'s, which knows whether the slot is tracked.
+    fn emit_drop_before_store(&mut self, place: &Operand, field_path: &[u32], value: &Operand) {
+        let ty = self.operand_type(value.clone()).expect("a stored value has a type");
+        if ty.is_copy() {
+            return;
+        }
+        let drop = match place {
+            _ if !field_path.is_empty() => {
+                Instruction::DropField { base: place.clone(), field_path: field_path.to_vec() }
+            }
+            // An out parameter holds something only once it has been written.
+            Operand::Param(p) if self.param_mode(*p) == Some(ParamMode::Out) => {
+                Instruction::DropTracked { operand: place.clone() }
+            }
+            Operand::Param(_) => Instruction::Drop { operand: place.clone() },
+            Operand::Value(r) | Operand::ValueRef(r) => Instruction::DropViaRef { ref_value: *r },
+            other => unreachable!("a store over {other:?}, whose drop its own store emits"),
+        };
+        self.emit(drop);
+    }
+
+    /// Emit a RefStore, destroying what the place it reaches held first.
+    pub fn emit_ref_store(&mut self, dest: Operand, value: Operand) {
+        self.emit_drop_before_store(&dest, &[], &value);
+        self.emit(Instruction::RefStore { dest, value });
+    }
+
+    /// Emit SetField or SetFieldTracked based on slot tracking, destroying
+    /// the field's old value first.
     pub fn emit_set_field(&mut self, slot: SlotDest, field_path: Vec<u32>, value: Operand) {
+        let base = match slot {
+            SlotDest::Local(sid) => Operand::Slot(sid),
+            SlotDest::External { unit, slot } => Operand::ExternalSlot { unit, slot },
+        };
+        self.emit_drop_before_store(&base, &field_path, &value);
         let tracked = match &slot {
             SlotDest::Local(sid) => self.is_slot_tracked(*sid),
             SlotDest::External { .. } => true, // External slots always tracked.
@@ -1255,11 +1294,13 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Emit ParamStore to write a value to a mutable parameter.
+    /// Emit ParamStore to write a value to a mutable parameter, destroying
+    /// what it held first.
     ///
-    /// - Mut params: precise, always destroys old value (ParamStore)
-    /// - Out params: tracked, checks init state before destroying (ParamStoreTracked)
+    /// - Mut params: precise, held something (`Drop`, then ParamStore)
+    /// - Out params: tracked, may hold something (`DropTracked`, then ParamStoreTracked)
     pub fn emit_param_store(&mut self, param: ParamId, value: Operand) {
+        self.emit_drop_before_store(&Operand::Param(param), &[], &value);
         if self.param_mode(param) == Some(ParamMode::Out) {
             self.emit(Instruction::ParamStoreTracked { param, value });
         } else {
@@ -1267,11 +1308,13 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Emit ParamSetField to write a value to a field within a mutable parameter.
+    /// Emit ParamSetField to write a value to a field within a mutable
+    /// parameter, destroying the field's old value first.
     ///
-    /// - Mut params: precise, always destroys old field value (ParamSetField)
-    /// - Out params: tracked, checks init state before destroying (ParamSetFieldTracked)
+    /// - Mut params: precise (ParamSetField)
+    /// - Out params: tracked (ParamSetFieldTracked)
     pub fn emit_param_set_field(&mut self, param: ParamId, field_path: Vec<u32>, value: Operand) {
+        self.emit_drop_before_store(&Operand::Param(param), &field_path, &value);
         if self.param_mode(param) == Some(ParamMode::Out) {
             self.emit(Instruction::ParamSetFieldTracked { param, field_path, value });
         } else {

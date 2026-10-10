@@ -15,6 +15,7 @@ Analysis(
                     fn set_to_42(p0):
                     block0:
                         v0 = const 42int
+                        drop p0
                         store p0, v0
                         v1 = const true
                         return v1

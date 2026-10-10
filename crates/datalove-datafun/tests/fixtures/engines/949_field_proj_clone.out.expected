@@ -86,6 +86,7 @@ Analysis(
                         v50 = getfieldref s0.0
                         debuglog *v50
                         v51 = const 50int
+                        drop.field s0.0
                         setfield.tracked s0.0, v51
                         v52 = getfieldref s0.0
                         debuglog *v52
@@ -103,6 +104,7 @@ Analysis(
                         v61 = getfieldref s1.0
                         debuglog *v61
                         v62 = const 50int
+                        drop.field s1.0
                         setfield.tracked s1.0, v62
                         v63 = getfieldref s1.0
                         debuglog *v63
@@ -128,12 +130,14 @@ Analysis(
                         v0 = const 1int
                         v1 = add p0, v0
                         drop v0
+                        drop p0
                         store p0, v1
                         return
                     
                     fn fill(p0):
                     block0:
                         v0 = const 99int
+                        drop.tracked p0
                         store.tracked p0, v0
                         return
                 """,

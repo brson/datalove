@@ -1650,6 +1650,14 @@ pub enum Instruction {
     // ========================================================================
     // Slot Operations
     // ========================================================================
+    //
+    // **Stores do not destroy.** Every store -- to a slot, a parameter, a field,
+    // or through a reference -- writes the new value over the place and nothing
+    // else. Where the place may hold a value that owns something, lowering
+    // emits the drop in front of the store: `Drop` or `DropTracked` for a slot
+    // or a parameter, `DropViaRef` for a store through a reference, `DropField`
+    // for a field. For a copy type there is nothing to destroy and no drop.
+    // Whether one is needed is decided once, here, rather than by each engine.
 
     /// Store value to mutable slot with copy semantics (precise slot).
     ///
@@ -1697,24 +1705,22 @@ pub enum Instruction {
 
     /// Store value to mutable parameter (Mut params only).
     ///
-    /// Mut params are precise - caller always provides initialized memory.
-    /// Always destroys the old value before storing.
+    /// Mut params are precise - caller always provides initialized memory, which
+    /// a `Drop` of the parameter destroys first if it owns anything.
     ///
     /// **Ownership:** Consumes `value`, writes to caller's param location.
     ParamStore { param: ParamId, value: Operand },
 
     /// Store value to Out parameter (tracked).
     ///
-    /// Out params start uninitialized. Checks tracking byte before destroying:
-    /// first write doesn't destroy, subsequent writes destroy old value.
+    /// Out params start uninitialized; a `DropTracked` of the parameter in front
+    /// destroys what an earlier write left, if anything.
     ///
     /// **Ownership:** Consumes `value`, writes to caller's param location.
-    /// **Tracking:** Reads param tracking byte; writes LIVE after store.
+    /// **Tracking:** Writes LIVE after store.
     ParamStoreTracked { param: ParamId, value: Operand },
 
     /// Store value to a field within mutable parameter (Mut params only).
-    ///
-    /// Mut params are precise - always destroys the old field value.
     ///
     /// **Ownership:** Consumes `value`, writes to field within param.
     ParamSetField {
@@ -1725,10 +1731,8 @@ pub enum Instruction {
 
     /// Store value to a field within Out parameter (tracked).
     ///
-    /// Out params start uninitialized. Checks tracking byte before destroying.
-    ///
     /// **Ownership:** Consumes `value`, writes to field within param.
-    /// **Tracking:** Reads param tracking byte; writes LIVE after store.
+    /// **Tracking:** Writes LIVE after store.
     ParamSetFieldTracked {
         param: ParamId,
         field_path: Vec<u32>,
@@ -1820,6 +1824,14 @@ pub enum Instruction {
     ///
     /// **Ownership:** Does not consume `ref_value`, destroys referent.
     DropViaRef { ref_value: ValueId },
+
+    /// Drop a field within a place: a slot, a parameter, or what a reference
+    /// points at, named as `SetField`, `ParamSetField` and `RefSetField` name it.
+    ///
+    /// Emitted in front of a store to the field when its type owns something.
+    ///
+    /// **Ownership:** Destroys the field; does not consume `base`.
+    DropField { base: Operand, field_path: Vec<u32> },
 
     /// Drop a script-level value binding at unit end.
     ///
@@ -2121,6 +2133,7 @@ impl Instruction {
                 f(value);
             }
             I::DropViaRef { ref_value } => f(&Operand::Value(*ref_value)),
+            I::DropField { base, .. } => f(base),
             I::ListGet { list, index, .. } | I::ListBoundsCheck { list, index, .. }
             | I::ListElementRef { list, index, .. } => {
                 f(list);

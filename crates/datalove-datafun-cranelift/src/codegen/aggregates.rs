@@ -474,8 +474,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             current_ty = field_types[field_idx as usize].clone();
         }
 
-        // Destroy old field value before overwriting (handles move types).
-        self.destroy_value(builder, current_addr, &current_ty, None, None)?;
 
         // Store new value at target address.
         let val = self.get_operand_value(builder, value)?;
@@ -491,31 +489,25 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Compile a ParamSetField instruction.
-    pub(super) fn compile_param_set_field(
+    /// The address of the field `field_path` names within `base`, its static
+    /// type, and its descriptor where the static type does not describe it.
+    ///
+    /// A base our caller described is one whose static type says `data` where
+    /// a type parameter stood, so its offsets are wrong by whatever the
+    /// difference in width is; there the offsets and descriptors are the
+    /// runtime's to work out, down the path.
+    pub(super) fn field_place(
         &mut self,
         builder: &mut FunctionBuilder,
-        param: &datalove_datafun_ir::ParamId,
+        base: &Operand,
         field_path: &[u32],
-        value: &Operand,
-    ) -> Result<(), CraneliftError> {
-        // Get base address and type from param.
-        let addr = self.param_values.get(param).copied().ok_or_else(|| {
-            CraneliftError::Codegen(format!("param {:?} not found in param_values", param))
-        })?;
-        let ty = self.func_ctx.param_types.get(param.0 as usize)
-            .cloned()
-            .ok_or_else(|| CraneliftError::Codegen(format!("param {:?} type not found", param)))?;
-
-        // Navigate field path to find target. A parameter our caller described
-        // is one whose static type says `data` where a type parameter stood, so
-        // its offsets are wrong by whatever the difference in width is. Writing
-        // at one of those is the severe half of this: it puts the value past
-        // the end of what the caller owns.
-        let dynamic_base = self.operand_ref_desc(&Operand::Param(*param));
-        let mut current_addr = addr;
-        let mut current_ty = ty;
-        let mut current_desc = dynamic_base;
+    ) -> Result<(cranelift_codegen::ir::Value, IrType, Option<cranelift_codegen::ir::Value>), CraneliftError> {
+        let mut current_addr = self.get_operand_ptr(builder, base)?;
+        let mut current_ty = match self.get_operand_type(base)? {
+            IrType::Ref(inner) => *inner,
+            ty => ty,
+        };
+        let mut current_desc = self.operand_ref_desc(base);
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
@@ -523,7 +515,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 IrType::Struct(flds) => flds.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => {
                     return Err(CraneliftError::Codegen(format!(
-                        "param_set_field path through non-aggregate type: {:?}",
+                        "field path through non-aggregate type: {:?}",
                         current_ty
                     )));
                 }
@@ -539,7 +531,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             match current_desc {
                 Some(desc) => {
                     let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-                        "a generic field write requires runtime imports".into()))?;
+                        "a generic field place requires runtime imports".into()))?;
                     let index = builder.ins().iconst(cl_types::I32, field_idx as i64);
                     let offset_fn = self.module
                         .declare_func_in_func(runtime.field_offset, builder.func);
@@ -561,7 +553,31 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             current_ty = field_types[field_idx as usize].clone();
         }
+        Ok((current_addr, current_ty, current_desc))
+    }
 
+    /// Compile a DropField instruction: destroy a field in place, where its
+    /// type owns something.
+    pub(super) fn compile_drop_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        base: &Operand,
+        field_path: &[u32],
+    ) -> Result<(), CraneliftError> {
+        let (addr, ty, desc) = self.field_place(builder, base, field_path)?;
+        self.destroy_value(builder, addr, &ty, desc, None)
+    }
+
+    /// Compile a ParamSetField instruction.
+    pub(super) fn compile_param_set_field(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        param: &datalove_datafun_ir::ParamId,
+        field_path: &[u32],
+        value: &Operand,
+    ) -> Result<(), CraneliftError> {
+        let (current_addr, current_ty, current_desc) =
+            self.field_place(builder, &Operand::Param(*param), field_path)?;
 
         let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
             "ParamSetField requires runtime imports".into()))?;
@@ -581,8 +597,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        // Destroy old field value before overwriting.
-        self.destroy_value(builder, current_addr, &current_ty, Some(tydesc_ptr), None)?;
 
         let val = self.get_operand_value(builder, value)?;
 
@@ -615,8 +629,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile a ParamSetFieldTracked instruction.
     ///
-    /// For Out params: caller destroys before call, so first write sees
-    /// uninitialized memory. Check tracking byte before destroying.
+    /// Writes the field and marks the param live; what the field held, a
+    /// `drop.field` in front destroyed.
     pub(super) fn compile_param_set_field_tracked(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -660,14 +674,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             current_ty = field_types[field_idx as usize].clone();
         }
 
-        // Get tracking byte offset (should exist for tracked params).
-        let track_offset = self.param_tracking_byte_offset(*param)
-            .ok_or_else(|| CraneliftError::Codegen(format!(
-                "ParamSetFieldTracked: param {:?} has no tracking byte", param
-            )))?;
-
-        // Destroy the old field value if the param holds one, then store.
-        self.destroy_value(builder, current_addr, &current_ty, None, Some(track_offset))?;
 
         let val = self.get_operand_value(builder, value)?;
         let field_repr = types::ir_type_to_cranelift(&current_ty);

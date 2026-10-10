@@ -1053,6 +1053,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DropViaRef { ref_value } => {
                 self.compile_drop_via_ref(builder, *ref_value)?;
             }
+            Instruction::DropField { base, field_path } => {
+                self.compile_drop_field(builder, base, field_path)?;
+            }
             Instruction::UnitEndDrop { operand } => {
                 // Precise binding: unconditional drop.
                 self.compile_drop(builder, operand)?;
@@ -1499,6 +1502,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match operand {
             Operand::Value(vid) => self.layout.values[vid.0 as usize].tracking_byte,
             Operand::Slot(sid) => self.layout.slots[sid.0 as usize].tracking_byte,
+            Operand::Param(pid) => self.param_tracking_byte_offset(*pid),
             _ => None,
         }
     }

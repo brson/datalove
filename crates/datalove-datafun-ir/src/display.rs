@@ -619,6 +619,13 @@ impl fmt::Display for Instruction {
             Instruction::DropTracked { operand } => {
                 write!(f, "drop.tracked {}", operand)
             }
+            Instruction::DropField { base, field_path } => {
+                write!(f, "drop.field {}", base)?;
+                for idx in field_path {
+                    write!(f, ".{}", idx)?;
+                }
+                Ok(())
+            }
             Instruction::DropViaRef { ref_value } => {
                 write!(f, "drop.ref {}", ref_value)
             }

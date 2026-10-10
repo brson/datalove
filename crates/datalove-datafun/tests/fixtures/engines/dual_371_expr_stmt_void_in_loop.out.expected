@@ -44,6 +44,7 @@ Analysis(
                     fn set_to(p0, p1):
                     block0:
                         v0 = move p1
+                        drop p0
                         store p0, v0
                         return
                 """,

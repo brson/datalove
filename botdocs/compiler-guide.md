@@ -1169,14 +1169,20 @@ is why it needs no resolved call target to know how an argument is passed.
 Reading a parameter is `Operand::Param(p)`, not an instruction. Writing has
 four forms:
 
-- `ParamStore { param, value }` - store to Mut (destroys old value)
-- `ParamStoreTracked { param, value }` - store to Out (checks tracking byte)
+- `ParamStore { param, value }` - store to Mut
+- `ParamStoreTracked { param, value }` - store to Out (marks it LIVE)
 - `ParamSetField { param, field_path, value }` - field write to Mut
 - `ParamSetFieldTracked { param, field_path, value }` - field write to Out
 
 `RefStore` and `RefSetField` generalize these to any reference-like operand.
 
 For `out` params, the **caller** destroys the existing value before the call via `DropViaRef`.
+
+Stores never destroy. Where the stored type owns something, lowering emits the
+destroy in front of the store (`emit_drop_before_store` in `context.rs`):
+`Drop` for a `mut` param, `DropTracked` for an `out` one, `DropViaRef` through
+a reference, `DropField` for a field. Slot stores already had theirs from
+`store_slot`.
 
 ### Enum Instructions
 

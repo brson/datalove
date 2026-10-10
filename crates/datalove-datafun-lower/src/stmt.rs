@@ -829,7 +829,7 @@ fn lower_set_compound<'db>(
             }
         }
         Operand::ValueRef(_) => {
-            ctx.emit(Instruction::RefStore { dest: target, value: Operand::Value(result) });
+            ctx.emit_ref_store(target, Operand::Value(result));
         }
         other => panic!("compound assignment to {other:?}, which is not a place"),
     }
@@ -874,7 +874,7 @@ fn lower_set_indexed<'db>(
         // Last step is a field, but chain contains index -- use ref-based approach.
         let ref_op = navigate_place(ctx, place, keys, place.steps.len())?;
         let value = take_value(ctx, value);
-        ctx.emit(Instruction::RefStore { dest: ref_op, value });
+        ctx.emit_ref_store(ref_op, value);
     }
     Ok(())
 }

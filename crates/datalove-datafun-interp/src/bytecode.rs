@@ -1157,16 +1157,13 @@ impl<'a> Lowering<'a> {
                 true
             }
             Instruction::ParamStore { param, value } => {
-                // A `mut` parameter always holds something, which goes first.
+                // What the parameter held, a `Drop` in front of the store
+                // destroyed, if it owned anything.
                 let p = Operand::Param(*param);
-                let (Some(ty), Some(dst), Some(desc), Some(src)) =
-                    (self.typed(&p), self.loc(&p), self.desc_of(&p), self.consumed(value)) else { return false };
+                let (Some(ty), Some(dst), Some(src)) =
+                    (self.typed(&p), self.loc(&p), self.consumed(value)) else { return false };
                 if self.typed(value).is_none() {
                     return false;
-                }
-                if !ty.is_copy() {
-                    let desc = self.desc_index(desc);
-                    self.emit(Op::Drop { src: dst, desc });
                 }
                 if let Some(op) = Self::copy(dst, src, layout_of(ty).size) {
                     self.emit(op);
@@ -1805,6 +1802,7 @@ impl Lowering<'_> {
                     }
                     Instruction::RefStore { dest, .. } | Instruction::RefStoreTracked { dest, .. }
                     | Instruction::RefSetField { dest, .. } | Instruction::RefSetFieldTracked { dest, .. }
+                    | Instruction::DropField { base: dest, .. }
                     | Instruction::OpAssign { place: dest, .. }
                     | Instruction::OpAssignChecked { place: dest, .. } => {
                         if let Operand::Value(id) | Operand::ValueRef(id) = dest {

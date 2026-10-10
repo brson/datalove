@@ -472,6 +472,9 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::DropViaRef { ref_value } => {
                 self.emit_drop_via_ref(out, *ref_value)?;
             }
+            Instruction::DropField { base, field_path } => {
+                self.emit_drop_field(out, base, field_path)?;
+            }
             Instruction::UnitEndDrop { operand } => {
                 self.emit_drop(out, operand, false)?;
             }
@@ -1739,14 +1742,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(value);
         let repr = types::ir_type_to_crepr(&current_ty);
 
-        // The field holds a live value, so destroy it before overwriting.
-        // This applies to the tracked form too: the tracking byte covers the
-        // whole slot, which is already live whenever a field of it is assigned.
-        if !current_ty.is_copy() {
-            let tydesc = self.tydesc_name(&current_ty);
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", current_addr, tydesc).unwrap();
-        }
-
         match repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
@@ -2809,23 +2804,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let ty = &func_ctx.param_types[param.0 as usize];
         let repr = types::ir_type_to_crepr(ty);
 
-        // For non-copy types, destroy the old value before overwriting.
-        // - For tracked params (Out), check tracking byte first.
-        // - For non-tracked mut params, always destroy (param is always initialized).
-        if !ty.is_copy() {
-            if tracked {
-                if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
-                    let tydesc = self.tydesc_name(ty);
-                    writeln!(out, "    if (__frame[{}] == TRACK_LIVE) dtlv_rti_any_destroy_local(rt, {}, &{});",
-                        track_offset, param_addr, tydesc).unwrap();
-                }
-            } else {
-                // Mut param - always has a valid value that needs destruction.
-                let tydesc = self.tydesc_name(ty);
-                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", param_addr, tydesc).unwrap();
-            }
-        }
-
         match repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){param_addr} = *({c_ty}*){src_addr};").unwrap();
@@ -2865,16 +2843,10 @@ impl<'a> FunctionCodegenContext<'a> {
         // severe half of this: it puts the value past the end of what the
         // caller owns.
         if let Some(base_desc) = self.operand_ref_desc(&Operand::Param(param)) {
-            let (addr, field_desc, field_ty) = self.walk_dynamic_field_path(
+            let (addr, field_desc, _) = self.walk_dynamic_field_path(
                 current_addr, base_desc, &current_ty, field_path)?;
             let src_addr = self.operand_addr(value);
             let src_tydesc = self.operand_tydesc(value);
-
-            // The field holds a live value, destroyed against the descriptor
-            // that says what is really there rather than the erased type.
-            if !field_ty.is_copy() {
-                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, field_desc).unwrap();
-            }
 
             // What this function holds is in the erased shape and the field is
             // in the real one, so the value is moved back out of its wrapping
@@ -2932,12 +2904,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let ty = self.operand_type(value).clone();
         let repr = types::ir_type_to_crepr(&ty);
 
-        if !tracked && !ty.is_copy() {
-            // Non-tracked: destination has a valid value, destroy it first.
-            let tydesc = self.tydesc_name(&ty);
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", dest_addr, tydesc).unwrap();
-        }
-
         match repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
@@ -2950,10 +2916,9 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         if tracked {
-            // The destination was uninitialized, so nothing was destroyed
-            // above and this only records that something is there now. A
-            // reference into a place this frame does not own has no tracking
-            // byte here, and then there is nothing to record.
+            // This only records that something is there now. A reference
+            // into a place this frame does not own has no tracking byte here,
+            // and then there is nothing to record.
             self.mark_tracking_live(out, dest);
         }
         Ok(())
@@ -3008,12 +2973,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_addr = self.operand_addr(value);
         let repr = types::ir_type_to_crepr(&current_ty);
 
-        if !tracked && !current_ty.is_copy() {
-            // Non-tracked: field has a valid value, destroy it first.
-            let tydesc = self.tydesc_name(&current_ty);
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", current_addr, tydesc).unwrap();
-        }
-
         match repr {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
@@ -3026,8 +2985,6 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         if tracked {
-            // Tracked (RefSetFieldTracked): destination was uninitialized, no destroy needed.
-            // Mark tracking byte as LIVE.
             todo!("RefSetFieldTracked tracking byte write not yet implemented in C AOT");
         }
         Ok(())
@@ -3041,24 +2998,63 @@ impl<'a> FunctionCodegenContext<'a> {
         if ty.is_copy() {
             return Ok(());
         }
-        let tydesc = self.tydesc_name(&ty);
+        // A param our caller described is described by it.
+        let tydesc = match self.operand_ref_desc(operand) {
+            Some(desc) => desc,
+            None => format!("&{}", self.tydesc_name(&ty)),
+        };
 
         if tracked {
             // Check tracking byte before dropping.
             let track_offset = match operand {
                 Operand::Slot(sid) => self.layout.slot_tracking_byte(sid.0),
                 Operand::Value(vid) => self.layout.value_tracking_byte(vid.0),
+                Operand::Param(pid) => self.layout.param_tracking_byte(pid.0),
                 _ => None,
             };
 
             if let Some(offset) = track_offset {
-                writeln!(out, "    if (__frame[{}] == TRACK_LIVE) {{ dtlv_rti_any_destroy_local(rt, {}, &{}); __frame[{}] = TRACK_MOVED; }}",
+                writeln!(out, "    if (__frame[{}] == TRACK_LIVE) {{ dtlv_rti_any_destroy_local(rt, {}, {}); __frame[{}] = TRACK_MOVED; }}",
                     offset, addr, tydesc, offset).unwrap();
             } else {
-                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, tydesc).unwrap();
+                writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap();
             }
         } else {
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap();
+        }
+        Ok(())
+    }
+
+    /// Emit drop field: destroy a field in place, where its type owns
+    /// something.
+    fn emit_drop_field(&mut self, out: &mut String, base: &Operand, field_path: &[u32]) -> Result<(), CAotError> {
+        // A reference value names what it points at.
+        let (addr, base_ty) = match self.operand_type(base) {
+            IrType::Ref(inner) => (format!("(*(void**){})", self.operand_addr(base)), inner.as_ref().clone()),
+            ty => (self.operand_addr(base), ty.clone()),
+        };
+        let (addr, desc, ty) = match self.operand_ref_desc(base) {
+            Some(base_desc) => self.walk_dynamic_field_path(addr, base_desc, &base_ty, field_path)?,
+            None => {
+                let mut addr = addr;
+                let mut ty = base_ty;
+                for &idx in field_path {
+                    let field_types: Vec<IrType> = match &ty {
+                        IrType::Tuple(tys) => tys.clone(),
+                        IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+                        other => return Err(CAotError::Codegen(format!(
+                            "field path steps through a {:?}, which has no fields", other))),
+                    };
+                    let offsets = types::compute_tuple_field_offsets(&field_types);
+                    addr = format!("({} + {})", addr, offsets[idx as usize]);
+                    ty = field_types[idx as usize].clone();
+                }
+                let desc = format!("&{}", self.tydesc_name(&ty));
+                (addr, desc, ty)
+            }
+        };
+        if !ty.is_copy() {
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, desc).unwrap();
         }
         Ok(())
     }

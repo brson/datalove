@@ -902,31 +902,18 @@ impl FrameStore {
 
     /// Write a value to a slot in a previous unit.
     ///
-    /// Destroys whatever the slot still owns before writing, and leaves it
-    /// initialized, so a slot that had been moved out of is readable again.
+    /// A store, so it destroys nothing: a drop in front of it destroyed what
+    /// the slot held, if it owned anything. Leaves the slot initialized, so a
+    /// slot that had been moved out of is readable again.
     ///
     /// Panics if unit not found (compiler bug).
     pub fn write_external_slot(
         &mut self,
-        rt_handle: datalove_rt::c::LocalRtHandle,
         unit: u32,
         slot: SlotId,
         value: &Value,
     ) {
         let frame = self.frame(unit);
-
-        // A slot that was moved out of is uninitialized and owns nothing.
-        if frame.slot_is_live(slot) {
-            let old_val = frame.slot(slot);
-            unsafe {
-                datalove_rt::c::dtlv_rti_any_destroy_local(
-                    rt_handle,
-                    old_val.ptr,
-                    old_val.tydesc,
-                );
-            }
-        }
-
         let dest = frame.slot_dest(slot);
         unsafe {
             std::ptr::copy_nonoverlapping(value.ptr, dest.ptr, (*value.tydesc).size as usize);

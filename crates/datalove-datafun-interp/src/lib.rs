@@ -968,7 +968,6 @@ impl IrInterpreter {
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
-                            self.runtime.handle(),
                             *unit,
                             *slot,
                             &src_val,
@@ -1066,7 +1065,6 @@ impl IrInterpreter {
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
-                            self.runtime.handle(),
                             *unit,
                             *slot,
                             &src_val,
@@ -1075,34 +1073,11 @@ impl IrInterpreter {
                     }
                 }
             }
-            Instruction::ParamStore { param, value } => {
-                // Mut params are always initialized - always destroy old value.
+            // A store writes and does not destroy: what the place held, if
+            // anything, a drop in front of the store has destroyed.
+            Instruction::ParamStore { param, value } | Instruction::ParamStoreTracked { param, value } => {
                 let src_val = self.read_operand(value, frame, frames);
                 let dest_ptr = frame.param_dest(*param);
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        dest_ptr.ptr,
-                        dest_ptr.tydesc,
-                    );
-                }
-                unsafe { self.move_value(&src_val, dest_ptr); }
-                Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::ParamStoreTracked { param, value } => {
-                // Out params: caller destroys before call, so first write sees
-                // uninitialized memory. Check tracking byte before destroying.
-                let src_val = self.read_operand(value, frame, frames);
-                let dest_ptr = frame.param_dest(*param);
-                if frame.param_is_live(*param) {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(
-                            self.runtime.handle(),
-                            dest_ptr.ptr,
-                            dest_ptr.tydesc,
-                        );
-                    }
-                }
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 frame.mark_param_live(*param);
                 Self::mark_source_dropped_local(value, frame);
@@ -1120,18 +1095,10 @@ impl IrInterpreter {
                 frame.mark_value_live(*overflow);
             }
             Instruction::RefStore { dest, value } => {
-                // Store through a reference operand. Used after inlining mut params.
-                // The destination is always precise (initialized), so always destroy old value.
+                // Store through a reference operand.
                 let src_val = self.read_operand(value, frame, frames);
                 let dest_val = self.get_operand_dest(dest, frame);
                 let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        dest_ptr.ptr,
-                        dest_ptr.tydesc,
-                    );
-                }
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 Self::mark_source_dropped_local(value, frame);
             }
@@ -1469,23 +1436,12 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        if frame.slot_is_live(*slot_id) {
-                            let old_val = frame.slot(*slot_id);
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.copy_value(&src_val, dest_slot); }
                         frame.mark_slot_live(*slot_id);
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
-                            self.runtime.handle(),
                             *unit,
                             *slot,
                             &src_val,
@@ -1497,16 +1453,8 @@ impl IrInterpreter {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
                     SlotDest::Local(slot_id) => {
-                        if frame.slot_is_live(*slot_id) {
-                            let old_val = frame.slot(*slot_id);
-                            unsafe {
-                                datalove_rt::c::dtlv_rti_any_destroy_local(
-                                    self.runtime.handle(),
-                                    old_val.ptr,
-                                    old_val.tydesc,
-                                );
-                            }
-                        }
+                        // A drop in front of the store emptied the slot.
+                        frame.check_slot_empty(*slot_id);
                         let dest_slot = frame.slot_dest(*slot_id);
                         unsafe { self.move_value(&src_val, dest_slot); }
                         Self::mark_source_dropped_local(value, frame);
@@ -1514,7 +1462,6 @@ impl IrInterpreter {
                     }
                     SlotDest::External { unit, slot } => {
                         frames.write_external_slot(
-                            self.runtime.handle(),
                             *unit,
                             *slot,
                             &src_val,
@@ -1598,14 +1545,6 @@ impl IrInterpreter {
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     dest_ptr.ptr, dest_ptr.tydesc, field_path
                 );
-                // Destroy old value and store new value.
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        current_ptr,
-                        current_tydesc,
-                    );
-                }
                 self.write_field(current_ptr, current_tydesc, &value_val);
                 Self::mark_source_dropped_local(value, frame);
             }
@@ -2185,15 +2124,6 @@ impl IrInterpreter {
                     slot_info.ptr, slot_info.tydesc, field_path
                 );
 
-                // Destroy old field value before overwriting (handles move types).
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        current_ptr,
-                        current_tydesc,
-                    );
-                }
-
                 // Copy new value to target field.
                 let size = unsafe { (*current_tydesc).size as usize };
                 unsafe {
@@ -2205,43 +2135,29 @@ impl IrInterpreter {
                 }
                 Self::mark_source_dropped_local(value, frame);
             }
-            Instruction::ParamSetField { param, field_path, value } => {
-                // Mut params are always initialized - always destroy old field.
+            Instruction::ParamSetField { param, field_path, value }
+            | Instruction::ParamSetFieldTracked { param, field_path, value } => {
                 let value_val = self.read_operand(value, frame, frames);
                 let slot_info = frame.param_dest(*param);
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
+                );
+                self.write_field(current_ptr, current_tydesc, &value_val);
+                frame.mark_param_live(*param);
+                Self::mark_source_dropped_local(value, frame);
+            }
+            Instruction::DropField { base, field_path } => {
+                let place = self.get_operand_dest(base, frame);
+                let (field_ptr, field_tydesc) = self.navigate_field_path(
+                    place.ptr, place.tydesc, field_path
                 );
                 unsafe {
                     datalove_rt::c::dtlv_rti_any_destroy_local(
                         self.runtime.handle(),
-                        current_ptr,
-                        current_tydesc,
+                        field_ptr,
+                        field_tydesc,
                     );
                 }
-                self.write_field(current_ptr, current_tydesc, &value_val);
-                Self::mark_source_dropped_local(value, frame);
-            }
-            Instruction::ParamSetFieldTracked { param, field_path, value } => {
-                // Out params: caller destroys before call, so first write sees
-                // uninitialized memory. Check tracking byte before destroying.
-                let value_val = self.read_operand(value, frame, frames);
-                let slot_info = frame.param_dest(*param);
-                let (current_ptr, current_tydesc) = self.navigate_field_path(
-                    slot_info.ptr, slot_info.tydesc, field_path
-                );
-                if frame.param_is_live(*param) {
-                    unsafe {
-                        datalove_rt::c::dtlv_rti_any_destroy_local(
-                            self.runtime.handle(),
-                            current_ptr,
-                            current_tydesc,
-                        );
-                    }
-                }
-                self.write_field(current_ptr, current_tydesc, &value_val);
-                frame.mark_param_live(*param);
-                Self::mark_source_dropped_local(value, frame);
             }
             // Slot tracking variants - these track SLOT state, not value state.
             Instruction::SetFieldTracked { slot, field_path, value } => {
@@ -2258,13 +2174,6 @@ impl IrInterpreter {
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
                 );
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        current_ptr,
-                        current_tydesc,
-                    );
-                }
                 let size = unsafe { (*current_tydesc).size as usize };
                 unsafe {
                     std::ptr::copy_nonoverlapping(

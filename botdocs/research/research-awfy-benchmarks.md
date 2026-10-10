@@ -121,10 +121,11 @@ And why, from a profile of each:
   though every value there is an `f64` or a struct of them, and owns nothing:
   the Cranelift codegen destroyed the old value before every store through a
   reference, into a field or into a parameter, whatever its type. It now
-  emits no destroy for a copy type (`FunctionCompiler::destroy_value`, which
-  every such store goes through); the C backend already checked, but for a
+  emits no destroy for a copy type; the C backend already checked, but for a
   drop and an `out` argument. NBody went from 511 to 169 ms under the JIT and
-  from 421 to 172 ms AOT; `wordfreq` and the store demo gained about 4%.
+  from 421 to 172 ms AOT; `wordfreq` and the store demo gained about 4%. The
+  decision has since moved into the IR: no store destroys, and lowering emits
+  a drop in front of one only where the type owns something.
 - **Mandelbrot, 1.4x Java compiled, but 6.7x tiered.** With every function
   compiled at its first call it runs in 546 ms; tiered, in 2606. Its two inner
   loops need what their enclosing loop defines, so OSR refuses them, and the

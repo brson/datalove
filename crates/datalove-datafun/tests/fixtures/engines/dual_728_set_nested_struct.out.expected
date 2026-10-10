@@ -20,6 +20,7 @@ Analysis(
                         v3 = pack Struct0 {v2}
                         store.move.tracked s0, v3
                         v4 = const 99int
+                        drop.field s0.0.0
                         setfield.tracked s0.0.0, v4
                         v5 = getfieldref s0.0
                         v6 = getfieldref *v5.0

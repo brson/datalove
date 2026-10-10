@@ -25,6 +25,7 @@ Analysis(
                     block0:
                         v0 = const 10int
                         v1 = add p0, v0
+                        drop p0
                         store p0, v1
                         v2 = const true
                         drop v0

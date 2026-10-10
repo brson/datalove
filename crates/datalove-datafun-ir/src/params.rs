@@ -400,6 +400,10 @@ pub fn map_operands_in_instruction(
         Instruction::Drop { operand } => Instruction::Drop {
             operand: replace_operand(operand),
         },
+        Instruction::DropField { base, field_path } => Instruction::DropField {
+            base: replace_operand(base),
+            field_path: field_path.clone(),
+        },
         Instruction::DropTracked { operand } => Instruction::DropTracked {
             operand: replace_operand(operand),
         },

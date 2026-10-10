@@ -20,6 +20,7 @@ Analysis(
                         goto block1
                     block1:
                         v2 = const 1int
+                        drop.field s0.0
                         setfield.tracked s0.0, v2
                         goto block2
                     block2:
@@ -28,6 +29,7 @@ Analysis(
                         goto block3
                     block3:
                         v4 = const 2int
+                        drop.field s0.0
                         setfield.tracked s0.0, v4
                         goto block4
                     block4:

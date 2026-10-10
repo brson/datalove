@@ -140,7 +140,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
         let value_ptr = self.get_operand_ptr(builder, operand)?;
-        self.destroy_value(builder, value_ptr, &ty, None, None)
+        let desc = self.operand_ref_desc(operand);
+        self.destroy_value(builder, value_ptr, &ty, desc, None)
     }
 
     /// Compile a DropTracked instruction.
@@ -201,11 +202,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("DropTracked requires runtime handle parameter".into())
         })?;
 
-        // Look up pre-emitted TyDesc.
-        let tydesc_id = self.tydesc(&ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        // An out param our caller described is described by it.
+        let tydesc_addr = match self.operand_ref_desc(operand) {
+            Some(desc) => desc,
+            None => {
+                let tydesc_id = self.tydesc(&ty)?;
+                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
+                builder.ins().symbol_value(PTR_TYPE, tydesc_gv)
+            }
+        };
 
         let value_ptr = self.get_operand_ptr(builder, operand)?;
 

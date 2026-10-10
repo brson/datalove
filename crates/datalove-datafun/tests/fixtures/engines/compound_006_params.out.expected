@@ -71,6 +71,7 @@ Analysis(
                     fn init_then_add(p0):
                     block0:
                         v0 = const 40int
+                        drop.tracked p0
                         store.tracked p0, v0
                         v1 = const 2int
                         add.assign p0, v1
