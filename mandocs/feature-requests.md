@@ -1,3 +1,10 @@
+## 2026/10/10 Recursive types
+
+Questions about how to represent them in datalit.
+May need type aliases.
+Should boxing be explicit or implicit?
+
+
 ## 2026/10/08 Lossless mixed-type math ops
 
 Being able to do
