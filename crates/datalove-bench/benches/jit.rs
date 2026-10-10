@@ -53,6 +53,7 @@ impl Config {
         let config = DispatcherConfig {
             jit_enabled: true,
             mode: DispatcherMode::Tuned { jit_threshold: 1 },
+            opt_level: Default::default(),
         };
         let dispatcher = OptimizingDispatcher::with_config(config)
             .expect("dispatcher construction failed");

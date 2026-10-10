@@ -5,8 +5,9 @@ program shaped like an application, using the store demo (`demos/store`) as
 the workload, and for adding on-stack replacement (OSR), which the demo shows
 the JIT needs.
 
-> **This is a plan.** Steps 0 to 3 are done (October 2026); the rest is not
-> started. The numbers are from a release build on 4 CPUs.
+> **This is a record of a plan, carried out.** Steps 0 to 5 are done (October
+> 2026), and `--jit` tiers by default as a result. The numbers are from a
+> release build on 4 CPUs.
 
 ## Contents
 
@@ -15,6 +16,7 @@ the JIT needs.
 - [The steps](#user-content-the-steps)
 - [The baseline grid](#user-content-the-baseline-grid)
 - [Making the crossings cheap](#user-content-making-the-crossings-cheap)
+- [Tuning](#user-content-tuning)
 - [OSR](#user-content-osr)
 
 ## Why the store demo
@@ -60,17 +62,16 @@ were planned it was slower than having no JIT at all; see [Making the
 crossings cheap](#user-content-making-the-crossings-cheap). Codegen now
 includes the entries compiled at loops.
 
-**Codegen of the first function costs about 4 ms** whatever it is
-(`db.order_count`, 72 bytes, is the most expensive function to compile in the
-threshold-1 run), which looks like one-time setup in the compiler being
-charged to it.
+**Codegen of the first function cost about 4 ms** whatever it was, which
+was one-time setup charged to it: Cranelift's IR verifier and the first stubs.
+It went with the changes in step 4.
 
 ## The steps
 
 **0. Instrumentation (done).** `script --jit` runs under an
 `OptimizingDispatcher` rather than a bare `JitEngine`, so the dispatcher being
-tuned is the one that runs. `--jit-threshold N` sets the threshold, defaulting
-to 1, which is what `--jit` always did. `--jit-stats` prints the time spent
+tuned is the one that runs. `--jit-threshold N` sets the threshold, then
+defaulting to 1, which is what `--jit` had always done (100 since step 5). `--jit-stats` prints the time spent
 compiling and running, then `JitStats`: totals, the functions with the most
 calls through the dispatcher -- run by the interpreter, entered from the
 interpreter, and calling back into it from compiled code -- and the functions
@@ -100,15 +101,12 @@ still loses at 2,000 orders, to its codegen rather than to crossings.
 with OSR running the report close to the threshold-1 time while compiling far
 fewer than 86 functions; it runs it faster than threshold 1, compiling 39.
 
-**4. Tune.** Sweep the call threshold, the back-edge threshold -- or one
-counter of calls plus back-edges over some k, as HotSpot does -- and
-Cranelift's `opt_level` (`none` against `speed`, since codegen is now a
-measurable share of the run). Score total wall time across all three data
-sizes and pick what does well across them, not what wins at 20,000.
+**4. Tune (done).** See [Tuning](#user-content-tuning).
 
-**5. Check against other programs.** `benchvs`, the `jit` bench in
-`datalove-bench` and `botdocs/learn.dfs`, so the result is not fitted to one
-program, then record it in the compiler guide's performance notes.
+**5. Check against other programs (done).** `benchvs` and
+`botdocs/learn.dfs`; see [Tuning](#user-content-tuning). The `jit` bench in
+`datalove-bench` was not run: it holds the threshold at 1 on purpose, to
+measure what compiled code is worth rather than when to compile.
 
 ## The baseline grid
 
@@ -303,6 +301,102 @@ direction, compiled code calling into the interpreter through
 `__jit_dispatch_call`, builds two `Vec`s and probes the layout cache per call;
 the demo makes almost none of those, but OSR will, since a compiled loop calls
 whatever its callees are.
+
+## Tuning
+
+**Where the time goes, after OSR.** `perf` of the demo at 20,000 orders, a
+threshold of 100 with OSR, the whole process: the runtime library (maps,
+comparison, clone and destroy) 26%, the front end (parsing the data, CTFE)
+24.5%, the kernel 20%, compiled code 9%, Cranelift 5%, and the interpreter
+0.8%. The kernel's share is page faults, 84% of which happen compiling: a
+compile-only script takes 46,600 of the run's 55,400. So once loops are
+entered, what the JIT's knobs can still win is its codegen and its startup;
+the larger levers are the runtime library and the front end, which no JIT
+setting touches.
+
+**The sweep.** `grid.py` now times compiling everything at once against a
+call threshold of 100 -- which barely matters, since loops decide it -- across
+OSR thresholds of 100, 1000 and 10,000 and `opt_level` `speed` and `none`.
+
+**2,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 146 | 62 | 73 | 1.00x | - | - | - |
+| jit t=1 | 166 | 63 | 89 | 0.88x | 86 | 57 | 122 |
+| t=100 osr=100 speed | 147 | 64 | 71 | 1.00x | 40 | 34 | 6,941 |
+| t=100 osr=1000 speed | 146 | 63 | 70 | 1.00x | 42 | 32 | 76,163 |
+| t=100 osr=10000 speed | 137 | 63 | 62 | 1.07x | 39 | 11 | 355,818 |
+| t=100 osr=100 none | 139 | 63 | 64 | 1.05x | 40 | 28 | 6,941 |
+| t=100 osr=1000 none | 139 | 64 | 64 | 1.05x | 42 | 26 | 76,163 |
+| t=100 osr=10000 none | 135 | 63 | 61 | 1.08x | 39 | 8 | 355,818 |
+| aot | 33 | - | - | 4.37x | - | - | - |
+
+**20,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 865 | 252 | 576 | 1.00x | - | - | - |
+| jit t=1 | 578 | 251 | 288 | 1.50x | 86 | 62 | 123 |
+| t=100 osr=100 speed | 560 | 253 | 271 | 1.55x | 41 | 36 | 7,117 |
+| t=100 osr=1000 speed | 559 | 256 | 268 | 1.55x | 43 | 34 | 75,717 |
+| t=100 osr=10000 speed | 577 | 253 | 290 | 1.50x | 43 | 37 | 815,357 |
+| t=100 osr=100 none | 548 | 251 | 262 | 1.58x | 41 | 30 | 7,117 |
+| t=100 osr=1000 none | 548 | 251 | 262 | 1.58x | 43 | 30 | 75,717 |
+| t=100 osr=10000 none | 571 | 249 | 282 | 1.51x | 43 | 28 | 815,357 |
+| aot | 228 | - | - | 3.80x | - | - | - |
+
+**200,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 7048 | 2220 | 4566 | 1.00x | - | - | - |
+| jit t=1 | 4345 | 2220 | 1817 | 1.62x | 86 | 95 | 123 |
+| t=100 osr=100 speed | 4296 | 2248 | 1802 | 1.64x | 42 | 37 | 6,646 |
+| t=100 osr=1000 speed | 4320 | 2267 | 1784 | 1.63x | 44 | 35 | 75,486 |
+| t=100 osr=10000 speed | 4268 | 2227 | 1771 | 1.65x | 44 | 35 | 818,382 |
+| t=100 osr=100 none | 4285 | 2243 | 1783 | 1.64x | 42 | 29 | 6,646 |
+| t=100 osr=1000 none | 4277 | 2235 | 1775 | 1.65x | 44 | 28 | 75,486 |
+| t=100 osr=10000 none | 4271 | 2245 | 1778 | 1.65x | 44 | 28 | 818,382 |
+| aot | 1704 | - | - | 4.14x | - | - | - |
+
+`none` was never worse than `speed` on the demo, and better at 2,000 and
+20,000 orders. An OSR threshold of 10,000 won at 2,000 orders, by compiling
+nothing at loops, and lost at 20,000; 100 and 1000 were alike.
+
+**Codegen, made cheaper.** The sweep's codegen column had about 26 ms left
+at `none`, so most of it was not Cranelift optimizing. Two things were:
+
+- **Stubs were made again for every caller.** Compiling a function made a
+  stub for each callee and a trampoline for each native it called, each a
+  Cranelift compilation of its own, though a stub depends only on its callee.
+  `JitCompiler` keeps them now, by callee and by symbol and address.
+- **Cranelift's IR verifier ran on everything.** It is for catching the
+  codegen's mistakes; it now runs only with debug assertions, which the test
+  suites have. It was about 6 ms of 24.
+
+Together they took the demo's codegen at a threshold of 100 from 34 ms to 22
+ms at `speed` and from 28 to 18 at `none`, and threshold 1's from 62 to 43.
+
+**Other programs.** Medians of 5 runs, in ms:
+
+| Program | interpreter | `--jit` at 1 | tiered, `speed` | tiered, `none` |
+|---|---|---|---|---|
+| `benchvs/fib` | 3443 | 443 | 436 | 439 |
+| `benchvs/primes` | 3256 | 335 | 332 | 430 |
+| `benchvs/sum` | 767 | 387 | 387 | 389 |
+| `benchvs/wordfreq` | 971 | 606 | 598 | 608 |
+| `botdocs/learn.dfs` | 18.8 | 25.9 | 20.3 | - |
+
+Tiered is a call threshold of 100 with OSR at 1000 iterations. `primes` is
+what the demo could not show: an arithmetic loop, where `none`'s code is 28%
+slower. Tiering itself is as fast as compiling everything or faster on every
+program, and much faster on a short one.
+
+**The defaults.** `script --jit` now tiers: a call threshold of 100
+(`DEFAULT_JIT_THRESHOLD`), OSR at 1000 iterations, `opt_level` `speed`. It
+had compiled every function on its first call. `--jit-opt-level none` is
+there for a program shaped like the demo, bound by the runtime library.
 
 ## OSR
 

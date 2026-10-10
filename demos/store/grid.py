@@ -28,7 +28,16 @@ ROOT = HERE.parent.parent
 DATALOVE = ROOT / "target/release/datalove"
 OUT = ROOT / "target/store-grid"
 
-THRESHOLDS = [1, 2, 10, 100, 1000]
+# Each JIT configuration: its name and the flags beside `--jit`. Compiling
+# every function on its first call, as `--jit` alone does, then tiering at a
+# call threshold of 100 -- which no longer matters much, since loops are
+# entered by OSR -- across OSR thresholds and Cranelift's opt levels.
+JIT_CONFIGS = [("jit t=1", ["--jit-threshold", "1"])] + [
+    (f"t=100 osr={osr} {opt}",
+     ["--jit-threshold", "100", "--jit-osr-threshold", str(osr), "--jit-opt-level", opt])
+    for opt in ["speed", "none"]
+    for osr in [100, 1000, 10000]
+]
 TIME_LINE = re.compile(r"^time: ([\d.]+) ms compiling, ([\d.]+) ms running$", re.M)
 COMPILED_LINE = re.compile(
     r"^jit: compiled (\d+) functions \((\d+) refused\), ([\d.]+) ms codegen, (\d+) bytes$", re.M)
@@ -46,8 +55,8 @@ def engines(orders):
     """Each engine as (name, argv, whether it is a `script` run)."""
     script = [str(DATALOVE), "script", "--time"]
     yield "interp", script + ["report.dfs"], True
-    for t in THRESHOLDS:
-        yield f"jit t={t}", script + ["--jit", "--jit-threshold", str(t), "report.dfs"], True
+    for name, flags in JIT_CONFIGS:
+        yield name, script + ["--jit"] + flags + ["report.dfs"], True
     yield "aot", [str(OUT / f"report-{orders}")], False
 
 
@@ -62,10 +71,9 @@ def run(argv):
     return wall, proc.stderr
 
 
-def jit_stats(threshold):
-    """What one run at `threshold` compiled, and the calls through the dispatcher."""
-    _, err = run([str(DATALOVE), "script", "--jit", "--jit-threshold", str(threshold),
-                  "--jit-stats", "report.dfs"])
+def jit_stats(flags):
+    """What one run with `flags` compiled, and the calls through the dispatcher."""
+    _, err = run([str(DATALOVE), "script", "--jit"] + flags + ["--jit-stats", "report.dfs"])
     compiled = COMPILED_LINE.search(err)
     calls = CALLS_LINE.search(err)
     return {
@@ -112,8 +120,8 @@ def measure(orders):
                   for key in samples[name][0]}
         result["samples"] = samples[name]
         results[name] = result
-    for t in THRESHOLDS:
-        results[f"jit t={t}"]["stats"] = jit_stats(t)
+    for name, flags in JIT_CONFIGS:
+        results[name]["stats"] = jit_stats(flags)
     for name, code in failed.items():
         results[name] = {"failed": code}
     return results

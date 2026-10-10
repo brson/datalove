@@ -28,7 +28,7 @@ check: build
     @echo "the report matches, under the interpreter and the jit"
 
 # Print what the jit compiled and how calls crossed into it, at a threshold.
-jit-stats threshold="1": build
+jit-stats threshold="100": build
     {{datalove}} script --jit --jit-threshold {{threshold}} --jit-stats report.dfs 2>&1 | rg -v '^"'
 
 # Time every engine and jit threshold at several sizes of data; see grid.py.

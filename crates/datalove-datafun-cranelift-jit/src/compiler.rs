@@ -110,6 +110,13 @@ pub struct JitCompiler {
     /// jit's time on call-heavy code. The cell's address is emitted into the
     /// stub, so each is boxed to stay put and none is ever removed.
     code_cells: rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
+    /// The stub for each callee, made by the first compilation to call it and
+    /// called by every later one: a stub depends on nothing but its callee,
+    /// and making one is a Cranelift compilation of its own.
+    stubs: rustc_hash::FxHashMap<FuncIdentity, FuncId>,
+    /// The trampoline for each native rider function, by symbol and the
+    /// address it was registered at, likewise.
+    native_trampolines: HashMap<(String, u64), FuncId>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -123,7 +130,7 @@ unsafe impl Sync for SendPtr {}
 
 impl JitCompiler {
     /// Create a new JIT compiler for the host target.
-    pub fn new() -> Result<Self, JitError> {
+    pub fn new(opt_level: crate::JitOptLevel) -> Result<Self, JitError> {
         use cranelift_codegen::ir::{self as cl_ir, types as cl_types, AbiParam};
 
         let triple = Triple::host();
@@ -133,7 +140,12 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("unsupported target: {}", e)))?;
 
         let mut settings_builder = settings::builder();
-        settings_builder.set("opt_level", "speed")
+        settings_builder.set("opt_level", opt_level.as_str())
+            .map_err(|e| JitError::CompilationFailed(format!("settings error: {}", e)))?;
+        // Cranelift checks the IR it is given before compiling it, which is
+        // for catching the codegen's mistakes: the tests, built with debug
+        // assertions, keep it, and a release build does not pay for it.
+        settings_builder.set("enable_verifier", if cfg!(debug_assertions) { "true" } else { "false" })
             .map_err(|e| JitError::CompilationFailed(format!("settings error: {}", e)))?;
 
         let flags = settings::Flags::new(settings_builder);
@@ -213,6 +225,8 @@ impl JitCompiler {
             native_symbols,
             code_owners: Mutex::new(Vec::new()),
             code_cells: Default::default(),
+            stubs: Default::default(),
+            native_trampolines: HashMap::new(),
         })
     }
 
@@ -307,7 +321,15 @@ impl JitCompiler {
                     .get(native_ctx.symbol())
                     .map(|p| p.0 as u64)
                     .unwrap_or_else(|| panic!("native symbol not registered: {}", native_ctx.symbol()));
-                let func_id = self.create_native_trampoline(native_ctx.symbol(), &sig, addr)?;
+                let cached = (native_ctx.symbol().to_owned(), addr);
+                let func_id = match self.native_trampolines.get(&cached) {
+                    Some(&id) => id,
+                    None => {
+                        let id = self.create_native_trampoline(native_ctx.symbol(), &sig, addr)?;
+                        self.native_trampolines.insert(cached, id);
+                        id
+                    }
+                };
                 if let CodeRef::Module { module, id } = &code_ref {
                     module_funcs.insert((*module, CodeUnitId(id.0)), func_id);
                 }
@@ -316,7 +338,14 @@ impl JitCompiler {
 
             // Create a stub for this callee.
             let key = FuncIdentity::of(&code_ref, ctx.unit());
-            let stub_id = self.create_stub_for_callee(key, &callee_ir)?;
+            let stub_id = match self.stubs.get(&key) {
+                Some(&id) => id,
+                None => {
+                    let id = self.create_stub_for_callee(key, &callee_ir)?;
+                    self.stubs.insert(key, id);
+                    id
+                }
+            };
 
             // Register in appropriate map.
             match &code_ref {

@@ -16,7 +16,7 @@ use datalove_datafun_interp::{
 };
 use datalove_rt::c::LocalRtHandle;
 
-use crate::{JitEngine, JitError};
+use crate::{JitEngine, JitError, JitOptLevel, DEFAULT_JIT_THRESHOLD};
 
 /// Execution mode for the dispatcher.
 #[derive(Clone, Debug)]
@@ -40,7 +40,7 @@ pub enum DispatcherMode {
 impl Default for DispatcherMode {
     fn default() -> Self {
         DispatcherMode::Tuned {
-            jit_threshold: 100,
+            jit_threshold: DEFAULT_JIT_THRESHOLD,
         }
     }
 }
@@ -52,6 +52,8 @@ pub struct DispatcherConfig {
     pub jit_enabled: bool,
     /// Execution mode.
     pub mode: DispatcherMode,
+    /// How hard Cranelift works on what it compiles.
+    pub opt_level: JitOptLevel,
 }
 
 impl Default for DispatcherConfig {
@@ -66,8 +68,9 @@ impl DispatcherConfig {
         Self {
             jit_enabled: true,
             mode: DispatcherMode::Tuned {
-                jit_threshold: 100,
+                jit_threshold: DEFAULT_JIT_THRESHOLD,
             },
+            opt_level: JitOptLevel::default(),
         }
     }
 
@@ -80,6 +83,7 @@ impl DispatcherConfig {
                 compile_probability: 50,
                 use_jit_probability: 50,
             },
+            opt_level: JitOptLevel::default(),
         }
     }
 
@@ -97,6 +101,7 @@ impl DispatcherConfig {
             mode: DispatcherMode::Tuned {
                 jit_threshold: u32::MAX,
             },
+            opt_level: JitOptLevel::default(),
         }
     }
 
@@ -113,6 +118,7 @@ impl DispatcherConfig {
                 compile_probability: compile_probability.min(100),
                 use_jit_probability: use_jit_probability.min(100),
             },
+            opt_level: JitOptLevel::default(),
         }
     }
 }
@@ -199,7 +205,7 @@ impl OptimizingDispatcher {
             DispatcherMode::Tuned { .. } => None,
         };
 
-        let mut jit = JitEngine::new(jit_threshold)?;
+        let mut jit = JitEngine::with_opt_level(jit_threshold, config.opt_level)?;
         if chaos.is_some() {
             // So that a loop can be entered at any iteration, which the draws
             // in `loop_policy` then choose.

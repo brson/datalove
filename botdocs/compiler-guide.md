@@ -1526,8 +1526,9 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   `OptimizingDispatcher` executes native code when a function is compiled, and
   otherwise counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
   `Chaos` makes seeded pseudo-random decisions for testing. `script --jit` runs
-  under an `OptimizingDispatcher` at a threshold of 1 unless given
-  `--jit-threshold`, and `--jit-stats` prints its `JitStats`: each function's
+  under an `OptimizingDispatcher` at a threshold of 100 with OSR at 1000
+  iterations unless given `--jit-threshold` and `--jit-osr-threshold`,
+  `--jit-opt-level` sets Cranelift's `opt_level` (`speed` by default), and `--jit-stats` prints its `JitStats`: each function's
   codegen time and size and, counted only when asked for since it is a second
   table probe per call, the calls that crossed from the interpreter into
   compiled code or back. Calls between compiled functions go stub to stub and
@@ -1621,7 +1622,10 @@ perhaps 1% and is open.
 **The JIT** is about 85x on a tight arithmetic loop and 2-3.5x on call-heavy code.
 It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, registering every
 runtime symbol) and compiles synchronously at `opt_level = "speed"` in the dispatch
-that crossed the threshold. A loop in a function called once is compiled by
+that crossed the threshold. Stubs and native trampolines are made once per
+callee and kept (`JitCompiler::stubs`), and Cranelift's IR verifier runs only
+with debug assertions; making them per caller, and verifying, had been about
+a third of codegen. A loop in a function called once is compiled by
 OSR: the bytecode counts iterations at the loop's header, and past
 `--jit-osr-threshold` (default 1000) the frame goes on in code compiled from the
 header, which runs the rest of the call. Compiled code calls each callee through a stub with the

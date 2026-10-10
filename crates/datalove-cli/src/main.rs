@@ -284,13 +284,17 @@ struct ScriptCommand {
     /// Enable the JIT compiler for function execution.
     #[arg(long)]
     jit: bool,
-    /// Compile a function on this call to it rather than the first.
+    /// Compile a function on this call to it [default: 100].
     #[arg(long, value_name = "CALLS", requires = "jit")]
     jit_threshold: Option<u32>,
     /// Go on in compiled code from a loop once it has run this many times,
-    /// in a function not yet compiled.
+    /// in a function not yet compiled [default: 1000].
     #[arg(long, value_name = "ITERATIONS", requires = "jit")]
     jit_osr_threshold: Option<u32>,
+    /// How hard the JIT's code generator works: none, speed or speed_and_size
+    /// [default: speed].
+    #[arg(long, value_name = "LEVEL", requires = "jit")]
+    jit_opt_level: Option<datalove::datafun_jit::JitOptLevel>,
     /// Print to stderr what the JIT compiled and how calls crossed between it
     /// and the interpreter. Implies `--time`.
     #[arg(long, requires = "jit")]
@@ -598,7 +602,9 @@ impl ReplCommand {
 impl ScriptCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
         use datalove::datafun;
-        use datalove::datafun_jit::{DispatcherConfig, DispatcherMode, OptimizingDispatcher};
+        use datalove::datafun_jit::{
+            DispatcherConfig, DispatcherMode, OptimizingDispatcher, DEFAULT_JIT_THRESHOLD,
+        };
 
         let start = std::time::Instant::now();
         let file_path = &self.file_path;
@@ -627,14 +633,21 @@ impl ScriptCommand {
         let compiled = pipeline.compile_fresh(&db);
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
 
-        // A threshold of 1 compiles every function on its first call, which
-        // is what `--jit` has always done. Under the dispatcher's own default
-        // of 100 the loops in functions called once stay interpreted, as
-        // nothing compiles a function partway through a call.
+        // The production defaults: compiling a function on its hundredth
+        // call, and a loop's code, by OSR, on its thousandth iteration. On
+        // the store demo, `benchvs` and `botdocs/learn.dfs` that is as fast
+        // as compiling every function on its first call or faster -- much
+        // faster on a short run -- and compiles about half as many; see
+        // `botdocs/plan-jit-tuning.md`. `opt_level` stays `speed`: `none`
+        // compiles faster and was faster on the demo, but 28% slower on
+        // `benchvs/primes`.
         let call_dispatcher: Option<Box<dyn datalove::datafun_interp::CallDispatcher>> = if self.jit {
             let config = DispatcherConfig {
                 jit_enabled: true,
-                mode: DispatcherMode::Tuned { jit_threshold: self.jit_threshold.unwrap_or(1) },
+                mode: DispatcherMode::Tuned {
+                    jit_threshold: self.jit_threshold.unwrap_or(DEFAULT_JIT_THRESHOLD),
+                },
+                opt_level: self.jit_opt_level.unwrap_or_default(),
             };
             let mut dispatcher = OptimizingDispatcher::with_config(config)
                 .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;

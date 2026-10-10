@@ -126,15 +126,53 @@ pub struct JitEngine {
     loops: FxHashMap<(FuncIdentity, BlockId), Tier>,
 }
 
+/// Calls before compiling a function, for a dispatcher configured by default.
+pub const DEFAULT_JIT_THRESHOLD: u32 = 100;
+
 /// Loop iterations before compiling an entry at the loop, unless set.
 pub const DEFAULT_OSR_THRESHOLD: u32 = 1000;
+
+/// How hard Cranelift works on the code it generates: its `opt_level`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum JitOptLevel {
+    None,
+    #[default]
+    Speed,
+    SpeedAndSize,
+}
+
+impl JitOptLevel {
+    /// The setting's value as Cranelift spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            JitOptLevel::None => "none",
+            JitOptLevel::Speed => "speed",
+            JitOptLevel::SpeedAndSize => "speed_and_size",
+        }
+    }
+}
+
+impl std::str::FromStr for JitOptLevel {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, String> {
+        [JitOptLevel::None, JitOptLevel::Speed, JitOptLevel::SpeedAndSize].into_iter()
+            .find(|level| level.as_str() == s)
+            .ok_or_else(|| format!("no opt level `{s}`: none, speed or speed_and_size"))
+    }
+}
 
 impl JitEngine {
     /// Create a new JIT engine with the specified compilation threshold.
     pub fn new(threshold: u32) -> Result<Self, JitError> {
+        Self::with_opt_level(threshold, JitOptLevel::default())
+    }
+
+    /// Create a JIT engine that has Cranelift work as hard as `opt_level` says.
+    pub fn with_opt_level(threshold: u32, opt_level: JitOptLevel) -> Result<Self, JitError> {
         Ok(Self {
             states: FxHashMap::default(),
-            compiler: JitCompiler::new()?,
+            compiler: JitCompiler::new(opt_level)?,
             threshold,
             stats: JitStats::default(),
             count_calls: false,
