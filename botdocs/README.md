@@ -33,6 +33,7 @@ Specifications, research, design documents, implementation plans, and reports.
 
 - [Tables: What the Type System Is Missing](design-table-rows.md)
 - [Generics and Specialization](plan-generics.md)
+- [Monomorphizing Generics](plan-monomorphization.md)
 - [Script Reactivity](plan-script-reactivity.md)
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
