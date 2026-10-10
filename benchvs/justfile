@@ -23,12 +23,15 @@ build:
 
 # Run all benchmarks.
 run: build
-    for b in {{benches}}; do just bench-one $b; done
+    for b in {{benches}}; do just julia={{julia}} bench-one $b; done
 
 # Run one benchmark by name.
 bench name: build
-    just bench-one {{name}}
+    just julia={{julia}} bench-one {{name}}
 
+# The JIT twice: compiling every function on its first call, and tiered as
+# `--jit` is by default, compiling hot functions and entering hot loops.
+#
 # At least three runs, rather than hyperfine's ten: the benches are sized so the
 # fastest implementations take most of a second, which puts the IR walker at
 # ten seconds or more a run.
@@ -37,6 +40,7 @@ bench-one name:
     @echo "=== {{name}} ==="
     hyperfine --warmup 1 --min-runs 3 -N \
         -n 'datalove-interp' '{{datalove}} script {{name}}.dfs' \
+        -n 'datalove-jit-t1' '{{datalove}} script --jit --jit-threshold 1 {{name}}.dfs' \
         -n 'datalove-jit' '{{datalove}} script --jit {{name}}.dfs' \
         -n 'datalove-aot' '{{aotdir}}/{{name}}' \
         -n 'python' '{{python}} {{name}}.py' \
@@ -51,6 +55,7 @@ check: build
     for b in {{benches}}; do
         outs=(
             "$({{datalove}} script $b.dfs 2>&1)"
+            "$({{datalove}} script --jit --jit-threshold 1 $b.dfs 2>&1)"
             "$({{datalove}} script --jit $b.dfs 2>&1)"
             "$({{aotdir}}/$b 2>&1)"
             "$({{python}} $b.py)"
