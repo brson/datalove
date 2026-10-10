@@ -10,8 +10,8 @@ runtime or the JIT shows up where it belongs.
 
 Writes `../target/benchvs/history/<time>-<commit>.json`, which `compare.py`
 reads. Expects `just build` to have built the CLI and the AOT executables;
-`just record` does both. `PYTHON` names the Python interpreter; Julia is the
-`julia` on `PATH`.
+`just record` does both. `PYTHON` names the Python interpreter; Julia, Java and
+V8 (`v8`, its d8 shell) are the ones on `PATH`.
 """
 
 import datetime
@@ -44,6 +44,8 @@ def implementations(bench):
     yield "datalove-aot", [str(AOT_DIR / bench)], False
     yield "python", [os.environ.get("PYTHON", "python3"), f"{bench}.py"], False
     yield "julia", ["julia", "--startup-file=no", f"{bench}.jl"], False
+    yield "java", ["java", "-cp", str(AOT_DIR / "java"), bench.capitalize()], False
+    yield "v8", ["v8", f"{bench}.js"], False
 
 
 def run(argv):

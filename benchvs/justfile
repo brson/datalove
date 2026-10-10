@@ -7,16 +7,28 @@ datalove := "../target/release/datalove"
 # The interpreter uv resolves, invoked directly so uv's startup is not timed.
 python := `uv python find`
 
-# AOT executables are built here, outside the timed runs.
+# AOT executables and Java classes are built here, outside the timed runs.
 aotdir := "../target/benchvs"
+javadir := aotdir / "java"
+
+# Julia, Java and V8 are the ones on PATH. V8 is its own shell, d8, as jsvu
+# installs it (`just install-v8`) under the name `v8` in ~/.jsvu/bin, which has
+# to be on PATH. It warns on stderr that it runs "an unsupported
+# configuration", as V8's test shell does; it runs at V8's full speed.
 
 benches := "fib sum primes wordfreq"
 
-# Build datalove CLI in release mode and AOT-compile every bench.
+# Build datalove CLI in release mode, AOT-compile every bench, and compile
+# the Java ones.
 build:
     cargo build -p datalove-cli --release
     mkdir -p {{aotdir}}
     for b in {{benches}}; do {{datalove}} aot-compile --link $b.dfs -o {{aotdir}}/$b; done
+    javac -d {{javadir}} *.java
+
+# Install V8's shell, d8, as ~/.jsvu/bin/v8.
+install-v8:
+    npx --yes jsvu --os=linux64 --engines=v8
 
 # Run all benchmarks.
 run: build
@@ -41,7 +53,9 @@ bench-one name:
         -n 'datalove-jit' '{{datalove}} script --jit {{name}}.dfs' \
         -n 'datalove-aot' '{{aotdir}}/{{name}}' \
         -n 'python' '{{python}} {{name}}.py' \
-        -n 'julia' 'julia --startup-file=no {{name}}.jl'
+        -n 'julia' 'julia --startup-file=no {{name}}.jl' \
+        -n 'java' 'java -cp {{javadir}} {{capitalize(name)}}' \
+        -n 'v8' 'v8 {{name}}.js'
     @echo ""
 
 # Time every implementation, splitting datalove's into compiling and running,
@@ -66,6 +80,8 @@ check: build
             "$({{aotdir}}/$b 2>&1)"
             "$({{python}} $b.py)"
             "$(julia --startup-file=no $b.jl)"
+            "$(java -cp {{javadir}} ${b^})"
+            "$(v8 $b.js 2>/dev/null)"
         )
         echo "$b: ${outs[*]}"
         for o in "${outs[@]}"; do
