@@ -172,15 +172,19 @@ What it says:
   calls twice and the functions they call, and leaves the rest crossing.
 - **AOT is the ceiling, at 3.75-4.3x,** and threshold 1 is about 60 ms of
   running from it at 20,000 once codegen is taken out.
-- **The compile phase is 13% slower under `--jit` at 200,000 orders,** 2,615
-  against 2,307 ms, which is not the jit: `--jit` runs the whole command on a
-  spawned thread, and glibc gives that thread its own malloc arena, which the
-  allocation-bound front end does worse in. `MALLOC_ARENA_MAX=1` takes the
-  difference away. The grid's compile column carries it; the run column does
-  not.
-- **The AOT executable crashes at 200,000 orders,** overflowing its stack in
-  `__dtlv_statics_init`, whose frame grows with the data; see
-  [issues](issues.md#user-content-the-aot-statics-initializer-takes-a-frame-the-size-of-the-data).
+- **The compile phase was 13% slower under `--jit` at 200,000 orders,**
+  2,615 against 2,307 ms, which was not the jit: `--jit` ran the whole command
+  on a spawned thread, and glibc gave that thread its own malloc arena, which
+  the allocation-bound front end does worse in. `MALLOC_ARENA_MAX=1` took the
+  difference away. The thread had been added for "Cranelift limitations with
+  PIE binaries", which a thread cannot affect, and the JIT runs on the main
+  thread without it; it now does, and the compile phases match.
+- **The AOT executable crashed at 200,000 orders,** overflowing its stack in
+  `__dtlv_statics_init`, whose frame grew with the data: every collection
+  constant took a stack slot of its own for its elements, 13 MB of them. They
+  now share one slot used as a stack, with anything over 4 KB built on the
+  heap (`ConstScratchArea` in the Cranelift codegen), and the frame is 320
+  bytes. The grid above predates both fixes.
 
 ## OSR
 

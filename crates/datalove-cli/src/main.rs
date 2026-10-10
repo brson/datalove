@@ -274,7 +274,7 @@ struct ReplCommand {
     script: Option<PathBuf>,
 }
 
-#[derive(clap::Args, Clone)]
+#[derive(clap::Args)]
 struct ScriptCommand {
     /// Path to the script file (.dfs) to execute.
     file_path: PathBuf,
@@ -593,18 +593,6 @@ impl ReplCommand {
 
 impl ScriptCommand {
     fn run(&self, _args: &Args) -> AnyResult<()> {
-        if self.jit {
-            // Run with JIT in a spawned thread to work around Cranelift JIT
-            // limitations with PIE binaries.
-            let command = self.clone();
-            std::thread::spawn(move || command.run_impl())
-                .join().expect("script thread panicked")
-        } else {
-            self.run_impl()
-        }
-    }
-
-    fn run_impl(&self) -> AnyResult<()> {
         use datalove::datafun;
         use datalove::datafun_jit::{DispatcherConfig, DispatcherMode, OptimizingDispatcher};
 

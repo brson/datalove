@@ -16,7 +16,124 @@ use super::FunctionCompiler;
 /// Global counter for unique static data names across all function compilations.
 static GLOBAL_STATIC_DATA_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// The most a constant's scratch memory takes from the stack; more comes from
+/// the runtime's allocator.
+const CONST_SCRATCH_STACK_LIMIT: u32 = 4096;
+
+/// The alignment of the scratch slot, and so the most any scratch can ask for.
+const CONST_SCRATCH_ALIGN: u32 = 16;
+
+/// The stack memory a function builds constants in.
+///
+/// Building a collection constant needs memory to put its elements in, or each
+/// element on its way in, until the runtime has taken them. That used to be a
+/// stack slot apiece, and Cranelift gives every slot its own space for the
+/// whole function, so a function building a lot of constant data had a frame
+/// the size of the data: `__dtlv_statics_init` for 200,000 orders of the store
+/// demo took 13 MB of stack and died before `main` got anywhere.
+///
+/// Building is strictly nested -- whatever an element needs is given back
+/// before the next element starts -- so one slot serves all of it, taken and
+/// given back like a stack, and the frame is as deep as constants nest rather
+/// than as big as they are. Memory over `CONST_SCRATCH_STACK_LIMIT` comes from
+/// the runtime's allocator instead, since the outermost buffer of a large
+/// constant is as big as the data by itself.
+#[derive(Default)]
+pub(super) struct ConstScratchArea {
+    /// The slot, made on first use and grown to the deepest use.
+    slot: Option<cranelift_codegen::ir::StackSlot>,
+    /// How many bytes from the start of the slot are taken.
+    top: u32,
+}
+
+/// Memory taken to build a constant in, given back with `release_const_scratch`.
+pub(super) struct ConstScratch {
+    /// Where it starts.
+    pub(super) addr: cranelift_codegen::ir::Value,
+    place: ScratchPlace,
+}
+
+enum ScratchPlace {
+    /// In the scratch slot, ending at `end`, taken when the area's top was
+    /// at `previous_top`.
+    Stack { previous_top: u32, end: u32 },
+    /// From the runtime's allocator, as asked for.
+    Heap { size: u32, align: u32 },
+}
+
 impl<'a, M: Module> FunctionCompiler<'a, M> {
+    /// Take `size` bytes at `align` to build a constant in.
+    ///
+    /// What is in it has to have been moved out or destroyed by the time it is
+    /// given back, and scratch is given back in the reverse of the order it was
+    /// taken.
+    fn take_const_scratch(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        size: u32,
+        align: u32,
+    ) -> Result<ConstScratch, CraneliftError> {
+        let size = size.max(1);
+        let align = align.max(1);
+        assert!(align <= CONST_SCRATCH_ALIGN, "constant scratch aligned to {align}");
+
+        if size > CONST_SCRATCH_STACK_LIMIT {
+            let rt_handle = self.rt_handle_param.ok_or_else(|| {
+                CraneliftError::Codegen("a large constant requires the runtime handle".into())
+            })?;
+            let runtime = self.runtime.ok_or_else(|| {
+                CraneliftError::Codegen("a large constant requires runtime imports".into())
+            })?;
+            let alloc = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
+            let size_val = builder.ins().iconst(cl_types::I32, size as i64);
+            let align_val = builder.ins().iconst(cl_types::I32, align as i64);
+            let one = builder.ins().iconst(crate::index_types::INDEX_TYPE, 1);
+            let call = builder.ins().call(alloc, &[rt_handle, size_val, align_val, one]);
+            let addr = builder.inst_results(call)[0];
+            return Ok(ConstScratch { addr, place: ScratchPlace::Heap { size, align } });
+        }
+
+        let previous_top = self.const_scratch.top;
+        let start = datalove_rtdt::layout::align_up(previous_top, align);
+        let end = start + size;
+        let slot = *self.const_scratch.slot.get_or_insert_with(|| {
+            builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
+                cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
+                end,
+                align_shift(CONST_SCRATCH_ALIGN),
+            ))
+        });
+        let data = &mut builder.func.sized_stack_slots[slot];
+        data.size = data.size.max(end);
+        self.const_scratch.top = end;
+        let addr = builder.ins().stack_addr(PTR_TYPE, slot, start as i32);
+        Ok(ConstScratch { addr, place: ScratchPlace::Stack { previous_top, end } })
+    }
+
+    /// Give back what `take_const_scratch` took.
+    fn release_const_scratch(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        scratch: ConstScratch,
+    ) -> Result<(), CraneliftError> {
+        match scratch.place {
+            ScratchPlace::Stack { previous_top, end } => {
+                assert_eq!(self.const_scratch.top, end, "constant scratch given back out of order");
+                self.const_scratch.top = previous_top;
+            }
+            ScratchPlace::Heap { size, align } => {
+                let rt_handle = self.rt_handle_param.expect("taken with the runtime handle");
+                let runtime = self.runtime.expect("taken with runtime imports");
+                let free = self.module.declare_func_in_func(runtime.mem_free_raw, builder.func);
+                let size_val = builder.ins().iconst(cl_types::I32, size as i64);
+                let align_val = builder.ins().iconst(cl_types::I32, align as i64);
+                let one = builder.ins().iconst(crate::index_types::INDEX_TYPE, 1);
+                builder.ins().call(free, &[rt_handle, size_val, align_val, one, scratch.addr]);
+            }
+        }
+        Ok(())
+    }
+
     /// Compile a constant instruction.
     pub(super) fn compile_const(
         &mut self,
@@ -507,14 +624,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_size = inner_layout.size.max(1);
         let inner_align = inner_layout.align.max(1);
 
-        // Allocate temp slot for the inner value.
-        let slot_data = cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            inner_size,
-            align_shift(inner_align),
-        );
-        let temp_slot = builder.create_sized_stack_slot(slot_data);
-        let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+        let scratch = self.take_const_scratch(builder, inner_size, inner_align)?;
+        let inner_ptr = scratch.addr;
 
         // Write inner value to temp slot.
         self.write_const_value_to_addr(builder, inner_ptr, &inner_ir_type, inner)?;
@@ -522,6 +633,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Call error_from_local to box the inner value into an Error.
         let error_from_ref = self.module.declare_func_in_func(runtime.error_from, builder.func);
         builder.ins().call(error_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, base]);
+        self.release_const_scratch(builder, scratch)?;
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -568,14 +680,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_size = inner_layout.size.max(1);
         let inner_align = inner_layout.align.max(1);
 
-        // Allocate temp slot for the inner value.
-        let slot_data = cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            inner_size,
-            align_shift(inner_align),
-        );
-        let temp_slot = builder.create_sized_stack_slot(slot_data);
-        let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+        let scratch = self.take_const_scratch(builder, inner_size, inner_align)?;
+        let inner_ptr = scratch.addr;
 
         // Write inner value to temp slot.
         self.write_const_value_to_addr(builder, inner_ptr, &inner_ir_type, inner)?;
@@ -583,6 +689,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Call data_from_local to box the inner value into a Data.
         let data_from_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
         builder.ins().call(data_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, base]);
+        self.release_const_scratch(builder, scratch)?;
 
         // Store base pointer for this value.
         self.values.insert(dest, base);
@@ -663,15 +770,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let elem_stride = datalove_rtdt::layout::align_up(elem_size, elem_align);
         let elem_stride = if elem_stride == 0 { 1 } else { elem_stride };
 
-        // Allocate stack buffer for ALL elements.
+        // A buffer for all the elements, which the list takes them from.
         let num_elements = elements.len() as u32;
         let buffer_size = (elem_stride * num_elements).max(8);
-        let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            buffer_size,
-            align_shift(elem_align),
-        ));
-        let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
+        let scratch = self.take_const_scratch(builder, buffer_size, elem_align)?;
+        let elements_addr = scratch.addr;
 
         // Write each element at its offset in the buffer.
         for (i, element_value) in elements.iter().enumerate() {
@@ -684,7 +787,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let num_elements_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_elements as i64);
         let list_build_ref = self.module.declare_func_in_func(runtime.list_build_from_slice, builder.func);
         builder.ins().call(list_build_ref, &[rt_handle, base, elem_tydesc_ptr, elements_addr, num_elements_val]);
-        Ok(())
+        self.release_const_scratch(builder, scratch)
+
     }
 
     /// Compile a Set constant.
@@ -755,12 +859,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // The elements, one after another.
         let buffer_size = (elem_stride * elements.len() as u32).max(8);
-        let elements_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            buffer_size,
-            align_shift(elem_layout.align.max(1)),
-        ));
-        let elements_addr = builder.ins().stack_addr(PTR_TYPE, elements_slot, 0);
+        let elements_scratch = self.take_const_scratch(builder, buffer_size, elem_layout.align)?;
+        let elements_addr = elements_scratch.addr;
         for (i, element) in elements.iter().enumerate() {
             let offset = (i as u32) * elem_stride;
             let elem_addr = builder.ins().iadd_imm_s(elements_addr, offset as i64);
@@ -769,12 +869,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // And the shape beside them.
         let shape_size = (shape.len() as u32 * 4).max(4);
-        let shape_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            shape_size,
-            align_shift(std::mem::align_of::<u32>() as u32),
-        ));
-        let shape_addr = builder.ins().stack_addr(PTR_TYPE, shape_slot, 0);
+        let shape_scratch = self.take_const_scratch(
+            builder, shape_size, std::mem::align_of::<u32>() as u32)?;
+        let shape_addr = shape_scratch.addr;
         let mem_flags = cranelift_codegen::ir::MemFlagsData::new();
         for (i, extent) in shape.iter().enumerate() {
             let value = builder.ins().iconst(cl_types::I32, *extent as i64);
@@ -789,7 +886,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             rt_handle, elements_addr, count, elem_tydesc_ptr,
             shape_addr, rank_value, base, tensor_tydesc_ptr,
         ]);
-        Ok(())
+        self.release_const_scratch(builder, shape_scratch)?;
+        self.release_const_scratch(builder, elements_scratch)
     }
 
     /// Build a set at an address, from a declared element type. See
@@ -826,21 +924,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.ins().call(create_ref, &[rt_handle, base, set_tydesc_ptr]);
 
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
-        let elem_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            elem_layout.size.max(8),
-            align_shift(elem_layout.align.max(1)),
-        ));
-        let bool_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot, 1, align_shift(1)));
+        let elem_scratch = self.take_const_scratch(builder, elem_layout.size.max(8), elem_layout.align)?;
+        let bool_scratch = self.take_const_scratch(builder, 1, 1)?;
         let insert_ref = self.module.declare_func_in_func(runtime.set_insert, builder.func);
         for element_value in elements {
-            let elem_addr = builder.ins().stack_addr(PTR_TYPE, elem_slot, 0);
+            let elem_addr = elem_scratch.addr;
             self.write_const_value_to_addr(builder, elem_addr, &element_type, element_value)?;
-            let bool_ptr = builder.ins().stack_addr(PTR_TYPE, bool_slot, 0);
+            let bool_ptr = bool_scratch.addr;
             builder.ins().call(insert_ref, &[rt_handle, base, set_tydesc_ptr, elem_addr, elem_tydesc_ptr, bool_ptr]);
         }
-        Ok(())
+        self.release_const_scratch(builder, bool_scratch)?;
+        self.release_const_scratch(builder, elem_scratch)
     }
 
     /// Compile a Map constant.
@@ -903,27 +997,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let key_layout = crate::types::ir_type_to_cranelift(&key_type).layout();
         let val_layout = crate::types::ir_type_to_cranelift(&value_type).layout();
-        let key_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            key_layout.size.max(8),
-            align_shift(key_layout.align.max(1)),
-        ));
-        let val_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            val_layout.size.max(8),
-            align_shift(val_layout.align.max(1)),
-        ));
+        let key_scratch = self.take_const_scratch(builder, key_layout.size.max(8), key_layout.align)?;
+        let val_scratch = self.take_const_scratch(builder, val_layout.size.max(8), val_layout.align)?;
         let insert_ref = self.module.declare_func_in_func(runtime.map_insert, builder.func);
         for (key_value, val_value) in entries {
-            let key_addr = builder.ins().stack_addr(PTR_TYPE, key_slot, 0);
-            let val_addr = builder.ins().stack_addr(PTR_TYPE, val_slot, 0);
+            let key_addr = key_scratch.addr;
+            let val_addr = val_scratch.addr;
             self.write_const_value_to_addr(builder, key_addr, &key_type, key_value)?;
             self.write_const_value_to_addr(builder, val_addr, &value_type, val_value)?;
             builder.ins().call(insert_ref, &[
                 rt_handle, base, map_tydesc_ptr, key_addr, key_tydesc_ptr, val_addr, val_tydesc_ptr,
             ]);
         }
-        Ok(())
+        self.release_const_scratch(builder, val_scratch)?;
+        self.release_const_scratch(builder, key_scratch)
     }
 
     /// Build a table constant at an address, from its rows.
@@ -975,15 +1062,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let row_max_align = row_layout.align;
         let row_stride = if row_layout.size == 0 { 1 } else { row_layout.size };
 
-        // Allocate stack buffer for ALL rows.
+        // A buffer for all the rows, which the table takes them from.
         let num_rows = rows.len() as u32;
         let buffer_size = (row_stride * num_rows).max(8);
-        let rows_slot = builder.create_sized_stack_slot(cranelift_codegen::ir::StackSlotData::new(
-            cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-            buffer_size,
-            align_shift(row_max_align),
-        ));
-        let rows_addr = builder.ins().stack_addr(PTR_TYPE, rows_slot, 0);
+        let scratch = self.take_const_scratch(builder, buffer_size, row_max_align)?;
+        let rows_addr = scratch.addr;
 
         // Write each row at its offset in the buffer.
         for (row_idx, row_values) in rows.iter().enumerate() {
@@ -999,7 +1082,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let num_rows_val = builder.ins().iconst(crate::index_types::INDEX_TYPE, num_rows as i64);
         let table_build_ref = self.module.declare_func_in_func(runtime.table_build_from_rows, builder.func);
         builder.ins().call(table_build_ref, &[rt_handle, base, table_tydesc_ptr, rows_addr, row_tydesc_ptr, num_rows_val]);
-        Ok(())
+        self.release_const_scratch(builder, scratch)
     }
     /// Write a ConstValue to a memory address.
     /// Write a constant into an address, as a value of `ty`.
@@ -1253,14 +1336,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let inner_size = inner_layout.size.max(1);
                 let inner_align = inner_layout.align.max(1);
 
-                // Allocate temp slot for the inner value.
-                let slot_data = cranelift_codegen::ir::StackSlotData::new(
-                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                    inner_size,
-                    align_shift(inner_align),
-                );
-                let temp_slot = builder.create_sized_stack_slot(slot_data);
-                let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+                let scratch = self.take_const_scratch(builder, inner_size, inner_align)?;
+                let inner_ptr = scratch.addr;
 
                 // Write inner value to temp slot.
                 self.write_const_value_to_addr(builder, inner_ptr, &inner_ir_type, inner)?;
@@ -1268,6 +1345,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Call error_from_local to box the inner value into an Error at addr.
                 let error_from_ref = self.module.declare_func_in_func(runtime.error_from, builder.func);
                 builder.ins().call(error_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, addr]);
+                self.release_const_scratch(builder, scratch)?;
             }
             ConstValue::Data { payload_type, value: inner } => {
                 // Data requires runtime call - write inner value then box it.
@@ -1289,14 +1367,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let inner_size = inner_layout.size.max(1);
                 let inner_align = inner_layout.align.max(1);
 
-                // Allocate temp slot for the inner value.
-                let slot_data = cranelift_codegen::ir::StackSlotData::new(
-                    cranelift_codegen::ir::StackSlotKind::ExplicitSlot,
-                    inner_size,
-                    align_shift(inner_align),
-                );
-                let temp_slot = builder.create_sized_stack_slot(slot_data);
-                let inner_ptr = builder.ins().stack_addr(PTR_TYPE, temp_slot, 0);
+                let scratch = self.take_const_scratch(builder, inner_size, inner_align)?;
+                let inner_ptr = scratch.addr;
 
                 // Write inner value to temp slot.
                 self.write_const_value_to_addr(builder, inner_ptr, &inner_ir_type, inner)?;
@@ -1304,6 +1376,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Call data_from_local to box the inner value into a Data at addr.
                 let data_from_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
                 builder.ins().call(data_from_ref, &[rt_handle, inner_ptr, inner_tydesc_ptr, addr]);
+                self.release_const_scratch(builder, scratch)?;
             }
             // An atom is one value of a type that has only that value, so it
             // occupies nothing and there is nothing to write.

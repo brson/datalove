@@ -87,8 +87,8 @@ def measure(orders):
 
     configs = list(engines(orders))
     # A round, not counted, that warms the page cache and finds what fails. An
-    # engine that fails is reported as failing rather than timed: the AOT
-    # executable overflows its stack building the data at 200,000 orders.
+    # engine that fails is reported as failing rather than timed, so that one
+    # broken backend does not cost the rest of the grid.
     failed = {}
     for name, argv, _ in configs:
         proc = subprocess.run(argv, cwd=HERE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

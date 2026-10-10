@@ -342,6 +342,8 @@ pub struct FunctionCompiler<'a, M: Module> {
     return_slot: std::collections::HashSet<ValueId>,
     /// Where the consts `StaticRef` names live.
     static_consts: StaticConsts,
+    /// The stack memory constants are built in; see `constants::ConstScratch`.
+    const_scratch: constants::ConstScratchArea,
 }
 
 /// The values a function builds straight into its caller's result slot: each
@@ -438,6 +440,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             sret_param: None,
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
+            const_scratch: constants::ConstScratchArea::default(),
         }
     }
 
@@ -489,6 +492,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             sret_param: None,
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
+            const_scratch: constants::ConstScratchArea::default(),
         }
     }
 

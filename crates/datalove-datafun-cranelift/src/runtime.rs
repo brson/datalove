@@ -40,6 +40,8 @@ pub struct RuntimeImports {
     pub map_set_value_erased: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
+    /// `dtlv_rti_mem_free_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) -> RtStatus`
+    pub mem_free_raw: FuncId,
     /// `dtlv_rti_string_create_local(rt: LocalRtHandle, value_out: *mut u8, tydesc: *const TyDesc) -> RtStatus`
     pub string_create: FuncId,
     /// `dtlv_rti_string_push_bytes_local(rt: LocalRtHandle, value_mut: *mut u8, tydesc: *const TyDesc, bytes: *const u8, len: u32) -> RtStatus`
@@ -221,6 +223,19 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_mem_alloc_raw_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_mem_alloc_raw_local: {}", e)))?
+        };
+
+        let mem_free_raw = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt handle
+            sig.params.push(AbiParam::new(cl_types::I32)); // size
+            sig.params.push(AbiParam::new(cl_types::I32)); // align
+            sig.params.push(AbiParam::new(INDEX_TYPE));    // count (IndexRepr)
+            sig.params.push(AbiParam::new(PTR_TYPE));      // ptr
+            sig.returns.push(AbiParam::new(cl_types::I8)); // status
+            module
+                .declare_function("dtlv_rti_mem_free_raw_local", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_mem_free_raw_local: {}", e)))?
         };
 
         // dtlv_rti_string_create_local(ptr, ptr, ptr) -> u8
@@ -911,6 +926,7 @@ impl RuntimeImports {
             element_write,
             map_set_value_erased,
             mem_alloc_raw,
+            mem_free_raw,
             string_create,
             string_push_bytes,
             string_from_bytes,
