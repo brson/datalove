@@ -83,7 +83,7 @@ Focus on ergonomic scripting experience and the REPL.
 ### Retired checkpoints
 
 
-## Checkpoint 1 - Compiler Architecture
+## Checkpoint 1 - Compiler architecture
 
 Initial prototype.
 Thorough compiler architecture, bare language.

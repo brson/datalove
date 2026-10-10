@@ -20,9 +20,9 @@ Then add I/O to it &mdash; carefully.
 
 
 
-> **Latest news**: [Compound assignment](posts/) &middot; updated 2026-10-09.
+> **Latest news**: [Checkpoint 1](posts/) &middot; updated 2026-10-09.
 
-> **Roadmap**: [18 of 19 complete](roadmap.md) &middot; updated 2026-10-02.
+> **Roadmap**: [0 of 15 complete](roadmap.md) &middot; updated 2026-10-09.
 
 
 
