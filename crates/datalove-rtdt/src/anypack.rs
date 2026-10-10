@@ -108,6 +108,7 @@ impl Data {
     /// Construct Data from two pointers (Tag 0).
     ///
     /// This is the default, unoptimized encoding used for heap-allocated values.
+    #[inline]
     pub fn from_pointers(tydesc: *const TyDesc, value: *const u8) -> Self {
         debug_assert_eq!(
             tydesc.addr() & TAG_MASK,
@@ -127,6 +128,7 @@ impl Data {
     /// Construct Data from small immediate value without tydesc (Tag 1).
     ///
     /// Value must fit in 61 bits.
+    #[inline]
     pub fn from_immediate(value: u64, tytag: TyTag) -> Self {
         debug_assert!(value < (1u64 << 61), "value too large for 61 bits");
         Self {
@@ -136,11 +138,13 @@ impl Data {
     }
 
     /// Construct bool value (Tag 1).
+    #[inline]
     pub fn from_bool(value: bool) -> Self {
         Self::from_immediate(value as u64, TyTag::Bool)
     }
 
     /// Construct u32 value (Tag 1).
+    #[inline]
     pub fn from_u32(value: u32) -> Self {
         Self::from_immediate(value as u64, TyTag::U32)
     }
@@ -150,6 +154,7 @@ impl Data {
     // ============================================================================
 
     /// Construct Data from tydesc + inline 64-bit value (Tag 4).
+    #[inline]
     pub fn from_inline64(tydesc: *const TyDesc, value: u64) -> Self {
         debug_assert_eq!(
             tydesc.addr() & TAG_MASK,
@@ -163,49 +168,58 @@ impl Data {
     }
 
     /// Construct f32 value (Tag 4).
+    #[inline]
     pub fn from_f32(value: f32, tydesc: *const TyDesc) -> Self {
         Self::from_inline64(tydesc, value.to_bits() as u64)
     }
 
     /// Construct u8 value (Tag 1).
+    #[inline]
     pub fn from_u8(value: u8) -> Self {
         Self::from_immediate(value as u64, TyTag::U8)
     }
 
     /// Construct i8 value (Tag 1).
+    #[inline]
     pub fn from_i8(value: i8) -> Self {
         // Reinterpret as u8, then widen to u64 (no sign extension).
         Self::from_immediate(value as u8 as u64, TyTag::I8)
     }
 
     /// Construct u16 value (Tag 1).
+    #[inline]
     pub fn from_u16(value: u16) -> Self {
         Self::from_immediate(value as u64, TyTag::U16)
     }
 
     /// Construct i16 value (Tag 1).
+    #[inline]
     pub fn from_i16(value: i16) -> Self {
         // Reinterpret as u16, then widen to u64 (no sign extension).
         Self::from_immediate(value as u16 as u64, TyTag::I16)
     }
 
     /// Construct i32 value (Tag 1).
+    #[inline]
     pub fn from_i32(value: i32) -> Self {
         // Reinterpret as u32, then widen to u64 (no sign extension).
         Self::from_immediate(value as u32 as u64, TyTag::I32)
     }
 
     /// Construct u64 value (Tag 4).
+    #[inline]
     pub fn from_u64(value: u64, tydesc: *const TyDesc) -> Self {
         Self::from_inline64(tydesc, value)
     }
 
     /// Construct i64 value (Tag 4).
+    #[inline]
     pub fn from_i64(value: i64, tydesc: *const TyDesc) -> Self {
         Self::from_inline64(tydesc, value as u64)
     }
 
     /// Construct f64 value (Tag 4).
+    #[inline]
     pub fn from_f64(value: f64, tydesc: *const TyDesc) -> Self {
         Self::from_inline64(tydesc, value.to_bits())
     }
@@ -215,46 +229,55 @@ impl Data {
     // ============================================================================
 
     /// Construct Int (bigint) value (Tag 0).
+    #[inline]
     pub fn from_int(int_ptr: *const Int, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, int_ptr as *const u8)
     }
 
     /// Construct String value (Tag 0).
+    #[inline]
     pub fn from_string(string_ptr: *const String, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, string_ptr as *const u8)
     }
 
     /// Construct List value (Tag 0).
+    #[inline]
     pub fn from_list(list_ptr: *const List, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, list_ptr as *const u8)
     }
 
     /// Construct Map value (Tag 0).
+    #[inline]
     pub fn from_map(map_ptr: *const Map, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, map_ptr as *const u8)
     }
 
     /// Construct Set value (Tag 0).
+    #[inline]
     pub fn from_set(set_ptr: *const Set, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, set_ptr as *const u8)
     }
 
     /// Construct Option value (Tag 0).
+    #[inline]
     pub fn from_option(option_ptr: *const Option, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, option_ptr as *const u8)
     }
 
     /// Construct Result value (Tag 0).
+    #[inline]
     pub fn from_result(result_ptr: *const Result, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, result_ptr as *const u8)
     }
 
     /// Construct nested Data value (Tag 0).
+    #[inline]
     pub fn from_data(data_ptr: *const Data, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, data_ptr as *const u8)
     }
 
     /// Construct Error value (Tag 0).
+    #[inline]
     pub fn from_error(error_ptr: *const Error, tydesc: *const TyDesc) -> Self {
         Self::from_pointers(tydesc, error_ptr as *const u8)
     }
@@ -267,6 +290,7 @@ impl Data {
     ///
     /// For Tag 0 and Tag 4, this is a direct pointer.
     /// For Tag 1, the TyTag is stored in secondary and would need synthesis.
+    #[inline]
     pub fn tydesc(&self) -> *const TyDesc {
         match self.tag() {
             Tag::TwoPointers => self.primary as *const TyDesc,
@@ -280,6 +304,7 @@ impl Data {
     ///
     /// If tydesc is available, extract from it.
     /// If Tag 1, extract from secondary.
+    #[inline]
     pub fn tytag(&self) -> TyTag {
         match self.tag() {
             Tag::TwoPointers | Tag::InlineWithTyDesc => {
@@ -301,6 +326,7 @@ impl Data {
     // ============================================================================
 
     /// Get pointer to value (only valid for Tag 0).
+    #[inline]
     pub fn value_ptr(&self) -> *const u8 {
         match self.tag() {
             Tag::TwoPointers => self.secondary as *const u8,
@@ -315,6 +341,7 @@ impl Data {
     /// whole secondary, so which word to read depends on the tag. Reading a
     /// value back generically needs both, and the choosing is done here rather
     /// than at each caller.
+    #[inline]
     pub fn inline_bits(&self) -> u64 {
         match self.tag() {
             Tag::SmallImmediate => self.immediate_u61(),
@@ -330,6 +357,7 @@ impl Data {
     }
 
     /// Get pointer to value as specific type (only valid for Tag 0).
+    #[inline]
     pub fn value_ptr_as<T>(&self) -> *const T {
         self.value_ptr() as *const T
     }
@@ -339,6 +367,7 @@ impl Data {
     // ============================================================================
 
     /// Try to extract as bool.
+    #[inline]
     pub fn as_bool(&self) -> std::option::Option<bool> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::Bool => {
@@ -352,6 +381,7 @@ impl Data {
     }
 
     /// Try to extract as u32.
+    #[inline]
     pub fn as_u32(&self) -> std::option::Option<u32> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::U32 => {
@@ -364,6 +394,7 @@ impl Data {
     }
 
     /// Try to extract as f32.
+    #[inline]
     pub fn as_f32(&self) -> std::option::Option<f32> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::F32 => {
@@ -374,6 +405,7 @@ impl Data {
     }
 
     /// Try to extract as u8.
+    #[inline]
     pub fn as_u8(&self) -> std::option::Option<u8> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::U8 => {
@@ -385,6 +417,7 @@ impl Data {
     }
 
     /// Try to extract as i8.
+    #[inline]
     pub fn as_i8(&self) -> std::option::Option<i8> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::I8 => {
@@ -396,6 +429,7 @@ impl Data {
     }
 
     /// Try to extract as u16.
+    #[inline]
     pub fn as_u16(&self) -> std::option::Option<u16> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::U16 => {
@@ -407,6 +441,7 @@ impl Data {
     }
 
     /// Try to extract as i16.
+    #[inline]
     pub fn as_i16(&self) -> std::option::Option<i16> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::I16 => {
@@ -419,6 +454,7 @@ impl Data {
     }
 
     /// Try to extract as i32.
+    #[inline]
     pub fn as_i32(&self) -> std::option::Option<i32> {
         match self.tag() {
             Tag::SmallImmediate if self.tytag() == TyTag::I32 => {
@@ -430,6 +466,7 @@ impl Data {
     }
 
     /// Try to extract as u64.
+    #[inline]
     pub fn as_u64(&self) -> std::option::Option<u64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::U64 => {
@@ -440,6 +477,7 @@ impl Data {
     }
 
     /// Try to extract as i64.
+    #[inline]
     pub fn as_i64(&self) -> std::option::Option<i64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::I64 => {
@@ -450,6 +488,7 @@ impl Data {
     }
 
     /// Try to extract as f64.
+    #[inline]
     pub fn as_f64(&self) -> std::option::Option<f64> {
         match self.tag() {
             Tag::InlineWithTyDesc if self.tytag() == TyTag::F64 => {
@@ -460,6 +499,7 @@ impl Data {
     }
 
     /// Try to extract as Int pointer.
+    #[inline]
     pub fn as_int(&self) -> std::option::Option<*const Int> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Int => {
@@ -470,6 +510,7 @@ impl Data {
     }
 
     /// Try to extract as String pointer.
+    #[inline]
     pub fn as_string(&self) -> std::option::Option<*const String> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::String => {
@@ -480,6 +521,7 @@ impl Data {
     }
 
     /// Try to extract as List pointer.
+    #[inline]
     pub fn as_list(&self) -> std::option::Option<*const List> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::List => {
@@ -490,6 +532,7 @@ impl Data {
     }
 
     /// Try to extract as Map pointer.
+    #[inline]
     pub fn as_map(&self) -> std::option::Option<*const Map> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Map => {
@@ -500,6 +543,7 @@ impl Data {
     }
 
     /// Try to extract as Set pointer.
+    #[inline]
     pub fn as_set(&self) -> std::option::Option<*const Set> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Set => {
@@ -510,6 +554,7 @@ impl Data {
     }
 
     /// Try to extract as Option pointer.
+    #[inline]
     pub fn as_option(&self) -> std::option::Option<*const Option> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Option => {
@@ -520,6 +565,7 @@ impl Data {
     }
 
     /// Try to extract as Result pointer.
+    #[inline]
     pub fn as_result(&self) -> std::option::Option<*const Result> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Result => {
@@ -530,6 +576,7 @@ impl Data {
     }
 
     /// Try to extract as nested Data pointer.
+    #[inline]
     pub fn as_data(&self) -> std::option::Option<*const Data> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Data => {
@@ -540,6 +587,7 @@ impl Data {
     }
 
     /// Try to extract as Error pointer.
+    #[inline]
     pub fn as_error(&self) -> std::option::Option<*const Error> {
         match self.tag() {
             Tag::TwoPointers if self.tytag() == TyTag::Error => {
@@ -556,6 +604,7 @@ impl Data {
 
 impl Error {
     /// Get the type descriptor for this error value.
+    #[inline]
     pub fn tydesc(&self) -> *const TyDesc {
         // Error uses same encoding as Data - interpret primary/secondary as Data.
         let as_data = unsafe { &*(self as *const Error as *const Data) };
@@ -563,6 +612,7 @@ impl Error {
     }
 
     /// Get pointer to error value.
+    #[inline]
     pub fn value_ptr(&self) -> *const u8 {
         // Error uses same encoding as Data - interpret primary/secondary as Data.
         let as_data = unsafe { &*(self as *const Error as *const Data) };
@@ -576,6 +626,7 @@ impl Error {
 
 impl TyTag {
     /// Check if this type tag represents a type that needs heap allocation.
+    #[inline]
     pub fn needs_heap_allocation(&self) -> bool {
         matches!(
             self,
@@ -593,6 +644,7 @@ impl TyTag {
     }
 
     /// Check if this type tag represents a type that can be inlined.
+    #[inline]
     pub fn can_inline(&self) -> bool {
         matches!(
             self,

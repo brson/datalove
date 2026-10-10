@@ -33,31 +33,37 @@ impl<'a> TyDescRef<'a> {
     }
 
     /// Creates a safe reference from a Rust reference.
+    #[inline]
     pub fn from_ref(td: &'a TyDesc) -> Self {
         TyDescRef { inner: td }
     }
 
     /// Returns the type tag.
+    #[inline]
     pub fn type_tag(&self) -> TyTag {
         self.inner.type_tag
     }
 
     /// Returns the size in bytes.
+    #[inline]
     pub fn size(&self) -> u32 {
         self.inner.size
     }
 
     /// Returns the alignment in bytes.
+    #[inline]
     pub fn align(&self) -> u32 {
         self.inner.align
     }
 
     /// Returns the underlying raw pointer.
+    #[inline]
     pub fn as_ptr(&self) -> *const TyDesc {
         self.inner as *const TyDesc
     }
 
     /// Returns a reference to the underlying TyDesc.
+    #[inline]
     pub fn as_ref(&self) -> &'a TyDesc {
         self.inner
     }
@@ -68,6 +74,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Tuple type.
+    #[inline]
     pub fn tuple_info(&self) -> TupleInfo<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Tuple);
         unsafe {
@@ -81,6 +88,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Tuple type.
+    #[inline]
     pub fn iter_tuple_fields(&self) -> TupleFieldIter<'a> {
         let info = self.tuple_info();
         TupleFieldIter {
@@ -95,6 +103,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Struct type.
+    #[inline]
     pub fn struct_info(&self) -> StructInfo<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Struct);
         unsafe {
@@ -108,6 +117,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Struct type.
+    #[inline]
     pub fn iter_struct_fields(&self) -> StructFieldIter<'a> {
         let info = self.struct_info();
         StructFieldIter {
@@ -122,6 +132,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not an Enum type.
+    #[inline]
     pub fn enum_info(&self) -> EnumInfo<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Enum);
         unsafe {
@@ -135,6 +146,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not an Enum type.
+    #[inline]
     pub fn iter_enum_variants(&self) -> EnumVariantIter<'a> {
         let info = self.enum_info();
         EnumVariantIter {
@@ -149,6 +161,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not an Atom type.
+    #[inline]
     pub fn atom_info(&self) -> (&'a str, u32) {
         assert_eq!(self.inner.type_tag, TyTag::Atom);
         unsafe {
@@ -163,6 +176,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Term type.
+    #[inline]
     pub fn term_info(&self) -> (&'a str, TyDescRef<'a>) {
         assert_eq!(self.inner.type_tag, TyTag::Term);
         unsafe {
@@ -180,6 +194,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a List type.
+    #[inline]
     pub fn list_element_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::List);
         unsafe {
@@ -192,6 +207,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Map type.
+    #[inline]
     pub fn map_key_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Map);
         unsafe {
@@ -204,6 +220,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Map type.
+    #[inline]
     pub fn map_value_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Map);
         unsafe {
@@ -268,6 +285,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Set type.
+    #[inline]
     pub fn set_element_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Set);
         unsafe {
@@ -280,6 +298,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Tensor type.
+    #[inline]
     pub fn tensor_element_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Tensor);
         unsafe {
@@ -292,6 +311,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Tensor type.
+    #[inline]
     pub fn tensor_rank(&self) -> u32 {
         assert_eq!(self.inner.type_tag, TyTag::Tensor);
         unsafe {
@@ -304,6 +324,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Table type.
+    #[inline]
     pub fn table_num_columns(&self) -> u32 {
         assert_eq!(self.inner.type_tag, TyTag::Table);
         unsafe { self.inner.type_info.table.num_columns }
@@ -313,6 +334,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Table type.
+    #[inline]
     pub fn table_column_tydescs(&self) -> TableColumnIter<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Table);
         let info = unsafe { &self.inner.type_info.table };
@@ -329,6 +351,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not an Option type.
+    #[inline]
     pub fn option_inner_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Option);
         unsafe {
@@ -341,6 +364,7 @@ impl<'a> TyDescRef<'a> {
     ///
     /// # Panics
     /// Panics if this is not a Result type.
+    #[inline]
     pub fn result_ok_ty(&self) -> TyDescRef<'a> {
         assert_eq!(self.inner.type_tag, TyTag::Result);
         unsafe {
@@ -365,16 +389,19 @@ pub struct TupleInfo<'a> {
 
 impl<'a> TupleInfo<'a> {
     /// Returns the number of fields.
+    #[inline]
     pub fn num_fields(&self) -> u32 {
         self.fields.len() as u32
     }
 
     /// Returns a slice of raw field information.
+    #[inline]
     pub fn fields(&self) -> &'a [TyInfoTupleField] {
         self.fields
     }
 
     /// Returns a specific field by index.
+    #[inline]
     pub fn field(&self, index: usize) -> core::option::Option<TupleFieldRef<'a>> {
         self.fields.get(index).map(|f| {
             unsafe {
@@ -396,11 +423,13 @@ pub struct TupleFieldRef<'a> {
 
 impl<'a> TupleFieldRef<'a> {
     /// Returns the field offset in bytes.
+    #[inline]
     pub fn offset(&self) -> u32 {
         self.offset
     }
 
     /// Returns the field's type descriptor.
+    #[inline]
     pub fn tydesc(&self) -> TyDescRef<'a> {
         self.tydesc
     }
@@ -440,16 +469,19 @@ pub struct StructInfo<'a> {
 
 impl<'a> StructInfo<'a> {
     /// Returns the number of fields.
+    #[inline]
     pub fn num_fields(&self) -> u32 {
         self.fields.len() as u32
     }
 
     /// Returns a slice of raw field information.
+    #[inline]
     pub fn fields(&self) -> &'a [TyInfoStructField] {
         self.fields
     }
 
     /// Returns a specific field by index.
+    #[inline]
     pub fn field(&self, index: usize) -> core::option::Option<StructFieldRef<'a>> {
         self.fields.get(index).map(|f| {
             unsafe {
@@ -475,16 +507,19 @@ pub struct StructFieldRef<'a> {
 
 impl<'a> StructFieldRef<'a> {
     /// Returns the field name.
+    #[inline]
     pub fn name(&self) -> &'a str {
         self.name
     }
 
     /// Returns the field offset in bytes.
+    #[inline]
     pub fn offset(&self) -> u32 {
         self.offset
     }
 
     /// Returns the field's type descriptor.
+    #[inline]
     pub fn tydesc(&self) -> TyDescRef<'a> {
         self.tydesc
     }
@@ -527,16 +562,19 @@ pub struct EnumInfo<'a> {
 
 impl<'a> EnumInfo<'a> {
     /// Returns the number of variants.
+    #[inline]
     pub fn num_variants(&self) -> u32 {
         self.variants.len() as u32
     }
 
     /// Returns a slice of raw variant information.
+    #[inline]
     pub fn variants(&self) -> &'a [TyInfoEnumVariant] {
         self.variants
     }
 
     /// Returns a specific variant by index.
+    #[inline]
     pub fn variant(&self, index: usize) -> core::option::Option<EnumVariantRef<'a>> {
         self.variants.get(index).map(|v| {
             unsafe {
@@ -567,16 +605,19 @@ pub struct EnumVariantRef<'a> {
 
 impl<'a> EnumVariantRef<'a> {
     /// Returns the variant name.
+    #[inline]
     pub fn name(&self) -> &'a str {
         self.name
     }
 
     /// Returns the payload offset in bytes.
+    #[inline]
     pub fn offset(&self) -> u32 {
         self.offset
     }
 
     /// Returns the payload type descriptor, if any.
+    #[inline]
     pub fn payload(&self) -> core::option::Option<TyDescRef<'a>> {
         self.payload
     }
@@ -624,11 +665,13 @@ pub struct TableColumnRef<'a> {
 
 impl<'a> TableColumnRef<'a> {
     /// Returns the column name.
+    #[inline]
     pub fn name(&self) -> &'a str {
         self.name
     }
 
     /// Returns the column's type descriptor.
+    #[inline]
     pub fn tydesc(&self) -> TyDescRef<'a> {
         self.tydesc
     }

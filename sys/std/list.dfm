@@ -116,6 +116,7 @@ end fun
 // A list of n clones of one element.
 fun repeated<T>(ref elem: T, n: index): [T]
   var built: [T] = []
+  call list_reserve(mut built, n)
   var i: index = : index / 0
   loop while i .< n
     call push(mut built, elem@)

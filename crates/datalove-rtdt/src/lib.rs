@@ -1103,6 +1103,7 @@ impl TyTag {
     ///
     /// The discriminants are sparse, so most byte values are not tags.
     /// Transmuting one would be undefined behaviour.
+    #[inline]
     pub fn from_u8(raw: u8) -> core::option::Option<TyTag> {
         let tag = match raw {
             0x01 => TyTag::Bool,
