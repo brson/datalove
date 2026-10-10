@@ -18,17 +18,16 @@ mod compiler;
 pub(crate) mod bridge;
 pub(crate) mod trampoline;
 pub mod optimizing;
-pub mod metrics;
+pub mod stats;
 
 pub use trampoline::{DispatchContext, set_dispatch_context, clear_dispatch_context};
 pub use optimizing::{OptimizingDispatcher, DispatcherConfig, DispatcherMode};
-pub use metrics::{MetricsCollector, FunctionMetrics, AggregateMetrics, ExecutionMode};
+pub use stats::{CallFrom, FunctionStats, JitStats};
 
 use std::any::Any;
-use std::collections::HashMap;
 
 use rustc_hash::FxHashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
@@ -78,26 +77,6 @@ pub enum FunctionState {
     },
 }
 
-/// Statistics about JIT compilation activity.
-#[derive(Clone, Debug, Default)]
-pub struct JitStats {
-    /// Total number of functions compiled.
-    pub compiled_count: u32,
-    /// Total compilation time across all functions.
-    pub total_compile_time: Duration,
-    /// Total generated code size in bytes.
-    pub total_code_size: usize,
-    /// Functions the backend declined, which are interpreted instead.
-    ///
-    /// Not failures: a refusal is `JitError::Unsupported`, and a failure is
-    /// reported to the caller rather than counted here.
-    pub refused_count: u32,
-    /// Per-function compilation times (function name -> duration).
-    pub per_function_compile_time: HashMap<String, Duration>,
-    /// Per-function code sizes (function name -> bytes).
-    pub per_function_code_size: HashMap<String, usize>,
-}
-
 /// Per-function tracing JIT engine.
 ///
 /// Tracks function call counts and compiles hot functions to native code.
@@ -114,6 +93,8 @@ pub struct JitEngine {
     threshold: u32,
     /// Compilation statistics.
     stats: JitStats,
+    /// Whether to count each call offered to the jit in `stats`.
+    count_calls: bool,
 }
 
 impl JitEngine {
@@ -124,7 +105,23 @@ impl JitEngine {
             compiler: JitCompiler::new()?,
             threshold,
             stats: JitStats::default(),
+            count_calls: false,
         })
+    }
+
+    /// Count every call offered to the jit, by function, in `stats`.
+    ///
+    /// Off by default: it is a second table probe on every call.
+    pub fn count_calls(&mut self) {
+        self.count_calls = true;
+    }
+
+    /// Count a call in `stats` if calls are being counted.
+    #[inline]
+    pub(crate) fn note_call(&mut self, key: FuncIdentity, func: &IrCodeUnit, from: CallFrom, native: bool) {
+        if self.count_calls {
+            self.stats.count_call(key, &func.name, from, native);
+        }
     }
 
     /// Register a native rider function symbol for JIT resolution.
@@ -201,8 +198,9 @@ impl JitEngine {
                 self.stats.compiled_count += 1;
                 self.stats.total_compile_time += compile_time;
                 self.stats.total_code_size += code_size;
-                self.stats.per_function_compile_time.insert(func.name.clone(), compile_time);
-                self.stats.per_function_code_size.insert(func.name.clone(), code_size);
+                let f = self.stats.function(key, &func.name);
+                f.compile_time = Some(compile_time);
+                f.code_size = code_size;
 
                 *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
                 self.compiler.publish(key, code_ptr);
@@ -242,16 +240,17 @@ impl JitEngine {
         match self.record_call(key, func, &callee_ctx, call_ctx.registry, call_ctx.interp) {
             Err(e) => JitDispatch {
                 result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
-                compiled_now: None,
             },
-            Ok(Recorded::Interpret) => JitDispatch {
-                result: DispatchResult::NotHandled,
-                compiled_now: None,
-            },
-            Ok(Recorded::Compiled { code_ptr, uses_sret, compiled_now }) => {
+            Ok(Recorded::Interpret) => {
+                self.note_call(key, func, CallFrom::Interpreter, false);
+                JitDispatch { result: DispatchResult::NotHandled }
+            }
+            Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
                 if !use_compiled() {
-                    return JitDispatch { result: DispatchResult::NotHandled, compiled_now };
+                    self.note_call(key, func, CallFrom::Interpreter, false);
+                    return JitDispatch { result: DispatchResult::NotHandled };
                 }
+                self.note_call(key, func, CallFrom::Interpreter, true);
                 let descriptor_params = &func.function_context()
                     .expect("a compiled function is a function")
                     .descriptor_params;
@@ -276,7 +275,7 @@ impl JitEngine {
                     )
                 };
                 clear_dispatch_context();
-                JitDispatch { result: DispatchResult::Handled(Ok(())), compiled_now }
+                JitDispatch { result: DispatchResult::Handled(Ok(())) }
             }
         }
     }
@@ -300,8 +299,6 @@ pub enum Recorded {
 pub struct JitDispatch {
     /// What to tell the interpreter.
     pub result: DispatchResult,
-    /// The size of the code, when this call is the one that compiled it.
-    pub compiled_now: Option<usize>,
 }
 
 #[cfg(test)]

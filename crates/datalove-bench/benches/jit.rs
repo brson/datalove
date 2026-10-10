@@ -53,11 +53,6 @@ impl Config {
         let config = DispatcherConfig {
             jit_enabled: true,
             mode: DispatcherMode::Tuned { jit_threshold: 1 },
-            // Off: the collector times the dispatcher's own bookkeeping rather
-            // than the call, and its per-call `Instant::now` would land inside
-            // what is being measured.
-            metrics_enabled: false,
-            metrics_config: Default::default(),
         };
         let dispatcher = OptimizingDispatcher::with_config(config)
             .expect("dispatcher construction failed");

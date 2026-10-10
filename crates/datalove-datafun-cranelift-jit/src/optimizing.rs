@@ -4,7 +4,6 @@
 //! 1. Check if function is JIT-compiled; if so, execute native code
 //! 2. If not compiled, record call count for future compilation
 //! 3. Fall back to interpreter if needed
-//! 4. Record timing if metrics enabled
 
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
@@ -13,11 +12,10 @@ use std::hash::{Hash, Hasher};
 use datalove_datafun_ir::{CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, DispatchCallContext, DispatchResult, Destination,
-    FuncIdentity, Value,
+    Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
-use crate::metrics::{ExecutionMode, MetricsCollector, MetricsConfig};
 use crate::{JitEngine, JitError};
 
 /// Execution mode for the dispatcher.
@@ -54,10 +52,6 @@ pub struct DispatcherConfig {
     pub jit_enabled: bool,
     /// Execution mode.
     pub mode: DispatcherMode,
-    /// Enable metrics collection.
-    pub metrics_enabled: bool,
-    /// Configuration for metrics collection.
-    pub metrics_config: MetricsConfig,
 }
 
 impl Default for DispatcherConfig {
@@ -74,8 +68,6 @@ impl DispatcherConfig {
             mode: DispatcherMode::Tuned {
                 jit_threshold: 100,
             },
-            metrics_enabled: true,
-            metrics_config: MetricsConfig::default(),
         }
     }
 
@@ -88,8 +80,6 @@ impl DispatcherConfig {
                 compile_probability: 50,
                 use_jit_probability: 50,
             },
-            metrics_enabled: false,
-            metrics_config: MetricsConfig::default(),
         }
     }
 
@@ -107,8 +97,6 @@ impl DispatcherConfig {
             mode: DispatcherMode::Tuned {
                 jit_threshold: u32::MAX,
             },
-            metrics_enabled: false,
-            metrics_config: MetricsConfig::default(),
         }
     }
 
@@ -125,8 +113,6 @@ impl DispatcherConfig {
                 compile_probability: compile_probability.min(100),
                 use_jit_probability: use_jit_probability.min(100),
             },
-            metrics_enabled: false,
-            metrics_config: MetricsConfig::default(),
         }
     }
 }
@@ -137,12 +123,9 @@ impl DispatcherConfig {
 /// 1. Check if JIT-compiled; if so, execute native code
 /// 2. If not compiled, record call count, maybe trigger compilation
 /// 3. Fall back to interpreter if needed
-/// 4. Record timing if metrics enabled
 pub struct OptimizingDispatcher {
     /// JIT engine for native code compilation.
     jit: JitEngine,
-    /// Metrics collector (optional).
-    metrics: Option<MetricsCollector>,
     /// Configuration.
     config: DispatcherConfig,
     /// The probabilities of chaos mode, or `None` in tuned mode.
@@ -217,15 +200,9 @@ impl OptimizingDispatcher {
         };
 
         let jit = JitEngine::new(jit_threshold)?;
-        let metrics = if config.metrics_enabled {
-            Some(MetricsCollector::with_config(config.metrics_config.clone()))
-        } else {
-            None
-        };
 
         Ok(Self {
             jit,
-            metrics,
             chaos,
             config,
             rng: ChaosRng { state: rng_state, call_counter: 0 },
@@ -237,14 +214,9 @@ impl OptimizingDispatcher {
         &self.jit
     }
 
-    /// Get the metrics collector if enabled.
-    pub fn metrics(&self) -> Option<&MetricsCollector> {
-        self.metrics.as_ref()
-    }
-
-    /// Get mutable access to metrics collector.
-    pub fn metrics_mut(&mut self) -> Option<&mut MetricsCollector> {
-        self.metrics.as_mut()
+    /// Get the JIT engine mutably, to configure it.
+    pub fn jit_mut(&mut self) -> &mut JitEngine {
+        &mut self.jit
     }
 
     /// Get the configuration.
@@ -288,11 +260,6 @@ impl CallDispatcher for OptimizingDispatcher {
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> DispatchResult {
-        // Start timing if metrics enabled.
-        let start_time = self.metrics.as_mut().and_then(|m| m.start_call());
-
-        let func_id = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
-
         // Offer the call to the JIT, which counts it, may compile it, and runs
         // compiled code. In chaos mode,
         // compiling and using what was compiled are separate draws, so that
@@ -304,24 +271,9 @@ impl CallDispatcher for OptimizingDispatcher {
             let dispatch = self.jit.dispatch_with(
                 code_ref, func, args, ret_dest, rt_handle, call_ctx,
                 || rng.roll(use_probability));
-
-            if let Some(metrics) = &mut self.metrics {
-                if let Some(code_size) = dispatch.compiled_now {
-                    metrics.record_jit_compile(func_id, code_size);
-                }
-                if matches!(dispatch.result, DispatchResult::Handled(Ok(()))) {
-                    metrics.record_call(func_id, ExecutionMode::Jit, start_time);
-                }
-            }
             if let DispatchResult::Handled(result) = dispatch.result {
                 return DispatchResult::Handled(result);
             }
-        }
-
-        // Fall back to interpreter.
-        // Record interpreted execution in metrics.
-        if let Some(metrics) = &mut self.metrics {
-            metrics.record_call(func_id, ExecutionMode::Interpreted, start_time);
         }
 
         DispatchResult::NotHandled
@@ -344,7 +296,6 @@ mod tests {
     fn test_dispatcher_config_production() {
         let config = DispatcherConfig::production();
         assert!(config.jit_enabled);
-        assert!(config.metrics_enabled);
         match config.mode {
             DispatcherMode::Tuned { jit_threshold } => {
                 assert_eq!(jit_threshold, 100);
@@ -357,7 +308,6 @@ mod tests {
     fn test_dispatcher_config_chaos() {
         let config = DispatcherConfig::chaos(12345);
         assert!(config.jit_enabled);
-        assert!(!config.metrics_enabled);
         match config.mode {
             DispatcherMode::Chaos { seed, compile_probability, use_jit_probability } => {
                 assert_eq!(seed, 12345);
@@ -372,7 +322,6 @@ mod tests {
     fn test_dispatcher_config_interpreter_only() {
         let config = DispatcherConfig::interpreter_only();
         assert!(!config.jit_enabled);
-        assert!(!config.metrics_enabled);
     }
 
     #[test]

@@ -67,6 +67,14 @@ impl<'db> CompiledModules<'db> {
         !self.is_successful()
     }
 
+    /// The path of every module, riders included, by the id the IR knows it by.
+    pub fn module_paths(&self, db: &'db dyn salsa::Database) -> HashMap<IrModuleId, String> {
+        datalove_datafun_compiler::tracked_lower::ir_module_ids(db, self.shared.parsed_graph)
+            .iter()
+            .map(|(module, ir_id)| (*ir_id, module.path(db).clone()))
+            .collect()
+    }
+
     /// Collect all errors.
     pub fn all_errors(&self) -> Vec<String> {
         let mut errors = Vec::new();

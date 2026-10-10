@@ -68,3 +68,9 @@ lookups and inserts on every line, sorting, string building, and a long tail
 of code that runs once. Compiling it reads the data and evaluates the id maps,
 which is about a quarter of a run at 20,000 orders. `just gen` takes any
 order count, and the time grows about linearly with it.
+
+Every query is a function called once that loops over all the orders, so a
+jit that compiles only on call counts never compiles the loops that matter;
+see [Tuning the JIT](../../botdocs/plan-jit-tuning.md). `just jit-stats 100`
+shows what a threshold leaves interpreted and how often calls cross into
+compiled code.

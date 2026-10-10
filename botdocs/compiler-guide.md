@@ -1523,7 +1523,13 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
 - **JIT** (`datalove-datafun-cranelift-jit`) tiers by call count.
   `OptimizingDispatcher` executes native code when a function is compiled, and
   otherwise counts toward the threshold. `DispatcherMode::Tuned` uses thresholds;
-  `Chaos` makes seeded pseudo-random decisions for testing.
+  `Chaos` makes seeded pseudo-random decisions for testing. `script --jit` runs
+  under an `OptimizingDispatcher` at a threshold of 1 unless given
+  `--jit-threshold`, and `--jit-stats` prints its `JitStats`: each function's
+  codegen time and size and, counted only when asked for since it is a second
+  table probe per call, the calls that crossed from the interpreter into
+  compiled code or back. Calls between compiled functions go stub to stub and
+  are not seen. See [Tuning the JIT](plan-jit-tuning.md).
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) compiles ahead of time.
 - **C AOT** (`datalove-datafun-c-aot`) emits C11 in one pass: type descriptors,
   then functions (module functions prefixed `__mod_N_`), then
@@ -2066,4 +2072,5 @@ The three `module-change-*` kinds drive the memoization tests.
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |
 | `interp/src/native.rs` | `NativeFunctionTable`, the C ABI bridge (`call_c`) |
 | `interp/src/dispatch.rs` | `CallDispatcher`, `DispatchResult` |
-| `cranelift-jit/src/optimizing.rs` | Tiering and dynamic inlining dispatcher |
+| `cranelift-jit/src/optimizing.rs` | Tiering dispatcher, and chaos mode for testing |
+| `cranelift-jit/src/stats.rs` | `JitStats`: what was compiled, and the crossings between the jit and the interpreter |

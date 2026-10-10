@@ -37,13 +37,14 @@ fn register_natives(
     compiled: &datalove::datafun::pipeline::CompiledModules,
     executor: &mut datalove::datafun::pipeline::ScriptExecutor,
 ) -> AnyResult<datalove::datafun::pipeline::rider_load::RegisteredNatives> {
-    use datalove::datafun_jit::JitEngine;
+    use datalove::datafun_jit::OptimizingDispatcher;
 
     let registered = datalove::datafun::pipeline::rider_load::register_natives(
         natives, compiled, executor)?;
 
     if let Some(dispatcher) = executor.take_dispatcher() {
-        if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
+        if let Some(dispatcher) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
+            let jit = dispatcher.jit();
             for (symbol, ptr) in &registered.native_fn_ptrs {
                 jit.register_native_symbol(symbol, *ptr);
             }
@@ -273,7 +274,7 @@ struct ReplCommand {
     script: Option<PathBuf>,
 }
 
-#[derive(clap::Args)]
+#[derive(clap::Args, Clone)]
 struct ScriptCommand {
     /// Path to the script file (.dfs) to execute.
     file_path: PathBuf,
@@ -283,6 +284,13 @@ struct ScriptCommand {
     /// Enable the JIT compiler for function execution.
     #[arg(long)]
     jit: bool,
+    /// Compile a function on this call to it rather than the first.
+    #[arg(long, value_name = "CALLS", requires = "jit")]
+    jit_threshold: Option<u32>,
+    /// Print to stderr what the JIT compiled, how calls crossed between it and
+    /// the interpreter, and how long compiling and running took.
+    #[arg(long, requires = "jit")]
+    jit_stats: bool,
 }
 
 #[derive(clap::Args)]
@@ -585,19 +593,21 @@ impl ScriptCommand {
         if self.jit {
             // Run with JIT in a spawned thread to work around Cranelift JIT
             // limitations with PIE binaries.
-            let file_path = self.file_path.clone();
-            let no_sys = self.no_sys;
-            std::thread::spawn(move || {
-                Self::run_impl(&file_path, no_sys, true)
-            }).join().expect("script thread panicked")
+            let command = self.clone();
+            std::thread::spawn(move || command.run_impl())
+                .join().expect("script thread panicked")
         } else {
-            Self::run_impl(&self.file_path, self.no_sys, false)
+            self.run_impl()
         }
     }
 
-    fn run_impl(file_path: &PathBuf, no_sys: bool, jit: bool) -> AnyResult<()> {
+    fn run_impl(&self) -> AnyResult<()> {
         use datalove::datafun;
+        use datalove::datafun_jit::{DispatcherConfig, DispatcherMode, OptimizingDispatcher};
 
+        let start = std::time::Instant::now();
+        let file_path = &self.file_path;
+        let no_sys = self.no_sys;
         let db = datafun::Database::default();
 
         // Build workspace descriptor. The work dir goes on whether or not it
@@ -622,11 +632,21 @@ impl ScriptCommand {
         let compiled = pipeline.compile_fresh(&db);
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
 
-        // Create JIT engine if --jit flag is set (threshold=1 compiles on first call).
-        let call_dispatcher: Option<Box<dyn datalove::datafun_interp::CallDispatcher>> = if jit {
-            let jit_engine = datalove::datafun_jit::JitEngine::new(1)
+        // A threshold of 1 compiles every function on its first call, which
+        // is what `--jit` has always done. Under the dispatcher's own default
+        // of 100 the loops in functions called once stay interpreted, as
+        // nothing compiles a function partway through a call.
+        let call_dispatcher: Option<Box<dyn datalove::datafun_interp::CallDispatcher>> = if self.jit {
+            let config = DispatcherConfig {
+                jit_enabled: true,
+                mode: DispatcherMode::Tuned { jit_threshold: self.jit_threshold.unwrap_or(1) },
+            };
+            let mut dispatcher = OptimizingDispatcher::with_config(config)
                 .map_err(|e| anyhow!("Failed to create JIT engine: {:?}", e))?;
-            Some(Box::new(jit_engine))
+            if self.jit_stats {
+                dispatcher.jit_mut().count_calls();
+            }
+            Some(Box::new(dispatcher))
         } else {
             None
         };
@@ -662,11 +682,24 @@ impl ScriptCommand {
         }
 
         // Execute the compiled unit.
+        let compiled_at = start.elapsed();
         let output = if let Some(ir_unit) = &compiled_unit.ir_unit {
             executor.execute_fragment(ir_unit)
         } else {
             String::new()
         };
+        if self.jit_stats {
+            let ran = start.elapsed() - compiled_at;
+            let dispatcher = executor.take_dispatcher().expect("--jit-stats runs with the jit");
+            let stats = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>()
+                .expect("the script command's dispatcher is an OptimizingDispatcher")
+                .jit().stats();
+            let paths = compiled.module_paths(&db);
+            eprintln!("time: {:.1} ms compiling, {:.1} ms running",
+                compiled_at.as_secs_f64() * 1e3, ran.as_secs_f64() * 1e3);
+            eprint!("{}", stats.report(25, &|id| paths.get(&id).cloned()));
+            executor.set_dispatcher(dispatcher);
+        }
         if output.starts_with("Error:") {
             bail!("{}", output);
         }

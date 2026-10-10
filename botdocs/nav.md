@@ -28,6 +28,7 @@
 - [A Register Bytecode for the Interpreter](plan-bytecode.md)
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
+- [Tuning the JIT](plan-jit-tuning.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
