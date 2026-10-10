@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, Destination, FuncIdentity,
-    InterpError, LoopPolicy, SitePolicy, Value,
+    InterpError, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -323,31 +323,21 @@ impl CallDispatcher for OptimizingDispatcher {
         header: BlockId,
         iterations: u32,
         call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<LoopPolicy, InterpError> {
+    ) -> Result<SitePolicy, InterpError> {
         if !self.config.jit_enabled {
-            return Ok(LoopPolicy::Interpret);
+            return Ok(SitePolicy::Interpret);
         }
         if !self.chaos_should_compile() {
-            return Ok(LoopPolicy::Count(1));
+            return Ok(SitePolicy::Count(1));
         }
         let policy = self.jit.loop_policy(func, body, header, iterations, call_ctx)?;
         let use_probability = self.chaos.as_ref().map(|c| c.use_jit);
         Ok(match policy {
-            LoopPolicy::Enter(_) if !self.rng.roll(use_probability) => LoopPolicy::Count(1),
+            SitePolicy::Enter(_) if !self.rng.roll(use_probability) => SitePolicy::Count(1),
             policy => policy,
         })
     }
 
-    fn enter_loop(
-        &mut self,
-        func: FuncIdentity,
-        entry: CompiledEntry,
-        words: &[usize],
-        call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<(), InterpError> {
-        self.jit.enter_loop(func, entry, words, call_ctx);
-        Ok(())
-    }
 
     fn as_any(&self) -> &dyn Any {
         self

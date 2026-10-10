@@ -51,39 +51,36 @@ pub const MAX_ENTRY_WORDS: usize = 10;
 /// Those are the runtime handle; the result's address if `uses_sret`; a
 /// pointer to each argument; then a descriptor for each of the function's
 /// `descriptor_params`, and one for each shape it declares.
+///
+/// Or, at a loop header (`at_loop`): the runtime handle, the result's address
+/// if `uses_sret`, and the interpreter's frame for the call, in which the code
+/// runs the rest of the call.
 #[derive(Clone, Copy, Debug)]
 pub struct CompiledEntry {
     pub code_ptr: *const u8,
     pub uses_sret: bool,
+    pub at_loop: bool,
 }
 
-/// How a call site the interpreter has planned is to make calls to a function.
+/// How the interpreter is to go on at a site it runs without asking: a call
+/// site it has planned, or a loop header.
 ///
-/// A planned call is made without asking anything, so a dispatcher that is to
-/// see calls has to say how it wants to see them. The interpreter asks when it
-/// plans the site, and asks again when the answer runs out.
+/// A dispatcher that is to see what happens there has to say how it wants to
+/// see it. The interpreter asks when it plans the call site or first reaches
+/// the header, and asks again when the answer runs out.
 #[derive(Clone, Copy, Debug)]
 pub enum SitePolicy {
-    /// Offer every call to `dispatch_call`, planning none.
+    /// Offer every call to `dispatch_call`, planning none; at a loop header,
+    /// ask again at the next iteration.
     EveryCall,
-    /// Run every call in the interpreter, never offering it.
+    /// Interpret, and do not ask again.
     Interpret,
-    /// Run calls in the interpreter, and offer every `n`th to `dispatch_call`
-    /// as standing for `n` (`DispatchCallContext::weight`).
+    /// Interpret `n` more calls or iterations, then ask again. A call site
+    /// offers the `n`th to `dispatch_call` as standing for all of them
+    /// (`DispatchCallContext::weight`); a loop header reports them to
+    /// `loop_policy`.
     Count(u32),
     /// Enter compiled code, through `call_compiled`.
-    Enter(CompiledEntry),
-}
-
-/// What the interpreter is to do about a loop it has run a while.
-#[derive(Clone, Copy, Debug)]
-pub enum LoopPolicy {
-    /// Run this many more iterations, then ask again.
-    Count(u32),
-    /// Run it in the interpreter, and do not ask again.
-    Interpret,
-    /// Enter compiled code at the loop's header, through `enter_loop`, which
-    /// runs the rest of the call.
     Enter(CompiledEntry),
 }
 
@@ -156,7 +153,8 @@ pub trait CallDispatcher {
         SitePolicy::EveryCall
     }
 
-    /// Enter `entry`, which `site_policy` gave for `func`, with `words`.
+    /// Enter `entry`, which `site_policy` or `loop_policy` gave for `func`,
+    /// with the words `CompiledEntry` says it takes.
     ///
     /// `call_ctx` is for the compiled code to call back into the interpreter
     /// with; its shape descriptors are already among the words.
@@ -185,23 +183,9 @@ pub trait CallDispatcher {
         header: datalove_datafun_ir::BlockId,
         iterations: u32,
         call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<LoopPolicy, InterpError> {
+    ) -> Result<SitePolicy, InterpError> {
         let _ = (func, body, header, iterations, call_ctx);
-        Ok(LoopPolicy::Interpret)
-    }
-
-    /// Enter `entry`, which `loop_policy` gave for `func`, with `words`: the
-    /// runtime handle, where the result goes if the code takes it, and the
-    /// frame. The code runs the rest of the call, result and all.
-    fn enter_loop(
-        &mut self,
-        func: FuncIdentity,
-        entry: CompiledEntry,
-        words: &[usize],
-        call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<(), InterpError> {
-        let _ = (func, entry, words, call_ctx);
-        unreachable!("a dispatcher that compiles no loops was asked to enter one")
+        Ok(SitePolicy::Interpret)
     }
 
     /// Convert to Any for downcasting.

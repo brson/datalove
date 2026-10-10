@@ -2156,6 +2156,19 @@ impl Instruction {
 }
 
 impl Terminator {
+    /// The blocks control can go on to: none for a return or the end of a
+    /// unit, and a block once for each edge to it.
+    pub fn successors(&self) -> Vec<BlockId> {
+        match self {
+            Terminator::Goto { target, .. } => vec![*target],
+            Terminator::Branch { then_block, else_block, .. } => vec![*then_block, *else_block],
+            Terminator::Switch { cases, default, .. } => {
+                cases.iter().map(|(_, b)| *b).chain(std::iter::once(*default)).collect()
+            }
+            Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => vec![],
+        }
+    }
+
     /// Visit every operand the terminator reads: a condition, a
     /// discriminant, a returned value, and the arguments of every edge.
     pub fn for_each_operand(&self, mut f: impl FnMut(&Operand)) {

@@ -323,18 +323,22 @@ frame bytes.
 How it works:
 
 - **Counting.** The bytecode starts every loop header with an
-  `Op::LoopHead`, which counts down a `LoopCounter` in the body's
-  `BcFunction`, shared by every call running it. A header is an in-loop block
+  `Op::LoopHead`, which counts down a `Countdown` -- the type a planned call
+  site counts calls with -- in the body's `BcFunction`, shared by every call
+  running it. A header is an in-loop block
   entered by an edge from a block at or after it. When a header is copied
   into its latch by `duplicate_short_branches`, the op is copied with it, and
   the frame is as entering the header wherever it runs. When the count runs
-  out, `IrInterpreter::loop_hot` asks the dispatcher for a `LoopPolicy` --
-  count so many more, interpret, or enter -- reporting how many iterations it
-  counted. With no dispatcher it asks again every 65,536.
+  out, `IrInterpreter::loop_hot` asks the dispatcher for a `SitePolicy`, the
+  one a call site is given -- count so many more, interpret, or enter --
+  reporting how many iterations it counted. With no dispatcher it asks again
+  every 65,536.
 - **Deciding.** `JitEngine::loop_policy` sums iterations per `(function,
   header)` against `osr_threshold` (`--jit-osr-threshold`, default 1000) and
   then compiles an entry there for the frame that asked; later frames to ask
-  are given the same entry at once. Only a function's frame is entered, not a
+  are given the same entry at once. A loop's state is a `Tier`, as a
+  function's is -- counting, compiled or refused -- and `Tier::policy` turns
+  either into the `SitePolicy` the interpreter is given. Only a function's frame is entered, not a
   script unit's.
 - **Compiling.** `FunctionCompiler::compile_osr_as` compiles the blocks
   reachable from the header, entered by a block of its own taking `(rt,
@@ -355,8 +359,10 @@ How it works:
   with what each block's compilation defined). The outer loop's header is
   then the one entered, which compiles both loops. A reference whose
   descriptor only its projection works out is refused too.
-- **Entering.** The interpreter calls the entry with its frame and the call's
-  result destination; the code runs the rest of the call, and the
+- **Entering.** The interpreter calls the entry through
+  `CallDispatcher::call_compiled`, as it does a planned call, with its frame
+  and the call's result destination (`CompiledEntry::at_loop` says which
+  words an entry takes); the code runs the rest of the call, and the
   interpreter returns from the frame as it does after a `Return`.
 
 What it took beyond the sketch:

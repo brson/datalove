@@ -62,8 +62,8 @@ pub use tydesc::IrTyDescTable;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{
-    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, LoopPolicy,
-    SitePolicy, MAX_ENTRY_WORDS,
+    CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, SitePolicy,
+    MAX_ENTRY_WORDS,
 };
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
@@ -2563,30 +2563,45 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Option<Result<(), InterpError>> {
-        // Take dispatcher temporarily to avoid borrow conflicts.
-        let mut dispatcher = self.call_dispatcher.borrow_mut().take()?;
-
-        // Capture rt_handle before borrowing self for the context.
         let rt_handle = self.runtime.handle();
         let weight = std::mem::replace(&mut self.call_weight, 1);
+        let result = self.with_dispatcher(ctx, registry, frames, shape_descriptors, weight,
+            |dispatcher, call_ctx| dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx))?;
+        match result {
+            dispatch::DispatchResult::Handled(result) => Some(result),
+            dispatch::DispatchResult::NotHandled => None,
+        }
+    }
 
+    /// Run `f` with the dispatcher and a context for it, or say there is no
+    /// dispatcher.
+    ///
+    /// The dispatcher is taken out of the interpreter for as long as `f` runs,
+    /// so that it and the interpreter can each be borrowed; compiled code it
+    /// runs that calls back into the interpreter lends it a stand-in
+    /// (`lend_dispatcher`). `exec_ctx` and the rest are the call's or the
+    /// frame's, as `DispatchCallContext` says.
+    pub(crate) fn with_dispatcher<R>(
+        &mut self,
+        exec_ctx: &ExecutionContext,
+        registry: &FunctionRegistry,
+        frames: &mut FrameStore,
+        shape_descriptors: &[*const rtdt::TyDesc],
+        weight: u32,
+        f: impl FnOnce(&mut dyn CallDispatcher, dispatch::DispatchCallContext<'_, '_>) -> R,
+    ) -> Option<R> {
+        let mut dispatcher = self.call_dispatcher.borrow_mut().take()?;
         let call_ctx = dispatch::DispatchCallContext {
-            exec_ctx: ctx,
+            exec_ctx,
             registry,
             frames,
             interp: self,
             shape_descriptors,
             weight,
         };
-
-        let result = match dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx) {
-            dispatch::DispatchResult::Handled(result) => Some(result),
-            dispatch::DispatchResult::NotHandled => None,
-        };
-
-        // Restore dispatcher.
+        let result = f(&mut *dispatcher, call_ctx);
         *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-        result
+        Some(result)
     }
 
     /// The frame layout for a function, computed once per body.

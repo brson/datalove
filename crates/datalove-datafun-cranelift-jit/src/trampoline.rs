@@ -23,7 +23,7 @@ use datalove_datafun_ir::{BlockId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, Destination, DispatchCallContext, DispatchResult,
     ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, InterpError, IrInterpreter,
-    LoopPolicy, SitePolicy, Value,
+    SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
@@ -224,12 +224,12 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // Count the call, which may compile the callee. Once it is compiled its
     // stubs call it directly and no longer come here.
     match ctx.jit_engine.record_call(key, ir_unit, 1, &callee_ctx, ctx.registry, ctx.interp) {
-        Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
+        Ok(Recorded::Compiled { entry, .. }) => {
             ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, true, 1);
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
-                    code_ptr, uses_sret, rt_handle, &arg_vals, dest,
+                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_vals, dest,
                     &func_ctx.descriptor_params, &shape_descriptors,
                 )
             }
@@ -312,20 +312,10 @@ impl CallDispatcher for LentEngine {
         header: BlockId,
         iterations: u32,
         call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<LoopPolicy, InterpError> {
+    ) -> Result<SitePolicy, InterpError> {
         self.engine().loop_policy(func, body, header, iterations, call_ctx)
     }
 
-    fn enter_loop(
-        &mut self,
-        func: FuncIdentity,
-        entry: CompiledEntry,
-        words: &[usize],
-        call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<(), InterpError> {
-        self.engine().enter_loop(func, entry, words, call_ctx);
-        Ok(())
-    }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self

@@ -61,6 +61,63 @@ enum ScratchPlace {
     Heap { size: u32, align: u32 },
 }
 
+/// A scalar constant made with `ins`, or `None` for a constant that is not
+/// one scalar, without making anything.
+pub(super) fn scalar_const<'f>(ins: impl InstBuilder<'f>, value: &ConstValue) -> Option<cranelift_codegen::ir::Value> {
+    Some(match value {
+        ConstValue::Bool(b) => {
+            ins.iconst(cl_types::I8, *b as i64)
+        }
+        ConstValue::U8(v) => {
+            ins.iconst(cl_types::I8, *v as i64)
+        }
+        ConstValue::U16(v) => {
+            ins.iconst(cl_types::I16, *v as i64)
+        }
+        ConstValue::U32(v) => {
+            ins.iconst(cl_types::I32, *v as i64)
+        }
+        ConstValue::U64(v) => {
+            ins.iconst(cl_types::I64, *v as i64)
+        }
+        ConstValue::I8(v) => {
+            ins.iconst(cl_types::I8, *v as i64)
+        }
+        ConstValue::I16(v) => {
+            ins.iconst(cl_types::I16, *v as i64)
+        }
+        ConstValue::I32(v) => {
+            ins.iconst(cl_types::I32, *v as i64)
+        }
+        ConstValue::I64(v) => {
+            ins.iconst(cl_types::I64, *v)
+        }
+        #[cfg(not(feature = "index-64"))]
+        ConstValue::Index(v) => {
+            ins.iconst(cl_types::I32, *v as i64)
+        }
+        #[cfg(feature = "index-64")]
+        ConstValue::Index(v) => {
+            ins.iconst(cl_types::I64, *v as i64)
+        }
+        #[cfg(not(feature = "index-64"))]
+        ConstValue::Offset(v) => {
+            ins.iconst(cl_types::I32, *v as i64)
+        }
+        #[cfg(feature = "index-64")]
+        ConstValue::Offset(v) => {
+            ins.iconst(cl_types::I64, *v)
+        }
+        ConstValue::F32(v) => {
+            ins.f32const(v.0)
+        }
+        ConstValue::F64(v) => {
+            ins.f64const(v.0)
+        }
+        _ => return None,
+    })
+}
+
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Take `size` bytes at `align` to build a constant in.
     ///
@@ -141,7 +198,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         value: &ConstValue,
     ) -> Result<(), CraneliftError> {
-        let cl_val = match value {
+        if let Some(cl_val) = scalar_const(builder.ins(), value) {
+            self.values.insert(dest, cl_val);
+            return Ok(());
+        }
+        match value {
+            ConstValue::Bool(_) | ConstValue::U8(_) | ConstValue::U16(_) | ConstValue::U32(_)
+            | ConstValue::U64(_) | ConstValue::I8(_) | ConstValue::I16(_) | ConstValue::I32(_)
+            | ConstValue::I64(_) | ConstValue::Index(_) | ConstValue::Offset(_)
+            | ConstValue::F32(_) | ConstValue::F64(_) => unreachable!("made by `scalar_const` above"),
             ConstValue::Unit => {
                 // Unit is zero-sized, but we need a valid address for debuglog.
                 // Store the frame address like other aggregates.
@@ -152,55 +217,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let base = frame_slot.addr(builder, dest_offset as i32);
                 self.values.insert(dest, base);
                 return Ok(());
-            }
-            ConstValue::Bool(b) => {
-                builder.ins().iconst(cl_types::I8, *b as i64)
-            }
-            ConstValue::U8(v) => {
-                builder.ins().iconst(cl_types::I8, *v as i64)
-            }
-            ConstValue::U16(v) => {
-                builder.ins().iconst(cl_types::I16, *v as i64)
-            }
-            ConstValue::U32(v) => {
-                builder.ins().iconst(cl_types::I32, *v as i64)
-            }
-            ConstValue::U64(v) => {
-                builder.ins().iconst(cl_types::I64, *v as i64)
-            }
-            ConstValue::I8(v) => {
-                builder.ins().iconst(cl_types::I8, *v as i64)
-            }
-            ConstValue::I16(v) => {
-                builder.ins().iconst(cl_types::I16, *v as i64)
-            }
-            ConstValue::I32(v) => {
-                builder.ins().iconst(cl_types::I32, *v as i64)
-            }
-            ConstValue::I64(v) => {
-                builder.ins().iconst(cl_types::I64, *v)
-            }
-            #[cfg(not(feature = "index-64"))]
-            ConstValue::Index(v) => {
-                builder.ins().iconst(cl_types::I32, *v as i64)
-            }
-            #[cfg(feature = "index-64")]
-            ConstValue::Index(v) => {
-                builder.ins().iconst(cl_types::I64, *v as i64)
-            }
-            #[cfg(not(feature = "index-64"))]
-            ConstValue::Offset(v) => {
-                builder.ins().iconst(cl_types::I32, *v as i64)
-            }
-            #[cfg(feature = "index-64")]
-            ConstValue::Offset(v) => {
-                builder.ins().iconst(cl_types::I64, *v)
-            }
-            ConstValue::F32(v) => {
-                builder.ins().f32const(v.0)
-            }
-            ConstValue::F64(v) => {
-                builder.ins().f64const(v.0)
             }
             ConstValue::Int { limbs, negative } => {
                 // Int is an aggregate type - write directly to frame.
@@ -272,10 +288,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Error: box inner value.
                 return self.compile_error_const(builder, dest, payload_type, value);
             }
-        };
-
-        self.values.insert(dest, cl_val);
-        Ok(())
+        }
     }
 
     /// Compile an Int (bigint) constant.

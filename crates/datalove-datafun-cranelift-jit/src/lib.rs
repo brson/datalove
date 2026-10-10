@@ -32,7 +32,7 @@ use std::time::Instant;
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, Destination, DispatchResult, ExecutionContext,
-    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, LoopPolicy, SitePolicy, Value,
+    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, SitePolicy, Value,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -62,19 +62,41 @@ impl std::fmt::Display for JitError {
 
 impl std::error::Error for JitError {}
 
-/// Tracks function execution state for JIT compilation decisions.
-pub enum FunctionState {
-    /// Function is interpreted; tracks call count for compilation trigger.
-    Interpreted { call_count: u32 },
-    /// Function has been compiled to native code.
-    Compiled {
-        /// Pointer to native code entry point.
-        code_ptr: *const u8,
-        /// Whether return uses sret convention.
-        uses_sret: bool,
-        /// Estimated code size in bytes.
-        code_size: usize,
-    },
+/// Where the JIT is with a function, or with a loop in one: counting calls
+/// or iterations toward compiling it, compiled, or refused by the backend.
+#[derive(Clone, Copy)]
+enum Tier {
+    Counting(u32),
+    Compiled(CompiledEntry),
+    Refused,
+}
+
+impl Tier {
+    /// Count `n` more, and say whether that reaches `threshold`.
+    fn count(&mut self, n: u32, threshold: u32) -> bool {
+        match self {
+            Tier::Counting(counted) => {
+                *counted = counted.saturating_add(n);
+                *counted >= threshold
+            }
+            Tier::Compiled(_) | Tier::Refused => false,
+        }
+    }
+
+    /// How the interpreter is to go on, counting toward `threshold`; see
+    /// `SitePolicy`.
+    ///
+    /// Counting asks again after as many as are lacking, so that with one
+    /// site counting, compiling happens when it would have had every call
+    /// been offered; with several, each counts on its own, and the first to
+    /// finish reports what it counted.
+    fn policy(self, threshold: u32) -> SitePolicy {
+        match self {
+            Tier::Counting(counted) => SitePolicy::Count(threshold.saturating_sub(counted).max(1)),
+            Tier::Compiled(entry) => SitePolicy::Enter(entry),
+            Tier::Refused => SitePolicy::Interpret,
+        }
+    }
 }
 
 /// Per-function tracing JIT engine.
@@ -82,11 +104,11 @@ pub enum FunctionState {
 /// Tracks function call counts and compiles hot functions to native code.
 /// Single-threaded design - no synchronization overhead.
 pub struct JitEngine {
-    /// Function states (interpreted with call count, or compiled).
+    /// Where each function is.
     ///
     /// `FxHashMap` because this is probed on every call that reaches the
     /// dispatcher and again on every call out of compiled code.
-    pub(crate) states: FxHashMap<FuncIdentity, FunctionState>,
+    states: FxHashMap<FuncIdentity, Tier>,
     /// Cranelift JIT compiler.
     compiler: JitCompiler,
     /// Call count threshold for triggering compilation.
@@ -98,19 +120,10 @@ pub struct JitEngine {
     /// Iterations of a loop, in all the calls running it, before the frame
     /// that runs the last of them goes on in compiled code.
     osr_threshold: u32,
-    /// What has been decided about each loop the interpreter has asked about,
-    /// by its function and header.
-    loops: FxHashMap<(FuncIdentity, BlockId), LoopState>,
-}
-
-/// What the jit has decided about a loop.
-enum LoopState {
-    /// Iterations counted so far.
-    Counting(u32),
-    /// Compiled, to be entered at its header.
-    Compiled(CompiledEntry),
-    /// The backend cannot enter it there; see `codegen::OsrSpec`.
-    Refused,
+    /// Where each loop the interpreter has asked about is, by its function
+    /// and header. Refused where the backend cannot enter at the header; see
+    /// `codegen::OsrSpec`.
+    loops: FxHashMap<(FuncIdentity, BlockId), Tier>,
 }
 
 /// Loop iterations before compiling an entry at the loop, unless set.
@@ -149,18 +162,10 @@ impl JitEngine {
         header: BlockId,
         iterations: u32,
         call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<LoopPolicy, InterpError> {
-        let state = self.loops.entry((func, header)).or_insert(LoopState::Counting(0));
-        let counted = match state {
-            LoopState::Compiled(entry) => return Ok(LoopPolicy::Enter(*entry)),
-            LoopState::Refused => return Ok(LoopPolicy::Interpret),
-            LoopState::Counting(n) => {
-                *n = n.saturating_add(iterations);
-                *n
-            }
-        };
-        if counted < self.osr_threshold {
-            return Ok(LoopPolicy::Count(self.osr_threshold - counted));
+    ) -> Result<SitePolicy, InterpError> {
+        let tier = self.loops.entry((func, header)).or_insert(Tier::Counting(0));
+        if !tier.count(iterations, self.osr_threshold) {
+            return Ok(tier.policy(self.osr_threshold));
         }
 
         let layout = call_ctx.interp.layout_for(func, body);
@@ -170,8 +175,7 @@ impl JitEngine {
             shape_offset: layout.shape_offset,
         };
         let start = Instant::now();
-        let compiled = self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec);
-        let (state, policy) = match compiled {
+        match self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec) {
             Ok((code_ptr, uses_sret, code_size)) => {
                 let compile_time = start.elapsed();
                 self.stats.osr_compiled_count += 1;
@@ -179,47 +183,15 @@ impl JitEngine {
                 self.stats.total_code_size += code_size;
                 let f = self.stats.function(func, &body.name);
                 *f.osr_compile_time.get_or_insert_default() += compile_time;
-                let entry = CompiledEntry { code_ptr, uses_sret };
-                (LoopState::Compiled(entry), LoopPolicy::Enter(entry))
+                *tier = Tier::Compiled(CompiledEntry { code_ptr, uses_sret, at_loop: true });
             }
             Err(JitError::Unsupported(_)) => {
                 self.stats.osr_refused_count += 1;
-                (LoopState::Refused, LoopPolicy::Interpret)
+                *tier = Tier::Refused;
             }
             Err(e) => return Err(InterpError::RuntimeError(e.to_string())),
-        };
-        self.loops.insert((func, header), state);
-        Ok(policy)
-    }
-
-    /// Enter a loop's compiled code for the frame at its header; see
-    /// `CallDispatcher::enter_loop`.
-    pub fn enter_loop(
-        &mut self,
-        func: FuncIdentity,
-        entry: CompiledEntry,
-        words: &[usize],
-        call_ctx: DispatchCallContext<'_, '_>,
-    ) {
-        if self.count_calls {
-            self.stats.functions.get_mut(&func)
-                .expect("a loop compiled has its function's stats")
-                .loops_entered += 1;
         }
-        let mut dispatch_ctx = DispatchContext {
-            jit_engine: self,
-            interp: call_ctx.interp,
-            exec_ctx: call_ctx.exec_ctx,
-            registry: call_ctx.registry,
-            frames: call_ctx.frames,
-        };
-        // SAFETY: the context outlives the call, and is cleared after it.
-        let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
-        // SAFETY: the words are the runtime handle, the result's place if the
-        // code takes one, and the frame of a call to the function at the
-        // header the code enters at.
-        unsafe { bridge::call_words(entry.code_ptr, words) };
-        restore_dispatch_context(previous);
+        Ok(tier.policy(self.osr_threshold))
     }
 
     /// Count every call offered to the jit, by function, in `stats`.
@@ -238,29 +210,16 @@ impl JitEngine {
     }
 
     /// How a planned call site is to make its calls to `func`; see
-    /// `CallDispatcher::site_policy`.
-    ///
-    /// Compiled code is entered, a function that will not be compiled is
-    /// interpreted, and one that may be is counted for as many calls as it
-    /// lacks of the threshold. A site does not wait longer than that to offer
-    /// a call, so with one site calling it the function is compiled on the
-    /// call it would have been anyway; with several, each counts on its own,
-    /// and the first to finish offers what it counted.
+    /// `CallDispatcher::site_policy` and `Tier::policy`.
     pub fn site_policy(&self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
         match self.states.get(&func) {
-            Some(FunctionState::Compiled { code_ptr, uses_sret, .. }) => {
-                SitePolicy::Enter(CompiledEntry { code_ptr: *code_ptr, uses_sret: *uses_sret })
-            }
-            Some(FunctionState::Interpreted { call_count: u32::MAX }) => SitePolicy::Interpret,
-            Some(FunctionState::Interpreted { call_count }) => {
-                SitePolicy::Count(self.threshold.saturating_sub(*call_count).max(1))
-            }
+            Some(tier) => tier.policy(self.threshold),
             None if !bridge::enterable(body) => SitePolicy::Interpret,
-            None => SitePolicy::Count(self.threshold.max(1)),
+            None => Tier::Counting(0).policy(self.threshold),
         }
     }
 
-    /// Enter compiled code from a planned call; see
+    /// Enter compiled code, from a planned call or at a loop header; see
     /// `CallDispatcher::call_compiled`.
     pub fn call_compiled(
         &mut self,
@@ -270,13 +229,17 @@ impl JitEngine {
         call_ctx: DispatchCallContext<'_, '_>,
     ) {
         if self.count_calls {
-            self.stats.functions.get_mut(&func)
-                .expect("a compiled function has its stats")
-                .entered += 1;
+            let f = self.stats.functions.get_mut(&func).expect("a compiled function has its stats");
+            if entry.at_loop {
+                f.loops_entered += 1;
+            } else {
+                f.entered += 1;
+            }
         }
         // What the code's stubs call back into the interpreter with, for the
         // length of the call. A planned call is never to a function of an
-        // earlier unit, so the callee runs in the caller's context.
+        // earlier unit, and a loop is entered in the frame running it, so the
+        // code runs in the context it was given.
         let mut dispatch_ctx = DispatchContext {
             jit_engine: self,
             interp: call_ctx.interp,
@@ -341,24 +304,15 @@ impl JitEngine {
         // agrees before the work is done: finding out at the call meant a
         // program that ran under the interpreter failed under the jit.
         if !bridge::enterable(func) {
-            self.states.insert(key, FunctionState::Interpreted { call_count: u32::MAX });
+            self.states.insert(key, Tier::Refused);
             return Ok(Recorded::Interpret);
         }
 
-        let state = self.states.entry(key).or_insert(FunctionState::Interpreted { call_count: 0 });
-        let call_count = match state {
-            FunctionState::Compiled { code_ptr, uses_sret, .. } => {
-                return Ok(Recorded::Compiled {
-                    code_ptr: *code_ptr,
-                    uses_sret: *uses_sret,
-                    compiled_now: None,
-                });
-            }
-            FunctionState::Interpreted { call_count } => call_count,
-        };
-        // u32::MAX means permanently interpreted.
-        *call_count = call_count.saturating_add(weight).min(u32::MAX - 1);
-        if *call_count < self.threshold || *call_count == u32::MAX {
+        let tier = self.states.entry(key).or_insert(Tier::Counting(0));
+        if let Tier::Compiled(entry) = *tier {
+            return Ok(Recorded::Compiled { entry, compiled_now: None });
+        }
+        if !tier.count(weight, self.threshold) {
             return Ok(Recorded::Interpret);
         }
 
@@ -373,14 +327,15 @@ impl JitEngine {
                 f.compile_time = Some(compile_time);
                 f.code_size = code_size;
 
-                *state = FunctionState::Compiled { code_ptr, uses_sret, code_size };
+                let entry = CompiledEntry { code_ptr, uses_sret, at_loop: false };
+                *tier = Tier::Compiled(entry);
                 self.compiler.publish(key, code_ptr);
-                Ok(Recorded::Compiled { code_ptr, uses_sret, compiled_now: Some(code_size) })
+                Ok(Recorded::Compiled { entry, compiled_now: Some(code_size) })
             }
             Err(JitError::Unsupported(_)) => {
                 // Not a failure: the function is left to the interpreter, and
                 // asking again at every call would recompile it every time.
-                *state = FunctionState::Interpreted { call_count: u32::MAX };
+                *tier = Tier::Refused;
                 self.stats.refused_count += 1;
                 Ok(Recorded::Interpret)
             }
@@ -416,7 +371,7 @@ impl JitEngine {
                 self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight);
                 JitDispatch { result: DispatchResult::NotHandled }
             }
-            Ok(Recorded::Compiled { code_ptr, uses_sret, .. }) => {
+            Ok(Recorded::Compiled { entry, .. }) => {
                 if !use_compiled() {
                     self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight);
                     return JitDispatch { result: DispatchResult::NotHandled };
@@ -445,7 +400,7 @@ impl JitEngine {
                 // these are.
                 unsafe {
                     bridge::call_jit(
-                        code_ptr, uses_sret, rt_handle, args, ret_dest,
+                        entry.code_ptr, entry.uses_sret, rt_handle, args, ret_dest,
                         descriptor_params, shape_descriptors,
                     )
                 };
@@ -463,8 +418,7 @@ pub enum Recorded {
     Interpret,
     /// Run its compiled code.
     Compiled {
-        code_ptr: *const u8,
-        uses_sret: bool,
+        entry: CompiledEntry,
         /// The size of the code, when this call is the one that compiled it.
         compiled_now: Option<usize>,
     },
@@ -571,8 +525,8 @@ mod tests {
 
         // Third call should trigger compilation.
         match record(&mut jit, &func) {
-            Recorded::Compiled { code_ptr, compiled_now, .. } => {
-                assert!(!code_ptr.is_null(), "compiled code pointer should not be null");
+            Recorded::Compiled { entry, compiled_now } => {
+                assert!(!entry.code_ptr.is_null(), "compiled code pointer should not be null");
                 assert!(compiled_now.is_some(), "this call compiled it");
             }
             Recorded::Interpret => panic!("expected compilation at threshold"),
@@ -625,9 +579,9 @@ mod tests {
         let func = make_test_function();
 
         match record(&mut jit, &func) {
-            Recorded::Compiled { code_ptr, uses_sret, .. } => {
-                assert!(!code_ptr.is_null());
-                assert!(uses_sret, "all non-Unit returns use sret");
+            Recorded::Compiled { entry, .. } => {
+                assert!(!entry.code_ptr.is_null());
+                assert!(entry.uses_sret, "all non-Unit returns use sret");
             }
             Recorded::Interpret => panic!("expected immediate compilation"),
         }
@@ -642,7 +596,7 @@ mod tests {
         let func = make_test_function();
 
         // Compile the function.
-        let Recorded::Compiled { code_ptr, uses_sret, .. } = record(&mut jit, &func) else {
+        let Recorded::Compiled { entry: CompiledEntry { code_ptr, uses_sret, .. }, .. } = record(&mut jit, &func) else {
             panic!("expected immediate compilation");
         };
         assert!(uses_sret, "all non-Unit returns use sret");
@@ -824,7 +778,7 @@ mod tests {
 
         // Compile main() with context (creates stub for identity()).
         let main_key = FuncIdentity::Unit { unit: 0, id: CodeUnitId(1) };
-        let Recorded::Compiled { code_ptr, uses_sret, .. } = jit
+        let Recorded::Compiled { entry: CompiledEntry { code_ptr, uses_sret, .. }, .. } = jit
             .record_call(main_key, &main_fn, 1, &ctx, &registry, &mut IrInterpreter::new())
             .expect("compilation failed")
         else {
@@ -917,20 +871,10 @@ impl CallDispatcher for JitEngine {
         header: BlockId,
         iterations: u32,
         call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<LoopPolicy, InterpError> {
+    ) -> Result<SitePolicy, InterpError> {
         JitEngine::loop_policy(self, func, body, header, iterations, call_ctx)
     }
 
-    fn enter_loop(
-        &mut self,
-        func: FuncIdentity,
-        entry: CompiledEntry,
-        words: &[usize],
-        call_ctx: DispatchCallContext<'_, '_>,
-    ) -> Result<(), InterpError> {
-        JitEngine::enter_loop(self, func, entry, words, call_ctx);
-        Ok(())
-    }
 
     fn as_any(&self) -> &dyn Any {
         self

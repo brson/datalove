@@ -391,49 +391,9 @@ fn reachable_from(func: &IrCodeUnit, from: BlockId) -> std::collections::HashSet
             continue;
         }
         let block = func.blocks.iter().find(|b| b.id == id).expect("a block of the function");
-        work.extend(successors(&block.terminator));
+        work.extend(block.terminator.successors());
     }
     seen
-}
-
-/// The blocks a terminator goes on to.
-fn successors(term: &Terminator) -> Vec<BlockId> {
-    match term {
-        Terminator::Goto { target, .. } => vec![*target],
-        Terminator::Branch { then_block, else_block, .. } => vec![*then_block, *else_block],
-        Terminator::Switch { cases, default, .. } => {
-            cases.iter().map(|(_, b)| *b).chain(std::iter::once(*default)).collect()
-        }
-        Terminator::Return { .. } | Terminator::UnitEnd { .. } | Terminator::UnitEarlyReturn { .. } => vec![],
-    }
-}
-
-/// Whether a constant is one scalar an OSR entry makes again; see
-/// `OsrState::consts`.
-fn is_scalar_const(value: &ConstValue) -> bool {
-    matches!(value,
-        ConstValue::Bool(_) | ConstValue::U8(_) | ConstValue::U16(_) | ConstValue::U32(_)
-        | ConstValue::U64(_) | ConstValue::I8(_) | ConstValue::I16(_) | ConstValue::I32(_)
-        | ConstValue::I64(_) | ConstValue::Index(_) | ConstValue::Offset(_)
-        | ConstValue::F32(_) | ConstValue::F64(_))
-}
-
-/// The bits of an integer or boolean constant, for `iconst`.
-fn scalar_const_bits(value: &ConstValue) -> i64 {
-    match value {
-        ConstValue::Bool(b) => *b as i64,
-        ConstValue::U8(v) => *v as i64,
-        ConstValue::U16(v) => *v as i64,
-        ConstValue::U32(v) => *v as i64,
-        ConstValue::U64(v) => *v as i64,
-        ConstValue::I8(v) => *v as i64,
-        ConstValue::I16(v) => *v as i64,
-        ConstValue::I32(v) => *v as i64,
-        ConstValue::I64(v) => *v,
-        ConstValue::Index(v) => *v as i64,
-        ConstValue::Offset(v) => *v as i64,
-        other => unreachable!("{:?} is not an integer constant", other),
-    }
 }
 
 /// Where a function's frame is.
@@ -475,10 +435,12 @@ struct OsrState {
     entry_jump: cl_ir::Inst,
     /// Those values, read in.
     materialized: std::cell::RefCell<HashMap<ValueId, cl_ir::Value>>,
-    /// The scalar constants, which are made again rather than read: the
-    /// bytecode folds a constant into what reads it and may never write it to
-    /// the frame.
+    /// The constants, a scalar one of which is made again rather than read:
+    /// the bytecode folds a constant into what reads it and may never write
+    /// it to the frame.
     consts: HashMap<ValueId, ConstValue>,
+    /// What compiling each block defined; see `osr_check`.
+    defined: HashMap<BlockId, std::collections::HashSet<ValueId>>,
 }
 
 impl FrameBase {
@@ -809,86 +771,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         }
 
-        // Per block, for an OSR entry, the values compiling it defined; see
-        // `osr_check`.
-        let mut defined: HashMap<BlockId, std::collections::HashSet<ValueId>> = HashMap::new();
-
         // Compile each block.
-        for ir_block in &self.func.blocks {
-            if !compiled(ir_block.id) {
-                continue;
-            }
-            let cl_block = self.blocks[&ir_block.id];
-            let before: Option<std::collections::HashSet<ValueId>> =
-                self.osr.is_some().then(|| self.values.keys().copied().collect());
-
-            // Switch to block (entry already switched, unless this is an OSR
-            // entry, whose entry is its own).
-            if ir_block.id != BlockId(0) || self.osr.is_some() {
-                builder.switch_to_block(cl_block);
-
-                // Map block params to IR ValueIds.
-                //
-                // Block params implement loop carries/brings. The IR semantics specify
-                // that Goto/Branch MOVE their args INTO the target block's param locations.
-                // Each block param conceptually gets a "fresh" value each time the block
-                // is entered.
-                //
-                // Scalars: Cranelift block param IS the value - pure SSA semantics.
-                //
-                // Aggregates: Cranelift block param is a POINTER to the source data.
-                // We must memcpy to a local frame location to:
-                // 1. Ensure value semantics (each iteration sees independent data)
-                // 2. Prevent aliasing when source and dest overlap (loop carry case)
-                let cl_params = builder.block_params(cl_block).to_vec();
-                for (ir_value_id, &cl_param) in ir_block.params.iter().zip(cl_params.iter()) {
-                    let param_ty = self.func.value_types.get(ir_value_id.0 as usize)
-                        .cloned()
-                        .unwrap_or(IrType::Unit);
-                    let repr = types::ir_type_to_cranelift(&param_ty);
-
-                    match repr {
-                        CraneliftRepr::Scalar(_) => {
-                            // Scalar: block param IS the value (pure SSA).
-                            self.values.insert(*ir_value_id, cl_param);
-                        }
-                        CraneliftRepr::Aggregate(layout) => {
-                            // Aggregate: block param is PTR to source. Copy to local frame.
-                            let frame_slot = self.frame_slot.expect("aggregate block param requires frame slot");
-                            let dest_offset = self.layout.value_offset(ir_value_id.0);
-                            let dest_addr = frame_slot.addr(&mut builder, dest_offset as i32);
-
-                            // memcpy from incoming pointer to local frame location.
-                            let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                            builder.call_memcpy(self.isa.frontend_config(), dest_addr, cl_param, size);
-
-                            // Use local address for this value.
-                            self.values.insert(*ir_value_id, dest_addr);
-
-                            // Mark as live if tracked.
-                            self.mark_value_live(&mut builder, *ir_value_id);
-                        }
-                    }
-                }
-
-                // Don't seal yet - wait until all blocks are compiled for loop back-edges.
-            }
-
-            // Compile instructions.
-            for inst in &ir_block.instructions {
-                self.compile_instruction(&mut builder, inst)?;
-            }
-
-            // Compile terminator.
-            self.compile_terminator(&mut builder, &ir_block.terminator)?;
-
-            if let Some(before) = before {
-                let new = self.values.keys().filter(|v| !before.contains(v)).copied().collect();
-                defined.insert(ir_block.id, new);
+        let func = self.func;
+        for ir_block in func.blocks.iter().filter(|b| compiled(b.id)) {
+            if self.osr.is_some() {
+                self.compile_osr_block(&mut builder, ir_block)?;
+            } else {
+                self.compile_block(&mut builder, ir_block)?;
             }
         }
         if self.osr.is_some() {
-            self.osr_check(&defined)?;
+            self.osr_check()?;
         }
 
         // Seal all blocks now that all predecessors are known (required for loops).
@@ -906,6 +799,71 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
 
         Ok(func_id)
+    }
+
+    /// Compile one block: its parameters, instructions and terminator.
+    fn compile_block(&mut self, builder: &mut FunctionBuilder, ir_block: &IrBlock) -> Result<(), CraneliftError> {
+        let cl_block = self.blocks[&ir_block.id];
+        // Switch to block (entry already switched, unless this is an OSR
+        // entry, whose entry is its own).
+        if ir_block.id != BlockId(0) || self.osr.is_some() {
+            builder.switch_to_block(cl_block);
+
+            // Map block params to IR ValueIds.
+            //
+            // Block params implement loop carries/brings. The IR semantics specify
+            // that Goto/Branch MOVE their args INTO the target block's param locations.
+            // Each block param conceptually gets a "fresh" value each time the block
+            // is entered.
+            //
+            // Scalars: Cranelift block param IS the value - pure SSA semantics.
+            //
+            // Aggregates: Cranelift block param is a POINTER to the source data.
+            // We must memcpy to a local frame location to:
+            // 1. Ensure value semantics (each iteration sees independent data)
+            // 2. Prevent aliasing when source and dest overlap (loop carry case)
+            let cl_params = builder.block_params(cl_block).to_vec();
+            for (ir_value_id, &cl_param) in ir_block.params.iter().zip(cl_params.iter()) {
+                let param_ty = self.func.value_types.get(ir_value_id.0 as usize)
+                    .cloned()
+                    .unwrap_or(IrType::Unit);
+                let repr = types::ir_type_to_cranelift(&param_ty);
+
+                match repr {
+                    CraneliftRepr::Scalar(_) => {
+                        // Scalar: block param IS the value (pure SSA).
+                        self.values.insert(*ir_value_id, cl_param);
+                    }
+                    CraneliftRepr::Aggregate(layout) => {
+                        // Aggregate: block param is PTR to source. Copy to local frame.
+                        let frame_slot = self.frame_slot.expect("aggregate block param requires frame slot");
+                        let dest_offset = self.layout.value_offset(ir_value_id.0);
+                        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+
+                        // memcpy from incoming pointer to local frame location.
+                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
+                        builder.call_memcpy(self.isa.frontend_config(), dest_addr, cl_param, size);
+
+                        // Use local address for this value.
+                        self.values.insert(*ir_value_id, dest_addr);
+
+                        // Mark as live if tracked.
+                        self.mark_value_live(builder, *ir_value_id);
+                    }
+                }
+            }
+
+            // Don't seal yet - wait until all blocks are compiled for loop back-edges.
+        }
+
+        // Compile instructions.
+        for inst in &ir_block.instructions {
+            self.compile_instruction(builder, inst)?;
+        }
+
+        // Compile terminator.
+        self.compile_terminator(builder, &ir_block.terminator)?;
+        Ok(())
     }
 
     /// Build the Cranelift function signature.
@@ -1639,16 +1597,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let ty = &self.func.value_types[vid.0 as usize];
         let offset = self.layout.value_offset(vid.0) as i32;
         let mut pos = FuncCursor::new(builder.func).at_inst(osr.entry_jump);
-        let v = match (types::ir_type_to_cranelift(ty), osr.consts.get(&vid)) {
-            (CraneliftRepr::Scalar(cl_ty), Some(c)) => match c {
-                ConstValue::F32(f) => pos.ins().f32const(f.0),
-                ConstValue::F64(f) => pos.ins().f64const(f.0),
-                c => pos.ins().iconst(cl_ty, scalar_const_bits(c)),
-            },
-            (CraneliftRepr::Scalar(cl_ty), None) => {
-                pos.ins().load(cl_ty, MemFlagsData::trusted(), osr.frame, offset)
-            }
-            (CraneliftRepr::Aggregate(_), _) => pos.ins().iadd_imm_s(osr.frame, offset as i64),
+        let remade = osr.consts.get(&vid).and_then(|c| constants::scalar_const(pos.ins(), c));
+        let v = match (remade, types::ir_type_to_cranelift(ty)) {
+            (Some(v), _) => v,
+            (None, CraneliftRepr::Scalar(cl_ty)) => pos.ins().load(cl_ty, MemFlagsData::trusted(), osr.frame, offset),
+            (None, CraneliftRepr::Aggregate(_)) => pos.ins().iadd_imm_s(osr.frame, offset as i64),
         };
         osr.materialized.borrow_mut().insert(vid, v);
         Ok(v)
@@ -1703,7 +1656,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let consts = self.func.blocks.iter()
             .flat_map(|b| &b.instructions)
             .filter_map(|instr| match instr {
-                Instruction::Const { dest, value } if is_scalar_const(value) => Some((*dest, value.clone())),
+                Instruction::Const { dest, value } => Some((*dest, value.clone())),
                 _ => None,
             })
             .collect();
@@ -1713,7 +1666,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             entry_jump,
             materialized: std::cell::RefCell::new(HashMap::new()),
             consts,
+            defined: HashMap::new(),
         });
+    }
+
+    /// Compile a block of an OSR entry, noting what compiling it defined.
+    fn compile_osr_block(&mut self, builder: &mut FunctionBuilder, ir_block: &IrBlock) -> Result<(), CraneliftError> {
+        let before: std::collections::HashSet<ValueId> = self.values.keys().copied().collect();
+        self.compile_block(builder, ir_block)?;
+        let new = self.values.keys().filter(|v| !before.contains(v)).copied().collect();
+        self.osr.as_mut().expect("an OSR entry").defined.insert(ir_block.id, new);
+        Ok(())
     }
 
     /// Refuse an OSR entry whose header needs a value that the code it
@@ -1721,9 +1684,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// defining it was compiled, either way read from the frame where the
     /// code also makes it.
     ///
-    /// `defined` is, per block compiled, what compiling it defined.
-    fn osr_check(&self, defined: &HashMap<BlockId, std::collections::HashSet<ValueId>>) -> Result<(), CraneliftError> {
+    fn osr_check(&self) -> Result<(), CraneliftError> {
         let osr = self.osr.as_ref().expect("an OSR entry");
+        let defined = &osr.defined;
         let spec = self.osr_spec.as_ref().expect("an OSR entry");
         let all: std::collections::HashSet<ValueId> = defined.values().flatten().copied().collect();
         if let Some(v) = osr.materialized.borrow().keys().find(|v| all.contains(v)) {
@@ -1752,7 +1715,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         loop {
             let mut changed = false;
             for block in blocks.iter().rev() {
-                let mut live: std::collections::HashSet<ValueId> = successors(&block.terminator).into_iter()
+                let mut live: std::collections::HashSet<ValueId> = block.terminator.successors().into_iter()
                     .filter_map(|s| live_in.get(&s))
                     .flatten()
                     .copied()

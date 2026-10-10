@@ -489,7 +489,7 @@ impl CallCache {
         if self.dispatcher != Some(epoch) {
             return true;
         }
-        matches!(&self.plan, Some(Plan::Body(BodyPlan { countdown: Some(c), .. })) if c.left.get() == 0)
+        matches!(&self.plan, Some(Plan::Body(BodyPlan { countdown: Some(c), .. })) if c.run_out())
     }
 }
 
@@ -517,13 +517,42 @@ struct BodyPlan {
     countdown: Option<Countdown>,
 }
 
-/// Calls a planned site makes before offering one to the dispatcher.
+/// Calls a planned site makes, or iterations a loop header counts, before
+/// the dispatcher is asked again; see `SitePolicy::Count`.
 struct Countdown {
-    /// Left to make. Zero once the last was offered, until the site asks the
-    /// dispatcher again.
+    /// Left to make. Zero once run out, until set again.
     left: std::cell::Cell<u32>,
-    /// How many it started with, which the offered call stands for.
-    batch: u32,
+    /// How many it was set to, which the asking reports.
+    batch: std::cell::Cell<u32>,
+}
+
+impl Countdown {
+    fn new(n: u32) -> Self {
+        let n = n.max(1);
+        Countdown { left: std::cell::Cell::new(n), batch: std::cell::Cell::new(n) }
+    }
+
+    fn set(&self, n: u32) {
+        let n = n.max(1);
+        self.left.set(n);
+        self.batch.set(n);
+    }
+
+    /// Count one, and say whether it was the last, which leaves it run out.
+    #[inline(always)]
+    fn tick(&self) -> bool {
+        let left = self.left.get();
+        self.left.set(left.saturating_sub(1));
+        left <= 1
+    }
+
+    fn run_out(&self) -> bool {
+        self.left.get() == 0
+    }
+
+    fn batch(&self) -> u32 {
+        self.batch.get()
+    }
 }
 
 /// What a planned call site is to do with this call; see `valid_plan`.
@@ -728,10 +757,7 @@ pub(crate) struct BcFunction {
 /// every call running it.
 struct LoopCounter {
     header: BlockId,
-    /// Iterations left until the dispatcher is asked again.
-    left: std::cell::Cell<u32>,
-    /// How many there were when it was last set, which the asking reports.
-    batch: std::cell::Cell<u32>,
+    countdown: Countdown,
 }
 
 /// A const a `StaticRef` op names, and where the pool put it.
@@ -1023,11 +1049,7 @@ impl<'a> Lowering<'a> {
             self.cur = b;
             if headers[b] {
                 let at = self.loops.len() as u32;
-                self.loops.push(LoopCounter {
-                    header: block.id,
-                    left: std::cell::Cell::new(1),
-                    batch: std::cell::Cell::new(1),
-                });
+                self.loops.push(LoopCounter { header: block.id, countdown: Countdown::new(1) });
                 self.emit(Op::LoopHead { at });
             }
             for (i, instr) in block.instructions.iter().enumerate() {
@@ -1812,26 +1834,13 @@ impl Lowering<'_> {
     /// Which blocks head a loop: in one, and entered by an edge from a block
     /// at or after them, which is how a loop's body goes back to its top.
     fn loop_headers(&self) -> Vec<bool> {
-        let blocks = &self.func.blocks;
-        let mut headers = vec![false; blocks.len()];
-        for (b, block) in blocks.iter().enumerate() {
-            let mut back = |target: BlockId| {
+        let mut headers = vec![false; self.func.blocks.len()];
+        for (b, block) in self.func.blocks.iter().enumerate() {
+            for target in block.terminator.successors() {
                 let t = target.0 as usize;
                 if t <= b && self.in_loop[t] {
                     headers[t] = true;
                 }
-            };
-            match &block.terminator {
-                Terminator::Goto { target, .. } => back(*target),
-                Terminator::Branch { then_block, else_block, .. } => {
-                    back(*then_block);
-                    back(*else_block);
-                }
-                Terminator::Switch { cases, default, .. } => {
-                    cases.iter().for_each(|(_, t)| back(*t));
-                    back(*default);
-                }
-                _ => {}
             }
         }
         headers
@@ -1840,22 +1849,11 @@ impl Lowering<'_> {
     /// Which blocks can reach themselves.
     fn loop_blocks(&self) -> Vec<bool> {
         let blocks = &self.func.blocks;
-        let successors = |b: usize| -> Vec<usize> {
-            match &blocks[b].terminator {
-                Terminator::Goto { target, .. } => vec![target.0 as usize],
-                Terminator::Branch { then_block, else_block, .. } => {
-                    vec![then_block.0 as usize, else_block.0 as usize]
-                }
-                Terminator::Switch { cases, default, .. } => {
-                    cases.iter().map(|(_, b)| b.0 as usize).chain([default.0 as usize]).collect()
-                }
-                _ => vec![],
-            }
-        };
+        let successors = |b: usize| blocks[b].terminator.successors().into_iter().map(|t| t.0 as usize);
         (0..blocks.len())
             .map(|start| {
                 let mut seen = vec![false; blocks.len()];
-                let mut stack = successors(start);
+                let mut stack: Vec<usize> = successors(start).collect();
                 while let Some(b) = stack.pop() {
                     if b == start {
                         return true;
@@ -2531,10 +2529,7 @@ impl IrInterpreter {
                     }
                     Op::LoopHead { at } => {
                         let counter = &bc.loops[at as usize];
-                        let left = counter.left.get();
-                        if left > 1 {
-                            counter.left.set(left - 1);
-                        } else if tri!(self.loop_hot(regs, counter, base)) {
+                        if counter.countdown.tick() && tri!(self.loop_hot(regs, counter, base)) {
                             // Compiled code ran the rest of the call.
                             ret!();
                         }
@@ -2732,18 +2727,10 @@ impl IrInterpreter {
             _ if cache.dispatcher != Some(self.dispatcher_epoch.get()) => None,
             Plan::Body(plan) => match &plan.countdown {
                 None => Some(Planned::Body(plan)),
-                Some(countdown) => match countdown.left.get() {
-                    // Offered, and the site has to ask again.
-                    0 => None,
-                    1 => {
-                        countdown.left.set(0);
-                        Some(Planned::Offer(countdown.batch))
-                    }
-                    left => {
-                        countdown.left.set(left - 1);
-                        Some(Planned::Body(plan))
-                    }
-                },
+                // Offered, and the site has to ask again.
+                Some(countdown) if countdown.run_out() => None,
+                Some(countdown) if countdown.tick() => Some(Planned::Offer(countdown.batch())),
+                Some(_) => Some(Planned::Body(plan)),
             },
             Plan::Jit(plan) => Some(Planned::Jit(plan)),
         }
@@ -2909,19 +2896,9 @@ impl IrInterpreter {
             push(args[param as usize].tydesc as usize);
         }
 
-        let mut dispatcher = self.call_dispatcher.borrow_mut().take()
-            .expect("a planned call into compiled code is made with its dispatcher installed");
-        let call_ctx = crate::dispatch::DispatchCallContext {
-            exec_ctx: &regs.ctx,
-            registry: regs.registry,
-            frames: &mut *regs.frames,
-            interp: self,
-            shape_descriptors: &[],
-            weight: 1,
-        };
-        let result = dispatcher.call_compiled(plan.func, plan.entry, &words[..len], call_ctx);
-        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-        result
+        self.with_dispatcher(&regs.ctx, regs.registry, regs.frames, &[], 1,
+                |dispatcher, call_ctx| dispatcher.call_compiled(plan.func, plan.entry, &words[..len], call_ctx))
+            .expect("a planned call into compiled code is made with its dispatcher installed")
     }
 
     /// Ask the dispatcher about a loop whose counter ran out, and go on in
@@ -2931,75 +2908,49 @@ impl IrInterpreter {
     /// The frame is the running one, at the loop's header.
     #[inline(never)]
     fn loop_hot(&mut self, regs: &mut Regs<'_>, counter: &LoopCounter, base: *mut u8) -> Result<bool, InterpError> {
+        use crate::dispatch::SitePolicy;
         // How long to go before asking again when there is nothing to ask:
         // long enough to cost nothing, and a dispatcher may yet be installed.
         const UNASKED: u32 = 1 << 16;
-        let set = |n: u32| {
-            counter.left.set(n);
-            counter.batch.set(n);
-        };
-        if self.call_dispatcher.borrow().is_none() {
-            set(UNASKED);
-            return Ok(false);
-        }
+        let countdown = &counter.countdown;
         // A script unit's loops stay in the interpreter: only a function has
         // a frame compiled code can carry on in.
-        let Some(code_ref) = regs.code_ref else {
-            set(u32::MAX);
+        let (Some(code_ref), Some(_)) = (regs.code_ref, regs.func.function_context()) else {
+            countdown.set(u32::MAX);
             return Ok(false);
         };
-        if regs.func.function_context().is_none() {
-            set(u32::MAX);
-            return Ok(false);
-        }
         let func = crate::dispatch::FuncIdentity::of(code_ref, regs.ctx.unit());
-        let iterations = counter.batch.get();
-
-        let mut dispatcher = self.call_dispatcher.borrow_mut().take().expect("installed");
-        let call_ctx = crate::dispatch::DispatchCallContext {
-            exec_ctx: &regs.ctx,
-            registry: regs.registry,
-            frames: &mut *regs.frames,
-            interp: self,
-            shape_descriptors: &[],
-            weight: 1,
+        let body = regs.func;
+        let policy = self.with_dispatcher(&regs.ctx, regs.registry, regs.frames, &[], 1,
+            |dispatcher, call_ctx| dispatcher.loop_policy(func, body, counter.header, countdown.batch(), call_ctx));
+        let entry = match policy.transpose()? {
+            None => {
+                countdown.set(UNASKED);
+                return Ok(false);
+            }
+            Some(SitePolicy::EveryCall) => {
+                countdown.set(1);
+                return Ok(false);
+            }
+            Some(SitePolicy::Count(n)) => {
+                countdown.set(n);
+                return Ok(false);
+            }
+            Some(SitePolicy::Interpret) => {
+                countdown.set(u32::MAX);
+                return Ok(false);
+            }
+            Some(SitePolicy::Enter(entry)) => entry,
         };
-        let result = match dispatcher.loop_policy(func, regs.func, counter.header, iterations, call_ctx) {
-            Err(e) => Err(e),
-            Ok(crate::dispatch::LoopPolicy::Count(n)) => {
-                set(n.max(1));
-                Ok(false)
-            }
-            Ok(crate::dispatch::LoopPolicy::Interpret) => {
-                set(u32::MAX);
-                Ok(false)
-            }
-            Ok(crate::dispatch::LoopPolicy::Enter(entry)) => {
-                // The next call to run the loop asks again, and is told the
-                // same at once.
-                set(1);
-                let mut words = [self.runtime.handle() as usize, 0, 0];
-                let len = if entry.uses_sret {
-                    words[1] = regs.ret_dest.ptr as usize;
-                    words[2] = base as usize;
-                    3
-                } else {
-                    words[1] = base as usize;
-                    2
-                };
-                let call_ctx = crate::dispatch::DispatchCallContext {
-                    exec_ctx: &regs.ctx,
-                    registry: regs.registry,
-                    frames: &mut *regs.frames,
-                    interp: self,
-                    shape_descriptors: &[],
-                    weight: 1,
-                };
-                dispatcher.enter_loop(func, entry, &words[..len], call_ctx).map(|()| true)
-            }
-        };
-        *self.call_dispatcher.borrow_mut() = Some(dispatcher);
-        result
+        // The next call to run the loop asks again, and is told the same at
+        // once.
+        countdown.set(1);
+        let words = [self.runtime.handle() as usize, regs.ret_dest.ptr as usize, base as usize];
+        let words = if entry.uses_sret { &words[..] } else { &[words[0], words[2]][..] };
+        self.with_dispatcher(&regs.ctx, regs.registry, regs.frames, &[], 1,
+                |dispatcher, call_ctx| dispatcher.call_compiled(func, entry, words, call_ctx))
+            .expect("the dispatcher that gave the entry")
+            .map(|()| true)
     }
 
     /// Pop every frame the loop pushed, on the way out with an error.
@@ -3432,10 +3383,7 @@ impl IrInterpreter {
             // descriptor and a borrowed one with the argument's.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
                 countdown: match policy {
-                    Some(SitePolicy::Count(n)) => Some(Countdown {
-                        left: std::cell::Cell::new(n.max(1)),
-                        batch: n.max(1),
-                    }),
+                    Some(SitePolicy::Count(n)) => Some(Countdown::new(n)),
                     _ => None,
                 },
                 layout: std::rc::Rc::clone(layout),
