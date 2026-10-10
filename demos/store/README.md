@@ -10,6 +10,7 @@ just gen 20000   # write local/store/*.dlt
 just run         # print the report
 just check       # compare it with check.py's
 just bench       # time the interpreter, the jit and AOT
+just grid        # time every engine and jit threshold at three data sizes
 ```
 
 ## Structure
@@ -17,6 +18,7 @@ just bench       # time the interpreter, the jit and AOT
 ```
 gen.py              writes the data
 check.py            the same report, in Python
+grid.py             times the engines across data sizes, for tuning the jit
 report.dfs          the script: asks for the report and prints it
 local/store/
   products.dlt      400 products in 8 categories, priced in cents

@@ -5,14 +5,15 @@ program shaped like an application, using the store demo (`demos/store`) as
 the workload, and for adding on-stack replacement (OSR), which the demo shows
 the JIT needs.
 
-> **This is a plan.** Step 0 is done (October 2026); the rest is not started.
-> The numbers are from a release build on 4 CPUs at 20,000 orders.
+> **This is a plan.** Steps 0 and 1 are done (October 2026); the rest is not
+> started. The numbers are from a release build on 4 CPUs.
 
 ## Contents
 
 - [Why the store demo](#user-content-why-the-store-demo)
 - [Where things stand](#user-content-where-things-stand)
 - [The steps](#user-content-the-steps)
+- [The baseline grid](#user-content-the-baseline-grid)
 - [OSR](#user-content-osr)
 
 ## Why the store demo
@@ -45,9 +46,9 @@ iterations, and `db.build_*_slots`, which run under CTFE at compile time.
 | `--jit-threshold 100` | 993 ms | 44 | 12 ms |
 | AOT executable | 239 ms | - | - |
 
-Compiling the program, which reads the data and evaluates the id maps under
-CTFE, is about 330 ms of every `script` run (`--jit-stats` prints it as
-`compiling`), so the threshold-1 JIT runs the report in about 300 ms, of which
+At 20,000 orders. Compiling the program, which reads the data and evaluates
+the id maps under CTFE, is about 300 ms of every `script` run (`--time`
+prints it), so the threshold-1 JIT runs the report in about 300 ms, of which
 about 70 ms is codegen and some of the rest is `JitEngine::new`. That is within
 reach of AOT, at the price of compiling every function called even once.
 
@@ -82,13 +83,14 @@ call before the interpreter ran it.
 
 Back-edge counts belong here too but wait for step 3, which adds the counters.
 
-**1. A baseline grid.** Data at 2,000, 20,000 and 200,000 orders (`just gen
-N`), since the right threshold moves with the size of the run: a short run
-rewards compiling little and a long one compiling a lot. Engines: interpreter,
-thresholds 1, 2, 10, 100 and 1000, and AOT as the ceiling. `hyperfine` with
-the variants alternating, and the compile phase taken out using the time
-`--jit-stats` reports. Kept as a script beside the demo so the grid can be
-rerun after each later step.
+**1. A baseline grid (done).** `demos/store/grid.py` (`just grid`) times the
+interpreter, thresholds 1, 2, 10, 100 and 1000, and AOT as the ceiling, at
+2,000, 20,000 and 200,000 orders, since the right threshold moves with the
+size of the run. The engines alternate round by round and the medians are
+reported; `script --time` splits each run into compiling and running, and
+one untimed `--jit-stats` run per threshold gives what was compiled and the
+crossings. It writes `target/store-grid/grid.json`, and is what to rerun after
+each later step. The results are [below](#user-content-the-baseline-grid).
 
 **2. Make every threshold at least as fast as the interpreter.** Profile
 `--jit-threshold 100` with `perf`. The candidates are the two above: keep the
@@ -110,6 +112,75 @@ sizes and pick what does well across them, not what wins at 20,000.
 **5. Check against other programs.** `benchvs`, the `jit` bench in
 `datalove-bench` and `botdocs/learn.dfs`, so the result is not fitted to one
 program, then record it in the compiler guide's performance notes.
+
+## The baseline grid
+
+From `just grid` at commit `44101c96` plus `--time`. Times in ms, medians of 7
+rounds (3 at 200,000). Wall is the whole process; compile and run are what
+`--time` reports; the last three columns are from one `--jit-stats` run.
+
+**2,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 159 | 68 | 78 | 1.00x | - | - | - |
+| jit t=1 | 188 | 78 | 96 | 0.85x | 86 | 72 | 122 |
+| jit t=2 | 171 | 77 | 78 | 0.93x | 66 | 23 | 266,020 |
+| jit t=10 | 199 | 78 | 106 | 0.80x | 57 | 17 | 402,770 |
+| jit t=100 | 193 | 79 | 100 | 0.83x | 44 | 13 | 403,227 |
+| jit t=1000 | 196 | 77 | 104 | 0.81x | 37 | 11 | 389,285 |
+| aot | 37 | - | - | 4.28x | - | - | - |
+
+**20,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 899 | 270 | 596 | 1.00x | - | - | - |
+| jit t=1 | 630 | 290 | 299 | 1.43x | 86 | 70 | 123 |
+| jit t=2 | 810 | 309 | 472 | 1.11x | 66 | 23 | 2,363,019 |
+| jit t=10 | 1040 | 299 | 701 | 0.86x | 58 | 17 | 3,383,535 |
+| jit t=100 | 992 | 292 | 660 | 0.91x | 44 | 12 | 3,384,049 |
+| jit t=1000 | 978 | 288 | 649 | 0.92x | 37 | 10 | 3,370,008 |
+| aot | 240 | - | - | 3.75x | - | - | - |
+
+**200,000 orders**
+
+| Engine | Wall | Compile | Run | vs interp | Compiled | Codegen | Interp->JIT calls |
+|---|---|---|---|---|---|---|---|
+| interp | 7115 | 2307 | 4555 | 1.00x | - | - | - |
+| jit t=1 | 4746 | 2615 | 1811 | 1.50x | 86 | 97 | 123 |
+| jit t=2 | 6412 | 2560 | 3545 | 1.11x | 66 | 21 | 22,578,685 |
+| jit t=10 | 8141 | 2623 | 5018 | 0.87x | 58 | 17 | 29,446,718 |
+| jit t=100 | 7891 | 2584 | 4984 | 0.90x | 44 | 12 | 29,447,225 |
+| jit t=1000 | 7855 | 2621 | 4903 | 0.91x | 37 | 10 | 29,433,391 |
+| aot | crashed | | | | | | |
+
+What it says:
+
+- **No threshold above 2 beats the interpreter at any size,** and they lose
+  by about the same at every size, 8-20%. The crossings grow with the data,
+  about 150 per order, so the loss is per call rather than a fixed cost. Step
+  2 is the first thing to do; nothing tuned on top of today's crossings means
+  much.
+- **Compiling everything wins once the run is long enough,** and only then:
+  2x on the running phase at 20,000 and 2.5x at 200,000, but at 2,000 its 72
+  ms of codegen is more than the whole interpreted run of 78 ms. That is the
+  trade a threshold exists to make, and today no threshold makes it, because
+  the code worth compiling is in loops. Cheaper codegen (`opt_level`) would
+  move the break-even down.
+- **Threshold 2 sits between** because it catches the queries the report
+  calls twice and the functions they call, and leaves the rest crossing.
+- **AOT is the ceiling, at 3.75-4.3x,** and threshold 1 is about 60 ms of
+  running from it at 20,000 once codegen is taken out.
+- **The compile phase is 13% slower under `--jit` at 200,000 orders,** 2,615
+  against 2,307 ms, which is not the jit: `--jit` runs the whole command on a
+  spawned thread, and glibc gives that thread its own malloc arena, which the
+  allocation-bound front end does worse in. `MALLOC_ARENA_MAX=1` takes the
+  difference away. The grid's compile column carries it; the run column does
+  not.
+- **The AOT executable crashes at 200,000 orders,** overflowing its stack in
+  `__dtlv_statics_init`, whose frame grows with the data; see
+  [issues](issues.md#user-content-the-aot-statics-initializer-takes-a-frame-the-size-of-the-data).
 
 ## OSR
 

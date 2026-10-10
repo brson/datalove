@@ -38,6 +38,8 @@ home here.
 - [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
 - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
 - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
+- [The AOT statics initializer takes a frame the size of the data](#user-content-the-aot-statics-initializer-takes-a-frame-the-size-of-the-data)
+- [`script --jit` compiles on a thread with its own malloc arena](#user-content-script---jit-compiles-on-a-thread-with-its-own-malloc-arena)
 - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
 
 ## No table module, and none can be written
@@ -187,10 +189,6 @@ compiled tiers do, each cheap to state and none started.
   same in `engine_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
   number in the jit report. The work is whatever undefined behaviour `-O2` exposes
   in the emitted C, which the four-backend differential suite would find.
-- **`register_natives` in the cli only finds a bare `JitEngine`.** It downcasts
-  the dispatcher to `JitEngine`, so an `OptimizingDispatcher` would get no native
-  symbols and the first native call from jitted code would abort the process.
-  Unreachable today, since the cli never builds one; it is in the way of doing so.
 
 ## A `let` that fails to typecheck leaves its name undefined
 
@@ -602,6 +600,36 @@ data files. None stopped it; each cost a detour.
   every sale, and it was 14% of the interpreter's run. In place it is `set
   m[k@] = #{}` when absent, then `set.insert(mut m[k]!, x)`. Nothing points
   the writer from the first to the second.
+
+## The AOT statics initializer takes a frame the size of the data
+
+**Reproduced** with the store demo: `just gen 200000`, then `datalove
+aot-compile --link -o report report.dfs`, and `./report` dies with SIGSEGV in
+`__dtlv_statics_init` before printing anything. Its frame is `sub rsp` of
+0x62760 at 2,000 orders, 0x17c7c0 at 20,000 and 0xc716f0 -- 13 MB -- at
+200,000, against an 8 MB main stack; the first store below the frame faults.
+`ulimit -s unlimited` makes it run.
+
+The Cranelift AOT backend builds every static const in one function, and what
+it builds a const with is frame space proportional to the value, so `require
+data` of any size makes the executable's startup grow its stack with the
+data. A build that loops over the elements, or builds each const in its own
+function with its own frame, would not. The C backend's `__dtlv_statics_init`
+was not checked. Neither Cranelift backend sets `enable_probestack` (see [Deep
+recursion](#user-content-deep-recursion-aborts-the-process-in-every-engine-but-the-bytecode)),
+so a frame a little over the limit could also land past the guard page.
+
+## `script --jit` compiles on a thread with its own malloc arena
+
+**Measured.** `script --jit` runs the whole command on a spawned thread (see
+`ScriptCommand::run`), so the front end allocates from a glibc arena of its
+own rather than the main one, and does worse there: at 200,000 store orders
+the compile phase is 2,550-2,600 ms under `--jit` against 2,250-2,300 ms
+without, and `MALLOC_ARENA_MAX=1` takes the difference away. At 20,000 orders
+it is about 20 ms. Spawning the thread only around execution, after
+compiling, would avoid it if what compiling built can be handed to the thread,
+which a salsa database may not allow; so would a global allocator that does not arena
+by thread. It bears on comparing the engines, since it is charged to the jit.
 
 ## A borrow into a collection outlives a later `mut` of it
 

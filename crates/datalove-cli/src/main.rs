@@ -287,10 +287,13 @@ struct ScriptCommand {
     /// Compile a function on this call to it rather than the first.
     #[arg(long, value_name = "CALLS", requires = "jit")]
     jit_threshold: Option<u32>,
-    /// Print to stderr what the JIT compiled, how calls crossed between it and
-    /// the interpreter, and how long compiling and running took.
+    /// Print to stderr what the JIT compiled and how calls crossed between it
+    /// and the interpreter. Implies `--time`.
     #[arg(long, requires = "jit")]
     jit_stats: bool,
+    /// Print to stderr how long compiling and running took.
+    #[arg(long)]
+    time: bool,
 }
 
 #[derive(clap::Args)]
@@ -688,15 +691,17 @@ impl ScriptCommand {
         } else {
             String::new()
         };
-        if self.jit_stats {
+        if self.time || self.jit_stats {
             let ran = start.elapsed() - compiled_at;
+            eprintln!("time: {:.1} ms compiling, {:.1} ms running",
+                compiled_at.as_secs_f64() * 1e3, ran.as_secs_f64() * 1e3);
+        }
+        if self.jit_stats {
             let dispatcher = executor.take_dispatcher().expect("--jit-stats runs with the jit");
             let stats = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>()
                 .expect("the script command's dispatcher is an OptimizingDispatcher")
                 .jit().stats();
             let paths = compiled.module_paths(&db);
-            eprintln!("time: {:.1} ms compiling, {:.1} ms running",
-                compiled_at.as_secs_f64() * 1e3, ran.as_secs_f64() * 1e3);
             eprint!("{}", stats.report(25, &|id| paths.get(&id).cloned()));
             executor.set_dispatcher(dispatcher);
         }
