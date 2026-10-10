@@ -47,6 +47,15 @@ bench-one name:
         -n 'julia' '{{julia}} --startup-file=no {{name}}.jl'
     @echo ""
 
+# Time every implementation, splitting datalove's into compiling and running,
+# and keep the result in ../target/benchvs/history; see record.py.
+record *names: build
+    JULIA={{julia}} PYTHON={{python}} uv run --no-project record.py {{names}}
+
+# Compare two recordings, the latest two by default, flagging what moved.
+compare *files:
+    uv run --no-project compare.py {{files}}
+
 # Datalove has only `debuglog`, which writes to stderr.
 # Print every implementation's output, failing if any disagree.
 check: build

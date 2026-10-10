@@ -1,0 +1,30 @@
+fun step(x: u32): u32
+  ret icall add_wrapping_u32(x, : u32 / 3)
+end fun
+
+fun drive(n: u32): u32
+  var t: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    set t = step(t)
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret t
+end fun
+
+fun triangle(n: u32): u32
+  var t: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    let width = icall add_wrapping_u32(i, : u32 / 1)
+    var j: u32 = 0
+    loop while j .< width
+      set t = icall add_wrapping_u32(t, : u32 / 1)
+      set j = icall add_wrapping_u32(j, : u32 / 1)
+    end loop
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret t
+end fun
+
+debuglog((drive(5000), triangle(100)))

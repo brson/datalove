@@ -54,6 +54,9 @@ pub struct FunctionStats {
     pub interpreted: u64,
     /// Calls from the interpreter that ran compiled code.
     pub entered: u64,
+    /// Of those, the ones a planned call site made without offering them to
+    /// the dispatcher, which is how the bytecode makes them once it can.
+    pub planned: u64,
     /// Calls from compiled code that the interpreter ran.
     pub exited: u64,
     /// How long compiling entries at its loops took, if any were compiled.
@@ -113,13 +116,14 @@ impl JitStats {
 
         let (interpreted, entered, exited) = self.functions.values()
             .fold((0, 0, 0), |(i, n, x), f| (i + f.interpreted, n + f.entered, x + f.exited));
+        let planned: u64 = self.functions.values().map(|f| f.planned).sum();
 
         let mut out = String::new();
         let _ = writeln!(out, "jit: compiled {} functions ({} refused), {:.1} ms codegen, {} bytes",
             self.compiled_count, self.refused_count,
             self.total_compile_time.as_secs_f64() * 1e3, self.total_code_size);
         let _ = writeln!(out, "jit: calls through the dispatcher: {interpreted} interpreted, \
-            {entered} interpreter -> native, {exited} native -> interpreter");
+            {entered} interpreter -> native ({planned} planned), {exited} native -> interpreter");
         let loops_entered: u64 = self.functions.values().map(|f| f.loops_entered).sum();
         let _ = writeln!(out, "jit: loops: {} entries compiled ({} refused), {} frames entered them",
             self.osr_compiled_count, self.osr_refused_count, loops_entered);

@@ -42,8 +42,8 @@ TIME_LINE = re.compile(r"^time: ([\d.]+) ms compiling, ([\d.]+) ms running$", re
 COMPILED_LINE = re.compile(
     r"^jit: compiled (\d+) functions \((\d+) refused\), ([\d.]+) ms codegen, (\d+) bytes$", re.M)
 CALLS_LINE = re.compile(
-    r"^jit: calls through the dispatcher: (\d+) interpreted, (\d+) interpreter -> native, "
-    r"(\d+) native -> interpreter$", re.M)
+    r"^jit: calls through the dispatcher: (\d+) interpreted, (\d+) interpreter -> native "
+    r"\((\d+) planned\), (\d+) native -> interpreter$", re.M)
 
 
 def rounds_for(orders):
@@ -83,7 +83,8 @@ def jit_stats(flags):
         "code_bytes": int(compiled[4]),
         "interpreted": int(calls[1]),
         "interp_to_jit": int(calls[2]),
-        "jit_to_interp": int(calls[3]),
+        "planned": int(calls[3]),
+        "jit_to_interp": int(calls[4]),
     }
 
 

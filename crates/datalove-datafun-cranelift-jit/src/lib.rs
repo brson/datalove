@@ -272,6 +272,7 @@ impl JitEngine {
                 f.loops_entered += 1;
             } else {
                 f.entered += 1;
+                f.planned += 1;
             }
         }
         // What the code's stubs call back into the interpreter with, for the

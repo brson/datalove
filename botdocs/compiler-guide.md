@@ -1646,6 +1646,20 @@ comes from. The interpreter's call path takes frames off a `FrameStack`
 (`interp/src/frame.rs`) and layouts from a `LayoutCache` (`interp/src/layout.rs`);
 reusing frames and layouts made it 1.5-1.8x faster on call-heavy code.
 
+**What keeps the JIT fast is checked by counts, not times.** A fast path
+falling back to its slow one gives the same answers more slowly, which no
+output comparison sees. `jit_path_tests` in `datalove-cli` read `--jit-stats`
+and fail unless calls into compiled code are made from planned call sites and
+hot loops are entered by OSR, the nested case included.
+
+**`benchvs` keeps its timings.** `just record` times every implementation of
+every benchmark -- the interpreter, the JIT at threshold 1 and tiered, AOT,
+Python and Julia -- splits datalove's runs into compiling and running, and
+writes them to `target/benchvs/history` stamped with the commit and the load
+average. `just compare` sets the latest two side by side, marking a change past
+5% and exiting nonzero if anything got slower. `just run` is the same set under
+`hyperfine`, for reading.
+
 **The interpreter's dispatch is mostly call overhead.** `execute_instruction` is
 one `match` over every instruction, and its prologue and epilogue -- six saved
 registers and a frame sized for the largest arm -- were a third of its time,
