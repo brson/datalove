@@ -138,9 +138,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
                 CraneliftError::Codegen("a large constant requires the runtime handle".into())
             })?;
-            let runtime = self.runtime.ok_or_else(|| {
-                CraneliftError::Codegen("a large constant requires runtime imports".into())
-            })?;
+            let runtime = self.runtime;
             let alloc = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
             let size_val = builder.ins().iconst(cl_types::I32, size as i64);
             let align_val = builder.ins().iconst(cl_types::I32, align as i64);
@@ -180,7 +178,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             ScratchPlace::Heap { size, align } => {
                 let rt_handle = self.rt_handle_param.expect("taken with the runtime handle");
-                let runtime = self.runtime.expect("taken with runtime imports");
+                let runtime = self.runtime;
                 let free = self.module.declare_func_in_func(runtime.mem_free_raw, builder.func);
                 let size_val = builder.ins().iconst(cl_types::I32, size as i64);
                 let align_val = builder.ins().iconst(cl_types::I32, align as i64);
@@ -312,9 +310,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Int constant requires runtime handle".into())
         })?;
-        let int_from_limbs_func = self.runtime.as_ref().ok_or_else(|| {
-            CraneliftError::Codegen("Int constant requires runtime imports".into())
-        })?.int_from_limbs;
+        let int_from_limbs_func = self.runtime.int_from_limbs;
 
         // Get Int TyDesc.
         let tydesc_id = self.tydesc(&datalove_datafun_ir::IrType::Int)?;
@@ -366,9 +362,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("String constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("String constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         // Get String TyDesc.
         let tydesc_id = self.tydesc(&IrType::String)?;
@@ -618,9 +612,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Error constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Error constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         // The type the value was read back as, rather than one worked out
         // from the value: an empty collection cannot say what it holds, and
@@ -674,9 +666,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Data constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Data constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         // The type the value was read back as, rather than one worked out
         // from the value: an empty collection cannot say what it holds, and
@@ -767,9 +757,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("List constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("List constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         // Get element TyDesc.
         let elem_tydesc_id = self.tydesc(&element_type)?;
@@ -854,9 +842,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Tensor constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Tensor constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         let tensor_tydesc_id = self.tydesc(&tensor_type)?;
         let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
@@ -917,9 +903,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Set constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Set constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
 
         // Get element TyDesc.
@@ -986,9 +970,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Map constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Map constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         // Get key TyDesc.
         let key_tydesc_id = self.tydesc(&key_type)?;
@@ -1042,9 +1024,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Table constant requires runtime handle".into())
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Table constant requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
 
         let IrType::Table(columns) = ty else {
             return Err(CraneliftError::Codegen(format!(
@@ -1190,9 +1170,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("Int constant requires runtime handle".into())
                 })?;
-                let int_from_limbs_func = self.runtime.as_ref().ok_or_else(|| {
-                    CraneliftError::Codegen("Int constant requires runtime imports".into())
-                })?.int_from_limbs;
+                let int_from_limbs_func = self.runtime.int_from_limbs;
 
                 let tydesc_id = self.tydesc(&IrType::Int)?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
@@ -1220,9 +1198,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("String constant requires runtime handle".into())
                 })?;
-                let runtime = self.runtime.ok_or_else(|| {
-                    CraneliftError::Codegen("String constant requires runtime imports".into())
-                })?;
+                let runtime = self.runtime;
 
                 let tydesc_id = self.tydesc(&IrType::String)?;
                 let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
@@ -1334,9 +1310,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("Error constant requires runtime handle".into())
                 })?;
-                let runtime = self.runtime.ok_or_else(|| {
-                    CraneliftError::Codegen("Error constant requires runtime imports".into())
-                })?;
+                let runtime = self.runtime;
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();
@@ -1365,9 +1339,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("Data constant requires runtime handle".into())
                 })?;
-                let runtime = self.runtime.ok_or_else(|| {
-                    CraneliftError::Codegen("Data constant requires runtime imports".into())
-                })?;
+                let runtime = self.runtime;
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();

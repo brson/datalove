@@ -86,8 +86,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
 
                             // Call move_value runtime function.
-                            let move_func_id = self.runtime.as_ref()
-                                .ok_or_else(|| CraneliftError::Codegen("Pack aggregate requires runtime imports".into()))?
+                            let move_func_id = self.runtime
                                 .move_value;
                             let rt_handle = self.rt_handle_param.ok_or_else(|| {
                                 CraneliftError::Codegen("Pack aggregate requires runtime handle parameter".into())
@@ -265,9 +264,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         base_desc: cl_ir::Value,
         field_index: u32,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("a generic field read requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let base = self.get_operand_value(builder, src)?;
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
         let index = builder.ins().iconst(cl_types::I32, field_index as i64);
@@ -311,8 +308,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         src: &Operand,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-            "DataBorrow requires runtime imports".into()))?;
+        let runtime = self.runtime;
         let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
             cl_ir::StackSlotKind::ExplicitSlot, 3 * types::PTR_SIZE,
             types::align_shift(types::PTR_ALIGN)));
@@ -351,9 +347,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // describe this reference. Both are in there already: building a
         // descriptor is what settled the offsets.
         if let Some(base_desc) = self.operand_ref_desc(src) {
-            let runtime = self.runtime.ok_or_else(|| {
-                CraneliftError::Codegen("a generic field borrow requires runtime imports".into())
-            })?;
+            let runtime = self.runtime;
             let base = self.get_operand_value(builder, src)?;
             let index = builder.ins().iconst(cl_types::I32, field_index as i64);
 
@@ -530,8 +524,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             match current_desc {
                 Some(desc) => {
-                    let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-                        "a generic field place requires runtime imports".into()))?;
+                    let runtime = self.runtime;
                     let index = builder.ins().iconst(cl_types::I32, field_idx as i64);
                     let offset_fn = self.module
                         .declare_func_in_func(runtime.field_offset, builder.func);
@@ -579,8 +572,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let (current_addr, current_ty, current_desc) =
             self.field_place(builder, &Operand::Param(*param), field_path)?;
 
-        let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-            "ParamSetField requires runtime imports".into()))?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("ParamSetField requires runtime handle parameter".into())
         })?;
@@ -700,8 +692,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ty: &IrType,
         dest: cranelift_codegen::ir::Value,
     ) -> Result<(), CraneliftError> {
-        let move_value = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("moving an aggregate requires runtime imports".into()))?
+        let move_value = self.runtime
             .move_value;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("moving an aggregate requires the runtime handle".into())

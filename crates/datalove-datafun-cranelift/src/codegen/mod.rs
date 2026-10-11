@@ -152,17 +152,11 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
     module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
     /// Function registry for looking up module functions.
-    #[allow(dead_code)]
     registry: Option<&'a FunctionRegistry>,
-    /// Cranelift variables for mutable slots (SlotId).
-    #[allow(dead_code)]
-    slot_vars: HashMap<SlotId, Variable>,
     /// Where the frame is: values, slots and tracking bytes, as `layout` says.
     frame_slot: Option<FrameBase>,
-    /// Next variable index for Cranelift.
-    #[allow(dead_code)]
-    /// Runtime function imports (optional, for functions that need runtime calls).
-    runtime: Option<RuntimeImports>,
+    /// The runtime's functions, as this module imports them.
+    runtime: RuntimeImports,
     /// The module's type descriptors, shared by every function compiled into
     /// it. A descriptor is emitted the first time codegen asks for it.
     tydesc_emitter: &'a mut TyDescEmitter,
@@ -220,62 +214,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Create a new function compiler.
+    /// Create a function compiler for `func`, whose code calls the runtime
+    /// through `runtime`.
     ///
     /// Panics if the code unit is not a function.
     pub fn new(
-        func: &'a IrCodeUnit,
-        isa: &'a dyn TargetIsa,
-        module: &'a mut M,
-        tydesc_emitter: &'a mut TyDescEmitter,
-    ) -> Self {
-        let func_ctx = func.function_context()
-            .expect("FunctionCompiler requires a function code unit");
-
-        let layout = FrameLayout::compute(
-            &func_ctx.param_types,
-            &func.value_types,
-            &func.slot_types,
-            &func.tracked_slots,
-            &func_ctx.tracked_params,
-        );
-
-        Self {
-            func,
-            abandoning_offset: None,
-            func_ctx,
-            layout,
-            isa,
-            module,
-            values: HashMap::new(),
-            blocks: HashMap::new(),
-            param_values: HashMap::new(),
-            descriptor_values: HashMap::new(),
-            shape_descriptor_values: Vec::new(),
-            ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
-            ref_desc_values: HashMap::new(),
-            local_funcs: HashMap::new(),
-            external_funcs: HashMap::new(),
-            module_funcs: HashMap::new(),
-            registry: None,
-            slot_vars: HashMap::new(),
-            frame_slot: None,
-            runtime: None,
-            tydesc_emitter,
-            rt_handle_param: None,
-            sret_param: None,
-            return_slot: return_slot_values(func),
-            static_consts: StaticConsts::new(),
-            const_scratch: constants::ConstScratchArea::default(),
-            osr_spec: None,
-            osr: None,
-        }
-    }
-
-    /// Create a new function compiler with runtime imports.
-    ///
-    /// Panics if the code unit is not a function.
-    pub fn new_with_runtime(
         func: &'a IrCodeUnit,
         isa: &'a dyn TargetIsa,
         module: &'a mut M,
@@ -312,9 +255,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             registry,
-            slot_vars: HashMap::new(),
             frame_slot: None,
-            runtime: Some(runtime),
+            runtime,
             tydesc_emitter,
             rt_handle_param: None,
             sret_param: None,

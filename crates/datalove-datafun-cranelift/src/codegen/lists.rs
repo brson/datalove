@@ -82,9 +82,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         list: &Operand,
         index: &Operand,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen(
-                "indexing through a descriptor requires runtime imports".into()))?;
+        let runtime = self.runtime;
         let get = runtime.list_get_erased;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("indexing through a descriptor requires a runtime handle".into())
@@ -215,9 +213,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.seal_block(load_block);
                 let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
 
-                let runtime = self.runtime.ok_or_else(|| {
-                    CraneliftError::Codegen("ListGet aggregate requires runtime imports".into())
-                })?;
+                let runtime = self.runtime;
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("ListGet aggregate requires runtime handle".into())
                 })?;
@@ -280,9 +276,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return self.compile_list_set_copy(builder, is_valid, list, index, value, &elem_ty);
         }
 
-        let set = self.runtime.as_ref().ok_or_else(|| {
-            CraneliftError::Codegen("ListSet requires runtime imports".into())
-        })?.list_set_erased;
+        let set = self.runtime.list_set_erased;
         let list_ptr = self.get_operand_ptr(builder, list)?;
         let list_tydesc = self.operand_tydesc(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
@@ -382,8 +376,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // descriptor says, and the element's descriptor goes on to describe
         // this reference.
         if let Some(list_desc) = self.operand_ref_desc(list) {
-            let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-                "a generic element borrow requires runtime imports".into()))?;
+            let runtime = self.runtime;
             let elem_fn = self.module
                 .declare_func_in_func(runtime.element_tydesc, builder.func);
             let call = builder.ins().call(elem_fn, &[list_desc]);

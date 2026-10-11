@@ -47,9 +47,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))),
         };
 
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen(format!("{} requires runtime imports", op_name))
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen(format!("{} requires runtime handle", op_name))
         })?;

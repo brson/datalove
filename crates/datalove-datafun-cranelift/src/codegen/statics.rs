@@ -89,7 +89,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         statics: &[(cranelift_module::DataId, IrType, std::sync::Arc<ConstValue>)],
     ) -> Result<(), CraneliftError> {
         self.compile_static_pass(func_id, |this, builder, addr, ty, _value| {
-            let runtime = this.runtime.expect("static const functions are compiled with runtime imports");
+            let runtime = this.runtime;
             let tydesc_id = this.tydesc(ty)?;
             let tydesc_gv = this.module.declare_data_in_func(tydesc_id, builder.func);
             let tydesc = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);

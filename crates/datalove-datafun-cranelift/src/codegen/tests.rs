@@ -82,7 +82,8 @@ fn test_compile_const_i32() {
     );
 
     let mut tydescs = TyDescEmitter::new();
-    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
+    let runtime = RuntimeImports::declare(&mut module, isa.default_call_conv()).expect("runtime imports");
+    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, runtime, &mut tydescs, None);
     let result = compiler.compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
 }
@@ -125,7 +126,8 @@ fn test_compile_comparison() {
     );
 
     let mut tydescs = TyDescEmitter::new();
-    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
+    let runtime = RuntimeImports::declare(&mut module, isa.default_call_conv()).expect("runtime imports");
+    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, runtime, &mut tydescs, None);
     let result = compiler.compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
 }
@@ -160,7 +162,8 @@ fn test_compile_unary_neg() {
     );
 
     let mut tydescs = TyDescEmitter::new();
-    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
+    let runtime = RuntimeImports::declare(&mut module, isa.default_call_conv()).expect("runtime imports");
+    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, runtime, &mut tydescs, None);
     let result = compiler.compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
 }
@@ -242,7 +245,8 @@ fn test_compile_branch() {
     };
 
     let mut tydescs = TyDescEmitter::new();
-    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, &mut tydescs);
+    let runtime = RuntimeImports::declare(&mut module, isa.default_call_conv()).expect("runtime imports");
+    let compiler = FunctionCompiler::new(&code_unit, isa.as_ref(), &mut module, runtime, &mut tydescs, None);
     let result = compiler.compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
 }

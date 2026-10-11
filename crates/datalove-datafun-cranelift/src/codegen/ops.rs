@@ -267,9 +267,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         rhs: &Operand,
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Int BinOp requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Int BinOp requires runtime handle".into())
         })?;
@@ -326,9 +324,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         operand: &Operand,
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Int Neg requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Int Neg requires runtime handle".into())
         })?;
@@ -378,9 +374,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         rhs: &Operand,
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Int comparison requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Int comparison requires runtime handle".into())
         })?;
@@ -458,9 +452,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         lhs: &Operand,
         rhs: &Operand,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("equality requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("equality requires runtime handle".into())
         })?;
@@ -507,9 +499,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
             CraneliftError::Codegen(format!("no dynamic form of {:?}", op))
         })?;
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("a dynamic binop requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("a dynamic binop requires runtime handle".into())
         })?;
@@ -732,9 +722,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let ty = self.get_operand_type(place)?;
         if matches!(ty, IrType::Int) {
-            let runtime = self.runtime.ok_or_else(|| {
-                CraneliftError::Codegen("Int OpAssign requires runtime imports".into())
-            })?;
+            let runtime = self.runtime;
             let func_id = match op {
                 BinOp::Add => runtime.int_add_assign,
                 BinOp::Sub => runtime.int_sub_assign,
@@ -776,9 +764,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let ty = self.get_operand_type(place)?;
         if matches!(ty, IrType::Int) {
             assert_eq!(op, BinOp::Div, "checked {:?} on an `int` place, which the typechecker refuses", op);
-            let runtime = self.runtime.ok_or_else(|| {
-                CraneliftError::Codegen("Int OpAssignChecked requires runtime imports".into())
-            })?;
+            let runtime = self.runtime;
             let status = self.call_int_assign(builder, runtime.int_div_assign, place, rhs)?;
             // RtStatus::Ok is 1; anything else is the zero divisor.
             let ok = builder.ins().iconst(cl_types::I8, 1);
@@ -846,9 +832,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 growing to fit instead", op);
         }
 
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Int BinOpChecked requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Int BinOpChecked requires runtime handle".into())
         })?;
@@ -965,9 +949,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         &self,
         what: &str,
     ) -> Result<(cl_ir::Value, crate::runtime::RuntimeImports), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen(format!("{} requires runtime imports", what))
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen(format!("{} requires runtime handle", what))
         })?;
@@ -1068,9 +1050,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         src: &Operand,
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Widen requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Widen requires runtime handle".into())
         })?;
@@ -1118,9 +1098,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         src: &Operand,
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("Clone requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Clone requires runtime handle".into())
         })?;

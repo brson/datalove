@@ -19,8 +19,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         operand: &Operand,
     ) -> Result<(), CraneliftError> {
         // Need runtime imports for debuglog.
-        let debuglog_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("DebugLog requires runtime imports".into()))?
+        let debuglog_func_id = self.runtime
             .debuglog_local;
 
         // Need runtime handle.
@@ -83,8 +82,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if ty.is_copy() {
             return Ok(());
         }
-        let destroy = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("destroying a value requires runtime imports".into()))?
+        let destroy = self.runtime
             .destroy_local;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("destroying a value requires the runtime handle".into())
@@ -194,8 +192,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.seal_block(do_drop_block);
 
         // Get runtime imports.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("DropTracked requires runtime imports".into()))?
+        let destroy_func_id = self.runtime
             .destroy_local;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -255,8 +252,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Get runtime imports.
-        let destroy_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("DropViaRef requires runtime imports".into()))?
+        let destroy_func_id = self.runtime
             .destroy_local;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {

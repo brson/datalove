@@ -368,7 +368,7 @@ impl JitCompiler {
         }
 
         // Build a FunctionCompiler with stub mappings.
-        let mut compiler = codegen::FunctionCompiler::new_with_runtime(
+        let mut compiler = codegen::FunctionCompiler::new(
             func,
             self.isa.as_ref(),
             &mut self.jit_module,

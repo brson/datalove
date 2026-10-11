@@ -40,7 +40,7 @@ use cranelift_object::{ObjectBuilder, ObjectModule, ObjectProduct};
 use target_lexicon::Triple;
 
 use datalove_datafun_ir::{
-    ConstValue, Instruction, IrCodeUnit, IrModule, IrModuleId, IrType,
+    ConstValue, Instruction, IrCodeUnit, IrModuleId, IrType,
 };
 
 /// Errors during AOT compilation.
@@ -107,24 +107,6 @@ impl AotCompiler {
             .map_err(|e| AotError::Codegen(format!("isa error: {}", e)))?;
 
         Ok(Self { isa })
-    }
-
-    /// Compile an IR module to an object file.
-    pub fn compile_module(&mut self, module: &IrModule) -> Result<ObjectProduct, AotError> {
-        let obj_builder = ObjectBuilder::new(
-            self.isa.clone(),
-            "module",
-            cranelift_module::default_libcall_names(),
-        ).map_err(|e| AotError::Module(format!("object builder error: {}", e)))?;
-
-        let mut obj_module = ObjectModule::new(obj_builder);
-        let mut tydesc_emitter = tydesc_emit::TyDescEmitter::new();
-
-        for func in &module.functions {
-            self.compile_function(&mut obj_module, &mut tydesc_emitter, func)?;
-        }
-
-        Ok(obj_module.finish())
     }
 
     /// Compile an IR script unit to an object file.
@@ -251,7 +233,7 @@ impl AotCompiler {
         for func in &unit.nested_units {
             let func_id = datalove_datafun_ir::CodeUnitId(func.id.0);
             let cl_func_id = local_funcs[&func_id].func_id;
-            let mut compiler = codegen::FunctionCompiler::new_with_runtime(
+            let mut compiler = codegen::FunctionCompiler::new(
                 func,
                 self.isa.as_ref(),
                 &mut obj_module,
@@ -274,7 +256,7 @@ impl AotCompiler {
                 continue;
             }
 
-            let mut compiler = codegen::FunctionCompiler::new_with_runtime(
+            let mut compiler = codegen::FunctionCompiler::new(
                 ir_unit,
                 self.isa.as_ref(),
                 &mut obj_module,
@@ -299,11 +281,11 @@ impl AotCompiler {
                 .map_err(|e| AotError::Module(format!("declare {}: {}", name, e)));
             let init_id = declare("__dtlv_statics_init")?;
             let fini_id = declare("__dtlv_statics_fini")?;
-            codegen::FunctionCompiler::new_with_runtime(
+            codegen::FunctionCompiler::new(
                 &empty, self.isa.as_ref(), &mut obj_module,
                 runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
             ).compile_static_init(init_id, &statics)?;
-            codegen::FunctionCompiler::new_with_runtime(
+            codegen::FunctionCompiler::new(
                 &empty, self.isa.as_ref(), &mut obj_module,
                 runtime_imports.clone(), &mut tydesc_emitter, Some(registry),
             ).compile_static_fini(fini_id, &statics)?;
@@ -311,7 +293,7 @@ impl AotCompiler {
         };
 
         // Compile the body function with pre-populated local_funcs and module_funcs.
-        let mut compiler = codegen::FunctionCompiler::new_with_runtime(
+        let mut compiler = codegen::FunctionCompiler::new(
             &body_func,
             self.isa.as_ref(),
             &mut obj_module,
@@ -436,18 +418,6 @@ impl AotCompiler {
             .define_function(main_id, &mut ctx)
             .map_err(|e| AotError::Codegen(format!("define main: {}", e)))?;
 
-        Ok(())
-    }
-
-    /// Compile a single code unit into the module.
-    fn compile_function(
-        &mut self,
-        module: &mut ObjectModule,
-        tydesc_emitter: &mut tydesc_emit::TyDescEmitter,
-        func: &IrCodeUnit,
-    ) -> Result<(), AotError> {
-        let compiler = codegen::FunctionCompiler::new(func, self.isa.as_ref(), module, tydesc_emitter);
-        compiler.compile()?;
         Ok(())
     }
 }

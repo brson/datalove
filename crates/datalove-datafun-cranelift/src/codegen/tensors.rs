@@ -59,8 +59,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let size = types::ir_type_to_cranelift(elem_ty).layout().size;
             return Ok((builder.ins().iconst(INDEX_TYPE, size as i64), None));
         };
-        let runtime = self.runtime.ok_or_else(|| CraneliftError::Codegen(
-            "a generic tensor index requires runtime imports".into()))?;
+        let runtime = self.runtime;
         let elem_fn = self.module.declare_func_in_func(runtime.element_tydesc, builder.func);
         let call = builder.ins().call(elem_fn, &[desc]);
         let elem_desc = builder.inst_results(call)[0];
@@ -193,9 +192,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.seal_block(load_block);
                     let elem_addr = self.compute_tensor_element_addr(builder, tensor_ptr, idx, elem_size);
 
-                    let runtime = self.runtime.ok_or_else(|| {
-                        CraneliftError::Codegen("TensorGet aggregate requires runtime imports".into())
-                    })?;
+                    let runtime = self.runtime;
                     let rt_handle = self.rt_handle_param.ok_or_else(|| {
                         CraneliftError::Codegen("TensorGet aggregate requires runtime handle".into())
                     })?;
@@ -247,9 +244,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             builder.switch_to_block(load_block);
             builder.seal_block(load_block);
 
-            let runtime = self.runtime.ok_or_else(|| {
-                CraneliftError::Codegen("TensorGet hyperplane requires runtime imports".into())
-            })?;
+            let runtime = self.runtime;
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
                 CraneliftError::Codegen("TensorGet hyperplane requires runtime handle".into())
             })?;
@@ -293,9 +288,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         index: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let set = self.runtime.as_ref().ok_or_else(|| {
-            CraneliftError::Codegen("TensorSet requires runtime imports".into())
-        })?.tensor_set_erased;
+        let set = self.runtime.tensor_set_erased;
         let tensor_ptr = self.get_operand_ptr(builder, tensor)?;
         let tensor_tydesc = self.operand_tydesc(builder, tensor)?;
         let indices = self.get_operand_ptr(builder, index)?;

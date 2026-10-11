@@ -21,8 +21,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         inner: &Operand,
     ) -> Result<(), CraneliftError> {
-        let error_from_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("ErrorFrom requires runtime imports".into()))?
+        let error_from_func_id = self.runtime
             .error_from;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -69,8 +68,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         inner: &Operand,
     ) -> Result<(), CraneliftError> {
-        let data_from_func_id = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("DataFrom requires runtime imports".into()))?
+        let data_from_func_id = self.runtime
             .data_from;
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -150,8 +148,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         erasing: bool,
         tracked: bool,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen("erasure requires runtime imports".into()))?;
+        let runtime = self.runtime;
         let func_id = if erasing { runtime.erase } else { runtime.reify };
 
         let rt_handle = self.rt_handle_param.ok_or_else(|| {

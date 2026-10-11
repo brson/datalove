@@ -176,9 +176,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         arg: &Operand,
     ) -> Result<(cl_ir::Value, cl_ir::Value), CraneliftError> {
-        let borrow = self.runtime.as_ref()
-            .ok_or_else(|| CraneliftError::Codegen(
-                "borrowing through a wrapper requires runtime imports".into()))?
+        let borrow = self.runtime
             .data_borrow;
 
         // Two words for the answers and a third to unpack into, for a value

@@ -28,9 +28,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elements: &[Operand],
         shape: u32,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("ListNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("ListNew requires runtime handle".into())
         })?;
@@ -80,9 +78,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elements: &[Operand],
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("ListNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("ListNew requires runtime handle".into())
         })?;
@@ -145,9 +141,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elements: &[Operand],
         shape: u32,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("SetNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("SetNew requires runtime handle".into())
         })?;
@@ -187,9 +181,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         entries: &[(Operand, Operand)],
         shape: u32,
     ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("MapNew requires runtime handle".into())
         })?;
@@ -251,9 +243,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elements: &[Operand],
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("SetNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("SetNew requires runtime handle".into())
         })?;
@@ -321,9 +311,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         entries: &[(Operand, Operand)],
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("MapNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("MapNew requires runtime handle".into())
         })?;
@@ -391,9 +379,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         elements: &[Operand],
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("TensorNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("TensorNew requires runtime handle".into())
         })?;
@@ -504,9 +490,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         rows: &[Operand],
     ) -> Result<(), CraneliftError> {
         // Get runtime imports and handle.
-        let runtime = self.runtime.ok_or_else(|| {
-            CraneliftError::Codegen("TableNew requires runtime imports".into())
-        })?;
+        let runtime = self.runtime;
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("TableNew requires runtime handle".into())
         })?;
