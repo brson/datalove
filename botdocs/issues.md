@@ -16,11 +16,9 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A runtime error in a REPL unit ends the process](#user-content-a-runtime-error-in-a-repl-unit-ends-the-process)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
-  - [An error leaks what the frames it unwinds own](#user-content-an-error-leaks-what-the-frames-it-unwinds-own)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
@@ -59,47 +57,6 @@ home here.
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
 
-### A runtime error in a REPL unit ends the process
-
-**Reproduced** with `datalove repl --script`, units split by `---`:
-
-```datalove
-fun down(n: u32): u32
-  ret icall add_wrapping_u32(down(n), : u32 / 1)
-end fun
----
-let y = 3
----
-let x = down(: u32 / 5)
-```
-
-The third unit fails with `StackOverflow`, as it should, and then the REPL
-panics with `external unit 2 not found` (`FrameStore::frame`) and exits with
-status 101. The session is gone, not reset. Stack overflow is the error
-tried; the cause applies to any runtime error in a unit that exports a
-binding.
-
-`ScriptExecutor::register_bindings` registers a unit's exports under the next
-unit index *before* the unit runs, and a unit that fails leaves no frame:
-`run_script_unit` destroys it and adds nothing to the `FrameStore`. The
-function's own doc says the two agree "only while every unit that is
-registered goes on to execute". `get_environment` then asks the frame store for
-the failed unit's bindings. It is called from `Engine::run_source` outside the
-`catch_unwind` that turns an evaluation panic into `CrashReset`, so nothing
-catches it. The interactive REPL calls it on its worker thread after every
-evaluation, so that thread dies the same way (reasoned, not run).
-
-The engines' half is handled: a failed unit's index goes to the next unit, so
-the interpreter and the JIT forget what they worked out for its functions
-(`IrInterpreter::forget_unit_bodies`, `CallDispatcher::unit_bodies_replaced`).
-What is left is the numbering above it. The executor's exports and the
-compiler's `CodeRef::External` and `ExternalValue` name units by the same index,
-and both assume a registered unit has a frame.
-
-**What it would take:** register a unit's exports once it has run, or
-unregister them when it fails, and a test of a failed unit followed by one
-that reads an earlier unit's binding. Nothing tests the failed-unit path today.
-
 ### A REPL unit that returns early reports success
 
 **Reproduced.**
@@ -116,9 +73,10 @@ bounds"`. The REPL reports the first unit as `Success`, with `x` bound and
 shown as `<moved>`, though nothing ever wrote it. The second unit reads `x`
 and panics (`Option::unwrap()` on a `None`), which is a `CrashReset`, and the
 session loses every binding. The REPL ignores a unit's early return
-(`UnitCompletion`), when it should report it as the unit's error. The bindings
-the unit never reached also stay on offer, which the fix has to settle the
-same way as a failed unit's (above).
+(`UnitCompletion`): `ScriptExecutor` hands the returned error back as the
+unit's output, without the `Error:` that marks a failure. The bindings the
+unit never reached also stay on offer. Treating an early return as a runtime
+error would settle both, at the price of the session (see `Eval::ErrorReset`).
 
 ### Setting a field of an earlier unit's binding panics
 
@@ -158,35 +116,6 @@ one. Naming it whole (`let v = W`) and reading it from a function both work.
 work; this is the REPL's, and that of anything else that splits units
 (`ScriptExecutor` driven by a reactive session).
 
-### An error leaks what the frames it unwinds own
-
-**Reproduced** on the bytecode, the IR walker and the JIT:
-
-```datalove
-fun down(s: string): u32
-  let t = s@
-  ret icall add_wrapping_u32(down(t), : u32 / 1)
-end fun
-let x = down("abc")
-```
-
-This reports `StackOverflow`, and with `DATALOVE_LEAK_CHECK=panic` it panics on
-a leak per frame. That is 3.7 million leaked blocks on the bytecode.
-
-- **Interpreter:** a function frame that errors goes back to the pool without
-  destroying its live values. Release function frames keep no liveness flags,
-  so nothing knows what they hold.
-- **JIT:** code abandoning on an error returns at once.
-- **Script units:** these are cleaned up (`Frame::destroy_on_error`).
-
-A script exits after the error, so this costs nothing there. In the REPL every
-failing line leaks what it built.
-
-**What it would take:** unwinding that runs each frame's drops. The frame
-model gave up the per-value tracking that would have said what to drop. The
-function's IR knows its drop points, so an error path per call site that runs
-the drops due there is the likely shape. The same would serve compiled code.
-
 ### Deep recursion aborts the process off Linux
 
 **Reproduced on Linux; the rest reasoned.** On Linux every engine stops
@@ -223,8 +152,6 @@ What is left:
 - **No `enable_probestack`** in either Cranelift backend. The entry check has
   a 1 MiB margin, so only a single frame larger than that could step past the
   guard page.
-- **Leaks:** a stack overflow, like any error, leaks what the unwound frames
-  owned (above). In AOT the process ends at once, so that costs nothing.
 
 ### Compile-time evaluation has no limits
 

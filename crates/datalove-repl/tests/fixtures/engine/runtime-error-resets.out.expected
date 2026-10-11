@@ -1,0 +1,95 @@
+[
+  {
+    "input": "// A runtime error frees everything the runtime allocated, every binding the\n// session had among it, so the session starts again empty: `keep` is gone,\n// and the line after the error runs as the first of a new session.\nfun down(s: string): u32\n  let t = s@\n  ret icall add_wrapping_u32(down(t), : u32 / 1)\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "// A runtime error frees everything the runtime allocated, every binding the\n// session had among it, so the session starts again empty: `keep` is gone,\n// and the line after the error runs as the first of a new session.\nfun down(s: string): u32\n  let t = s@\n  ret icall add_wrapping_u32(down(t), : u32 / 1)\nend fun"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Function": {
+            "name": "down"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "down",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "let keep = \"kept\"",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let keep = \"kept\""
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "keep",
+            "ty": "string",
+            "value": "\"kept\""
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "down",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "keep",
+        "ty": "string",
+        "value": "\"kept\""
+      }
+    ]
+  },
+  {
+    "input": "let x = down(\"abc\")",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let x = down(\"abc\")"
+      }
+    },
+    "eval": {
+      "ErrorReset": "Error: stack overflow"
+    },
+    "environment": []
+  },
+  {
+    "input": "let z = 4",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let z = 4"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "z",
+            "ty": "int",
+            "value": "4"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "z",
+        "ty": "int",
+        "value": "4"
+      }
+    ]
+  }
+]

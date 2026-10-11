@@ -1,5 +1,5 @@
-//! Recursion deeper than the Rust stack allows, on the bytecode, and without
-//! end in an AOT executable.
+//! Recursion deeper than the Rust stack allows, on the bytecode; without end
+//! in an AOT executable; and what the error it ends in leaves behind.
 //!
 //! The bytecode makes a call from one bytecode body to another without
 //! recursing on the Rust stack: the callee's frame goes on the interpreter's
@@ -100,4 +100,56 @@ fn cranelift_aot_recursion_without_end_is_reported() {
 #[test]
 fn c_aot_recursion_without_end_is_reported() {
     aot_recursion_without_end_is_reported(true);
+}
+
+/// Run `script` with `args` before it, checking for leaks.
+fn run_checking_leaks(script: &str, env: &[(&str, &str)], args: &[&str]) -> Output {
+    let dir = rmx::tempfile::tempdir().X();
+    let source = dir.path().join("leak.dfs");
+    std::fs::write(&source, script).X();
+    Command::new(env!("CARGO_BIN_EXE_datalove"))
+        .arg("script")
+        .arg("--no-sys")
+        .args(args)
+        .arg(&source)
+        .env("DATALOVE_LEAK_CHECK", "panic")
+        .envs(env.iter().copied())
+        .output()
+        .expect("failed to run datalove")
+}
+
+/// Every frame of this owns a string when the stack runs out.
+const LEAKY: &str = "\
+fun down(s: string): u32
+  let t = s@
+  ret icall add_wrapping_u32(down(t), : u32 / 1)
+end fun
+";
+
+/// An error frees what the frames it unwound owned, on every engine: the
+/// runtime discards all its memory rather than each frame destroying its
+/// values, and the leak check at shutdown finds nothing.
+#[test]
+fn an_error_frees_what_the_unwound_frames_owned() {
+    let script = format!("{LEAKY}let x = down(\"abc\")\ndebuglog x\n");
+    for (env, args) in [
+        (&[][..], &[][..]),
+        (&[("DATALOVE_INTERP", "ir")][..], &[][..]),
+        (&[][..], &["--jit"][..]),
+    ] {
+        let output = run_checking_leaks(&script, env, args);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(1), "{env:?} {args:?}: {:?}\n{stderr}", output.status);
+        assert_eq!(stderr.trim(), "Error: stack overflow", "{env:?} {args:?}");
+    }
+}
+
+/// The same for a const, whose evaluation fails in the compiler.
+#[test]
+fn a_failed_const_frees_what_it_built() {
+    let script = format!("{LEAKY}const C: u32 = down(\"abc\")\ndebuglog C\n");
+    let output = run_checking_leaks(&script, &[], &[]);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{:?}\n{stderr}", output.status);
+    assert!(stderr.trim().ends_with("failed to lower const 'C': stack overflow"), "{stderr}");
 }

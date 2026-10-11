@@ -75,6 +75,20 @@ pub extern "C-unwind" fn dtlv_rti_init() -> LocalRtHandle {
     Box::into_raw(rt) as *mut u8
 }
 
+/// Free everything the runtime has allocated, live or not, at once, without
+/// reporting it as leaked, and carry on with the same handle as if new.
+///
+/// For after an error: datalove has no side effects, so what an error unwinds
+/// through need not be destroyed in any order, only freed, and freeing all of
+/// it is simplest. Every value the runtime made is gone, those held by
+/// whoever called it included. The debug mode and buffered output are kept.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_reset(rt: LocalRtHandle) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    unsafe { (*(rt as *mut rt_local::RtLocal)).reset() };
+    RtStatus::Ok
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_shutdown(
     rt: LocalRtHandle,

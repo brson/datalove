@@ -235,6 +235,18 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 }
                             }
                         }
+                        repl::Eval::ErrorReset(e) => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✗ ",
+                                    Style::default().fg(Color::Red),
+                                ),
+                                ratatui::text::Span::styled(
+                                    format!("error: {e} (session reset)"),
+                                    Style::default().fg(Color::Red),
+                                ),
+                            ]));
+                        }
                         repl::Eval::CrashReset(_msg) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(

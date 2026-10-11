@@ -673,18 +673,6 @@ impl Frame {
         self.set_kept_live(self.param_index(id), false);
     }
 
-    /// Destroy initialized unit_end bindings on error cleanup.
-    ///
-    /// Used when a script unit errors out before being added to FrameStore.
-    pub fn destroy_on_error(
-        &mut self,
-        rt_handle: datalove_rt::c::LocalRtHandle,
-        unit_end_values: &[ValueId],
-        unit_end_slots: &[SlotId],
-    ) {
-        self.destroy_unit_end_bindings(rt_handle, unit_end_values, unit_end_slots);
-    }
-
     /// Destroy unit_end bindings (values/slots) in this frame.
     ///
     /// Called during REPL cleanup to free persistent bindings. Bindings that
@@ -866,6 +854,14 @@ impl FrameStore {
         self.frames.truncate(len);
         self.unit_end_values.truncate(len);
         self.unit_end_slots.truncate(len);
+    }
+
+    /// Drop every unit's frame without destroying what it owns: for after the
+    /// runtime has discarded all its memory, those values with it.
+    pub fn discard_units(&mut self) {
+        self.frames.clear();
+        self.unit_end_values.clear();
+        self.unit_end_slots.clear();
     }
 
     /// How many units the store holds frames for.

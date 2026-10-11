@@ -75,6 +75,15 @@ re-scanning the source text. All four error phases are checked, ownership
 included: an ownership error leaves lowering `Skipped`, so a use-after-move
 inside a fragment used to slip through as a successful binding.
 
+A runtime error empties the session. What the frames the error unwound
+owned is not destroyed a value at a time: the runtime discards all its
+memory instead (`IrInterpreter::discard_runtime_state`), and every binding
+the session had was in it. The executor drops its units, and the engine
+starts its compiled session again and reports `Eval::ErrorReset`, which the
+app treats like a crash reset. Re-running the earlier units to bring the
+session back was considered and not done: a unit that fails again would
+loop.
+
 `Engine::run_source` is the one loop over a `---`-separated script. Both
 `repl --script` and the fixture tests use it, so the driver and the tests
 cannot drift.

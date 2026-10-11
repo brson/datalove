@@ -89,7 +89,9 @@ pub fn restore_dispatch_context(previous: PreviousContext) {
 /// notes it here, sets the runtime's flag, and returns; the code returns from
 /// each frame as it sees the flag after a call, and where the interpreter
 /// entered it, `take_abandonment` gives the error back. What those frames
-/// hold is not destroyed: an error is being reported, not recovered from.
+/// hold is not destroyed one value at a time: once the error is out of every
+/// frame, the interpreter has the runtime discard all its memory
+/// (`IrInterpreter::discard_runtime_state`).
 fn abandon(rt: LocalRtHandle, error: InterpError) {
     ABANDONED_FOR.with(|cell| *cell.borrow_mut() = Some(error));
     // SAFETY: the handle compiled code was given.

@@ -95,6 +95,13 @@ impl ScriptEnvironment {
         self.registry.truncate_units(len);
     }
 
+    /// Drop every unit, frames and functions, without destroying what the
+    /// frames owned: for after the runtime has discarded all its memory.
+    pub fn discard_units(&mut self) {
+        self.frames.discard_units();
+        self.registry.truncate_units(0);
+    }
+
     /// Destroy live values in all frames.
     pub fn destroy_live_values(&mut self, rt_handle: datalove_rt::c::LocalRtHandle) {
         self.frames.destroy_live_values(rt_handle);

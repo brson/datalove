@@ -47,6 +47,19 @@ impl RtLocal {
         })
     }
 
+    /// Free everything allocated, live or not, and start again: what a
+    /// datalove error unwinds through is not destroyed a value at a time, so
+    /// this is how it is freed. Everything but the memory -- the table, the
+    /// debug mode and buffer, the stack limit -- is kept.
+    ///
+    /// # Safety
+    ///
+    /// Nothing may use a value this runtime allocated again.
+    pub unsafe fn reset(&mut self) {
+        unsafe { self.alloc.discard_all() };
+        self.header.abandoning = 0;
+    }
+
     /// Shutdown the runtime.
     pub unsafe fn shutdown(self: Box<Self>) {
         unsafe {

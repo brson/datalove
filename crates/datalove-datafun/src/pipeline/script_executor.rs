@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use datalove_datafun_ir::{ExportBinding, IrType, IrCodeUnit};
 use datalove_datafun_compiler::lower;
-use datalove_datafun_interp::{CallDispatcher, ScriptEnvironment, UnitCompletion};
+use datalove_datafun_interp::{CallDispatcher, InterpError, ScriptEnvironment, UnitCompletion};
 use datalove_rt::rust::AlignedBuffer;
 
 use super::compiled_modules::CompiledModules;
@@ -163,7 +163,7 @@ impl ScriptExecutor {
                 self.interp.destroy_value(&value);
                 output_str
             }
-            Err(e) => format!("Error: {e}"),
+            Err(e) => self.failed(e),
         }
     }
 
@@ -221,7 +221,7 @@ impl ScriptExecutor {
                     self.interp.destroy_value(&value);
                     output_str
                 }
-                Err(e) => format!("Error: {e}"),
+                Err(e) => self.failed(e),
             }
         } else {
             // The unit computes nothing. Run it anyway so it takes its place
@@ -244,19 +244,32 @@ impl ScriptExecutor {
                     }
                     None => "(fragment executed)".S(),
                 },
-                Err(e) => format!("Error: {e}"),
+                Err(e) => self.failed(e),
             }
         };
 
         (result_ty, output)
     }
 
+    /// What a unit that failed leaves: nothing.
+    ///
+    /// The interpreter freed everything the runtime had allocated, every
+    /// earlier unit's values included, and dropped the units (see
+    /// `IrInterpreter::discard_runtime_state`), so the bindings on offer go
+    /// too and the next unit is unit 0. Whoever keeps the session's compiled
+    /// side has to start it again to match; the REPL does.
+    fn failed(&mut self, error: InterpError) -> String {
+        self.unit_exports.clear();
+        self.rebuild_script_ctx();
+        format!("Error: {error}")
+    }
+
     /// Register bindings from an IR unit for future lookups.
     ///
     /// The unit index this assigns is the one external operands in later units
-    /// will use to index the frame store, so the two have to agree. They only
-    /// do while every unit that is registered goes on to execute: a unit that
-    /// errors out leaves no frame behind.
+    /// will use to index the frame store, so the two have to agree. A unit that
+    /// fails leaves no frame behind, and no other unit's either, so `failed`
+    /// drops every registration to match.
     fn register_bindings(&mut self, ir_unit: &IrCodeUnit) {
         assert_eq!(
             self.unit_exports.len(),
@@ -349,7 +362,7 @@ impl ScriptExecutor {
             index as u32, ir_unit, &mut self.env, ret_dest, expr_dest);
 
         let output = match completion {
-            Err(e) => format!("Error: {e}"),
+            Err(e) => self.failed(e),
             Ok(UnitCompletion::Normal) => match (&mut expr_buffer, &shown_binding) {
                 (Some(buffer), _) => {
                     let value = datalove_datafun_interp::Value {

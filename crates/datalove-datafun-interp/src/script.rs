@@ -84,21 +84,15 @@ impl IrInterpreter {
         );
         self.release_retired_call_caches();
 
-        // On error, destroy the frame and propagate the error. A unit being
-        // re-executed keeps the frame it had: the numbering cannot have a hole
-        // in it, and what that frame owns is destroyed when the session ends.
+        // On error, free everything, this unit's values and every earlier
+        // unit's alike, and drop the units: what the frames the error unwound
+        // owned is not destroyed a value at a time, so the runtime discards
+        // all its memory instead (see `discard_runtime_state`). The session
+        // is empty afterwards, its next unit unit 0.
         if let Err(e) = result {
-            frame.destroy_on_error(
-                self.runtime.handle(),
-                &script_ctx.unit_end_values,
-                &script_ctx.unit_end_slots,
-            );
-            // A unit that failed is not kept, so the next unit takes its
-            // index; what was worked out for this one's functions would be
-            // used for that one's.
-            if !replacing {
-                self.forget_unit_bodies(at);
-            }
+            drop(script_frame);
+            env.discard_units();
+            self.discard_runtime_state();
             return Err(e);
         }
 

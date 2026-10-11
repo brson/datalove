@@ -351,6 +351,21 @@ mod unix_impl {
             }
         }
 
+        /// Free every allocation, live or not, at once, and forget them: the
+        /// allocator is as new, keeping its leak check mode.
+        ///
+        /// # Safety
+        ///
+        /// Nothing may use a pointer this allocator gave out again.
+        pub unsafe fn discard_all(&mut self) {
+            for page in self.small_pages.drain(..).chain(self.large_pages.drain(..)) {
+                let result = unsafe { rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size) };
+                assert_eq!(result, 0, "munmap of a page the allocator mapped failed");
+            }
+            self.free_lists = [ptr::null_mut(); NUM_SIZE_CLASSES];
+            self.active_allocations.clear();
+        }
+
         pub unsafe fn shutdown(mut self) {
             // Capture leak information before cleanup.
             let leak_report = if !self.active_allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
@@ -392,21 +407,7 @@ mod unix_impl {
             };
 
             // Clean up resources first.
-            unsafe {
-                for page in self.small_pages.drain(..) {
-                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
-                    if result != 0 {
-                        eprintln!("Warning: munmap failed during shutdown");
-                    }
-                }
-
-                for page in self.large_pages.drain(..) {
-                    let result = rmx::libc::munmap(page.ptr as *mut rmx::libc::c_void, page.size);
-                    if result != 0 {
-                        eprintln!("Warning: munmap failed during shutdown");
-                    }
-                }
-            }
+            unsafe { self.discard_all() };
 
             // Report leaks after cleanup.
             if let Some(full_report) = leak_report {
@@ -524,6 +525,18 @@ mod wasm_impl {
             }
         }
 
+        /// Free every allocation, live or not, at once, and forget them: the
+        /// allocator is as new, keeping its leak check mode.
+        ///
+        /// # Safety
+        ///
+        /// Nothing may use a pointer this allocator gave out again.
+        pub unsafe fn discard_all(&mut self) {
+            for alloc in self.allocations.drain(..) {
+                unsafe { dealloc(alloc.ptr, alloc.layout) };
+            }
+        }
+
         pub unsafe fn shutdown(mut self) {
             // Capture leak information before cleanup.
             let leak_report = if !self.allocations.is_empty() && self.leak_check_mode != LeakCheckMode::Ignore {
@@ -560,11 +573,7 @@ mod wasm_impl {
             };
 
             // Clean up resources first.
-            for alloc in self.allocations.drain(..) {
-                unsafe {
-                    dealloc(alloc.ptr, alloc.layout);
-                }
-            }
+            unsafe { self.discard_all() };
 
             // Report leaks after cleanup.
             if let Some(full_report) = leak_report {
@@ -1115,6 +1124,34 @@ mod tests {
             let _leak2 = rt.alloc(256, 8, 1);
             let _leak3 = rt.alloc(8192, 16, 1);
             rt.shutdown(); // Should panic with 3 leaks.
+        }
+    }
+
+    /// Discarding frees what is live without calling it leaked, and the
+    /// allocator carries on as new, checking leaks again.
+    #[test]
+    fn discarding_frees_everything_and_starts_again() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _small = rt.alloc(128, 8, 1);
+            let _large = rt.alloc(8192, 16, 1);
+            rt.discard_all();
+            let again = rt.alloc(128, 8, 1);
+            assert!(!again.is_null());
+            rt.free(128, 8, 1, again);
+            rt.shutdown();
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "DATALOVE RUNTIME LEAK DETECTED")]
+    fn a_leak_after_discarding_is_still_reported() {
+        let mut rt = AllocLocal::new_raw_with_leak_check_mode(LeakCheckMode::Panic);
+        unsafe {
+            let _discarded = rt.alloc(128, 8, 1);
+            rt.discard_all();
+            let _leak = rt.alloc(256, 8, 1);
+            rt.shutdown();
         }
     }
 

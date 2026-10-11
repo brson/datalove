@@ -298,12 +298,19 @@ impl Engine {
             .expect("a fragment that compiled without errors has ir");
         let output = self.executor.execute_fragment(ir_unit);
 
-        // Check for runtime errors.
         if output.starts_with("Error:") {
-            return Eval::Error(output);
+            return self.failed(output);
         }
 
         self.report_exports(ir_unit)
+    }
+
+    /// A unit failed at run time: the executor has freed everything the
+    /// runtime allocated and emptied its session (see
+    /// `ScriptExecutor::failed`), so the compiled session starts again too.
+    fn failed(&mut self, output: String) -> Eval {
+        self.reset();
+        Eval::ErrorReset(output)
     }
 
     /// Report the bindings a fragment defined, as the compiler recorded them.
@@ -507,7 +514,12 @@ impl Engine {
                 (None, Some(ir_unit)) => {
                     let (ty, output) = self.executor.reexecute_unit(index, ir_unit);
                     match (output.starts_with("Error:"), ty) {
-                        (true, _) => Eval::Error(output),
+                        (true, _) => {
+                            // The session is gone, so there is nothing left
+                            // for the rest to run against.
+                            reports.push(UnitEdit { unit: index, eval: self.failed(output) });
+                            break;
+                        }
                         // An expression unit reports the value it now comes to;
                         // a fragment reports the bindings it defines.
                         (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
@@ -547,18 +559,25 @@ impl Engine {
             let eval = if is_expr[index] {
                 let (ty, output) = self.executor.execute_expr(ir_unit);
                 match (output.starts_with("Error:"), ty) {
-                    (true, _) => Eval::Error(output),
-                    (false, Some(ty)) => Eval::SuccessExpr(EvalExpr { ty, value: output }),
-                    (false, None) => self.report_exports(ir_unit),
+                    (true, _) => Err(output),
+                    (false, Some(ty)) => Ok(Eval::SuccessExpr(EvalExpr { ty, value: output })),
+                    (false, None) => Ok(self.report_exports(ir_unit)),
                 }
             } else {
                 let output = self.executor.execute_fragment(ir_unit);
                 match output.starts_with("Error:") {
-                    true => Eval::Error(output),
-                    false => self.report_exports(ir_unit),
+                    true => Err(output),
+                    false => Ok(self.report_exports(ir_unit)),
                 }
             };
-            reports.push(UnitEdit { unit: index, eval });
+            match eval {
+                Ok(eval) => reports.push(UnitEdit { unit: index, eval }),
+                Err(output) => {
+                    // As in `rerun`: nothing is left for the rest.
+                    reports.push(UnitEdit { unit: index, eval: self.failed(output) });
+                    break;
+                }
+            }
         }
         reports
     }
@@ -594,9 +613,8 @@ impl Engine {
             .expect("an expression that compiled without errors has ir");
         let (ty, output) = self.executor.execute_expr(ir_unit);
 
-        // Check for runtime errors.
         if output.starts_with("Error:") {
-            return Eval::Error(output);
+            return self.failed(output);
         }
 
         Eval::SuccessExpr(EvalExpr {

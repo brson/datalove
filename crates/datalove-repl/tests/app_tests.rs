@@ -239,6 +239,34 @@ fn results_from_before_a_crash_reset_are_dropped() {
     assert!(app.environment().is_empty());
 }
 
+/// A runtime error empties the session, so the app forgets the history and
+/// environment it showed of it and says why.
+#[test]
+fn a_runtime_error_reset_clears_the_session() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let x = 1".to_string());
+    executor.queue(parsed_statement(0, "let x = 1"));
+    executor.queue(evaluated_let(0, "x"));
+    app.poll_results();
+    assert_eq!(app.environment().len(), 1);
+
+    app.submit_input("let y = f()".to_string());
+    executor.queue(parsed_statement(1, "let y = f()"));
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::ErrorReset("Error: stack overflow".to_string()),
+        environment: Vec::new(),
+    });
+    app.poll_results();
+
+    assert_eq!(app.history().len(), 0);
+    assert!(app.environment().is_empty());
+    let message = app.crash_modal_message().expect("the reset is explained");
+    assert!(message.contains("stack overflow") && message.contains("reset"), "{message}");
+}
+
 /// The engine reports when it is ready, so the UI can say it is starting.
 #[test]
 fn engine_readiness_is_reported() {

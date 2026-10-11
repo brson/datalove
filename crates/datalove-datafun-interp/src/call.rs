@@ -100,6 +100,29 @@ impl IrInterpreter {
         }
     }
 
+    /// Free everything run so far allocated, after an error: the runtime
+    /// discards all its memory at once, and everything that pointed into it
+    /// is forgotten.
+    ///
+    /// An error unwinds frames without destroying what they own -- release
+    /// frames do not track it, and compiled frames return without looking --
+    /// and datalove has no side effects, so nothing is owed an orderly
+    /// teardown: freeing everything is both simplest and complete. What
+    /// survives an error is therefore nothing the runtime allocated: the
+    /// caller's earlier units' values go too (see `run_script_unit`).
+    ///
+    /// Only where no frame is running, since every frame's values go.
+    pub(crate) fn discard_runtime_state(&mut self) {
+        debug_assert!(self.frame_stack.is_empty(), "discarding while frames run");
+        // Built on the heap being discarded, so forgotten rather than
+        // destroyed, and built again when next read.
+        self.static_pool = Default::default();
+        // Which the bytecode and the JIT's code hold the pool's addresses in.
+        self.forget_compiled_bodies();
+        self.retired_call_caches.clear();
+        unsafe { datalove_rt::c::dtlv_rti_reset(self.runtime.handle()) };
+    }
+
     /// Forget what was worked out about the functions of script unit `unit`,
     /// whose index is about to name another unit's.
     ///

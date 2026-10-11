@@ -23,6 +23,17 @@ use datalove_rtdt as rtdt;
 
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
+/// Calls [`RtiTable::dtlv_rti_reset`](crate::table::RtiTable::dtlv_rti_reset).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_reset(rt: LocalRtHandle) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_reset)(rt) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_shutdown`](crate::table::RtiTable::dtlv_rti_shutdown).
 ///
 /// # Safety

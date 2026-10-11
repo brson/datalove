@@ -749,6 +749,9 @@ Left as they are:
 - A function frame that returns an error goes back to the pool without
   destroying its live values. Release function frames keep no liveness flags,
   so this would need the tracking the frame model gave up, or unwinding drops.
+  (Since settled the other way: a unit that fails has the runtime discard all
+  its memory, every frame's values with it; see
+  `IrInterpreter::discard_runtime_state`.)
 - The JIT trampoline's interpreted callbacks run with no dispatcher, because the
   dispatcher is taken out of the interpreter while it runs.
 

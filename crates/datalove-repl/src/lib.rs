@@ -72,6 +72,12 @@ pub enum Eval {
     Error(String),
     CallerInterpret(ReplCommand),
     CrashReset(String),
+    /// A runtime error, after which the session is empty.
+    ///
+    /// An error frees everything the runtime allocated rather than unwinding
+    /// a value at a time, and every binding the session had was a value the
+    /// runtime allocated, so the session starts again.
+    ErrorReset(String),
 }
 
 

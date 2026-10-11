@@ -19,6 +19,7 @@ use crate::c;
 /// The table every handle this runtime gives out points to.
 pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_init: c::dtlv_rti_init,
+    dtlv_rti_reset: c::dtlv_rti_reset,
     dtlv_rti_shutdown: c::dtlv_rti_shutdown,
     dtlv_rti_mem_alloc_local: c::dtlv_rti_mem_alloc_local,
     dtlv_rti_mem_alloc_raw_local: c::dtlv_rti_mem_alloc_raw_local,
@@ -163,6 +164,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 139,
+    datalove_rti::table::EXPORTED == 140,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

@@ -1,0 +1,13 @@
+// A runtime error frees everything the runtime allocated, every binding the
+// session had among it, so the session starts again empty: `keep` is gone,
+// and the line after the error runs as the first of a new session.
+fun down(s: string): u32
+  let t = s@
+  ret icall add_wrapping_u32(down(t), : u32 / 1)
+end fun
+---
+let keep = "kept"
+---
+let x = down("abc")
+---
+let z = 4

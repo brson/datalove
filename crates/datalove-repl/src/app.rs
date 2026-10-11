@@ -292,6 +292,15 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
             }
+            repl::Eval::ErrorReset(msg) => {
+                // A runtime error emptied the session, so what the history
+                // and environment show of it is gone, as after a crash.
+                entry.status = EntryStatus::Error;
+                let _ = entry;
+                self.history.clear();
+                self.environment.clear();
+                self.crash_modal = Some(format!("{msg}\nThe session was reset."));
+            }
             repl::Eval::CrashReset(msg) => {
                 // Engine crashed and reset during eval.
                 // Set the entry status before clearing history.
