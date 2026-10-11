@@ -25,10 +25,11 @@ its ops. Wordfreq makes 44 million calls; fib is nothing but calls, and is
 where CPython 3.11, whose calls are a frame pushed on a contiguous stack inside
 one loop, is still twice as fast.
 
-The same two changes are what the interpreter needs to stop aborting on deep
-recursion (see "Deep recursion aborts the process" in [issues.md](issues.md)):
-frames that can be walked, and a recursion depth bounded by something the
-interpreter checks rather than by the Rust stack.
+The same two changes are what the interpreter needed to stop aborting on deep
+recursion: frames that can be walked, and a recursion depth bounded by
+something the interpreter checks rather than by the Rust stack. (It no longer
+aborts; what is left is "Deep recursion still kills an AOT executable" in
+[issues.md](issues.md).)
 
 The target is a bytecode-to-bytecode call of a few dozen instructions: bump a
 pointer, write the arguments, clear the tracking bytes, switch the loop's
