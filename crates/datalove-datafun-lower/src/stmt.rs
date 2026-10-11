@@ -857,7 +857,7 @@ fn lower_set_indexed<'db>(
             // the index itself and takes the value whether or not it lands, so
             // the early return has nothing of the value's to drop.
             let error_mode = idx.error_mode.unwrap();
-            let base_type = operand_type(ctx, &base_op);
+            let base_type = super::expr::place_index_type(ctx, &base_op);
             let base_op = super::expr::open_container(ctx, base_op, &base_type);
             let value = take_value(ctx, value);
             let is_valid = ctx.fresh_value(IrType::Bool);
@@ -1109,7 +1109,7 @@ fn navigate_place<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("bare index (upsert) cannot appear in intermediate set target position");
-                let base_type = operand_type(ctx, &current_op);
+                let base_type = super::expr::place_index_type(ctx, &current_op);
                 let key_op = *keys.next().expect("a key for every index step");
                 emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, true)?;
                 let dest = emit_collection_element_ref(ctx, current_op, &base_type, key_op);

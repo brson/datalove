@@ -1872,12 +1872,7 @@ fn lower_place_expression<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                // A place's root has no expression node, so a wrapped container
-                // is recognised by the shape it was bound with.
-                let base_type = match operand_type(ctx, &current_op) {
-                    IrType::Data => ctx.wrapped_shape(&current_op).unwrap_or(IrType::Data),
-                    other => other,
-                };
+                let base_type = place_index_type(ctx, &current_op);
                 current_op = open_container(ctx, current_op, &base_type);
                 // As in `lower_collection_index_value`: a get borrows its key,
                 // so anything made to hand it over is dropped on both ways out.
@@ -1984,10 +1979,7 @@ fn lower_place_as_ref<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                let base_type = match operand_type(ctx, &current_op) {
-                    IrType::Data => ctx.wrapped_shape(&current_op).unwrap_or(IrType::Data),
-                    other => other,
-                };
+                let base_type = place_index_type(ctx, &current_op);
                 current_op = open_container(ctx, current_op, &base_type);
                 let key_op = lower_operand(ctx, idx.index)?;
                 super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, false)?;
@@ -2032,6 +2024,18 @@ pub(crate) fn container_shape<'db>(
         DlType::Tensor(t) => IrType::Tensor(Box::new(elem(&t.element_type)), t.rank),
         _ => return None,
     })
+}
+
+/// The type to index a place's operand at, opened out of the wrapper if it is
+/// one.
+///
+/// A place's root has no expression node, so a wrapped container is
+/// recognised by the shape it was bound with (`LowerBody::wrapped_shapes`).
+pub(crate) fn place_index_type(ctx: &LowerCtx, op: &Operand) -> IrType {
+    match operand_type(ctx, op) {
+        IrType::Data => ctx.wrapped_shape(op).unwrap_or(IrType::Data),
+        other => other,
+    }
 }
 
 /// The type to index an expression at, opened out of the wrapper if it is one.

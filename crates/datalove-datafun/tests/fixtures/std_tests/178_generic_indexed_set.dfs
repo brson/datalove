@@ -1,0 +1,33 @@
+// Setting an element of a collection a generic owns. Inside the generic the
+// collection is wrapped, so the set has to open it as the container its type
+// says, as a read of one does; it used to be handed the wrapper.
+
+fun set_at<T>(xs: [T], i: index, v: T): ?[T]
+    var ys = xs
+    set ys[i]? = v
+    ret some ys
+end fun
+
+fun set_count<T>(xs: [{item: T, n: u32}], i: index, n: u32): ?[{item: T, n: u32}]
+    var ys = xs
+    set ys[i]?.n = n
+    ret some ys
+end fun
+
+fun set_value<K, V>(m: %{K = V}, k: K, v: V): ?%{K = V} with { K is ord, }
+    var n = m
+    set n[k]? = v
+    ret some n
+end fun
+
+let nums: [u32] = [1, 2, 3]
+let words: [string] = ["a", "b"]
+let counted: [{item: string, n: u32}] = [{item = "x", n = 1}, {item = "y", n = 2}]
+let ages: %{string = u32} = %{"ann" = 30, "bob" = 40}
+
+let output = (
+    set_at(nums@, 1, 9), set_at(nums, 7, 9),
+    set_at(words@, 0, "z"), set_at(words, 5, "z"),
+    set_count(counted@, 1, 20), set_count(counted, 9, 20),
+    set_value(ages@, "bob", 41), set_value(ages, "cy", 1),
+)

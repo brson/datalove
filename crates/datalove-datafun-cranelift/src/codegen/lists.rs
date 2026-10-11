@@ -270,11 +270,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let elem_ty = match self.get_operand_type(list)? {
             IrType::List(e) => *e,
-            IrType::Ref(inner) => match *inner {
-                IrType::List(e) => *e,
-                other => unreachable!("ListSet on a reference to {other:?}"),
-            },
-            other => unreachable!("ListSet on {other:?}"),
+            IrType::Ref(inner) if matches!(*inner, IrType::List(_)) => {
+                let IrType::List(e) = *inner else { unreachable!("matched a list") };
+                *e
+            }
+            other => return Err(CraneliftError::Codegen(format!("ListSet on non-list type: {other:?}"))),
         };
         if self.operand_ref_desc(list).is_none() && elem_ty.is_copy() {
             return self.compile_list_set_copy(builder, is_valid, list, index, value, &elem_ty);
