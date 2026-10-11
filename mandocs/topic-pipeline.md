@@ -1,5 +1,10 @@
 ## Blog topic pipeline
 
+- json libraries
+- data downcasting
+- recursive types
+- named types with polymorphism
+- closures/blocks/continuations
 - Repl experience week
 - `for` loops for collections
 - How I use LLMs to build Datalove
