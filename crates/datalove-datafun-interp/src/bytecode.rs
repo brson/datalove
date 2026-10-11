@@ -1114,12 +1114,15 @@ impl<'a> Lowering<'a> {
     fn facts(&self) -> opt::Facts {
         let mut values = rustc_hash::FxHashMap::default();
         for v in 0..self.func.value_types.len() {
-            // A value of no size shares its offset with the next one, and
-            // nothing reads or writes it.
-            if layout_of(&self.func.value_types[v]).size == 0 {
+            // A value of no size has the next value's offset, so it is left out
+            // to keep that one's fact; and an op naming it moves no bytes,
+            // which no fact matches.
+            let size = layout_of(&self.func.value_types[v]).size;
+            if size == 0 {
                 continue;
             }
             values.insert(self.layout.value_offsets[v], opt::ValueFact {
+                size,
                 uses: self.uses[v],
                 const_u32: self.const_u32[v],
                 pinned: self.pinned[v],

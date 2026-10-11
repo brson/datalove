@@ -37,6 +37,11 @@ use super::{Ck, CkTy, Loc, Op};
 
 /// What the pass may know of the IR, keyed by where values are in the frame,
 /// which is all an op names.
+///
+/// An offset alone does not name a value: field 0 of a struct is at the
+/// struct's own offset, and a value of no size is at the next one's. So a fact
+/// is had only for an access that covers its value exactly, offset and width;
+/// one that covers a part of it, or of nothing, learns nothing.
 pub(super) struct Facts {
     /// Each value of nonzero size, by its offset.
     pub values: FxHashMap<u32, ValueFact>,
@@ -47,6 +52,8 @@ pub(super) struct Facts {
 }
 
 pub(super) struct ValueFact {
+    /// How many bytes the value is.
+    pub size: u32,
     /// How many times the value is read.
     pub uses: u32,
     /// The `u32` it holds, if nothing but its constant writes it.
@@ -56,20 +63,21 @@ pub(super) struct ValueFact {
 }
 
 impl Facts {
-    fn value(&self, loc: Loc) -> Option<&ValueFact> {
+    /// The value an access of `len` bytes at `loc` is the whole of, if any.
+    fn value(&self, loc: Loc, len: u32) -> Option<&ValueFact> {
         if loc.0 & super::INDIRECT != 0 {
             return None;
         }
-        self.values.get(&loc.0)
+        self.values.get(&loc.0).filter(|v| v.size == len)
     }
 
-    /// Whether `loc` is a value read exactly once.
-    fn read_once(&self, loc: Loc) -> bool {
-        self.value(loc).is_some_and(|v| v.uses == 1)
+    /// Whether `len` bytes at `loc` are a value read exactly once.
+    fn read_once(&self, loc: Loc, len: u32) -> bool {
+        self.value(loc, len).is_some_and(|v| v.uses == 1)
     }
 
     fn const_u32(&self, loc: Loc) -> Option<u32> {
-        self.value(loc)?.const_u32
+        self.value(loc, 4)?.const_u32
     }
 }
 
@@ -126,7 +134,7 @@ fn absorb_immediates(blocks: &mut [Vec<Op>], facts: &Facts) {
     for block in blocks.iter_mut() {
         block.retain(|op| match *op {
             Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. } => {
-                let read = facts.value(dst).map_or(0, |v| v.uses);
+                let read = facts.value(dst, const_len(op)).map_or(0, |v| v.uses);
                 absorbed.get(&dst.0).copied().unwrap_or(0) != read
             }
             _ => true,
@@ -143,7 +151,7 @@ fn absorb_immediates(blocks: &mut [Vec<Op>], facts: &Facts) {
 fn fuse_branches(block: &mut Vec<Op>, b: usize, facts: &Facts) {
     let [.., prev, Op::BrIf { cond, then, els }] = block.as_slice() else { return };
     let (cond, then, els) = (*cond, *then, *els);
-    if !facts.read_once(cond) {
+    if !facts.read_once(cond, 1) {
         return;
     }
     let want = cond.0;
@@ -186,7 +194,8 @@ fn fold_copies(block: &mut Vec<Op>, facts: &Facts) {
     while i < block.len() {
         if let (Some(copied), Op::WrapOk { dst, src, at, len }) = (copy_of(&block[i - 1]), block[i])
             && copied.0.0 == src.0
-            && facts.read_once(src)
+            && copy_len(&block[i - 1]) == len
+            && facts.read_once(src, len)
         {
             block[i] = Op::WrapOk { dst, src: copied.1, at, len };
             block.remove(i - 1);
@@ -212,7 +221,7 @@ fn fold_element_access(block: &mut Vec<Op>, facts: &Facts) {
             i += 1;
             continue;
         };
-        if !facts.read_once(r) {
+        if !facts.read_once(r, POINTER) {
             i += 1;
             continue;
         }
@@ -224,7 +233,7 @@ fn fold_element_access(block: &mut Vec<Op>, facts: &Facts) {
             block.remove(i + 1);
         } else if let Op::FieldRef { dst: f, src, offset } = block[i + 1]
             && src.0 == through(r).0
-            && facts.read_once(f)
+            && facts.read_once(f, POINTER)
             && let Some((dst, value)) = block.get(i + 2).and_then(copy_of)
             && dst.0 == through(f).0
             && let (Ok(offset), Ok(len)) = (u16::try_from(offset), u16::try_from(copy_len(&block[i + 2])))
@@ -233,6 +242,20 @@ fn fold_element_access(block: &mut Vec<Op>, facts: &Facts) {
             block.drain(i + 1..i + 3);
         }
         i += 1;
+    }
+}
+
+/// How wide a pointer in the frame is: a reference value, or a reference op's
+/// result.
+const POINTER: u32 = std::mem::size_of::<*const u8>() as u32;
+
+/// How many bytes a constant's op writes.
+fn const_len(op: &Op) -> u32 {
+    match *op {
+        Op::Const1 { .. } => 1,
+        Op::Const4 { .. } => 4,
+        Op::ConstPool { len, .. } => len,
+        _ => unreachable!("not a constant"),
     }
 }
 
@@ -265,10 +288,10 @@ fn copy_of(op: &Op) -> Option<(Loc, Loc)> {
 /// stores that had just written its tag and payload back with wide loads,
 /// which the processor cannot forward from.
 fn fuse_returns(block: &mut Vec<Op>, facts: &Facts) {
-    let [.., Op::WrapOk { dst, src, at, len }, Op::Return { src: returned, .. }] = *block.as_slice() else {
+    let [.., Op::WrapOk { dst, src, at, len }, Op::Return { src: returned, len: returned_len }] = *block.as_slice() else {
         return;
     };
-    if returned.0 != dst.0 || !facts.read_once(dst) {
+    if returned.0 != dst.0 || !facts.read_once(dst, returned_len) {
         return;
     }
     block.truncate(block.len() - 2);
@@ -288,7 +311,7 @@ fn hoist_constants(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
         }
         block.retain(|op| match *op {
             Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. }
-                if facts.value(dst).is_some_and(|v| !v.pinned) =>
+                if facts.value(dst, const_len(op)).is_some_and(|v| !v.pinned) =>
             {
                 prologue.push(*op);
                 false
@@ -312,12 +335,18 @@ fn coalesce_copies(block: &mut Vec<Op>, facts: &Facts) {
     let mut i = 1;
     while i < block.len() {
         if let Some((dst, src)) = copy_of(&block[i])
-            && facts.read_once(src)
+            && facts.read_once(src, copy_len(&block[i]))
             && let Some(result) = single_result(&mut block[i - 1])
             && result.0 == src.0
         {
             *result = dst;
             block.remove(i);
+            // An op writing where it now reads, through a copy onto itself,
+            // is gone with nothing written.
+            if let Some((d, s)) = copy_of(&block[i - 1]) && d.0 == s.0 {
+                block.remove(i - 1);
+                i -= 1;
+            }
             continue;
         }
         i += 1;

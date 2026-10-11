@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// A struct read out of a list element, then its first field copied out. The
+// field is at the struct's own offset, so the copy of it is not the copy of
+// the struct, and the op writing the struct keeps writing the struct.
+fun h(ref ps: [{ inner: { x: u32, y: u32 }, z: u32 }], n: index): !u32
+  var total: u32 = 0
+  var i: index = 0
+  loop while i .< n
+    let a = ps[i]!.inner
+    let k = a.x
+    set total = icall add_wrapping_u32(total, icall add_wrapping_u32(k, : u32 / 7))
+    set i = i +! : index / 1
+  end loop
+  ret ok total
+end fun
+
+let ps: [{ inner: { x: u32, y: u32 }, z: u32 }] = [{ inner = { x = 1, y = 100 }, z = 3 }, { inner = { x = 2, y = 1000 }, z = 3 }]
+debuglog h(ref ps, : index / 2)

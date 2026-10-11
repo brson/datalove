@@ -1,0 +1,82 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 100u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 3u32
+                        v4 = pack Struct0 {v2, v3}
+                        v5 = const 2u32
+                        v6 = const 1000u32
+                        v7 = pack Struct0 {v5, v6}
+                        v8 = const 3u32
+                        v9 = pack Struct0 {v7, v8}
+                        v10 = list [v4, v9]
+                        v11 = const 2index
+                        v12 = call u0(v10, v11)
+                        debuglog v12
+                        drop v12
+                        unit_end_drop v10
+                        unit_end
+                    
+                    fn h(p0, p1):
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const 0index
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = lt s1, p1
+                        branch v2, block2, block7
+                    block2:
+                        v3 = listboundscheck p0[s1]
+                        branch v3, block4, block3
+                    block3:
+                        v4 = const "index out of bounds"
+                        v5 = error_from v4
+                        v6 = err v5
+                        return v6
+                    block4:
+                        v7 = listelementref p0[s1]
+                        v8 = getfield *v7.0
+                        v9 = getfield v8.0
+                        v10 = const 7u32
+                        v11 = intrinsic AddWrappingU32(v9, v10)
+                        v12 = intrinsic AddWrappingU32(s0, v11)
+                        store.copy s0, v12
+                        v13 = const 1index
+                        v14, v15 = add.checked s1, v13
+                        branch v15, block5, block6
+                    block5:
+                        v16 = const "arithmetic overflow"
+                        v17 = error_from v16
+                        v18 = err v17
+                        return v18
+                    block6:
+                        store.copy s1, v14
+                        goto block1
+                    block7:
+                        v19 = load.copy s0
+                        v20 = ok v19
+                        return v20
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok 17\n"),
+        ),
+    ],
+)

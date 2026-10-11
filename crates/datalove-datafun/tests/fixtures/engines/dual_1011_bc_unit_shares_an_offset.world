@@ -1,0 +1,16 @@
+----------
+scriptunit-fragment
+----------
+
+// A unit value has no size, so its place is the next value's. Wrapping the
+// unit reads none of the next value's bytes, and the copy into that value is
+// still needed.
+fun f(a: u32): !u32
+  let u = ()
+  let v = a
+  let r: !() = ok u
+  let w = r!
+  ret ok (v +! 1)
+end fun
+
+debuglog f(41)
