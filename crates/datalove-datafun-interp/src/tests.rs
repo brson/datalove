@@ -123,7 +123,8 @@ fn test_layout_computation() {
     let param_types = vec![IrType::Bool, IrType::I64];
 
     let extras = |keep_liveness| crate::layout::LayoutExtras {
-        shape_count: 0, described_refs: &[], keep_liveness, is_script: false, param_modes: &[],
+        shape_count: 0, described_refs: &[], tensor_views: &[], keep_liveness, is_script: false,
+        param_modes: &[],
     };
     let layout = IrLayout::compute(
         &value_types, &slot_types, &param_types, &[SlotId(0)], &[], Some(&IrType::Bool),

@@ -92,6 +92,11 @@ pub struct IrLayout {
     /// `resolve_ref_descriptors` names. Any other reference points at what its
     /// static type says.
     pub ref_desc_offsets: Vec<Option<u32>>,
+    /// Where the view a `TensorIndexRef` makes of a rank 2 or higher tensor's
+    /// row is built, for each value one is a reference to: in the frame, so it
+    /// lasts as long as a reference can, which is the frame, and costs nothing
+    /// to make again.
+    pub tensor_view_offsets: Vec<Option<u32>>,
     /// Where the liveness bytes start, if this frame keeps them: one per value,
     /// then one per slot, then one per parameter.
     pub liveness_offset: Option<u32>,
@@ -120,6 +125,8 @@ pub struct LayoutExtras<'a> {
     pub shape_count: usize,
     /// The reference values that get a descriptor word.
     pub described_refs: &'a [ValueId],
+    /// The reference values that point at a tensor view the frame holds.
+    pub tensor_views: &'a [ValueId],
     /// Whether the frame keeps liveness bytes.
     pub keep_liveness: bool,
     /// Whether the frame is a script unit's.
@@ -186,6 +193,11 @@ impl IrLayout {
             ref_desc_offsets[id.0 as usize] = Some(offset);
             offset += WORD;
         }
+        let mut tensor_view_offsets = vec![None; value_types.len()];
+        for id in extras.tensor_views {
+            tensor_view_offsets[id.0 as usize] = Some(offset);
+            offset += align_up(std::mem::size_of::<datalove_rtdt::Tensor>() as u32, WORD);
+        }
         let liveness_offset = extras.keep_liveness.then_some(offset);
         if extras.keep_liveness {
             offset += (value_types.len() + slot_types.len() + param_types.len()) as u32;
@@ -210,6 +222,7 @@ impl IrLayout {
             shape_offset,
             shape_count: extras.shape_count as u32,
             ref_desc_offsets,
+            tensor_view_offsets,
             liveness_offset,
             is_script: extras.is_script,
             bytecode: std::cell::OnceCell::new(),
@@ -225,12 +238,22 @@ impl IrLayout {
     pub fn of_unit(unit: &IrCodeUnit, tydesc_table: &mut IrTyDescTable) -> Self {
         let described_refs: Vec<ValueId> =
             datalove_datafun_ir::resolve_ref_descriptors(unit).into_keys().collect();
+        let tensor_views: Vec<ValueId> = unit.blocks.iter()
+            .flat_map(|b| &b.instructions)
+            .filter_map(|instr| match instr {
+                datalove_datafun_ir::Instruction::TensorIndexRef { dest, .. }
+                    if matches!(&unit.value_types[dest.0 as usize],
+                        IrType::Ref(inner) if matches!(**inner, IrType::Tensor(..))) => Some(*dest),
+                _ => None,
+            })
+            .collect();
         let Some(ctx) = unit.function_context() else {
             // A script frame keeps liveness always: the REPL frees what a unit
             // that failed part way had bound, and later units read and move
             // its bindings.
             let extras = LayoutExtras {
-                shape_count: 0, described_refs: &described_refs, keep_liveness: true, is_script: true,
+                shape_count: 0, described_refs: &described_refs, tensor_views: &tensor_views,
+                keep_liveness: true, is_script: true,
                 param_modes: &[],
             };
             return Self::compute(
@@ -245,6 +268,7 @@ impl IrLayout {
         let extras = LayoutExtras {
             shape_count: ctx.descriptor_shapes.len(),
             described_refs: &described_refs,
+            tensor_views: &tensor_views,
             keep_liveness: cfg!(debug_assertions),
             is_script: false,
             param_modes: &param_modes,

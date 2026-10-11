@@ -168,9 +168,6 @@ pub struct IrInterpreter {
     /// `DispatchCallContext::weight`. One but while a planned site hands over
     /// the calls it counted.
     pub(crate) call_weight: u32,
-    /// Temporary view tensors (capacity_elems=0) created by TensorIndexRef.
-    /// Kept alive for the duration of the ref's usage.
-    temp_view_tensors: Vec<Box<rtdt::Tensor>>,
     /// Native function dispatch table for rider functions.
     native_table: NativeFunctionTable,
     /// What runs function bodies.
@@ -276,7 +273,6 @@ impl IrInterpreter {
             call_dispatcher: RefCell::new(call_dispatcher),
             dispatcher_epoch: std::cell::Cell::new(0),
             call_weight: 1,
-            temp_view_tensors: Vec::new(),
             native_table: NativeFunctionTable::new(),
             engine: Engine::from_env(),
             static_pool: StaticPool::default(),
@@ -2056,19 +2052,23 @@ impl IrInterpreter {
                     // rather than the `data` a generic's static type claims.
                     frame.set_value_tydesc(*dest, element_tydesc);
                 } else {
-                    // Rank > 1: construct view Tensor on heap, store pointer.
-                    let view = Box::new(rtdt::Tensor {
-                        ptr_base: tensor_struct.ptr_base,
-                        offset_elems: rtdt::Index(linear_offset),
-                        capacity_elems: rtdt::Index::ZERO,
-                        shape: unsafe { tensor_struct.shape.add(1) },
-                        strides: unsafe { tensor_struct.strides.add(1) },
-                        layout: tensor_struct.layout,
-                    });
-                    let view_ptr = &*view as *const rtdt::Tensor as *mut u8;
+                    // Rank > 1: a view of the row, made where the frame keeps
+                    // it for this reference.
+                    let at = frame.layout().tensor_view_offsets[dest.0 as usize]
+                        .expect("a frame keeps a view for each tensor view reference");
+                    let view_ptr = unsafe { frame.base_ptr().add(at as usize) } as *mut rtdt::Tensor;
+                    unsafe {
+                        view_ptr.write(rtdt::Tensor {
+                            ptr_base: tensor_struct.ptr_base,
+                            offset_elems: rtdt::Index(linear_offset),
+                            capacity_elems: rtdt::Index::ZERO,
+                            shape: tensor_struct.shape.add(1),
+                            strides: tensor_struct.strides.add(1),
+                            layout: tensor_struct.layout,
+                        });
+                    }
                     let dest_slot = frame.value_dest(*dest);
-                    unsafe { *(dest_slot.ptr as *mut *mut u8) = view_ptr; }
-                    self.temp_view_tensors.push(view);
+                    unsafe { *(dest_slot.ptr as *mut *mut u8) = view_ptr as *mut u8; }
                 }
                 frame.mark_value_live(*dest);
             }
