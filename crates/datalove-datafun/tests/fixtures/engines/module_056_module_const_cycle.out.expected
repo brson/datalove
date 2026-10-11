@@ -11,7 +11,7 @@ Analysis(
             ),
             lowering: LoweringResult(
                 status: "Error",
-                message: "const \'A\': depends on a function that is not available yet, which means it and that function depend on each other: module function #0\nfunction \'f\' names a module const that could not be evaluated",
+                message: "const \'A\': depends on a function that is not available yet, which means it and that function depend on each other: f\nfunction \'f\' names a module const that could not be evaluated",
             ),
             output: "",
         ),

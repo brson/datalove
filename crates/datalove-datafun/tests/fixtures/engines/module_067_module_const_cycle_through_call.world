@@ -1,0 +1,38 @@
+----------
+module local/test/main
+----------
+
+// A const whose evaluation reaches a function waiting on a module const only
+// through another function: `cheapest` names no const and is lowered first,
+// but it calls `price_at`, which names `ORDERS` and so waits for the consts.
+// The cycle is the same as a direct one and is reported the same way, naming
+// the function that waits. Before the check followed calls, it panicked in the
+// interpreter looking for `price_at`.
+
+const ORDERS: [{price: f64}] = [{price = 2.0}]
+
+fun price_at(i: index): ?f64
+    ret some (ORDERS[i]?.price)
+end fun
+
+fun cheapest(): f64
+    if price_at(: index / 0) |p|
+        ret p
+    end if
+    ret 0.0
+end fun
+
+const CHEAPEST: f64 = cheapest()
+
+fun main(): u32
+  ret : u32 / 1
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

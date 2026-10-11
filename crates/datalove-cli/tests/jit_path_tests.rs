@@ -117,6 +117,6 @@ fn a_stack_overflow_under_the_jit_is_an_error() {
             .expect("the binary runs");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(output.status.code().is_some(), "{args:?} ended on a signal:\n{stderr}");
-        assert!(stderr.contains("StackOverflow"), "{args:?} reported no stack overflow:\n{stderr}");
+        assert!(stderr.contains("stack overflow"), "{args:?} reported no stack overflow:\n{stderr}");
     }
 }

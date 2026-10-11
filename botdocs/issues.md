@@ -20,14 +20,12 @@ home here.
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
-  - [A const reaching a waiting function through another panics](#user-content-a-const-reaching-a-waiting-function-through-another-panics)
   - [An error leaks what the frames it unwinds own](#user-content-an-error-leaks-what-the-frames-it-unwinds-own)
   - [Deep recursion still kills an AOT executable, and any process off Linux](#user-content-deep-recursion-still-kills-an-aot-executable-and-any-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
-  - [A rider function taking more than 13 words panics in the interpreter](#user-content-a-rider-function-taking-more-than-13-words-panics-in-the-interpreter)
   - [The REPL takes most statements for expressions](#user-content-the-repl-takes-most-statements-for-expressions)
-  - [Errors are printed as Rust values](#user-content-errors-are-printed-as-rust-values)
+  - [The REPL prints errors as Rust values](#user-content-the-repl-prints-errors-as-rust-values)
 
 - [The language and its checks](#user-content-the-language-and-its-checks)
   - [A borrow into a collection outlives a later `mut` of it](#user-content-a-borrow-into-a-collection-outlives-a-later-mut-of-it)
@@ -160,28 +158,6 @@ one. Naming it whole (`let v = W`) and reading it from a function both work.
 work; this is the REPL's, and that of anything else that splits units
 (`ScriptExecutor` driven by a reactive session).
 
-### A const reaching a waiting function through another panics
-
-**Reproduced.**
-
-A module const evaluated by calling a function that calls another function
-naming a module const:
-
-```datalove
-const ORDERS: [{price: f64}] = [{price = 2.0}]
-fun price_at(i: index): ?f64       // names ORDERS, so waits for the second stratum
-    ret some (ORDERS[i]?.price)
-end fun
-const CHEAPEST: f64 = cheapest()   // cheapest calls price_at
-```
-
-panics in the interpreter with `module unit IrModuleId(0)::CodeUnitId(0) not
-found`. The spec says this is a cycle and is reported as one, but
-`const_eval::first_uncallable_target` looks only at what the const's own unit
-calls, not at what those calls reach. Data consts are in scope for the first
-stratum (`const_eval::data_consts`), so the same shape over a `require data`
-works; over an evaluated const it still panics.
-
 ### An error leaks what the frames it unwinds own
 
 **Reproduced** on the bytecode, the IR walker and the JIT:
@@ -230,10 +206,11 @@ What is left:
 - **Both AOT backends segfault** (exit 139) on unbounded recursion: compiled
   executables check nothing. The same prologue check against a limit set at
   startup would give a message instead.
-- **Off Linux there is no limit.** `thread_stack_bottom` returns `None`, so
-  every engine but the bytecode aborts there as before.
-- **A thread with less than 1 MiB of stack** has a limit above its own top, so
-  its first checked call would fail (reasoned).
+- **Off Linux there is no limit.** The thread's stack is found only through
+  `pthread_getattr_np`, so elsewhere every engine but the bytecode aborts as
+  before. macOS has `pthread_get_stackaddr_np`. On wasm the call stack is
+  the engine's and out of reach, so the IR walker there runs until the engine
+  traps; a call-depth count in the walker is what would bound it.
 - **Panics under compiled code abort.** `__jit_dispatch_call` is `extern "C"`.
   An error now comes back through the abandonment protocol, but a *panic* in
   the interpreter under compiled code aborts the process, where without the
@@ -253,7 +230,7 @@ What is left:
 no step limit and no allocation limit. A const calling a function that never
 terminates hangs `datalove script-ir`, which only compiles. Unbounded
 recursion is caught, by the IR walker's stack check, and reported as `const
-evaluation error: failed to lower const 'C': StackOverflow`. There is a `ConstEvalError::GasExpired` and an arm mapping an error
+evaluation error: failed to lower const 'C': stack overflow`. There is a `ConstEvalError::GasExpired` and an arm mapping an error
 message containing "gas" to it, but nothing produces such a message, so the arm
 is dead.
 
@@ -282,16 +259,6 @@ failed definition. Dropping the engine and starting a fresh one is the
 heavier alternative. The CLI's REPL does not use the JIT, so a long session
 does not reach this today.
 
-### A rider function taking more than 13 words panics in the interpreter
-
-**Reasoned from the code.** The interpreter calls a native through a fixed set
-of function pointer types, up to `MAX_C_WORDS` (13) words of arguments. Past
-that, `native::c_words` and `call_c` hit `todo!`, so an evaluation panics
-(a `CrashReset` in the REPL). The compiled backends call any arity, so the
-same program runs AOT. The JIT's direct entry has the same kind of limit
-(`MAX_DIRECT_ARGS`), but it refuses such a function up front
-(`bridge::enterable`) and leaves it to the interpreter.
-
 ### The REPL takes most statements for expressions
 
 **Reproduced** for `debuglog`. `classify_input` (`datalove-repl/src/lib.rs`)
@@ -302,13 +269,12 @@ expression", and by the same path `if`, `loop`, `match`, `type`, `native` and
 `ret` should too (not tried). The `OpenBraceTree` kind is never produced
 (`is_open_brace_tree = false; // todo`), and its multiline arm is `todo!()`.
 
-### Errors are printed as Rust values
+### The REPL prints errors as Rust values
 
 **Reproduced.** The REPL reports a lowering error as the `Debug` of its value,
 with no span: `NonCopyIndexProjection { elem_ty: "string" }`,
-`UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`.
-`datalove script` prints a runtime error as `Error: Error: StackOverflow`.
-Neither is wrong, but every user sees them. A module's ownership errors have
+`UnresolvedName("x")`, `InvalidOperandType { op: "/", ty: "int" }`. Not
+wrong, but every user sees them. A module's ownership errors have
 the same problem; see the store demo entry below.
 
 ## The language and its checks

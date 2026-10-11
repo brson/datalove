@@ -83,7 +83,7 @@ impl CtfeEvaluator for InterpCtfeEvaluator {
         // Execute the unit.
         let completion = self.interp
             .execute_script_unit_in_env(unit, &mut env, ret_dest, Some(result_dest))
-            .map_err(|e| CtfeError::InterpError(format!("{:?}", e)))?;
+            .map_err(|e| CtfeError::InterpError(e.to_string()))?;
 
         // Clean up the environment (frames from executed units).
         // This must happen before env is dropped to free any heap allocations.

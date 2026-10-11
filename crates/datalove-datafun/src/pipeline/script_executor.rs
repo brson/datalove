@@ -159,11 +159,11 @@ impl ScriptExecutor {
                     tydesc: ret_tydesc,
                 };
                 let output_str = self.interp.pretty_print_value(&value)
-                    .unwrap_or_else(|e| format!("Error: {:?}", e));
+                    .unwrap_or_else(|e| format!("Error: {e}"));
                 self.interp.destroy_value(&value);
                 output_str
             }
-            Err(e) => format!("Error: {:?}", e),
+            Err(e) => format!("Error: {e}"),
         }
     }
 
@@ -207,7 +207,7 @@ impl ScriptExecutor {
                         tydesc: expr_tydesc,
                     };
                     let output_str = self.interp.pretty_print_value(&value)
-                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                        .unwrap_or_else(|e| format!("Error: {e}"));
                     self.interp.destroy_value(&value);
                     output_str
                 }
@@ -217,11 +217,11 @@ impl ScriptExecutor {
                         tydesc: ret_tydesc,
                     };
                     let output_str = self.interp.pretty_print_value(&value)
-                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                        .unwrap_or_else(|e| format!("Error: {e}"));
                     self.interp.destroy_value(&value);
                     output_str
                 }
-                Err(e) => format!("Error: {:?}", e),
+                Err(e) => format!("Error: {e}"),
             }
         } else {
             // The unit computes nothing. Run it anyway so it takes its place
@@ -244,7 +244,7 @@ impl ScriptExecutor {
                     }
                     None => "(fragment executed)".S(),
                 },
-                Err(e) => format!("Error: {:?}", e),
+                Err(e) => format!("Error: {e}"),
             }
         };
 
@@ -349,7 +349,7 @@ impl ScriptExecutor {
             index as u32, ir_unit, &mut self.env, ret_dest, expr_dest);
 
         let output = match completion {
-            Err(e) => format!("Error: {:?}", e),
+            Err(e) => format!("Error: {e}"),
             Ok(UnitCompletion::Normal) => match (&mut expr_buffer, &shown_binding) {
                 (Some(buffer), _) => {
                     let value = datalove_datafun_interp::Value {
@@ -357,7 +357,7 @@ impl ScriptExecutor {
                         tydesc: expr_tydesc,
                     };
                     let printed = self.interp.pretty_print_value(&value)
-                        .unwrap_or_else(|e| format!("Error: {:?}", e));
+                        .unwrap_or_else(|e| format!("Error: {e}"));
                     self.interp.destroy_value(&value);
                     printed
                 }
@@ -375,7 +375,7 @@ impl ScriptExecutor {
                     tydesc: ret_tydesc,
                 };
                 let printed = self.interp.pretty_print_value(&value)
-                    .unwrap_or_else(|e| format!("Error: {:?}", e));
+                    .unwrap_or_else(|e| format!("Error: {e}"));
                 self.interp.destroy_value(&value);
                 printed
             }

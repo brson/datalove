@@ -713,8 +713,8 @@ impl ScriptCommand {
             eprint!("{}", stats.report(25, &|id| paths.get(&id).cloned()));
             executor.set_dispatcher(dispatcher);
         }
-        if output.starts_with("Error:") {
-            bail!("{}", output);
+        if let Some(error) = output.strip_prefix("Error: ") {
+            bail!("{error}");
         }
 
         // Look up the "output" binding from the exports.
@@ -1108,8 +1108,8 @@ impl ScriptWorldCommand {
         if let datafun::pipeline::LoweringResult::Error { message } = &compiled_unit.lowering {
             bail!("Lowering error: {}", message);
         }
-        if output.starts_with("Error:") {
-            bail!("{}", output);
+        if let Some(error) = output.strip_prefix("Error: ") {
+            bail!("{error}");
         }
 
         // Print output if any (for scriptunit-expr).

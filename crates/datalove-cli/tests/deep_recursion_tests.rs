@@ -54,5 +54,5 @@ fn running_out_of_frame_stack_is_an_error() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.code().is_some(), "killed by a signal: {:?}\n{}", output.status, stderr);
     assert!(!output.status.success(), "ten million levels fit: {}", stderr);
-    assert!(stderr.contains("StackOverflow"), "not a stack overflow: {}", stderr);
+    assert!(stderr.contains("stack overflow"), "not a stack overflow: {}", stderr);
 }

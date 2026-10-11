@@ -9,3 +9,14 @@ pub enum InterpError {
     /// stack a call recursed on, the IR walker's or compiled code's, did.
     StackOverflow,
 }
+
+impl std::fmt::Display for InterpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InterpError::RuntimeError(message) => f.write_str(message),
+            InterpError::StackOverflow => f.write_str("stack overflow"),
+        }
+    }
+}
+
+impl std::error::Error for InterpError {}

@@ -7,14 +7,14 @@
 //! straight off when it is a literal or names a const already evaluated, and
 //! the unit is run by the CTFE evaluator. Both pipelines do it through here.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, ExprKey, Statement, StmtFun};
 use datalove_datafun_const::evaluate_const_unit;
 use datalove_datafun_ir::{
-    CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, Instruction, IrCodeUnit, IrType,
+    CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, IrCodeUnit, IrType,
     ModuleFunctionRegistry,
 };
 use datalove_datafun_sema::{CallTargets, ExprTypes};
@@ -151,7 +151,7 @@ pub fn evaluate_const<'db>(
             // Every function this reaches has to be lowered already, or the
             // interpreter has nothing to call and panics looking for it.
             if let Some(callable) = env.callable {
-                if let Some(missing) = first_uncallable_target(&unit, callable) {
+                if let Some(missing) = first_uncallable_target(&unit, callable, env.func_id_map) {
                     return Err(ConstError::Cycle(missing));
                 }
             }
@@ -201,21 +201,34 @@ pub fn evaluate_body_consts<'db>(
     (consts, errors)
 }
 
-/// The first module function a const's unit calls that is not lowered yet.
+/// The first module function a const's unit reaches that is not lowered yet.
 ///
 /// Such a function is waiting on a module const, which is where a cycle
-/// between a const and a function shows up. Local and external references are
-/// resolved against units the caller already holds, so they cannot be missing.
-fn first_uncallable_target(unit: &IrCodeUnit, callable: &ModuleFunctionRegistry) -> Option<String> {
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            let func = match instr {
-                Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } => func,
-                _ => continue,
-            };
-            if let CodeRef::Module { module, id } = func {
-                if callable.get_module_function_as_unit(*module, *id).is_none() {
-                    return Some(format!("module function #{}", id.0));
+/// between a const and a function shows up. Followed through the functions it
+/// can call, since the one waiting may be any number of calls away. Local and
+/// external references are resolved against units the caller already holds,
+/// so they cannot be missing.
+fn first_uncallable_target(
+    unit: &IrCodeUnit,
+    callable: &ModuleFunctionRegistry,
+    names: &FuncIdLookup<'_>,
+) -> Option<String> {
+    let mut seen = HashSet::new();
+    let mut bodies = vec![unit];
+    while let Some(body) = bodies.pop() {
+        for instr in body.blocks.iter().flat_map(|block| &block.instructions) {
+            let Some((CodeRef::Module { module, id }, _)) = instr.call_target() else { continue };
+            if !seen.insert((*module, *id)) {
+                continue;
+            }
+            match callable.get_module_function_as_unit(*module, *id) {
+                Some(callee) => bodies.push(callee),
+                None => {
+                    let name = names.iter()
+                        .find(|(_, (m, f))| m == module && f.0 == id.0)
+                        .map(|((_, name), _)| name.clone())
+                        .expect("a module function the compiler numbered has a name");
+                    return Some(name);
                 }
             }
         }

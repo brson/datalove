@@ -449,7 +449,7 @@ impl IrInterpreter {
         if let NativeTarget::C(fn_ptr) = target {
             let mut words = [0usize; MAX_C_WORDS];
             let len = crate::native::c_words(
-                &mut words, self.runtime.handle(), (0..n).map(|i| arg(self, i, mode(i))), dest, shapes);
+                &mut words, self.runtime.handle(), (0..n).map(|i| arg(self, i, mode(i))), dest, shapes)?;
             // SAFETY: the table registered this as a rider function and holds
             // its code until its generation changes.
             unsafe { call_c(fn_ptr, &words[..len]) };

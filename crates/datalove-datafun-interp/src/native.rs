@@ -66,8 +66,11 @@ impl NativeTarget {
     }
 }
 
-/// The most words a C-ABI native call takes, the runtime handle included.
-pub const MAX_C_WORDS: usize = 13;
+/// The most words the interpreter calls a C-ABI native with, the runtime
+/// handle included: fourteen parameters and the result, or fewer with
+/// descriptors. The compiled backends call any width; a wider native is an
+/// error here.
+pub const MAX_C_WORDS: usize = 32;
 
 /// Call a rider function with the native C ABI.
 ///
@@ -95,7 +98,7 @@ pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
                         unsafe { std::mem::transmute(fn_ptr) };
                     f($(words[$i]),+)
                 })+
-                n => todo!("native functions with {} C args not yet supported", n),
+                n => unreachable!("a native call of {n} words; `c_words` refuses more than {MAX_C_WORDS}"),
             }
         };
         (@ptr $i:literal) => { usize };
@@ -113,12 +116,31 @@ pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
         11 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10;
         12 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11;
         13 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12;
+        14 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13;
+        15 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14;
+        16 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15;
+        17 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16;
+        18 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
+        19 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18;
+        20 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19;
+        21 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20;
+        22 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21;
+        23 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22;
+        24 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23;
+        25 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24;
+        26 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25;
+        27 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26;
+        28 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27;
+        29 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28;
+        30 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29;
+        31 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30;
+        32 => 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31;
     };
 }
 
 /// Lay out a native call's C words: the runtime handle, each argument's pointer
 /// and descriptor, the destination's, then the supplied descriptors. Returns
-/// how many words there are.
+/// how many words there are, or an error past `MAX_C_WORDS`.
 ///
 /// The arguments come as they are read, so a caller with them in hand passes
 /// them and one that reads each from somewhere makes no list of them first.
@@ -128,11 +150,12 @@ pub fn c_words(
     args: impl ExactSizeIterator<Item = Value>,
     dest: Destination,
     supplied: &[*const datalove_rtdt::TyDesc],
-) -> usize {
+) -> Result<usize, InterpError> {
     let n = args.len();
     let len = 1 + n * 2 + 2 + supplied.len();
     if len > MAX_C_WORDS {
-        todo!("native functions with {} C args not yet supported", len);
+        return Err(InterpError::RuntimeError(format!(
+            "a native function called with {len} words; the interpreter calls at most {MAX_C_WORDS}")));
     }
     words[0] = rt as usize;
     for (i, arg) in args.enumerate() {
@@ -145,7 +168,7 @@ pub fn c_words(
     for (i, tydesc) in supplied.iter().enumerate() {
         words[at + 2 + i] = *tydesc as usize;
     }
-    len
+    Ok(len)
 }
 
 /// Table of registered native function implementations.
@@ -243,7 +266,7 @@ impl NativeFunctionTable {
         match self.lookup(symbol)? {
             NativeTarget::C(fn_ptr) => {
                 let mut words = [0; MAX_C_WORDS];
-                let len = c_words(&mut words, rt, args.iter().copied(), dest, supplied);
+                let len = c_words(&mut words, rt, args.iter().copied(), dest, supplied)?;
                 // SAFETY: registered as a rider function, whose code the table
                 // holds, with the words its ABI says.
                 unsafe { call_c(fn_ptr, &words[..len]) };
@@ -262,5 +285,56 @@ impl NativeFunctionTable {
 impl Default for NativeFunctionTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    thread_local! {
+        static SEEN: Cell<usize> = const { Cell::new(0) };
+    }
+
+    /// A rider function of the widest arity, recording a fold of its words
+    /// that tells each position apart.
+    extern "C-unwind" fn widest(
+        w0: usize, w1: usize, w2: usize, w3: usize, w4: usize, w5: usize, w6: usize,
+        w7: usize, w8: usize, w9: usize, w10: usize, w11: usize, w12: usize, w13: usize,
+        w14: usize, w15: usize, w16: usize, w17: usize, w18: usize, w19: usize,
+        w20: usize, w21: usize, w22: usize, w23: usize, w24: usize, w25: usize,
+        w26: usize, w27: usize, w28: usize, w29: usize, w30: usize, w31: usize,
+    ) -> u8 {
+        let fold =
+            w0.rotate_left(0) ^ w1.rotate_left(1) ^ w2.rotate_left(2) ^
+            w3.rotate_left(3) ^ w4.rotate_left(4) ^ w5.rotate_left(5) ^
+            w6.rotate_left(6) ^ w7.rotate_left(7) ^ w8.rotate_left(8) ^
+            w9.rotate_left(9) ^ w10.rotate_left(10) ^ w11.rotate_left(11) ^
+            w12.rotate_left(12) ^ w13.rotate_left(13) ^ w14.rotate_left(14) ^
+            w15.rotate_left(15) ^ w16.rotate_left(16) ^ w17.rotate_left(17) ^
+            w18.rotate_left(18) ^ w19.rotate_left(19) ^ w20.rotate_left(20) ^
+            w21.rotate_left(21) ^ w22.rotate_left(22) ^ w23.rotate_left(23) ^
+            w24.rotate_left(24) ^ w25.rotate_left(25) ^ w26.rotate_left(26) ^
+            w27.rotate_left(27) ^ w28.rotate_left(28) ^ w29.rotate_left(29) ^
+            w30.rotate_left(30) ^ w31.rotate_left(31);
+        SEEN.with(|seen| seen.set(fold));
+        1
+    }
+
+    #[test]
+    fn the_widest_native_gets_every_word_in_place() {
+        let words: Vec<usize> = (0..MAX_C_WORDS).map(|i| 1000 + i).collect();
+        let want = words.iter().enumerate().fold(0, |acc, (i, w)| acc ^ w.rotate_left(i as u32));
+        unsafe { call_c(widest as *const (), &words) };
+        assert_eq!(SEEN.with(Cell::get), want);
+    }
+
+    #[test]
+    fn a_native_wider_than_the_interpreter_calls_is_an_error() {
+        let mut words = [0; MAX_C_WORDS];
+        let dest = Destination { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() };
+        let args = vec![Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() }; 15];
+        let result = c_words(&mut words, std::ptr::null_mut(), args.into_iter(), dest, &[]);
+        assert!(matches!(result, Err(InterpError::RuntimeError(_))));
     }
 }

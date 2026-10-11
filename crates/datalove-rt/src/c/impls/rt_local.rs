@@ -65,19 +65,22 @@ impl RtLocal {
 }*/
 
 /// The calling thread's stack limit; see `dtlv_rti_native_stack_limit`.
+///
+/// The margin is 1 MiB, or a quarter of a smaller stack, so that a small
+/// thread keeps most of its stack rather than none of it.
 pub fn native_stack_limit() -> usize {
     const MARGIN: usize = 1 << 20;
     thread_local! {
-        static LIMIT: usize = thread_stack_bottom().map_or(0, |bottom| bottom + MARGIN);
+        static LIMIT: usize = thread_stack().map_or(0, |(bottom, size)| bottom + MARGIN.min(size / 4));
     }
     LIMIT.with(|limit| *limit)
 }
 
-/// The lowest address of this thread's stack. Asking is slow for the main
-/// thread, whose bounds glibc reads out of `/proc`, so `native_stack_limit`
-/// asks once a thread.
+/// The lowest address of this thread's stack, and its size. Asking is slow
+/// for the main thread, whose bounds glibc reads out of `/proc`, so
+/// `native_stack_limit` asks once a thread.
 #[cfg(target_os = "linux")]
-fn thread_stack_bottom() -> Option<usize> {
+fn thread_stack() -> Option<(usize, usize)> {
     use rmx::libc;
     unsafe {
         let mut attr: libc::pthread_attr_t = std::mem::zeroed();
@@ -88,11 +91,31 @@ fn thread_stack_bottom() -> Option<usize> {
         let mut size: libc::size_t = 0;
         let got = libc::pthread_attr_getstack(&attr, &mut addr, &mut size);
         libc::pthread_attr_destroy(&mut attr);
-        (got == 0).then_some(addr as usize)
+        (got == 0).then_some((addr as usize, size))
     }
 }
 
 #[cfg(not(target_os = "linux"))]
-fn thread_stack_bottom() -> Option<usize> {
+fn thread_stack() -> Option<(usize, usize)> {
     None
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    /// A thread smaller than the margin still runs: the limit is below where
+    /// it stands, with most of its stack left above it.
+    #[test]
+    fn a_small_thread_keeps_most_of_its_stack() {
+        const SIZE: usize = 512 * 1024;
+        std::thread::Builder::new().stack_size(SIZE).spawn(|| {
+            let here = 0u8;
+            let here = &here as *const u8 as usize;
+            let (bottom, size) = thread_stack().expect("a thread's stack is found");
+            let limit = native_stack_limit();
+            assert!(limit < here, "the limit {limit:#x} is above the stack in use {here:#x}");
+            assert!(limit - bottom <= size / 4, "the margin takes more than a quarter");
+        }).unwrap().join().unwrap();
+    }
 }
