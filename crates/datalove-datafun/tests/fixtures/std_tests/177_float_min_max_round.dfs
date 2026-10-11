@@ -1,0 +1,36 @@
+// The float intrinsics whose edge cases the engines once disagreed on: `min`
+// and `max` ignore a NaN unless both operands are one, and put -0.0 below
+// 0.0; `round` takes a tie to the even neighbour, and keeps a zero's sign.
+// In functions, so the compiled engines compile them.
+
+require module sys/std/f64
+require module sys/std/f32
+
+fun min_max_64(a: f64, b: f64): (f64, f64)
+    ret (f64.min(a, b), f64.max(a, b))
+end fun
+
+fun min_max_32(a: f32, b: f32): (f32, f32)
+    ret (f32.min(a, b), f32.max(a, b))
+end fun
+
+fun rounds_64(x: f64): f64
+    ret f64.round(x)
+end fun
+
+fun rounds_32(x: f32): f32
+    ret f32.round(x)
+end fun
+
+let nan = (: f64 / 0.0) / (: f64 / 0.0)
+let inf = (: f64 / 1.0) / (: f64 / 0.0)
+let nan32 = (: f32 / 0.0) / (: f32 / 0.0)
+
+let output = (
+    (min_max_64(nan, 1.0), min_max_64(1.0, nan), min_max_64(nan, nan)),
+    (min_max_64(-0.0, 0.0), min_max_64(0.0, -0.0), min_max_64(-inf, inf), min_max_64(2.0, 3.0)),
+    (min_max_32(nan32, 1.0), min_max_32(1.0, nan32), min_max_32(-0.0, 0.0), min_max_32(0.0, -0.0)),
+    (rounds_64(2.5), rounds_64(3.5), rounds_64(-2.5), rounds_64(0.5), rounds_64(-0.5), rounds_64(-0.4),
+     rounds_64(1.25), rounds_64(inf), rounds_64(nan)),
+    (rounds_32(2.5), rounds_32(-0.5), rounds_32(1.5)),
+)

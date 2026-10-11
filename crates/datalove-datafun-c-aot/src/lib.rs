@@ -310,6 +310,18 @@ impl CAotCompiler {
         writeln!(out, "#include <math.h>").unwrap();
         writeln!(out).unwrap();
 
+        // `min` and `max` ignore a NaN, as `fmin` does, and order -0.0 below
+        // 0.0, which `fmin` leaves unspecified; the other engines do the same.
+        for (ty, suffix) in [("double", ""), ("float", "f")] {
+            writeln!(out, "static inline {ty} dtlv_min{suffix}({ty} a, {ty} b) {{ \
+                if (isnan(a)) return b; if (isnan(b)) return a; \
+                if (a < b || (a == b && signbit(a))) return a; return b; }}").unwrap();
+            writeln!(out, "static inline {ty} dtlv_max{suffix}({ty} a, {ty} b) {{ \
+                if (isnan(a)) return b; if (isnan(b)) return a; \
+                if (a > b || (a == b && !signbit(a))) return a; return b; }}").unwrap();
+        }
+        writeln!(out).unwrap();
+
         // Runtime type definitions (must match datalove-rtdt).
         writeln!(out, "// Runtime type definitions").unwrap();
         writeln!(out, "typedef uint8_t bool_t;").unwrap();

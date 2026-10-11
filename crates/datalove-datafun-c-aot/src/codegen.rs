@@ -3611,7 +3611,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(float*){} = ceilf(*(float*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::RoundF32 => {
-                writeln!(out, "    *(float*){} = roundf(*(float*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(float*){} = nearbyintf(*(float*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::TruncF32 => {
                 writeln!(out, "    *(float*){} = truncf(*(float*){});", dest_addr, arg0()).unwrap();
@@ -3620,10 +3620,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(float*){} = copysignf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::MinF32 => {
-                writeln!(out, "    *(float*){} = fminf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(float*){} = dtlv_minf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::MaxF32 => {
-                writeln!(out, "    *(float*){} = fmaxf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(float*){} = dtlv_maxf(*(float*){}, *(float*){});", dest_addr, arg0(), arg1()).unwrap();
             }
 
             // F64 operations.
@@ -3706,7 +3706,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(double*){} = ceil(*(double*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::RoundF64 => {
-                writeln!(out, "    *(double*){} = round(*(double*){});", dest_addr, arg0()).unwrap();
+                writeln!(out, "    *(double*){} = nearbyint(*(double*){});", dest_addr, arg0()).unwrap();
             }
             IntrinsicId::TruncF64 => {
                 writeln!(out, "    *(double*){} = trunc(*(double*){});", dest_addr, arg0()).unwrap();
@@ -3715,10 +3715,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(double*){} = copysign(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::MinF64 => {
-                writeln!(out, "    *(double*){} = fmin(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(double*){} = dtlv_min(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
             }
             IntrinsicId::MaxF64 => {
-                writeln!(out, "    *(double*){} = fmax(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
+                writeln!(out, "    *(double*){} = dtlv_max(*(double*){}, *(double*){});", dest_addr, arg0(), arg1()).unwrap();
             }
 
             // U64 operations.

@@ -170,8 +170,7 @@ impl IrInterpreter {
             }
             RoundF32 => {
                 let a = self.read_f32(&args[0], frame, frames);
-                // Round to nearest even to match Cranelift's `nearest`.
-                self.write_f32(round_ties_even(a), dest);
+                self.write_f32(a.round_ties_even(), dest);
             }
             TruncF32 => {
                 let a = self.read_f32(&args[0], frame, frames);
@@ -185,12 +184,12 @@ impl IrInterpreter {
             MinF32 => {
                 let a = self.read_f32(&args[0], frame, frames);
                 let b = self.read_f32(&args[1], frame, frames);
-                self.write_f32(a.min(b), dest);
+                self.write_f32(min_f32(a, b), dest);
             }
             MaxF32 => {
                 let a = self.read_f32(&args[0], frame, frames);
                 let b = self.read_f32(&args[1], frame, frames);
-                self.write_f32(a.max(b), dest);
+                self.write_f32(max_f32(a, b), dest);
             }
 
             // F64 classification intrinsics.
@@ -306,8 +305,7 @@ impl IrInterpreter {
             }
             RoundF64 => {
                 let a = self.read_f64(&args[0], frame, frames);
-                // Round to nearest even to match Cranelift's `nearest`.
-                self.write_f64(round_ties_even_f64(a), dest);
+                self.write_f64(a.round_ties_even(), dest);
             }
             TruncF64 => {
                 let a = self.read_f64(&args[0], frame, frames);
@@ -321,12 +319,12 @@ impl IrInterpreter {
             MinF64 => {
                 let a = self.read_f64(&args[0], frame, frames);
                 let b = self.read_f64(&args[1], frame, frames);
-                self.write_f64(a.min(b), dest);
+                self.write_f64(min_f64(a, b), dest);
             }
             MaxF64 => {
                 let a = self.read_f64(&args[0], frame, frames);
                 let b = self.read_f64(&args[1], frame, frames);
-                self.write_f64(a.max(b), dest);
+                self.write_f64(max_f64(a, b), dest);
             }
 
             // U64 bitwise operations.
@@ -933,56 +931,30 @@ impl IrInterpreter {
     }
 }
 
-/// Round f32 to nearest integer, with ties going to nearest even.
-fn round_ties_even(x: f32) -> f32 {
-    // Handle special cases.
-    if x.is_nan() || x.is_infinite() {
-        return x;
-    }
-
-    let rounded = x.round();
-    let diff = x - rounded;
-
-    // Check if exactly halfway.
-    if diff.abs() == 0.5 {
-        // Round to nearest even.
-        if rounded as i32 % 2 != 0 {
-            if x > 0.0 {
-                rounded - 1.0
+/// The lesser and the greater of two floats as every engine's `min` and `max`
+/// give them: a NaN is ignored unless both are one, and -0.0 is below 0.0.
+macro_rules! min_max {
+    ($min:ident, $max:ident, $t:ty) => {
+        fn $min(a: $t, b: $t) -> $t {
+            if a.is_nan() {
+                b
+            } else if b.is_nan() || a < b || (a == b && a.is_sign_negative()) {
+                a
             } else {
-                rounded + 1.0
+                b
             }
-        } else {
-            rounded
         }
-    } else {
-        rounded
-    }
-}
 
-/// Round f64 to nearest integer, with ties going to nearest even.
-fn round_ties_even_f64(x: f64) -> f64 {
-    // Handle special cases.
-    if x.is_nan() || x.is_infinite() {
-        return x;
-    }
-
-    let rounded = x.round();
-    let diff = x - rounded;
-
-    // Check if exactly halfway.
-    if diff.abs() == 0.5 {
-        // Round to nearest even.
-        if rounded as i64 % 2 != 0 {
-            if x > 0.0 {
-                rounded - 1.0
+        fn $max(a: $t, b: $t) -> $t {
+            if a.is_nan() {
+                b
+            } else if b.is_nan() || a > b || (a == b && a.is_sign_positive()) {
+                a
             } else {
-                rounded + 1.0
+                b
             }
-        } else {
-            rounded
         }
-    } else {
-        rounded
-    }
+    };
 }
+min_max!(min_f32, max_f32, f32);
+min_max!(min_f64, max_f64, f64);

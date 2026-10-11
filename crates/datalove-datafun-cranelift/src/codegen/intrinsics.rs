@@ -15,6 +15,17 @@ use crate::CraneliftError;
 use crate::codegen::FunctionCompiler;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
+    /// `fmin` or `fmax`'s result `m` for `a` and `b`, but the other operand
+    /// where one is a NaN: `fmin` gives NaN, and the other engines' `min` and
+    /// `max` ignore one. For two zeros `fmin` already puts -0.0 first.
+    fn ignoring_nan(builder: &mut FunctionBuilder, a: cl_ir::Value, b: cl_ir::Value, m: cl_ir::Value) -> cl_ir::Value {
+        use cl_ir::condcodes::FloatCC;
+        let a_nan = builder.ins().fcmp(FloatCC::Unordered, a, a);
+        let b_nan = builder.ins().fcmp(FloatCC::Unordered, b, b);
+        let unless_b = builder.ins().select(b_nan, a, m);
+        builder.ins().select(a_nan, b, unless_b)
+    }
+
     /// Compile an intrinsic call to Cranelift IR.
     pub(crate) fn compile_intrinsic(
         &mut self,
@@ -197,15 +208,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let b = self.get_operand_value(builder, &args[1])?;
                 builder.ins().fcopysign(a, b)
             }
-            MinF32 => {
+            MinF32 | MinF64 => {
                 let a = self.get_operand_value(builder, &args[0])?;
                 let b = self.get_operand_value(builder, &args[1])?;
-                builder.ins().fmin(a, b)
+                let m = builder.ins().fmin(a, b);
+                Self::ignoring_nan(builder, a, b, m)
             }
-            MaxF32 => {
+            MaxF32 | MaxF64 => {
                 let a = self.get_operand_value(builder, &args[0])?;
                 let b = self.get_operand_value(builder, &args[1])?;
-                builder.ins().fmax(a, b)
+                let m = builder.ins().fmax(a, b);
+                Self::ignoring_nan(builder, a, b, m)
             }
 
             // F64 classification intrinsics.
@@ -299,16 +312,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let a = self.get_operand_value(builder, &args[0])?;
                 let b = self.get_operand_value(builder, &args[1])?;
                 builder.ins().fcopysign(a, b)
-            }
-            MinF64 => {
-                let a = self.get_operand_value(builder, &args[0])?;
-                let b = self.get_operand_value(builder, &args[1])?;
-                builder.ins().fmin(a, b)
-            }
-            MaxF64 => {
-                let a = self.get_operand_value(builder, &args[0])?;
-                let b = self.get_operand_value(builder, &args[1])?;
-                builder.ins().fmax(a, b)
             }
 
             // U64 bitwise operations.
