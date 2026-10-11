@@ -40,6 +40,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Consts Built Once](plan-static-consts.md)
+- [A Runtime Datalit Loader](plan-datalit-loader.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
