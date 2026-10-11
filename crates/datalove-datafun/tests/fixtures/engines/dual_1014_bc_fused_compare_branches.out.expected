@@ -1,0 +1,188 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 3u32
+                        v1 = const 9u32
+                        v2 = const 27u32
+                        v3 = const 81u32
+                        v4 = list [v0, v1, v2, v3]
+                        v5 = const 100f32
+                        v6 = call u0(v5)
+                        v7 = const 1000f64
+                        v8 = call u1(v7)
+                        v9 = const 5i64
+                        v10 = call u2(v9)
+                        v11 = const 30u64
+                        v12 = call u3(v11)
+                        v13 = const 4index
+                        v14 = const 20u32
+                        v15 = call u4(v4, v13, v14)
+                        v16 = pack Tuple5 {v6, v8, v10, v12, v15}
+                        debuglog v16
+                        drop v16
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn halves32(p0):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1 = const 0u32
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = const 1f32
+                        v3 = gt s0, v2
+                        branch v3, block2, block3
+                    block2:
+                        v4 = const 2f32
+                        v5 = div s0, v4
+                        store.copy s0, v5
+                        v6 = const 1u32
+                        v7 = intrinsic AddWrappingU32(s1, v6)
+                        store.copy s1, v7
+                        goto block1
+                    block3:
+                        v8 = load.copy s1
+                        return v8
+                    
+                    fn halves64(p0):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1 = const 0u32
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = const 1f64
+                        v3 = gt s0, v2
+                        branch v3, block2, block3
+                    block2:
+                        v4 = const 2f64
+                        v5 = div s0, v4
+                        store.copy s0, v5
+                        v6 = const 1u32
+                        v7 = intrinsic AddWrappingU32(s1, v6)
+                        store.copy s1, v7
+                        goto block1
+                    block3:
+                        v8 = load.copy s1
+                        return v8
+                    
+                    fn down_from(p0):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1 = const 0i64
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = const -3i64
+                        v3 = gt s0, v2
+                        branch v3, block2, block7
+                    block2:
+                        v4 = const 1i64
+                        v5, v6 = sub.checked s0, v4
+                        branch v6, block3, block4
+                    block3:
+                        v7 = const "arithmetic overflow"
+                        v8 = error_from v7
+                        v9 = err v8
+                        return v9
+                    block4:
+                        store.copy s0, v5
+                        v10 = const 1i64
+                        v11, v12 = add.checked s1, v10
+                        branch v12, block5, block6
+                    block5:
+                        v13 = const "arithmetic overflow"
+                        v14 = error_from v13
+                        v15 = err v14
+                        return v15
+                    block6:
+                        store.copy s1, v11
+                        goto block1
+                    block7:
+                        v16 = load.copy s1
+                        v17 = ok v16
+                        return v17
+                    
+                    fn up_to(p0):
+                    block0:
+                        v0 = const 0u64
+                        store.copy s0, v0
+                        goto block1
+                    block1:
+                        v1 = lt s0, p0
+                        branch v1, block2, block5
+                    block2:
+                        v2 = const 7u64
+                        v3, v4 = add.checked s0, v2
+                        branch v4, block3, block4
+                    block3:
+                        v5 = const "arithmetic overflow"
+                        v6 = error_from v5
+                        v7 = err v6
+                        return v7
+                    block4:
+                        store.copy s0, v3
+                        goto block1
+                    block5:
+                        v8 = load.copy s0
+                        v9 = ok v8
+                        return v9
+                    
+                    fn first_over(p0, p1, p2):
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        goto block1
+                    block1:
+                        v1 = lt s0, p1
+                        branch v1, block2, block8
+                    block2:
+                        v2, v3 = listget p0[s0]
+                        branch v3, block4, block3
+                    block3:
+                        v4 = const "index out of bounds"
+                        v5 = error_from v4
+                        v6 = err v5
+                        return v6
+                    block4:
+                        v7 = gt v2, p2
+                        branch v7, block5, block6
+                    block5:
+                        v8 = load.copy s0
+                        v9 = ok v8
+                        return v9
+                    block6:
+                        goto block7
+                    block7:
+                        v10 = const 1index
+                        v11 = intrinsic AddWrappingIndex(s0, v10)
+                        store.copy s0, v11
+                        goto block1
+                    block8:
+                        v12 = load.copy s0
+                        v13 = ok v12
+                        return v13
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, 10, ok 8, ok 35, ok 2)\n"),
+        ),
+    ],
+)

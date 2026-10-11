@@ -529,4 +529,10 @@ impl ScriptExecutor {
     pub fn set_engine(&mut self, engine: datalove_datafun_interp::Engine) {
         self.interp.set_engine(engine);
     }
+
+    /// What the interpreter's bytecode lowering has done; see
+    /// `IrInterpreter::bytecode_stats`.
+    pub fn bytecode_stats(&self) -> &datalove_datafun_interp::BcStats {
+        self.interp.bytecode_stats()
+    }
 }

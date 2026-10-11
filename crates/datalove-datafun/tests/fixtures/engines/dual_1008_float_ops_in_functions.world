@@ -1,3 +1,5 @@
+// expect-bytecode-ops: AddF64 SubF64 MulF64 DivF64 AddF32 SubF32 MulF32 DivF32 NegF64 NegF32 CmpF64 CmpF32 BrCmpF64 SqrtF64 SqrtF32 U64ToF64 I64ToF64 F32ToF64 F64ToF32 XorU32 OrU32
+// expect-bytecode-lowered: BinOp UnaryOp Intrinsic
 ----------
 scriptunit-fragment
 ----------

@@ -1,0 +1,146 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = pack Struct0 {v0, v1}
+                        v3 = const 3u32
+                        v4 = const 4u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = list [v2, v5]
+                        v7 = const 1u32
+                        v8 = const 1u32
+                        v9 = const 1u32
+                        v10 = pack Struct0 {v8, v9}
+                        v11 = const 2u32
+                        v12 = const 2u32
+                        v13 = const 2u32
+                        v14 = pack Struct0 {v12, v13}
+                        v15 = %{v7: v10, v11: v14}
+                        v16 = clone v6
+                        v17 = const 2index
+                        v18 = call u0(v16, v17)
+                        v19 = clone v6
+                        v20 = const 3index
+                        v21 = call u0(v19, v20)
+                        v22 = clone v6
+                        v23 = const 2index
+                        v24 = call u1(v22, v23)
+                        v25 = clone v6
+                        v26 = const 5index
+                        v27 = call u1(v25, v26)
+                        v28 = pack Tuple4 {v18, v21, v24, v27}
+                        debuglog v28
+                        drop v28
+                        v29 = clone v15
+                        v30 = const 2u32
+                        v31 = call u2(v29, v30)
+                        v32 = clone v15
+                        v33 = const 5u32
+                        v34 = call u2(v32, v33)
+                        v35 = pack Tuple2 {v31, v34}
+                        debuglog v35
+                        drop v35
+                        unit_end_drop v6
+                        unit_end_drop v15
+                        unit_end
+                    
+                    fn fill(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = const 0index
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = lt s1, p1
+                        branch v2, block2, block5
+                    block2:
+                        v3 = const 7u32
+                        v4 = const 8u32
+                        v5 = pack Struct0 {v3, v4}
+                        v6 = listset s0[s1] = v5
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        drop.tracked s0
+                        return v7
+                    block4:
+                        v8 = const 1index
+                        v9 = intrinsic AddWrappingIndex(s1, v8)
+                        store.copy s1, v9
+                        goto block1
+                    block5:
+                        v10 = load.move.tracked s0
+                        v11 = some v10
+                        return v11
+                    
+                    fn bump(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = const 0index
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = lt s1, p1
+                        branch v2, block2, block5
+                    block2:
+                        v3 = const 100u32
+                        v4 = listboundscheck s0[s1]
+                        branch v4, block4, block3
+                    block3:
+                        v5 = none
+                        drop.tracked s0
+                        return v5
+                    block4:
+                        v6 = listelementref s0[s1]
+                        v7 = getfieldref *v6.1
+                        refstore *v7, v3
+                        v8 = const 1index
+                        v9 = intrinsic AddWrappingIndex(s1, v8)
+                        store.copy s1, v9
+                        goto block1
+                    block5:
+                        v10 = load.move.tracked s0
+                        v11 = some v10
+                        return v11
+                    
+                    fn mark(p0, p1):
+                    block0:
+                        v0 = move p0
+                        store.move.tracked s0, v0
+                        v1 = const 9u32
+                        v2 = mapcontainskey s0[p1]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop.tracked s0
+                        return v3
+                    block2:
+                        v4 = mapvalueref s0[p1]
+                        v5 = getfieldref *v4.1
+                        refstore *v5, v1
+                        v6 = load.move.tracked s0
+                        v7 = some v6
+                        return v7
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(some [{x = 7, y = 8}, {x = 7, y = 8}], none, some [{x = 1, y = 100}, {x = 3, y = 100}], none)\n(some %{1 = {x = 1, y = 1}, 2 = {x = 2, y = 9}}, none)\n"),
+        ),
+    ],
+)

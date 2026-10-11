@@ -1,0 +1,65 @@
+// expect-osr: entered
+----------
+scriptunit-fragment
+----------
+
+// Nested loops in functions, which the osr engine enters partway through:
+// inner loops reading what their outer loop makes -- a scalar, an owned
+// string -- a generic at two types, and an owned variable the loop replaces.
+fun triangle(n: u32): !u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    let width = i +! 1
+    var j: u32 = 0
+    loop while j .< width
+      set total = total +! 1
+      set j = j +! 1
+    end loop
+    set i = i +! 1
+  end loop
+  ret ok total
+end fun
+
+fun labels(n: u32): !string
+  var out: string = ""
+  var i: u32 = 0
+  loop while i .< n
+    let mark: string = "ab"
+    var j: u32 = 0
+    loop while j .< i
+      set out = mark@
+      set j = j +! 1
+    end loop
+    set i = i +! 1
+  end loop
+  ret ok out
+end fun
+
+fun pairs<T>(ref xs: [T], n: index): index
+  var count: index = 0
+  var i: index = 0
+  loop while i .< n
+    var j: index = 0
+    loop while j .< i
+      set count = icall add_wrapping_index(count, : index / 1)
+      set j = icall add_wrapping_index(j, : index / 1)
+    end loop
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret count
+end fun
+
+fun latest(n: u32): !string
+  var last: string = "none"
+  var i: u32 = 0
+  loop while i .< n
+    set last = "seen"
+    set i = i +! 1
+  end loop
+  ret ok last
+end fun
+
+let nums: [u32] = [1, 2, 3, 4]
+let words: [string] = ["a", "b", "c"]
+debuglog (triangle(6), labels(4), pairs(ref nums, : index / 4), pairs(ref words, : index / 3), latest(5))

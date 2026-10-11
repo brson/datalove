@@ -59,6 +59,7 @@ pub use error::InterpError;
 pub use value::{Value, Destination};
 pub use layout::{IrLayout, LayoutCache};
 pub use tydesc::IrTyDescTable;
+pub use bytecode::BcStats;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};
 pub use env::{FunctionRegistry, ModuleFunctionRegistry, UnitFunctionRegistry, ScriptEnvironment, ExecutionContext};
 pub use dispatch::{
@@ -281,6 +282,12 @@ impl IrInterpreter {
                 ..Default::default()
             },
         }
+    }
+
+    /// What lowering bodies to bytecode has done so far: how many, how many
+    /// ops, and which kinds of op and of escape.
+    pub fn bytecode_stats(&self) -> &bytecode::BcStats {
+        &self.bc_stats
     }
 
     /// Get a mutable reference to the native function table.

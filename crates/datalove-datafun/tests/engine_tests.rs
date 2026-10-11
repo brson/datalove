@@ -31,6 +31,17 @@
 //!
 //! A fixture opts out of an engine with a comment before its first section,
 //! `// engines: -aot -c`, for what that backend does not support.
+//!
+//! It can also say what has to have run, since an engine that quietly falls
+//! back to the reference's way of running something agrees with the reference
+//! and tests nothing:
+//!
+//! - `// expect-bytecode-ops: ListStoreAt BrListBounds`: the bytecode run
+//!   lowered some body to each of these ops.
+//! - `// expect-bytecode-lowered: RefStore ListSet`: no body the bytecode
+//!   lowered left an instruction of these kinds to the IR walker.
+//! - `// expect-osr: entered`: the osr run entered compiled code at some loop,
+//!   and was refused at none.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
@@ -54,10 +65,12 @@ static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
 /// Entries at loop headers it compiled, and loop headers it could not enter.
 static CHAOS_LOOPS: AtomicU32 = AtomicU32::new(0);
 static CHAOS_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
-/// The same for the `osr` engine, and the `jit` one, whose loops are compiled
-/// with their functions and so should never be.
-static ENGINE_LOOPS: AtomicU32 = AtomicU32::new(0);
-static ENGINE_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
+/// The same for the `osr` engine.
+static OSR_LOOPS: AtomicU32 = AtomicU32::new(0);
+static OSR_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
+/// The same for the `jit` engine, whose loops are compiled with their
+/// functions and so should never be entered on their own.
+static JIT_LOOPS: AtomicU32 = AtomicU32::new(0);
 /// Fixtures each engine ran, in the order of `Differential::ALL`.
 static RAN: [AtomicU32; Differential::ALL.len()] = [const { AtomicU32::new(0) }; Differential::ALL.len()];
 
@@ -103,28 +116,99 @@ impl Differential {
     }
 }
 
-/// The engines a fixture's preamble opts out of.
-fn opt_outs(source: &str) -> Result<Vec<Differential>, String> {
-    let mut out = Vec::new();
+/// What a fixture's preamble says: the engines it opts out of, and what has
+/// to have run.
+#[derive(Default)]
+struct Preamble {
+    opt_outs: Vec<Differential>,
+    bytecode_ops: Vec<String>,
+    bytecode_lowered: Vec<String>,
+    osr_entered: bool,
+}
+
+fn preamble(source: &str) -> Result<Preamble, String> {
+    let mut out = Preamble::default();
     for line in source.lines().take_while(|l| !l.trim_start().starts_with("----------")) {
-        let Some(list) = line.trim().strip_prefix("// engines:") else {
-            continue;
-        };
-        for word in list.split_whitespace() {
-            let name = word.strip_prefix('-')
-                .ok_or_else(|| format!("`{word}` in `engines:` is not an opt-out like `-aot`"))?;
-            let engine = Differential::ALL.into_iter().find(|e| e.name() == name)
-                .ok_or_else(|| format!("no engine `{name}`"))?;
-            out.push(engine);
+        let line = line.trim();
+        let words = |list: &str| list.split_whitespace().map(str::to_string).collect::<Vec<_>>();
+        if let Some(list) = line.strip_prefix("// engines:") {
+            for word in list.split_whitespace() {
+                let name = word.strip_prefix('-')
+                    .ok_or_else(|| format!("`{word}` in `engines:` is not an opt-out like `-aot`"))?;
+                let engine = Differential::ALL.into_iter().find(|e| e.name() == name)
+                    .ok_or_else(|| format!("no engine `{name}`"))?;
+                out.opt_outs.push(engine);
+            }
+        } else if let Some(list) = line.strip_prefix("// expect-bytecode-ops:") {
+            out.bytecode_ops.extend(words(list));
+        } else if let Some(list) = line.strip_prefix("// expect-bytecode-lowered:") {
+            out.bytecode_lowered.extend(words(list));
+        } else if let Some(what) = line.strip_prefix("// expect-osr:") {
+            if what.trim() != "entered" {
+                return Err(format!("`expect-osr:` takes `entered`, not `{}`", what.trim()));
+            }
+            out.osr_entered = true;
         }
     }
     Ok(out)
+}
+
+/// What the last analysis on this thread ran, for a fixture's expectations.
+#[derive(Default)]
+struct LastRun {
+    bytecode_ops: std::collections::BTreeSet<String>,
+    escaped: std::collections::BTreeSet<String>,
+    loops_entered: u32,
+    loops_refused: u32,
+}
+
+thread_local! {
+    static LAST_RUN: std::cell::RefCell<LastRun> = std::cell::RefCell::new(LastRun::default());
+}
+
+impl Preamble {
+    /// Whether the bytecode run did what the fixture says it has to.
+    fn check_bytecode(&self) -> Result<(), String> {
+        LAST_RUN.with(|run| {
+            let run = run.borrow();
+            for op in &self.bytecode_ops {
+                if !run.bytecode_ops.contains(op) {
+                    return Err(format!("the bytecode lowered nothing to `{op}`; it used {:?}", run.bytecode_ops));
+                }
+            }
+            for kind in &self.bytecode_lowered {
+                if run.escaped.contains(kind) {
+                    return Err(format!("the bytecode left a `{kind}` to the IR walker"));
+                }
+            }
+            Ok(())
+        })
+    }
+
+    /// Whether the osr run did what the fixture says it has to.
+    fn check_osr(&self) -> Result<(), String> {
+        if !self.osr_entered {
+            return Ok(());
+        }
+        LAST_RUN.with(|run| {
+            let run = run.borrow();
+            if run.loops_entered == 0 {
+                return Err("the osr engine entered no loop".to_string());
+            }
+            if run.loops_refused != 0 {
+                return Err(format!("the osr engine was refused at {} loops", run.loops_refused));
+            }
+            Ok(())
+        })
+    }
 }
 
 /// Sets the interpreter's engine and, optionally, a dispatcher.
 struct Setup {
     engine: Engine,
     dispatcher: Option<Box<dyn datalove_datafun_interp::CallDispatcher>>,
+    /// Which differential engine this is, if it is one.
+    differential: Option<Differential>,
 }
 
 impl ExecutorHooks for Setup {
@@ -136,6 +220,14 @@ impl ExecutorHooks for Setup {
     }
 
     fn finish(&mut self, executor: &mut ScriptExecutor) {
+        LAST_RUN.with(|run| {
+            let stats = executor.bytecode_stats();
+            *run.borrow_mut() = LastRun {
+                bytecode_ops: stats.op_kinds.clone(),
+                escaped: stats.escaped_kinds.clone(),
+                ..LastRun::default()
+            };
+        });
         let Some(dispatcher) = executor.take_dispatcher() else {
             return;
         };
@@ -145,8 +237,22 @@ impl ExecutorHooks for Setup {
             CHAOS_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
             CHAOS_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
         } else if let Some(jit) = dispatcher.as_any().downcast_ref::<JitEngine>() {
-            ENGINE_LOOPS.fetch_add(jit.stats().osr_compiled_count, Ordering::Relaxed);
-            ENGINE_LOOPS_REFUSED.fetch_add(jit.stats().osr_refused_count, Ordering::Relaxed);
+            let stats = jit.stats();
+            LAST_RUN.with(|run| {
+                let mut run = run.borrow_mut();
+                run.loops_entered = stats.osr_compiled_count;
+                run.loops_refused = stats.osr_refused_count;
+            });
+            match self.differential {
+                Some(Differential::Osr) => {
+                    OSR_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
+                    OSR_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
+                }
+                Some(Differential::Jit) => {
+                    JIT_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -282,11 +388,12 @@ fn c_build_and_run(unit: &IrCodeUnit, registry: &FunctionRegistry, dir: &Path) -
 /// rendering for the expected file.
 fn check(path: &Path) -> Result<String, String> {
     let source = std::fs::read_to_string(path).map_err(|e| format!("failed to read: {e}"))?;
-    let skip = opt_outs(&source)?;
+    let preamble = preamble(&source)?;
+    let skip = &preamble.opt_outs;
     let parsed = package_load_worldfile::parse_worldfile_sections(source.as_bytes())
         .map_err(|e| format!("failed to parse worldfile: {e}"))?;
 
-    let (reference, rendered) = analyze(&parsed, AnalysisOptions::default(), Setup { engine: Engine::IrWalker, dispatcher: None })?;
+    let (reference, rendered) = analyze(&parsed, AnalysisOptions::default(), Setup { engine: Engine::IrWalker, dispatcher: None, differential: None })?;
 
     let mut seed = DefaultHasher::new();
     source.hash(&mut seed);
@@ -309,7 +416,7 @@ fn check(path: &Path) -> Result<String, String> {
                 continue;
             }
             RAN[i].fetch_add(1, Ordering::Relaxed);
-            let (other, _) = analyze(&parsed, options, Setup { engine: Engine::Bytecode, dispatcher: None })?;
+            let (other, _) = analyze(&parsed, options, Setup { engine: Engine::Bytecode, dispatcher: None, differential: Some(engine) })?;
             let (want, got) = (observed(&reference), observed(&other));
             if want != got {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&want, &got)));
@@ -317,19 +424,22 @@ fn check(path: &Path) -> Result<String, String> {
             continue;
         }
         let interpreted = match engine {
-            Differential::Bytecode => Some(Setup { engine: Engine::Bytecode, dispatcher: None }),
-            Differential::Plain => Some(Setup { engine: Engine::PlainBytecode, dispatcher: None }),
+            Differential::Bytecode => Some(Setup { engine: Engine::Bytecode, dispatcher: None, differential: Some(engine) }),
+            Differential::Plain => Some(Setup { engine: Engine::PlainBytecode, dispatcher: None, differential: Some(engine) }),
             Differential::Jit => Some(Setup {
+                differential: Some(engine),
                 engine: Engine::IrWalker,
                 dispatcher: Some(Box::new(JitEngine::new(1).map_err(|e| e.to_string())?)),
             }),
             Differential::Chaos => Some(Setup {
+                differential: Some(engine),
                 engine: Engine::Bytecode,
                 dispatcher: Some(Box::new(
                     OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?,
                 )),
             }),
             Differential::Osr => Some(Setup {
+                differential: Some(engine),
                 engine: Engine::Bytecode,
                 dispatcher: Some({
                     let mut jit = JitEngine::new(u32::MAX).map_err(|e| e.to_string())?;
@@ -344,6 +454,11 @@ fn check(path: &Path) -> Result<String, String> {
             let (_, other) = analyze(&parsed, AnalysisOptions::default(), setup)?;
             if other != rendered {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&rendered, &other)));
+            }
+            match engine {
+                Differential::Bytecode => preamble.check_bytecode()?,
+                Differential::Osr => preamble.check_osr()?,
+                _ => {}
             }
             continue;
         }
@@ -387,11 +502,15 @@ fn report() -> Result<(), String> {
     if loops == 0 {
         return Err("the chaos dispatcher never entered a loop".to_string());
     }
-    let osr = ENGINE_LOOPS.load(Ordering::Relaxed);
-    let osr_refused = ENGINE_LOOPS_REFUSED.load(Ordering::Relaxed);
+    let osr = OSR_LOOPS.load(Ordering::Relaxed);
+    let osr_refused = OSR_LOOPS_REFUSED.load(Ordering::Relaxed);
     println!("osr: {osr} loops entered ({osr_refused} refused)");
     if osr == 0 {
         return Err("the osr engine never entered a loop".to_string());
+    }
+    let jit = JIT_LOOPS.load(Ordering::Relaxed);
+    if jit != 0 {
+        return Err(format!("the jit engine entered {jit} loops by OSR, though it compiles every function first"));
     }
     Ok(())
 }

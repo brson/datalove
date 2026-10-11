@@ -1,0 +1,58 @@
+// expect-bytecode-ops: BrCmpF32 BrCmpF64 BrCmpI64 BrCmpU64 BrCmpU32 ListGetCopy
+----------
+scriptunit-fragment
+----------
+
+// Loops whose conditions are a comparison only their branch reads, for each
+// width and signedness the bytecode fuses into one op.
+fun halves32(x: f32): u32
+  var v = x
+  var n: u32 = 0
+  loop while v .> 1.0
+    set v = v / 2.0
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret n
+end fun
+
+fun halves64(x: f64): u32
+  var v = x
+  var n: u32 = 0
+  loop while v .> 1.0
+    set v = v / 2.0
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret n
+end fun
+
+fun down_from(x: i64): !i64
+  var v = x
+  var steps: i64 = 0
+  loop while v .> -3
+    set v = v -! 1
+    set steps = steps +! 1
+  end loop
+  ret ok steps
+end fun
+
+fun up_to(x: u64): !u64
+  var v: u64 = 0
+  loop while v .< x
+    set v = v +! 7
+  end loop
+  ret ok v
+end fun
+
+fun first_over(ref xs: [u32], n: index, limit: u32): !index
+  var i: index = 0
+  loop while i .< n
+    if xs[i]! .> limit
+      ret ok i
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok i
+end fun
+
+let xs: [u32] = [3, 9, 27, 81]
+debuglog (halves32(100.0), halves64(1000.0), down_from(5), up_to(30), first_over(ref xs, : index / 4, 20))

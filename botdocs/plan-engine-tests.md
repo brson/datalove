@@ -134,6 +134,19 @@ about 700. A fixture opts out of an engine with a `// engines: -c` comment
 before its first section, saying why; one does. Under Miri only the
 engines that generate no code run.
 
+**A fixture can say what has to have run**, in the same place: agreeing with
+the reference proves nothing if an engine quietly ran something the
+reference's way, as the bytecode does when it leaves an instruction to the IR
+walker. `// expect-bytecode-ops: ListStoreAt BrCmpF64` requires the bytecode
+run to have lowered some body to each op; `// expect-bytecode-lowered:
+RefStore ListSet` requires that no body left an instruction of those kinds to
+the walker; `// expect-osr: entered` requires the osr run to have entered a
+loop and been refused at none. The bytecode keeps the kinds of op it lowered
+to and of instruction it left (`BcStats`), and the harness reads them, and
+the JIT's loop counts, after each run. The corpus-wide counts are split by
+engine too: the jit engine compiles every function first, so OSR entering any
+of its loops is a failure.
+
 **C AOT runs in the default job**, not only the slow one: over the whole
 corpus it costs about as much again as the rest, which is cheap next to a
 backend that drifts. Its first run found a fault no suite had reached: a table's

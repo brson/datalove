@@ -1,3 +1,4 @@
+// expect-bytecode-ops: ListCopyAt
 ----------
 scriptunit-fragment
 ----------

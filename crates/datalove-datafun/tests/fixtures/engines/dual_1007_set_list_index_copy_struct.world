@@ -1,3 +1,5 @@
+// expect-bytecode-ops: ListSetCopy
+// expect-bytecode-lowered: ListSet
 ----------
 scriptunit-fragment
 ----------

@@ -1,0 +1,38 @@
+// expect-bytecode-ops: ListSetCopy ListStoreAt
+// expect-bytecode-lowered: RefStore ListSet
+----------
+scriptunit-fragment
+----------
+
+// Writing elements in loops, in bounds and then past the end: a whole copy
+// element, a field of one, and a field of a map's value through a reference.
+fun fill(ps: [{x: u32, y: u32}], upto: index): ?[{x: u32, y: u32}]
+  var qs = ps
+  var i: index = 0
+  loop while i .< upto
+    set qs[i]? = {x = 7, y = 8}
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret some qs
+end fun
+
+fun bump(ps: [{x: u32, y: u32}], upto: index): ?[{x: u32, y: u32}]
+  var qs = ps
+  var i: index = 0
+  loop while i .< upto
+    set qs[i]?.y = 100
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret some qs
+end fun
+
+fun mark(m: %{u32 = {x: u32, y: u32}}, k: u32): ?%{u32 = {x: u32, y: u32}}
+  var n = m
+  set n[k]?.y = 9
+  ret some n
+end fun
+
+let ps: [{x: u32, y: u32}] = [{x = 1, y = 2}, {x = 3, y = 4}]
+let m: %{u32 = {x: u32, y: u32}} = %{1 = {x = 1, y = 1}, 2 = {x = 2, y = 2}}
+debuglog (fill(ps@, : index / 2), fill(ps@, : index / 3), bump(ps@, : index / 2), bump(ps@, : index / 5))
+debuglog (mark(m@, 2), mark(m@, 5))

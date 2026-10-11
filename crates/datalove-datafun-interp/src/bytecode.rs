@@ -817,6 +817,10 @@ pub struct BcStats {
     pub bodies: u32,
     pub ops: u32,
     pub escapes: u32,
+    /// Each kind of op the bodies lowered to, by name.
+    pub op_kinds: std::collections::BTreeSet<String>,
+    /// Each kind of IR instruction a body left to the IR walker, by name.
+    pub escaped_kinds: std::collections::BTreeSet<String>,
     /// Whether to count what runs on the IR walker as it runs, which costs a
     /// formatted string per instruction and so only with `DATALOVE_BC_STATS`.
     pub counting: bool,
@@ -893,7 +897,9 @@ struct Lowering<'a> {
     descs: Vec<*const rtdt::TyDesc>,
     rt: Vec<[(Loc, Desc); 3]>,
     statics: Vec<StaticSlot>,
-    escapes: u32,
+    /// What was left to the IR walker, by name: each instruction's variant,
+    /// or the edge or return that was.
+    escapes: Vec<String>,
     /// How many times each value is read, for fusing an op into its only use.
     uses: Vec<u32>,
     /// The `u32` each value nothing but its constant writes holds.
@@ -1076,11 +1082,11 @@ impl<'a> Lowering<'a> {
     }
 
     fn escape(&mut self, block: usize, index: usize) {
-        self.escapes += 1;
+        self.escapes.push(variant(&self.func.blocks[block].instructions[index]));
         self.emit(Op::Ir { block: block as u32, index: index as u32 });
     }
 
-    fn lower(mut self) -> (BcFunction, u32) {
+    fn lower(mut self) -> (BcFunction, Vec<String>) {
         let func = self.func;
         self.count_uses();
         let headers = self.loop_headers();
@@ -1148,7 +1154,7 @@ impl<'a> Lowering<'a> {
 
     /// Lay the blocks out in one sequence, with the prologue after them, and
     /// point every jump at the op its block starts at.
-    fn assemble(mut self, prologue: Vec<Op>) -> (BcFunction, u32) {
+    fn assemble(mut self, prologue: Vec<Op>) -> (BcFunction, Vec<String>) {
         let order = self.layout_order();
         let mut start = vec![0u32; self.blocks.len()];
         let mut ops = Vec::new();
@@ -1871,7 +1877,7 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::Jump { to: target.0 });
             }
             None => {
-                self.escapes += 1;
+                self.escapes.push("edge".to_string());
                 self.emit(Op::EdgeIr { block: block as u32, edge, to: target.0 });
             }
         }
@@ -1907,7 +1913,7 @@ impl<'a> Lowering<'a> {
                         self.emit(Op::Return { src, len });
                     }
                     _ => {
-                        self.escapes += 1;
+                        self.escapes.push("return".to_string());
                         self.emit(Op::ReturnIr { block: block as u32 });
                     }
                 }
@@ -2261,7 +2267,7 @@ impl BcFunction {
 }
 
 /// Lower a function body against its layout.
-pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout, optimize: bool) -> (BcFunction, u32) {
+pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout, optimize: bool) -> (BcFunction, Vec<String>) {
     let lowered = Lowering {
         func,
         layout,
@@ -2275,7 +2281,7 @@ pub(crate) fn lower(func: &IrCodeUnit, layout: &IrLayout, optimize: bool) -> (Bc
         descs: Vec::new(),
         rt: Vec::new(),
         statics: Vec::new(),
-        escapes: 0,
+        escapes: Vec::new(),
         uses: Vec::new(),
         const_u32: Vec::new(),
         pinned: Vec::new(),
@@ -3847,10 +3853,15 @@ impl BcFunction {
 }
 
 impl BcStats {
-    pub(crate) fn record(&mut self, bc: &BcFunction, escapes: u32) {
+    pub(crate) fn record(&mut self, bc: &BcFunction, escapes: Vec<String>) {
         self.bodies += 1;
         self.ops += bc.ops.len() as u32;
-        self.escapes += escapes;
+        self.escapes += escapes.len() as u32;
+        self.escaped_kinds.extend(escapes);
+        for op in &bc.ops {
+            let text = format!("{op:?}");
+            self.op_kinds.insert(text.split([' ', '{', '(']).next().unwrap_or("").to_string());
+        }
     }
 }
 

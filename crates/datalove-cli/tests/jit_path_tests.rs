@@ -91,6 +91,15 @@ fn an_inner_loop_needing_the_outer_ones_values_is_entered() {
     };
     assert_eq!(refused, 0, "a loop was refused:\n{stats}");
     assert!(compiled >= 1 && entered >= 1, "no loop was entered:\n{stats}");
+    // `drive`'s own loop satisfies the totals; `triangle` has to have been
+    // entered itself. Its row of the compile table is `codegen bytes loops
+    // entered function`.
+    let row = stats.lines().skip_while(|l| !l.starts_with("jit: longest to compile"))
+        .find(|l| l.ends_with(".triangle"))
+        .unwrap_or_else(|| panic!("no row for triangle in:\n{stats}"));
+    let triangle_entered: u64 = row.split_whitespace().nth(3).and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no entered count in `{row}`"));
+    assert!(triangle_entered >= 1, "triangle's loops were not entered:\n{stats}");
 }
 
 /// Recursion too deep for the stack, in compiled code and in the interpreter
