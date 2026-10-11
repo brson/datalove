@@ -126,11 +126,10 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord, }
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
-    if list_get(ref self, i) |held|
-      let same = equal(ref held, ref elem)
-      let unwanted = held
+    if equal_to_at(ref self, i, ref elem) |same|
       if same
         set found = true
+        break
       end if
     end if
     set i = icall add_wrapping_index(i, : index / 1)
@@ -144,16 +143,9 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
-    if list_get(ref self, i) |held|
-      let same = equal(ref held, ref elem)
-      let unwanted = held
-      if same
-        if at |already|
-          set at = some already
-        else
-          set at = some i
-        end if
-      end if
+    if equal(ref self[i]?, ref elem)
+      set at = some i
+      break
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
@@ -166,9 +158,7 @@ fun count_of<T>(ref self: [T], ref elem: T): index with { T is ord, }
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
-    if list_get(ref self, i) |held|
-      let same = equal(ref held, ref elem)
-      let unwanted = held
+    if equal_to_at(ref self, i, ref elem) |same|
       if same
         set seen = icall add_wrapping_index(seen, : index / 1)
       end if
@@ -179,39 +169,37 @@ fun count_of<T>(ref self: [T], ref elem: T): index with { T is ord, }
 end fun
 
 // The element that sorts first, or none when there are none.
+//
+// Finds where it is and clones only that one. On an empty list the read at the
+// end is out of bounds, which is the none.
 fun least<T>(ref self: [T]): ?T with { T is ord, }
-  var best: ?T = none
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var best: index = : index / 0
+  var i: index = : index / 1
   loop while i .< n
-    if list_get(ref self, i) |elem|
-      if best |held|
-        set best = some min(held, elem)
-      else
-        set best = some elem
-      end if
+    if less(ref self[i]?, ref self[best]?)
+      set best = i
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  ret best
+  ret some self[best]?@
 end fun
 
 // The element that sorts last, or none when there are none.
+//
+// Finds where it is and clones only that one. On an empty list the read at the
+// end is out of bounds, which is the none.
 fun greatest<T>(ref self: [T]): ?T with { T is ord, }
-  var best: ?T = none
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var best: index = : index / 0
+  var i: index = : index / 1
   loop while i .< n
-    if list_get(ref self, i) |elem|
-      if best |held|
-        set best = some max(held, elem)
-      else
-        set best = some elem
-      end if
+    if greater(ref self[i]?, ref self[best]?)
+      set best = i
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  ret best
+  ret some self[best]?@
 end fun
 
 // Whether no element sorts before the one in front of it.
@@ -219,25 +207,17 @@ end fun
 // An empty list and a list of one are sorted, having nothing out of order.
 fun is_sorted<T>(ref self: [T]): bool with { T is ord, }
   var ordered = true
-  var previous: ?T = none
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var i: index = : index / 1
   loop while i .< n
-    if list_get(ref self, i) |elem|
-      if previous |before|
-        let out_of_order = greater(ref before, ref elem)
-        let unwanted_before = before
-        if out_of_order
-          set ordered = false
-        end if
+    if greater_at(ref self, icall sub_wrapping_index(i, : index / 1), i) |out_of_order|
+      if out_of_order
+        set ordered = false
+        break
       end if
-      set previous = some elem
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  if previous |last|
-    let unwanted_last = last
-  end if
   ret ordered
 end fun
 
@@ -300,6 +280,17 @@ fun greater_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
   ret some greater(ref self[i]?, ref self[j]?)
 end fun
 
+// Whether `self[i]` sorts together with `self[j]`; none when either is out of
+// bounds.
+fun equal_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
+  ret some equal(ref self[i]?, ref self[j]?)
+end fun
+
+// Whether `self[i]` sorts together with elem; none when i is out of bounds.
+fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool with { T is ord, }
+  ret some equal(ref self[i]?, ref elem)
+end fun
+
 // Where an element that sorts together with this one is, or none.
 //
 // The list has to be sorted already; on one that is not, the answer says
@@ -312,20 +303,15 @@ fun binary_search<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
   loop while low .< high
     let span = icall sub_wrapping_index(high, low)
     let mid = icall add_wrapping_index(low, shift_right_wrapping(span, : u32 / 1))
-    if list_get(ref self, mid) |held|
-      let probe: T = held@
-      let wanted: T = elem@
-      let order = ord_compare(probe, wanted)
-      let unwanted_held = held
-      if order == : i8 / 0
-        set found = some mid
-        break
-      end if
-      if order .< : i8 / 0
-        set low = icall add_wrapping_index(mid, : index / 1)
-      else
-        set high = mid
-      end if
+    let order = compare(ref self[mid]?, ref elem)
+    if order == : i8 / 0
+      set found = some mid
+      break
+    end if
+    if order .< : i8 / 0
+      set low = icall add_wrapping_index(mid, : index / 1)
+    else
+      set high = mid
     end if
   end loop
   ret found
@@ -336,31 +322,20 @@ end fun
 // The list has to be sorted already, since only neighbours are compared.
 fun deduped<T>(ref self: [T]): [T] with { T is ord, }
   var out: [T] = []
-  var previous: ?T = none
+  if list_get(ref self, : index / 0) |first|
+    call list_push(mut out, first)
+  end if
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var i: index = : index / 1
   loop while i .< n
-    if list_get(ref self, i) |elem|
-      // What came before is compared and then let go; this element takes its
-      // place either way, so that a run of three or more is one element and
-      // not two.
-      var keep = true
-      if previous |before|
-        let same = equal(ref before, ref elem)
-        let unwanted_before = before
-        if same
-          set keep = false
+    if equal_at(ref self, icall sub_wrapping_index(i, : index / 1), i) |same|
+      if not same
+        if list_get(ref self, i) |elem|
+          call list_push(mut out, elem)
         end if
       end if
-      if keep
-        call list_push(mut out, elem@)
-      end if
-      set previous = some elem
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  if previous |last|
-    let unwanted_last = last
-  end if
   ret out
 end fun
