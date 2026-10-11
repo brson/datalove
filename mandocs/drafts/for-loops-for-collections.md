@@ -11,24 +11,31 @@ incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element.
 
 ```datalove
-fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
-  var at: ?index = none
+fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
+  var found = false
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
-    if equal(ref self[i]?, ref elem)
-      set at = some i
-      break
+    if equal_to_at(ref self, i, ref elem) |same|
+      if same
+        set found = true
+        break
+      end if
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  ret at
+  ret found
+end fun
+
+fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool with { T is ord }
+  ret some equal(ref self[i]?, ref elem)
 end fun
 ```
 
 This has a number of deficiencies,
 but for the purposes of the work at hand I care about the
-`self[i]?`, which does a bounds check every iteration,
+`self[i]?`, which does a bounds check every iteration
+(and for which `equal_to_at` exists just to accomodate the error handling),
 and the intrinsic call to `add_wrapping_index`.
 The indexing is a performance hazard,
 but maybe more importantly the wrapping math is a big
@@ -44,17 +51,14 @@ modest as it is.
 I want to write that function like the following.
 
 ```datalove
-fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
-  var at: ?index = none
-  let n = list_len(ref self)
-  var i: index = : index / 0
+fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
+  var found = false
   for item in self
     if equal(ref item, ref elem)
-      set at = some i
+      set found = true
       break
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret at
+  end for
+  ret found
 end fun
 ```
