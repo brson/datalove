@@ -25,7 +25,7 @@ use datalove_datafun_interp::{
     ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, InterpError, IrInterpreter,
     SitePolicy, Value,
 };
-use datalove_rt::c::LocalRtHandle;
+use datalove_rt::c::{self, LocalRtHandle};
 use datalove_rtdt as rtdt;
 
 use crate::{CallFrom, JitEngine, Recorded};
@@ -93,29 +93,25 @@ pub fn restore_dispatch_context(previous: PreviousContext) {
 fn abandon(rt: LocalRtHandle, error: InterpError) {
     ABANDONED_FOR.with(|cell| *cell.borrow_mut() = Some(error));
     // SAFETY: the handle compiled code was given.
-    unsafe { datalove_rt::rust::set_abandoning(rt, datalove_rt::rust::ABANDONED_FOR_ERROR) };
+    unsafe { c::dtlv_rti_abandon(rt, c::ABANDONED_FOR_ERROR) };
 }
 
 /// Get ready to enter compiled code: give it the limit to the stack it checks
 /// on entering each function.
 pub(crate) fn entering(rt: LocalRtHandle) {
     // SAFETY: the handle compiled code is given.
-    unsafe { datalove_rt::rust::set_stack_limit(rt, datalove_rt::rust::native_stack_limit()) };
+    unsafe { c::dtlv_rti_set_stack_limit(rt, c::dtlv_rti_native_stack_limit(rt)) };
 }
 
 /// The error the compiled code just returned from was abandoned for, if it
 /// was, clearing it; see `abandon`.
 pub(crate) fn take_abandonment(rt: LocalRtHandle) -> Result<(), InterpError> {
     // SAFETY: the handle compiled code was given.
-    let reason = unsafe { datalove_rt::rust::abandoning(rt) };
-    if reason == 0 {
-        return Ok(());
-    }
-    unsafe { datalove_rt::rust::set_abandoning(rt, 0) };
-    match reason {
-        datalove_rt::rust::ABANDONED_FOR_ERROR => Err(ABANDONED_FOR.with(|cell| cell.borrow_mut().take())
+    match unsafe { c::dtlv_rti_take_abandoned(rt) } {
+        0 => Ok(()),
+        c::ABANDONED_FOR_ERROR => Err(ABANDONED_FOR.with(|cell| cell.borrow_mut().take())
             .expect("calls abandoned for an error")),
-        datalove_rt::rust::ABANDONED_FOR_STACK => Err(InterpError::StackOverflow),
+        c::ABANDONED_FOR_STACK => Err(InterpError::StackOverflow),
         other => unreachable!("abandoned for reason {other}"),
     }
 }

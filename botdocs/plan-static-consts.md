@@ -107,7 +107,7 @@ are unaffected and stay immediate `Const` literals.
   turning one into a value deep-copies. No pointer into a pool outlives the
   code that took it, so a pool only has to live as long as its code unit.
 - **The allocator never sees pool memory.** `AllocLocal` in
-  `rt/src/impls/alloc.rs` keeps per-heap free lists, and freeing a pointer it
+  `rt/src/c/impls/alloc.rs` keeps per-heap free lists, and freeing a pointer it
   did not hand out would corrupt it, but a pool value is never owned by
   running code and so is never dropped by it. A clone out of the pool
   allocates on the caller's heap as any clone does.
@@ -150,7 +150,7 @@ at an address.
   compiled and outlive the compiled code.
 - **Cranelift AOT and C AOT.** Emit an init function that runs before the
   script, building each slot into a global with the existing const builders
-  and a second runtime instance, created as `rt/src/c.rs` creates the first.
+  and a second runtime instance, created as `rt/src/c/mod.rs` creates the first.
   `staticref` is the global's address.
 
 Pool lifetime follows the code unit:

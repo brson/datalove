@@ -1,9 +1,12 @@
 //! Datalove runtime.
 //!
-//! The `c` module contains the C runtime API.
-//! The `rust` module wraps it with safer Rusty accessors.
-//! The `impls` module contains the runtime implementation.
-//! It is private and should not be accessed outside the crate.
+//! The `c` module is the runtime's interface: the C API, and everything else
+//! outside the runtime may know about it, which is the `RtHeader` a handle
+//! points at and the data types of `rtdt`.
+//! The `rust` module wraps the C API in Rust abstractions, and goes through it
+//! like any other caller.
+//! The implementation is `c::impls`, private to `c`, so that nothing else, in
+//! this crate or out of it, reaches past the interface.
 //!
 //! - "rt" calls are called by the language and have a restricted ABI.
 //! - "rti" calls are emitted only by the compiler and have whatever ABI is needed.
@@ -41,6 +44,5 @@
 
 pub mod c;
 pub mod rust;
-pub mod impls;
 
 mod abi_table;

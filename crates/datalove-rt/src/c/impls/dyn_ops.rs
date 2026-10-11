@@ -211,7 +211,7 @@ unsafe fn place_bits(
         }
 
         if (*out_tydesc).type_tag == TyTag::Data {
-            return crate::impls::boxing::data_from_local_tagged(
+            return crate::c::impls::boxing::data_from_local_tagged(
                 rt, value, tag, tydesc, out);
         }
         std::ptr::copy_nonoverlapping(value as *const u8, out, width(tag));
@@ -666,12 +666,12 @@ pub unsafe fn field_read(
         // holds something real, is owned by the reader and wants a clone in
         // that shape; `clone_erased_local` decides which.
         if (*dest_tydesc).type_tag != TyTag::Data
-            && !crate::impls::boxing::needs_erasure(field_ty, dest_tydesc)
+            && !crate::c::impls::boxing::needs_erasure(field_ty, dest_tydesc)
         {
             core::ptr::copy_nonoverlapping(src, dest_out, (*field_ty).size as usize);
             return RtStatus::Ok;
         }
-        crate::impls::boxing::clone_erased_local(rt, src, field_ty, dest_out, dest_tydesc)
+        crate::c::impls::boxing::clone_erased_local(rt, src, field_ty, dest_out, dest_tydesc)
     }
 }
 

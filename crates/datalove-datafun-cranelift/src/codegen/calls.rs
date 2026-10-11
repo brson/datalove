@@ -10,6 +10,12 @@ use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
 
 use super::{uses_sret, FunctionCompiler, LocalCallee};
+use datalove_rt::c::{self, RtHeader};
+
+/// Where in what the runtime handle points at compiled code finds whether its
+/// calls are being abandoned, and the limit to the stack; see `RtHeader`.
+const ABANDONING_OFFSET: i32 = std::mem::offset_of!(RtHeader, abandoning) as i32;
+const STACK_LIMIT_OFFSET: i32 = std::mem::offset_of!(RtHeader, stack_limit) as i32;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile a Call instruction.
@@ -418,23 +424,25 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// In a JIT-compiled function's entry, abandon the calls under way if the
     /// stack is past the runtime's limit, rather than overflow it; see
-    /// `datalove_rt::rust::stack_limit_offset`.
+    /// `RtHeader::stack_limit`.
     pub(super) fn abandon_if_stack_too_deep(&mut self, builder: &mut FunctionBuilder) -> Result<(), CraneliftError> {
-        let Some(offset) = self.abandoning_offset else { return Ok(()) };
+        if !self.abandon_on_errors {
+            return Ok(());
+        }
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("a stack check requires the runtime handle".into())
         })?;
         let sp = builder.ins().get_stack_pointer(PTR_TYPE);
         let limit = builder.ins().load(
-            PTR_TYPE, MemFlagsData::new(), rt_handle, datalove_rt::rust::stack_limit_offset());
+            PTR_TYPE, MemFlagsData::new(), rt_handle, STACK_LIMIT_OFFSET);
         let too_deep = builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, sp, limit);
         let abandon = builder.create_block();
         let carry_on = builder.create_block();
         builder.ins().brif(too_deep, abandon, &[], carry_on, &[]);
         builder.switch_to_block(abandon);
         builder.seal_block(abandon);
-        let reason = builder.ins().iconst(cl_ir::types::I8, datalove_rt::rust::ABANDONED_FOR_STACK as i64);
-        builder.ins().store(MemFlagsData::new(), reason, rt_handle, offset);
+        let reason = builder.ins().iconst(cl_ir::types::I8, c::ABANDONED_FOR_STACK as i64);
+        builder.ins().store(MemFlagsData::new(), reason, rt_handle, ABANDONING_OFFSET);
         builder.ins().return_(&[]);
         builder.switch_to_block(carry_on);
         builder.seal_block(carry_on);
@@ -444,13 +452,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Return at once if the call just made is being abandoned: an
     /// interpreted function under it failed, and every compiled frame between
     /// it and the interpreter goes without finishing. JIT-compiled code only;
-    /// see `datalove_rt::rust::abandoning_offset`.
+    /// see `RtHeader::abandoning`.
     fn return_if_abandoning(&mut self, builder: &mut FunctionBuilder) -> Result<(), CraneliftError> {
-        let Some(offset) = self.abandoning_offset else { return Ok(()) };
+        if !self.abandon_on_errors {
+            return Ok(());
+        }
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("a call that can be abandoned requires the runtime handle".into())
         })?;
-        let flag = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), rt_handle, offset);
+        let flag = builder.ins().load(cl_ir::types::I8, MemFlagsData::new(), rt_handle, ABANDONING_OFFSET);
         let abandon = builder.create_block();
         let carry_on = builder.create_block();
         builder.ins().brif(flag, abandon, &[], carry_on, &[]);

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate the runtime interface from the runtime's definitions.
 
-`crates/datalove-rt/src/c.rs` defines every `dtlv_rti_*` function the ABI
+`crates/datalove-rt/src/c/mod.rs` defines every `dtlv_rti_*` function the ABI
 exports. Three files are generated from it:
 
 - `crates/datalove-rti/src/table.rs`, the table of function pointers a rider
@@ -23,7 +23,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "crates" / "datalove-rt" / "src" / "c.rs"
+SOURCE = ROOT / "crates" / "datalove-rt" / "src" / "c" / "mod.rs"
 TABLE = ROOT / "crates" / "datalove-rti" / "src" / "table.rs"
 CALL = ROOT / "crates" / "datalove-rti" / "src" / "call.rs"
 FILLED = ROOT / "crates" / "datalove-rt" / "src" / "abi_table.rs"
@@ -130,7 +130,7 @@ def main():
     shape = fnv1a("".join(f"{name}:{ptype};" for name, ptype in typed).encode())
     TABLE.write_text(f'''//! The table of runtime functions a rider calls.
 //!
-//! Generated from `datalove-rt`'s `c.rs` by `scripts/gen-rti.py`. Do not edit.
+//! Generated from `datalove-rt`'s `c/mod.rs` by `scripts/gen-rti.py`. Do not edit.
 //!
 //! A rider does not link the runtime, so it cannot call these by name. It
 //! gets them from the handle it is passed, which carries a pointer to one of
@@ -192,7 +192,7 @@ pub struct RtiTable {{
     listed = "\n".join(f"//! - `{name}`" for name in stateless)
     CALL.write_text(f'''//! Calling the runtime through the table on the handle.
 //!
-//! Generated from `datalove-rt`'s `c.rs` by `scripts/gen-rti.py`. Do not edit.
+//! Generated from `datalove-rt`'s `c/mod.rs` by `scripts/gen-rti.py`. Do not edit.
 //!
 //! Each of these finds the table on the handle it is given and calls through
 //! it, so a rider writes `call::dtlv_rti_string_from_bytes(rt, ..)` and does
@@ -226,8 +226,9 @@ use crate::{{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus}};
 //! whose type does not match the function assigned to it does not compile, so
 //! there is nothing to assert separately.
 //!
-//! [`RtLocal`](crate::impls::rt_local::RtLocal) holds a reference to this as
-//! its first field, which is how a rider reaches it from a handle.
+//! The runtime's state starts with an
+//! [`RtHeader`](datalove_rti::RtHeader) holding a reference to this, which is
+//! how a rider reaches it from a handle.
 
 use datalove_rti::table::RtiTable;
 
@@ -239,7 +240,7 @@ pub static TABLE: RtiTable = RtiTable {{
 }};
 
 /// The declarations must cover every export, not merely agree with the ones
-/// they name. A function added to `c.rs` without regenerating leaves the
+/// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
     datalove_rti::table::EXPORTED == {len(found)},

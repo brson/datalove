@@ -507,8 +507,8 @@ unsafe fn pretty_map(
             let key_size = key_ty.size() as usize;
             let value_size = value_ty.size() as usize;
 
-            let map_ty = crate::impls::btreemap::MapTy::of(tydesc);
-            let mut current_leaf = crate::impls::btreemap::leftmost_leaf(
+            let map_ty = crate::c::impls::btreemap::MapTy::of(tydesc);
+            let mut current_leaf = crate::c::impls::btreemap::leftmost_leaf(
                 map.root as *mut rtdt::MapNode, map_ty);
             let mut entry_count = 0u32;
 
@@ -560,8 +560,8 @@ unsafe fn pretty_set(
         if !set.root.is_null() && set.len > rtdt::Index::ZERO {
             let elem_size = elem_ty.size() as usize;
 
-            let set_ty = crate::impls::set::SetTy::of(tydesc);
-            let mut current_leaf = crate::impls::set::leftmost_leaf(
+            let set_ty = crate::c::impls::set::SetTy::of(tydesc);
+            let mut current_leaf = crate::c::impls::set::leftmost_leaf(
                 set.root as *mut rtdt::SetNode, set_ty);
             let mut elem_count = 0u32;
 
@@ -873,7 +873,7 @@ unsafe fn pretty_table(
 ) -> Result<(), ()> {
     unsafe {
         let table = &*(value_ref as *const rtdt::Table);
-        let column_tydescs = crate::impls::table::collect_column_tydescs(tydesc);
+        let column_tydescs = crate::c::impls::table::collect_column_tydescs(tydesc);
 
         // Format: {| col1, col2; val1, val2; val3, val4 |}
         // Header row with column names, then data rows separated by ";".
@@ -897,7 +897,7 @@ unsafe fn pretty_table(
                         push_str(rt, string_mut, string_tydesc, b", ")?;
                     }
 
-                    let elem_ptr = crate::impls::table::element_ptr(
+                    let elem_ptr = crate::c::impls::table::element_ptr(
                         table.data,
                         &column_tydescs,
                         row,
@@ -924,7 +924,7 @@ unsafe fn push_str(
     }
 
     unsafe {
-        let status = crate::impls::string::string_push_bytes_local(
+        let status = crate::c::impls::string::string_push_bytes_local(
             rt,
             string_mut,
             string_tydesc,
@@ -943,7 +943,7 @@ unsafe fn push_str(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::impls::rt_local;
+    use crate::c::impls::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {
@@ -961,7 +961,7 @@ mod tests {
         unsafe {
             let tydesc = create_string_tydesc();
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
@@ -1008,7 +1008,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
             assert_eq!(get_string_contents(&output_string), "true");
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
@@ -1047,7 +1047,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
             assert_eq!(get_string_contents(&output_string), "42");
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
@@ -1086,7 +1086,7 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
             assert_eq!(get_string_contents(&output_string), "3.14");
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
@@ -1108,14 +1108,14 @@ mod tests {
             // Create a string value.
             let mut string_val = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let string_tydesc = create_string_tydesc();
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 string_val.as_mut_ptr() as *mut u8,
                 &string_tydesc,
             );
             let mut string_val = string_val.assume_init();
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
@@ -1134,13 +1134,13 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
             assert_eq!(get_string_contents(&output_string), "\"hello\"");
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,
@@ -1161,14 +1161,14 @@ mod tests {
 
             let mut string_val = std::mem::MaybeUninit::<rtdt::String>::uninit();
             let string_tydesc = create_string_tydesc();
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 string_val.as_mut_ptr() as *mut u8,
                 &string_tydesc,
             );
             let mut string_val = string_val.assume_init();
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
@@ -1187,13 +1187,13 @@ mod tests {
             assert_eq!(status, RtStatus::Ok);
             assert_eq!(get_string_contents(&output_string), "\"hello\\nworld\"");
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut string_val as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
-            crate::impls::string::string_destroy_local(
+            crate::c::impls::string::string_destroy_local(
                 rt_handle,
                 &mut output_string as *mut rtdt::String as *mut u8,
                 &output_tydesc,

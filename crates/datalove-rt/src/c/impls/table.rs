@@ -5,7 +5,7 @@
 //! for column-oriented operations.
 
 use crate::c::{LocalRtHandle, RtStatus};
-use crate::impls::rt_local;
+use crate::c::impls::rt_local;
 use datalove_rtdt as rtdt;
 
 /// Collect column type descriptors from a table tydesc into a Vec.
@@ -88,7 +88,7 @@ pub unsafe fn table_destroy_impl(
                     col,
                     table.capacity.0,
                 );
-                let status = crate::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
+                let status = crate::c::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
                 if status != RtStatus::Ok {
                     return status;
                 }
@@ -280,13 +280,13 @@ pub unsafe fn table_set_element(
 
         // Destroy old value.
         let col_tydesc = column_tydescs[col as usize];
-        let status = crate::impls::destroy::any_destroy_local(rt, dst, col_tydesc);
+        let status = crate::c::impls::destroy::any_destroy_local(rt, dst, col_tydesc);
         if status != RtStatus::Ok {
             return status;
         }
 
         // Clone new value into place.
-        crate::impls::clone::clone_value(rt, value_ref, value_tydesc, dst)
+        crate::c::impls::clone::clone_value(rt, value_ref, value_tydesc, dst)
     }
 }
 
@@ -318,7 +318,7 @@ pub unsafe fn table_clear_impl(
                     col,
                     table.capacity.0,
                 );
-                let status = crate::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
+                let status = crate::c::impls::destroy::any_destroy_local(rt, elem, col_tydesc);
                 if status != RtStatus::Ok {
                     return status;
                 }

@@ -1,7 +1,7 @@
 //! String operations for the Datalove runtime.
 
 use datalove_rtdt as rtdt;
-use crate::impls::rt_local::RtLocal;
+use crate::c::impls::rt_local::RtLocal;
 use crate::c::{LocalRtHandle, RtStatus};
 
 /// Creates a new empty string.
@@ -198,7 +198,7 @@ pub unsafe fn string_clear_local(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::impls::rt_local;
+    use crate::c::impls::rt_local;
 
     unsafe fn create_string_tydesc() -> rtdt::TyDesc {
         rtdt::TyDesc {

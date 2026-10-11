@@ -1,6 +1,6 @@
 //! Calling the runtime through the table on the handle.
 //!
-//! Generated from `datalove-rt`'s `c.rs` by `scripts/gen-rti.py`. Do not edit.
+//! Generated from `datalove-rt`'s `c/mod.rs` by `scripts/gen-rti.py`. Do not edit.
 //!
 //! Each of these finds the table on the handle it is given and calls through
 //! it, so a rider writes `call::dtlv_rti_string_from_bytes(rt, ..)` and does
@@ -1352,6 +1352,50 @@ pub unsafe fn dtlv_rti_table_clear_local(rt: LocalRtHandle, table_mut: *mut u8, 
 #[inline]
 pub unsafe fn dtlv_rti_table_len(rt: LocalRtHandle, table_ref: *const u8, table_tydesc: *const rtdt::TyDesc) -> rtdt::IndexRepr {
     unsafe { (crate::table(rt).dtlv_rti_table_len)(rt, table_ref, table_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_abandon`](crate::table::RtiTable::dtlv_rti_abandon).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_abandon(rt: LocalRtHandle, reason: u8) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_abandon)(rt, reason) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_take_abandoned`](crate::table::RtiTable::dtlv_rti_take_abandoned).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_take_abandoned(rt: LocalRtHandle) -> u8 {
+    unsafe { (crate::table(rt).dtlv_rti_take_abandoned)(rt) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_set_stack_limit`](crate::table::RtiTable::dtlv_rti_set_stack_limit).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_set_stack_limit(rt: LocalRtHandle, limit: usize) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_set_stack_limit)(rt, limit) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_native_stack_limit`](crate::table::RtiTable::dtlv_rti_native_stack_limit).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_native_stack_limit(rt: LocalRtHandle) -> usize {
+    unsafe { (crate::table(rt).dtlv_rti_native_stack_limit)(rt) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_set_debug_mode`](crate::table::RtiTable::dtlv_rti_set_debug_mode).

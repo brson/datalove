@@ -115,10 +115,10 @@ use crate::CraneliftError;
 pub struct FunctionCompiler<'a, M: Module> {
     /// The IR code unit being compiled.
     func: &'a IrCodeUnit,
-    /// Where the runtime says whether calls are being abandoned, if this code
-    /// is the JIT's and has to look after each call; see
+    /// Whether this code is the JIT's, and has to look after each call for
+    /// whether it is being abandoned, and check the stack on entry; see
     /// `return_if_abandoning`.
-    abandoning_offset: Option<i32>,
+    abandon_on_errors: bool,
     /// Function-specific context (always present for compiled code units).
     func_ctx: &'a FunctionContext,
     /// Frame layout for values and slots.
@@ -246,7 +246,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Self {
             func,
-            abandoning_offset: None,
+            abandon_on_errors: false,
             func_ctx,
             layout,
             isa,
@@ -289,7 +289,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// is being abandoned, and return if so: what the JIT's code has to do,
     /// since what it calls may be interpreted.
     pub fn abandon_on_interpreter_errors(&mut self) {
-        self.abandoning_offset = Some(datalove_rt::rust::abandoning_offset());
+        self.abandon_on_errors = true;
     }
 
     /// Set all local function mappings at once.

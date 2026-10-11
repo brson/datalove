@@ -2,7 +2,7 @@
 //!
 //! Uses a simple growable array structure with element-based capacity.
 
-use crate::impls::rt_local::RtLocal;
+use crate::c::impls::rt_local::RtLocal;
 use datalove_rtdt as rtdt;
 use datalove_rtdt::*;
 use crate::c::RtStatus;
@@ -67,7 +67,7 @@ pub unsafe fn list_create_from_slice_impl(
         let dest_ptr = unsafe { data.add((i as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Clean up partially created list.
@@ -218,7 +218,7 @@ pub unsafe fn list_get_impl(
     // Clone element to option payload.
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::clone::clone_value(
+        crate::c::impls::clone::clone_value(
             rt_handle,
             list.element_ptr(index),
             element_ty.as_ptr(),
@@ -258,7 +258,7 @@ pub unsafe fn list_set_impl(
 
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
+        crate::c::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
     };
     if status != RtStatus::Ok {
         return status;
@@ -410,7 +410,7 @@ pub unsafe fn list_get_as_data_impl(
     // The list keeps its element, so the data gets a clone of it.
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::boxing::data_clone_from_local(
+        crate::c::impls::boxing::data_clone_from_local(
             rt_handle,
             list.element_ptr(index),
             element_ty.as_ptr(),
@@ -459,7 +459,7 @@ pub unsafe fn list_get_erased_impl(
     // inside it.
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::boxing::clone_erased_local(
+        crate::c::impls::boxing::clone_erased_local(
             rt_handle,
             list.element_ptr(index),
             element_ty.as_ptr(),
@@ -499,7 +499,7 @@ pub unsafe fn list_pop_erased_impl(
     let last_index = list.size() - 1;
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::boxing::erase_local(
+        crate::c::impls::boxing::erase_local(
             rt_handle,
             list.element_ptr(last_index),
             element_ty.as_ptr(),
@@ -538,7 +538,7 @@ pub unsafe fn list_pop_as_data_impl(
     let last_index = list.size() - 1;
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::boxing::data_from_local(
+        crate::c::impls::boxing::data_from_local(
             rt_handle,
             list.element_ptr(last_index),
             element_ty.as_ptr(),
@@ -580,7 +580,7 @@ pub unsafe fn list_push_data_impl(
     // Move the value out of the data and straight into the new slot.
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let status = unsafe {
-        crate::impls::boxing::data_into_local(
+        crate::c::impls::boxing::data_into_local(
             rt_handle,
             data_in,
             list.end_ptr(),
@@ -616,14 +616,14 @@ pub unsafe fn list_set_data_impl(
     let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
     let element_ptr = list.element_ptr_mut(index);
     let status = unsafe {
-        crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_ty.as_ptr())
+        crate::c::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_ty.as_ptr())
     };
     if status != RtStatus::Ok {
         return status;
     }
 
     unsafe {
-        crate::impls::boxing::data_into_local(rt_handle, data_in, element_ptr, element_ty.as_ptr())
+        crate::c::impls::boxing::data_into_local(rt_handle, data_in, element_ptr, element_ty.as_ptr())
     }
 }
 
@@ -670,7 +670,7 @@ pub unsafe fn list_insert_data_impl(
         list.end_ptr()
     };
     let status = unsafe {
-        crate::impls::boxing::data_into_local(rt_handle, data_in, hole, element_ty.as_ptr())
+        crate::c::impls::boxing::data_into_local(rt_handle, data_in, hole, element_ty.as_ptr())
     };
     if status != RtStatus::Ok {
         return status;
@@ -714,7 +714,7 @@ pub unsafe fn list_remove_erased_impl(
     let element_size = element_ty.size() as usize;
     let element_ptr = list.element_ptr_mut(index);
     let status = unsafe {
-        crate::impls::boxing::erase_local(
+        crate::c::impls::boxing::erase_local(
             rt_handle, element_ptr, element_ty.as_ptr(), opt.payload_ptr(), slot_ty.as_ptr(),
         )
     };
@@ -756,7 +756,7 @@ pub unsafe fn list_remove_as_data_impl(
     let element_size = element_ty.size() as usize;
     let element_ptr = list.element_ptr_mut(index);
     let status = unsafe {
-        crate::impls::boxing::data_from_local(
+        crate::c::impls::boxing::data_from_local(
             rt_handle, element_ptr, element_ty.as_ptr(), opt.payload_ptr(),
         )
     };
@@ -999,7 +999,7 @@ pub unsafe fn list_extend_from_slice_impl(
         let dest_ptr = unsafe { list.data_mut().add(((size + i) as usize) * (element_size as usize)) };
 
         let status = unsafe {
-            crate::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
+            crate::c::impls::clone::clone_value(rt_handle, src_ptr, element_tydesc.as_ptr(), dest_ptr)
         };
         if status != RtStatus::Ok {
             // Update size to reflect what was successfully added.
@@ -1079,7 +1079,7 @@ unsafe fn destroy_elements(
 
     for element_ptr in iter {
         let status = unsafe {
-            crate::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
+            crate::c::impls::destroy::any_destroy_local(rt_handle, element_ptr, element_tydesc.as_ptr())
         };
         if status != RtStatus::Ok {
             return status;

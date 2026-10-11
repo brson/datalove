@@ -137,7 +137,7 @@ impl IrInterpreter {
         // The IR walker recurses on the native stack, a call at a time, and
         // the bytecode does where it runs a call on the walker.
         let here = 0u8;
-        if (&here as *const u8 as usize) < datalove_rt::rust::native_stack_limit() {
+        if (&here as *const u8 as usize) < unsafe { datalove_rt::c::dtlv_rti_native_stack_limit(self.runtime.handle()) } {
             return Err(InterpError::StackOverflow);
         }
         if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode) {

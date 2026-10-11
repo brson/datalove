@@ -1555,7 +1555,7 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   through it the same way every backend does: `(ptr, tydesc)` per argument, the
   result through an out pair, and a status back.
 
-The runtime's C API (`datalove-rt/src/c.rs`) is entirely `dtlv_rti_*`: calls
+The runtime's C API (`datalove-rt/src/c/mod.rs`) is entirely `dtlv_rti_*`: calls
 only the compiler emits, which may use whatever ABI is convenient. The crate
 docs also describe a `dtlv_rt_*` family the language would call under a
 restricted ABI, but none exist yet. Everything but `init` takes a runtime
@@ -1566,7 +1566,7 @@ handle, and every value pointer is followed by its tydesc.
 The runtime allocator can record every live allocation, so that `shutdown`
 reports what leaked and every `free` checks that its pointer is known (double
 free, untracked pointer) and that its size, align and count match what was
-allocated. `LeakCheckMode` (`datalove-rt/src/impls/alloc.rs`) is read from
+allocated. `LeakCheckMode` (`datalove-rt/src/c/impls/alloc.rs`) is read from
 `DATALOVE_LEAK_CHECK` -- `ignore`, `warn`, `panic`, `panic-backtrace` -- and
 defaults to **`Ignore`**, which skips all of it. The justfile sets
 `LEAK_CHECK := "panic"` on every recipe that runs tests, and children inherit
@@ -2103,7 +2103,7 @@ The three `module-change-*` kinds drive the memoization tests.
 | `datafun/src/pipeline/compiled_world.rs` | `CompiledWorld` |
 | `datafun/src/incremental.rs` | `IncrementalModuleWorld`, `Roots` |
 | `buildinfo/build.rs` | Decides `BuildInfo` |
-| `rt/src/impls/alloc.rs` | The runtime allocator, `LeakCheckMode` |
+| `rt/src/c/impls/alloc.rs` | The runtime allocator, `LeakCheckMode` |
 | `bcts/src/parser_util.rs` | Token gluing, `eat_number` |
 | `sys/std/rider/build.rs` | Generates `symbols()` from `rider.dli` |
 | `interp/src/native.rs` | `NativeFunctionTable`, the C ABI bridge (`call_c`) |

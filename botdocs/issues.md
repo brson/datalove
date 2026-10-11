@@ -218,10 +218,10 @@ evaluation report unbounded recursion as `InterpError::StackOverflow`:
 
 - The bytecode bounds its own frame stack.
 - The IR walker checks the native stack pointer at each call against
-  `datalove_rt::rust::native_stack_limit()`, which is 1 MiB above the
+  `dtlv_rti_native_stack_limit`, which is 1 MiB above the
   thread's stack bottom, from `pthread_getattr_np`.
 - JIT-compiled code makes the same check in its prologue. It also returns at
-  once when an interpreted callee fails (`RtLocal.abandoning`), and the error
+  once when an interpreted callee fails (`RtHeader::abandoning`), and the error
   comes back through the trampoline.
 - `jit_path_tests` and `deep_recursion_tests` check this.
 
@@ -628,7 +628,7 @@ per compile of the module. That is a hash, not a copy.
 
 ### The allocator maps a page per large block and keeps every small page
 
-**Reasoned from `datalove-rt/src/impls/alloc.rs`; none of it measured as a
+**Reasoned from `datalove-rt/src/c/impls/alloc.rs`; none of it measured as a
 cost.** Three structural costs in the runtime allocator:
 
 - **Every block from 2049 to 4096 bytes is its own `mmap`.** The largest size

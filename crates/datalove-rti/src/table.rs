@@ -1,6 +1,6 @@
 //! The table of runtime functions a rider calls.
 //!
-//! Generated from `datalove-rt`'s `c.rs` by `scripts/gen-rti.py`. Do not edit.
+//! Generated from `datalove-rt`'s `c/mod.rs` by `scripts/gen-rti.py`. Do not edit.
 //!
 //! A rider does not link the runtime, so it cannot call these by name. It
 //! gets them from the handle it is passed, which carries a pointer to one of
@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 134;
+pub const EXPORTED: usize = 138;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 134;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x64fd13270c7f59ed;
+pub const TABLE_SHAPE: u64 = 0x1a39c4673c437bd5;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -153,6 +153,10 @@ pub struct RtiTable {
     pub dtlv_rti_table_set_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, u32, *const u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_table_clear_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_table_len: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc) -> rtdt::IndexRepr,
+    pub dtlv_rti_abandon: unsafe extern "C-unwind" fn(LocalRtHandle, u8) -> RtStatus,
+    pub dtlv_rti_take_abandoned: unsafe extern "C-unwind" fn(LocalRtHandle) -> u8,
+    pub dtlv_rti_set_stack_limit: unsafe extern "C-unwind" fn(LocalRtHandle, usize) -> RtStatus,
+    pub dtlv_rti_native_stack_limit: unsafe extern "C-unwind" fn(LocalRtHandle) -> usize,
     pub dtlv_rti_set_debug_mode: unsafe extern "C-unwind" fn(LocalRtHandle, DebugOutputMode) -> RtStatus,
     pub dtlv_rti_debuglog_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_get_debug_buffer: unsafe extern "C-unwind" fn(LocalRtHandle, *mut *const u8, *mut usize) -> RtStatus,

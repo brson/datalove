@@ -426,7 +426,7 @@ pub unsafe fn clone_erased_local(
     unsafe {
         if (*dst_tydesc).type_tag == TyTag::Data {
             return if (*src_tydesc).type_tag == TyTag::Data {
-                crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out)
+                crate::c::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out)
             } else {
                 data_clone_from_local(rt, src_in, src_tydesc, dst_out)
             };
@@ -439,7 +439,7 @@ pub unsafe fn clone_erased_local(
         // the wrong widths from the erased field on.
         //
         if !needs_erasure(src_tydesc, dst_tydesc) {
-            return crate::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out);
+            return crate::c::impls::clone::clone_value(rt, src_in, src_tydesc, dst_out);
         }
         clone_into_erased_shape(rt, src_in, src_tydesc, dst_out, dst_tydesc)
     }
@@ -467,16 +467,16 @@ unsafe fn clone_into_erased_shape(
     unsafe {
         let size = (*src_tydesc).size;
         let align = (*src_tydesc).align;
-        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+        let rt_ref = &mut *(rt as *mut crate::c::impls::rt_local::RtLocal);
         let scratch = rt_ref.alloc.alloc(size, align, 1);
         if scratch.is_null() {
             return RtStatus::Error;
         }
-        let mut status = crate::impls::clone::clone_value(rt, src_in, src_tydesc, scratch);
+        let mut status = crate::c::impls::clone::clone_value(rt, src_in, src_tydesc, scratch);
         if status == RtStatus::Ok {
             status = erase_local(rt, scratch, src_tydesc, dst_out, dst_tydesc);
         }
-        let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+        let rt_ref = &mut *(rt as *mut crate::c::impls::rt_local::RtLocal);
         rt_ref.alloc.free(size, align, 1, scratch);
         status
     }
@@ -638,7 +638,7 @@ pub unsafe fn data_into_local(
                     std::ptr::copy_nonoverlapping(value_ptr, dest_out, size);
                 }
                 let inner_ty = rtdt::TyDescRef::from_ptr(inner_tydesc);
-                let rt_ref = &mut *(rt as *mut crate::impls::rt_local::RtLocal);
+                let rt_ref = &mut *(rt as *mut crate::c::impls::rt_local::RtLocal);
                 rt_ref.alloc.free(
                     inner_ty.size(),
                     inner_ty.align(),
@@ -776,7 +776,7 @@ pub unsafe fn data_clone_from_local(
     }
 
     let status = unsafe {
-        crate::impls::clone::clone_value(rt, inner_in, inner_tydesc, box_ptr)
+        crate::c::impls::clone::clone_value(rt, inner_in, inner_tydesc, box_ptr)
     };
     if status != RtStatus::Ok {
         return status;

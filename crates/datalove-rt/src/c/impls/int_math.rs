@@ -1,7 +1,7 @@
 //! Bigint arithmetic operations for the Datalove runtime.
 
 use datalove_rtdt as rtdt;
-use crate::impls::rt_local::RtLocal;
+use crate::c::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 
 /// The most limbs an `Int` holds, its size being a signed 32-bit count.

@@ -109,11 +109,52 @@ const fn mix(mut hash: u64, value: u64) -> u64 {
     hash
 }
 
-/// The table of runtime functions a handle carries.
+/// The start of what a runtime handle points at: the whole of what a holder of
+/// a handle may assume about it.
 ///
-/// A handle points at the runtime's own state, whose first word is a pointer
-/// to its table. That first word is the whole of what a holder of a handle
-/// may assume about what it points at; the rest belongs to the runtime.
+/// The runtime's own state begins with this, and the rest belongs to the
+/// runtime. A rider reads only `table`. Compiled code also reads and writes
+/// the other two fields in place, after every call and on entry to every
+/// function, which is too often to call the runtime for: their offsets are
+/// part of the ABI, so they are declared here rather than agreed by accident.
+#[repr(C)]
+pub struct RtHeader {
+    /// The functions a rider calls the runtime through. First, and it has to
+    /// stay first.
+    pub table: &'static table::RtiTable,
+    /// Why compiled code is abandoning the calls it is in -- one of the
+    /// `ABANDONED_FOR_*` reasons -- or 0 if it is not.
+    ///
+    /// Compiled code has no way to return an interpreter's error: its results
+    /// are values. So when an interpreted function it called fails, or it
+    /// finds the stack too deep, this is set, and compiled code checks it
+    /// after each call it makes and returns at once. The interpreter, where it
+    /// entered the compiled code, takes the reason back and reports the error.
+    /// Set through `dtlv_rti_abandon`, taken through `dtlv_rti_take_abandoned`.
+    pub abandoning: u8,
+    /// The lowest address compiled code lets the native stack grow to, or 0
+    /// for no limit. Compiled code compares its stack pointer with it on
+    /// entry, and abandons for `ABANDONED_FOR_STACK` past it.
+    pub stack_limit: usize,
+}
+
+/// An interpreted callee of compiled code failed.
+pub const ABANDONED_FOR_ERROR: u8 = 1;
+
+/// Compiled code found the stack past `RtHeader::stack_limit`.
+pub const ABANDONED_FOR_STACK: u8 = 2;
+
+/// The header of what `rt` points at.
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out and has not shut down.
+#[inline]
+pub unsafe fn header(rt: LocalRtHandle) -> *mut RtHeader {
+    rt as *mut RtHeader
+}
+
+/// The table of runtime functions a handle carries.
 ///
 /// [`call`] is the readable way to reach these. Use this directly for the few
 /// functions that take no handle and so have no wrapper.
@@ -123,7 +164,7 @@ const fn mix(mut hash: u64, value: u64) -> u64 {
 /// `rt` must be a handle the runtime gave out and has not shut down.
 #[inline]
 pub unsafe fn table(rt: LocalRtHandle) -> &'static table::RtiTable {
-    unsafe { &**(rt as *const *const table::RtiTable) }
+    unsafe { (*header(rt)).table }
 }
 
 /// A runtime handle. Needed for all calls.
@@ -131,8 +172,8 @@ pub unsafe fn table(rt: LocalRtHandle) -> &'static table::RtiTable {
 /// This is the only native type used in the ABI directly;
 /// everything else is an rtdt argument type.
 ///
-/// It is deliberately opaque. What it points at belongs to the runtime, and a
-/// caller holding one has no business knowing the shape of it.
+/// It is deliberately opaque. What it points at belongs to the runtime, apart
+/// from the [`RtHeader`] it starts with.
 pub type LocalRtHandle = *mut u8;
 
 /// A simple status code.

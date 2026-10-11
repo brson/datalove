@@ -192,7 +192,7 @@ either way, so nothing would be rebuilt.
 
 ## Converting between shapes
 
-`convert` in `datalove-rt/src/impls/boxing.rs` walks two descriptors and
+`convert` in `datalove-rt/src/c/impls/boxing.rs` walks two descriptors and
 converts at every position one of them calls `data`. It handles options,
 results, terms, enums, tuples and structs, recursing structurally, and it is
 driven entirely by the descriptor pointers -- so one found at run time does as

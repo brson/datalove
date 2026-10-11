@@ -823,7 +823,7 @@ unsafe fn eq_value(
                 eq_map_trees(
                     map_a.root as *mut rtdt::MapNode,
                     map_b.root as *mut rtdt::MapNode,
-                    crate::impls::btreemap::MapTy::of(td),
+                    crate::c::impls::btreemap::MapTy::of(td),
                     float_policy,
                 )
             }
@@ -845,7 +845,7 @@ unsafe fn eq_value(
                 eq_set_trees(
                     set_a.root as *mut rtdt::SetNode,
                     set_b.root as *mut rtdt::SetNode,
-                    crate::impls::set::SetTy::of(td),
+                    crate::c::impls::set::SetTy::of(td),
                     float_policy,
                 )
             }
@@ -930,19 +930,19 @@ unsafe fn eq_value(
                     return true;
                 }
 
-                let column_tydescs = crate::impls::table::collect_column_tydescs(td);
+                let column_tydescs = crate::c::impls::table::collect_column_tydescs(td);
 
                 // Compare element-by-element, row-major order.
                 for row in 0..table_a.len.0 {
                     for (col, col_info) in td.table_column_tydescs().enumerate() {
-                        let elem_a = crate::impls::table::element_ptr(
+                        let elem_a = crate::c::impls::table::element_ptr(
                             table_a.data,
                             &column_tydescs,
                             row,
                             col,
                             table_a.capacity.0,
                         );
-                        let elem_b = crate::impls::table::element_ptr(
+                        let elem_b = crate::c::impls::table::element_ptr(
                             table_b.data,
                             &column_tydescs,
                             row,
@@ -1377,7 +1377,7 @@ unsafe fn cmp_value(
                 cmp_map_trees(
                     map_a.root as *mut rtdt::MapNode,
                     map_b.root as *mut rtdt::MapNode,
-                    crate::impls::btreemap::MapTy::of(td),
+                    crate::c::impls::btreemap::MapTy::of(td),
                 )
             }
             rtdt::TyTag::Set => {
@@ -1388,7 +1388,7 @@ unsafe fn cmp_value(
                 cmp_set_trees(
                     set_a.root as *mut rtdt::SetNode,
                     set_b.root as *mut rtdt::SetNode,
-                    crate::impls::set::SetTy::of(td),
+                    crate::c::impls::set::SetTy::of(td),
                 )
             }
             rtdt::TyTag::Tensor => {
@@ -1473,20 +1473,20 @@ unsafe fn cmp_value(
                 let table_a = &*(value_a as *const rtdt::Table);
                 let table_b = &*(value_b as *const rtdt::Table);
 
-                let column_tydescs = crate::impls::table::collect_column_tydescs(td);
+                let column_tydescs = crate::c::impls::table::collect_column_tydescs(td);
                 let min_len = table_a.len.min(table_b.len).0;
 
                 // Compare element-by-element, row-major order (lexicographic).
                 for row in 0..min_len {
                     for (col, col_info) in td.table_column_tydescs().enumerate() {
-                        let elem_a = crate::impls::table::element_ptr(
+                        let elem_a = crate::c::impls::table::element_ptr(
                             table_a.data,
                             &column_tydescs,
                             row,
                             col,
                             table_a.capacity.0,
                         );
-                        let elem_b = crate::impls::table::element_ptr(
+                        let elem_b = crate::c::impls::table::element_ptr(
                             table_b.data,
                             &column_tydescs,
                             row,
@@ -1536,14 +1536,14 @@ unsafe fn read_set_node_len(node: *const rtdt::SetNode) -> u32 {
 unsafe fn eq_map_trees(
     root_a: *mut rtdt::MapNode,
     root_b: *mut rtdt::MapNode,
-    ty: crate::impls::btreemap::MapTy,
+    ty: crate::c::impls::btreemap::MapTy,
     float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
         let (key_tydesc, value_tydesc) = (ty.key, ty.value);
         // Find leftmost leaves.
-        let mut leaf_a = crate::impls::btreemap::leftmost_leaf(root_a, ty);
-        let mut leaf_b = crate::impls::btreemap::leftmost_leaf(root_b, ty);
+        let mut leaf_a = crate::c::impls::btreemap::leftmost_leaf(root_a, ty);
+        let mut leaf_b = crate::c::impls::btreemap::leftmost_leaf(root_b, ty);
 
         let key_size = key_tydesc.size() as usize;
         let value_size = value_tydesc.size() as usize;
@@ -1624,14 +1624,14 @@ unsafe fn eq_map_trees(
 unsafe fn eq_set_trees(
     root_a: *mut rtdt::SetNode,
     root_b: *mut rtdt::SetNode,
-    ty: crate::impls::set::SetTy,
+    ty: crate::c::impls::set::SetTy,
     float_policy: FloatEqPolicy,
 ) -> bool {
     unsafe {
         let element_tydesc = ty.elem;
         // Find leftmost leaves.
-        let mut leaf_a = crate::impls::set::leftmost_leaf(root_a, ty);
-        let mut leaf_b = crate::impls::set::leftmost_leaf(root_b, ty);
+        let mut leaf_a = crate::c::impls::set::leftmost_leaf(root_a, ty);
+        let mut leaf_b = crate::c::impls::set::leftmost_leaf(root_b, ty);
 
         let element_size = element_tydesc.size() as usize;
 
@@ -1702,7 +1702,7 @@ unsafe fn eq_set_trees(
 unsafe fn cmp_map_trees(
     root_a: *mut rtdt::MapNode,
     root_b: *mut rtdt::MapNode,
-    ty: crate::impls::btreemap::MapTy,
+    ty: crate::c::impls::btreemap::MapTy,
 ) -> crate::c::RtOrdering {
     unsafe {
         let (key_tydesc, value_tydesc) = (ty.key, ty.value);
@@ -1718,8 +1718,8 @@ unsafe fn cmp_map_trees(
         }
 
         // Find leftmost leaves.
-        let mut leaf_a = crate::impls::btreemap::leftmost_leaf(root_a, ty);
-        let mut leaf_b = crate::impls::btreemap::leftmost_leaf(root_b, ty);
+        let mut leaf_a = crate::c::impls::btreemap::leftmost_leaf(root_a, ty);
+        let mut leaf_b = crate::c::impls::btreemap::leftmost_leaf(root_b, ty);
 
         let key_size = key_tydesc.size() as usize;
         let value_size = value_tydesc.size() as usize;
@@ -1812,7 +1812,7 @@ unsafe fn cmp_map_trees(
 unsafe fn cmp_set_trees(
     root_a: *mut rtdt::SetNode,
     root_b: *mut rtdt::SetNode,
-    ty: crate::impls::set::SetTy,
+    ty: crate::c::impls::set::SetTy,
 ) -> crate::c::RtOrdering {
     unsafe {
         let element_tydesc = ty.elem;
@@ -1828,8 +1828,8 @@ unsafe fn cmp_set_trees(
         }
 
         // Find leftmost leaves.
-        let mut leaf_a = crate::impls::set::leftmost_leaf(root_a, ty);
-        let mut leaf_b = crate::impls::set::leftmost_leaf(root_b, ty);
+        let mut leaf_a = crate::c::impls::set::leftmost_leaf(root_a, ty);
+        let mut leaf_b = crate::c::impls::set::leftmost_leaf(root_b, ty);
 
         let element_size = element_tydesc.size() as usize;
 

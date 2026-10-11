@@ -1,6 +1,6 @@
 //! Destructor implementation for all Datalove types.
 
-use crate::impls::rt_local;
+use crate::c::impls::rt_local;
 use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
 
@@ -69,12 +69,12 @@ pub unsafe fn any_destroy_local(
 
             // String has allocations.
             rtdt::TyTag::String => {
-                crate::impls::string::string_destroy_local(rt, value_in, tydesc)
+                crate::c::impls::string::string_destroy_local(rt, value_in, tydesc)
             }
 
             // Map has allocations.
             rtdt::TyTag::Map => {
-                crate::impls::btreemap::btreemap_destroy_impl(rt_ref, value_in, ty)
+                crate::c::impls::btreemap::btreemap_destroy_impl(rt_ref, value_in, ty)
             }
 
             // List has allocations.
@@ -113,7 +113,7 @@ pub unsafe fn any_destroy_local(
 
             // Set has allocations.
             rtdt::TyTag::Set => {
-                crate::impls::set::set_destroy_impl(rt_ref, value_in, tydesc)
+                crate::c::impls::set::set_destroy_impl(rt_ref, value_in, tydesc)
             }
 
             // Tensor has allocations.
@@ -171,7 +171,7 @@ pub unsafe fn any_destroy_local(
 
             // Table - destroy columnar data.
             rtdt::TyTag::Table => {
-                crate::impls::table::table_destroy_impl(rt, value_in, ty)
+                crate::c::impls::table::table_destroy_impl(rt, value_in, ty)
             }
 
             // Tuple - recursively destroy fields.
@@ -424,14 +424,14 @@ mod tests {
 
         unsafe {
             let mut string = std::mem::MaybeUninit::<rtdt::String>::uninit();
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 string.as_mut_ptr() as *mut u8,
                 &tydesc,
             );
             let mut string = string.assume_init();
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 &mut string as *mut rtdt::String as *mut u8,
                 &tydesc,
@@ -507,13 +507,13 @@ mod tests {
             };
 
             // Initialize the string field.
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 &mut tuple.field1 as *mut rtdt::String as *mut u8,
                 &string_tydesc,
             );
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 &mut tuple.field1 as *mut rtdt::String as *mut u8,
                 &string_tydesc,
@@ -671,13 +671,13 @@ mod tests {
                 1
             ) as *mut rtdt::String;
 
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
             );
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
@@ -804,13 +804,13 @@ mod tests {
                 1
             ) as *mut rtdt::String;
 
-            crate::impls::string::string_create_local(
+            crate::c::impls::string::string_create_local(
                 rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,
             );
 
-            crate::impls::string::string_push_bytes_local(
+            crate::c::impls::string::string_push_bytes_local(
                 rt_handle,
                 inner_string_ptr as *mut u8,
                 &string_tydesc,

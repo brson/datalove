@@ -8,8 +8,9 @@
 //! whose type does not match the function assigned to it does not compile, so
 //! there is nothing to assert separately.
 //!
-//! [`RtLocal`](crate::impls::rt_local::RtLocal) holds a reference to this as
-//! its first field, which is how a rider reaches it from a handle.
+//! The runtime's state starts with an
+//! [`RtHeader`](datalove_rti::RtHeader) holding a reference to this, which is
+//! how a rider reaches it from a handle.
 
 use datalove_rti::table::RtiTable;
 
@@ -141,6 +142,10 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_table_set_local: c::dtlv_rti_table_set_local,
     dtlv_rti_table_clear_local: c::dtlv_rti_table_clear_local,
     dtlv_rti_table_len: c::dtlv_rti_table_len,
+    dtlv_rti_abandon: c::dtlv_rti_abandon,
+    dtlv_rti_take_abandoned: c::dtlv_rti_take_abandoned,
+    dtlv_rti_set_stack_limit: c::dtlv_rti_set_stack_limit,
+    dtlv_rti_native_stack_limit: c::dtlv_rti_native_stack_limit,
     dtlv_rti_set_debug_mode: c::dtlv_rti_set_debug_mode,
     dtlv_rti_debuglog_local: c::dtlv_rti_debuglog_local,
     dtlv_rti_get_debug_buffer: c::dtlv_rti_get_debug_buffer,
@@ -154,9 +159,9 @@ pub static TABLE: RtiTable = RtiTable {
 };
 
 /// The declarations must cover every export, not merely agree with the ones
-/// they name. A function added to `c.rs` without regenerating leaves the
+/// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 134,
+    datalove_rti::table::EXPORTED == 138,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

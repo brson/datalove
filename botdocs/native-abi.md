@@ -34,8 +34,11 @@ In order:
   library therefore resolves nothing when it loads, and the process loading it
   exports nothing.
 
-  That first word is all a holder of a handle may assume. The rest of what it
-  points at belongs to the runtime.
+  What a holder of a handle may assume is `datalove_rti::RtHeader`, which the
+  runtime's state starts with: the table, then two fields compiled code reads
+  and writes in place (whether its calls are being abandoned for an error, and
+  the limit to the native stack). A rider reads only the table. The rest of
+  what the handle points at belongs to the runtime.
 - **One `(pointer, descriptor)` pair per declared parameter**, in declaration
   order. The pointer is at the value; the descriptor says what is behind it.
 - **The result, as an out parameter**, given the same way: somewhere to write

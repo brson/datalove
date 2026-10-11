@@ -2,7 +2,7 @@
 
 use datalove_rtdt as rtdt;
 use crate::c::{LocalRtHandle, RtStatus};
-use crate::impls::rt_local::{RtLocal, DebugOutputMode};
+use crate::c::impls::rt_local::{RtLocal, DebugOutputMode};
 
 /// Create a TyDesc for String type.
 fn create_string_tydesc() -> rtdt::TyDesc {
@@ -48,7 +48,7 @@ pub unsafe fn debuglog_local(
         // String is already initialized as empty, no need to call string_create_local.
 
         // Pretty-print the value into the temp string.
-        let status = crate::impls::pretty::pretty_print_local(
+        let status = crate::c::impls::pretty::pretty_print_local(
             rt,
             value_ref,
             value_tydesc,
@@ -58,7 +58,7 @@ pub unsafe fn debuglog_local(
 
         if status != RtStatus::Ok {
             // Clean up on error.
-            crate::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
+            crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
             return status;
         }
 
@@ -88,7 +88,7 @@ pub unsafe fn debuglog_local(
         }
 
         // Destroy the temp string.
-        crate::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
+        crate::c::impls::string::string_destroy_local(rt, string_ptr, string_tydesc);
 
         RtStatus::Ok
     }

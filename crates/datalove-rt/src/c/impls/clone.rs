@@ -1,6 +1,6 @@
 //! Deep cloning for runtime values.
 
-use crate::{c::{LocalRtHandle, RtStatus}, impls::rt_local};
+use crate::c::{LocalRtHandle, RtStatus, impls::rt_local};
 use datalove_rtdt as rtdt;
 
 /// Clone any type into the local heap.
@@ -45,7 +45,7 @@ pub(crate) unsafe fn clone_array(
     for i in 0..count {
         let status = unsafe { clone_impl(rt, src.add(i * size), ty, dst.add(i * size)) };
         if status != RtStatus::Ok {
-            unsafe { crate::impls::destroy::destroy_array(rt, dst, i, ty) };
+            unsafe { crate::c::impls::destroy::destroy_array(rt, dst, i, ty) };
             return status;
         }
     }
@@ -264,7 +264,7 @@ unsafe fn clone_impl(
                                 for j in 0..i {
                                     let cleanup_offset = (j as usize) * (elem_size as usize);
                                     let elem_to_destroy = new_data.add(cleanup_offset);
-                                    let _ = crate::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
+                                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_to_destroy, elem_ty.as_ptr());
                                 }
                                 rt_ref.alloc.free(elem_size, elem_align, list_in.size.0, new_data);
                             }
@@ -293,10 +293,10 @@ unsafe fn clone_impl(
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
-                    crate::impls::btreemap::btreemap_clone_tree(
+                    crate::c::impls::btreemap::btreemap_clone_tree(
                         rt_ref,
                         map_in.root,
-                        crate::impls::btreemap::MapTy::of(ty),
+                        crate::c::impls::btreemap::MapTy::of(ty),
                     )
                 };
 
@@ -323,10 +323,10 @@ unsafe fn clone_impl(
                 let rt_ref = unsafe { &mut *(rt as *mut rt_local::RtLocal) };
 
                 let new_root = unsafe {
-                    crate::impls::set::set_clone_tree(
+                    crate::c::impls::set::set_clone_tree(
                         rt_ref,
                         set_in.root,
-                        crate::impls::set::SetTy::of(ty),
+                        crate::c::impls::set::SetTy::of(ty),
                     )
                 };
 
@@ -421,7 +421,7 @@ unsafe fn clone_impl(
                 return RtStatus::Ok;
             }
 
-            let column_tydescs = crate::impls::table::collect_column_tydescs(ty);
+            let column_tydescs = crate::c::impls::table::collect_column_tydescs(ty);
             let alloc_size = rtdt::layout::table_data_allocation_size(&column_tydescs, table_in.len.0);
             let alloc_align = rtdt::layout::table_data_alignment(&column_tydescs);
 
@@ -435,7 +435,7 @@ unsafe fn clone_impl(
             for (col, col_info) in ty.table_column_tydescs().enumerate() {
                 for row in 0..table_in.len.0 {
                     let src = unsafe {
-                        crate::impls::table::element_ptr(
+                        crate::c::impls::table::element_ptr(
                             table_in.data,
                             &column_tydescs,
                             row,
@@ -444,7 +444,7 @@ unsafe fn clone_impl(
                         )
                     };
                     let dst = unsafe {
-                        crate::impls::table::element_ptr_mut(
+                        crate::c::impls::table::element_ptr_mut(
                             new_data,
                             &column_tydescs,
                             row,
@@ -459,7 +459,7 @@ unsafe fn clone_impl(
                             let cleanup_end_row = if cleanup_col == col { row } else { table_in.len.0 };
                             for cleanup_row in 0..cleanup_end_row {
                                 let cleanup_ptr = unsafe {
-                                    crate::impls::table::element_ptr_mut(
+                                    crate::c::impls::table::element_ptr_mut(
                                         new_data,
                                         &column_tydescs,
                                         cleanup_row,
@@ -469,7 +469,7 @@ unsafe fn clone_impl(
                                 };
                                 let cleanup_col_info = ty.table_column_tydescs().nth(cleanup_col).unwrap();
                                 unsafe {
-                                    let _ = crate::impls::destroy::any_destroy_local(
+                                    let _ = crate::c::impls::destroy::any_destroy_local(
                                         rt,
                                         cleanup_ptr,
                                         cleanup_col_info.tydesc().as_ptr(),
@@ -813,7 +813,7 @@ unsafe fn clone_view_tensor(
             for j in 0..dest_idx {
                 let elem_ptr = unsafe { new_data.add(j as usize * elem_size_usize) };
                 unsafe {
-                    let _ = crate::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ptr());
+                    let _ = crate::c::impls::destroy::any_destroy_local(rt, elem_ptr, element_ty.as_ptr());
                 }
             }
             unsafe {
