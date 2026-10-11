@@ -64,7 +64,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
-        let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
+        let wrap_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, list_ptr, list_tydesc_ptr, dest_ptr]);
 
         self.values.insert(dest, dest_ptr);
@@ -230,7 +230,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
         let dest_offset = self.layout.value_offset(dest.0);
         let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
-        let wrap_ref = self.module.declare_func_in_func(runtime.data_from_local, builder.func);
+        let wrap_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, built_ptr, tydesc_ptr, dest_ptr]);
         self.values.insert(dest, dest_ptr);
         Ok(())

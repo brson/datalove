@@ -167,11 +167,7 @@ impl JitCompiler {
             )))?;
         jit_builder.memory_provider(Box::new(arena));
 
-        // Register the dispatch function so JIT code can call it.
-        jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
-
-        // Register all runtime symbols so JIT code can call them.
-        register_runtime_symbols(&mut jit_builder);
+        register_libcalls(&mut jit_builder);
 
         // Register a lookup function for dynamically-added native rider symbols.
         let native_symbols: Arc<Mutex<HashMap<String, SendPtr>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -722,198 +718,103 @@ fn trampoline_import(
     create_indirect_trampoline(jit_module, &name, &sig, addr)
 }
 
-/// Replace all RuntimeImports FuncIds with local indirect-call trampolines.
+/// Replace every runtime import with a local trampoline that calls the
+/// runtime function's absolute address.
 fn trampoline_all_runtime_imports(
     jit_module: &mut JITModule,
     runtime: &mut RuntimeImports,
 ) -> Result<(), JitError> {
-    use datalove_rt::c;
-
-    /// Helper to trampoline a single field.
-    fn tramp(
-        jit_module: &mut JITModule,
-        field: &mut FuncId,
-        addr: *const u8,
-    ) -> Result<(), JitError> {
-        *field = trampoline_import(jit_module, *field, addr as u64)?;
-        Ok(())
+    let addresses = runtime_addresses();
+    for func_id in runtime.all_mut() {
+        let decl = jit_module.declarations().get_function_decl(*func_id);
+        let name = decl.linkage_name(*func_id);
+        let addr = *addresses.get(name.as_ref())
+            .unwrap_or_else(|| panic!("no address for runtime import {name}"));
+        *func_id = trampoline_import(jit_module, *func_id, addr as u64)?;
     }
-
-    tramp(jit_module, &mut runtime.init, c::dtlv_rti_init as *const u8)?;
-    tramp(jit_module, &mut runtime.shutdown, c::dtlv_rti_shutdown as *const u8)?;
-    tramp(jit_module, &mut runtime.set_debug_mode, c::dtlv_rti_set_debug_mode as *const u8)?;
-    tramp(jit_module, &mut runtime.debuglog_local, c::dtlv_rti_debuglog_local as *const u8)?;
-    tramp(jit_module, &mut runtime.destroy_local, c::dtlv_rti_any_destroy_local as *const u8)?;
-    tramp(jit_module, &mut runtime.mem_alloc_raw, c::dtlv_rti_mem_alloc_raw_local as *const u8)?;
-    tramp(jit_module, &mut runtime.string_create, c::dtlv_rti_string_create_local as *const u8)?;
-    tramp(jit_module, &mut runtime.string_push_bytes, c::dtlv_rti_string_push_bytes_local as *const u8)?;
-    tramp(jit_module, &mut runtime.string_from_bytes, c::dtlv_rti_string_from_bytes as *const u8)?;
-    tramp(jit_module, &mut runtime.list_create, c::dtlv_rti_list_create_local as *const u8)?;
-    tramp(jit_module, &mut runtime.list_push, c::dtlv_rti_list_push_local as *const u8)?;
-    tramp(jit_module, &mut runtime.list_build_from_slice, c::dtlv_rti_list_build_from_slice_local as *const u8)?;
-    tramp(jit_module, &mut runtime.set_create, c::dtlv_rti_btreeset_create_local as *const u8)?;
-    tramp(jit_module, &mut runtime.set_insert, c::dtlv_rti_btreeset_insert_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_create, c::dtlv_rti_btreemap_create_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_insert, c::dtlv_rti_btreemap_insert_local as *const u8)?;
-    tramp(jit_module, &mut runtime.list_push_erased,
-        c::dtlv_rti_list_push_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.set_insert_erased,
-        c::dtlv_rti_btreeset_insert_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_insert_erased,
-        c::dtlv_rti_btreemap_insert_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_contains_key, c::dtlv_rti_btreemap_contains_key_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_get_value_ref, c::dtlv_rti_btreemap_get_value_ref_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_set_value, c::dtlv_rti_btreemap_set_value_local as *const u8)?;
-    tramp(jit_module, &mut runtime.tensor_init, c::dtlv_rti_tensor_init_local as *const u8)?;
-    tramp(jit_module, &mut runtime.tensor_hyperplane_clone, c::dtlv_rti_tensor_hyperplane_clone_local as *const u8)?;
-    tramp(jit_module, &mut runtime.table_create, c::dtlv_rti_table_create_local as *const u8)?;
-    tramp(jit_module, &mut runtime.table_push_row, c::dtlv_rti_table_push_row_local as *const u8)?;
-    tramp(jit_module, &mut runtime.table_build_from_rows, c::dtlv_rti_table_build_from_rows_local as *const u8)?;
-    tramp(jit_module, &mut runtime.int_add, c::dtlv_rti_int_add as *const u8)?;
-    tramp(jit_module, &mut runtime.int_sub, c::dtlv_rti_int_sub as *const u8)?;
-    tramp(jit_module, &mut runtime.int_mul, c::dtlv_rti_int_mul as *const u8)?;
-    tramp(jit_module, &mut runtime.int_div, c::dtlv_rti_int_div_checked as *const u8)?;
-    tramp(jit_module, &mut runtime.int_neg, c::dtlv_rti_int_neg as *const u8)?;
-    tramp(jit_module, &mut runtime.int_add_assign, c::dtlv_rti_int_add_assign as *const u8)?;
-    tramp(jit_module, &mut runtime.int_sub_assign, c::dtlv_rti_int_sub_assign as *const u8)?;
-    tramp(jit_module, &mut runtime.int_mul_assign, c::dtlv_rti_int_mul_assign as *const u8)?;
-    tramp(jit_module, &mut runtime.int_div_assign, c::dtlv_rti_int_div_assign_checked as *const u8)?;
-    tramp(jit_module, &mut runtime.int_from_fixed, c::dtlv_rti_int_from_fixed as *const u8)?;
-    tramp(jit_module, &mut runtime.int_from_limbs, c::dtlv_rti_int_from_limbs as *const u8)?;
-    tramp(jit_module, &mut runtime.int_cmp, c::dtlv_rti_cmp_local as *const u8)?;
-    tramp(jit_module, &mut runtime.eq, c::dtlv_rti_eq_local as *const u8)?;
-    tramp(jit_module, &mut runtime.move_value, c::dtlv_rti_move_value_local as *const u8)?;
-    tramp(jit_module, &mut runtime.clone_local, c::dtlv_rti_clone_local as *const u8)?;
-    tramp(jit_module, &mut runtime.error_from, c::dtlv_rti_error_from_local as *const u8)?;
-    tramp(jit_module, &mut runtime.data_from, c::dtlv_rti_data_from_local as *const u8)?;
-    tramp(jit_module, &mut runtime.erase, c::dtlv_rti_erase_local as *const u8)?;
-    tramp(jit_module, &mut runtime.reify, c::dtlv_rti_reify_local as *const u8)?;
-    tramp(jit_module, &mut runtime.data_parts, c::dtlv_rti_data_parts as *const u8)?;
-    tramp(jit_module, &mut runtime.data_borrow, c::dtlv_rti_data_borrow as *const u8)?;
-    tramp(jit_module, &mut runtime.data_from_local,
-        c::dtlv_rti_data_from_local as *const u8)?;
-    tramp(jit_module, &mut runtime.dyn_binop, c::dtlv_rti_dyn_binop as *const u8)?;
-    tramp(jit_module, &mut runtime.dyn_binop_checked,
-        c::dtlv_rti_dyn_binop_checked as *const u8)?;
-    tramp(jit_module, &mut runtime.dyn_neg_checked,
-        c::dtlv_rti_dyn_neg_checked as *const u8)?;
-    tramp(jit_module, &mut runtime.list_get_erased,
-        c::dtlv_rti_list_get_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.clone_erased,
-        c::dtlv_rti_clone_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.field_offset, c::dtlv_rti_field_offset as *const u8)?;
-    tramp(jit_module, &mut runtime.field_tydesc, c::dtlv_rti_field_tydesc as *const u8)?;
-    tramp(jit_module, &mut runtime.field_read, c::dtlv_rti_field_read_local as *const u8)?;
-    tramp(jit_module, &mut runtime.element_tydesc, c::dtlv_rti_element_tydesc as *const u8)?;
-    tramp(jit_module, &mut runtime.map_contains_key_erased,
-        c::dtlv_rti_btreemap_contains_key_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_get_value_ref_erased,
-        c::dtlv_rti_btreemap_get_value_ref_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.list_set_erased,
-        c::dtlv_rti_list_set_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.tensor_set_erased,
-        c::dtlv_rti_tensor_set_erased_local as *const u8)?;
-    tramp(jit_module, &mut runtime.map_set_value_erased,
-        c::dtlv_rti_btreemap_set_value_erased_local as *const u8)?;
-
     Ok(())
 }
 
-/// Register all runtime symbols with the JIT builder.
+/// The address of each runtime function compiled code may import, by symbol.
+fn runtime_addresses() -> HashMap<&'static str, *const u8> {
+    macro_rules! addresses {
+        ($($f:ident,)*) => {
+            HashMap::from([$((stringify!($f), datalove_rt::c::$f as *const u8)),*])
+        };
+    }
+    addresses! {
+        dtlv_rti_init,
+        dtlv_rti_shutdown,
+        dtlv_rti_set_debug_mode,
+        dtlv_rti_debuglog_local,
+        dtlv_rti_any_destroy_local,
+        dtlv_rti_mem_alloc_raw_local,
+        dtlv_rti_mem_free_raw_local,
+        dtlv_rti_field_offset,
+        dtlv_rti_field_tydesc,
+        dtlv_rti_field_read_local,
+        dtlv_rti_element_tydesc,
+        dtlv_rti_btreemap_contains_key_erased_local,
+        dtlv_rti_btreemap_get_value_ref_erased_local,
+        dtlv_rti_list_set_erased_local,
+        dtlv_rti_tensor_set_erased_local,
+        dtlv_rti_btreemap_set_value_erased_local,
+        dtlv_rti_string_create_local,
+        dtlv_rti_string_push_bytes_local,
+        dtlv_rti_string_from_bytes,
+        dtlv_rti_list_create_local,
+        dtlv_rti_list_push_local,
+        dtlv_rti_list_build_from_slice_local,
+        dtlv_rti_btreeset_create_local,
+        dtlv_rti_btreeset_insert_local,
+        dtlv_rti_btreemap_create_local,
+        dtlv_rti_btreemap_insert_local,
+        dtlv_rti_list_push_erased_local,
+        dtlv_rti_btreeset_insert_erased_local,
+        dtlv_rti_btreemap_insert_erased_local,
+        dtlv_rti_btreemap_contains_key_local,
+        dtlv_rti_btreemap_get_value_ref_local,
+        dtlv_rti_btreemap_set_value_local,
+        dtlv_rti_tensor_init_local,
+        dtlv_rti_tensor_hyperplane_clone_local,
+        dtlv_rti_table_create_local,
+        dtlv_rti_table_push_row_local,
+        dtlv_rti_table_build_from_rows_local,
+        dtlv_rti_int_add,
+        dtlv_rti_int_sub,
+        dtlv_rti_int_mul,
+        dtlv_rti_int_div_checked,
+        dtlv_rti_int_neg,
+        dtlv_rti_int_add_assign,
+        dtlv_rti_int_sub_assign,
+        dtlv_rti_int_mul_assign,
+        dtlv_rti_int_div_assign_checked,
+        dtlv_rti_int_from_fixed,
+        dtlv_rti_int_from_limbs,
+        dtlv_rti_cmp_local,
+        dtlv_rti_eq_local,
+        dtlv_rti_move_value_local,
+        dtlv_rti_clone_local,
+        dtlv_rti_error_from_local,
+        dtlv_rti_data_from_local,
+        dtlv_rti_dyn_binop,
+        dtlv_rti_dyn_binop_checked,
+        dtlv_rti_dyn_neg_checked,
+        dtlv_rti_erase_local,
+        dtlv_rti_reify_local,
+        dtlv_rti_data_parts,
+        dtlv_rti_data_borrow,
+        dtlv_rti_list_get_erased_local,
+        dtlv_rti_clone_erased_local,
+    }
+}
+
+/// Register the libm functions Cranelift calls when legalizing float
+/// instructions.
 ///
-/// These symbols are declared as imports by RuntimeImports::declare and must be
-/// registered before creating the JITModule so they can be resolved at runtime.
-fn register_runtime_symbols(jit_builder: &mut JITBuilder) {
-    use datalove_rt::c;
-
-    // Core runtime functions.
-    jit_builder.symbol("dtlv_rti_init", c::dtlv_rti_init as *const u8);
-    jit_builder.symbol("dtlv_rti_shutdown", c::dtlv_rti_shutdown as *const u8);
-    jit_builder.symbol("dtlv_rti_set_debug_mode", c::dtlv_rti_set_debug_mode as *const u8);
-    jit_builder.symbol("dtlv_rti_debuglog_local", c::dtlv_rti_debuglog_local as *const u8);
-    jit_builder.symbol("dtlv_rti_any_destroy_local", c::dtlv_rti_any_destroy_local as *const u8);
-    jit_builder.symbol("dtlv_rti_mem_alloc_raw_local", c::dtlv_rti_mem_alloc_raw_local as *const u8);
-    jit_builder.symbol("dtlv_rti_mem_free_raw_local", c::dtlv_rti_mem_free_raw_local as *const u8);
-    jit_builder.symbol("dtlv_rti_field_offset", c::dtlv_rti_field_offset as *const u8);
-    jit_builder.symbol("dtlv_rti_field_tydesc", c::dtlv_rti_field_tydesc as *const u8);
-    jit_builder.symbol("dtlv_rti_field_read_local", c::dtlv_rti_field_read_local as *const u8);
-    jit_builder.symbol("dtlv_rti_element_tydesc", c::dtlv_rti_element_tydesc as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_contains_key_erased_local",
-        c::dtlv_rti_btreemap_contains_key_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_get_value_ref_erased_local",
-        c::dtlv_rti_btreemap_get_value_ref_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_list_set_erased_local", c::dtlv_rti_list_set_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_tensor_set_erased_local", c::dtlv_rti_tensor_set_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_set_value_erased_local",
-        c::dtlv_rti_btreemap_set_value_erased_local as *const u8);
-
-    // String functions.
-    jit_builder.symbol("dtlv_rti_string_create_local", c::dtlv_rti_string_create_local as *const u8);
-    jit_builder.symbol("dtlv_rti_string_push_bytes_local", c::dtlv_rti_string_push_bytes_local as *const u8);
-    jit_builder.symbol("dtlv_rti_string_from_bytes", c::dtlv_rti_string_from_bytes as *const u8);
-
-    // Collection functions.
-    jit_builder.symbol("dtlv_rti_list_create_local", c::dtlv_rti_list_create_local as *const u8);
-    jit_builder.symbol("dtlv_rti_list_push_local", c::dtlv_rti_list_push_local as *const u8);
-    jit_builder.symbol("dtlv_rti_list_build_from_slice_local", c::dtlv_rti_list_build_from_slice_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreeset_create_local", c::dtlv_rti_btreeset_create_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreeset_insert_local", c::dtlv_rti_btreeset_insert_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_create_local", c::dtlv_rti_btreemap_create_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_insert_local", c::dtlv_rti_btreemap_insert_local as *const u8);
-    jit_builder.symbol("dtlv_rti_list_push_erased_local",
-        c::dtlv_rti_list_push_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreeset_insert_erased_local",
-        c::dtlv_rti_btreeset_insert_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_insert_erased_local",
-        c::dtlv_rti_btreemap_insert_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_contains_key_local", c::dtlv_rti_btreemap_contains_key_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_get_value_ref_local", c::dtlv_rti_btreemap_get_value_ref_local as *const u8);
-    jit_builder.symbol("dtlv_rti_btreemap_set_value_local", c::dtlv_rti_btreemap_set_value_local as *const u8);
-    jit_builder.symbol("dtlv_rti_tensor_init_local", c::dtlv_rti_tensor_init_local as *const u8);
-    jit_builder.symbol("dtlv_rti_tensor_hyperplane_clone_local", c::dtlv_rti_tensor_hyperplane_clone_local as *const u8);
-    jit_builder.symbol("dtlv_rti_table_create_local", c::dtlv_rti_table_create_local as *const u8);
-    jit_builder.symbol("dtlv_rti_table_push_row_local", c::dtlv_rti_table_push_row_local as *const u8);
-    jit_builder.symbol("dtlv_rti_table_build_from_rows_local", c::dtlv_rti_table_build_from_rows_local as *const u8);
-
-    // Int (bigint) arithmetic functions.
-    jit_builder.symbol("dtlv_rti_int_add", c::dtlv_rti_int_add as *const u8);
-    jit_builder.symbol("dtlv_rti_int_sub", c::dtlv_rti_int_sub as *const u8);
-    jit_builder.symbol("dtlv_rti_int_mul", c::dtlv_rti_int_mul as *const u8);
-    jit_builder.symbol("dtlv_rti_int_div_checked", c::dtlv_rti_int_div_checked as *const u8);
-    jit_builder.symbol("dtlv_rti_int_neg", c::dtlv_rti_int_neg as *const u8);
-    jit_builder.symbol("dtlv_rti_int_add_assign", c::dtlv_rti_int_add_assign as *const u8);
-    jit_builder.symbol("dtlv_rti_int_sub_assign", c::dtlv_rti_int_sub_assign as *const u8);
-    jit_builder.symbol("dtlv_rti_int_mul_assign", c::dtlv_rti_int_mul_assign as *const u8);
-    jit_builder.symbol("dtlv_rti_int_div_assign_checked", c::dtlv_rti_int_div_assign_checked as *const u8);
-    jit_builder.symbol("dtlv_rti_int_from_fixed", c::dtlv_rti_int_from_fixed as *const u8);
-    jit_builder.symbol("dtlv_rti_int_from_limbs", c::dtlv_rti_int_from_limbs as *const u8);
-    jit_builder.symbol("dtlv_rti_cmp_local", c::dtlv_rti_cmp_local as *const u8);
-    jit_builder.symbol("dtlv_rti_eq_local", c::dtlv_rti_eq_local as *const u8);
-
-    // Value move and clone functions.
-    jit_builder.symbol("dtlv_rti_move_value_local", c::dtlv_rti_move_value_local as *const u8);
-    jit_builder.symbol("dtlv_rti_clone_local", c::dtlv_rti_clone_local as *const u8);
-
-    // Boxing functions.
-    jit_builder.symbol("dtlv_rti_error_from_local", c::dtlv_rti_error_from_local as *const u8);
-    jit_builder.symbol("dtlv_rti_data_from_local", c::dtlv_rti_data_from_local as *const u8);
-    jit_builder.symbol("dtlv_rti_dyn_binop", c::dtlv_rti_dyn_binop as *const u8);
-    jit_builder.symbol("dtlv_rti_dyn_binop_checked",
-        c::dtlv_rti_dyn_binop_checked as *const u8);
-    jit_builder.symbol("dtlv_rti_dyn_neg_checked", c::dtlv_rti_dyn_neg_checked as *const u8);
-    jit_builder.symbol("dtlv_rti_dyn_unop", c::dtlv_rti_dyn_unop as *const u8);
-    jit_builder.symbol("dtlv_rti_erase_local", c::dtlv_rti_erase_local as *const u8);
-    jit_builder.symbol("dtlv_rti_reify_local", c::dtlv_rti_reify_local as *const u8);
-    jit_builder.symbol("dtlv_rti_data_parts", c::dtlv_rti_data_parts as *const u8);
-    jit_builder.symbol("dtlv_rti_data_borrow", c::dtlv_rti_data_borrow as *const u8);
-    jit_builder.symbol("dtlv_rti_list_get_erased_local",
-        c::dtlv_rti_list_get_erased_local as *const u8);
-    jit_builder.symbol("dtlv_rti_clone_erased_local",
-        c::dtlv_rti_clone_erased_local as *const u8);
-
-    // Math libcalls used by Cranelift when legalizing float instructions.
-    // On some platforms dlsym can't find these (e.g. static linking), so
-    // register them explicitly via libc.
+/// On some platforms dlsym can't find these (e.g. static linking), so they are
+/// registered explicitly.
+fn register_libcalls(jit_builder: &mut JITBuilder) {
     unsafe extern "C" {
         fn floor(x: f64) -> f64;
         fn floorf(x: f32) -> f32;

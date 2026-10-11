@@ -140,8 +140,6 @@ pub struct RuntimeImports {
     pub data_parts: FuncId,
     /// `dtlv_rti_data_borrow(data_in, scratch, value_out, tydesc_out) -> RtStatus`
     pub data_borrow: FuncId,
-    /// `dtlv_rti_data_from_local(rt, inner, inner_tydesc, dest) -> RtStatus`
-    pub data_from_local: FuncId,
     /// `dtlv_rti_dyn_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
     pub dyn_binop: FuncId,
     /// `dtlv_rti_dyn_binop_checked(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td, overflow)`
@@ -730,18 +728,6 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_data_borrow: {}", e)))?
         };
 
-        let data_from_local = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE)); // rt
-            sig.params.push(AbiParam::new(PTR_TYPE)); // inner
-            sig.params.push(AbiParam::new(PTR_TYPE)); // inner tydesc
-            sig.params.push(AbiParam::new(PTR_TYPE)); // dest
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module.declare_function("dtlv_rti_data_from_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_data_from_local: {}", e)))?
-        };
-
         // An operator on a bounded type parameter, whose type only the
         // descriptor says.
         fn dyn_binop_sig(mut sig: cl_ir::Signature, checked: bool) -> cl_ir::Signature {
@@ -992,7 +978,6 @@ impl RuntimeImports {
             erase,
             data_parts,
             data_borrow,
-            data_from_local,
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
@@ -1000,6 +985,90 @@ impl RuntimeImports {
             clone_erased,
             reify,
         })
+    }
+    /// Every import, for a backend that resolves them itself.
+    pub fn all_mut(&mut self) -> Vec<&mut FuncId> {
+        let Self {
+            init,
+            shutdown,
+            set_debug_mode,
+            debuglog_local,
+            destroy_local,
+            field_offset,
+            field_tydesc,
+            field_read,
+            element_tydesc,
+            map_contains_key_erased,
+            map_get_value_ref_erased,
+            list_set_erased,
+            tensor_set_erased,
+            map_set_value_erased,
+            mem_alloc_raw,
+            mem_free_raw,
+            string_create,
+            string_push_bytes,
+            string_from_bytes,
+            list_create,
+            list_push,
+            list_build_from_slice,
+            set_create,
+            set_insert,
+            map_create,
+            list_push_erased,
+            set_insert_erased,
+            map_insert_erased,
+            map_insert,
+            tensor_init,
+            tensor_hyperplane_clone,
+            table_create,
+            table_push_row,
+            table_build_from_rows,
+            int_add,
+            int_sub,
+            int_mul,
+            int_div,
+            int_neg,
+            int_add_assign,
+            int_sub_assign,
+            int_mul_assign,
+            int_div_assign,
+            int_from_fixed,
+            int_from_limbs,
+            int_cmp,
+            eq,
+            move_value,
+            clone_local,
+            map_contains_key,
+            map_get_value_ref,
+            map_set_value,
+            error_from,
+            data_from,
+            erase,
+            reify,
+            data_parts,
+            data_borrow,
+            dyn_binop,
+            dyn_binop_checked,
+            dyn_neg_checked,
+            list_get_erased,
+            clone_erased,
+        } = self;
+        vec![
+            init, shutdown, set_debug_mode, debuglog_local, destroy_local, field_offset,
+            field_tydesc, field_read, element_tydesc, map_contains_key_erased,
+            map_get_value_ref_erased, list_set_erased, tensor_set_erased,
+            map_set_value_erased, mem_alloc_raw, mem_free_raw, string_create,
+            string_push_bytes, string_from_bytes, list_create, list_push,
+            list_build_from_slice, set_create, set_insert, map_create, list_push_erased,
+            set_insert_erased, map_insert_erased, map_insert, tensor_init,
+            tensor_hyperplane_clone, table_create, table_push_row,
+            table_build_from_rows, int_add, int_sub, int_mul, int_div, int_neg,
+            int_add_assign, int_sub_assign, int_mul_assign, int_div_assign,
+            int_from_fixed, int_from_limbs, int_cmp, eq, move_value, clone_local,
+            map_contains_key, map_get_value_ref, map_set_value, error_from, data_from,
+            erase, reify, data_parts, data_borrow, dyn_binop, dyn_binop_checked,
+            dyn_neg_checked, list_get_erased, clone_erased,
+        ]
     }
 }
 
