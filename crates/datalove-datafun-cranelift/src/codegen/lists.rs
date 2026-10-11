@@ -65,10 +65,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder.ins().iadd(data_ptr, offset)
     }
 
-    /// Compile a ListGet instruction.
-    ///
-    /// Performs bounds check and conditionally loads the element. Uses branching
-    /// to avoid loading from out-of-bounds memory.
     /// Read an element whose type only the list's descriptor knows.
     ///
     /// The runtime writes an option, which is where the bounds answer comes
@@ -128,6 +124,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// Compile a ListGet instruction.
+    ///
+    /// Checks the bounds and loads the element only if the index is in them.
     pub(super) fn compile_list_get(
         &mut self,
         builder: &mut FunctionBuilder,

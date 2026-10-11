@@ -183,9 +183,11 @@ impl EncodedFuncKey {
 /// * `rt_handle` - Runtime handle for memory operations
 /// * `encoded_key` - The callee's identity, encoded by `EncodedFuncKey`
 /// * `ret_dest` - Pointer to return value destination (NULL for void)
-/// * `_ret_is_sret` - Non-zero if return uses sret convention (unused, info in ir_func)
 /// * `arg_count` - Number of arguments
 /// * `args` - Pointer to array of argument pointers
+/// * `descriptors` - Pointer to the callee's descriptor arguments: one per
+///   entry of its `descriptor_params`, then one per entry of its
+///   `descriptor_shapes`, in those orders; NULL if it has none
 ///
 /// # Safety
 ///
@@ -200,7 +202,6 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     rt_handle: LocalRtHandle,
     encoded_key: u64,
     ret_dest: *mut u8,
-    _ret_is_sret: u8,
     arg_count: u32,
     args: *const *const u8,
     descriptors: *const *const rtdt::TyDesc,

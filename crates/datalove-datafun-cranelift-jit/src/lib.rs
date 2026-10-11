@@ -1,7 +1,14 @@
-//! Per-function tracing JIT for the datalove interpreter.
+//! A method JIT for the datalove interpreter.
 //!
-//! Tracks function call counts and compiles hot functions to native code using
-//! Cranelift. Integrates with the interpreter for mixed-mode execution.
+//! Counts calls to each function and compiles a hot one, whole, to native code
+//! with Cranelift; a loop that runs long in the interpreter is entered
+//! mid-body by on-stack replacement. Compiled code and the interpreter call
+//! each other freely, through the `CallDispatcher` the interpreter offers each
+//! call to.
+//!
+//! `JitEngine` is the JIT itself. `OptimizingDispatcher` wraps it with the
+//! policy of when to compile, tuned or chaotic, which is what the engines are
+//! run with.
 //!
 //! # Usage
 //!
@@ -99,10 +106,9 @@ impl Tier {
     }
 }
 
-/// Per-function tracing JIT engine.
+/// The JIT: counts calls, compiles hot functions, and runs what it compiled.
 ///
-/// Tracks function call counts and compiles hot functions to native code.
-/// Single-threaded design - no synchronization overhead.
+/// Single-threaded, so no synchronization.
 pub struct JitEngine {
     /// Where each function is.
     ///

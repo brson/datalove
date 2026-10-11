@@ -19,13 +19,13 @@
 //! 3. `fold_copies`: a copy only a `WrapOk` reads is read past.
 //! 4. `fuse_returns`: a result wrapped only to be returned is written into the
 //!    caller's slot.
-//! 5. `hoist_constants`: a constant written in a loop is written once on entry.
-//! 6. `coalesce_copies`: an op whose result only the next op copies writes
-//!    where the copy would have.
-//! 7. `duplicate_short_branches`: a jump to a short block ending in a branch
-//!    becomes a copy of that block.
-//! 8. `fold_element_access`: a reference to a list element that only a read
+//! 5. `fold_element_access`: a reference to a list element that only a read
 //!    or a store of one of its fields uses is folded into that access.
+//! 6. `hoist_constants`: a constant written in a loop is written once on entry.
+//! 7. `coalesce_copies`: an op whose result only the next op copies writes
+//!    where the copy would have.
+//! 8. `duplicate_short_branches`: a jump to a short block ending in a branch
+//!    becomes a copy of that block.
 //!
 //! The pass can be left out, for `Engine::PlainBytecode`, which the engine
 //! tests run every fixture on, so that each rule is checked against the ops
@@ -205,7 +205,7 @@ fn fold_copies(block: &mut Vec<Op>, facts: &Facts) {
     }
 }
 
-/// 8. A reference to a list element, used only to read or store a field of
+/// 5. A reference to a list element, used only to read or store a field of
 /// it, folded into the access.
 ///
 /// Matches a `ListElementRef` read once, by the next op: a `CopyAt` through
@@ -298,7 +298,7 @@ fn fuse_returns(block: &mut Vec<Op>, facts: &Facts) {
     block.push(Op::ReturnOk { src, at, len });
 }
 
-/// 5. A constant written in a loop, written once on entry instead.
+/// 6. A constant written in a loop, written once on entry instead.
 ///
 /// Matches a constant's op, in a block that is in a loop, writing a value
 /// nothing else writes. Saves its execution at every iteration, for one at
@@ -322,7 +322,7 @@ fn hoist_constants(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
     prologue
 }
 
-/// 6. An op whose result only the next op copies, writing where the copy would
+/// 7. An op whose result only the next op copies, writing where the copy would
 /// have.
 ///
 /// Matches an op with one result, which it writes after reading every operand,
@@ -383,7 +383,7 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
 /// The most ops a block may have for a jump to it to be replaced by a copy.
 const SHORT_BRANCH: usize = 4;
 
-/// 7. A jump to a short block that ends in a branch, replaced by a copy of the
+/// 8. A jump to a short block that ends in a branch, replaced by a copy of the
 /// block.
 ///
 /// Matches a block ending in a jump to another, of at most `SHORT_BRANCH` ops,

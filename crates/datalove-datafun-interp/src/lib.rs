@@ -1,41 +1,41 @@
-//! IR interpreter with frame-based execution.
+//! The interpreter: runs IR function bodies and script units.
 //!
-//! # Architecture
+//! # Engines
 //!
-//! The interpreter executes IR instructions using a frame-based memory model:
+//! A body runs on one of two engines over the same frame:
 //!
-//! - **Frame**: Flat byte buffer (`Vec<u8>`) holding all values and slots for a
-//!   function call or script unit. Layout computed from type information.
+//! - **The IR walker** (`walker`) runs the IR an instruction at a time. It is
+//!   the reference the other engines are tested against.
+//! - **The bytecode** (`bytecode`) lowers a body once into ops on frame
+//!   offsets, optimizes them, and runs them; an instruction it has no op for
+//!   runs on the walker against the same frame. Script units always walk.
 //!
-//! - **Value/Destination**: Pointer + type descriptor pairs. `Value` for reading,
-//!   `Destination` for writing. Type descriptors (`TyDesc`) provide size, alignment,
-//!   and type-specific metadata for runtime operations.
+//! A `CallDispatcher` sees each call first and may run compiled code instead;
+//! that is how the JIT plugs in. A call whose compiled code gives up (a runtime
+//! error or a stack too deep) returns the `InterpError` it gave up with.
 //!
-//! - **Linear semantics**: Non-copy types (Int, String, List, etc.) use move semantics.
-//!   Moved values are marked dropped to prevent double-free. Copy types use shallow copy.
+//! # Memory
 //!
-//! # Execution Modes
+//! A frame (`frame`) is a flat buffer of all a body's values and slots, laid
+//! out by `IrLayout` from their types. A `Value` or `Destination` is a pointer
+//! into one with the type descriptor (`TyDesc`, built by `IrTyDescTable`) that
+//! says how to read it. Non-copy values move, and a moved-from place is marked
+//! dropped. Everything that allocates, clones, compares or prints goes through
+//! `datalove-rt`.
 //!
-//! **Functions**: Called via `call_with_env()` or `call_in_context()`. Arguments moved
-//! into parameter slots, return value moved to caller-provided destination. Frame
-//! destroyed after return.
+//! # Entry points
 //!
-//! **Script units**: Executed via `execute_script_unit_in_env()`. Frames persist in
-//! `FrameStore` for subsequent units to access via `ExternalValue`/`ExternalSlot`
-//! operands. Supports early return via `!` and `?` operators.
+//! - Functions: `call_with_env` and `call_in_context` (`call`). Arguments move
+//!   into the callee's frame, which comes off the `FrameStack` and goes back on
+//!   return.
+//! - Script units: `execute_script_unit_in_env` (`script`). A unit's frame
+//!   outlives it in the `FrameStore`, for later units to read through
+//!   `ExternalValue` and `ExternalSlot` operands.
+//! - Constants: `consts` writes them into place, and keeps a static const read
+//!   by reference once in a pool. `ctfe` evaluates consts at compile time.
 //!
-//! # Environment
-//!
-//! - `FunctionRegistry`: Stores functions from modules and previous script units.
-//! - `FrameStore`: Stores frames from previous units for external value access.
-//! - `ScriptEnvironment`: Combines registry and frame store for script execution.
-//! - `ExecutionContext`: Local functions available during execution.
-//!
-//! # Runtime Integration
-//!
-//! All memory operations go through `datalove-rt`: allocation, deallocation, deep
-//! copy, comparison, and pretty-printing. Type descriptors are constructed by
-//! `IrTyDescTable` from `IrType` definitions.
+//! Functions are found through the registries in `env`; native rider
+//! functions through `native`.
 
 mod error;
 mod value;

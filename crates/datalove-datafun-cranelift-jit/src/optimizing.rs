@@ -1,9 +1,9 @@
-//! Dispatcher that decides when to JIT-compile and run native code.
+//! The dispatcher that decides when to JIT-compile.
 //!
-//! The OptimizingDispatcher provides a unified optimization pipeline:
-//! 1. Check if function is JIT-compiled; if so, execute native code
-//! 2. If not compiled, record call count for future compilation
-//! 3. Fall back to interpreter if needed
+//! `OptimizingDispatcher` wraps a `JitEngine` with a policy: tuned, compiling
+//! a function after a threshold of calls, or chaos, deciding each compile and
+//! each entry pseudo-randomly from a seed so that tests cover every mix of
+//! compiled and interpreted code.
 
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;

@@ -259,8 +259,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("DropViaRef requires runtime handle parameter".into())
         })?;
 
-        // Get the ref value (pointer to field).
-        let ref_ptr = self.get_value_as_ref_ptr(builder, ref_value)?;
+        // A reference's value is its pointer.
+        let ref_ptr = self.value(builder, ref_value)?;
 
         // Get tydesc for inner type.
         let tydesc_id = self.tydesc(inner_ty)?;

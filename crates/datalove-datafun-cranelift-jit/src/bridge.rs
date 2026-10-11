@@ -28,7 +28,7 @@ fn entry_width(func: &IrCodeUnit) -> usize {
 
 /// Whether `func` is narrow enough to be entered from outside compiled code.
 ///
-/// `dispatch_void` transmutes the entry point to one of a fixed set of `extern
+/// `call_words` transmutes the entry point to one of a fixed set of `extern
 /// "C"` function pointer types, one per arity, so a wider function has no type
 /// to be called through. Asked before compiling rather than at the call, because
 /// a function that cannot be entered is one there is no point compiling, and

@@ -225,21 +225,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Get the pointer stored in a ref value (from GetFieldRef).
-    ///
-    /// For ref values, the stored cranelift value IS the pointer.
-    pub(super) fn get_value_as_ref_ptr(
-        &self,
-        builder: &mut FunctionBuilder,
-        vid: ValueId,
-    ) -> Result<cl_ir::Value, CraneliftError> {
-        // GetFieldRef stores the pointer directly in self.values.
-        self.value(builder, vid)
-    }
-
     /// The Cranelift value for `vid`: what defined it, or in an OSR entry, for
     /// one defined before the loop, what the interpreter's frame holds.
-    fn value(&self, builder: &mut FunctionBuilder, vid: ValueId) -> Result<cl_ir::Value, CraneliftError> {
+    pub(super) fn value(&self, builder: &mut FunctionBuilder, vid: ValueId) -> Result<cl_ir::Value, CraneliftError> {
         if let Some(v) = self.values.get(&vid) {
             return Ok(*v);
         }

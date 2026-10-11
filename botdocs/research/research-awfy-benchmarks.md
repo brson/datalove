@@ -115,7 +115,10 @@ And why, from a profile of each:
 - **Sieve, 19x Java.** A list element written in compiled code is a call to
   the runtime (`dtlv_rti_element_write_local`), not a store; and
   `list.repeated`, generic, boxes each of the 5000 flags into a `data` and out
-  again, about a third of the run.
+  again, about a third of the run. (Since: the runtime's element write is
+  gone, a list store being one checked `ListSet`, which Cranelift and C inline
+  as a store for a copy element. `repeated` still goes through `data`, which
+  is what [Monomorphizing Generics](../plan-monomorphization.md) is for.)
 - **NBody, 4.7x Java (fixed: now 1.6x).** Close to half of the compiled
   `advance` was calls to the runtime's generic destroy (`any_destroy_local`),
   though every value there is an `f64` or a struct of them, and owns nothing:

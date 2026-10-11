@@ -1,6 +1,6 @@
 [package]
 name = "datalove-datafun-cranelift-jit"
-description = "A per-function tracing JIT for the datafun interpreter."
+description = "A method JIT for the datafun interpreter."
 version.workspace = true
 license.workspace = true
 authors.workspace = true

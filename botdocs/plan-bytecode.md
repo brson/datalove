@@ -14,7 +14,7 @@ falling back to the IR walker for any body it cannot lower, and check it against
 the IR walker on every fixture from the first day.
 
 > **This is a plan, and a prototype of it.** The prototype is in
-> `crates/datalove-datafun-interp/src/bytecode.rs`, on by default since October
+> `crates/datalove-datafun-interp/src/bytecode/`, on by default since October
 > 2026 (`DATALOVE_INTERP=ir` turns it off); [What the prototype found](#user-content-what-the-prototype-found)
 > says how it went. The rest records the reasoning and the facts it rests on as
 > of October 2026.
@@ -475,8 +475,8 @@ a bytecode loop header, which the shared frame layout makes possible.
 
 ## What the prototype found
 
-The prototype is `bytecode.rs` in the interpreter crate, the interpreter's
-default engine (`DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP` to print
+The prototype is the `bytecode` module of the interpreter crate, the
+interpreter's default engine (`DATALOVE_BC_STATS` for coverage, `DATALOVE_BC_DUMP` to print
 each body's ops). `engine_tests` runs every fixture on it and compares what it
 observes with the IR walker in the same process; see `plan-engine-tests.md`.
 Before it was the default, a `test-bc` configuration ran the interpreter-driven
@@ -492,19 +492,24 @@ unnecessary. Block edges whose arguments need the IR walker's bookkeeping (a
 parallel move, a slot or parameter argument) and returns of anything but a
 value take the same route.
 
-**What is lowered**: scalar constants, copies and moves of values and untracked
-slots, checked add, sub and mul and comparisons for 32- and 64-bit integers
-(and `index`, `offset`, `u8`, `bool` equality), the hot `u32` intrinsics,
-option and result wrapping and unwrapping, tracked slot stores, loads and
-drops (the tracking byte's offset baked in), drops of values, widening to
-`int` and binary operations no typed op covers (big integers, floats, string
-equality -- these call the IR walker's routines with operands resolved), string
-constants, parameter stores, list bounds checks and element references, the
-`data` operations of generic code (erase, reify, clone, fixed widening), moves
-and drops of parameters, the wrapping `index` intrinsics, jumps, branches,
-switches, returns, and calls. Operands are frame offsets, direct or through a pointer (parameters,
-references); parameter pointers go in the frame's parameter region on `enter`.
-Ops are a 24-byte enum dispatched by a `match`.
+**What is lowered** is most of what function bodies do: constants, copies and
+moves, slot and parameter stores and loads, tracked or not, drops and clones,
+typed integer and float arithmetic and comparisons, option and result wrapping
+and unwrapping, packing and field reads, list bounds checks, element reads,
+stores and references (copy elements without the runtime), map reads, the
+`data` operations of generic code, the hot intrinsics, branches, switches,
+returns and calls. `lower.rs` is the list; `DATALOVE_BC_STATS` reports which
+instructions still escape to the IR walker on a given program. Operands are
+frame offsets, direct or through a pointer (parameters, references); parameter
+pointers go in the frame's parameter region on `enter`. Ops are a 24-byte enum
+dispatched by a `match`.
+
+The lowering emits plain ops, one instruction at a time; `opt.rs` then rewrites
+them by a catalog of general rules (immediates, branch and return fusion, copy
+coalescing, constant hoisting, element-access folding, duplicating short
+branch blocks), each checked against the unoptimized ops by the engine tests'
+plain-bytecode engine. `verify.rs`, in debug builds, checks everything the
+run loop then takes on trust.
 
 **Results** (release build, benchvs, medians):
 
@@ -577,10 +582,9 @@ two and a half times CPython's 945ms, where it was four.
   flags, since the bytecode keeps none for values and untracked slots. The IR
   walker remains the checked engine; the bytecode is checked against it by the
   differential suites.
-- Collection construction, aggregates (pack, unpack, field projections),
-  error construction and calls with `out` arguments are still IR walker
-  instructions, reached through `execute_hot` and `execute_warm`. None is hot
-  in the benchmarks.
+- Collection construction, unpacking, error construction and the rarer
+  collection and string operations are still IR walker instructions, reached
+  through `execute_hot` and `execute_warm`. None is hot in the benchmarks.
 - Ops are 24 bytes rather than 16, which has not been measured as worth
   changing. (A call between bytecode bodies no longer recurses on the Rust
   stack; see [plan-frame-stack.md](plan-frame-stack.md).)
@@ -740,7 +744,8 @@ Fixed:
 
 Left as they are:
 
-- `temp_view_tensors` (rank > 1 `TensorIndexRef`) grows and is never cleared.
+- `temp_view_tensors` (rank > 1 `TensorIndexRef`) grew and was never
+  cleared. (Since fixed: views are built in frame storage.)
 - A function frame that returns an error goes back to the pool without
   destroying its live values. Release function frames keep no liveness flags,
   so this would need the tracking the frame model gave up, or unwinding drops.

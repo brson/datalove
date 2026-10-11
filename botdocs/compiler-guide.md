@@ -1626,8 +1626,8 @@ worth keeping. Carrying a newline flag on `TokenKind::Whitespace`, so
 perhaps 1% and is open.
 
 **The JIT** is about 85x on a tight arithmetic loop and 2-3.5x on call-heavy code.
-It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, registering every
-runtime symbol) and compiles synchronously at `opt_level = "speed"` in the dispatch
+It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, a trampoline for every
+runtime import) and compiles synchronously at `opt_level = "speed"` in the dispatch
 that crossed the threshold. Stubs and native trampolines are made once per
 callee and kept (`JitCompiler::stubs`), and Cranelift's IR verifier runs only
 with debug assertions; making them per caller, and verifying, had been about
@@ -1639,7 +1639,7 @@ callee's signature, which calls the callee's code directly once it is compiled
 and goes through `__jit_dispatch_call` until then; going through the dispatcher
 every time had been over 80% of the time on recursive `fib`, 5x slower. The
 other direction, a call from the bytecode into compiled code, is planned at the
-call site like a call to a native (`Plan::Jit` in `bytecode.rs`): the site asks
+call site like a call to a native (`Plan::Jit` in `bytecode/mod.rs`): the site asks
 the dispatcher once for a `SitePolicy` -- enter this code, count so many calls
 and then offer one, interpret, or offer every call -- and makes its calls by
 that without asking again. Offering every call through the general path had
@@ -1724,7 +1724,7 @@ Script frames are `ScriptFrame`s, which own their bytes and live in the
 
 **Bytecode calls do not recurse.** A call from one bytecode body to another
 pushes the callee's frame and carries on in the same loop (`run_body` in
-`bytecode.rs`), saving the caller's registers in an `Activation`; a return
+`bytecode/run.rs`), saving the caller's registers in an `Activation`; a return
 restores them. A call site that resolves to a statically typed bytecode body
 keeps a `Plan` -- the callee's layout, bytecode and final parameter
 descriptors -- so that the call is a check, a push, the arguments and a
@@ -1975,7 +1975,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `ir_lower_script_tests` | Script IR lowering |
 | `ir_inline_tests` | Inlining transformations |
 | `ir_serial_tests` | IR serialization round-trip |
-| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode_opt.rs`), the JIT, a chaos dispatcher, a JIT that enters every function's loops early by OSR and compiles nothing else, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
+| `engine_tests` | Every program in `fixtures/engines/` on the IR walker, checked against its expected file, and on the bytecode, the bytecode without its optimization pass (`bytecode/opt.rs`), the JIT, a chaos dispatcher, a JIT that enters every function's loops early by OSR and compiles nothing else, Cranelift AOT, C AOT, and with const inlining or specialization off, each compared with the IR walker in process. See `plan-engine-tests.md` |
 | `aot_layout_tests` | Cranelift AOT layout compatibility |
 | `layout_conformance_tests` | `ir::layout` against `rtdt::layout`, both directions |
 | `native_rider_tests` | End-to-end native rider calls |

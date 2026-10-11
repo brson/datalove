@@ -5,7 +5,6 @@
 //!
 //! - [`codegen`]: IR to Cranelift translation.
 //! - [`types`]: Type mapping from IR to Cranelift.
-//! - [`layout`]: Stack frame layout computation.
 //! - [`runtime`]: Runtime function imports.
 //! - [`tydesc_emit`]: Type descriptor emission.
 //! - [`index_types`]: Index-sized value types.
@@ -14,7 +13,6 @@
 pub mod codegen;
 /// Cranelift types for index-sized values.
 pub mod index_types;
-/// Stack frame layout computation.
 /// Runtime function imports.
 pub mod runtime;
 /// Type descriptor emission as static data.

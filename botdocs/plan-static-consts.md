@@ -66,7 +66,7 @@ Every backend builds a heap value for each `Const` it executes:
   stack buffer and calling `list_build_from_slice`; sets and maps likewise.
 - The C backend (`datafun-c-aot/src/codegen.rs`) creates a list with
   `dtlv_rti_list_create_local` and pushes each element.
-- The interpreter (`write_const` in `datafun-interp/src/lib.rs`) builds from
+- The interpreter (`write_const` in `datafun-interp/src/consts.rs`) builds from
   the `ConstValue` the same way.
 
 Only string bytes and type descriptors are static today.

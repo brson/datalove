@@ -7,8 +7,6 @@ use super::*;
 // Lowering
 // =============================================================================
 
-/// Whether a type has a `data` anywhere in it: a type parameter, whose real
-/// layout only its descriptor knows at run time.
 /// The offset and type of a field of a tuple or struct whose layout its static
 /// type says, which a type with no `data` in it does: elsewhere the runtime's
 /// descriptor has the offsets.
@@ -26,6 +24,8 @@ fn static_field(ty: &IrType, index: u32) -> Option<(u32, &IrType)> {
     Some((offset, types[index as usize]))
 }
 
+/// Whether a type has a `data` anywhere in it: a type parameter, whose real
+/// layout only its descriptor knows at run time.
 fn has_data(ty: &IrType) -> bool {
     match ty {
         IrType::Data => true,

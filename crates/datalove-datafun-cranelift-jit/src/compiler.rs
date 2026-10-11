@@ -184,13 +184,12 @@ impl JitCompiler {
             .map_err(|e| JitError::CompilationFailed(format!("runtime imports: {}", e)))?;
 
         // Declare the dispatch function signature.
-        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, ret_is_sret,
-        //                     arg_count, args, descriptors) -> void
+        // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, arg_count,
+        //                     args, descriptors) -> void
         let mut dispatch_sig = cl_ir::Signature::new(call_conv);
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // rt_handle
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // encoded_key
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // ret_dest
-        dispatch_sig.params.push(AbiParam::new(cl_types::I8));  // ret_is_sret
         dispatch_sig.params.push(AbiParam::new(cl_types::I32)); // arg_count
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // args
         dispatch_sig.params.push(AbiParam::new(cl_types::I64)); // descriptors
@@ -586,16 +585,13 @@ impl JitCompiler {
             builder.ins().iconst(PTR_TYPE, 0)
         };
 
-        // ret_is_sret flag.
-        let ret_is_sret_val = builder.ins().iconst(cl_types::I8, if callee_uses_sret { 1 } else { 0 });
-
         // arg_count.
         let arg_count_val = builder.ins().iconst(cl_types::I32, arg_count as i64);
 
         // Call __jit_dispatch_call (void return - result written via ret_dest).
         let dispatch_ref = self.jit_module.declare_func_in_func(self.dispatch_func_id, builder.func);
         let call_args = [
-            rt_handle, encoded_key_val, ret_dest, ret_is_sret_val, arg_count_val,
+            rt_handle, encoded_key_val, ret_dest, arg_count_val,
             args_ptr, descriptors_ptr,
         ];
         builder.ins().call(dispatch_ref, &call_args);

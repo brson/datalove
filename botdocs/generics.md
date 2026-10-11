@@ -294,9 +294,9 @@ is width rather than shape: `bridge::enterable` turns away a function whose
 parameters and descriptors together exceed `MAX_DIRECT_ARGS` words, since
 `call_jit` has no function pointer type to enter it through.
 
-The jit also needs runtime symbols registered twice: once in
-`register_runtime_symbols` and once in `trampoline_all_runtime_imports`. Nothing
-catches a missed one at compile time -- it aborts at run time.
+A runtime function a generic needs is added in two places: declared in
+`RuntimeImports`, and given its address in the jit's `runtime_addresses`. One
+missing from the second panics as the jit starts, which every jit test does.
 
 One rule at a call site is easy to get backwards. An argument whose static type
 reads `data` may be a *wrapper* to unwrap, or a *pointer at the value* that
