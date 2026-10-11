@@ -2284,8 +2284,8 @@ impl IrInterpreter {
         match op {
             Operand::Value(id) => frame.mark_value_dropped(*id),
             Operand::Slot(id) => frame.mark_slot_dropped(*id),
-            Operand::Param(_) | Operand::ValueRef(_)
-            | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+            Operand::Param(id) => frame.mark_param_dropped(*id),
+            Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
         }
     }
 
@@ -2604,7 +2604,9 @@ impl IrInterpreter {
         match op {
             Operand::Slot(id) => frame.mark_slot_live(*id),
             Operand::Value(id) => frame.mark_value_live(*id),
-            _ => {}
+            // This function's own `out` parameter, passed straight on.
+            Operand::Param(id) => frame.mark_param_live(*id),
+            Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
         }
     }
 

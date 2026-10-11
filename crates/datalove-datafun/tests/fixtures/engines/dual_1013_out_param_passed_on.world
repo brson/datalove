@@ -1,0 +1,21 @@
+----------
+scriptunit-fragment
+----------
+
+// An `out` parameter passed straight on as another call's `out` argument:
+// once that call returns, the parameter holds what it wrote, and setting it
+// again destroys that first.
+fun g(out x: string): bool
+    set x = "written by g, long enough to allocate"
+    ret true
+end fun
+
+fun f(out x: string): bool
+    let _a: bool = g(out x)
+    set x = "written by f, long enough to allocate too"
+    ret true
+end fun
+
+var s: string = "initial value long enough to allocate"
+let _ok: bool = f(out s)
+debuglog s

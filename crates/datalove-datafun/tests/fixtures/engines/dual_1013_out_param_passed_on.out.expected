@@ -1,0 +1,46 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "initial value long enough to allocate"
+                        store.move.tracked s0, v0
+                        v1 = call u1(s0)
+                        debuglog s0
+                        unit_end_drop.tracked s0
+                        unit_end
+                    
+                    fn g(p0):
+                    block0:
+                        v0 = const "written by g, long enough to allocate"
+                        drop.tracked p0
+                        store.tracked p0, v0
+                        v1 = const true
+                        return v1
+                    
+                    fn f(p0):
+                    block0:
+                        v0 = call u0(p0)
+                        v1 = const "written by f, long enough to allocate too"
+                        drop.tracked p0
+                        store.tracked p0, v1
+                        v2 = const true
+                        return v2
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("\"written by f, long enough to allocate too\"\n"),
+        ),
+    ],
+)
