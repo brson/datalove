@@ -258,12 +258,10 @@ native fun fixedint_max_value<T>(): T with { T is fixedint, }
 // maps keep their keys in, which for floats is IEEE 754-2008 `totalOrder` and
 // so differs from `.<` over NaN and signed zero. See `sys/std/ord`.
 //
-// Takes its operands by value rather than by reference. A borrowed bare `T`
-// arrives read through its wrapper, and a value packed into a `data`'s own
-// words has no address to lend and no descriptor to hand over -- see
-// `botdocs/native-abi.md`. Taken by value it arrives as the wrapper itself,
-// which the runtime's comparison unpacks for itself.
-native fun ord_compare<T>(self: T, other: T): i8 with { T is ord, }
+// Borrows its operands, so comparing clones nothing. A value packed into a
+// `data`'s own words is unpacked into scratch the caller lends -- see
+// `botdocs/native-abi.md`.
+native fun ord_compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
 
 // Constants of a type parameter bounded to `float`.
 //

@@ -2466,19 +2466,13 @@ pub extern "C-unwind" fn dlr_std__fixedint_max_value(
 
 /// The total order every value has, as a three-way comparison.
 ///
-/// The operands are taken by value, so inside a generic each arrives as the
-/// `data` wrapping it rather than as the thing itself. The runtime's own
-/// comparison reads through a wrapper, so both readings work; what would not
-/// work is borrowing through one, since a value packed into a `data`'s own
-/// words has no address.
-///
-/// Ownership passes with them, and comparing does not consume: both are
-/// destroyed here, which is what taking them by value promised.
+/// The operands are borrowed, so inside a generic each arrives read through
+/// the `data` wrapping it, as the thing itself with a real descriptor.
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__ord_compare(
     rt: *mut u8,
-    a: *mut u8, a_td: *const u8,
-    b: *mut u8, b_td: *const u8,
+    a: *const u8, a_td: *const u8,
+    b: *const u8, b_td: *const u8,
     out: *mut u8, _out_td: *const u8,
 ) -> u8 {
     unsafe {
@@ -2496,8 +2490,6 @@ pub extern "C-unwind" fn dlr_std__ord_compare(
             datalove_rti::RtOrdering::Error => return 2,
         };
         *(out as *mut i8) = answer;
-        datalove_rti::call::dtlv_rti_any_destroy_local(rt, a as *mut u8, a_td as *const rtdt::TyDesc);
-        datalove_rti::call::dtlv_rti_any_destroy_local(rt, b as *mut u8, b_td as *const rtdt::TyDesc);
     }
     OK
 }

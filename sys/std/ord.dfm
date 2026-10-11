@@ -29,45 +29,31 @@ import std.list_insert
 // Negative when self sorts before other, zero when they sort together,
 // positive when it sorts after.
 fun compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b)
+  ret ord_compare(ref self, ref other)
 end fun
 
 fun equal<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) == : i8 / 0
+  ret ord_compare(ref self, ref other) == : i8 / 0
 end fun
 
 fun not_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) != : i8 / 0
+  ret ord_compare(ref self, ref other) != : i8 / 0
 end fun
 
 fun less<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) .< : i8 / 0
+  ret ord_compare(ref self, ref other) .< : i8 / 0
 end fun
 
 fun less_or_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) <= : i8 / 0
+  ret ord_compare(ref self, ref other) <= : i8 / 0
 end fun
 
 fun greater<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) .> : i8 / 0
+  ret ord_compare(ref self, ref other) .> : i8 / 0
 end fun
 
 fun greater_or_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
-  let a: T = self@
-  let b: T = other@
-  ret ord_compare(a, b) >= : i8 / 0
+  ret ord_compare(ref self, ref other) >= : i8 / 0
 end fun
 
 // The smaller of two, or self when they sort together.
@@ -275,7 +261,7 @@ end fun
 // Whether `self[i]` sorts after `self[j]`; none when either is out of bounds.
 //
 // Compares the two in place, which reading each out with `list_get` would not:
-// that clones, and `greater` clones both sides again.
+// that clones.
 fun greater_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
   ret some greater(ref self[i]?, ref self[j]?)
 end fun
