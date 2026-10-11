@@ -72,3 +72,78 @@ which fully destructure their operands.
 
 Besides lists we also have other collections that need
 iteration consideration: maps, sets, tensors, and tables.
+
+Sets are the easy one.
+A set is a tree kept in the total order,
+so `for` walks it in that order
+and binds a reference to each element,
+just as for a list.
+
+```datalove
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord }
+  var all_present = true
+  for elem in self
+    if not contains(ref other, ref elem)
+      set all_present = false
+      break
+    end if
+  end for
+  ret all_present
+end fun
+```
+
+The binding can never be mutable, even if lists eventually grow a mutable form of iteration:
+changing an element in place could move where it belongs in the order.
+
+Maps bind two references, the key and the value.
+
+```datalove
+for key, value in totals
+  debuglog (key@, value@)
+end for
+```
+
+Not a tuple: a `(K, V)` would be a new value built from the two,
+not a place in the map,
+and building it means cloning both.
+Today `sys/std/map` exposes `key_at` and `value_at`
+precisely so maps can be walked with an index like a list,
+and each of those walks the tree to the position from the top.
+A `for` walks it once.
+As with sets, the key binding is immutable forever;
+the value could someday be `mut`.
+
+Tensors iterate along axis 0, the same axis `t[i]?` indexes.
+At rank 1 the binding is a reference to an element.
+At higher ranks it is a view of rank one less,
+the same non-owning view `t[i]?` produces today,
+with the same restrictions.
+So walking every element of a matrix is two loops:
+
+```datalove
+for row in grid
+  for cell in row
+    set total = total + cell
+  end for
+end for
+```
+
+Not sure how to do tables yet.
+The language needs additional features to do anything with them.
+Iterating over the columns would be easy but doesn't seem like what one would want.
+`for` could be a mechanism to iterate over
+partial row projections while binding references to individual fields,
+avoiding materializing a fresh struct.
+This could be the basic tool needed for table transformations.
+
+```datalove
+let table = {|
+  name, number, status
+  "brian", 1, true
+  "sid", 2, false
+|}
+
+for { name, number, .. } in table
+  ...
+end for
+```
