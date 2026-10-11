@@ -1,0 +1,151 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 7.5f64
+                        v1 = const 2f64
+                        v2 = call u0(v0, v1)
+                        debuglog v2
+                        v3 = const 1f64
+                        v4 = const 0f64
+                        v5 = call u0(v3, v4)
+                        debuglog v5
+                        v6 = const 7.5f32
+                        v7 = const 2f32
+                        v8 = call u1(v6, v7)
+                        debuglog v8
+                        v9 = const 1.5f64
+                        v10 = const 2.5f64
+                        v11 = call u2(v9, v10)
+                        debuglog v11
+                        v12 = const 2.5f64
+                        v13 = const 2.5f64
+                        v14 = call u2(v12, v13)
+                        debuglog v14
+                        v15 = const 0f64
+                        v16 = const 0f64
+                        v17 = div v15, v16
+                        v18 = const 0f64
+                        v19 = const 0f64
+                        v20 = div v18, v19
+                        v21 = call u2(v17, v20)
+                        debuglog v21
+                        v22 = const 3f32
+                        v23 = const 1f32
+                        v24 = call u3(v22, v23)
+                        debuglog v24
+                        v25 = const 0f32
+                        v26 = const 0f32
+                        v27 = div v25, v26
+                        v28 = const 1f32
+                        v29 = call u3(v27, v28)
+                        debuglog v29
+                        v30 = const 1000f64
+                        v31 = call u4(v30)
+                        debuglog v31
+                        v32 = const 16f64
+                        v33 = const 2.25f32
+                        v34 = const 9007199254740993u64
+                        v35 = const -42i64
+                        v36 = const 12u32
+                        v37 = const 10u32
+                        v38 = call u5(v32, v33, v34, v35, v36, v37)
+                        debuglog v38
+                        unit_end
+                    
+                    fn arith64(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        v1 = sub p0, p1
+                        v2 = mul p0, p1
+                        v3 = div p0, p1
+                        v4 = neg p0
+                        v5 = pack Tuple5 {v0, v1, v2, v3, v4}
+                        return v5
+                    
+                    fn arith32(p0, p1):
+                    block0:
+                        v0 = add p0, p1
+                        v1 = sub p0, p1
+                        v2 = mul p0, p1
+                        v3 = div p0, p1
+                        v4 = neg p0
+                        v5 = pack Tuple5 {v0, v1, v2, v3, v4}
+                        return v5
+                    
+                    fn cmp64(p0, p1):
+                    block0:
+                        v0 = eq p0, p1
+                        v1 = ne p0, p1
+                        v2 = lt p0, p1
+                        v3 = le p0, p1
+                        v4 = gt p0, p1
+                        v5 = ge p0, p1
+                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        return v6
+                    
+                    fn cmp32(p0, p1):
+                    block0:
+                        v0 = eq p0, p1
+                        v1 = ne p0, p1
+                        v2 = lt p0, p1
+                        v3 = le p0, p1
+                        v4 = gt p0, p1
+                        v5 = ge p0, p1
+                        v6 = pack Tuple6 {v0, v1, v2, v3, v4, v5}
+                        return v6
+                    
+                    fn halvings(p0):
+                    block0:
+                        v0 = copy p0
+                        store.copy s0, v0
+                        v1 = const 0u32
+                        store.copy s1, v1
+                        goto block1
+                    block1:
+                        v2 = const 1f64
+                        v3 = gt s0, v2
+                        branch v3, block2, block3
+                    block2:
+                        v4 = const 2f64
+                        v5 = div s0, v4
+                        store.copy s0, v5
+                        v6 = const 1u32
+                        v7 = intrinsic AddWrappingU32(s1, v6)
+                        store.copy s1, v7
+                        goto block1
+                    block3:
+                        v8 = load.copy s1
+                        return v8
+                    
+                    fn intrinsics(p0, p1, p2, p3, p4, p5):
+                    block0:
+                        v0 = intrinsic SqrtF64(p0)
+                        v1 = intrinsic SqrtF32(p1)
+                        v2 = intrinsic U64ToF64(p2)
+                        v3 = intrinsic I64ToF64(p3)
+                        v4 = intrinsic F32ToF64(p1)
+                        v5 = intrinsic F64ToF32(p0)
+                        v6 = intrinsic BitxorU32(p4, p5)
+                        v7 = intrinsic BitorU32(p4, p5)
+                        v8 = pack Tuple8 {v0, v1, v2, v3, v4, v5, v6, v7}
+                        return v8
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(9.5, 5.5, 15.0, 3.75, -7.5)\n(1.0, 1.0, 0.0, inf, -1.0)\n(9.5, 5.5, 15.0, 3.75, -7.5)\n(false, true, true, true, false, false)\n(true, false, false, true, false, true)\n(false, true, false, false, false, false)\n(false, true, false, false, true, true)\n(false, true, false, false, false, false)\n10\n(4.0, 1.5, 9007199254740992.0, -42.0, 2.25, 16.0, 6, 14)\n"),
+        ),
+    ],
+)

@@ -306,6 +306,28 @@ pub(crate) enum Op {
     ZextU8U64 { dst: Loc, src: Loc },
     ZextU32U64 { dst: Loc, src: Loc },
     NotBool { dst: Loc, src: Loc },
+    XorU32 { dst: Loc, a: Loc, b: Loc },
+    OrU32 { dst: Loc, a: Loc, b: Loc },
+
+    /// Floating point: IEEE arithmetic, as the IR walker does it.
+    CmpF32 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
+    CmpF64 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
+    AddF64 { dst: Loc, a: Loc, b: Loc },
+    SubF64 { dst: Loc, a: Loc, b: Loc },
+    MulF64 { dst: Loc, a: Loc, b: Loc },
+    DivF64 { dst: Loc, a: Loc, b: Loc },
+    AddF32 { dst: Loc, a: Loc, b: Loc },
+    SubF32 { dst: Loc, a: Loc, b: Loc },
+    MulF32 { dst: Loc, a: Loc, b: Loc },
+    DivF32 { dst: Loc, a: Loc, b: Loc },
+    NegF64 { dst: Loc, src: Loc },
+    NegF32 { dst: Loc, src: Loc },
+    SqrtF64 { dst: Loc, src: Loc },
+    SqrtF32 { dst: Loc, src: Loc },
+    U64ToF64 { dst: Loc, src: Loc },
+    I64ToF64 { dst: Loc, src: Loc },
+    F32ToF64 { dst: Loc, src: Loc },
+    F64ToF32 { dst: Loc, src: Loc },
 
     /// Whether `index` is inside the list at `list`.
     ListBoundsCheck { dst: Loc, list: Loc, index: Loc },
@@ -382,6 +404,8 @@ pub(crate) enum Op {
     BrCmpI32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpU64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpI64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
+    BrCmpF32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
+    BrCmpF64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     /// Pass block `block`'s terminator's arguments for its edge `edge` (0 for
     /// a `Goto` or the then side of a `Branch`, 1 for the else side) on the IR
     /// walker, then jump to `to`.
@@ -1246,6 +1270,16 @@ impl<'a> Lowering<'a> {
                 }
                 true
             }
+            Instruction::UnaryOp { dest, op: UnaryOp::Neg, operand } => {
+                let (Some(ty), Some(src)) = (self.typed(operand), self.loc(operand)) else { return false };
+                let dst = self.value_loc(*dest);
+                match ty {
+                    IrType::F64 => self.emit(Op::NegF64 { dst, src }),
+                    IrType::F32 => self.emit(Op::NegF32 { dst, src }),
+                    _ => return false,
+                }
+                true
+            }
             Instruction::UnaryOp { dest, op: UnaryOp::Not | UnaryOp::LogicNot, operand } => {
                 let (Some(IrType::Bool), Some(src)) = (self.typed(operand), self.loc(operand)) else {
                     return false;
@@ -1592,6 +1626,9 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_binop(&mut self, dest: ValueId, op: BinOp, lhs: &Operand, rhs: &Operand) -> bool {
+        if let Some(arith) = self.lower_float_arith(dest, op, lhs, rhs) {
+            return arith;
+        }
         let Some(cmp) = Cmp::of(op) else { return false };
         let (Some(lt), Some(a), Some(b)) = (self.typed(lhs), self.loc(lhs), self.loc(rhs)) else {
             return false;
@@ -1610,6 +1647,8 @@ impl<'a> Lowering<'a> {
             IrType::Index => Op::CmpU64 { cmp, dst, a, b },
             IrType::Offset if rtdt::INDEX_SIZE == 4 => Op::CmpI32 { cmp, dst, a, b },
             IrType::Offset => Op::CmpI64 { cmp, dst, a, b },
+            IrType::F32 => Op::CmpF32 { cmp, dst, a, b },
+            IrType::F64 => Op::CmpF64 { cmp, dst, a, b },
             _ => return false,
         };
         // A bool compares as its byte only for equality.
@@ -1618,6 +1657,33 @@ impl<'a> Lowering<'a> {
         }
         self.emit(op);
         true
+    }
+
+    /// Floating-point `+ - * /`, where both operands are the same float type;
+    /// `None` if this is not that.
+    fn lower_float_arith(&mut self, dest: ValueId, op: BinOp, lhs: &Operand, rhs: &Operand) -> Option<bool> {
+        let ty = self.typed(lhs)?;
+        if !matches!(ty, IrType::F32 | IrType::F64) || !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div) {
+            return None;
+        }
+        if self.typed(rhs) != Some(ty) {
+            return None;
+        }
+        let (Some(a), Some(b)) = (self.loc(lhs), self.loc(rhs)) else { return Some(false) };
+        let dst = self.value_loc(dest);
+        let f64 = matches!(ty, IrType::F64);
+        self.emit(match (op, f64) {
+            (BinOp::Add, true) => Op::AddF64 { dst, a, b },
+            (BinOp::Sub, true) => Op::SubF64 { dst, a, b },
+            (BinOp::Mul, true) => Op::MulF64 { dst, a, b },
+            (BinOp::Div, true) => Op::DivF64 { dst, a, b },
+            (BinOp::Add, false) => Op::AddF32 { dst, a, b },
+            (BinOp::Sub, false) => Op::SubF32 { dst, a, b },
+            (BinOp::Mul, false) => Op::MulF32 { dst, a, b },
+            (BinOp::Div, false) => Op::DivF32 { dst, a, b },
+            _ => unreachable!("matched above"),
+        });
+        Some(true)
     }
 
     /// A binary operation on the IR walker's routine, with its operands
@@ -1695,9 +1761,20 @@ impl<'a> Lowering<'a> {
     }
 
     fn lower_intrinsic(&mut self, dest: ValueId, intrinsic: IntrinsicId, args: &[Operand]) -> bool {
-        if let ([x], IntrinsicId::U64ToIndex) = (args, intrinsic) {
+        if let [x] = args {
             let Some(src) = self.loc(x) else { return false };
-            self.emit(Op::U64ToIndex { dst: self.value_loc(dest), src });
+            let dst = self.value_loc(dest);
+            let op = match intrinsic {
+                IntrinsicId::U64ToIndex => Op::U64ToIndex { dst, src },
+                IntrinsicId::SqrtF64 => Op::SqrtF64 { dst, src },
+                IntrinsicId::SqrtF32 => Op::SqrtF32 { dst, src },
+                IntrinsicId::U64ToF64 => Op::U64ToF64 { dst, src },
+                IntrinsicId::I64ToF64 => Op::I64ToF64 { dst, src },
+                IntrinsicId::F32ToF64 => Op::F32ToF64 { dst, src },
+                IntrinsicId::F64ToF32 => Op::F64ToF32 { dst, src },
+                _ => return false,
+            };
+            self.emit(op);
             return true;
         }
         let [x, y] = args else { return false };
@@ -1711,6 +1788,8 @@ impl<'a> Lowering<'a> {
             IntrinsicId::ShrU32 => Op::ShrU32 { dst, a, b },
             IntrinsicId::ShlU32 => Op::ShlU32 { dst, a, b },
             IntrinsicId::BitandU32 => Op::AndU32 { dst, a, b },
+            IntrinsicId::BitxorU32 => Op::XorU32 { dst, a, b },
+            IntrinsicId::BitorU32 => Op::OrU32 { dst, a, b },
             IntrinsicId::AddWrappingIndex => Op::AddWrapIndex { dst, a, b },
             IntrinsicId::SubWrappingIndex => Op::SubWrapIndex { dst, a, b },
             _ => return false,
@@ -1951,6 +2030,21 @@ impl Op {
             Op::ZextU8U64 { dst, src } => { f(dst, 8); f(src, 1) }
             Op::ZextU32U64 { dst, src } => { f(dst, 8); f(src, 4) }
             Op::NotBool { dst, src } => { f(dst, 1); f(src, 1) }
+            Op::XorU32 { dst, a, b } | Op::OrU32 { dst, a, b } => { f(dst, 4); f(a, 4); f(b, 4) }
+            Op::CmpF32 { dst, a, b, .. } => { f(dst, 1); f(a, 4); f(b, 4) }
+            Op::CmpF64 { dst, a, b, .. } => { f(dst, 1); f(a, 8); f(b, 8) }
+            Op::AddF64 { dst, a, b } | Op::SubF64 { dst, a, b }
+            | Op::MulF64 { dst, a, b } | Op::DivF64 { dst, a, b } => { f(dst, 8); f(a, 8); f(b, 8) }
+            Op::AddF32 { dst, a, b } | Op::SubF32 { dst, a, b }
+            | Op::MulF32 { dst, a, b } | Op::DivF32 { dst, a, b } => { f(dst, 4); f(a, 4); f(b, 4) }
+            Op::NegF64 { dst, src } => { f(dst, 8); f(src, 8) }
+            Op::NegF32 { dst, src } => { f(dst, 4); f(src, 4) }
+            Op::SqrtF64 { dst, src } => { f(dst, 8); f(src, 8) }
+            Op::SqrtF32 { dst, src } => { f(dst, 4); f(src, 4) }
+            Op::U64ToF64 { dst, src } => { f(dst, 8); f(src, 8) }
+            Op::I64ToF64 { dst, src } => { f(dst, 8); f(src, 8) }
+            Op::F32ToF64 { dst, src } => { f(dst, 8); f(src, 4) }
+            Op::F64ToF32 { dst, src } => { f(dst, 4); f(src, 8) }
             Op::ListBoundsCheck { dst, list, index } => {
                 f(dst, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
             }
@@ -1986,6 +2080,8 @@ impl Op {
             Op::CkU32IBr { dst, a, .. } => { f(dst, 4); f(a, 4) }
             Op::BrCmpU32 { a, b, .. } | Op::BrCmpI32 { a, b, .. } => { f(a, 4); f(b, 4) }
             Op::BrCmpU64 { a, b, .. } | Op::BrCmpI64 { a, b, .. } => { f(a, 8); f(b, 8) }
+            Op::BrCmpF32 { a, b, .. } => { f(a, 4); f(b, 4) }
+            Op::BrCmpF64 { a, b, .. } => { f(a, 8); f(b, 8) }
             Op::Switch { disc, .. } => f(disc, 4),
             Op::Return { src, len } => f(src, len),
             Op::ReturnOk { src, len, .. } => f(src, len),
@@ -2002,7 +2098,8 @@ impl Op {
             Op::UnwrapOkBr { then, .. } => f(then),
             Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
             | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
-            | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. } => { f(then); f(els) }
+            | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. }
+            | Op::BrCmpF32 { then, els, .. } | Op::BrCmpF64 { then, els, .. } => { f(then); f(els) }
             Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. }
             | Op::CkAssignBr { ovf, ok, .. } | Op::CkAssignU32IBr { ovf, ok, .. } => { f(ovf); f(ok) }
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. }
@@ -2020,6 +2117,7 @@ impl Op {
             | Op::ShrU32 { .. } | Op::ShlU32 { .. } | Op::AndU32 { .. }
             | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::U64ToIndex { .. }
             | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
+            | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. } | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. } | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. } | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. } | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. } | Op::F64ToF32 { .. }
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
             | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
@@ -2465,6 +2563,26 @@ impl IrInterpreter {
                     Op::ZextU8U64 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u64),
                     Op::ZextU32U64 { dst, src } => wr(base, dst, rd::<u32>(base, src) as u64),
                     Op::NotBool { dst, src } => wr(base, dst, rd::<u8>(base, src) == 0),
+                    Op::XorU32 { dst, a, b } => wr(base, dst, rd::<u32>(base, a) ^ rd::<u32>(base, b)),
+                    Op::OrU32 { dst, a, b } => wr(base, dst, rd::<u32>(base, a) | rd::<u32>(base, b)),
+                    Op::CmpF32 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<f32>(base, a), rd::<f32>(base, b))),
+                    Op::CmpF64 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<f64>(base, a), rd::<f64>(base, b))),
+                    Op::AddF64 { dst, a, b } => wr(base, dst, rd::<f64>(base, a) + rd::<f64>(base, b)),
+                    Op::SubF64 { dst, a, b } => wr(base, dst, rd::<f64>(base, a) - rd::<f64>(base, b)),
+                    Op::MulF64 { dst, a, b } => wr(base, dst, rd::<f64>(base, a) * rd::<f64>(base, b)),
+                    Op::DivF64 { dst, a, b } => wr(base, dst, rd::<f64>(base, a) / rd::<f64>(base, b)),
+                    Op::AddF32 { dst, a, b } => wr(base, dst, rd::<f32>(base, a) + rd::<f32>(base, b)),
+                    Op::SubF32 { dst, a, b } => wr(base, dst, rd::<f32>(base, a) - rd::<f32>(base, b)),
+                    Op::MulF32 { dst, a, b } => wr(base, dst, rd::<f32>(base, a) * rd::<f32>(base, b)),
+                    Op::DivF32 { dst, a, b } => wr(base, dst, rd::<f32>(base, a) / rd::<f32>(base, b)),
+                    Op::NegF64 { dst, src } => wr(base, dst, -rd::<f64>(base, src)),
+                    Op::NegF32 { dst, src } => wr(base, dst, -rd::<f32>(base, src)),
+                    Op::SqrtF64 { dst, src } => wr(base, dst, rd::<f64>(base, src).sqrt()),
+                    Op::SqrtF32 { dst, src } => wr(base, dst, rd::<f32>(base, src).sqrt()),
+                    Op::U64ToF64 { dst, src } => wr(base, dst, rd::<u64>(base, src) as f64),
+                    Op::I64ToF64 { dst, src } => wr(base, dst, rd::<i64>(base, src) as f64),
+                    Op::F32ToF64 { dst, src } => wr(base, dst, rd::<f32>(base, src) as f64),
+                    Op::F64ToF32 { dst, src } => wr(base, dst, rd::<f64>(base, src) as f32),
 
                     Op::ListBoundsCheck { dst, list, index } => {
                         let list = &*(list.at(base) as *const rtdt::List);
@@ -2644,6 +2762,14 @@ impl IrInterpreter {
                     }
                     Op::BrCmpI64 { cmp, a, b, then, els } => {
                         pc = if cmp.apply(rd::<i64>(base, a), rd::<i64>(base, b)) { then } else { els } as usize;
+                        continue;
+                    }
+                    Op::BrCmpF32 { cmp, a, b, then, els } => {
+                        pc = if cmp.apply(rd::<f32>(base, a), rd::<f32>(base, b)) { then } else { els } as usize;
+                        continue;
+                    }
+                    Op::BrCmpF64 { cmp, a, b, then, els } => {
+                        pc = if cmp.apply(rd::<f64>(base, a), rd::<f64>(base, b)) { then } else { els } as usize;
                         continue;
                     }
                     Op::EdgeIr { block, edge, to } => {

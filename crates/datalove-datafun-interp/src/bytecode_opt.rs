@@ -156,6 +156,8 @@ fn fuse_branches(block: &mut Vec<Op>, b: usize, facts: &Facts) {
         Op::CmpI32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI32 { cmp, a, b, then, els },
         Op::CmpU64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU64 { cmp, a, b, then, els },
         Op::CmpI64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI64 { cmp, a, b, then, els },
+        Op::CmpF32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpF32 { cmp, a, b, then, els },
+        Op::CmpF64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpF64 { cmp, a, b, then, els },
         Op::AddCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Add, dst, a, b, ovf: then, ok: els },
         Op::SubCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Sub, dst, a, b, ovf: then, ok: els },
         Op::MulCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Mul, dst, a, b, ovf: then, ok: els },
@@ -279,7 +281,7 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
         | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. } | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. }
         | Op::AddWrapIndex { dst, .. } | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. }
         | Op::ZextU8U32 { dst, .. } | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. }
-        | Op::NotBool { dst, .. } => Some(dst),
+        | Op::NotBool { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. } | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. } | Op::SubF64 { dst, .. } | Op::MulF64 { dst, .. } | Op::DivF64 { dst, .. } | Op::AddF32 { dst, .. } | Op::SubF32 { dst, .. } | Op::MulF32 { dst, .. } | Op::DivF32 { dst, .. } | Op::NegF64 { dst, .. } | Op::NegF32 { dst, .. } | Op::SqrtF64 { dst, .. } | Op::SqrtF32 { dst, .. } | Op::U64ToF64 { dst, .. } | Op::I64ToF64 { dst, .. } | Op::F32ToF64 { dst, .. } | Op::F64ToF32 { dst, .. } => Some(dst),
         _ => None,
     }
 }
@@ -315,7 +317,8 @@ fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
 /// Whether an op is a branch to two blocks, with nothing falling through.
 fn two_way(op: &Op) -> bool {
     matches!(op, Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
-        | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::CkU32Br { .. }
+        | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. }
+        | Op::BrCmpF32 { .. } | Op::BrCmpF64 { .. } | Op::CkU32Br { .. }
         | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. })
 }
 

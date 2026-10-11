@@ -1,0 +1,49 @@
+----------
+scriptunit-fragment
+----------
+
+// Float arithmetic, comparisons, negation and the float intrinsics inside
+// functions, which run as bytecode: each has an op of its own there. NaN
+// compares false to everything, itself included, and unequal to it.
+fun arith64(a: f64, b: f64): (f64, f64, f64, f64, f64)
+  ret (a + b, a - b, a * b, a / b, -a)
+end fun
+
+fun arith32(a: f32, b: f32): (f32, f32, f32, f32, f32)
+  ret (a + b, a - b, a * b, a / b, -a)
+end fun
+
+fun cmp64(a: f64, b: f64): (bool, bool, bool, bool, bool, bool)
+  ret (a == b, a != b, a .< b, a <= b, a .> b, a >= b)
+end fun
+
+fun cmp32(a: f32, b: f32): (bool, bool, bool, bool, bool, bool)
+  ret (a == b, a != b, a .< b, a <= b, a .> b, a >= b)
+end fun
+
+// A float compare that only the loop's branch reads.
+fun halvings(x: f64): u32
+  var v = x
+  var n: u32 = 0
+  loop while v .> 1.0
+    set v = v / 2.0
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret n
+end fun
+
+fun intrinsics(x: f64, y: f32, u: u64, i: i64, p: u32, q: u32): (f64, f32, f64, f64, f64, f32, u32, u32)
+  ret (icall sqrt_f64(x), icall sqrt_f32(y), icall u64_to_f64(u), icall i64_to_f64(i),
+       icall f32_to_f64(y), icall f64_to_f32(x), icall bitxor_u32(p, q), icall bitor_u32(p, q))
+end fun
+
+debuglog arith64(7.5, 2.0)
+debuglog arith64(1.0, 0.0)
+debuglog arith32(7.5, 2.0)
+debuglog cmp64(1.5, 2.5)
+debuglog cmp64(2.5, 2.5)
+debuglog cmp64(0.0 / 0.0, 0.0 / 0.0)
+debuglog cmp32(3.0, 1.0)
+debuglog cmp32(0.0 / 0.0, 1.0)
+debuglog halvings(1000.0)
+debuglog intrinsics(16.0, 2.25, (: u64 / 9007199254740993), (: i64 / -42), (: u32 / 12), (: u32 / 10))
