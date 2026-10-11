@@ -1,3 +1,11 @@
+## 2026/10/11 ref binding mode for match and if
+
+These destructure by value.
+Destructuring by ref producing ref places would be good too,
+both for leaving the original intact
+and also to destructure other references.
+
+
 ## 2026/10/10 Recursive types
 
 Questions about how to represent them in datalit.
