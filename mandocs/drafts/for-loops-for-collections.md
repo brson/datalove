@@ -67,7 +67,7 @@ The `item` variable is a reference binding,
 a pointer directly into the container.
 So `item` can't be moved, nor can the iteratee, `self`
 be mutably referenced or mutated via indexing.
-This is in contrast to `match` and destructuring `for`
+This is in contrast to `match` and destructuring `if`
 which fully destructure their operands.
 
 Besides lists we also have other collections that need
