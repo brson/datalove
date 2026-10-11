@@ -24,6 +24,8 @@
 //!    where the copy would have.
 //! 7. `duplicate_short_branches`: a jump to a short block ending in a branch
 //!    becomes a copy of that block.
+//! 8. `fold_element_access`: a reference to a list element that only a read
+//!    or a store of one of its fields uses is folded into that access.
 //!
 //! The pass can be left out, for `Engine::PlainBytecode`, which the engine
 //! tests run every fixture on, so that each rule is checked against the ops
@@ -79,6 +81,7 @@ pub(super) fn optimize(blocks: &mut [Vec<Op>], facts: &Facts) -> Vec<Op> {
         fuse_branches(&mut blocks[b], b, facts);
         fold_copies(&mut blocks[b], facts);
         fuse_returns(&mut blocks[b], facts);
+        fold_element_access(&mut blocks[b], facts);
     }
     let prologue = hoist_constants(blocks, facts);
     for block in blocks.iter_mut() {
@@ -157,6 +160,7 @@ fn fuse_branches(block: &mut Vec<Op>, b: usize, facts: &Facts) {
         Op::CmpU64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU64 { cmp, a, b, then, els },
         Op::CmpI64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI64 { cmp, a, b, then, els },
         Op::CmpF32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpF32 { cmp, a, b, then, els },
+        Op::ListBoundsCheck { dst, list, index } if dst.0 == want => Op::BrListBounds { list, index, then, els },
         Op::CmpF64 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpF64 { cmp, a, b, then, els },
         Op::AddCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Add, dst, a, b, ovf: then, ok: els },
         Op::SubCkU32 { dst, ovf, a, b } if ovf.0 == want => Op::CkU32Br { kind: Ck::Sub, dst, a, b, ovf: then, ok: els },
@@ -189,6 +193,57 @@ fn fold_copies(block: &mut Vec<Op>, facts: &Facts) {
             continue;
         }
         i += 1;
+    }
+}
+
+/// 8. A reference to a list element, used only to read or store a field of
+/// it, folded into the access.
+///
+/// Matches a `ListElementRef` read once, by the next op: a `CopyAt` through
+/// it, or a `FieldRef` through it, read once in turn, by a copy into the field.
+/// Bounds were checked before the reference was taken, as they still are.
+/// Saves one op for a read and two for a store, on every field access to an
+/// element: an `xs[i]!.f`.
+fn fold_element_access(block: &mut Vec<Op>, facts: &Facts) {
+    let through = |r: Loc| Loc(r.0 | super::INDIRECT);
+    let mut i = 0;
+    while i + 1 < block.len() {
+        let Op::ListElementRef { dst: r, list, index, size } = block[i] else {
+            i += 1;
+            continue;
+        };
+        if !facts.read_once(r) {
+            i += 1;
+            continue;
+        }
+        if let Op::CopyAt { dst, src, offset, len } = block[i + 1]
+            && src.0 == through(r).0
+            && let (Ok(offset), Ok(len)) = (u16::try_from(offset), u16::try_from(len))
+        {
+            block[i] = Op::ListCopyAt { dst, list, index, size, offset, len };
+            block.remove(i + 1);
+        } else if let Op::FieldRef { dst: f, src, offset } = block[i + 1]
+            && src.0 == through(r).0
+            && facts.read_once(f)
+            && let Some((dst, value)) = block.get(i + 2).and_then(copy_of)
+            && dst.0 == through(f).0
+            && let (Ok(offset), Ok(len)) = (u16::try_from(offset), u16::try_from(copy_len(&block[i + 2])))
+        {
+            block[i] = Op::ListStoreAt { list, index, src: value, size, offset, len };
+            block.drain(i + 1..i + 3);
+        }
+        i += 1;
+    }
+}
+
+/// How many bytes a copy moves.
+fn copy_len(op: &Op) -> u32 {
+    match *op {
+        Op::Copy1 { .. } => 1,
+        Op::Copy4 { .. } => 4,
+        Op::Copy8 { .. } => 8,
+        Op::CopyN { len, .. } => len,
+        _ => unreachable!("not a copy"),
     }
 }
 
@@ -281,7 +336,7 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
         | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. } | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. }
         | Op::AddWrapIndex { dst, .. } | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. }
         | Op::ZextU8U32 { dst, .. } | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. }
-        | Op::NotBool { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. } | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. } | Op::SubF64 { dst, .. } | Op::MulF64 { dst, .. } | Op::DivF64 { dst, .. } | Op::AddF32 { dst, .. } | Op::SubF32 { dst, .. } | Op::MulF32 { dst, .. } | Op::DivF32 { dst, .. } | Op::NegF64 { dst, .. } | Op::NegF32 { dst, .. } | Op::SqrtF64 { dst, .. } | Op::SqrtF32 { dst, .. } | Op::U64ToF64 { dst, .. } | Op::I64ToF64 { dst, .. } | Op::F32ToF64 { dst, .. } | Op::F64ToF32 { dst, .. } => Some(dst),
+        | Op::NotBool { dst, .. } | Op::ListCopyAt { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. } | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. } | Op::SubF64 { dst, .. } | Op::MulF64 { dst, .. } | Op::DivF64 { dst, .. } | Op::AddF32 { dst, .. } | Op::SubF32 { dst, .. } | Op::MulF32 { dst, .. } | Op::DivF32 { dst, .. } | Op::NegF64 { dst, .. } | Op::NegF32 { dst, .. } | Op::SqrtF64 { dst, .. } | Op::SqrtF32 { dst, .. } | Op::U64ToF64 { dst, .. } | Op::I64ToF64 { dst, .. } | Op::F32ToF64 { dst, .. } | Op::F64ToF32 { dst, .. } => Some(dst),
         _ => None,
     }
 }
@@ -318,7 +373,7 @@ fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
 fn two_way(op: &Op) -> bool {
     matches!(op, Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
         | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. }
-        | Op::BrCmpF32 { .. } | Op::BrCmpF64 { .. } | Op::CkU32Br { .. }
+        | Op::BrCmpF32 { .. } | Op::BrCmpF64 { .. } | Op::BrListBounds { .. } | Op::CkU32Br { .. }
         | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. })
 }
 

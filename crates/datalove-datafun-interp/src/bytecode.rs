@@ -339,6 +339,12 @@ pub(crate) enum Op {
     /// `value`, if the index is in bounds, and say whether it was: a ListSet
     /// of an element type that owns nothing, so nothing to destroy either way.
     ListSetCopy { valid: Loc, list: Loc, index: Loc, value: Loc, size: u32 },
+    /// Copy `len` bytes, `offset` into element `index` of the list at `list`,
+    /// to `dst`: a reference to the element and a read through it.
+    ListCopyAt { dst: Loc, list: Loc, index: Loc, size: u32, offset: u16, len: u16 },
+    /// Copy `len` bytes from `src` to `offset` into element `index`: a
+    /// reference to the element, one to its field, and a store through it.
+    ListStoreAt { list: Loc, index: Loc, src: Loc, size: u32, offset: u16, len: u16 },
     /// A reference to element `index` of the list at `list`, whose elements
     /// are `size` bytes.
     ListElementRef { dst: Loc, list: Loc, index: Loc, size: u32 },
@@ -404,6 +410,8 @@ pub(crate) enum Op {
     BrCmpI32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpU64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpI64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
+    /// `ListBoundsCheck` and the branch that is all that reads it.
+    BrListBounds { list: Loc, index: Loc, then: u32, els: u32 },
     BrCmpF32 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpF64 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     /// Pass block `block`'s terminator's arguments for its edge `edge` (0 for
@@ -1195,6 +1203,29 @@ impl<'a> Lowering<'a> {
                 let (Some(ty), Some(dst), Some(src)) =
                     (self.typed(&p), self.loc(&p), self.consumed(value)) else { return false };
                 if self.typed(value).is_none() {
+                    return false;
+                }
+                if let Some(op) = Self::copy(dst, src, layout_of(ty).size) {
+                    self.emit(op);
+                }
+                true
+            }
+            // A store through a reference of a type that owns nothing, which is
+            // a copy to where the reference points: the drop in front of a
+            // store, which a type that owns nothing never has, did the rest.
+            Instruction::RefStore { dest, value } => {
+                let (ty, dst) = match dest {
+                    Operand::ValueRef(_) => (self.typed(dest), self.loc(dest)),
+                    Operand::Value(r) => match self.typed(dest) {
+                        Some(IrType::Ref(inner)) if !has_data(inner) => {
+                            (Some(&**inner), Some(Loc::indirect(self.layout.value_offsets[r.0 as usize])))
+                        }
+                        _ => return false,
+                    },
+                    _ => return false,
+                };
+                let (Some(ty), Some(dst), Some(src)) = (ty, dst, self.loc(value)) else { return false };
+                if !ty.is_copy() {
                     return false;
                 }
                 if let Some(op) = Self::copy(dst, src, layout_of(ty).size) {
@@ -2051,6 +2082,12 @@ impl Op {
             Op::ListGetCopy { dst, valid, list, index, size } => {
                 f(dst, size); f(valid, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
             }
+            Op::ListCopyAt { dst, list, index, len, .. } => {
+                f(dst, len as u32); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
+            }
+            Op::ListStoreAt { list, index, src, len, .. } => {
+                f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I); f(src, len as u32)
+            }
             Op::ListSetCopy { valid, list, index, value, size } => {
                 f(valid, 1); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I); f(value, size)
             }
@@ -2080,6 +2117,7 @@ impl Op {
             Op::CkU32IBr { dst, a, .. } => { f(dst, 4); f(a, 4) }
             Op::BrCmpU32 { a, b, .. } | Op::BrCmpI32 { a, b, .. } => { f(a, 4); f(b, 4) }
             Op::BrCmpU64 { a, b, .. } | Op::BrCmpI64 { a, b, .. } => { f(a, 8); f(b, 8) }
+            Op::BrListBounds { list, index, .. } => { f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I) }
             Op::BrCmpF32 { a, b, .. } => { f(a, 4); f(b, 4) }
             Op::BrCmpF64 { a, b, .. } => { f(a, 8); f(b, 8) }
             Op::Switch { disc, .. } => f(disc, 4),
@@ -2099,7 +2137,8 @@ impl Op {
             Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
             | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
             | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. }
-            | Op::BrCmpF32 { then, els, .. } | Op::BrCmpF64 { then, els, .. } => { f(then); f(els) }
+            | Op::BrCmpF32 { then, els, .. } | Op::BrCmpF64 { then, els, .. }
+            | Op::BrListBounds { then, els, .. } => { f(then); f(els) }
             Op::CkU32Br { ovf, ok, .. } | Op::CkU32IBr { ovf, ok, .. }
             | Op::CkAssignBr { ovf, ok, .. } | Op::CkAssignU32IBr { ovf, ok, .. } => { f(ovf); f(ok) }
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. }
@@ -2119,6 +2158,7 @@ impl Op {
             | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
             | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. } | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. } | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. } | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. } | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. } | Op::F64ToF32 { .. }
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
+            | Op::ListCopyAt { .. } | Op::ListStoreAt { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
             | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
@@ -2588,6 +2628,18 @@ impl IrInterpreter {
                         let list = &*(list.at(base) as *const rtdt::List);
                         wr(base, dst, rd::<rtdt::IndexRepr>(base, index) < list.size.0);
                     }
+                    Op::ListCopyAt { dst, list, index, size, offset, len } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        let i = rd::<rtdt::IndexRepr>(base, index) as usize;
+                        let at = (list.data as *const u8).add(i * size as usize + offset as usize);
+                        copy_bytes(at, dst.at(base), len as usize);
+                    }
+                    Op::ListStoreAt { list, index, src, size, offset, len } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        let i = rd::<rtdt::IndexRepr>(base, index) as usize;
+                        let at = (list.data as *mut u8).add(i * size as usize + offset as usize);
+                        copy_bytes(src.at(base), at, len as usize);
+                    }
                     Op::ListGetCopy { dst, valid, list, index, size } => {
                         let list = &*(list.at(base) as *const rtdt::List);
                         let i = rd::<rtdt::IndexRepr>(base, index);
@@ -2762,6 +2814,11 @@ impl IrInterpreter {
                     }
                     Op::BrCmpI64 { cmp, a, b, then, els } => {
                         pc = if cmp.apply(rd::<i64>(base, a), rd::<i64>(base, b)) { then } else { els } as usize;
+                        continue;
+                    }
+                    Op::BrListBounds { list, index, then, els } => {
+                        let list = &*(list.at(base) as *const rtdt::List);
+                        pc = if rd::<rtdt::IndexRepr>(base, index) < list.size.0 { then } else { els } as usize;
                         continue;
                     }
                     Op::BrCmpF32 { cmp, a, b, then, els } => {
