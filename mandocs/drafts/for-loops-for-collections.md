@@ -11,15 +11,18 @@ incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element.
 
 ```datalove
-fun greatest<T>(ref self: [T]): ?T with { T is ord }
-  var best: ?T = none
+fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
+  var at: ?index = none
   let n = list_len(ref self)
   var i: index = : index / 0
   loop while i .< n
-    set best = some max(self[i]?, ref held)
+    if equal(ref self[i]?, ref elem)
+      set at = some i
+      break
+    end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
-  ret best
+  ret at
 end fun
 ```
 
