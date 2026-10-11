@@ -111,7 +111,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // First param is always rt_handle (implicit).
             self.rt_handle_param = Some(param_values[0]);
-            self.abandon_if_stack_too_deep(&mut builder)?;
+            self.check_stack(&mut builder)?;
 
             // Check if this function uses sret.
             let has_sret = uses_sret(&self.func_ctx.return_type);

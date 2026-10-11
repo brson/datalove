@@ -422,13 +422,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// In a JIT-compiled function's entry, abandon the calls under way if the
-    /// stack is past the runtime's limit, rather than overflow it; see
-    /// `RtHeader::stack_limit`.
-    pub(super) fn abandon_if_stack_too_deep(&mut self, builder: &mut FunctionBuilder) -> Result<(), CraneliftError> {
-        if !self.abandon_on_errors {
-            return Ok(());
-        }
+    /// In a function's entry, stop rather than overflow the stack if it is past
+    /// the runtime's limit; see `RtHeader::stack_limit`.
+    ///
+    /// The JIT's code abandons the calls under way, back to the interpreter
+    /// that entered it, which reports a stack overflow. Code with no
+    /// interpreter under it, AOT's, has no way back up and ends the process
+    /// with a message (`dtlv_rti_stack_overflow`).
+    pub(super) fn check_stack(&mut self, builder: &mut FunctionBuilder) -> Result<(), CraneliftError> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("a stack check requires the runtime handle".into())
         })?;
@@ -436,14 +437,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let limit = builder.ins().load(
             PTR_TYPE, MemFlagsData::new(), rt_handle, STACK_LIMIT_OFFSET);
         let too_deep = builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThan, sp, limit);
-        let abandon = builder.create_block();
+        let stop = builder.create_block();
         let carry_on = builder.create_block();
-        builder.ins().brif(too_deep, abandon, &[], carry_on, &[]);
-        builder.switch_to_block(abandon);
-        builder.seal_block(abandon);
-        let reason = builder.ins().iconst(cl_ir::types::I8, c::ABANDONED_FOR_STACK as i64);
-        builder.ins().store(MemFlagsData::new(), reason, rt_handle, ABANDONING_OFFSET);
-        builder.ins().return_(&[]);
+        builder.ins().brif(too_deep, stop, &[], carry_on, &[]);
+        builder.set_cold_block(stop);
+        builder.switch_to_block(stop);
+        builder.seal_block(stop);
+        if self.abandon_on_errors {
+            let reason = builder.ins().iconst(cl_ir::types::I8, c::ABANDONED_FOR_STACK as i64);
+            builder.ins().store(MemFlagsData::new(), reason, rt_handle, ABANDONING_OFFSET);
+            builder.ins().return_(&[]);
+        } else {
+            let overflow = self.module.declare_func_in_func(self.runtime.stack_overflow, builder.func);
+            builder.ins().call(overflow, &[rt_handle]);
+            builder.ins().trap(cl_ir::TrapCode::STACK_OVERFLOW);
+        }
         builder.switch_to_block(carry_on);
         builder.seal_block(carry_on);
         Ok(())

@@ -735,6 +735,7 @@ fn runtime_addresses() -> HashMap<&'static str, *const u8> {
         dtlv_rti_init,
         dtlv_rti_shutdown,
         dtlv_rti_set_debug_mode,
+        dtlv_rti_stack_overflow,
         dtlv_rti_debuglog_local,
         dtlv_rti_any_destroy_local,
         dtlv_rti_mem_alloc_raw_local,

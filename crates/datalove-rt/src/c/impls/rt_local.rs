@@ -36,7 +36,11 @@ impl RtLocal {
     /// Create a new local runtime.
     pub fn new() -> Box<RtLocal> {
         Box::new(RtLocal {
-            header: RtHeader { table: &crate::abi_table::TABLE, abandoning: 0, stack_limit: 0 },
+            header: RtHeader {
+                table: &crate::abi_table::TABLE,
+                abandoning: 0,
+                stack_limit: native_stack_limit(),
+            },
             alloc: AllocLocal::new_raw(),
             debug_output_mode: DebugOutputMode::default(),
             debug_buffer: String::new(),

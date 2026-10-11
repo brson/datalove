@@ -3438,6 +3438,19 @@ pub unsafe extern "C-unwind" fn dtlv_rti_set_stack_limit(rt: LocalRtHandle, limi
     RtStatus::Ok
 }
 
+/// Stop the process for a stack overflow, which compiled code that cannot
+/// return to an interpreter found on entering a function.
+///
+/// The frames under it are not unwound and what they own is not destroyed:
+/// there is no way back up through compiled code, and the process is ending.
+/// Reported the way the CLI reports one, on stderr with status 1.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_stack_overflow(rt: LocalRtHandle) -> ! {
+    debug_assert!(!rt.is_null(), "rt is null");
+    eprintln!("Error: stack overflow");
+    std::process::exit(1)
+}
+
 /// The lowest address code running datalove on the calling thread should let
 /// the native stack grow to, or 0 for no limit where the thread's stack cannot
 /// be found.

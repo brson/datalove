@@ -145,6 +145,7 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_abandon: c::dtlv_rti_abandon,
     dtlv_rti_take_abandoned: c::dtlv_rti_take_abandoned,
     dtlv_rti_set_stack_limit: c::dtlv_rti_set_stack_limit,
+    dtlv_rti_stack_overflow: c::dtlv_rti_stack_overflow,
     dtlv_rti_native_stack_limit: c::dtlv_rti_native_stack_limit,
     dtlv_rti_set_debug_mode: c::dtlv_rti_set_debug_mode,
     dtlv_rti_debuglog_local: c::dtlv_rti_debuglog_local,
@@ -162,6 +163,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 138,
+    datalove_rti::table::EXPORTED == 139,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

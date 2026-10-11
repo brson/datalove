@@ -18,6 +18,8 @@ pub struct RuntimeImports {
     pub shutdown: FuncId,
     /// `dtlv_rti_set_debug_mode(rt: LocalRtHandle, mode: DebugOutputMode) -> RtStatus`
     pub set_debug_mode: FuncId,
+    /// `dtlv_rti_stack_overflow(rt: LocalRtHandle) -> !`
+    pub stack_overflow: FuncId,
     /// `dtlv_rti_debuglog_local(rt: LocalRtHandle, value_ref: *const u8, tydesc: *const TyDesc) -> RtStatus`
     pub debuglog_local: FuncId,
     /// `dtlv_rti_any_destroy_local(rt: LocalRtHandle, value: *mut u8, tydesc: *const TyDesc) -> RtStatus`
@@ -183,6 +185,14 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_set_debug_mode", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_set_debug_mode: {}", e)))?
+        };
+
+        let stack_overflow = {
+            let mut sig = cl_ir::Signature::new(call_conv);
+            sig.params.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_stack_overflow", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_stack_overflow: {}", e)))?
         };
 
         // dtlv_rti_debuglog_local(ptr, ptr, ptr) -> u8
@@ -924,6 +934,7 @@ impl RuntimeImports {
             init,
             shutdown,
             set_debug_mode,
+            stack_overflow,
             debuglog_local,
             destroy_local,
             field_offset,
@@ -992,6 +1003,7 @@ impl RuntimeImports {
             init,
             shutdown,
             set_debug_mode,
+            stack_overflow,
             debuglog_local,
             destroy_local,
             field_offset,
@@ -1054,7 +1066,7 @@ impl RuntimeImports {
             clone_erased,
         } = self;
         vec![
-            init, shutdown, set_debug_mode, debuglog_local, destroy_local, field_offset,
+            init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
             field_tydesc, field_read, element_tydesc, map_contains_key_erased,
             map_get_value_ref_erased, list_set_erased, tensor_set_erased,
             map_set_value_erased, mem_alloc_raw, mem_free_raw, string_create,

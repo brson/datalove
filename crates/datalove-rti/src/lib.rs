@@ -134,7 +134,10 @@ pub struct RtHeader {
     pub abandoning: u8,
     /// The lowest address compiled code lets the native stack grow to, or 0
     /// for no limit. Compiled code compares its stack pointer with it on
-    /// entry, and abandons for `ABANDONED_FOR_STACK` past it.
+    /// entry to each function: the JIT's abandons for `ABANDONED_FOR_STACK`
+    /// past it, and AOT code calls `dtlv_rti_stack_overflow`, which ends the
+    /// process. `dtlv_rti_init` sets it for the thread that calls it, and the
+    /// JIT again for the thread entering its code.
     pub stack_limit: usize,
 }
 

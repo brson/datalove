@@ -21,7 +21,7 @@ home here.
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
   - [An error leaks what the frames it unwinds own](#user-content-an-error-leaks-what-the-frames-it-unwinds-own)
-  - [Deep recursion still kills an AOT executable, and any process off Linux](#user-content-deep-recursion-still-kills-an-aot-executable-and-any-process-off-linux)
+  - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
   - [The REPL takes most statements for expressions](#user-content-the-repl-takes-most-statements-for-expressions)
@@ -187,42 +187,44 @@ model gave up the per-value tracking that would have said what to drop. The
 function's IR knows its drop points, so an error path per call site that runs
 the drops due there is the likely shape. The same would serve compiled code.
 
-### Deep recursion still kills an AOT executable, and any process off Linux
+### Deep recursion aborts the process off Linux
 
-**Reproduced for AOT.** The IR walker, the bytecode, the JIT and compile-time
-evaluation report unbounded recursion as `InterpError::StackOverflow`:
+**Reproduced on Linux; the rest reasoned.** On Linux every engine stops
+unbounded recursion with an error:
 
 - The bytecode bounds its own frame stack.
 - The IR walker checks the native stack pointer at each call against
-  `dtlv_rti_native_stack_limit`, which is 1 MiB above the
-  thread's stack bottom, from `pthread_getattr_np`.
-- JIT-compiled code makes the same check in its prologue. It also returns at
-  once when an interpreted callee fails (`RtHeader::abandoning`), and the error
-  comes back through the trampoline.
-- `jit_path_tests` and `deep_recursion_tests` check this.
+  `dtlv_rti_native_stack_limit`: 1 MiB above the thread's stack bottom, from
+  `pthread_getattr_np`, or a quarter of a smaller stack.
+- Compiled code compares its stack pointer with `RtHeader::stack_limit` on
+  entering each function. The JIT's abandons back to the interpreter, which
+  reports `stack overflow`. AOT code, with nothing under it to return to,
+  calls `dtlv_rti_stack_overflow`, which prints `Error: stack overflow` and
+  exits with status 1. `dtlv_rti_init` sets the limit.
+- `deep_recursion_tests` and `jit_path_tests` check all of these.
 
 What is left:
 
-- **Both AOT backends segfault** (exit 139) on unbounded recursion: compiled
-  executables check nothing. The same prologue check against a limit set at
-  startup would give a message instead.
 - **Off Linux there is no limit.** The thread's stack is found only through
-  `pthread_getattr_np`, so elsewhere every engine but the bytecode aborts as
-  before. macOS has `pthread_get_stackaddr_np`. On wasm the call stack is
-  the engine's and out of reach, so the IR walker there runs until the engine
-  traps; a call-depth count in the walker is what would bound it.
+  `pthread_getattr_np`, so elsewhere every engine but the bytecode aborts or
+  segfaults as before. macOS has `pthread_get_stackaddr_np`. On wasm the call
+  stack is the engine's and out of reach, so the IR walker there runs until
+  the engine traps; a call-depth count in the walker is what would bound it.
+- **AOT on another thread.** The limit is the thread's that called
+  `dtlv_rti_init`. An AOT executable runs on that thread, but a runtime used
+  from another thread would check against the wrong stack.
 - **Panics under compiled code abort.** `__jit_dispatch_call` is `extern "C"`.
-  An error now comes back through the abandonment protocol, but a *panic* in
-  the interpreter under compiled code aborts the process, where without the
-  JIT the REPL's `catch_unwind` would have caught it.
+  An error comes back through the abandonment protocol, but a *panic* in the
+  interpreter under compiled code aborts the process, where without the JIT
+  the REPL's `catch_unwind` would have caught it.
 - **Unchecked native recursion:** the runtime's destroy, clone, compare and
   print recurse as deep as a value nests. Without recursive types that is
   bounded by the type.
-- **No `enable_probestack`** in either Cranelift backend. The JIT's prologue
-  check has a 1 MiB margin, so only a single frame larger than that could step
-  past the guard page.
+- **No `enable_probestack`** in either Cranelift backend. The entry check has
+  a 1 MiB margin, so only a single frame larger than that could step past the
+  guard page.
 - **Leaks:** a stack overflow, like any error, leaks what the unwound frames
-  owned (above).
+  owned (above). In AOT the process ends at once, so that costs nothing.
 
 ### Compile-time evaluation has no limits
 

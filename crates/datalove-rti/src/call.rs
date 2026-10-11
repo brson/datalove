@@ -1387,6 +1387,17 @@ pub unsafe fn dtlv_rti_set_stack_limit(rt: LocalRtHandle, limit: usize) -> RtSta
     unsafe { (crate::table(rt).dtlv_rti_set_stack_limit)(rt, limit) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_stack_overflow`](crate::table::RtiTable::dtlv_rti_stack_overflow).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_stack_overflow(rt: LocalRtHandle) -> ! {
+    unsafe { (crate::table(rt).dtlv_rti_stack_overflow)(rt) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_native_stack_limit`](crate::table::RtiTable::dtlv_rti_native_stack_limit).
 ///
 /// # Safety

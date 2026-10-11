@@ -125,6 +125,7 @@ pub fn emit_function(
     // Local functions are static.
     let static_prefix = if module_id.is_some() { "" } else { "static " };
     writeln!(out, "{}{} {}({}) {{", static_prefix, return_type, func_name, params).unwrap();
+    writeln!(out, "    DTLV_CHECK_STACK(rt);").unwrap();
 
     // Emit frame allocation.
     if layout.frame_size > 0 {

@@ -1,4 +1,5 @@
-//! Recursion deeper than the Rust stack allows, on the bytecode.
+//! Recursion deeper than the Rust stack allows, on the bytecode, and without
+//! end in an AOT executable.
 //!
 //! The bytecode makes a call from one bytecode body to another without
 //! recursing on the Rust stack: the callee's frame goes on the interpreter's
@@ -55,4 +56,48 @@ fn running_out_of_frame_stack_is_an_error() {
     assert!(output.status.code().is_some(), "killed by a signal: {:?}\n{}", output.status, stderr);
     assert!(!output.status.success(), "ten million levels fit: {}", stderr);
     assert!(stderr.contains("stack overflow"), "not a stack overflow: {}", stderr);
+}
+
+/// Build `script` ahead of time, with the C backend if `c`, and run it.
+fn run_aot(script: &str, c: bool) -> Output {
+    let dir = rmx::tempfile::tempdir().X();
+    let source = dir.path().join("deep.dfs");
+    let exe = dir.path().join("deep");
+    std::fs::write(&source, script).X();
+    let mut build = Command::new(env!("CARGO_BIN_EXE_datalove"));
+    build.arg("aot-compile").arg("--no-sys").arg("--link").arg("-o").arg(&exe);
+    if c {
+        build.arg("--c");
+    }
+    let built = build.arg(&source)
+        .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .output()
+        .expect("failed to run datalove");
+    assert!(built.status.success(), "the build failed: {}", String::from_utf8_lossy(&built.stderr));
+    Command::new(&exe).output().expect("failed to run the executable")
+}
+
+/// Recursion with no end, compiled ahead of time, stops with a message and a
+/// status rather than a segfault: compiled code checks the stack on entering
+/// each function, against the limit the runtime set up.
+fn aot_recursion_without_end_is_reported(c: bool) {
+    let output = run_aot("\
+fun down(n: u32): u32
+  ret icall add_wrapping_u32(down(n), : u32 / 1)
+end fun
+debuglog(down(: u32 / 5))
+", c);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{:?}\n{}", output.status, stderr);
+    assert_eq!(stderr.trim(), "Error: stack overflow");
+}
+
+#[test]
+fn cranelift_aot_recursion_without_end_is_reported() {
+    aot_recursion_without_end_is_reported(false);
+}
+
+#[test]
+fn c_aot_recursion_without_end_is_reported() {
+    aot_recursion_without_end_is_reported(true);
 }

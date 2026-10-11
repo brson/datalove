@@ -410,6 +410,17 @@ impl CAotCompiler {
         writeln!(out, "extern void* dtlv_rti_init(void);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_shutdown(void* rt);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_set_debug_mode(void* rt, uint8_t mode);").unwrap();
+        writeln!(out, "extern _Noreturn void dtlv_rti_stack_overflow(void* rt);").unwrap();
+        writeln!(out).unwrap();
+        // What a handle points at starts with this, `datalove_rti::RtHeader`.
+        // Each function compares where its frame is with the limit in it, and
+        // past it stops with a message rather than overflow the stack.
+        writeln!(out, "typedef struct {{ const void* table; uint8_t abandoning; uintptr_t stack_limit; }} dtlv_rt_header_t;").unwrap();
+        writeln!(out, "#define DTLV_CHECK_STACK(rt) do {{ \\").unwrap();
+        writeln!(out, "    if ((uintptr_t)__builtin_frame_address(0) < ((dtlv_rt_header_t*)(rt))->stack_limit) \\").unwrap();
+        writeln!(out, "        dtlv_rti_stack_overflow(rt); \\").unwrap();
+        writeln!(out, "}} while (0)").unwrap();
+        writeln!(out).unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_debuglog_local(void* rt, const void* value_ref, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_any_destroy_local(void* rt, void* value, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint32_t dtlv_rti_field_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();

@@ -115,9 +115,9 @@ use crate::CraneliftError;
 pub struct FunctionCompiler<'a, M: Module> {
     /// The IR code unit being compiled.
     func: &'a IrCodeUnit,
-    /// Whether this code is the JIT's, and has to look after each call for
-    /// whether it is being abandoned, and check the stack on entry; see
-    /// `return_if_abandoning`.
+    /// Whether this code is the JIT's, which looks after each call for whether
+    /// it is being abandoned, and abandons rather than stops when the stack is
+    /// too deep; see `return_if_abandoning` and `check_stack`.
     abandon_on_errors: bool,
     /// Function-specific context (always present for compiled code units).
     func_ctx: &'a FunctionContext,

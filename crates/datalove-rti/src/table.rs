@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 138;
+pub const EXPORTED: usize = 139;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 138;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x1a39c4673c437bd5;
+pub const TABLE_SHAPE: u64 = 0x08d61e6a63db4515;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -156,6 +156,7 @@ pub struct RtiTable {
     pub dtlv_rti_abandon: unsafe extern "C-unwind" fn(LocalRtHandle, u8) -> RtStatus,
     pub dtlv_rti_take_abandoned: unsafe extern "C-unwind" fn(LocalRtHandle) -> u8,
     pub dtlv_rti_set_stack_limit: unsafe extern "C-unwind" fn(LocalRtHandle, usize) -> RtStatus,
+    pub dtlv_rti_stack_overflow: unsafe extern "C-unwind" fn(LocalRtHandle) -> !,
     pub dtlv_rti_native_stack_limit: unsafe extern "C-unwind" fn(LocalRtHandle) -> usize,
     pub dtlv_rti_set_debug_mode: unsafe extern "C-unwind" fn(LocalRtHandle, DebugOutputMode) -> RtStatus,
     pub dtlv_rti_debuglog_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc) -> RtStatus,
