@@ -20,35 +20,12 @@ unsafe fn wr<T>(base: *mut u8, loc: Loc, v: T) {
 /// Checked division, as the IR walker's: by zero, or the least signed value
 /// by minus one, sets the flag and gives zero.
 #[inline(always)]
-unsafe fn div_checked<T>(base: *mut u8, dst: Loc, ovf: Loc, a: Loc, b: Loc)
-where
-    T: Copy + num_checked_div::CheckedDiv,
-{
+unsafe fn div_checked<T: Copy + CheckedIntOps>(base: *mut u8, dst: Loc, ovf: Loc, a: Loc, b: Loc) {
     unsafe {
-        let (r, o) = match rd::<T>(base, a).checked_div(rd::<T>(base, b)) {
-            Some(r) => (r, false),
-            None => (T::ZERO, true),
-        };
+        let (r, o) = rd::<T>(base, a).checked_div_impl(rd::<T>(base, b));
         wr(base, dst, r);
         wr(base, ovf, o);
     }
-}
-
-mod num_checked_div {
-    /// The integer types checked division is lowered for.
-    pub(super) trait CheckedDiv: Sized {
-        const ZERO: Self;
-        fn checked_div(self, rhs: Self) -> Option<Self>;
-    }
-    macro_rules! checked_div {
-        ($($t:ty),*) => {$(
-            impl CheckedDiv for $t {
-                const ZERO: Self = 0;
-                fn checked_div(self, rhs: Self) -> Option<Self> { <$t>::checked_div(self, rhs) }
-            }
-        )*};
-    }
-    checked_div!(u32, i32, u64, i64);
 }
 
 /// An operand an op hands to an IR walker routine.

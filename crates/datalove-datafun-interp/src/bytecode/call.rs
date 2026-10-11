@@ -447,25 +447,9 @@ impl IrInterpreter {
             }
         };
         if let NativeTarget::C(fn_ptr) = target {
-            // The C words straight from the arguments, with no list of them
-            // in between; see `native::c_words`.
-            let len = 1 + 2 * n + 2 + shapes.len();
-            if len > MAX_C_WORDS {
-                todo!("native functions with {} C args not yet supported", len);
-            }
             let mut words = [0usize; MAX_C_WORDS];
-            words[0] = self.runtime.handle() as usize;
-            for i in 0..n {
-                let a = arg(self, i, mode(i));
-                words[1 + 2 * i] = a.ptr as usize;
-                words[2 + 2 * i] = a.tydesc as usize;
-            }
-            let at = 1 + 2 * n;
-            words[at] = dest.ptr as usize;
-            words[at + 1] = dest.tydesc as usize;
-            for (i, tydesc) in shapes.iter().enumerate() {
-                words[at + 2 + i] = *tydesc as usize;
-            }
+            let len = crate::native::c_words(
+                &mut words, self.runtime.handle(), (0..n).map(|i| arg(self, i, mode(i))), dest, shapes);
             // SAFETY: the table registered this as a rider function and holds
             // its code until its generation changes.
             unsafe { call_c(fn_ptr, &words[..len]) };

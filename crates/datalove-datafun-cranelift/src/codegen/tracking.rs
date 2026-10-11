@@ -65,15 +65,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Mark a tracked param as LIVE after store.
     pub(super) fn mark_param_live(&self, builder: &mut FunctionBuilder, pid: ParamId) {
-        use datalove_datafun_ir::frame_layout::tracking;
-
-        if let Some(track_offset) = self.param_tracking_byte_offset(pid) {
-            let frame_slot = self.frame_slot
-                .expect("tracking requires frame slot");
-            let track_addr = frame_slot.addr(builder, track_offset as i32);
-            let live_val = builder.ins().iconst(cl_types::I8, tracking::LIVE as i64);
-            builder.ins().store(MemFlagsData::new(), live_val, track_addr, 0);
-        }
+        self.mark_tracking_live(builder, &Operand::Param(pid));
     }
 
     /// Emit a conditional tracking byte write based on an is_valid flag.

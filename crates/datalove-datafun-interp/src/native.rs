@@ -119,23 +119,27 @@ pub unsafe fn call_c(fn_ptr: *const (), words: &[usize]) {
 /// Lay out a native call's C words: the runtime handle, each argument's pointer
 /// and descriptor, the destination's, then the supplied descriptors. Returns
 /// how many words there are.
+///
+/// The arguments come as they are read, so a caller with them in hand passes
+/// them and one that reads each from somewhere makes no list of them first.
 pub fn c_words(
     words: &mut [usize; MAX_C_WORDS],
     rt: LocalRtHandle,
-    args: &[Value],
+    args: impl ExactSizeIterator<Item = Value>,
     dest: Destination,
     supplied: &[*const datalove_rtdt::TyDesc],
 ) -> usize {
-    let len = 1 + args.len() * 2 + 2 + supplied.len();
+    let n = args.len();
+    let len = 1 + n * 2 + 2 + supplied.len();
     if len > MAX_C_WORDS {
         todo!("native functions with {} C args not yet supported", len);
     }
     words[0] = rt as usize;
-    for (i, arg) in args.iter().enumerate() {
+    for (i, arg) in args.enumerate() {
         words[1 + 2 * i] = arg.ptr as usize;
         words[2 + 2 * i] = arg.tydesc as usize;
     }
-    let at = 1 + 2 * args.len();
+    let at = 1 + 2 * n;
     words[at] = dest.ptr as usize;
     words[at + 1] = dest.tydesc as usize;
     for (i, tydesc) in supplied.iter().enumerate() {
@@ -239,7 +243,7 @@ impl NativeFunctionTable {
         match self.lookup(symbol)? {
             NativeTarget::C(fn_ptr) => {
                 let mut words = [0; MAX_C_WORDS];
-                let len = c_words(&mut words, rt, args, dest, supplied);
+                let len = c_words(&mut words, rt, args.iter().copied(), dest, supplied);
                 // SAFETY: registered as a rider function, whose code the table
                 // holds, with the words its ABI says.
                 unsafe { call_c(fn_ptr, &words[..len]) };
