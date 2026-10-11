@@ -313,8 +313,7 @@ impl CallDispatcher for OptimizingDispatcher {
         words: &[usize],
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> Result<(), InterpError> {
-        self.jit.call_compiled(func, entry, words, call_ctx);
-        Ok(())
+        self.jit.call_compiled(func, entry, words, call_ctx)
     }
 
     /// The engine's policy when tuned. In chaos mode each asking draws

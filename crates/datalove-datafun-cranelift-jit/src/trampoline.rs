@@ -45,6 +45,10 @@ pub struct DispatchContext<'a> {
 }
 
 thread_local! {
+    /// Why the compiled code running is abandoning its calls; see
+    /// `abandon`.
+    static ABANDONED_FOR: RefCell<Option<InterpError>> = const { RefCell::new(None) };
+
     /// Thread-local dispatch context, set during JIT execution.
     static DISPATCH_CONTEXT: RefCell<Option<NonNull<DispatchContext<'static>>>> = const { RefCell::new(None) };
 }
@@ -78,6 +82,44 @@ pub fn restore_dispatch_context(previous: PreviousContext) {
         *cell.borrow_mut() = previous.0;
     });
 }
+
+/// Abandon the compiled calls under way, for `error`.
+///
+/// Compiled code cannot return an interpreter's error, so the trampoline
+/// notes it here, sets the runtime's flag, and returns; the code returns from
+/// each frame as it sees the flag after a call, and where the interpreter
+/// entered it, `take_abandonment` gives the error back. What those frames
+/// hold is not destroyed: an error is being reported, not recovered from.
+fn abandon(rt: LocalRtHandle, error: InterpError) {
+    ABANDONED_FOR.with(|cell| *cell.borrow_mut() = Some(error));
+    // SAFETY: the handle compiled code was given.
+    unsafe { datalove_rt::rust::set_abandoning(rt, datalove_rt::rust::ABANDONED_FOR_ERROR) };
+}
+
+/// Get ready to enter compiled code: give it the limit to the stack it checks
+/// on entering each function.
+pub(crate) fn entering(rt: LocalRtHandle) {
+    // SAFETY: the handle compiled code is given.
+    unsafe { datalove_rt::rust::set_stack_limit(rt, datalove_rt::rust::native_stack_limit()) };
+}
+
+/// The error the compiled code just returned from was abandoned for, if it
+/// was, clearing it; see `abandon`.
+pub(crate) fn take_abandonment(rt: LocalRtHandle) -> Result<(), InterpError> {
+    // SAFETY: the handle compiled code was given.
+    let reason = unsafe { datalove_rt::rust::abandoning(rt) };
+    if reason == 0 {
+        return Ok(());
+    }
+    unsafe { datalove_rt::rust::set_abandoning(rt, 0) };
+    match reason {
+        datalove_rt::rust::ABANDONED_FOR_ERROR => Err(ABANDONED_FOR.with(|cell| cell.borrow_mut().take())
+            .expect("calls abandoned for an error")),
+        datalove_rt::rust::ABANDONED_FOR_STACK => Err(InterpError::StackOverflow),
+        other => unreachable!("abandoned for reason {other}"),
+    }
+}
+
 
 /// Get the current dispatch context.
 ///
@@ -255,10 +297,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             );
             drop(ctx.interp.reclaim_dispatcher());
             if let Err(e) = result {
-                panic!("JIT dispatch: interpreter call failed: {:?}", e);
+                abandon(rt_handle, e);
             }
         }
-        Err(e) => panic!("JIT dispatch: compiling {} failed: {}", ir_unit.name, e),
+        Err(e) => abandon(rt_handle, InterpError::RuntimeError(
+            format!("compiling {} failed: {}", ir_unit.name, e))),
     }
 }
 
@@ -301,8 +344,7 @@ impl CallDispatcher for LentEngine {
         words: &[usize],
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> Result<(), InterpError> {
-        self.engine().call_compiled(func, entry, words, call_ctx);
-        Ok(())
+        self.engine().call_compiled(func, entry, words, call_ctx)
     }
 
     fn loop_policy(

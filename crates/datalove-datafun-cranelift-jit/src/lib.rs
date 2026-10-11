@@ -266,7 +266,7 @@ impl JitEngine {
         entry: CompiledEntry,
         words: &[usize],
         call_ctx: DispatchCallContext<'_, '_>,
-    ) {
+    ) -> Result<(), InterpError> {
         if self.count_calls {
             let f = self.stats.functions.get_mut(&func).expect("a compiled function has its stats");
             if entry.at_loop {
@@ -288,11 +288,14 @@ impl JitEngine {
             frames: call_ctx.frames,
         };
         // SAFETY: the context outlives the call, and is cleared after it.
+        let rt = dispatch_ctx.interp.runtime_handle();
+        trampoline::entering(rt);
         let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
         // SAFETY: the interpreter planned `words` from the signature the code
         // was compiled to.
         unsafe { bridge::call_words(entry.code_ptr, words) };
         restore_dispatch_context(previous);
+        trampoline::take_abandonment(rt)
     }
 
     /// Register a native rider function symbol for JIT resolution.
@@ -434,6 +437,7 @@ impl JitEngine {
                     registry: call_ctx.registry,
                     frames: call_ctx.frames,
                 };
+                trampoline::entering(rt_handle);
                 // SAFETY: the context outlives the call, and is cleared after it.
                 let previous = unsafe { set_dispatch_context(&mut dispatch_ctx) };
                 // SAFETY: code_ptr is compiled code for `func`, whose arguments
@@ -445,7 +449,7 @@ impl JitEngine {
                     )
                 };
                 restore_dispatch_context(previous);
-                JitDispatch { result: DispatchResult::Handled(Ok(())) }
+                JitDispatch { result: DispatchResult::Handled(trampoline::take_abandonment(rt_handle)) }
             }
         }
     }
@@ -900,8 +904,7 @@ impl CallDispatcher for JitEngine {
         words: &[usize],
         call_ctx: DispatchCallContext<'_, '_>,
     ) -> Result<(), InterpError> {
-        JitEngine::call_compiled(self, func, entry, words, call_ctx);
-        Ok(())
+        JitEngine::call_compiled(self, func, entry, words, call_ctx)
     }
 
     fn loop_policy(

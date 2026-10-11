@@ -278,6 +278,10 @@ impl LocalCallee {
 pub struct FunctionCompiler<'a, M: Module> {
     /// The IR code unit being compiled.
     func: &'a IrCodeUnit,
+    /// Where the runtime says whether calls are being abandoned, if this code
+    /// is the JIT's and has to look after each call; see
+    /// `return_if_abandoning`.
+    abandoning_offset: Option<i32>,
     /// Function-specific context (always present for compiled code units).
     func_ctx: &'a FunctionContext,
     /// Frame layout for values and slots.
@@ -551,6 +555,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Self {
             func,
+            abandoning_offset: None,
             func_ctx,
             layout,
             isa,
@@ -604,6 +609,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         Self {
             func,
+            abandoning_offset: None,
             func_ctx,
             layout,
             isa,
@@ -676,6 +682,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .map_err(|e| CraneliftError::Module(format!("declare function: {}", e)))?;
 
         self.compile_body(func_id, sig)
+    }
+
+    /// Have compiled code look after each call it makes for whether the call
+    /// is being abandoned, and return if so: what the JIT's code has to do,
+    /// since what it calls may be interpreted.
+    pub fn abandon_on_interpreter_errors(&mut self) {
+        self.abandoning_offset = Some(datalove_rt::rust::abandoning_offset());
     }
 
     /// Compile an entry into the function at a loop header, from an
@@ -772,6 +785,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
             // First param is always rt_handle (implicit).
             self.rt_handle_param = Some(param_values[0]);
+            self.abandon_if_stack_too_deep(&mut builder)?;
 
             // Check if this function uses sret.
             let has_sret = uses_sret(&self.func_ctx.return_type);

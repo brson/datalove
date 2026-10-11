@@ -380,6 +380,7 @@ impl JitCompiler {
         compiler.set_external_funcs(external_funcs);
         compiler.set_module_funcs(module_funcs);
         compiler.set_static_consts(static_consts_of(func, interp));
+        compiler.abandon_on_interpreter_errors();
 
         // Compile and get the Cranelift FuncId.
         let cl_func_id = match osr {

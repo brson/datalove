@@ -608,6 +608,12 @@ impl IrInterpreter {
         frames: &mut FrameStore,
         code_ref: Option<&CodeRef>,
     ) -> Result<(), InterpError> {
+        // The IR walker recurses on the native stack, a call at a time, and
+        // the bytecode does where it runs a call on the walker.
+        let here = 0u8;
+        if (&here as *const u8 as usize) < datalove_rt::rust::native_stack_limit() {
+            return Err(InterpError::StackOverflow);
+        }
         if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode) {
             let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();

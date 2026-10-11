@@ -92,3 +92,22 @@ fn an_inner_loop_needing_the_outer_ones_values_is_entered() {
     assert_eq!(refused, 0, "a loop was refused:\n{stats}");
     assert!(compiled >= 1 && entered >= 1, "no loop was entered:\n{stats}");
 }
+
+/// Recursion too deep for the stack, in compiled code and in the interpreter
+/// that compiled code called, is reported as a stack overflow under the JIT
+/// as it is interpreted, rather than ending the process on a signal.
+#[test]
+fn a_stack_overflow_under_the_jit_is_an_error() {
+    let deep = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jit_paths/deep.dfs");
+    for args in [&[][..], &["--jit"][..], &["--jit", "--jit-threshold", "1"][..]] {
+        let output = Command::new(env!("CARGO_BIN_EXE_datalove"))
+            .arg("script")
+            .args(args)
+            .arg(&deep)
+            .output()
+            .expect("the binary runs");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.code().is_some(), "{args:?} ended on a signal:\n{stderr}");
+        assert!(stderr.contains("StackOverflow"), "{args:?} reported no stack overflow:\n{stderr}");
+    }
+}

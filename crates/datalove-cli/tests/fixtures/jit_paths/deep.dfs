@@ -1,0 +1,23 @@
+// Deep recursion under the JIT: interpreted, under a loop compiled code entered
+// by OSR, and then compiled itself. Either way the stack runs out, which has
+// to be reported as an error, not crash the process.
+
+fun down(n: u32): !u32
+    if n .< 1
+        ret ok 0
+    else
+        ret ok (down(n -! 1)! +! 1)
+    end if
+end fun
+
+fun drive(n: u32): !u32
+    var t: u32 = 0
+    var i: u32 = 0
+    loop while i .< n
+        set t +!= 1
+        set i +!= 1
+    end loop
+    ret ok (down(2000000)! +! t)
+end fun
+
+debuglog(drive(5000))

@@ -34,6 +34,12 @@ pub struct RtLocal {
     ///
     /// Each debuglog entry is appended with a newline.
     pub debug_buffer: String,
+    /// Why JIT-compiled code is abandoning the calls it is in, or 0 if it is
+    /// not; see `crate::rust::abandoning_offset`.
+    pub abandoning: u8,
+    /// The lowest address JIT-compiled code lets the stack grow to; see
+    /// `crate::rust::stack_limit_offset`.
+    pub stack_limit: usize,
 }
 
 impl RtLocal {
@@ -44,6 +50,8 @@ impl RtLocal {
             alloc: AllocLocal::new_raw(),
             debug_output_mode: DebugOutputMode::default(),
             debug_buffer: String::new(),
+            abandoning: 0,
+            stack_limit: 0,
         })
     }
 
