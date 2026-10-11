@@ -223,8 +223,9 @@ impl JitEngine {
                 *f.osr_compile_time.get_or_insert_default() += compile_time;
                 *tier = Tier::Compiled(CompiledEntry { code_ptr, uses_sret, at_loop: true });
             }
-            Err(JitError::Unsupported(_)) => {
+            Err(JitError::Unsupported(why)) => {
                 self.stats.osr_refused_count += 1;
+                self.stats.function(func, &body.name).osr_refusals.push((header, why));
                 *tier = Tier::Refused;
             }
             Err(e) => return Err(InterpError::RuntimeError(e.to_string())),

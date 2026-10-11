@@ -446,13 +446,19 @@ How it works:
   inserted before the entry's jump; a scalar constant is made again instead,
   since the bytecode folds `u32` constants into what reads them and may never
   write them to the frame.
-- **Refusing.** If the code reached defines a value the header needs -- an
-  inner loop's header, needing what the enclosing loop's body defines -- there
-  would be two places it comes from with nothing to choose between them, so
-  `osr_check` refuses the header (a liveness pass over the reached blocks,
-  with what each block's compilation defined). The outer loop's header is
-  then the one entered, which compiles both loops. A reference whose
-  descriptor only its projection works out is refused too.
+- **Carrying.** If the code reached defines a value the header needs -- an
+  inner loop's header, needing what the enclosing loop's body defines -- it
+  comes from two places: the frame, the first time round, and its
+  definition, every time the outer loop goes round again. `carried_into` finds
+  those values before compiling (a liveness pass over the reached blocks,
+  from each instruction's `Instruction::dests`), and each is compiled as a
+  Cranelift variable: given its frame value in the entry block, its new value
+  at the end of the block that makes it, and read through `use_var`, so
+  Cranelift builds the merge. This used to be a refusal, with the outer
+  loop's header entered instead; Mandelbrot's inner loops, `ord.sorted`'s and
+  three of the store demo's were refused, and the tuned jit ran Mandelbrot in
+  2.5 s rather than 0.54. A reference whose descriptor only its projection
+  works out is still refused.
 - **Entering.** The interpreter calls the entry through
   `CallDispatcher::call_compiled`, as it does a planned call, with its frame
   and the call's result destination (`CompiledEntry::at_loop` says which
@@ -479,7 +485,8 @@ Tested by an `osr` engine in `engine_tests` (no function compiled by its
 calls, every function's loops entered after one to three iterations, by the
 fixture's seed), the same at two iterations in `std_engine_tests`, where the
 library's loops are, and `std_tests/176_osr_loops`: carried scalars, an
-inner loop refused and one entered, owned values made in the loop, a
+inner loop needing what its outer loop makes (a scalar, and a string) and one
+needing nothing of it, owned values made in the loop, a
 borrowed parameter, an error from inside the loop, a generic function (one
 entry for both instantiations, its descriptors from the frame) and a
 `break`. Chaos mode enters loops at random. The engine fixtures have few

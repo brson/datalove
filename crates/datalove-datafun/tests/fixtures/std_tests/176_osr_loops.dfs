@@ -4,6 +4,7 @@
 
 require module sys/std/list
 require module sys/std/map
+require module sys/std/string
 
 // Carried scalars, a slot and a parameter.
 fun sum_squares(n: u64): !u64
@@ -16,8 +17,9 @@ fun sum_squares(n: u64): !u64
     ret ok total
 end fun
 
-// An inner loop that needs what the outer one defines, so that only the
-// outer loop's header can be entered; and one that needs nothing of it.
+// An inner loop that needs what the outer one defines, entered with that
+// value read from the frame the first time and made again by the outer loop
+// every time after; and one that needs nothing of it.
 fun triangle(n: u64): !u64
     var total: u64 = 0
     var i: u64 = 0
@@ -31,6 +33,28 @@ fun triangle(n: u64): !u64
         set i +!= 1
     end loop
     ret ok total
+end fun
+
+// The same with a value that owns something: a string the outer loop makes,
+// which the inner loop reads and the outer one drops.
+fun repeats(n: u32): ![string]
+    var out: [string] = []
+    var i: u32 = 0
+    loop while i .< n
+        var label: string = "x"
+        var k: u32 = 0
+        loop while k .< i
+            call string.push_char(mut label, 121)
+            set k +!= 1
+        end loop
+        var j: u32 = 0
+        loop while j .< 2
+            call list.push(mut out, label@)
+            set j +!= 1
+        end loop
+        set i +!= 1
+    end loop
+    ret ok out
 end fun
 
 fun grid(n: u64): !u64
@@ -114,7 +138,7 @@ end fun
 let xs: [u64] = [5, 1, 9, 30, 2, 70, 4]
 let words = ["a", "b", "a", "c", "b", "a"]
 let output = (
-    sum_squares(10), sum_squares(10), triangle(8), grid(6),
+    sum_squares(10), sum_squares(10), triangle(8), repeats(4), grid(6),
     evens(5), counts(ref words), total(ref xs), total(ref xs),
     overflow_at(250), count(ref xs), count(ref words), first_over(ref xs, 20),
 )

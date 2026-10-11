@@ -64,6 +64,8 @@ pub struct FunctionStats {
     /// Frames that went on in compiled code from one of its loops, counted
     /// with the calls.
     pub loops_entered: u64,
+    /// Loop headers the backend could not enter at, and why.
+    pub osr_refusals: Vec<(datalove_datafun_ir::BlockId, String)>,
 }
 
 /// Where a call the jit is offered comes from.
@@ -162,6 +164,16 @@ impl JitStats {
             for (_, key, f) in by_codegen.iter().take(top) {
                 let _ = writeln!(out, "{:>9} {:>8} {:>9} {:>8}  {}",
                     ms(f.compile_time), f.code_size, ms(f.osr_compile_time), f.loops_entered, name(key, f));
+            }
+        }
+        let mut refused: Vec<_> = self.functions.iter()
+            .flat_map(|(key, f)| f.osr_refusals.iter().map(move |(header, why)| (name(key, f), *header, why)))
+            .collect();
+        refused.sort_by(|a, b| (&a.0, a.1.0).cmp(&(&b.0, b.1.0)));
+        if !refused.is_empty() {
+            let _ = writeln!(out, "\njit: loop entries refused");
+            for (function, header, why) in refused {
+                let _ = writeln!(out, "  {function} at block{}: {why}", header.0);
             }
         }
         out

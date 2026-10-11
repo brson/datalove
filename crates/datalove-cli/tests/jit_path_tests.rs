@@ -79,15 +79,16 @@ fn a_hot_loop_is_entered_by_osr() {
     assert!(compiled >= 1 && entered >= 1, "no loop was entered by OSR:\n{stats}");
 }
 
-/// `triangle`'s inner loop needs what its outer loop defines, so its header is
-/// refused and the outer one entered instead, which a low threshold reaches.
+/// `triangle`'s inner loop needs what its outer loop defines. Its header is
+/// entered all the same, that value read from the frame the first time and
+/// made again by the outer loop after, and nothing is refused.
 #[test]
-fn an_inner_loop_refused_is_entered_from_outside() {
+fn an_inner_loop_needing_the_outer_ones_values_is_entered() {
     let stats = run(&["--jit", "--jit-osr-threshold", "50", "--jit-stats"]);
     check_output(&stats);
     let [compiled, refused, entered] = numbers(&stats, "jit: loops:")[..] else {
         panic!("unexpected loops line in:\n{stats}")
     };
-    assert!(refused >= 1, "the inner loop was not refused:\n{stats}");
-    assert!(compiled >= 2 && entered >= 2, "the outer loop was not entered:\n{stats}");
+    assert_eq!(refused, 0, "a loop was refused:\n{stats}");
+    assert!(compiled >= 1 && entered >= 1, "no loop was entered:\n{stats}");
 }

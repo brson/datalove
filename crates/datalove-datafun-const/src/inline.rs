@@ -19,7 +19,7 @@ use datalove_datafun_ir::{
     Operand, Terminator,
 };
 
-use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit, instruction_dest};
+use crate::dce::{eliminate_dead_blocks_func, eliminate_dead_code_unit};
 
 /// Inline const values into an IrCodeUnit (script unit).
 ///
@@ -112,7 +112,7 @@ fn inline_block_consts(block: &mut IrBlock, value_to_const: &HashMap<ValueId, Ar
 
     for (idx, instr) in block.instructions.iter().enumerate() {
         // Check if this instruction defines a const value.
-        if let Some(dest) = instruction_dest(instr) {
+        if let Some(dest) = instr.dest() {
             if let Some(const_value) = value_to_const.get(&dest) {
                 // Build replacement instructions.
                 let mut new_instrs = vec![Instruction::Const {

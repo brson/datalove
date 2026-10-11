@@ -131,7 +131,9 @@ And why, from a profile of each:
   loops need what their enclosing loop defines, so OSR refuses them, and the
   outer loop runs 750 times a call, under the threshold of 1000: the first call
   or so is interpreted. This is the program OSR's refusal of inner loops was
-  waiting for.
+  waiting for. (Fixed: OSR now enters an inner loop, carrying what the outer
+  one makes as a variable; tiered runs in 537 ms, the same as compiling
+  everything first.)
 
 ## Additions that would open the rest
 

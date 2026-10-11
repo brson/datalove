@@ -327,7 +327,6 @@ pub struct FunctionCompiler<'a, M: Module> {
     frame_slot: Option<FrameBase>,
     /// Next variable index for Cranelift.
     #[allow(dead_code)]
-    next_var: u32,
     /// Runtime function imports (optional, for functions that need runtime calls).
     runtime: Option<RuntimeImports>,
     /// The module's type descriptors, shared by every function compiled into
@@ -396,6 +395,66 @@ fn reachable_from(func: &IrCodeUnit, from: BlockId) -> std::collections::HashSet
     seen
 }
 
+/// The values an OSR entry at `header` reads before the code it reaches has
+/// defined them, which it also defines: what an enclosing loop's body makes
+/// and the inner loop reads, among them.
+///
+/// Such a value comes from two places -- the interpreter's frame, the first
+/// time round, and its definition, every time after -- so it is compiled as a
+/// variable, given its frame value on entry and its new one where it is made,
+/// and Cranelift puts the merge where the two meet.
+fn carried_into(
+    func: &IrCodeUnit,
+    reachable: &std::collections::HashSet<BlockId>,
+    header: BlockId,
+) -> std::collections::HashSet<ValueId> {
+    use std::collections::HashSet;
+    let blocks: Vec<&IrBlock> = func.blocks.iter().filter(|b| reachable.contains(&b.id)).collect();
+    let defines = |block: &IrBlock| -> HashSet<ValueId> {
+        block.params.iter().copied().chain(block.instructions.iter().flat_map(Instruction::dests)).collect()
+    };
+    let defined: HashMap<BlockId, HashSet<ValueId>> = blocks.iter().map(|b| (b.id, defines(b))).collect();
+
+    // What each block reads that it does not define, then live-in sets by the
+    // usual backward iteration.
+    let mut uses: HashMap<BlockId, HashSet<ValueId>> = HashMap::new();
+    for block in &blocks {
+        let mut used = HashSet::new();
+        let mut add = |op: &Operand| {
+            if let Operand::Value(v) | Operand::ValueRef(v) = op {
+                used.insert(*v);
+            }
+        };
+        block.instructions.iter().for_each(|i| i.for_each_operand(&mut add));
+        block.terminator.for_each_operand(&mut add);
+        used.retain(|v| !defined[&block.id].contains(v));
+        uses.insert(block.id, used);
+    }
+    let mut live_in = uses.clone();
+    loop {
+        let mut changed = false;
+        for block in blocks.iter().rev() {
+            let mut live: HashSet<ValueId> = block.terminator.successors().into_iter()
+                .filter_map(|s| live_in.get(&s))
+                .flatten()
+                .copied()
+                .collect();
+            live.retain(|v| !defined[&block.id].contains(v));
+            live.extend(uses[&block.id].iter().copied());
+            let entry = live_in.get_mut(&block.id).expect("every reached block");
+            if live.len() != entry.len() {
+                *entry = live;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let all: HashSet<ValueId> = defined.into_values().flatten().collect();
+    live_in.remove(&header).expect("the header is reached").into_iter().filter(|v| all.contains(v)).collect()
+}
+
 /// Where a function's frame is.
 ///
 /// Its own stack slot, or, for code entered partway through from the
@@ -439,8 +498,9 @@ struct OsrState {
     /// the bytecode folds a constant into what reads it and may never write
     /// it to the frame.
     consts: HashMap<ValueId, ConstValue>,
-    /// What compiling each block defined; see `osr_check`.
-    defined: HashMap<BlockId, std::collections::HashSet<ValueId>>,
+    /// The values read from the frame on entry and made again in the code
+    /// reached, as variables; see `carried_into`.
+    carried: HashMap<ValueId, Variable>,
 }
 
 impl FrameBase {
@@ -508,7 +568,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             registry: None,
             slot_vars: HashMap::new(),
             frame_slot: None,
-            next_var: 0,
             runtime: None,
             tydesc_emitter,
             rt_handle_param: None,
@@ -562,7 +621,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             registry,
             slot_vars: HashMap::new(),
             frame_slot: None,
-            next_var: 0,
             runtime: Some(runtime),
             tydesc_emitter,
             rt_handle_param: None,
@@ -623,12 +681,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compile an entry into the function at a loop header, from an
     /// interpreter frame; see `OsrSpec`.
     ///
-    /// Only what can be reached from the header is compiled. Refused, as
-    /// `CraneliftError::Unsupported`, where a value the loop needs is made
-    /// inside the code reached -- by an enclosing loop's body, for an inner
-    /// loop's header -- since there would be two places it comes from and
-    /// nothing to choose between them; and where one is a reference whose
-    /// descriptor only its making works out.
+    /// Only what can be reached from the header is compiled. A value the
+    /// loop reads that the code reached also makes -- an enclosing loop's, for
+    /// an inner loop's header -- is a variable; see `carried_into`. Refused,
+    /// as `CraneliftError::Unsupported`, where a value read from the frame is
+    /// a reference whose descriptor only its making works out.
     pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<FuncId, CraneliftError> {
         let mut sig = cl_ir::Signature::new(self.isa.default_call_conv());
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
@@ -701,7 +758,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         if self.osr_spec.is_some() {
-            self.enter_osr(&mut builder, reachable.clone().expect("an OSR entry has its reachable blocks"));
+            self.enter_osr(&mut builder, reachable.clone().expect("an OSR entry has its reachable blocks"))?;
         } else {
             // Set up entry block with parameters.
             let entry_block = self.blocks[&BlockId(0)];
@@ -774,14 +831,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Compile each block.
         let func = self.func;
         for ir_block in func.blocks.iter().filter(|b| compiled(b.id)) {
-            if self.osr.is_some() {
-                self.compile_osr_block(&mut builder, ir_block)?;
-            } else {
-                self.compile_block(&mut builder, ir_block)?;
-            }
-        }
-        if self.osr.is_some() {
-            self.osr_check()?;
+            self.compile_block(&mut builder, ir_block)?;
         }
 
         // Seal all blocks now that all predecessors are known (required for loops).
@@ -859,6 +909,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Compile instructions.
         for inst in &ir_block.instructions {
             self.compile_instruction(builder, inst)?;
+        }
+
+        // In an OSR entry, a carried value made here is its variable's new
+        // definition from here on; see `carried_into`.
+        if let Some(osr) = &self.osr {
+            let made: Vec<(ValueId, Variable)> = ir_block.params.iter().copied()
+                .chain(ir_block.instructions.iter().flat_map(Instruction::dests))
+                .filter_map(|vid| osr.carried.get(&vid).map(|&var| (vid, var)))
+                .collect();
+            for (vid, var) in made {
+                let v = self.values.remove(&vid).expect("a block defines what its instructions make");
+                builder.def_var(var, v);
+            }
         }
 
         // Compile terminator.
@@ -1489,14 +1552,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Allocate a new Cranelift variable.
-    #[allow(dead_code)]
-    fn alloc_var(&mut self) -> Variable {
-        let var = Variable::from_u32(self.next_var);
-        self.next_var += 1;
-        var
-    }
-
     /// Get the tracking byte offset for an operand, if it's tracked.
     fn tracking_byte_offset(&self, operand: &Operand) -> Option<u32> {
         match operand {
@@ -1590,6 +1645,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let Some(osr) = &self.osr else {
             return Err(CraneliftError::Codegen(format!("undefined value: {:?}", vid)));
         };
+        if let Some(&var) = osr.carried.get(&vid) {
+            return Ok(builder.use_var(var));
+        }
+        self.materialize(builder, vid)
+    }
+
+    /// In an OSR entry, the value the interpreter's frame holds for `vid`,
+    /// read in once, before the entry's jump to the header.
+    fn materialize(&self, builder: &mut FunctionBuilder, vid: ValueId) -> Result<cl_ir::Value, CraneliftError> {
+        let osr = self.osr.as_ref().expect("an OSR entry");
         if let Some(v) = osr.materialized.borrow().get(&vid) {
             return Ok(*v);
         }
@@ -1614,7 +1679,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Set up an OSR entry's own entry block: the parameters and descriptors
     /// from where the interpreter keeps them, and a jump to the header with
     /// its parameters as the frame holds them.
-    fn enter_osr(&mut self, builder: &mut FunctionBuilder, reachable: std::collections::HashSet<BlockId>) {
+    fn enter_osr(&mut self, builder: &mut FunctionBuilder, reachable: std::collections::HashSet<BlockId>) -> Result<(), CraneliftError> {
         let spec = self.osr_spec.as_ref().expect("an OSR entry");
         let entry = builder.create_block();
         builder.append_block_params_for_function_params(entry);
@@ -1670,78 +1735,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             entry_jump,
             materialized: std::cell::RefCell::new(HashMap::new()),
             consts,
-            defined: HashMap::new(),
+            carried: HashMap::new(),
         });
-    }
 
-    /// Compile a block of an OSR entry, noting what compiling it defined.
-    fn compile_osr_block(&mut self, builder: &mut FunctionBuilder, ir_block: &IrBlock) -> Result<(), CraneliftError> {
-        let before: std::collections::HashSet<ValueId> = self.values.keys().copied().collect();
-        self.compile_block(builder, ir_block)?;
-        let new = self.values.keys().filter(|v| !before.contains(v)).copied().collect();
-        self.osr.as_mut().expect("an OSR entry").defined.insert(ir_block.id, new);
-        Ok(())
-    }
-
-    /// Refuse an OSR entry whose header needs a value that the code it
-    /// reaches defines: an enclosing loop's, or one asked for before the block
-    /// defining it was compiled, either way read from the frame where the
-    /// code also makes it.
-    ///
-    fn osr_check(&self) -> Result<(), CraneliftError> {
-        let osr = self.osr.as_ref().expect("an OSR entry");
-        let defined = &osr.defined;
-        let spec = self.osr_spec.as_ref().expect("an OSR entry");
-        let all: std::collections::HashSet<ValueId> = defined.values().flatten().copied().collect();
-        if let Some(v) = osr.materialized.borrow().keys().find(|v| all.contains(v)) {
-            return Err(CraneliftError::Unsupported(format!(
-                "entering a loop at {:?} that uses {:?} before the code it reaches defines it", spec.header, v)));
-        }
-
-        // What each block uses that it does not itself define, then live-in
-        // sets by the usual backward iteration over the reached blocks.
-        let blocks: Vec<&IrBlock> = self.func.blocks.iter().filter(|b| osr.reachable.contains(&b.id)).collect();
-        let mut uses: HashMap<BlockId, std::collections::HashSet<ValueId>> = HashMap::new();
-        for block in &blocks {
-            let mut used = std::collections::HashSet::new();
-            let mut add = |op: &Operand| {
-                if let Operand::Value(v) | Operand::ValueRef(v) = op {
-                    used.insert(*v);
-                }
+        // Each carried value's first definition is what the frame holds.
+        let header = spec.header;
+        let reachable = &self.osr.as_ref().expect("just made").reachable;
+        let carried = carried_into(self.func, reachable, header);
+        for vid in carried {
+            let cl_ty = match types::ir_type_to_cranelift(&self.func.value_types[vid.0 as usize]) {
+                CraneliftRepr::Scalar(cl_ty) => cl_ty,
+                CraneliftRepr::Aggregate(_) => PTR_TYPE,
             };
-            block.instructions.iter().for_each(|i| i.for_each_operand(&mut add));
-            block.terminator.for_each_operand(&mut add);
-            let own = &defined[&block.id];
-            used.retain(|v| !own.contains(v));
-            uses.insert(block.id, used);
+            let var = builder.declare_var(cl_ty);
+            let from_frame = self.materialize(builder, vid)?;
+            builder.def_var(var, from_frame);
+            self.osr.as_mut().expect("just made").carried.insert(vid, var);
         }
-        let mut live_in: HashMap<BlockId, std::collections::HashSet<ValueId>> = uses.clone();
-        loop {
-            let mut changed = false;
-            for block in blocks.iter().rev() {
-                let mut live: std::collections::HashSet<ValueId> = block.terminator.successors().into_iter()
-                    .filter_map(|s| live_in.get(&s))
-                    .flatten()
-                    .copied()
-                    .collect();
-                let own = &defined[&block.id];
-                live.retain(|v| !own.contains(v));
-                live.extend(uses[&block.id].iter().copied());
-                let entry = live_in.get_mut(&block.id).expect("every reached block");
-                if live.len() != entry.len() {
-                    *entry = live;
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-        match live_in[&spec.header].iter().find(|v| all.contains(v)) {
-            Some(v) => Err(CraneliftError::Unsupported(format!(
-                "entering a loop at {:?} that needs {:?}, which an enclosing loop defines", spec.header, v))),
-            None => Ok(()),
-        }
+        Ok(())
     }
 
     /// Emit a zero constant for a scalar Cranelift type.
