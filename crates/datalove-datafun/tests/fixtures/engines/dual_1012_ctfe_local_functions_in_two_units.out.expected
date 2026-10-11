@@ -1,0 +1,63 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v1 = const 11int
+                        debuglog v1
+                        unit_end_drop v1
+                        unit_end
+                    
+                    fn fa(p0):
+                    block0:
+                        v0 = const 1int
+                        v1 = add p0, v0
+                        drop v0
+                        drop p0
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("11\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v1 = const 3.75f64
+                        debuglog v1
+                        unit_end
+                    
+                    fn fb(p0):
+                    block0:
+                        v0 = const 1.5f64
+                        v1 = add p0, v0
+                        return v1
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("3.75\n"),
+        ),
+    ],
+)

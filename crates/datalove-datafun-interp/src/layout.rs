@@ -269,8 +269,11 @@ impl IrLayout {
 ///
 /// Keyed by the function rather than by the body's address, because a
 /// `CodeRef::Local` is not a name on its own; this is the same key the JIT
-/// remembers a compiled body under. The body a key maps to only changes when
-/// the interpreter's bodies are all replaced, and that empties the cache.
+/// remembers a compiled body under. The body a key maps to changes when the
+/// interpreter's bodies are all replaced, which empties the cache, and when a
+/// unit's index is given to another unit -- every constant evaluation runs as
+/// unit 0, and a unit that fails leaves its index to the next -- which forgets
+/// that unit's entries (`IrInterpreter::forget_unit_bodies`).
 #[derive(Default)]
 pub struct LayoutCache {
     entries: FxHashMap<FuncIdentity, CachedLayout>,
@@ -287,6 +290,11 @@ impl LayoutCache {
     /// Create an empty cache.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Forget the layouts of the functions of script unit `unit`.
+    pub fn forget_unit(&mut self, unit: u32) {
+        self.entries.retain(|key, _| !matches!(key, FuncIdentity::Unit { unit: u, .. } if *u == unit));
     }
 
     /// The layout for `unit`, computing it if this is the first call to it.

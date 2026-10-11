@@ -1,0 +1,24 @@
+----------
+scriptunit-fragment
+----------
+
+// Two units, each evaluating a const with a function of its own. Constant
+// evaluation runs each as unit 0, so the second unit's function has the
+// first's identity and must not be run with what was worked out for it.
+fun fa(x: int): int
+    ret x + 1
+end fun
+
+const A: int = fa(10)
+debuglog A
+
+----------
+scriptunit-fragment
+----------
+
+fun fb(x: f64): f64
+    ret x + 1.5
+end fun
+
+const B: f64 = fb(2.25)
+debuglog B

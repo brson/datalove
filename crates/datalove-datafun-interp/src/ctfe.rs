@@ -51,6 +51,10 @@ impl Default for InterpCtfeEvaluator {
 
 impl CtfeEvaluator for InterpCtfeEvaluator {
     fn evaluate(&mut self, unit: &IrCodeUnit, result_type: &IrType) -> Result<ConstValue, CtfeError> {
+        // Every evaluation runs as unit 0, with the local functions of the
+        // unit it is for; the last evaluation's were other functions under
+        // the same identities.
+        self.interp.forget_unit_bodies(0);
         // Create environment with module registry if available (for cross-module CTFE).
         let mut env = match &self.module_registry {
             Some(registry) => ScriptEnvironment::with_module_registry(registry.clone()),

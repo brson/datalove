@@ -577,6 +577,17 @@ impl IrInterpreter {
         self.layout_cache = LayoutCache::new();
     }
 
+    /// Forget what was worked out about the functions of script unit `unit`,
+    /// whose index is about to name another unit's.
+    ///
+    /// Their layouts go, and the bytecode kept with them, and every call
+    /// site's idea of its callee is checked again; a module's functions,
+    /// which have not changed, are lowered again only if a call site asks.
+    pub fn forget_unit_bodies(&mut self, unit: u32) {
+        self.code_epoch += 1;
+        self.layout_cache.forget_unit(unit);
+    }
+
     /// Let go of the call-site caches the bytecode replaced, if no frame is
     /// left that could be borrowing a layout or a body from one.
     fn release_retired_call_caches(&mut self) {
@@ -716,6 +727,12 @@ impl IrInterpreter {
                 &script_ctx.unit_end_values,
                 &script_ctx.unit_end_slots,
             );
+            // A unit that failed is not kept, so the next unit takes its
+            // index; what was worked out for this one's functions would be
+            // used for that one's.
+            if !replacing {
+                self.forget_unit_bodies(at);
+            }
             return Err(e);
         }
 
