@@ -2012,7 +2012,68 @@ impl Lowering<'_> {
     }
 }
 
+/// What the optimization pass may do with an op; see `Op::shape`.
+#[derive(Clone, Copy)]
+pub(super) struct Shape {
+    /// It writes one place, its `dst`, after it has read every operand: what
+    /// `coalesce_copies` can point at the place its result is copied to.
+    pub one_result: bool,
+    /// It ends a block with a branch to one of two others.
+    pub two_way: bool,
+    /// A second copy of it in another block means the same: not a call, which
+    /// a call site is cached for; not an escape, which runs an instruction by
+    /// its place in the IR; not one that falls through or leaves the body.
+    pub duplicable: bool,
+}
+
+impl Shape {
+    const ONE_RESULT: Shape = Shape { one_result: true, two_way: false, duplicable: true };
+    const TWO_WAY: Shape = Shape { one_result: false, two_way: true, duplicable: true };
+    const FIXED: Shape = Shape { one_result: false, two_way: false, duplicable: false };
+    const OTHER: Shape = Shape { one_result: false, two_way: false, duplicable: true };
+}
+
 impl Op {
+    /// What the optimization pass may do with the op.
+    ///
+    /// Exhaustive, so that a new op cannot be added without saying.
+    pub(super) fn shape(&self) -> Shape {
+        match self {
+            Op::Const1 { .. } | Op::Const4 { .. } | Op::ConstPool { .. } | Op::Copy1 { .. } | Op::Copy4 { .. }
+            | Op::Copy8 { .. } | Op::CopyN { .. } | Op::CmpU32I { .. } | Op::CmpU8 { .. } | Op::CmpU32 { .. }
+            | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. } | Op::AddWrapU32 { .. }
+            | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. } | Op::ShrU32 { .. }
+            | Op::ShlU32 { .. } | Op::AndU32 { .. } | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. }
+            | Op::U64ToIndex { .. } | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. }
+            | Op::NotBool { .. } | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. }
+            | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. }
+            | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. }
+            | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. }
+            | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. }
+            | Op::F64ToF32 { .. } | Op::ListCopyAt { .. } => Shape::ONE_RESULT,
+            Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
+            | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::BrCmpF32 { .. }
+            | Op::BrCmpF64 { .. } | Op::BrListBounds { .. } | Op::CkU32Br { .. } | Op::CkU32IBr { .. }
+            | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. } => Shape::TWO_WAY,
+            Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::EdgeIr { .. } | Op::UnwrapOkBr { .. }
+            | Op::Switch { .. } | Op::Jump { .. } | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit
+            | Op::ReturnIr { .. } => Shape::FIXED,
+            Op::LoopHead { .. } | Op::ConstString { .. } | Op::CopyAt { .. } | Op::FieldRef { .. }
+            | Op::StaticRef { .. } | Op::MapGetRt { .. } | Op::AddCkU32 { .. } | Op::SubCkU32 { .. }
+            | Op::MulCkU32 { .. } | Op::AddCkI32 { .. } | Op::SubCkI32 { .. } | Op::MulCkI32 { .. }
+            | Op::DivCkU32 { .. } | Op::DivCkI32 { .. } | Op::DivCkU64 { .. } | Op::DivCkI64 { .. }
+            | Op::AddCkU64 { .. } | Op::SubCkU64 { .. } | Op::MulCkU64 { .. } | Op::AddCkI64 { .. }
+            | Op::SubCkI64 { .. } | Op::MulCkI64 { .. } | Op::AddCkU32I { .. } | Op::SubCkU32I { .. }
+            | Op::MulCkU32I { .. } | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. }
+            | Op::ListSetCopy { .. } | Op::ListStoreAt { .. } | Op::ListElementRef { .. }
+            | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. }
+            | Op::WidenFixedRt { .. } | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
+            | Op::UnwrapOption { .. } | Op::UnwrapResult { .. } | Op::Drop { .. } | Op::DropTracked { .. }
+            | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. } | Op::Widen { .. } | Op::BinOpRt { .. }
+            | Op::OpAssignRt { .. } | Op::CkAssign { .. } | Op::CkAssignU32I { .. } => Shape::OTHER,
+        }
+    }
+
     /// Every place in the frame the op reads or writes, with how many bytes it
     /// reads or writes there.
     ///

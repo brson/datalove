@@ -2092,149 +2092,138 @@ impl Instruction {
 impl Instruction {
     /// Every value an instruction defines.
     ///
-    /// [`Instruction::dest`] answers with one, which is all some callers want
-    /// and is not enough to decide whether an instruction is dead. Eight instructions
-    /// define a second or third value, and each of the extra ones is the flag a
-    /// branch tests: dropping `UnwrapOption` because nobody reads the payload
-    /// leaves the branch on `is_some` reading a value nothing defines.
-    ///
-    /// The three collection gets are the same shape -- `l[i]?` lowers to a get and
-    /// a branch on whether the index was in bounds -- and were missing from here.
-    /// A `let x = l[i]?` whose `x` nothing reads had its get dropped and its
-    /// branch kept, so it took the out-of-bounds arm on whatever the undefined
-    /// flag happened to be, and the function early-returned `none` from an index
-    /// that was in bounds.
+    /// Exhaustive, so a new instruction has to say. Several define a second or
+    /// third value, usually the flag a branch tests, and missing one is
+    /// missing a definition: dead code elimination once dropped an
+    /// `UnwrapOption` nobody read the payload of, and a `ListGet` nobody read
+    /// the element of, leaving their branches testing values nothing defined.
     pub fn dests(&self) -> Vec<ValueId> {
         match self {
-            Instruction::UnwrapOption { dest, is_some, .. } => vec![*dest, *is_some],
-            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, .. } => {
-                vec![*ok_dest, *err_dest, *is_ok]
-            }
+            // Constants and copies
+            Instruction::Const { dest, .. } => vec![*dest],
+            Instruction::StaticRef { dest, .. } => vec![*dest],
+            Instruction::Copy { dest, .. } => vec![*dest],
+            Instruction::Move { dest, .. } => vec![*dest],
+
+            // Arithmetic operations
+            Instruction::BinOp { dest, .. } => vec![*dest],
+            Instruction::UnaryOp { dest, .. } => vec![*dest],
             Instruction::BinOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
             Instruction::UnaryOpChecked { dest, overflow, .. } => vec![*dest, *overflow],
-            Instruction::ListGet { dest, is_valid, .. } => vec![*dest, *is_valid],
-            Instruction::MapGet { dest, is_valid, .. } => vec![*dest, *is_valid],
-            Instruction::TensorGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+            Instruction::Widen { dest, .. } => vec![*dest],
+            Instruction::WidenFixed { dest, .. } => vec![*dest],
+            Instruction::Clone { dest, .. } => vec![*dest],
+
+            // Function calls
+            Instruction::Call { dest, .. } => vec![*dest],
+            Instruction::ComptimeCall { dest, .. } => vec![*dest],
+
+            // Aggregate construction
+            Instruction::Pack { dest, .. } => vec![*dest],
             Instruction::Unpack { dests, .. } => dests.clone(),
-            _ => self.dest().into_iter().collect(),
+            Instruction::GetField { dest, .. } => vec![*dest],
+            Instruction::GetFieldRef { dest, .. } => vec![*dest],
+            Instruction::DataBorrow { dest, .. } => vec![*dest],
+
+            // Option/Result construction
+            Instruction::WrapSome { dest, .. } => vec![*dest],
+            Instruction::WrapNone { dest, .. } => vec![*dest],
+            Instruction::WrapOk { dest, .. } => vec![*dest],
+            Instruction::WrapErr { dest, .. } => vec![*dest],
+
+            // Enum construction
+            Instruction::EnumVariant { dest, .. } => vec![*dest],
+            Instruction::EnumDiscriminant { dest, .. } => vec![*dest],
+            Instruction::EnumPayload { dest, .. } => vec![*dest],
+
+            // Option/Result unwrapping (primary dest)
+            Instruction::UnwrapOption { dest, is_some, .. } => vec![*dest, *is_some],
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, .. } => vec![*ok_dest, *err_dest, *is_ok],
+
+            // Boxing operations
+            Instruction::ErrorFrom { dest, .. } => vec![*dest],
+            Instruction::DataFrom { dest, .. } => vec![*dest],
+            Instruction::Erase { dest, .. } => vec![*dest],
+            Instruction::EraseTracked { dest, .. } => vec![*dest],
+            Instruction::Reify { dest, .. } => vec![*dest],
+
+            // Collection construction
+            Instruction::ListNew { dest, .. } => vec![*dest],
+            Instruction::SetNew { dest, .. } => vec![*dest],
+            Instruction::MapNew { dest, .. } => vec![*dest],
+            Instruction::TensorNew { dest, .. } => vec![*dest],
+            Instruction::TableNew { dest, .. } => vec![*dest],
+
+            // Slot load operations
+            Instruction::SlotLoadCopy { dest, .. } => vec![*dest],
+            Instruction::SlotLoadMove { dest, .. } => vec![*dest],
+            Instruction::SlotLoadMoveTracked { dest, .. } => vec![*dest],
+
+            // Intrinsics
+            Instruction::Intrinsic { dest, .. } => vec![*dest],
+
+            // Slot store operations (no dest)
+            Instruction::SlotStoreCopy { .. } => vec![],
+            Instruction::SlotStoreCopyTracked { .. } => vec![],
+            Instruction::SlotStoreMove { .. } => vec![],
+            Instruction::SlotStoreMoveTracked { .. } => vec![],
+            Instruction::SetField { .. } => vec![],
+            Instruction::SetFieldTracked { .. } => vec![],
+            Instruction::ParamStore { .. } => vec![],
+            Instruction::ParamStoreTracked { .. } => vec![],
+            Instruction::ParamSetField { .. } => vec![],
+            Instruction::ParamSetFieldTracked { .. } => vec![],
+            Instruction::RefStore { .. } => vec![],
+            Instruction::RefStoreTracked { .. } => vec![],
+            Instruction::OpAssign { .. } => vec![],
+            Instruction::OpAssignChecked { overflow, .. } => vec![*overflow],
+            Instruction::RefSetField { .. } => vec![],
+            Instruction::RefSetFieldTracked { .. } => vec![],
+
+            // Drop operations (no dest)
+            Instruction::Drop { .. } => vec![],
+            Instruction::DropTracked { .. } => vec![],
+            Instruction::DropViaRef { .. } => vec![],
+            Instruction::DropField { .. } => vec![],
+            Instruction::UnitEndDrop { .. } => vec![],
+            Instruction::UnitEndDropTracked { .. } => vec![],
+
+            // List indexing
+            Instruction::ListGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+            Instruction::ListBoundsCheck { is_valid, .. } => vec![*is_valid],
+            Instruction::ListSet { is_valid, .. } => vec![*is_valid],
+            Instruction::ListElementRef { dest, .. } => vec![*dest],
+
+            // Map indexing
+            Instruction::MapGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+            Instruction::MapContainsKey { is_valid, .. } => vec![*is_valid],
+            Instruction::MapSetValue { is_valid, .. } => vec![*is_valid],
+            Instruction::MapValueRef { dest, .. } => vec![*dest],
+            Instruction::MapUpsert { .. } => vec![],
+
+            // Tensor indexing
+            Instruction::TensorGet { dest, is_valid, .. } => vec![*dest, *is_valid],
+            Instruction::TensorBoundsCheck { is_valid, .. } => vec![*is_valid],
+            Instruction::TensorSet { is_valid, .. } => vec![*is_valid],
+            Instruction::TensorIndexRef { dest, .. } => vec![*dest],
+
+            // Misc
+            Instruction::DebugLog { .. } => vec![],
+            Instruction::Nop => vec![],
         }
     }
 
-    /// The value an instruction defines, its first if it defines several;
-    /// `None` for one that defines none (a drop, a store).
+    /// The value an instruction primarily defines: its only one, or the first
+    /// of several, the payload before the flags that say whether it is there.
+    /// None for `Unpack`, whose values are alike, and for an instruction that
+    /// defines nothing.
+    ///
+    /// For const inlining, which replaces the instruction that defines a
+    /// constant with the constant and gives each flag the value it must have.
     pub fn dest(&self) -> Option<ValueId> {
         match self {
-            // Constants and copies
-            Instruction::Const { dest, .. } => Some(*dest),
-            Instruction::StaticRef { dest, .. } => Some(*dest),
-            Instruction::Copy { dest, .. } => Some(*dest),
-            Instruction::Move { dest, .. } => Some(*dest),
-
-            // Arithmetic operations
-            Instruction::BinOp { dest, .. } => Some(*dest),
-            Instruction::UnaryOp { dest, .. } => Some(*dest),
-            Instruction::BinOpChecked { dest, .. } => Some(*dest),
-            Instruction::UnaryOpChecked { dest, .. } => Some(*dest),
-            Instruction::Widen { dest, .. } => Some(*dest),
-            Instruction::WidenFixed { dest, .. } => Some(*dest),
-            Instruction::Clone { dest, .. } => Some(*dest),
-
-            // Function calls
-            Instruction::Call { dest, .. } => Some(*dest),
-            Instruction::ComptimeCall { dest, .. } => Some(*dest),
-
-            // Aggregate construction
-            Instruction::Pack { dest, .. } => Some(*dest),
-            Instruction::Unpack { .. } => None, // Multiple dests, handled separately if needed
-            Instruction::GetField { dest, .. } => Some(*dest),
-            Instruction::GetFieldRef { dest, .. } => Some(*dest),
-            Instruction::DataBorrow { dest, .. } => Some(*dest),
-
-            // Option/Result construction
-            Instruction::WrapSome { dest, .. } => Some(*dest),
-            Instruction::WrapNone { dest, .. } => Some(*dest),
-            Instruction::WrapOk { dest, .. } => Some(*dest),
-            Instruction::WrapErr { dest, .. } => Some(*dest),
-
-            // Enum construction
-            Instruction::EnumVariant { dest, .. } => Some(*dest),
-            Instruction::EnumDiscriminant { dest, .. } => Some(*dest),
-            Instruction::EnumPayload { dest, .. } => Some(*dest),
-
-            // Option/Result unwrapping (primary dest)
-            Instruction::UnwrapOption { dest, .. } => Some(*dest),
-            Instruction::UnwrapResult { ok_dest, .. } => Some(*ok_dest),
-
-            // Boxing operations
-            Instruction::ErrorFrom { dest, .. } => Some(*dest),
-            Instruction::DataFrom { dest, .. } => Some(*dest),
-            Instruction::Erase { dest, .. } => Some(*dest),
-            Instruction::EraseTracked { dest, .. } => Some(*dest),
-            Instruction::Reify { dest, .. } => Some(*dest),
-
-            // Collection construction
-            Instruction::ListNew { dest, .. } => Some(*dest),
-            Instruction::SetNew { dest, .. } => Some(*dest),
-            Instruction::MapNew { dest, .. } => Some(*dest),
-            Instruction::TensorNew { dest, .. } => Some(*dest),
-            Instruction::TableNew { dest, .. } => Some(*dest),
-
-            // Slot load operations
-            Instruction::SlotLoadCopy { dest, .. } => Some(*dest),
-            Instruction::SlotLoadMove { dest, .. } => Some(*dest),
-            Instruction::SlotLoadMoveTracked { dest, .. } => Some(*dest),
-
-            // Intrinsics
-            Instruction::Intrinsic { dest, .. } => Some(*dest),
-
-            // Slot store operations (no dest)
-            Instruction::SlotStoreCopy { .. } => None,
-            Instruction::SlotStoreCopyTracked { .. } => None,
-            Instruction::SlotStoreMove { .. } => None,
-            Instruction::SlotStoreMoveTracked { .. } => None,
-            Instruction::SetField { .. } => None,
-            Instruction::SetFieldTracked { .. } => None,
-            Instruction::ParamStore { .. } => None,
-            Instruction::ParamStoreTracked { .. } => None,
-            Instruction::ParamSetField { .. } => None,
-            Instruction::ParamSetFieldTracked { .. } => None,
-            Instruction::RefStore { .. } => None,
-            Instruction::RefStoreTracked { .. } => None,
-            Instruction::OpAssign { .. } => None,
-            Instruction::OpAssignChecked { overflow, .. } => Some(*overflow),
-            Instruction::RefSetField { .. } => None,
-            Instruction::RefSetFieldTracked { .. } => None,
-
-            // Drop operations (no dest)
-            Instruction::Drop { .. } => None,
-            Instruction::DropTracked { .. } => None,
-            Instruction::DropViaRef { .. } => None,
-            Instruction::DropField { .. } => None,
-            Instruction::UnitEndDrop { .. } => None,
-            Instruction::UnitEndDropTracked { .. } => None,
-
-            // List indexing
-            Instruction::ListGet { dest, .. } => Some(*dest),
-            Instruction::ListBoundsCheck { is_valid, .. } => Some(*is_valid),
-            Instruction::ListSet { is_valid, .. } => Some(*is_valid),
-            Instruction::ListElementRef { dest, .. } => Some(*dest),
-
-            // Map indexing
-            Instruction::MapGet { dest, .. } => Some(*dest),
-            Instruction::MapContainsKey { is_valid, .. } => Some(*is_valid),
-            Instruction::MapSetValue { is_valid, .. } => Some(*is_valid),
-            Instruction::MapValueRef { dest, .. } => Some(*dest),
-            Instruction::MapUpsert { .. } => None,
-
-            // Tensor indexing
-            Instruction::TensorGet { dest, .. } => Some(*dest),
-            Instruction::TensorBoundsCheck { is_valid, .. } => Some(*is_valid),
-            Instruction::TensorSet { is_valid, .. } => Some(*is_valid),
-            Instruction::TensorIndexRef { dest, .. } => Some(*dest),
-
-            // Misc
-            Instruction::DebugLog { .. } => None,
-            Instruction::Nop => None,
+            Instruction::Unpack { .. } => None,
+            _ => self.dests().first().copied(),
         }
     }
 

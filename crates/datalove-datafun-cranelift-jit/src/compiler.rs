@@ -410,9 +410,11 @@ impl JitCompiler {
     fn collect_call_targets(&self, func: &IrCodeUnit) -> HashSet<CodeRef> {
         let mut targets = HashSet::new();
 
+        // A `ComptimeCall` is a call too, where specialization left one: the
+        // codegen compiles it as one, and its callee needs a stub as much.
         for block in &func.blocks {
             for inst in &block.instructions {
-                if let Instruction::Call { func: code_ref, .. } = inst {
+                if let Some((code_ref, _)) = inst.call_target() {
                     targets.insert(code_ref.clone());
                 }
             }

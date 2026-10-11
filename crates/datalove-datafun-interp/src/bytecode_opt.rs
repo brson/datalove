@@ -356,18 +356,28 @@ fn coalesce_copies(block: &mut Vec<Op>, facts: &Facts) {
 /// The one place an op writes, for an op that writes one and reads all of its
 /// operands before it does.
 fn single_result(op: &mut Op) -> Option<&mut Loc> {
-    match op {
-        Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. }
-        | Op::Copy1 { dst, .. } | Op::Copy4 { dst, .. } | Op::Copy8 { dst, .. } | Op::CopyN { dst, .. }
-        | Op::CmpU32I { dst, .. } | Op::CmpU8 { dst, .. } | Op::CmpU32 { dst, .. } | Op::CmpI32 { dst, .. }
-        | Op::CmpU64 { dst, .. } | Op::CmpI64 { dst, .. }
-        | Op::AddWrapU32 { dst, .. } | Op::SubWrapU32 { dst, .. } | Op::MulWrapU32 { dst, .. }
-        | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. } | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. }
-        | Op::AddWrapIndex { dst, .. } | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. }
-        | Op::ZextU8U32 { dst, .. } | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. }
-        | Op::NotBool { dst, .. } | Op::ListCopyAt { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. } | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. } | Op::SubF64 { dst, .. } | Op::MulF64 { dst, .. } | Op::DivF64 { dst, .. } | Op::AddF32 { dst, .. } | Op::SubF32 { dst, .. } | Op::MulF32 { dst, .. } | Op::DivF32 { dst, .. } | Op::NegF64 { dst, .. } | Op::NegF32 { dst, .. } | Op::SqrtF64 { dst, .. } | Op::SqrtF32 { dst, .. } | Op::U64ToF64 { dst, .. } | Op::I64ToF64 { dst, .. } | Op::F32ToF64 { dst, .. } | Op::F64ToF32 { dst, .. } => Some(dst),
-        _ => None,
+    if !op.shape().one_result {
+        return None;
     }
+    Some(match op {
+        Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. }
+        | Op::Copy1 { dst, .. } | Op::Copy4 { dst, .. } | Op::Copy8 { dst, .. }
+        | Op::CopyN { dst, .. } | Op::CmpU32I { dst, .. } | Op::CmpU8 { dst, .. }
+        | Op::CmpU32 { dst, .. } | Op::CmpI32 { dst, .. } | Op::CmpU64 { dst, .. }
+        | Op::CmpI64 { dst, .. } | Op::AddWrapU32 { dst, .. } | Op::SubWrapU32 { dst, .. }
+        | Op::MulWrapU32 { dst, .. } | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. }
+        | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. } | Op::AddWrapIndex { dst, .. }
+        | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. } | Op::ZextU8U32 { dst, .. }
+        | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. } | Op::NotBool { dst, .. }
+        | Op::ListCopyAt { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. }
+        | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. }
+        | Op::SubF64 { dst, .. } | Op::MulF64 { dst, .. } | Op::DivF64 { dst, .. }
+        | Op::AddF32 { dst, .. } | Op::SubF32 { dst, .. } | Op::MulF32 { dst, .. }
+        | Op::DivF32 { dst, .. } | Op::NegF64 { dst, .. } | Op::NegF32 { dst, .. }
+        | Op::SqrtF64 { dst, .. } | Op::SqrtF32 { dst, .. } | Op::U64ToF64 { dst, .. }
+        | Op::I64ToF64 { dst, .. } | Op::F32ToF64 { dst, .. } | Op::F64ToF32 { dst, .. } => dst,
+        _ => unreachable!("an op of one result names it `dst`"),
+    })
 }
 
 /// The most ops a block may have for a jump to it to be replaced by a copy.
@@ -398,19 +408,12 @@ fn duplicate_short_branches(blocks: &mut [Vec<Op>]) {
     }
 }
 
-/// Whether an op is a branch to two blocks, with nothing falling through.
+/// See `Shape::two_way`.
 fn two_way(op: &Op) -> bool {
-    matches!(op, Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
-        | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. }
-        | Op::BrCmpF32 { .. } | Op::BrCmpF64 { .. } | Op::BrListBounds { .. } | Op::CkU32Br { .. }
-        | Op::CkU32IBr { .. } | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. })
+    op.shape().two_way
 }
 
-/// Whether an op means the same wherever it is: not a call, which a call site
-/// is cached for, nor an escape to the IR walker, which runs an instruction
-/// by its place in the IR, nor one that falls through or leaves the body.
+/// See `Shape::duplicable`.
 fn duplicable(op: &Op) -> bool {
-    !matches!(op, Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::EdgeIr { .. }
-        | Op::UnwrapOkBr { .. } | Op::Switch { .. } | Op::Jump { .. }
-        | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. })
+    op.shape().duplicable
 }
