@@ -259,8 +259,9 @@ runtime-call forms stay (`field_read`, `field_offset`).
 
 **Slots, parameters, references.** Stores and loads with the tracking decision
 baked in (see [liveness](#user-content-liveness-and-tracking-bytes)):
-`StoreSlot { off, src, size }`, `StoreSlotTracked { off, src, size, track, desc }`
-(destroy the old value if its byte says LIVE, store, set LIVE), `LoadSlotMoveTracked`,
+`StoreSlot { off, src, size }`, `StoreSlotTracked { off, src, size, track }`
+(store, set LIVE: stores are pure, and the `drop.tracked` in front destroys
+what the slot held), `LoadSlotMoveTracked`,
 `StoreParamTracked`, `RefStore`, and the field-path forms.
 
 **Drops.** `Drop { src, desc }` (call `dtlv_rti_any_destroy_local`) and

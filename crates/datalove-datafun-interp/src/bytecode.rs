@@ -371,9 +371,9 @@ pub(crate) enum Op {
     /// Destroy what a tracked slot or `out` parameter holds, if its tracking
     /// byte at frame offset `track` says it holds anything, and mark it moved.
     DropTracked { src: Loc, track: u32, desc: u32 },
-    /// Store into a tracked slot: destroy what it holds if anything, copy
-    /// `len` bytes from `src`, mark it live.
-    StoreTracked { dst: Loc, track: u32, src: Loc, len: u32, desc: u32 },
+    /// Store into a tracked slot: copy `len` bytes from `src`, mark it live.
+    /// What it held, the `drop.tracked` in front destroyed: a store is pure.
+    StoreTracked { dst: Loc, track: u32, src: Loc, len: u32 },
     /// Move out of a tracked slot and mark it moved.
     LoadMoveTracked { dst: Loc, src: Loc, track: u32, len: u32 },
     /// Widen a fixed-width integer to an `int`.
@@ -1576,15 +1576,12 @@ impl<'a> Lowering<'a> {
                     Instruction::SlotStoreMoveTracked { .. } => self.consumed(value),
                     _ => self.loc(value),
                 };
-                let slot_op = Operand::Slot(*slot);
-                let (Some(ty), Some(src), Some(desc)) =
-                    (self.typed(value), src, self.desc_of(&slot_op)) else { return false };
-                if self.typed(&slot_op).is_none() {
+                let (Some(ty), Some(src)) = (self.typed(value), src) else { return false };
+                if self.typed(&Operand::Slot(*slot)).is_none() {
                     return false;
                 }
                 let dst = Loc::direct(self.layout.slot_offsets[slot.0 as usize]);
-                let desc = self.desc_index(desc);
-                self.emit(Op::StoreTracked { dst, track, src, len: layout_of(ty).size, desc });
+                self.emit(Op::StoreTracked { dst, track, src, len: layout_of(ty).size });
                 true
             }
             Instruction::SlotLoadMoveTracked { dest, slot } => {
@@ -2240,7 +2237,7 @@ impl BcFunction {
             }
             match *op {
                 Op::ConstString { desc, .. } | Op::Drop { desc, .. } | Op::DropTracked { desc, .. }
-                | Op::StoreTracked { desc, .. } | Op::Widen { src_desc: desc, .. } => {
+                | Op::Widen { src_desc: desc, .. } => {
                     in_table(desc, self.descs.len(), "descriptor");
                 }
                 _ => {}
@@ -2728,15 +2725,9 @@ impl IrInterpreter {
                             *byte = tracking::MOVED;
                         }
                     }
-                    Op::StoreTracked { dst, track, src, len, desc } => {
-                        let byte = base.add(track as usize);
-                        let d = dst.at(base);
-                        if *byte == tracking::LIVE {
-                            let old = crate::value::Value { ptr: d, tydesc: bc.descs[desc as usize] };
-                            self.execute_drop(&old);
-                        }
-                        copy_bytes(src.at(base), d, len as usize);
-                        *byte = tracking::LIVE;
+                    Op::StoreTracked { dst, track, src, len } => {
+                        copy_bytes(src.at(base), dst.at(base), len as usize);
+                        *base.add(track as usize) = tracking::LIVE;
                     }
                     Op::LoadMoveTracked { dst, src, track, len } => {
                         copy_bytes(src.at(base), dst.at(base), len as usize);
