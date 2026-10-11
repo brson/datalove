@@ -62,3 +62,13 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
   ret found
 end fun
 ```
+
+The `item` variable is a reference binding,
+a pointer directly into the container.
+So `item` can't be moved, nor can the iteratee, `self`
+be mutably referenced or mutated via indexing.
+This is in contrast to `match` and destructuring `for`
+which fully destructure their operands.
+
+Besides lists we also have other collections that need
+iteration consideration: maps, sets, tensors, and tables.
