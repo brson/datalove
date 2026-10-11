@@ -95,6 +95,9 @@ impl IrInterpreter {
         debug_assert!(self.frame_stack.is_empty(), "bodies replaced while frames run on them");
         self.code_epoch += 1;
         self.layout_cache = LayoutCache::new();
+        if let Some(d) = self.call_dispatcher.get_mut().as_mut() {
+            d.bodies_replaced();
+        }
     }
 
     /// Forget what was worked out about the functions of script unit `unit`,
@@ -106,6 +109,9 @@ impl IrInterpreter {
     pub fn forget_unit_bodies(&mut self, unit: u32) {
         self.code_epoch += 1;
         self.layout_cache.forget_unit(unit);
+        if let Some(d) = self.call_dispatcher.get_mut().as_mut() {
+            d.unit_bodies_replaced(unit);
+        }
     }
 
     /// Let go of the call-site caches the bytecode replaced, if no frame is

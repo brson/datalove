@@ -360,6 +360,14 @@ impl CallDispatcher for LentEngine {
     }
 
 
+    fn bodies_replaced(&mut self) {
+        self.engine().bodies_replaced();
+    }
+
+    fn unit_bodies_replaced(&mut self, unit: u32) {
+        self.engine().unit_bodies_replaced(unit);
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }

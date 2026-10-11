@@ -12,7 +12,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// caller chooses.
     pub fn compile(self) -> Result<FuncId, CraneliftError> {
         let symbol = self.func.name.clone();
-        self.compile_as(&symbol)
+        self.compile_as(&symbol).map(|defined| defined.id)
     }
 
     /// Compile the function under a symbol of the caller's choosing.
@@ -27,7 +27,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// So anything compiling functions from more than one module into a single
     /// module has to name them apart itself.
-    pub fn compile_as(mut self, symbol: &str) -> Result<FuncId, CraneliftError> {
+    pub fn compile_as(mut self, symbol: &str) -> Result<Defined, CraneliftError> {
         // Build function signature.
         let sig = self.build_signature();
 
@@ -44,11 +44,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Use this for two-pass compilation where functions are declared first.
     pub fn compile_predeclared(mut self, func_id: FuncId) -> Result<FuncId, CraneliftError> {
         let sig = self.build_signature();
-        self.compile_body(func_id, sig)
+        self.compile_body(func_id, sig).map(|defined| defined.id)
     }
 
     /// Compile the function body using the given FuncId and signature.
-    pub(super) fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<FuncId, CraneliftError> {
+    pub(super) fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<Defined, CraneliftError> {
         // Create Cranelift function.
         let mut cl_func = cl_ir::Function::with_name_signature(
             cl_ir::UserFuncName::user(0, func_id.as_u32()),
@@ -187,8 +187,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.module
             .define_function(func_id, &mut ctx)
             .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
+        let code_size = ctx.compiled_code().expect("a function just defined").code_info().total_size;
 
-        Ok(func_id)
+        Ok(Defined { id: func_id, code_size })
     }
 
     /// Compile one block: its parameters, instructions and terminator.

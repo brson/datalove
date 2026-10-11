@@ -114,6 +114,9 @@ pub struct JitCompiler {
     /// called by every later one: a stub depends on nothing but its callee,
     /// and making one is a Cranelift compilation of its own.
     stubs: rustc_hash::FxHashMap<FuncIdentity, FuncId>,
+    /// The cells of functions forgotten since, kept because the stubs that
+    /// read them have their addresses.
+    retired_cells: Vec<Box<AtomicUsize>>,
     /// The trampoline for each native rider function, by symbol and the
     /// address it was registered at, likewise.
     native_trampolines: HashMap<(String, u64), FuncId>,
@@ -221,6 +224,7 @@ impl JitCompiler {
             code_owners: Mutex::new(Vec::new()),
             code_cells: Default::default(),
             stubs: Default::default(),
+            retired_cells: Vec::new(),
             native_trampolines: HashMap::new(),
         })
     }
@@ -239,6 +243,20 @@ impl JitCompiler {
     /// dispatcher has only a shared reference to.
     pub fn hold_code_owner(&self, owner: Arc<dyn Any + Send + Sync>) {
         self.code_owners.lock().expect("jit code owners poisoned").push(owner);
+    }
+
+    /// Forget the code, cells and stubs of the functions `which` picks, whose
+    /// bodies have been replaced, so that what calls them from now on is
+    /// compiled against the new bodies.
+    ///
+    /// Code compiled before can still reach the old ones, but no caller of
+    /// that code is left: the interpreter forgets its call sites too.
+    pub fn forget(&mut self, mut which: impl FnMut(&FuncIdentity) -> bool) {
+        self.stubs.retain(|key, _| !which(key));
+        let gone: Vec<FuncIdentity> = self.code_cells.keys().filter(|key| which(key)).copied().collect();
+        for key in gone {
+            self.retired_cells.push(self.code_cells.remove(&key).expect("a key just listed"));
+        }
     }
 
     /// The address of the cell holding `key`'s compiled code, zero until it has some.
@@ -273,7 +291,7 @@ impl JitCompiler {
 
     /// Compile an entry into `func` at a loop header, for a frame the
     /// interpreter is running it in; see `codegen::OsrSpec`. Returns the code,
-    /// whether it takes `sret`, and an estimate of its size.
+    /// whether it takes `sret`, and its size in bytes.
     pub fn compile_osr<'a>(
         &mut self,
         func: &IrCodeUnit,
@@ -312,10 +330,13 @@ impl JitCompiler {
             // library is loaded >2GB from JIT code memory.
             if let Some(native_ctx) = callee_ir.native_context() {
                 let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
+                // A native with no symbol registered is one implemented in
+                // Rust, which only the interpreter can call.
                 let addr = self.native_symbols.lock().unwrap()
                     .get(native_ctx.symbol())
                     .map(|p| p.0 as u64)
-                    .unwrap_or_else(|| panic!("native symbol not registered: {}", native_ctx.symbol()));
+                    .ok_or_else(|| JitError::Unsupported(format!(
+                        "a call to native {}, which has no symbol registered", native_ctx.symbol())))?;
                 let cached = (native_ctx.symbol().to_owned(), addr);
                 let func_id = match self.native_trampolines.get(&cached) {
                     Some(&id) => id,
@@ -377,8 +398,7 @@ impl JitCompiler {
         compiler.set_static_consts(static_consts_of(func, interp));
         compiler.abandon_on_interpreter_errors();
 
-        // Compile and get the Cranelift FuncId.
-        let cl_func_id = match osr {
+        let defined = match osr {
             None => compiler.compile_as(&unique_symbol(func)),
             Some(spec) => compiler.compile_osr_as(&unique_symbol(func), spec),
         }.map_err(|e| codegen_err("compile", e))?;
@@ -388,10 +408,8 @@ impl JitCompiler {
             .map_err(|e| jit_err("finalize", e))?;
 
         // Get the code pointer and size.
-        let code_ptr = self.jit_module.get_finalized_function(cl_func_id);
-
-        // Estimate code size from IR function.
-        let code_size = estimate_code_size(func);
+        let code_ptr = self.jit_module.get_finalized_function(defined.id);
+        let code_size = defined.code_size as usize;
 
         // Determine if function uses sret.
         let func_ctx = func.function_context()
@@ -611,31 +629,6 @@ impl JitCompiler {
 
         Ok(())
     }
-}
-
-/// Estimate code size for a code unit based on IR complexity.
-///
-/// Uses heuristics since Cranelift doesn't expose compiled code size directly.
-/// Estimates ~10 bytes per instruction + 20 bytes per block for control flow.
-fn estimate_code_size(func: &IrCodeUnit) -> usize {
-    let mut instruction_count = 0;
-    for block in &func.blocks {
-        instruction_count += block.instructions.len();
-    }
-    let block_count = func.blocks.len();
-
-    // Base estimate: 10 bytes per instruction, 20 bytes per block.
-    let base = instruction_count * 10 + block_count * 20;
-
-    // Add overhead for function prologue/epilogue (~32 bytes).
-    let overhead = 32;
-
-    // Add overhead for parameters (~8 bytes each for stack setup).
-    let param_overhead = func.function_context()
-        .map(|ctx| ctx.params.len() * 8)
-        .unwrap_or(0);
-
-    base + overhead + param_overhead
 }
 
 /// Create a local trampoline function that calls an external address indirectly.

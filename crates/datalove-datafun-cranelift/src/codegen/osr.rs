@@ -26,11 +26,13 @@ pub(super) fn reachable_from(func: &IrCodeUnit, from: BlockId) -> std::collectio
 /// time round, and its definition, every time after -- so it is compiled as a
 /// variable, given its frame value on entry and its new one where it is made,
 /// and Cranelift puts the merge where the two meet.
+///
+/// In order, so that the variables, and the code, come out the same each time.
 pub(super) fn carried_into(
     func: &IrCodeUnit,
     reachable: &std::collections::HashSet<BlockId>,
     header: BlockId,
-) -> std::collections::HashSet<ValueId> {
+) -> std::collections::BTreeSet<ValueId> {
     use std::collections::HashSet;
     let blocks: Vec<&IrBlock> = func.blocks.iter().filter(|b| reachable.contains(&b.id)).collect();
     let defines = |block: &IrBlock| -> HashSet<ValueId> {
@@ -124,7 +126,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// an inner loop's header -- is a variable; see `carried_into`. Refused,
     /// as `CraneliftError::Unsupported`, where a value read from the frame is
     /// a reference whose descriptor only its making works out.
-    pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<FuncId, CraneliftError> {
+    pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<Defined, CraneliftError> {
         let mut sig = cl_ir::Signature::new(self.isa.default_call_conv());
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
         if uses_sret(&self.func_ctx.return_type) {

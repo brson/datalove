@@ -254,6 +254,14 @@ impl JitEngine {
         }
     }
 
+    /// Forget the functions `which` picks, and their loops, whose bodies have
+    /// been replaced; see `CallDispatcher::bodies_replaced`.
+    fn forget(&mut self, mut which: impl FnMut(&FuncIdentity) -> bool) {
+        self.states.retain(|f, _| !which(f));
+        self.loops.retain(|(f, _), _| !which(f));
+        self.compiler.forget(which);
+    }
+
     /// How a planned call site is to make its calls to `func`; see
     /// `CallDispatcher::site_policy` and `Tier::policy`.
     pub fn site_policy(&self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
@@ -924,6 +932,14 @@ impl CallDispatcher for JitEngine {
         JitEngine::loop_policy(self, func, body, header, iterations, call_ctx)
     }
 
+
+    fn bodies_replaced(&mut self) {
+        self.forget(|_| true);
+    }
+
+    fn unit_bodies_replaced(&mut self, unit: u32) {
+        self.forget(|f| matches!(f, FuncIdentity::Unit { unit: u, .. } if *u == unit));
+    }
 
     fn as_any(&self) -> &dyn Any {
         self

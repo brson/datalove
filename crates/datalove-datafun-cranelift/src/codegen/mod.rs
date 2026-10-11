@@ -75,6 +75,13 @@ mod translate;
 mod tests;
 
 pub use osr::OsrSpec;
+
+/// A function compiled into the module: its id, and how many bytes of machine
+/// code it came to.
+pub struct Defined {
+    pub id: FuncId,
+    pub code_size: u32,
+}
 pub use signature::{build_native_signature, build_signature_for_func, uses_sret, LocalCallee};
 pub use statics::{empty_function_unit, static_const_key, StaticConstLoc, StaticConsts};
 use osr::{reachable_from, OsrState};

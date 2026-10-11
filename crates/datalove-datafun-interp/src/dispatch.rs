@@ -188,6 +188,25 @@ pub trait CallDispatcher {
         Ok(SitePolicy::Interpret)
     }
 
+    /// Every function body may have been replaced: forget everything kept
+    /// about functions by their identity.
+    ///
+    /// Bodies are replaced between units, with no frame running, so nothing
+    /// compiled from an old body can still be running. The default suits a
+    /// dispatcher that keeps nothing per function.
+    fn bodies_replaced(&mut self) {}
+
+    /// The functions of script unit `unit` are about to be other functions
+    /// under the same identities: forget what is kept about them.
+    ///
+    /// Only the unit's own functions can have called them, since a unit's
+    /// functions are called only by it and by later units, and there are none
+    /// (the unit failed, and was the last) or the unit is the one compile-time
+    /// evaluation runs every const as.
+    fn unit_bodies_replaced(&mut self, unit: u32) {
+        let _ = unit;
+    }
+
     /// Convert to Any for downcasting.
     ///
     /// Used to access dispatcher-specific state (like JIT stats) after execution.

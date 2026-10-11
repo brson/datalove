@@ -344,6 +344,14 @@ impl CallDispatcher for OptimizingDispatcher {
     }
 
 
+    fn bodies_replaced(&mut self) {
+        self.jit.bodies_replaced();
+    }
+
+    fn unit_bodies_replaced(&mut self, unit: u32) {
+        self.jit.unit_bodies_replaced(unit);
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }

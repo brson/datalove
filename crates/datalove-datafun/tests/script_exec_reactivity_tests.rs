@@ -676,3 +676,26 @@ fn a_module_signature_change_is_reported_against_the_importing_unit() {
     assert_eq!(broken, vec![0], "`f(1)` no longer typechecks, and unit 0 is where it is");
     assert_eq!(session.binding("b"), "2", "the control unit is untouched");
 }
+
+/// A function edited and re-run under the JIT runs as edited.
+///
+/// The JIT keeps what it compiled by the function's identity, which the edit
+/// does not change: told nothing, it went on running the code compiled from
+/// the old body.
+#[test]
+fn an_edited_function_runs_as_edited_under_the_jit() {
+    let unit = |n: u32| format!(
+        "fun f(x: u32): u32\n  ret icall add_wrapping_u32(x, : u32 / {n})\nend fun\n\
+         debuglog f(: u32 / 100)\n");
+    let mut session = Session::new();
+    let jit = datalove_datafun_cranelift_jit::JitEngine::new(1).expect("a jit");
+    session.executor.set_dispatcher(Box::new(jit));
+    session.append(&unit(1));
+    assert!(session.executor.get_debug_buffer().contains("101"));
+    session.executor.clear_debug_buffer();
+
+    session.edit(0, &unit(2));
+    session.rederive(0);
+    let buffer = session.executor.get_debug_buffer();
+    assert!(buffer.contains("102"), "ran the old body: {buffer}");
+}
