@@ -58,6 +58,11 @@ something else.
   gave and what this keeps.
 - The value a fat pointer points at lives on a **shadow stack** owned by the
   runtime, or in the caller's frame for an argument.
+- A **reference to a dynamic type**, `Ref(T)`, is not a dynamic value with
+  storage of its own. It *is* the fat pointer, pointing at storage someone
+  else owns. It gets no shadow-stack space, and moving it copies its two
+  words, not what it points at. Every rule below about a dynamic value's
+  storage is about owned dynamic values only.
 - A generic is called with its arguments as `(ptr, tydesc)` -- the rider
   ABI -- and **one descriptor per type parameter**. Anything compound the body
   needs is built from those at run time.
@@ -79,7 +84,18 @@ collapsing type parameters to `Data`, and `erased_param_type`,
 written type.
 
 Layout has one new rule: a dynamic type is laid out as a fat pointer. A
-non-dynamic type keeps its layout, so `ir::layout` changes in one place.
+non-dynamic type keeps its layout. "Dynamic" means *mentions* a parameter, so
+`layout_of` checks for it before its match rather than gaining a `Param` arm.
+
+That is the one rule, but not the one place. The static offset helpers --
+`aggregate_field_offsets`, `option_payload_offset`, `enum_variant_offsets` --
+are meaningless on a dynamic type, and are called directly from the
+bytecode's lowering (about two dozen uses), the C backend and cranelift; each
+call site needs a dynamic path or an assertion that it never sees one.
+Cranelift and C also map types themselves (`ir_type_to_cranelift`,
+`ir_type_size`), and the interpreter's `IrLayout` holds one static `TyDesc` per
+value and asserts its size against the frame slot (`interp/layout.rs`), which
+a dynamic value's fat pointer now fills instead.
 
 `Data` stays, for the language's own `data` type, which is a value written as
 one (`data 42`) and has nothing to do with generics after this. `T` bound to
@@ -103,6 +119,18 @@ touches `T` itself has nothing to build; `T`'s entry is the hidden parameter.
 descriptors of its parts -- a list of this, a tuple of these, an option of
 that -- and caches it, so a table fill is a lookup per entry after the first
 call at a given binding. See [The runtime](#user-content-the-runtime).
+
+A lookup per entry per call is still a cost on every call, and a small `sys/std`
+generic called in a loop pays it every time. The expected fix is a one-entry
+cache per function, keyed on the incoming type-parameter descriptor pointers,
+that skips the fill when a call repeats the previous binding. Whether it is
+needed is for the baseline to say.
+
+**Specialization.** Const-parameter specialization (`specialize.rs`) removes
+const parameters from the function it builds, so the hidden descriptors, which
+come after the ordinary parameters, move with them. It copies the descriptor
+table as it copies `descriptor_shapes` now. The other places that build a
+`FunctionContext` literal gain the field too.
 
 **Call sites.** For each type parameter of a callee, the caller supplies a
 descriptor: a static one, when the binding is concrete; its own table entry,
@@ -146,11 +174,29 @@ loop reuses its space every iteration, so the shadow stack grows with the
 number of IR values, never with the iteration count. The offsets depend only
 on the descriptors, so they can be cached beside the table.
 
-**Release.** The function records the shadow stack's top at entry and restores
-it on every exit. Early returns from `?` and `!` are ordinary returns.
-Abandoning compiled code returns through its callers the same way. The
-runtime's `reset`, which is how a datalove error frees what it unwound
-through, resets the shadow stack too.
+**Block arguments are a parallel move.** A jump can pass a block's own
+parameters back to it in another order, and copying bytes one argument at a
+time then reads storage it has already overwritten. The interpreter handles
+this already (`walker.rs`, reading every argument before writing any);
+cranelift copies aggregate block parameters one at a time and does not.
+Lowering never emits such a jump today. Either that becomes a rule the
+verifier checks, or the backends copy through scratch space sized from the
+descriptors. The rule is simpler and is the plan unless lowering turns out to
+need the jump.
+
+**Release.** The function records the shadow stack's position at entry and
+restores it on every ordinary exit. Early returns from `?` and `!` are
+ordinary returns. Since the stack grows by chunks, the position is the top
+*and* the chunk it is in, so restoring past a chunk boundary also restores the
+limit; restoring only the top would leave the limit pointing into the newer
+chunk.
+
+Ordinary exits are not every exit. Abandoning compiled code is a bare return
+after each call that skips any epilogue (`codegen/calls.rs`), and runtime
+entry points are `C-unwind`, so a panic the REPL catches unwinds past compiled
+frames without running anything. Neither restores. What makes this sound is
+the runtime's `reset`, which is how a datalove error frees what it unwound
+through: it resets the shadow stack to its base along with everything else.
 
 **Values that leave** are copied out: a return into the caller's storage, a
 push into the collection's buffer, a store into an aggregate. Nothing keeps a
@@ -186,8 +232,10 @@ an instruction whose operand is dynamic, the way `RefDesc` changes it today.
 | Operation | On a dynamic value |
 |---|---|
 | move, store, load, block argument | copy `desc.size` bytes into the destination's storage |
-| clone | `any_clone` into the destination's storage |
-| drop | `any_destroy` on the value; the storage goes with the frame |
+| move or block argument of a `Ref(T)` | copy the two words; nothing is pointed at anew |
+| read through a `Ref(T)` (`ValueRef`) | copy or clone `desc.size` bytes from `ptr` into the destination's storage |
+| clone | `dtlv_rti_clone_local` into the destination's storage |
+| drop | `dtlv_rti_any_destroy_local` on the value; the storage goes with the frame |
 | field, element, payload reference | a fat pointer: `ptr` plus the offset from the descriptor, and the part's descriptor |
 | field, element, payload read of a concrete part | a load at the offset from the descriptor |
 | tuple, struct, option, term, enum, result construction | each part stored at its offset from the destination's descriptor |
@@ -195,7 +243,16 @@ an instruction whose operand is dynamic, the way `RefDesc` changes it today.
 | bounded operations (`ord`, `fixedint`, `float`) | `dyn_ops` on `(ptr, tydesc)` pairs |
 | `debuglog` | the runtime's printer on the pair |
 
-The offsets are what `dtlv_rti_field_offset` and `rtdt::layout` already give.
+The offsets are what `rtdt::layout` already computes, but only part of it is
+reachable from compiled code: `dtlv_rti_field_offset` answers for tuples and
+structs and panics on anything else. Option, result and enum payload offsets
+need a runtime entry beside it, or the layout rules inlined per backend. They
+are not one rule: an option's payload is at `align_up(1, align(T))`, a
+result's at `align_up(1, max(align(T), 8))` because of the error, and each
+enum variant has its own offset in `TyInfoEnumVariant.offset`. A runtime entry
+is the plan, for the reason `generics.md` gives for the rest of the runtime
+helpers: one derivation, not four.
+
 A projection off a fat pointer is a fat pointer, so what
 `resolve_ref_descriptors` derives across a unit becomes a local computation at
 each projection.
@@ -207,7 +264,9 @@ each projection.
 
 The rider ABI does not change: `(ptr, tydesc)` per argument, the result
 through an out pair, trailing descriptors for a type parameter that appears
-only in the return. A generic calling a native passes its fat pointers
+only in the return -- one per type parameter no argument determines, as
+`DescriptorShape::Param` entries on `NativeContext`, which stay. A generic
+calling a native passes its fat pointers
 through, and the trailing descriptors come from its table instead of from a
 closure.
 
@@ -222,27 +281,59 @@ rider ABI change and a separate step.
 ## The runtime
 
 **Descriptor construction.** One entry per type form -- list, set, map,
-tensor, option, result, tuple, struct, term, enum -- taking the part
-descriptors and returning a descriptor. Layouts come from `rtdt::layout`,
-which already computes tuple, struct, option, result, enum and map and set
-node layouts from descriptors, and which `ir::layout` agrees with; flags from
-`TyDesc::computed_flags`. Built descriptors are interned in a cache keyed by
-the form and the part descriptors' addresses, and live until shutdown, which
-frees them so leak checking stays quiet. A miss for a type that already has a
-static descriptor elsewhere builds a duplicate, which is harmless: descriptors
-are compared structurally (`same_tydesc`), never by address.
+tensor, table, option, result, tuple, struct, term, enum -- taking the part
+descriptors and returning a descriptor. Tables are on the list because the
+spec allows a type parameter inside one.
+
+The parts are not the whole of a descriptor. Struct field names, enum variant
+names, term names and table column names are in it too, and `eq_tydesc`
+compares them; typing is structural, but the names are part of the structure.
+So each entry also takes a **template**: a static descriptor the compiler
+emits for the form with its parts left open, carrying the names. The template
+is part of the cache key.
+
+Layouts come from `rtdt::layout`, which `ir::layout` agrees with. Its
+functions take the composite's own descriptor rather than a list of parts, so
+building is: fill in a `TyDesc` from the template with the part pointers, then
+compute offsets and size from it, then flags from `TyDesc::computed_flags`.
+Map and set node layouts come from `TyInfoMap::new` and `TyInfoSet::new`.
+`datalove-datalit/src/tydesc_table.rs` already caches descriptors built at run
+time for options, results, lists, maps and sets, keyed by part addresses, and
+is the pattern to follow.
+
+Built descriptors are interned in a cache keyed by the form, the template and
+the part descriptors' addresses. A miss for a type that already has a static
+descriptor elsewhere builds a duplicate, which is harmless: descriptors are
+compared structurally (`same_tydesc`), with address equality only as a fast
+path. The one place that compares by address alone is a debug assertion in
+`dtlv_rti_clone_local` (`td_in == td_out`), which a static descriptor meeting a
+built one for the same type will trip; it becomes `same_tydesc` in phase 1.
+
+**Where the cache lives** is per runtime handle (`RtLocal`), and outside its
+allocator. Inside `AllocLocal` it would not survive: `reset` calls
+`discard_all`, so the first datalove error would free every built descriptor
+out from under the cache. Boxed and freed in `dtlv_rti_shutdown`, built
+descriptors stay out of leak checking entirely. A process-wide cache is ruled
+out by lifetimes rather than locking: its keys are the addresses of static
+descriptors that live in a JIT module or an interpreter's table, which go away
+when the REPL rebuilds its executor after an error, or when a test drops its
+interpreter. Per handle, the cache dies first -- `IrInterpreter` declares its
+runtime before its descriptor table -- so no key outlives what it names.
 
 **The shadow stack.** Its top and limit go in `RtHeader`, beside
 `stack_limit`, so compiled code bumps and restores it inline and calls the
 runtime only to grow it. It grows by chunks, never by moving, so a pointer
-into it stays good. It is per `RtLocal`, which is per thread, so it is
+into it stays good; see [Release](#user-content-storage) for what restoring
+across a chunk boundary has to restore. It is per `RtLocal`, which is per
+runtime handle, and a handle is used by one thread at a time, so it is
 reentrant and thread-safe by construction -- the property the C backend's
 static tensor view lacks.
 
 **Tests** in `datalove-rt-tests`: every type form built at run time compared
-field by field with the descriptor the compiler emits for the same type;
-nested forms; cache hits; the shadow stack across chunk boundaries, reset, and
-restore.
+field by field with the descriptor the compiler emits for the same type,
+names included; nested forms; cache hits, and misses on a different template
+with the same parts; built descriptors surviving `reset`; the shadow stack
+across chunk boundaries, reset, and restore across a boundary.
 
 ## What goes away
 
@@ -252,14 +343,27 @@ restore.
 - `erase_local`, `reify_local`, `clone_erased_local`, `convert`,
   `needs_erasure`, `data_into_local`, `unwraps_the_element`,
   `borrow_lookup_key`, and the `*_erased_local` collection entries
-- `descriptor_params`, `descriptor_shapes`, `close_shapes`,
-  `close_shapes_over_calls`, `close_shapes_in_units`, `growing_parameters`,
-  and the refusal of a call at a growing type
+- `descriptor_params` and `descriptor_shapes` on `FunctionContext`,
+  `close_shapes`, `close_shapes_over_calls`, `close_shapes_in_units`,
+  `growing_parameters`, and the refusal of a call at a growing type
+  (`LowerError::UnboundedDescriptorShape`, whose fixture
+  `engines/module_060_unbounded_shape` flips to passing). `NativeContext`'s
+  own `descriptor_shapes` stays; see [Natives](#user-content-natives).
+- `DescriptorShape` for functions, `shape_descriptors_for`,
+  `write_call_descriptors`, and the `shape_descriptors` on `Call`, replaced by
+  the per-type-parameter descriptors
 - `RefDesc` and `resolve_ref_descriptors`, replaced by fat pointers
 - `wrapped_shapes` and `container_shape` in lowering
+- the signature check that refuses a type parameter it cannot erase:
+  `first_unerasable_type_param` and `unerasable_type_param_error`
+- the three predicates for "a container of a type parameter" that have to
+  agree: `is_container_of_type_param`, `type_hint_is_container_of_param` and
+  `datalit_is_container_of_var`
+- the bytecode's `EraseRt` and `ReifyRt`, and cranelift's `codegen/boxing.rs`
 - the two descriptor groups in the JIT bridge and trampoline
 - the call-site question of whether a `data` is a wrapper or a pointer
-- the ownership rule that a binding is moved out before its conversion
+- the lowering rule that a binding is moved out before its conversion
+  (`datafun-lower/src/expr.rs`, beside `EraseTracked`)
 - OSR's refusal to enter a loop that needs a reference whose descriptor is
   worked out where it is made
 
@@ -288,7 +392,9 @@ descriptors a call already has.
 **Incremental compilation.** A generic's body no longer contributes to its
 callers' calling convention, so editing it invalidates less.
 
-**Const parameter specialization** (`specialize.rs`) is untouched.
+**Const parameter specialization** (`specialize.rs`) does what it did; it
+carries the descriptor table and the hidden descriptors along, as
+[Descriptors](#user-content-descriptors) says.
 
 ## Cost
 
@@ -305,36 +411,72 @@ descriptor table, and a dynamic parameter is two words, so the JIT's
 
 Measured before starting and after finishing, recorded here: jit and
 interpreted Sieve and the other benchvs benches, the `ord` benchmark from the
-`for` work, the store demo, and the compile time of `sys/std`.
+`for` work, the store demo, the compile time of `sys/std`, and a small
+generic over a compound type -- one that needs a built descriptor -- called in
+a loop, which is where the table fill shows.
 
 ## Phases
 
 The representation is decided in lowering and every backend reads it, so the
 switch cannot be made one backend at a time inside one build. Instead the new
-lowering sits behind a setting, `DATALOVE_GENERICS=fat`, which the suite runs
-under as its own configuration -- as it runs under `index-64` -- until it is
-the only one. Each phase leaves the default suite passing.
+lowering sits behind a cargo feature, `fat-generics`, which the suite runs
+under as its own configuration -- a `test-fat` recipe and CI runner, exactly
+as `index-64` has `test-64` -- until it is the only one. Each phase leaves the
+default suite passing.
+
+A feature rather than an environment variable because nothing reads an
+environment variable in lowering today, and lowering is salsa-cached: a
+variable would have to be read once per process and never vary, or become a
+query argument the way `skip_const_inlining` is on `lower_module`. A feature
+is decided at build time and cannot mix within a process.
+
+**Backends not yet ported** refuse under the feature, and the backend fixtures
+-- which run the interpreter, `--jit` and both AOT backends and fail on any
+disagreement -- compare only the backends that are ported so far. The AOT
+backends have nothing to fall back to, so they report the refusal and the
+fixture harness skips them under the feature. The JIT can fall back, since a
+function it refuses with `Unsupported` stays interpreted, but the refusal has
+to cover **every function that is generic or calls a generic**, not just
+those that touch a dynamic type: the interpreter and compiled code share
+three hand-coded entry layouts (`bridge::call_jit`, the bytecode's
+`call_planned_jit`, and the `__jit_dispatch_call` trampoline), so a compiled
+caller of an interpreted generic has to pass what the new convention expects.
 
 0. **Baseline.** The measurements in [Cost](#user-content-cost).
-1. **Runtime.** Descriptor construction and its cache; the shadow stack in
-   `RtHeader`; their tests.
-2. **IR.** `IrType::Param`; the fat-pointer layout rule; the descriptor table
-   on `FunctionContext`; display, serialization, verification. No lowering
-   produces them yet.
-3. **Lowering**, under the setting: written types kept, the table built,
+1. **Runtime.** Descriptor construction from templates, and its cache outside
+   the allocator; the payload-offset entry for options, results and enums;
+   `clone_local`'s address assertion made structural; the shadow stack in
+   `RtHeader`, with a restore that covers chunk boundaries and a `reset` that
+   empties it; their tests.
+2. **IR.** `IrType::Param`; the fat-pointer layout rule, with `Ref` of a
+   dynamic type as the fat pointer itself; the static offset helpers asserting
+   they are never handed a dynamic type; the descriptor table on
+   `FunctionContext`, carried through `specialize.rs`; the verifier rejecting a
+   jump that passes a block's own parameters back to it permuted; display,
+   serialization. No lowering produces them yet.
+3. **Lowering**, under the feature: written types kept, the table built,
    type-parameter descriptors at call sites, no `Erase` or `Reify`. Ownership
    analysis is unchanged, the language being unchanged.
-4. **Interpreter and CTFE**, the reference: the dynamic frame, the operations
-   table above, calls. Done when every fixture passes under the setting with
-   leak checking on.
+4. **Interpreter, bytecode and CTFE**, the reference: the dynamic frame, the
+   operations table above, calls. The interpreter's frame is the one the JIT
+   shares for OSR, so the dynamic frame is laid out here once for both. CTFE
+   is this interpreter, so it comes along. The bytecode is the default engine
+   and is part of this phase; where it does not lower an instruction yet, it
+   falls back to the IR walker as it does now. The JIT refuses as above; the
+   AOT backends refuse. Done when every fixture passes on the interpreter
+   under the feature with leak checking on.
 5. **Cranelift**, AOT and JIT: the same, plus the bridge, the trampoline and
-   OSR carrying fat pointers and type-parameter descriptors.
+   OSR carrying fat pointers and type-parameter descriptors. OSR shares the
+   interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather than
+   building one: `OsrSpec` gains a descriptor-table offset beside
+   `shape_offset`, and `enter_osr` loads it the same way. Cranelift's
+   one-at-a-time block-parameter copy is safe by the verifier rule in phase 2.
+   The JIT's refusal is lifted.
 6. **C AOT.**
-7. **Bytecode.**
-8. **Flip and delete.** The setting becomes the default and then goes; the
+7. **Flip and delete.** The feature becomes the default and then goes; the
    list in [What goes away](#user-content-what-goes-away) is deleted; a call
    at a growing type gets a fixture.
-9. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
+8. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
    measurements recorded.
 
@@ -344,17 +486,26 @@ the only one. Each phase leaves the default suite passing.
   value costs per call in proportion to how many the body has, used or not.
   Allocating each on its first definition costs a test per definition
   instead. Entry-time is simpler; measure on `sys/std` before choosing.
-- **Where the cache lives.** Per `RtLocal` needs no lock and builds each
-  descriptor once per thread; shared builds each once and needs a lock or a
-  concurrent map.
+- **The table-fill cache.** Whether the one-entry cache per function in
+  [Descriptors](#user-content-descriptors) is needed, and whether it lives in
+  the callee or at the call site.
 - **Inline containers.** A `[T]` header is the same three words whatever `T`
   is, so it could live in the frame with its descriptor beside it rather than
   behind a pointer. An optimization for after, once everything is one shape.
 - **Fat pointers in registers.** Cranelift can keep the two words as two
   variables rather than a struct in a stack slot, and C as two locals. Worth
-  doing in phase 5 if it is not much harder.
+  doing in phase 5 if it is not much harder. OSR reads the frame, so at a
+  loop header the JIT can enter, a fat pointer has to be in its frame slot.
 - **The rider ABI.** Whether natives move to one descriptor per type
   parameter, and when.
-- **Tracking bytes.** A dynamic slot that is conditionally initialized needs
-  its tracking byte as now; whether the dynamic frame changes anything about
-  where those live has not been looked at.
+
+Settled since the first draft:
+
+- **Where the cache lives.** Per runtime handle, outside its allocator; see
+  [The runtime](#user-content-the-runtime). A shared cache would outlive the
+  descriptors its keys point at.
+- **Tracking bytes.** They live in a region after the values and slots in the
+  fixed frame, only for tracked slots and `out` parameters
+  (`frame_layout.rs`). A fat pointer is fixed-size, so the fixed frame keeps
+  its shape and the tracking bytes stay where they are; the dynamic frame
+  holds only what fat pointers point at.
