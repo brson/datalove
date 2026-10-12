@@ -21,6 +21,7 @@ fn entry_width(func: &IrCodeUnit) -> usize {
     match func.function_context() {
         Some(ctx) => {
             ctx.param_types.len() + ctx.descriptor_params.len() + ctx.descriptor_shapes.len()
+                + ctx.type_param_count as usize
         }
         None => 0,
     }
@@ -102,9 +103,10 @@ pub unsafe fn call_jit(
         arg_idx += 1;
     }
 
-    // Then one for each shape the callee builds a collection of. No argument
-    // carries these, so they arrive already worked out: from the call site when
-    // the interpreter is calling, or forwarded out of the caller's own trailing
+    // Then one for each shape the callee builds a collection of, or under
+    // generics by reference one per type parameter. No argument carries these,
+    // so they arrive already worked out: from the call site when the
+    // interpreter is calling, or forwarded out of the caller's own trailing
     // arguments when jit code is.
     for tydesc in shape_descriptors {
         raw_args[arg_idx] = *tydesc as usize;

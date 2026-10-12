@@ -38,6 +38,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let slot_ty = &self.func.slot_types[slot_id.0 as usize];
         let repr = types::ir_type_to_cranelift(slot_ty);
 
+        // A dynamic slot is its storage on the shadow stack, and is copied as
+        // many bytes as its descriptor says.
+        if let Some(&dest_addr) = self.dyn_slot_storage.get(&slot_id) {
+            let slot_ty = slot_ty.clone();
+            let src_ptr = self.get_operand_ptr(builder, value)?;
+            let size = self.value_size(builder, &slot_ty)?;
+            builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
+            if !is_copy {
+                let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
+                builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
+            }
+            return Ok(());
+        }
+
         match repr {
             CraneliftRepr::Scalar(_cl_ty) => {
                 // Scalar: store value directly.
@@ -84,6 +98,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let slot_offset = self.layout.slot_offset(slot.0);
         let slot_ty = &self.func.slot_types[slot.0 as usize];
         let repr = types::ir_type_to_cranelift(slot_ty);
+
+        // Copied out of a dynamic slot's storage into the value's, for the
+        // reason the aggregate case below gives.
+        if let Some(&src) = self.dyn_slot_storage.get(&slot) {
+            let slot_ty = slot_ty.clone();
+            let dst = self.dest_addr(builder, dest)?;
+            self.copy_value_bytes(builder, dst, src, &slot_ty)?;
+            self.values.insert(dest, dst);
+            return Ok(());
+        }
 
         match repr {
             CraneliftRepr::Scalar(cl_ty) => {
@@ -216,10 +240,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let val = self.get_operand_value(builder, value)?;
                 builder.ins().store(MemFlagsData::new(), val, addr, 0);
             }
-            CraneliftRepr::Aggregate(layout) => {
+            CraneliftRepr::Aggregate(_) => {
                 let src_ptr = self.get_operand_ptr(builder, value)?;
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), addr, src_ptr, size);
+                self.copy_value_bytes(builder, addr, src_ptr, ty)?;
             }
         }
         Ok(())
@@ -245,8 +268,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             if field_idx as usize >= field_types.len() {
                 return Err(CraneliftError::Codegen(format!("field index {} out of bounds", field_idx)));
             }
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            addr = builder.ins().iadd_imm_s(addr, offsets[field_idx as usize] as i64);
+            addr = self.field_addr(builder, addr, &ty, field_idx)?;
             ty = field_types[field_idx as usize].clone();
         }
         Ok((addr, ty))

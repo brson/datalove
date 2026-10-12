@@ -257,9 +257,28 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .map(|k| unsafe { *descriptors.add(shape_start + k) })
         .collect();
 
+    // Under generics by reference, one per type parameter comes last. A
+    // dynamic argument arrives as a pointer alone, and what it is follows
+    // from them; so does a dynamic return.
+    let type_param_start = shape_start + func_ctx.descriptor_shapes.len();
+    let type_params: Vec<*const rtdt::TyDesc> = (0..func_ctx.type_param_count as usize)
+        .map(|k| unsafe { *descriptors.add(type_param_start + k) })
+        .collect();
+    for (i, value) in arg_vals.iter_mut().enumerate() {
+        if value.tydesc.is_null() {
+            value.tydesc = ctx.interp.describe(&func_ctx.param_types[i], &type_params);
+        }
+    }
+    let mut return_tydesc = layout.return_tydesc.expect("a jit callee is a function");
+    if return_tydesc.is_null() {
+        return_tydesc = ctx.interp.describe(&func_ctx.return_type, &type_params);
+    }
+    // What goes after the arguments: the shapes', or the type parameters'.
+    let trailing = if type_params.is_empty() { shape_descriptors } else { type_params };
+
     let dest = Destination {
         ptr: ret_dest,
-        tydesc: layout.return_tydesc.expect("a jit callee is a function"),
+        tydesc: return_tydesc,
     };
 
     // Count the call, which may compile the callee. Once it is compiled its
@@ -271,7 +290,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             unsafe {
                 crate::bridge::call_jit(
                     entry.code_ptr, entry.uses_sret, rt_handle, &arg_vals, dest,
-                    &func_ctx.descriptor_params, &shape_descriptors,
+                    &func_ctx.descriptor_params, &trailing,
                 )
             }
         }
@@ -288,7 +307,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
                 ir_unit,
                 Some(code_ref.clone()),
                 arg_vals,
-                shape_descriptors,
+                trailing,
                 dest,
                 &callee_ctx,
                 ctx.registry,

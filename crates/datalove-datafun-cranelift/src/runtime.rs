@@ -26,6 +26,14 @@ pub struct RuntimeImports {
     pub destroy_local: FuncId,
     /// `dtlv_rti_field_offset(tydesc: *const TyDesc, index: u32) -> u32`
     pub field_offset: FuncId,
+    /// `dtlv_rti_payload_offset(tydesc: *const TyDesc, index: u32) -> u32`
+    pub payload_offset: FuncId,
+    /// `dtlv_rti_payload_tydesc(tydesc: *const TyDesc, index: u32) -> *const TyDesc`
+    pub payload_tydesc: FuncId,
+    /// `dtlv_rti_tydesc_instantiate(rt, template, params, num_params) -> *const TyDesc`
+    pub tydesc_instantiate: FuncId,
+    /// `dtlv_rti_shadow_alloc(rt, size: u32, align: u32) -> *mut u8`
+    pub shadow_alloc: FuncId,
     /// `dtlv_rti_field_tydesc(tydesc: *const TyDesc, index: u32) -> *const TyDesc`
     pub field_tydesc: FuncId,
     /// `dtlv_rti_field_read_local(rt, dest, dest_td, base, base_td, index) -> RtStatus`
@@ -822,6 +830,53 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(
                     format!("declare dtlv_rti_field_offset: {}", e)))?
         };
+        // Under generics by reference: where an option's, a result's or an
+        // enum variant's payload is, and what it is, by the descriptor.
+        let payload_offset = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.params.push(AbiParam::new(cl_types::I32)); // index
+            sig.returns.push(AbiParam::new(cl_types::I32));
+            module
+                .declare_function("dtlv_rti_payload_offset", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_payload_offset: {}", e)))?
+        };
+        let payload_tydesc = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
+            sig.params.push(AbiParam::new(cl_types::I32)); // index
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_payload_tydesc", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_payload_tydesc: {}", e)))?
+        };
+        // A generic's descriptor table, filled on entry from templates.
+        let tydesc_instantiate = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(PTR_TYPE));      // template
+            sig.params.push(AbiParam::new(PTR_TYPE));      // params
+            sig.params.push(AbiParam::new(cl_types::I32)); // num_params
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_tydesc_instantiate", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_tydesc_instantiate: {}", e)))?
+        };
+        // Space for a generic's dynamic values, on entry.
+        let shadow_alloc = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
+            sig.params.push(AbiParam::new(cl_types::I32)); // size
+            sig.params.push(AbiParam::new(cl_types::I32)); // align
+            sig.returns.push(AbiParam::new(PTR_TYPE));
+            module
+                .declare_function("dtlv_rti_shadow_alloc", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_shadow_alloc: {}", e)))?
+        };
         let field_tydesc = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
@@ -938,6 +993,10 @@ impl RuntimeImports {
             debuglog_local,
             destroy_local,
             field_offset,
+            payload_offset,
+            payload_tydesc,
+            tydesc_instantiate,
+            shadow_alloc,
             field_tydesc,
             field_read,
             element_tydesc,
@@ -1007,6 +1066,10 @@ impl RuntimeImports {
             debuglog_local,
             destroy_local,
             field_offset,
+            payload_offset,
+            payload_tydesc,
+            tydesc_instantiate,
+            shadow_alloc,
             field_tydesc,
             field_read,
             element_tydesc,
@@ -1067,6 +1130,7 @@ impl RuntimeImports {
         } = self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
+            payload_offset, payload_tydesc, tydesc_instantiate, shadow_alloc,
             field_tydesc, field_read, element_tydesc, map_contains_key_erased,
             map_get_value_ref_erased, list_set_erased, tensor_set_erased,
             map_set_value_erased, mem_alloc_raw, mem_free_raw, string_create,

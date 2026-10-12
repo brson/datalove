@@ -51,6 +51,8 @@ mod tensors;
 mod ops;
 /// Option and Result operations.
 mod options;
+/// Values of a dynamic type: generics by reference.
+mod dynamic;
 /// Boxing operations (ErrorFrom, DataFrom).
 mod boxing;
 /// Runtime calls (DebugLog, Drop).
@@ -178,6 +180,18 @@ pub struct FunctionCompiler<'a, M: Module> {
     static_consts: StaticConsts,
     /// The stack memory constants are built in; see `constants::ConstScratch`.
     const_scratch: constants::ConstScratchArea,
+    /// Under generics by reference, the descriptor handed over for each of
+    /// this function's type parameters.
+    type_param_values: Vec<cl_ir::Value>,
+    /// The descriptor table, filled on entry; see `dynamic`.
+    table_values: Vec<cl_ir::Value>,
+    /// Where each dynamic value is kept, on the shadow stack.
+    dyn_storage: HashMap<ValueId, cl_ir::Value>,
+    /// Where each dynamic slot is kept, on the shadow stack.
+    dyn_slot_storage: HashMap<SlotId, cl_ir::Value>,
+    /// The shadow stack's top and limit on entry, written back on return, for
+    /// a function that takes space on it.
+    shadow_mark: Option<(cl_ir::Value, cl_ir::Value)>,
     /// Where to enter, if this is an OSR entry rather than the function.
     osr_spec: Option<OsrSpec>,
     /// What compiling the OSR entry keeps, while it compiles.
@@ -207,17 +221,15 @@ impl FrameBase {
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Where an option or result is built: in the caller's result slot if it
-    /// is one `return_slot_values` found, otherwise in this frame.
-    fn wrap_dest_addr(
-        &self,
+    /// is one `return_slot_values` found, otherwise where the value lives.
+    fn wrap_dest(
+        &mut self,
         builder: &mut FunctionBuilder,
-        frame_slot: FrameBase,
         dest: ValueId,
-        dest_offset: u32,
-    ) -> cl_ir::Value {
+    ) -> Result<cl_ir::Value, CraneliftError> {
         match self.sret_param {
-            Some(sret) if self.return_slot.contains(&dest) => sret,
-            _ => frame_slot.addr(builder, dest_offset as i32),
+            Some(sret) if self.return_slot.contains(&dest) => Ok(sret),
+            _ => self.dest_addr(builder, dest),
         }
     }
 
@@ -270,6 +282,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return_slot: return_slot_values(func),
             static_consts: StaticConsts::new(),
             const_scratch: constants::ConstScratchArea::default(),
+            type_param_values: Vec::new(),
+            table_values: Vec::new(),
+            dyn_storage: HashMap::new(),
+            dyn_slot_storage: HashMap::new(),
+            shadow_mark: None,
             osr_spec: None,
             osr: None,
         }
@@ -281,7 +298,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// foresee every type codegen would reach for, and each one it missed --
     /// a payload inside a constant, the row of an empty table -- was a
     /// function that would not compile.
+    ///
+    /// A dynamic type has no static descriptor, only a template, so asking
+    /// for one is refused: such a site wants `static_tydesc`, which reads the
+    /// descriptor table.
     pub(crate) fn tydesc(&mut self, ty: &IrType) -> Result<cranelift_module::DataId, CraneliftError> {
+        if ty.is_dynamic() {
+            return Err(CraneliftError::Unsupported(format!(
+                "a static descriptor for {ty}, which a generic is compiled by reference over")));
+        }
         self.tydesc_emitter.emit(self.module, ty)
     }
 

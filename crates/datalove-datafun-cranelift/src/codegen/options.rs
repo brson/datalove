@@ -4,7 +4,6 @@ use cranelift_codegen::ir::{types as cl_types, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
-use datalove_datafun_ir::layout as ir_layout;
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 use datalove_rtdt::{Error as RtError, OptionTag, ResultTag};
 
@@ -34,37 +33,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        // Compute Option layout.
-        let inner_layout = types::ir_type_to_cranelift(inner_ty).layout();
-        let tag_size = 1u32;
-        let payload_offset = types::align_up(tag_size, inner_layout.align);
-
-        // Get destination address in frame.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for WrapSome".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
+        let (dest_ty, inner_ty) = (dest_ty.clone(), inner_ty.clone());
+        let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Some = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::Some as i64);
         builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Get inner value and copy to payload location.
-        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
-        let inner_repr = types::ir_type_to_cranelift(inner_ty);
-
-        match inner_repr {
-            CraneliftRepr::Scalar(_) => {
-                let inner_val = self.get_operand_value(builder, inner)?;
-                builder.ins().store(MemFlagsData::new(), inner_val, payload_addr, 0);
-            }
-            CraneliftRepr::Aggregate(layout) => {
-                let inner_ptr = self.get_operand_ptr(builder, inner)?;
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), payload_addr, inner_ptr, size);
-            }
-        }
+        let payload_addr = self.payload_addr(builder, dest_addr, &dest_ty, 0)?;
+        self.put_value(builder, payload_addr, &inner_ty, inner)?;
 
         // Store pointer to Option in values map.
         self.values.insert(dest, dest_addr);
@@ -77,12 +55,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         dest: ValueId,
     ) -> Result<(), CraneliftError> {
-        // Get destination address in frame.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for WrapNone".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
+        let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (None = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, OptionTag::None as i64);
@@ -113,39 +86,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        // Compute Result layout.
-        let ok_layout = types::ir_type_to_cranelift(ok_ty).layout();
-        let error_align = std::mem::align_of::<RtError>() as u32;
-        let tag_size = 1u32;
-        let max_payload_align = ok_layout.align.max(error_align);
-        let payload_offset = types::align_up(tag_size, max_payload_align);
-
-        // Get destination address in frame.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for WrapOk".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
+        let (dest_ty, ok_ty) = (dest_ty.clone(), ok_ty.clone());
+        let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Ok = 1).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Ok as i64);
         builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Get inner value and copy to payload location.
-        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
-        let ok_repr = types::ir_type_to_cranelift(ok_ty);
-
-        match ok_repr {
-            CraneliftRepr::Scalar(_) => {
-                let inner_val = self.get_operand_value(builder, inner)?;
-                builder.ins().store(MemFlagsData::new(), inner_val, payload_addr, 0);
-            }
-            CraneliftRepr::Aggregate(layout) => {
-                let inner_ptr = self.get_operand_ptr(builder, inner)?;
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), payload_addr, inner_ptr, size);
-            }
-        }
+        let payload_addr = self.payload_addr(builder, dest_addr, &dest_ty, 0)?;
+        self.put_value(builder, payload_addr, &ok_ty, inner)?;
 
         // Store pointer to Result in values map.
         self.values.insert(dest, dest_addr);
@@ -161,38 +111,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
-        // Get ok type from Result<ok> to compute layout.
-        let ok_ty = match dest_ty {
-            IrType::Result(t) => t.as_ref(),
-            _ => {
-                return Err(CraneliftError::Codegen(format!(
-                    "WrapErr dest is not Result: {:?}",
-                    dest_ty
-                )));
-            }
-        };
-
-        // Compute Result layout.
-        let ok_layout = types::ir_type_to_cranelift(ok_ty).layout();
+        if !matches!(dest_ty, IrType::Result(_)) {
+            return Err(CraneliftError::Codegen(format!(
+                "WrapErr dest is not Result: {:?}",
+                dest_ty
+            )));
+        }
         let error_size = std::mem::size_of::<RtError>() as u32;
-        let error_align = std::mem::align_of::<RtError>() as u32;
-        let tag_size = 1u32;
-        let max_payload_align = ok_layout.align.max(error_align);
-        let payload_offset = types::align_up(tag_size, max_payload_align);
-
-        // Get destination address in frame.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for WrapErr".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = self.wrap_dest_addr(builder, frame_slot, dest, dest_offset);
+        let dest_ty = dest_ty.clone();
+        let dest_addr = self.wrap_dest(builder, dest)?;
 
         // Write tag (Err = 2).
         let tag_val = builder.ins().iconst(cl_types::I8, ResultTag::Err as i64);
         builder.ins().store(MemFlagsData::new(), tag_val, dest_addr, 0);
 
         // Copy Error value to payload location.
-        let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
+        let payload_addr = self.payload_addr(builder, dest_addr, &dest_ty, 0)?;
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
         let size = builder.ins().iconst(PTR_TYPE, error_size as i64);
         builder.call_memcpy(self.isa.frontend_config(), payload_addr, inner_ptr, size);
@@ -224,10 +158,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        // Compute Option layout.
-        let inner_layout = types::ir_type_to_cranelift(inner_ty).layout();
-        let tag_size = 1u32;
-        let payload_offset = types::align_up(tag_size, inner_layout.align);
+        let inner_ty = inner_ty.clone();
 
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;
@@ -245,10 +176,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(is_some, is_some_val);
 
         // Compute payload address.
-        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
+        let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
 
         // For dest, either load the value (scalar) or store the pointer (aggregate).
-        let inner_repr = types::ir_type_to_cranelift(inner_ty);
+        let inner_repr = types::ir_type_to_cranelift(&inner_ty);
         match inner_repr {
             CraneliftRepr::Scalar(cl_ty) => {
                 // Load payload value. Value is undefined if None, but that's ok
@@ -298,19 +229,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
 
-        // Compute payload offset for this variant.
-        let payload_offset = if let Some(payload_ty) = &variants[variant_index as usize].1 {
-            ir_layout::enum_payload_offset(payload_ty)
-        } else {
-            0
-        };
-
-        // Get destination address in frame.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for EnumVariant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+        let payload_ty = variants[variant_index as usize].1.clone();
+        let dest_ty = dest_ty.clone();
+        let dest_addr = self.dest_addr(builder, dest)?;
 
         // Write discriminant (variant_index as u32) at offset 0.
         let disc_val = builder.ins().iconst(cl_types::I32, variant_index as i64);
@@ -318,23 +239,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Copy payload if present.
         if let Some(payload_op) = payload {
-            let payload_ty = &variants[variant_index as usize].1.as_ref().ok_or_else(|| {
+            let payload_ty = payload_ty.ok_or_else(|| {
                 CraneliftError::Codegen("EnumVariant has payload but variant has no payload type".into())
             })?;
-            let payload_repr = types::ir_type_to_cranelift(payload_ty);
-            let payload_addr = builder.ins().iadd_imm_s(dest_addr, payload_offset as i64);
-
-            match payload_repr {
-                CraneliftRepr::Scalar(_) => {
-                    let val = self.get_operand_value(builder, payload_op)?;
-                    builder.ins().store(MemFlagsData::new(), val, payload_addr, 0);
-                }
-                CraneliftRepr::Aggregate(layout) => {
-                    let src_ptr = self.get_operand_ptr(builder, payload_op)?;
-                    let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                    builder.call_memcpy(self.isa.frontend_config(), payload_addr, src_ptr, size);
-                }
-            }
+            let payload_addr = self.payload_addr(builder, dest_addr, &dest_ty, variant_index)?;
+            self.put_value(builder, payload_addr, &payload_ty, payload_op)?;
         }
 
         // Store pointer to Enum in values map.
@@ -377,31 +286,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ))
         })?;
 
-        let payload_ty = variants[variant_index as usize].1.as_ref()
+        let payload_ty = variants[variant_index as usize].1.clone()
             .ok_or_else(|| CraneliftError::Codegen("EnumPayload variant has no payload type".into()))?;
-
-        // Compute payload offset.
-        let payload_offset = ir_layout::enum_payload_offset(payload_ty);
 
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;
-        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
+        let payload_addr = self.payload_addr(builder, src_addr, &src_ty, variant_index)?;
 
         // Copy payload to dest.
-        let payload_repr = types::ir_type_to_cranelift(payload_ty);
+        let payload_repr = types::ir_type_to_cranelift(&payload_ty);
         match payload_repr {
             CraneliftRepr::Scalar(cl_ty) => {
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);
                 self.values.insert(dest, val);
             }
-            CraneliftRepr::Aggregate(layout) => {
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for EnumPayload".into())
-                })?;
-                let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
-                let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload_addr, size);
+            CraneliftRepr::Aggregate(_) => {
+                let dest_addr = self.dest_addr(builder, dest)?;
+                self.copy_value_bytes(builder, dest_addr, payload_addr, &payload_ty)?;
                 self.values.insert(dest, dest_addr);
             }
         }
@@ -431,12 +332,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         };
 
-        // Compute Result layout.
-        let ok_layout = types::ir_type_to_cranelift(ok_ty).layout();
-        let error_align = std::mem::align_of::<RtError>() as u32;
-        let tag_size = 1u32;
-        let max_payload_align = ok_layout.align.max(error_align);
-        let payload_offset = types::align_up(tag_size, max_payload_align);
+        let ok_ty = ok_ty.clone();
 
         // Get source address.
         let src_addr = self.get_operand_ptr(builder, src)?;
@@ -454,10 +350,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.values.insert(is_ok, is_ok_val);
 
         // Compute payload address.
-        let payload_addr = builder.ins().iadd_imm_s(src_addr, payload_offset as i64);
+        let payload_addr = self.payload_addr(builder, src_addr, &src_ty, 0)?;
 
         // For ok_dest, either load value (scalar) or store pointer (aggregate).
-        let ok_repr = types::ir_type_to_cranelift(ok_ty);
+        let ok_repr = types::ir_type_to_cranelift(&ok_ty);
         match ok_repr {
             CraneliftRepr::Scalar(cl_ty) => {
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), payload_addr, 0);

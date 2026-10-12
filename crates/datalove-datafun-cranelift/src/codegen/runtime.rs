@@ -6,7 +6,6 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{IrType, Operand, ValueId};
 
-use crate::types::PTR_TYPE;
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -44,12 +43,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             (ty, value_ptr)
         };
 
-        // Look up pre-emitted TyDesc for the actual (non-ref) type.
-        let tydesc_id = self.tydesc(&actual_ty)?;
-
-        // Get address of tydesc.
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        // The descriptor for the actual (non-ref) type.
+        let tydesc_addr = self.static_tydesc(builder, &actual_ty)?;
 
         // Declare debuglog function in this function.
         let debuglog_ref = self.module.declare_func_in_func(
@@ -110,11 +105,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let tydesc = match tydesc {
             Some(tydesc) => tydesc,
-            None => {
-                let id = self.tydesc(ty)?;
-                let gv = self.module.declare_data_in_func(id, builder.func);
-                builder.ins().symbol_value(PTR_TYPE, gv)
-            }
+            None => self.static_tydesc(builder, ty)?,
         };
         let destroy_ref = self.module.declare_func_in_func(destroy, builder.func);
         builder.ins().call(destroy_ref, &[rt_handle, ptr, tydesc]);
@@ -202,11 +193,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // An out param our caller described is described by it.
         let tydesc_addr = match self.operand_ref_desc(operand) {
             Some(desc) => desc,
-            None => {
-                let tydesc_id = self.tydesc(&ty)?;
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                builder.ins().symbol_value(PTR_TYPE, tydesc_gv)
-            }
+            None => self.static_tydesc(builder, &ty)?,
         };
 
         let value_ptr = self.get_operand_ptr(builder, operand)?;
@@ -263,10 +250,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let ref_ptr = self.value(builder, ref_value)?;
 
         // Get tydesc for inner type.
-        let tydesc_id = self.tydesc(inner_ty)?;
-
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_addr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        let inner_ty = inner_ty.clone();
+        let tydesc_addr = self.static_tydesc(builder, &inner_ty)?;
 
         // Declare destroy function and call it.
         let destroy_ref = self.module.declare_func_in_func(destroy_func_id, builder.func);

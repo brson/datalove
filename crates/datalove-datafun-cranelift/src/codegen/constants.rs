@@ -208,11 +208,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ConstValue::Unit => {
                 // Unit is zero-sized, but we need a valid address for debuglog.
                 // Store the frame address like other aggregates.
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for Unit constant".into())
-                })?;
-                let dest_offset = self.layout.value_offset(dest.0);
-                let base = frame_slot.addr(builder, dest_offset as i32);
+                let base = self.dest_addr(builder, dest)?;
                 self.values.insert(dest, base);
                 return Ok(());
             }
@@ -300,11 +296,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         negative: bool,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Int constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = frame_slot.addr(builder, dest_offset as i32);
+        let base = self.dest_addr(builder, dest)?;
 
         // Need runtime handle.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -313,9 +305,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let int_from_limbs_func = self.runtime.int_from_limbs;
 
         // Get Int TyDesc.
-        let tydesc_id = self.tydesc(&datalove_datafun_ir::IrType::Int)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = self.tydesc_value(builder, &datalove_datafun_ir::IrType::Int)?;
 
         // Get limbs pointer (null for zero, static data otherwise).
         let limbs_ptr = if limbs.is_empty() {
@@ -352,11 +342,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         s: &str,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for String constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = frame_slot.addr(builder, dest_offset as i32);
+        let base = self.dest_addr(builder, dest)?;
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -365,9 +351,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let runtime = self.runtime;
 
         // Get String TyDesc.
-        let tydesc_id = self.tydesc(&IrType::String)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        let tydesc_ptr = self.tydesc_value(builder, &IrType::String)?;
 
         // Get bytes pointer and length.
         let (bytes_ptr, len) = if s.is_empty() {
@@ -431,11 +415,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Option constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = frame_slot.addr(builder, dest_offset as i32);
+        let base = self.dest_addr(builder, dest)?;
 
         // Write None tag (1) at offset 0.
         let tag = builder.ins().iconst(cl_types::I8, 1);
@@ -520,11 +500,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         match ir_type {
             IrType::Atom(_) => {
                 // Atom is zero-sized. Allocate address for debuglog.
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for Atom constant".into())
-                })?;
-                let dest_offset = self.layout.value_offset(dest.0);
-                let base = frame_slot.addr(builder, dest_offset as i32);
+                let base = self.dest_addr(builder, dest)?;
                 self.values.insert(dest, base);
                 Ok(())
             }
@@ -602,11 +578,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         inner: &ConstValue,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Error constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = frame_slot.addr(builder, dest_offset as i32);
+        let base = self.dest_addr(builder, dest)?;
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -618,9 +590,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
         let inner_ir_type = payload_type.clone();
-        let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
-        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
         // Get inner size and alignment.
         // Sized by the type the descriptor beside it names, which is the same
@@ -656,11 +626,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         inner: &ConstValue,
     ) -> Result<(), CraneliftError> {
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Data constant".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let base = frame_slot.addr(builder, dest_offset as i32);
+        let base = self.dest_addr(builder, dest)?;
 
         // Need runtime handle and imports.
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -672,9 +638,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // from the value: an empty collection cannot say what it holds, and
         // the descriptor a `data` carries has to be one this unit emitted.
         let inner_ir_type = payload_type.clone();
-        let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
-        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
         // Get inner size and alignment.
         // Sized by the type the descriptor beside it names, which is the same
@@ -760,9 +724,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let runtime = self.runtime;
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc(&element_type)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &element_type)?;
 
         // Get element size/alignment for buffer allocation.
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
@@ -844,13 +806,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         })?;
         let runtime = self.runtime;
 
-        let tensor_tydesc_id = self.tydesc(&tensor_type)?;
-        let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
-        let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
+        let tensor_tydesc_ptr = self.tydesc_value(builder, &tensor_type)?;
 
-        let elem_tydesc_id = self.tydesc(&element_type)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &element_type)?;
 
         let elem_layout = crate::types::ir_type_to_cranelift(&element_type).layout();
         let elem_stride =
@@ -907,16 +865,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc(&element_type)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &element_type)?;
 
         // Inserted one at a time, as a set literal is, so that the elements
         // need not arrive sorted or once each. One scratch slot holds each
         // element on its way in; the insert takes it or lets it go.
-        let set_tydesc_id = self.tydesc(&IrType::Set(Box::new(element_type.clone())))?;
-        let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
-        let set_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, set_tydesc_gv);
+        let set_tydesc_ptr = self.tydesc_value(builder, &IrType::Set(Box::new(element_type.clone())))?;
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, base, set_tydesc_ptr]);
 
@@ -973,20 +927,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let runtime = self.runtime;
 
         // Get key TyDesc.
-        let key_tydesc_id = self.tydesc(&key_type)?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = self.tydesc_value(builder, &key_type)?;
 
         // Get value TyDesc.
-        let val_tydesc_id = self.tydesc(&value_type)?;
-        let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
-        let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
+        let val_tydesc_ptr = self.tydesc_value(builder, &value_type)?;
 
         // Inserted one at a time, as a map literal is; see
         // `build_set_const_at`. A later entry for a key replaces an earlier.
-        let map_tydesc_id = self.tydesc(&IrType::Map(Box::new(key_type.clone()), Box::new(value_type.clone())))?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
+        let map_tydesc_ptr = self.tydesc_value(builder, &IrType::Map(Box::new(key_type.clone()), Box::new(value_type.clone())))?;
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
         builder.ins().call(create_ref, &[rt_handle, base, map_tydesc_ptr]);
 
@@ -1033,9 +981,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let columns = columns.clone();
 
         // Get Table TyDesc.
-        let table_tydesc_id = self.tydesc(ty)?;
-        let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
-        let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
+        let table_tydesc_ptr = self.tydesc_value(builder, ty)?;
 
         // A row is a tuple of the column types, and the descriptor for it is
         // emitted alongside the table's own. It used to be built here, on the
@@ -1045,9 +991,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // been for a long time, so the runtime asserted on the tag and every
         // table constant died where it was built.
         let row_ty = IrType::Tuple(columns.iter().map(|(_, ty)| (**ty).clone()).collect());
-        let row_tydesc_id = self.tydesc(&row_ty)?;
-        let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
-        let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
+        let row_tydesc_ptr = self.tydesc_value(builder, &row_ty)?;
 
         let col_types: Vec<_> = columns.iter().map(|(_, ty)| (**ty).clone()).collect();
         let field_offsets = ir_layout::aggregate_field_offsets(&col_types);
@@ -1172,9 +1116,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
                 let int_from_limbs_func = self.runtime.int_from_limbs;
 
-                let tydesc_id = self.tydesc(&IrType::Int)?;
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
                 let limbs_ptr = if limbs.is_empty() {
                     builder.ins().iconst(PTR_TYPE, 0)
@@ -1200,9 +1142,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 })?;
                 let runtime = self.runtime;
 
-                let tydesc_id = self.tydesc(&IrType::String)?;
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = self.tydesc_value(builder, &IrType::String)?;
 
                 let (bytes_ptr, len) = if s.is_empty() {
                     let null_ptr = builder.ins().iconst(PTR_TYPE, 0);
@@ -1314,9 +1254,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();
-                let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
-                let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-                let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+                let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
                 // Get inner size and alignment.
                 let inner_layout = ir_layout::layout_of(&inner_ir_type);
@@ -1343,9 +1281,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
                 // Infer inner type and get TyDesc.
                 let inner_ir_type = (**payload_type).clone();
-                let inner_tydesc_id = self.tydesc(&inner_ir_type)?;
-                let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-                let inner_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+                let inner_tydesc_ptr = self.tydesc_value(builder, &inner_ir_type)?;
 
                 // Get inner size and alignment.
                 let inner_layout = ir_layout::layout_of(&inner_ir_type);

@@ -35,9 +35,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
 
         // Get TyDesc for the inner type.
-        let inner_tydesc_id = self.tydesc(&inner_ty)?;
-        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_addr = self.tydesc_value(builder, &inner_ty)?;
 
         // Allocate temp slot for the Error result.
         let error_layout = datalove_datafun_ir::layout::layout_of(&IrType::Error);
@@ -82,9 +80,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let inner_ptr = self.get_operand_ptr(builder, inner)?;
 
         // Get TyDesc for the inner type.
-        let inner_tydesc_id = self.tydesc(&inner_ty)?;
-        let inner_tydesc_gv = self.module.declare_data_in_func(inner_tydesc_id, builder.func);
-        let inner_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, inner_tydesc_gv);
+        let inner_tydesc_addr = self.tydesc_value(builder, &inner_ty)?;
 
         // Allocate temp slot for the Data result.
         let data_layout = datalove_datafun_ir::layout::layout_of(&IrType::Data);
@@ -157,20 +153,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_ty = self.get_operand_type(src)?;
-        let src_tydesc_id = self.tydesc(&src_ty)?;
-        let src_tydesc_gv = self.module.declare_data_in_func(src_tydesc_id, builder.func);
-        let src_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, src_tydesc_gv);
+        let src_tydesc_addr = self.tydesc_value(builder, &src_ty)?;
 
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let dest_tydesc_id = self.tydesc(&dest_ty)?;
-        let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
-        let dest_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, dest_tydesc_gv);
+        let dest_tydesc_addr = self.tydesc_value(builder, &dest_ty)?;
 
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for erasure result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_ptr = self.dest_addr(builder, dest)?;
 
         // Whether the source is a place this frame tracks, which is what says
         // it may be holding nothing.

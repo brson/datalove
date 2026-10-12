@@ -271,6 +271,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             IrType::Ref(inner) => inner.as_ref().clone(),
             other => other.clone(),
         };
+        // A dynamic type's descriptor is its table entry.
+        if ty.is_dynamic() {
+            return self.table_entry(&ty);
+        }
         let tydesc_id = self.tydesc(&ty)?;
         let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
         Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
@@ -283,15 +287,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         code_ref: &CodeRef,
         args: &[Operand],
         shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
     ) -> Result<(), CraneliftError> {
         // Check if target is a native rider function.
         if let CodeRef::Module { module, id } = code_ref {
             let ir_func_id = CodeUnitId(id.0);
             if let Some(registry) = self.registry {
                 if let Some(unit) = registry.get_module_function_as_unit(*module, ir_func_id) {
-                    if unit.native_context().is_some() {
+                    if let Some(native) = unit.native_context() {
+                        // Under generics by reference, a descriptor for each
+                        // type parameter no argument determines, from what
+                        // this call bound it to. Under erasure, the shapes.
+                        let undetermined: Vec<IrType> = if bindings.is_empty() {
+                            Vec::new()
+                        } else {
+                            native.descriptor_shapes.iter()
+                                .map(|s| s.to_ir_type().substitute(bindings))
+                                .collect()
+                        };
                         return self.compile_native_call(
-                            builder, dest, code_ref, args, shape_descriptors);
+                            builder, dest, code_ref, args, shape_descriptors, bindings, &undetermined);
                     }
                 }
             }
@@ -314,11 +329,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Allocate space in caller's frame and pass sret pointer.
         if callee_uses_sret {
-            let frame_slot = self.frame_slot.ok_or_else(|| {
-                CraneliftError::Codegen("no frame slot for sret return value".into())
-            })?;
-            let dest_offset = self.layout.value_offset(dest.0);
-            let ptr = frame_slot.addr(builder, dest_offset as i32);
+            let ptr = self.dest_addr(builder, dest)?;
             call_args.push(ptr);
 
             // For aggregates, the pointer IS the value (used by downstream as address).
@@ -398,6 +409,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     })?
                 }
             };
+            call_args.push(value);
+        }
+
+        // Then, under generics by reference, a descriptor for each of the
+        // callee's type parameters, for what this call bound it to.
+        for binding in bindings {
+            let value = self.static_tydesc(builder, binding)?;
             call_args.push(value);
         }
 
@@ -493,9 +511,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         code_ref: &CodeRef,
         args: &[Operand],
         shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
+        undetermined: &[IrType],
     ) -> Result<(), CraneliftError> {
-        use datalove_datafun_ir::IrType;
-
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("Call requires runtime handle".into())
         })?;
@@ -541,23 +559,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         // Result out-param: pointer to dest slot + tydesc.
-        let dest_ty = &self.func.value_types[dest.0 as usize];
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for native call result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
-
-        let dest_tydesc_id = self.tydesc(dest_ty)?;
-        let dest_tydesc_gv = self.module.declare_data_in_func(dest_tydesc_id, builder.func);
-        let dest_tydesc_addr = builder.ins().symbol_value(PTR_TYPE, dest_tydesc_gv);
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ptr = self.dest_addr(builder, dest)?;
+        let dest_tydesc_addr = self.static_tydesc(builder, &dest_ty)?;
 
         call_args.push(dest_ptr);
         call_args.push(dest_tydesc_addr);
 
-        // Then a descriptor for each type parameter no argument determines,
-        // read from what the shape closure settled rather than derived here,
-        // so this side and `build_native_signature` cannot disagree.
+        // Then a descriptor for each type parameter no argument determines:
+        // under generics by reference, what the call bound it to; under
+        // erasure, read from what the shape closure settled rather than
+        // derived here, so this side and `build_native_signature` cannot
+        // disagree.
+        if !bindings.is_empty() {
+            for ty in undetermined {
+                let value = self.static_tydesc(builder, ty)?;
+                call_args.push(value);
+            }
+        }
         for r in shape_descriptors {
             let value = match r {
                 datalove_datafun_ir::DescriptorRef::Static(ty) => {
@@ -579,7 +598,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Result was written to dest_ptr by the callee.
         // For scalars, load the value; for aggregates, use the pointer.
-        match types::ir_type_to_cranelift(dest_ty) {
+        match types::ir_type_to_cranelift(&dest_ty) {
             CraneliftRepr::Scalar(scalar_ty) => {
                 let loaded = builder.ins().load(scalar_ty, MemFlagsData::new(), dest_ptr, 0);
                 self.values.insert(dest, loaded);

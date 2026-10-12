@@ -61,16 +61,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let erased = self.operand_ref_desc(map).is_some();
         let map_tydesc_ptr = match self.operand_ref_desc(map) {
             Some(desc) => desc,
-            None => {
-                let map_tydesc_id = self.tydesc(&map_ty)?;
-                let gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-                builder.ins().symbol_value(PTR_TYPE, gv)
-            }
+            None => self.tydesc_value(builder, &map_ty)?,
         };
 
-        let key_tydesc_id = self.tydesc(&key_ty)?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = self.tydesc_value(builder, &key_ty)?;
 
         Ok(MapSetup {
             map_ptr,
@@ -90,9 +84,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         builder: &mut FunctionBuilder,
         ty: &IrType,
     ) -> Result<cl_ir::Value, CraneliftError> {
-        let tydesc_id = self.tydesc(ty)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        Ok(builder.ins().symbol_value(PTR_TYPE, tydesc_gv))
+        self.tydesc_value(builder, ty)
     }
 
     /// Compile a MapContainsKey instruction.
@@ -208,11 +200,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.values.insert(dest, phi_val);
             }
             CraneliftRepr::Aggregate(_) => {
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for MapGet aggregate dest".into())
-                })?;
-                let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+                let dest_addr = self.dest_addr(builder, dest)?;
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 

@@ -52,6 +52,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // This is important for mut params: we pass the slot address so writes
         // go to the original slot, not a copy.
         if let Operand::Slot(slot_id) = operand {
+            if let Some(&ptr) = self.dyn_slot_storage.get(slot_id) {
+                return Ok(ptr);
+            }
             let frame_slot = self.frame_slot.ok_or_else(|| {
                 CraneliftError::Codegen("no frame slot for slot operand".into())
             })?;
@@ -163,6 +166,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         Ok(param_ptr)
                     }
                 }
+            }
+            Operand::Slot(slot_id) if self.dyn_slot_storage.contains_key(slot_id) => {
+                Ok(self.dyn_slot_storage[slot_id])
             }
             Operand::Slot(slot_id) => {
                 // Load value from slot in frame.

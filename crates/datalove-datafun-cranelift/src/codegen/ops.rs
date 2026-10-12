@@ -6,7 +6,6 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::{BinOp, IrType, Operand, UnaryOp, ValueId};
 
-use crate::types::PTR_TYPE;
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -53,7 +52,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // to `float`, which the call site fixed at one width or the other. This
         // body was compiled once and cannot hold the instruction for both, so
         // the runtime reads the descriptor and picks.
-        if matches!(lhs_ty, IrType::Data) || matches!(rhs_ty, IrType::Data) {
+        // Under generics by reference the operand is what it is, and only
+        // its descriptor says which.
+        if matches!(lhs_ty, IrType::Data) || matches!(rhs_ty, IrType::Data)
+            || lhs_ty.is_dynamic() || rhs_ty.is_dynamic()
+        {
             return self.compile_binop_dynamic(builder, dest, op, lhs, rhs);
         }
 
@@ -288,16 +291,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Int BinOp result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let result_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let result_ptr = self.dest_addr(builder, dest)?;
 
         // Get Int TyDesc.
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         // Call runtime function: (rt, a_in, a_tydesc, b_in, b_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(func_id, builder.func);
@@ -333,16 +330,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let operand_ptr = self.get_operand_ptr(builder, operand)?;
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Int Neg result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let result_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let result_ptr = self.dest_addr(builder, dest)?;
 
         // Get Int TyDesc.
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         // Call runtime function: (rt, a_in, a_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(runtime.int_neg, builder.func);
@@ -384,9 +375,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
 
         // Get Int TyDesc.
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         // Call runtime function: (rt, a_ref, a_tydesc, b_ref, b_tydesc) -> RtOrdering
         let func_ref = self.module.declare_func_in_func(runtime.int_cmp, builder.func);
@@ -511,11 +500,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_td = self.operand_tydesc(builder, rhs)?;
 
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for a dynamic binop".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
 
         let callee = self.module.declare_func_in_func(runtime.dyn_binop, builder.func);
@@ -555,7 +540,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // A type parameter bounded to `fixedint`, whose width and signedness
         // only the descriptor says. This body was compiled once and cannot hold
         // the instruction for all ten, so the runtime reads and picks.
-        if matches!(dest_ty, IrType::Data) {
+        if matches!(dest_ty, IrType::Data) || dest_ty.is_dynamic() {
             return self.compile_binop_checked_dynamic(
                 builder, dest, overflow_dest, op, lhs, rhs);
         }
@@ -797,9 +782,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let place_ptr = self.get_operand_ptr(builder, place)?;
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
 
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         let func_ref = self.module.declare_func_in_func(func_id, builder.func);
         let call = builder.ins().call(func_ref, &[
@@ -840,15 +823,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let lhs_ptr = self.get_operand_ptr(builder, lhs)?;
         let rhs_ptr = self.get_operand_ptr(builder, rhs)?;
 
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Int BinOpChecked result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let result_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let result_ptr = self.dest_addr(builder, dest)?;
 
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         let func_ref = self.module.declare_func_in_func(runtime.int_div, builder.func);
         let call = builder.ins().call(func_ref, &[
@@ -896,7 +873,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rhs_td = self.operand_tydesc(builder, rhs)?;
 
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let dest_ptr = self.frame_addr(builder, dest, "a checked dynamic binop")?;
+        let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
         let overflow_ptr = self.frame_addr(builder, overflow_dest, "a checked dynamic binop")?;
 
@@ -927,7 +904,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_td = self.operand_tydesc(builder, operand)?;
 
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let dest_ptr = self.frame_addr(builder, dest, "a checked dynamic negation")?;
+        let dest_ptr = self.dest_addr(builder, dest)?;
         let dest_td = self.static_tydesc(builder, &dest_ty)?;
         let overflow_ptr =
             self.frame_addr(builder, overflow_dest, "a checked dynamic negation")?;
@@ -1011,7 +988,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // A type parameter bounded to `fixedint`, which may turn out to be
         // unsigned; the runtime reads the descriptor and decides.
-        if matches!(dest_ty, IrType::Data) {
+        if matches!(dest_ty, IrType::Data) || dest_ty.is_dynamic() {
             return self.compile_neg_checked_dynamic(builder, dest, overflow_dest, operand);
         }
 
@@ -1062,16 +1039,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
 
         // Get frame slot and destination address for Int result.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Widen result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let result_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let result_ptr = self.dest_addr(builder, dest)?;
 
         // Get Int TyDesc for result.
-        let int_tydesc_id = self.tydesc(&IrType::Int)?;
-        let int_tydesc_gv = self.module.declare_data_in_func(int_tydesc_id, builder.func);
-        let int_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, int_tydesc_gv);
+        let int_tydesc_ptr = self.tydesc_value(builder, &IrType::Int)?;
 
         // Call runtime function: (rt, src_in, src_tydesc, result_out, result_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(runtime.int_from_fixed, builder.func);
@@ -1115,12 +1086,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
         let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
 
-        // Get frame slot and destination address for cloned result.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for Clone result".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let result_ptr = frame_slot.addr(builder, dest_offset as i32);
+        // The destination's own storage for the cloned result.
+        let result_ptr = self.dest_addr(builder, dest)?;
 
         // Call runtime function: dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> status
         let func_ref = self.module.declare_func_in_func(runtime.clone_erased, builder.func);

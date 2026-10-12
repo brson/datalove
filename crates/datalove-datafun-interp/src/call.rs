@@ -69,21 +69,25 @@ impl IrInterpreter {
             None => Rc::new(IrLayout::of_unit(func, &mut self.tydesc_table)),
         };
 
-        // Nothing that enters here has type parameter descriptors to give:
-        // the jit's trampoline leaves a generic's callers interpreted, and a
-        // program reaches a generic through a call instruction.
-        assert_eq!(layout.type_param_count, 0,
-            "{} is a generic compiled by reference, entered with no descriptors for its type parameters",
-            func.name);
+        // The trailing descriptors are the declared shapes' under erasure, and
+        // the type parameters' for a generic compiled by reference: a function
+        // has one or the other, which is what compiled code passes last.
+        let by_reference = layout.type_param_count > 0;
         let mut frame = self.frame_stack.push(layout)?;
         for (i, arg) in args.into_iter().enumerate() {
             frame.set_param(i, arg);
         }
         for (i, tydesc) in shape_descriptors.into_iter().enumerate() {
-            frame.set_shape_descriptor(i, tydesc);
+            if by_reference {
+                frame.set_type_param(i, tydesc);
+            } else {
+                frame.set_shape_descriptor(i, tydesc);
+            }
         }
         frame.enter();
+        self.enter_dynamic(&frame);
         let result = self.run_frame(func, &mut frame, ret_dest, ctx, registry, frames, code_ref.as_ref());
+        self.leave_dynamic(&frame);
         self.frame_stack.pop(frame);
         self.release_retired_call_caches();
         result
@@ -446,6 +450,24 @@ impl IrInterpreter {
         }
     }
 
+    /// The descriptor of `ty` with a generic's type parameters bound to
+    /// `type_params`: a static one for a concrete type, and one instantiated
+    /// from its template for a dynamic one.
+    ///
+    /// For a caller that has a generic's type parameter descriptors and not
+    /// its frame, which the jit's trampoline is: compiled code passes a
+    /// dynamic argument as a pointer, and the interpreter wants it described.
+    pub fn describe(&mut self, ty: &IrType, type_params: &[*const rtdt::TyDesc]) -> *const rtdt::TyDesc {
+        let template = self.tydesc_table.get_or_create(ty);
+        if !ty.is_dynamic() {
+            return template;
+        }
+        unsafe {
+            datalove_rt::c::dtlv_rti_tydesc_instantiate(
+                self.runtime.handle(), template, type_params.as_ptr(), type_params.len() as u32)
+        }
+    }
+
     /// Make a frame of a function compiled by reference ready to run, once
     /// its type parameters' descriptors are set: fill its descriptor table,
     /// and point each of its dynamic values and slots at space on the shadow
@@ -630,15 +652,16 @@ impl IrInterpreter {
         }
         let dest_slot = frame.value_dest(dest);
 
-        // Nothing compiled takes a generic's type parameter descriptors yet,
-        // so a generic compiled by reference is not offered to the dispatcher.
-        let dispatched = if by_reference {
-            None
+        // The trailing descriptors a compiled callee takes: its shapes', or
+        // its type parameters'.
+        let trailing = if by_reference {
+            callee_frame.type_params()
         } else {
-            self.try_dispatch_call(
-                code_ref, callee, callee_frame.params(), callee_frame.shape_descriptors(),
-                dest_slot, ctx, registry, frames)
+            callee_frame.shape_descriptors()
         };
+        let dispatched = self.try_dispatch_call(
+            code_ref, callee, callee_frame.params(), trailing,
+            dest_slot, ctx, registry, frames);
         let result = match dispatched {
             Some(result) => result,
             None => {

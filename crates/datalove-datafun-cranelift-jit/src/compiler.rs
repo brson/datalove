@@ -312,14 +312,6 @@ impl JitCompiler {
         interp: &mut IrInterpreter,
         osr: Option<codegen::OsrSpec>,
     ) -> Result<(*const u8, bool, usize), JitError> {
-        // Under generics by reference a generic takes a descriptor per type
-        // parameter, which nothing compiled passes or takes yet, so neither a
-        // generic nor a caller of one is compiled; both stay interpreted.
-        if datalove_datafun_ir::uses_generics_by_reference(func) {
-            return Err(JitError::Unsupported(
-                "a generic compiled by reference, or a call to one".to_string()));
-        }
-
         // Collect all Call targets in this function.
         let callees = self.collect_call_targets(func);
 
@@ -749,6 +741,10 @@ fn runtime_addresses() -> HashMap<&'static str, *const u8> {
         dtlv_rti_mem_alloc_raw_local,
         dtlv_rti_mem_free_raw_local,
         dtlv_rti_field_offset,
+        dtlv_rti_payload_offset,
+        dtlv_rti_payload_tydesc,
+        dtlv_rti_tydesc_instantiate,
+        dtlv_rti_shadow_alloc,
         dtlv_rti_field_tydesc,
         dtlv_rti_field_read_local,
         dtlv_rti_element_tydesc,

@@ -493,7 +493,7 @@ impl TyDescEmitter {
         let inner_tydesc_id = self.emit(module, inner_ty)?;
 
         let ir_layout::TypeLayout { size: total_size, align: overall_align } =
-            ir_layout::option_layout(inner_ty);
+            ir_layout::layout_of(&option_ty);
 
         // Build base TyDesc bytes.
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -549,7 +549,7 @@ impl TyDescEmitter {
         let ok_tydesc_id = self.emit(module, ok_ty)?;
 
         let ir_layout::TypeLayout { size: total_size, align: overall_align } =
-            ir_layout::result_layout(ok_ty);
+            ir_layout::layout_of(&result_ty);
 
         // Build base TyDesc bytes.
         let mut bytes = vec![0u8; TYDESC_SIZE];
@@ -697,7 +697,12 @@ impl TyDescEmitter {
 
         // Compute tuple layout (size, align, field offsets).
         let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
-        let field_offsets = crate::types::compute_tuple_field_offsets(field_types);
+        // A template's offsets are the instance's to work out.
+        let field_offsets = if original_ty.is_dynamic() {
+            vec![0; field_types.len()]
+        } else {
+            crate::types::compute_tuple_field_offsets(field_types)
+        };
 
         // Create the fields array as a separate data object.
         let fields_data_id = if field_types.is_empty() {
@@ -817,7 +822,11 @@ impl TyDescEmitter {
         // Compute struct layout (size, align, field offsets).
         let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
         let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-        let field_offsets = crate::types::compute_tuple_field_offsets(&field_types);
+        let field_offsets = if original_ty.is_dynamic() {
+            vec![0; field_types.len()]
+        } else {
+            crate::types::compute_tuple_field_offsets(&field_types)
+        };
 
         // Create the fields array as a separate data object.
         let fields_data_id = if fields.is_empty() {
@@ -968,7 +977,11 @@ impl TyDescEmitter {
 
         // Compute enum layout.
         let layout = crate::types::ir_type_to_cranelift(original_ty).layout();
-        let variant_offsets = crate::types::compute_enum_variant_offsets(variants);
+        let variant_offsets = if original_ty.is_dynamic() {
+            vec![0; variants.len()]
+        } else {
+            crate::types::compute_enum_variant_offsets(variants)
+        };
 
         // Create variant name data objects and the variants array.
         let variants_data_id = if variants.is_empty() {
@@ -1399,6 +1412,13 @@ impl TyDescEmitter {
             IrType::String => TyTag::String,
             IrType::Data => TyTag::Data,
             IrType::Error => TyTag::Error,
+            // In a template; its size and alignment are meaningless.
+            IrType::Param(index) => {
+                bytes[OFFSET_TYPE_TAG] = TyTag::Param as u8;
+                bytes[OFFSET_ALIGN..OFFSET_ALIGN + 4].copy_from_slice(&1u32.to_le_bytes());
+                put_u32(&mut bytes, OFFSET_TYPE_INFO, *index);
+                return Ok(bytes);
+            }
             // An aggregate has its own emitter and does not reach here; `emit`
             // routes by type before the bytes are built.
             _ => panic!("scalar tydesc bytes for {:?}, which is not a scalar", ty),

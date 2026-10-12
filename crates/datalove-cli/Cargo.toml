@@ -9,7 +9,7 @@ repository.workspace = true
 
 [features]
 # Generics by reference; see datalove-datafun-lower.
-fat-generics = ["datalove/fat-generics"]
+fat-generics = ["datalove/fat-generics", "datalove-exampletest/fat-generics"]
 
 [dependencies]
 rmx.workspace = true

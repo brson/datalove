@@ -389,11 +389,12 @@ impl JitEngine {
                 self.compiler.publish(key, code_ptr);
                 Ok(Recorded::Compiled { entry, compiled_now: Some(code_size) })
             }
-            Err(JitError::Unsupported(_)) => {
+            Err(JitError::Unsupported(why)) => {
                 // Not a failure: the function is left to the interpreter, and
                 // asking again at every call would recompile it every time.
                 *tier = Tier::Refused;
                 self.stats.refused_count += 1;
+                self.stats.function(key, &func.name).refusal = Some(why);
                 Ok(Recorded::Interpret)
             }
             Err(e) => Err(e),

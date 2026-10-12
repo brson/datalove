@@ -813,7 +813,10 @@ fn lower_set_compound<'db>(
 ) -> Result<(), LowerError> {
     let target = navigate_place(ctx, place, keys, place.steps.len())?;
     let ty = operand_type(ctx, &target);
-    if ty != IrType::Data {
+    // A place whose type only a descriptor says is updated by the operator
+    // and a store, as one of `data` is; an update in place is for a type
+    // whose operation the backend can emit.
+    if ty != IrType::Data && !ty.is_dynamic() {
         return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
     }
     let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;

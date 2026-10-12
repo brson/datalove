@@ -47,12 +47,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_layout) => {
                 // Allocate in frame and store fields.
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for aggregate".into())
-                })?;
 
-                let dest_offset = self.layout.value_offset(dest.0);
-                let base = frame_slot.addr(builder, dest_offset as i32);
+                let base = self.dest_addr(builder, dest)?;
 
                 // Get field offsets.
                 let field_types: Vec<_> = match dest_ty {
@@ -64,26 +60,23 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     }
                 };
 
-                let offsets = types::compute_tuple_field_offsets(&field_types);
-
+                let dest_ty = dest_ty.clone();
                 for (i, field_op) in fields.iter().enumerate() {
                     let field_val = self.get_operand_value(builder, field_op)?;
                     let field_ty = &field_types[i];
                     let field_repr = types::ir_type_to_cranelift(field_ty);
+                    let addr = self.field_addr(builder, base, &dest_ty, i as u32)?;
 
                     match field_repr {
                         CraneliftRepr::Scalar(_) => {
-                            let addr = builder.ins().iadd_imm_s(base, offsets[i] as i64);
                             builder.ins().store(MemFlagsData::new(), field_val, addr, 0);
                         }
                         CraneliftRepr::Aggregate(_) => {
                             // Move aggregate bytes from source to destination.
-                            let dst_addr = builder.ins().iadd_imm_s(base, offsets[i] as i64);
+                            let dst_addr = addr;
 
                             // Look up pre-emitted TyDesc.
-                            let tydesc_id = self.tydesc(field_ty)?;
-                            let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                            let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+                            let tydesc_ptr = self.tydesc_value(builder, field_ty)?;
 
                             // Call move_value runtime function.
                             let move_func_id = self.runtime
@@ -140,21 +133,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     }
                 };
 
-                let offsets = types::compute_tuple_field_offsets(&field_types);
-
                 for (i, &dest) in dests.iter().enumerate() {
                     let field_ty = &field_types[i];
                     let field_repr = types::ir_type_to_cranelift(field_ty);
+                    let addr = self.field_addr(builder, base, &src_ty, i as u32)?;
 
                     match field_repr {
                         CraneliftRepr::Scalar(field_cl_ty) => {
-                            let addr = builder.ins().iadd_imm_s(base, offsets[i] as i64);
                             let val = builder.ins().load(field_cl_ty, MemFlagsData::new(), addr, 0);
                             self.values.insert(dest, val);
                         }
                         CraneliftRepr::Aggregate(_) => {
                             // Return pointer to field.
-                            let addr = builder.ins().iadd_imm_s(base, offsets[i] as i64);
                             self.values.insert(dest, addr);
                         }
                     }
@@ -214,32 +204,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     )));
                 }
 
-                let offsets = types::compute_tuple_field_offsets(&field_types);
-                let field_ty = &field_types[field_index as usize];
-                let field_repr = types::ir_type_to_cranelift(field_ty);
+                let field_ty = field_types[field_index as usize].clone();
+                let field_repr = types::ir_type_to_cranelift(&field_ty);
+                let field_addr = self.field_addr(builder, base, &src_ty, field_index)?;
 
                 match field_repr {
                     CraneliftRepr::Scalar(field_cl_ty) => {
-                        let addr = builder.ins().iadd_imm_s(base, offsets[field_index as usize] as i64);
-                        let val = builder.ins().load(field_cl_ty, MemFlagsData::new(), addr, 0);
+                        let val = builder.ins().load(field_cl_ty, MemFlagsData::new(), field_addr, 0);
                         self.values.insert(dest, val);
                     }
-                    CraneliftRepr::Aggregate(layout) => {
-                        // Copy the field into the dest's frame location.
+                    CraneliftRepr::Aggregate(_) => {
+                        // Copy the field into the dest's own place.
                         // Only copy types are allowed for field projections.
-                        let src_addr = builder.ins().iadd_imm_s(base, offsets[field_index as usize] as i64);
-
-                        // Get dest's frame location.
-                        let frame_slot = self.frame_slot.ok_or_else(|| {
-                            CraneliftError::Codegen("GetField aggregate requires frame slot".into())
-                        })?;
-                        let dest_offset = self.layout.value_offset(dest.0);
-                        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
-
-                        // Emit memcpy for the field.
-                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                        builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_addr, size);
-
+                        let dest_addr = self.dest_addr(builder, dest)?;
+                        self.copy_value_bytes(builder, dest_addr, field_addr, &field_ty)?;
                         self.values.insert(dest, dest_addr);
                     }
                 }
@@ -284,11 +262,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("a generic field read requires a runtime handle".into())
         })?;
         let dest_tydesc = self.static_tydesc(builder, &dest_ty)?;
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("a generic field read requires a frame slot".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_addr = self.dest_addr(builder, dest)?;
 
         let read_fn = self.module.declare_func_in_func(runtime.field_read, builder.func);
         builder.ins().call(read_fn, &[rt_handle, dest_addr, dest_tydesc, base, base_desc, index]);
@@ -399,8 +373,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     )));
                 }
 
-                let offsets = types::compute_tuple_field_offsets(&field_types);
-                let field_addr = builder.ins().iadd_imm_s(base, offsets[field_index as usize] as i64);
+                let field_addr = self.field_addr(builder, base, &src_ty, field_index)?;
 
                 // The ref value IS the pointer to the field.
                 self.values.insert(dest, field_addr);
@@ -423,11 +396,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get base address and type.
         let (base, slot_ty) = match slot {
             SlotDest::Local(slot_id) => {
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for set_field".into())
-                })?;
-                let slot_offset = self.layout.slot_offset(slot_id.0);
-                let addr = frame_slot.addr(builder, slot_offset as i32);
+                let addr = self.get_operand_ptr(builder, &Operand::Slot(*slot_id))?;
                 let ty = self.func.slot_types.get(slot_id.0 as usize)
                     .cloned()
                     .ok_or_else(|| CraneliftError::Codegen(format!("slot {:?} type not found", slot_id)))?;
@@ -463,8 +432,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )));
             }
 
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            current_addr = builder.ins().iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
+            current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
             current_ty = field_types[field_idx as usize].clone();
         }
 
@@ -539,9 +507,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     current_desc = Some(builder.inst_results(call)[0]);
                 }
                 None => {
-                    let offsets = types::compute_tuple_field_offsets(&field_types);
-                    current_addr = builder.ins()
-                        .iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
+                    current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
                 }
             }
             current_ty = field_types[field_idx as usize].clone();
@@ -582,11 +548,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // static type is the truth.
         let tydesc_ptr = match current_desc {
             Some(desc) => desc,
-            None => {
-                let tydesc_id = self.tydesc(&current_ty)?;
-                let gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                builder.ins().symbol_value(PTR_TYPE, gv)
-            }
+            None => self.tydesc_value(builder, &current_ty)?,
         };
 
 
@@ -661,8 +623,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )));
             }
 
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            current_addr = builder.ins().iadd_imm_s(current_addr, offsets[field_idx as usize] as i64);
+            current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
             current_ty = field_types[field_idx as usize].clone();
         }
 
@@ -697,9 +658,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("moving an aggregate requires the runtime handle".into())
         })?;
-        let tydesc_id = self.tydesc(ty)?;
-        let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-        let tydesc = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+        let tydesc = self.tydesc_value(builder, ty)?;
         let move_ref = self.module.declare_func_in_func(move_value, builder.func);
         builder.ins().call(move_ref, &[rt_handle, src, tydesc, dest]);
         Ok(())

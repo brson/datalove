@@ -59,11 +59,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             ]);
         }
 
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for ListNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_ptr = self.dest_addr(builder, dest)?;
         let wrap_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, list_ptr, list_tydesc_ptr, dest_ptr]);
 
@@ -93,21 +89,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for ListNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let list_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let list_ptr = self.dest_addr(builder, dest)?;
 
         // Get List TyDesc.
-        let list_tydesc_id = self.tydesc(&list_ty)?;
-        let list_tydesc_gv = self.module.declare_data_in_func(list_tydesc_id, builder.func);
-        let list_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, list_tydesc_gv);
+        let list_tydesc_ptr = self.tydesc_value(builder, &list_ty)?;
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc(&elem_ty)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
         // Create empty list.
         let create_ref = self.module.declare_func_in_func(runtime.list_create, builder.func);
@@ -225,11 +213,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
             CraneliftError::Codegen("wrapping requires runtime handle".into())
         })?;
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for a built collection".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_ptr = self.dest_addr(builder, dest)?;
         let wrap_ref = self.module.declare_func_in_func(runtime.data_from, builder.func);
         builder.ins().call(wrap_ref, &[rt_handle, built_ptr, tydesc_ptr, dest_ptr]);
         self.values.insert(dest, dest_ptr);
@@ -258,21 +242,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for SetNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let set_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let set_ptr = self.dest_addr(builder, dest)?;
 
         // Get Set TyDesc.
-        let set_tydesc_id = self.tydesc(&set_ty)?;
-        let set_tydesc_gv = self.module.declare_data_in_func(set_tydesc_id, builder.func);
-        let set_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, set_tydesc_gv);
+        let set_tydesc_ptr = self.tydesc_value(builder, &set_ty)?;
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc(&elem_ty)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
         // Create empty set.
         let create_ref = self.module.declare_func_in_func(runtime.set_create, builder.func);
@@ -326,26 +302,16 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for MapNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let map_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let map_ptr = self.dest_addr(builder, dest)?;
 
         // Get Map TyDesc.
-        let map_tydesc_id = self.tydesc(&map_ty)?;
-        let map_tydesc_gv = self.module.declare_data_in_func(map_tydesc_id, builder.func);
-        let map_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, map_tydesc_gv);
+        let map_tydesc_ptr = self.tydesc_value(builder, &map_ty)?;
 
         // Get key TyDesc.
-        let key_tydesc_id = self.tydesc(&key_ty)?;
-        let key_tydesc_gv = self.module.declare_data_in_func(key_tydesc_id, builder.func);
-        let key_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, key_tydesc_gv);
+        let key_tydesc_ptr = self.tydesc_value(builder, &key_ty)?;
 
         // Get value TyDesc.
-        let val_tydesc_id = self.tydesc(&val_ty)?;
-        let val_tydesc_gv = self.module.declare_data_in_func(val_tydesc_id, builder.func);
-        let val_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, val_tydesc_gv);
+        let val_tydesc_ptr = self.tydesc_value(builder, &val_ty)?;
 
         // Create empty map.
         let create_ref = self.module.declare_func_in_func(runtime.map_create, builder.func);
@@ -394,21 +360,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for TensorNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let tensor_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let tensor_ptr = self.dest_addr(builder, dest)?;
 
         // Get Tensor TyDesc.
-        let tensor_tydesc_id = self.tydesc(&tensor_ty)?;
-        let tensor_tydesc_gv = self.module.declare_data_in_func(tensor_tydesc_id, builder.func);
-        let tensor_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tensor_tydesc_gv);
+        let tensor_tydesc_ptr = self.tydesc_value(builder, &tensor_ty)?;
 
         // Get element TyDesc.
-        let elem_tydesc_id = self.tydesc(&elem_ty)?;
-        let elem_tydesc_gv = self.module.declare_data_in_func(elem_tydesc_id, builder.func);
-        let elem_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, elem_tydesc_gv);
+        let elem_tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
         // Get element size from the type.
         let elem_size = crate::types::ir_type_size(&elem_ty);
@@ -508,21 +466,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let row_ty = IrType::Tuple(columns.iter().map(|(_, t)| (**t).clone()).collect());
 
         // Get frame slot and destination address.
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for TableNew".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let table_ptr = frame_slot.addr(builder, dest_offset as i32);
+        let table_ptr = self.dest_addr(builder, dest)?;
 
         // Get Table TyDesc.
-        let table_tydesc_id = self.tydesc(&table_ty)?;
-        let table_tydesc_gv = self.module.declare_data_in_func(table_tydesc_id, builder.func);
-        let table_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, table_tydesc_gv);
+        let table_tydesc_ptr = self.tydesc_value(builder, &table_ty)?;
 
         // Get row (tuple) TyDesc.
-        let row_tydesc_id = self.tydesc(&row_ty)?;
-        let row_tydesc_gv = self.module.declare_data_in_func(row_tydesc_id, builder.func);
-        let row_tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, row_tydesc_gv);
+        let row_tydesc_ptr = self.tydesc_value(builder, &row_ty)?;
 
         // Create empty table.
         let create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);

@@ -49,6 +49,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
     /// Compile the function body using the given FuncId and signature.
     pub(super) fn compile_body(&mut self, func_id: FuncId, sig: cl_ir::Signature) -> Result<Defined, CraneliftError> {
+        self.check_dynamic_support()?;
+
         // Create Cranelift function.
         let mut cl_func = cl_ir::Function::with_name_signature(
             cl_ir::UserFuncName::user(0, func_id.as_u32()),
@@ -141,6 +143,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             self.shape_descriptor_values = param_values[shape_start..].iter().copied()
                 .take(self.func_ctx.descriptor_shapes.len())
                 .collect();
+            let type_param_start = shape_start + self.func_ctx.descriptor_shapes.len();
+            self.type_param_values = param_values[type_param_start..].iter().copied()
+                .take(self.func_ctx.type_param_count as usize)
+                .collect();
 
             // Initialize aggregate slots and tracking bytes region.
             // - Aggregate slots: 0xFF poison makes uninitialized reads obvious
@@ -148,6 +154,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             if let Some(frame_slot) = self.frame_slot {
                 // Fill aggregate slots with 0xFF poison pattern.
                 for (slot_idx, slot_ty) in self.func.slot_types.iter().enumerate() {
+                    if dynamic::is_dynamic_value(slot_ty) {
+                        continue;
+                    }
                     let repr = types::ir_type_to_cranelift(slot_ty);
                     if let CraneliftRepr::Aggregate(layout) = repr {
                         let slot_offset = self.layout.slot_offset(slot_idx as u32);
@@ -166,6 +175,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     builder.call_memset(self.isa.frontend_config(), track_addr, zero, size);
                 }
             }
+            self.enter_dynamic(&mut builder)?;
         }
 
         // Compile each block.
@@ -225,15 +235,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                         // Scalar: block param IS the value (pure SSA).
                         self.values.insert(*ir_value_id, cl_param);
                     }
-                    CraneliftRepr::Aggregate(layout) => {
+                    CraneliftRepr::Aggregate(_) => {
                         // Aggregate: block param is PTR to source. Copy to local frame.
-                        let frame_slot = self.frame_slot.expect("aggregate block param requires frame slot");
-                        let dest_offset = self.layout.value_offset(ir_value_id.0);
-                        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
-
-                        // memcpy from incoming pointer to local frame location.
-                        let size = builder.ins().iconst(PTR_TYPE, layout.size as i64);
-                        builder.call_memcpy(self.isa.frontend_config(), dest_addr, cl_param, size);
+                        let dest_addr = self.dest_addr(builder, *ir_value_id)?;
+                        self.copy_value_bytes(builder, dest_addr, cl_param, &param_ty)?;
 
                         // Use local address for this value.
                         self.values.insert(*ir_value_id, dest_addr);
@@ -397,14 +402,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }
-            Instruction::Call { dest, func, args, shape_descriptors, .. } => {
-                self.compile_call(builder, *dest, func, args, shape_descriptors)?;
+            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. } => {
+                self.compile_call(builder, *dest, func, args, shape_descriptors, bindings)?;
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
-            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
-                self.compile_call(builder, *dest, func, args, shape_descriptors)?;
+            Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
+                self.compile_call(builder, *dest, func, args, shape_descriptors, bindings)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;

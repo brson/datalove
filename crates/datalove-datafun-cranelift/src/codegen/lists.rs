@@ -43,16 +43,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Compute the address of an element in a list's data buffer.
     ///
     /// `list_ptr` points to the List struct. Element address is
-    /// `list.data + index * elem_size`.
+    /// `list.data + index * elem_size`, the size read from the element's
+    /// descriptor where its type is dynamic.
     fn compute_element_addr(
-        &self,
+        &mut self,
         builder: &mut FunctionBuilder,
         list_ptr: cl_ir::Value,
         idx: cl_ir::Value,
-        elem_size: u32,
-    ) -> cl_ir::Value {
+        elem_ty: &IrType,
+    ) -> Result<cl_ir::Value, CraneliftError> {
         let data_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), list_ptr, 0);
-        let elem_size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
+        let elem_size_val = self.value_size(builder, elem_ty)?;
 
         // Widen index to pointer width if needed.
         let idx_wide = if INDEX_TYPE != PTR_TYPE {
@@ -62,7 +63,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
 
         let offset = builder.ins().imul(idx_wide, elem_size_val);
-        builder.ins().iadd(data_ptr, offset)
+        Ok(builder.ins().iadd(data_ptr, offset))
     }
 
     /// Read an element whose type only the list's descriptor knows.
@@ -112,11 +113,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // a `data` is the pointer alignment.
         let payload_offset = std::mem::align_of::<datalove_rtdt::Data>() as u32;
         let payload = builder.ins().stack_addr(PTR_TYPE, slot, payload_offset as i32);
-        let frame_slot = self.frame_slot.ok_or_else(|| {
-            CraneliftError::Codegen("no frame slot for an indexed element".into())
-        })?;
-        let dest_offset = self.layout.value_offset(dest.0);
-        let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+        let dest_addr = self.dest_addr(builder, dest)?;
         let size = builder.ins().iconst(
             PTR_TYPE, std::mem::size_of::<datalove_rtdt::Data>() as i64);
         builder.call_memcpy(self.isa.frontend_config(), dest_addr, payload, size);
@@ -152,7 +149,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         let elem_repr = types::ir_type_to_cranelift(&elem_ty);
-        let elem_size = elem_repr.layout().size;
 
         let list_ptr = self.get_operand_ptr(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
@@ -181,7 +177,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Load block: load element value, jump to merge.
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
-                let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
+                let elem_addr = self.compute_element_addr(builder, list_ptr, idx, &elem_ty)?;
                 let val = builder.ins().load(cl_ty, MemFlagsData::new(), elem_addr, 0);
                 builder.ins().jump(merge_block, &[BlockArg::from(val)]);
 
@@ -199,26 +195,20 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             CraneliftRepr::Aggregate(_) => {
                 // Allocate dest in frame.
-                let frame_slot = self.frame_slot.ok_or_else(|| {
-                    CraneliftError::Codegen("no frame slot for ListGet aggregate dest".into())
-                })?;
-                let dest_offset = self.layout.value_offset(dest.0);
-                let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+                let dest_addr = self.dest_addr(builder, dest)?;
 
                 builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 
                 // Load block: clone element to dest.
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
-                let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
+                let elem_addr = self.compute_element_addr(builder, list_ptr, idx, &elem_ty)?;
 
                 let runtime = self.runtime;
                 let rt_handle = self.rt_handle_param.ok_or_else(|| {
                     CraneliftError::Codegen("ListGet aggregate requires runtime handle".into())
                 })?;
-                let tydesc_id = self.tydesc(&elem_ty)?;
-                let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+                let tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
                 let clone_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
                 builder.ins().call(clone_ref, &[
@@ -305,7 +295,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let list_ptr = self.get_operand_ptr(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;
         let repr = types::ir_type_to_cranelift(elem_ty);
-        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, repr.layout().size);
+        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_ty)?;
         match repr {
             CraneliftRepr::Scalar(_) => {
                 let val = self.get_operand_value(builder, value)?;
@@ -399,10 +389,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(());
         }
 
-        let elem_repr = types::ir_type_to_cranelift(&elem_ty);
-        let elem_size = elem_repr.layout().size;
-
-        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, elem_size);
+        let elem_addr = self.compute_element_addr(builder, list_ptr, idx, &elem_ty)?;
         self.values.insert(dest, elem_addr);
         Ok(())
     }

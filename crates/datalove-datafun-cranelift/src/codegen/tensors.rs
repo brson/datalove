@@ -180,11 +180,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     self.values.insert(dest, phi_val);
                 }
                 CraneliftRepr::Aggregate(_) => {
-                    let frame_slot = self.frame_slot.ok_or_else(|| {
-                        CraneliftError::Codegen("no frame slot for TensorGet aggregate dest".into())
-                    })?;
-                    let dest_offset = self.layout.value_offset(dest.0);
-                    let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+                    let dest_addr = self.dest_addr(builder, dest)?;
 
                     builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 
@@ -196,9 +192,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     let rt_handle = self.rt_handle_param.ok_or_else(|| {
                         CraneliftError::Codegen("TensorGet aggregate requires runtime handle".into())
                     })?;
-                    let tydesc_id = self.tydesc(&elem_ty)?;
-                    let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-                    let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+                    let tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
                     // What is in the tensor is the real element type and the
                     // destination is whatever this function's static type says,
@@ -233,11 +227,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         } else {
             // Rank > 1: call hyperplane_clone.
-            let frame_slot = self.frame_slot.ok_or_else(|| {
-                CraneliftError::Codegen("no frame slot for TensorGet hyperplane dest".into())
-            })?;
-            let dest_offset = self.layout.value_offset(dest.0);
-            let dest_addr = frame_slot.addr(builder, dest_offset as i32);
+            let dest_addr = self.dest_addr(builder, dest)?;
 
             builder.ins().brif(is_valid_val, load_block, &[], skip_block, &[]);
 
@@ -248,9 +238,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let rt_handle = self.rt_handle_param.ok_or_else(|| {
                 CraneliftError::Codegen("TensorGet hyperplane requires runtime handle".into())
             })?;
-            let tydesc_id = self.tydesc(&tensor_ty)?;
-            let tydesc_gv = self.module.declare_data_in_func(tydesc_id, builder.func);
-            let tydesc_ptr = builder.ins().symbol_value(PTR_TYPE, tydesc_gv);
+            let tydesc_ptr = self.tydesc_value(builder, &tensor_ty)?;
 
             let hp_ref = self.module.declare_func_in_func(runtime.tensor_hyperplane_clone, builder.func);
             builder.ins().call(hp_ref, &[

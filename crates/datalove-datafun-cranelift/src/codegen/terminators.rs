@@ -6,7 +6,7 @@ use cranelift_module::Module;
 
 use datalove_datafun_ir::Terminator;
 
-use crate::types::{self, PTR_TYPE};
+use crate::types;
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -57,16 +57,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                             // pointer, unless it was built there.
                             let src_ptr = self.get_operand_value(builder, val_op)?;
                             if src_ptr != sret_ptr {
-                                let size = types::ir_type_size(ret_ty);
-                                let size_val = builder.ins().iconst(PTR_TYPE, size as i64);
-                                builder.call_memcpy(self.isa.frontend_config(), sret_ptr, src_ptr, size_val);
+                                let ret_ty = ret_ty.clone();
+                                self.copy_value_bytes(builder, sret_ptr, src_ptr, &ret_ty)?;
                             }
                         }
                     }
-                    builder.ins().return_(&[]);
-                } else {
-                    builder.ins().return_(&[]);
                 }
+                self.leave_dynamic(builder);
+                builder.ins().return_(&[]);
             }
             Terminator::UnitEnd { result } => {
                 // Script unit end.

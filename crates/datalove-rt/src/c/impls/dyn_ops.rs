@@ -47,6 +47,8 @@ unsafe fn scalar_bits(value: *const u8, tag: TyTag) -> u64 {
             TyTag::U8 | TyTag::I8 => *value as u64,
             TyTag::U16 | TyTag::I16 => *(value as *const u16) as u64,
             TyTag::U32 | TyTag::I32 | TyTag::F32 => *(value as *const u32) as u64,
+            // As wide as `index-64` makes them.
+            TyTag::Index | TyTag::Offset if rtdt::INDEX_SIZE == 4 => *(value as *const u32) as u64,
             _ => *(value as *const u64),
         }
     }

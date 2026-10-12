@@ -50,6 +50,11 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
+    // Under generics by reference, one for each type parameter, last.
+    for _ in 0..func_ctx.type_param_count {
+        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
+    }
+
     // No register return values. All returns use sret.
 
     sig
@@ -120,6 +125,8 @@ pub struct LocalCallee {
     /// How the callee takes each parameter, which the call site needs because
     /// an `out` one has its old value dropped here rather than there.
     pub param_modes: Vec<ParamMode>,
+    /// How many type parameters the callee takes a descriptor for, last.
+    pub type_param_count: u32,
 }
 
 impl LocalCallee {
@@ -131,6 +138,7 @@ impl LocalCallee {
             descriptor_params: ctx.map(|c| c.descriptor_params.clone()).unwrap_or_default(),
             descriptor_shapes: ctx.map(|c| c.descriptor_shapes.clone()).unwrap_or_default(),
             param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
+            type_param_count: ctx.map(|c| c.type_param_count).unwrap_or(0),
         }
     }
 }
