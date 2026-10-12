@@ -29,6 +29,7 @@
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Tuning the JIT](plan-jit-tuning.md)
+- [Immutable Cursors for the Collections](plan-cursors.md)
 - [Carry/Bring](carry-bring.md)
 
 ---

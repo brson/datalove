@@ -41,6 +41,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Consts Built Once](plan-static-consts.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
+- [Immutable Cursors for the Collections](plan-cursors.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
