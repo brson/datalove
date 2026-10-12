@@ -18,7 +18,7 @@ in the common case of iterating collections.
 
 In my [previous round of benchmarking](../posts/20261009A-compound-assignment.md)
 I noted that Datalove's system library iterates over collections by maintaining
-a loop induction variable of type [`index`](todo),
+a loop induction variable of type [`index`](../types.md#user-content-index-and-offset),
 incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element,
 and that this is a problem to be solved soon.
@@ -51,7 +51,7 @@ This has a number of deficiencies,
 but for the purposes of the work at hand I care about the
 `self[i]?`, which does a bounds check every iteration
 (and for which `equal_to_at` exists just to accommodate the
-[early-return error handling indicated by `?`](todo)),
+[early-return error handling indicated by `?`](../datafun.md#user-content-option-and-result-handling)),
 and the intrinsic call to `add_wrapping_index`.
 The indexing is a performance hazard,
 but maybe more importantly - the wrapping math is a
@@ -59,7 +59,7 @@ cognitive/maintainability hazard:
 every time I see wrapping math I must stop and think hard about the invariants.
 
 Both of these are solvable with language-level container iteration,
-like `for .. in` loops in whatever, and example here todo.
+like Python's `for x in xs` or Rust's `for x in &xs`.
 The simple design for this is fairly obvious and implementation is mostly straightforward,
 so I'll go ahead and do it now!
 
@@ -85,11 +85,11 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
 end fun
 ```
 
-The `item` variable is a [reference (`ref`) binding](todo),
+The `item` variable is a [reference (`ref`) binding](../datafun.md#user-content-functions),
 a pointer directly into the container.
 So `item` can't be moved, nor can the iteratee, `self`,
 be mutably referenced or mutated via indexing.
-This is in contrast to [`match` and destructuring `if`](todo),
+This is in contrast to [`match` and destructuring `if`](../types-lits-destr.md#user-content-destructuring-sum-types-with-if-and-match),
 which fully destructure their operands.
 
 Even though I don't plan immediately to have by-value iteration,
@@ -181,7 +181,7 @@ end for
 
 ## Getting at that loop induction variable
 
-Many of the collections iterations in the system library
+Many of the collection iterations in the system library
 also make use of the loop induction variable for more than just indexing the collection
 once every time through the loop. Here the `list.index_of` function
 needs to hold onto that index and return it:
@@ -225,7 +225,7 @@ end fun
 
 Personally this smells a bit to me, smells like a big special case,
 and I'm used to Rust with its many iterator adapters that
-can do this and much more (what abour reverse iteration? seems important...).
+can do this and much more (what about reverse iteration? seems important...).
 I don't know if Datalove will grow an iterator protocol like Rust has.
 I don't intend Datalove to have a high level of expressivity in its language integration.
 
@@ -246,9 +246,9 @@ All the existing accessors are per-element.
 
 I've sketched one cursor shape for all four collections.
 It's a small plain-data struct:
-a pointer to the current element
-a position, and a count.
-(plus additional fields for sets and maps),
+a pointer to the current element,
+a position, and a count
+(plus additional fields for sets and maps).
 
 ```rust
 #[repr(C)]
@@ -267,7 +267,7 @@ Each collection gets a "begin" and an "advance" function with the same signature
 and "done" is just comparing the position to the count,
 which every backend can do inline.
 
-```rust
+```
 dtlv_rti_list_cursor_begin_local(rt, coll_ref, coll_tydesc, cursor_out, scratch) -> RtStatus
 dtlv_rti_list_cursor_advance_local(rt, cursor, coll_tydesc) -> RtStatus
 ```
