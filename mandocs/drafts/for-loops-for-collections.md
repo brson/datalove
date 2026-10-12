@@ -1,14 +1,14 @@
 ---
-title: "`for` loops for collections"
+title: "`for` loops without first-class references"
 category: dev
-summary: "Yeah of course we need `for` loops"
+summary: "Language-integrated iteration over collections faces compromises when you don't have reference types"
 ---
 
 <!--
 
 Audience: programming language hackers.
-Problem: traditional loops impose performance and cognitive overhead
-in the common case of iterating collections.
+Problem: Language-integrated iteration over collections faces compromises
+when you don't have reference types.
 
 -->
 
@@ -53,15 +53,31 @@ but for the purposes of the work at hand I care about the
 (and for which `equal_to_at` exists just to accommodate the
 [early-return error handling indicated by `?`](../datafun.md#user-content-option-and-result-handling)),
 and the intrinsic call to `add_wrapping_index`.
+
+The indexing hazard gets _much worse_ when we look at how sets and maps are iterated today:
+
+```datalove
+todo
+```
+
+No longer just a bounds check and some pointer math,
+each of those is a full B-tree lookup,
+which makes a loop over the full collection O(n log n).
+
 The indexing is a performance hazard,
-but maybe more importantly - the wrapping math is a
+but also the wrapping math is a
 cognitive/maintainability hazard:
 every time I see wrapping math I must stop and think hard about the invariants.
 
 Both of these are solvable with language-level container iteration,
 like Python's `for x in xs` or Rust's `for x in &xs`.
-The simple design for this is fairly obvious and implementation is mostly straightforward,
+A simple design for this is obvious
 so I'll go ahead and do it now!
+
+Two properties of the language that are going
+to impact our design are that Datalove has a linear type system,
+and that [Datalove does not have first-class references](../principles.md#todo).
+The latter is going to heavily limit our expressivity.
 
 
 
@@ -103,77 +119,26 @@ We'll see how that feels over time.
 Besides lists we also have other collections that need
 iteration consideration: maps, sets, tensors, and tables.
 
-Sets are the easy one.
-A set is a tree kept in the total order,
-so `for` walks it in that order
-and binds a reference to each element,
-just as for a list.
+Maps and sets are trees kept in the total order,
+so `for` walks them in that order.
+Sets bind a reference to the key,
+maps to both the key and value.
 
 ```datalove
-fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord }
-  var all_present = true
-  for elem in ref self
-    if not contains(ref other, ref elem)
-      set all_present = false
-      break
-    end if
-  end for
-  ret all_present
-end fun
+todo map example
 ```
 
-The binding can never be mutable, even if lists eventually grow a mutable form of iteration:
-changing an element in place could move where it belongs in the order.
-
-Maps bind two references, the key and the value.
-
-```datalove
-for key, value in ref totals
-  debuglog (key@, value@)
-end for
-```
-
-Not a tuple: a `(K, V)` would be a new value built from the two,
+The bindings are not a tuple:
+a `(K, V)` would be a new value built from the two,
 not a place in the map.
-Datalove doesn't have first-class references that could be shoved into a tuple
-so building one means cloning both elements.
-As with sets, the key binding is immutable;
+And Datalove doesn't have first-class references that could be shoved into a tuple
+so to build one means cloning both elements.
+As with lists, the key binding is immutable;
 the value could someday be `mut`.
 
-Tensors iterate along axis 0, the same axis `t[i]?` indexes.
-At rank 1 the binding is a reference to an element.
-At higher ranks it is a view of rank one less,
-the same non-owning view `t[i]?` produces today,
-with the same restrictions.
-So walking every element of a matrix is two loops:
+[Tensors and tables](todo) both add their own complications here,
+but are generally extensions in the same solution space.
 
-```datalove
-for row in ref grid
-  for cell in ref row
-    set total = total + cell
-  end for
-end for
-```
-
-Not sure how to do tables yet.
-The language needs additional features to do anything with them.
-Iterating over the columns would be easy but doesn't seem like what one would want.
-`for` could be a mechanism to iterate over
-partial row projections while binding references to individual fields,
-avoiding materializing a fresh struct.
-This could be the basic tool needed for table transformations.
-
-```datalove
-let table = {|
-  name, number, status
-  "brian", 1, true
-  "sid", 2, false
-|}
-
-for { name, number, .. } in ref table
-  ...
-end for
-```
 
 
 
@@ -223,44 +188,45 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
 end fun
 ```
 
-Personally this smells a bit to me, smells like a big special case,
+Personally **this smells a bit to me, smells like a big special case**,
 and I'm used to Rust with its many iterator adapters that
 can do this and much more (what about reverse iteration? seems important...).
 I don't know if Datalove will grow an iterator protocol like Rust has.
 I don't intend Datalove to have a high level of expressivity in its language integration.
+So for now this is a compromise I have to make to make `for` loops useful in
+the most common case.
 
 Sets and maps won't support this form since they don't index by number.
 
 
 
 
-<!-- but, but ... -->
+<!-- is this the payoff? -->
 
-## Implementation considerations
+## An efficient collection cursor
 
-Implementing this is a somewhat large piece of work,
+Implementing this is a significant piece of work,
 but most of the compiler bits are relatively straightforward extensions to what already exists.
 The big missing piece to make this all work is
 collection cursors in the runtime.
 All the existing accessors are per-element.
 
-I've sketched one cursor shape for all four collections.
+Our design needs to solve the performance problems we identified earlier:
+todo
+Also want to be able to short-circuit the runtime calls completely when
+iterating over lists.
+
+I ended up on one cursor shape for all collections.
 It's a small plain-data struct:
 a pointer to the current element,
 a position, and a count
 (plus additional fields for sets and maps).
 
 ```rust
-#[repr(C)]
-pub struct Cursor {
-    pub elem: *const u8,   // The current element; a map's current key.
-    pub value: *const u8,  // A map's current value; null for the rest.
-    pub node: *const u8,   // A tree's current leaf; null for the rest.
-    pub step: usize,       // How to get to the next one.
-    pub pos: Index,        // How many elements have been passed.
-    pub end: Index,        // How many there are.
-}
+todo
 ```
+
+todo rewrite this to be the payoff
 
 The position doubles as the loop index, so the indexed form of `for` is free.
 Each collection gets a "begin" and an "advance" function with the same signature,
@@ -284,15 +250,14 @@ which provides a simple protocol for the compiler to codegen against.
 
 
 
-<!-- todo any implementation obstacles -->
-
-
 <!-- the results -->
 
 <!--
 
 don't expect much problems here.
 maybe number of loop conversions that were able to remove the explicit variable.
+some perf numbers for the set walk
 cases where there's still wrapping addition related to loops or the for loop wasn't sufficient.
+maybe show whether cranelift can lift the bounds check without the for loop.
 
 -->
