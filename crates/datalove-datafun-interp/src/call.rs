@@ -173,12 +173,7 @@ impl IrInterpreter {
         if (&here as *const u8 as usize) < unsafe { datalove_rt::c::dtlv_rti_native_stack_limit(self.runtime.handle()) } {
             return Err(InterpError::StackOverflow);
         }
-        // A body compiled by reference runs on the walker, which reads every
-        // value through the frame and so through its fat pointer; the
-        // bytecode does not yet.
-        if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode)
-            && frame.layout().table.is_empty()
-        {
+        if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode) {
             let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();
             return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);
@@ -440,13 +435,28 @@ impl IrInterpreter {
     /// caller's own type parameters is an entry of the caller's descriptor
     /// table, filled when the caller was entered.
     pub(super) fn binding_descriptor(&mut self, binding: &IrType, frame: &Frame) -> *const rtdt::TyDesc {
+        let r = self.binding_ref(binding, frame.layout());
+        Self::resolve_binding(r, frame)
+    }
+
+    /// Where the descriptor of what a call site bound a type parameter to is
+    /// found, worked out once for a site to keep.
+    pub(crate) fn binding_ref(&mut self, binding: &IrType, caller: &IrLayout) -> crate::BindingRef {
         if !binding.is_dynamic() {
-            return self.tydesc_table.get_or_create(binding);
+            return crate::BindingRef::Static(self.tydesc_table.get_or_create(binding));
         }
-        let layout = frame.layout();
-        match layout.table_types.iter().position(|t| t == binding) {
-            Some(index) => frame.table_entry(index),
+        match caller.table_types.iter().position(|t| t == binding) {
+            Some(index) => crate::BindingRef::Table(index as u32),
             None => panic!("{binding} is bound at a call and not in the caller's descriptor table"),
+        }
+    }
+
+    /// The descriptor a `BindingRef` names, in the caller's frame.
+    #[inline]
+    pub(crate) fn resolve_binding(r: crate::BindingRef, frame: &Frame) -> *const rtdt::TyDesc {
+        match r {
+            crate::BindingRef::Static(tydesc) => tydesc,
+            crate::BindingRef::Table(index) => frame.table_entry(index as usize),
         }
     }
 
@@ -479,26 +489,46 @@ impl IrInterpreter {
         }
         let rt = self.runtime.handle();
         let params = frame.type_params();
-        for (i, entry) in layout.table.iter().enumerate() {
-            let tydesc = match *entry {
-                crate::layout::TableEntry::Param(p) => params[p as usize],
-                crate::layout::TableEntry::Template(template) => unsafe {
-                    datalove_rt::c::dtlv_rti_tydesc_instantiate(
-                        rt, template, params.as_ptr(), params.len() as u32)
-                },
-            };
-            frame.set_table_entry(i, tydesc);
+        let mut cache = layout.table_cache.borrow_mut();
+        if cache.0 == params {
+            for (i, &tydesc) in cache.1.iter().enumerate() {
+                frame.set_table_entry(i, tydesc);
+            }
+        } else {
+            cache.1.clear();
+            for (i, entry) in layout.table.iter().enumerate() {
+                let tydesc = match *entry {
+                    crate::layout::TableEntry::Param(p) => params[p as usize],
+                    crate::layout::TableEntry::Template(template) => unsafe {
+                        datalove_rt::c::dtlv_rti_tydesc_instantiate(
+                            rt, template, params.as_ptr(), params.len() as u32)
+                    },
+                };
+                frame.set_table_entry(i, tydesc);
+                cache.1.push(tydesc);
+            }
+            cache.0.clear();
+            cache.0.extend_from_slice(params);
         }
+        drop(cache);
         if let Some(mark) = layout.shadow_mark_offset {
             // SAFETY: the handle's header, and the frame's mark words.
-            unsafe {
-                let header = rt as *mut datalove_rt::c::RtHeader;
-                *frame.shadow_mark(mark) = [(*header).shadow_top, (*header).shadow_limit];
-            }
+            let header = rt as *mut datalove_rt::c::RtHeader;
+            unsafe { *frame.shadow_mark(mark) = [(*header).shadow_top, (*header).shadow_limit] };
             for &(offset, entry) in &layout.dynamic_places {
                 let tydesc = frame.table_entry(entry as usize);
                 let (size, align) = unsafe { ((*tydesc).size, (*tydesc).align) };
-                let ptr = unsafe { datalove_rt::c::dtlv_rti_shadow_alloc(rt, size, align) };
+                // Bumped here, as compiled code does, and the runtime asked
+                // only when its chunk has no room.
+                let ptr = unsafe {
+                    let start = ((*header).shadow_top + align as usize - 1) & !(align as usize - 1);
+                    if start + size as usize <= (*header).shadow_limit {
+                        (*header).shadow_top = start + size as usize;
+                        start as *mut u8
+                    } else {
+                        datalove_rt::c::dtlv_rti_shadow_alloc(rt, size, align)
+                    }
+                };
                 frame.set_fat_pointer(offset, ptr, tydesc);
             }
         }

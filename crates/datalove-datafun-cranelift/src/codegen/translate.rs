@@ -238,7 +238,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     CraneliftRepr::Aggregate(_) => {
                         // Aggregate: block param is PTR to source. Copy to local frame.
                         let dest_addr = self.dest_addr(builder, *ir_value_id)?;
-                        self.copy_value_bytes(builder, dest_addr, cl_param, &param_ty)?;
+                        if dynamic::is_dynamic_value(&param_ty) {
+                            // A move rather than a copy: an OSR entry passes a
+                            // dynamic parameter its own storage.
+                            let size = self.value_size(builder, &param_ty)?;
+                            builder.call_memmove(self.isa.frontend_config(), dest_addr, cl_param, size);
+                        } else {
+                            self.copy_value_bytes(builder, dest_addr, cl_param, &param_ty)?;
+                        }
 
                         // Use local address for this value.
                         self.values.insert(*ir_value_id, dest_addr);

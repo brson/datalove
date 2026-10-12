@@ -95,6 +95,9 @@ pub struct OsrSpec {
     pub param_offsets: Vec<u32>,
     /// Where the shape descriptors are, one word each.
     pub shape_offset: u32,
+    /// Where the descriptor table is, one word an entry, filled when the
+    /// interpreter entered the function.
+    pub table_offset: u32,
 }
 
 /// What compiling an OSR entry keeps; see `OsrSpec`.
@@ -156,6 +159,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let offset = self.layout.value_offset(vid.0) as i32;
         let mut pos = FuncCursor::new(builder.func).at_inst(osr.entry_jump);
         let remade = osr.consts.get(&vid).and_then(|c| constants::scalar_const(pos.ins(), c));
+        // A dynamic value is where its fat pointer says.
+        if let Some(&ptr) = self.dyn_storage.get(&vid) {
+            osr.materialized.borrow_mut().insert(vid, ptr);
+            return Ok(ptr);
+        }
         let v = match (remade, types::ir_type_to_cranelift(ty)) {
             (Some(v), _) => v,
             (None, CraneliftRepr::Scalar(cl_ty)) => pos.ins().load(cl_ty, MemFlagsData::trusted(), osr.frame, offset),
@@ -197,12 +205,36 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             .map(|k| builder.ins().load(PTR_TYPE, flags, frame, spec.shape_offset as i32 + k as i32 * word))
             .collect();
 
+        // A generic's table, and where its dynamic values and slots are,
+        // as the interpreter set them up on entry. The shadow stack space is
+        // the interpreter's, which gives it back.
+        self.table_values = (0..self.func_ctx.descriptor_table.len())
+            .map(|k| builder.ins().load(PTR_TYPE, flags, frame, spec.table_offset as i32 + k as i32 * word))
+            .collect();
+        for (i, ty) in self.func.value_types.iter().enumerate() {
+            if dynamic::is_dynamic_value(ty) {
+                let offset = self.layout.value_offset(i as u32) as i32;
+                let ptr = builder.ins().load(PTR_TYPE, flags, frame, offset);
+                self.dyn_storage.insert(ValueId(i as u32), ptr);
+            }
+        }
+        for (i, ty) in self.func.slot_types.iter().enumerate() {
+            if dynamic::is_dynamic_value(ty) {
+                let offset = self.layout.slot_offset(i as u32) as i32;
+                let ptr = builder.ins().load(PTR_TYPE, flags, frame, offset);
+                self.dyn_slot_storage.insert(SlotId(i as u32), ptr);
+            }
+        }
+
         // The header's parameters as an edge into it would pass them: a
         // scalar itself, an aggregate by its address.
         let header = self.func.blocks.iter().find(|b| b.id == spec.header)
             .expect("the header is a block of the function");
         let args: Vec<cranelift_codegen::ir::BlockArg> = header.params.iter().map(|&v| {
             let offset = self.layout.value_offset(v.0) as i32;
+            if let Some(&ptr) = self.dyn_storage.get(&v) {
+                return cranelift_codegen::ir::BlockArg::from(ptr);
+            }
             let arg = match types::ir_type_to_cranelift(&self.func.value_types[v.0 as usize]) {
                 CraneliftRepr::Scalar(cl_ty) => builder.ins().load(cl_ty, flags, frame, offset),
                 CraneliftRepr::Aggregate(_) => builder.ins().iadd_imm_s(frame, offset as i64),

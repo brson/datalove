@@ -63,6 +63,14 @@ mod tests;
 pub use error::InterpError;
 pub use value::{Value, Destination};
 pub use layout::{IrLayout, LayoutCache};
+
+/// Where a call site finds a descriptor it hands over under generics by
+/// reference: a static one, or an entry of the caller's descriptor table.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum BindingRef {
+    Static(*const datalove_rtdt::TyDesc),
+    Table(u32),
+}
 pub use tydesc::IrTyDescTable;
 pub use bytecode::BcStats;
 pub use frame::{Frame, FrameStack, FrameStore, ScriptFrame};

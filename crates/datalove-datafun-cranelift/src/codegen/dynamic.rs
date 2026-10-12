@@ -394,14 +394,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if !datalove_datafun_ir::uses_generics_by_reference(self.func) {
             return Ok(());
         }
-        // A generic's own entry fills its table and takes its storage; an
-        // entry at a loop would have to take the interpreter's. A caller of
-        // one has neither, and is entered anywhere.
-        let generic = self.func_ctx.type_param_count > 0 || !self.func_ctx.descriptor_table.is_empty();
-        if self.osr_spec.is_some() && generic {
-            return Err(CraneliftError::Unsupported(
-                "entering a generic compiled by reference partway through".into()));
-        }
 
         for block in &self.func.blocks {
             for instr in &block.instructions {

@@ -87,7 +87,14 @@ impl<'a> Lowering<'a> {
     /// bytes. What a borrowed parameter or a reference points at is the
     /// caller's, as it really is, which inside a generic the static type does
     /// not say; nor is anything that reaches another unit.
+    ///
+    /// A dynamic type is not one: its frame bytes are a fat pointer, and
+    /// only the IR walker reads through it.
     fn typed(&self, op: &Operand) -> Option<&'a IrType> {
+        self.typed_any(op).filter(|ty| !ty.is_dynamic())
+    }
+
+    fn typed_any(&self, op: &Operand) -> Option<&'a IrType> {
         let func = self.func;
         match op {
             Operand::Value(id) => Some(&func.value_types[id.0 as usize]),
@@ -261,7 +268,15 @@ impl<'a> Lowering<'a> {
             }
             for (i, instr) in block.instructions.iter().enumerate() {
                 self.index = i;
-                if !self.lower_instruction(instr) {
+                // Under generics by reference, an instruction on a value of a
+                // dynamic type runs on the walker, which reads it through its
+                // fat pointer.
+                // A call is the exception: its arguments are read through the
+                // frame, and its result written so, wherever it is dynamic.
+                let call = matches!(instr, Instruction::Call { .. });
+                if let Some(op) = self.lower_dynamic_move(instr) {
+                    self.emit(op);
+                } else if (!call && self.touches_dynamic(instr)) || !self.lower_instruction(instr) {
                     self.escape(b, i);
                 }
             }
@@ -342,6 +357,77 @@ impl<'a> Lowering<'a> {
             func: self.func, ops, entry, pool: self.pool, switches: self.switches, calls: self.calls,
             descs: self.descs, rt: self.rt, statics: self.statics, loops: self.loops,
         }, escapes)
+    }
+
+    /// Where an operand of a dynamic type keeps its pointer and descriptor,
+    /// if it is one the frame records nothing else about: a value's fat
+    /// pointer, a parameter's `Value`, or an untracked slot's fat pointer.
+    fn fat_loc(&self, op: &Operand) -> Option<Loc> {
+        let ty = self.typed_any(op)?;
+        if !ty.is_dynamic() || matches!(ty, IrType::Ref(_)) {
+            return None;
+        }
+        match op {
+            Operand::Value(v) => Some(Loc::direct(self.layout.value_offsets[v.0 as usize])),
+            Operand::Slot(s) if self.layout.slot_tracking[s.0 as usize].is_none() => {
+                Some(Loc::direct(self.layout.slot_offsets[s.0 as usize]))
+            }
+            Operand::Param(p) => Some(Loc::direct(self.layout.param_offsets[p.0 as usize])),
+            _ => None,
+        }
+    }
+
+    /// A move of a dynamic value as one op, where neither side has a tracking
+    /// byte to keep.
+    fn lower_dynamic_move(&self, instr: &Instruction) -> Option<Op> {
+        use datalove_datafun_ir::SlotDest;
+        let (dst, src) = match instr {
+            Instruction::Move { dest, src } => (self.fat_loc(&Operand::Value(*dest))?, self.fat_loc(src)?),
+            Instruction::SlotLoadMove { dest, slot } => {
+                (self.fat_loc(&Operand::Value(*dest))?, self.fat_loc(&Operand::Slot(*slot))?)
+            }
+            Instruction::SlotStoreMove { dest: SlotDest::Local(slot), value } => {
+                (self.fat_loc(&Operand::Slot(*slot))?, self.fat_loc(value)?)
+            }
+            _ => return None,
+        };
+        Some(Op::CopyFat { dst, src })
+    }
+
+    /// Whether an instruction reads, makes or writes into a value of a
+    /// dynamic type.
+    fn touches_dynamic(&self, instr: &Instruction) -> bool {
+        use datalove_datafun_ir::SlotDest;
+        if self.layout.table.is_empty() {
+            return false;
+        }
+        let func = self.func;
+        let mut touches = instr.dests().into_iter()
+            .any(|v| func.value_types[v.0 as usize].is_dynamic());
+        instr.for_each_operand(|op: &Operand| {
+            touches |= self.typed_any(op).is_some_and(|t| t.is_dynamic())
+                || matches!(op, Operand::Param(p) if func.function_context()
+                    .is_some_and(|c| c.param_types[p.0 as usize].is_dynamic()));
+        });
+        match instr {
+            Instruction::SlotStoreCopy { dest: SlotDest::Local(s), .. }
+            | Instruction::SlotStoreMove { dest: SlotDest::Local(s), .. }
+            | Instruction::SlotStoreCopyTracked { dest: SlotDest::Local(s), .. }
+            | Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(s), .. }
+            | Instruction::SetField { slot: SlotDest::Local(s), .. }
+            | Instruction::SetFieldTracked { slot: SlotDest::Local(s), .. } => {
+                touches |= func.slot_types[s.0 as usize].is_dynamic();
+            }
+            Instruction::ParamStore { param, .. }
+            | Instruction::ParamStoreTracked { param, .. }
+            | Instruction::ParamSetField { param, .. }
+            | Instruction::ParamSetFieldTracked { param, .. } => {
+                touches |= func.function_context()
+                    .is_some_and(|c| c.param_types[param.0 as usize].is_dynamic());
+            }
+            _ => {}
+        }
+        touches
     }
 
     /// Lower one instruction to ops, or say it has to run on the IR walker.
@@ -668,13 +754,6 @@ impl<'a> Lowering<'a> {
                 });
                 true
             }
-            // A call binding type parameters, under generics by reference,
-            // hands the callee descriptors for them, which only the general
-            // lane does.
-            Instruction::Call { bindings, .. } if !bindings.is_empty() => {
-                self.emit(Op::Call { block: self.block as u32, index: self.index as u32 });
-                true
-            }
             Instruction::Call { dest, args, .. } => {
                 // Anything but an earlier unit's binding, which a function
                 // body never names.
@@ -705,6 +784,7 @@ impl<'a> Lowering<'a> {
                             resolved,
                             dest: self.value_loc(*dest),
                             dest_tydesc: self.layout.value_tydescs[dest.0 as usize],
+                            dest_id: *dest,
                             site: std::cell::RefCell::new(SiteCache::default()),
                         });
                         self.emit(Op::CallFast { site });
@@ -1074,6 +1154,10 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::Switch { disc, table: t as u32 });
             }
             Terminator::Return { value: None } => self.emit(Op::ReturnUnit),
+            Terminator::Return { value: Some(op) } if self.fat_loc(op).is_some() => {
+                let src = self.fat_loc(op).expect("just checked");
+                self.emit(Op::ReturnFat { src });
+            }
             Terminator::Return { value: Some(op) } => {
                 match (self.typed(op), self.consumed(op)) {
                     (Some(ty), Some(src)) => {

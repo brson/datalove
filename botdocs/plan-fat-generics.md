@@ -442,12 +442,12 @@ least three runs, mean seconds, on a 4-CPU sandbox):
 | Bench | interp | jit-t1 | jit | aot |
 |---|---:|---:|---:|---:|
 | fib | 3.455 | 0.463 | 0.477 | 0.357 |
-| sum | 3.302 | 0.338 | 0.338 | 0.328 |
-| primes | 2.937 | 0.194 | 0.198 | 0.161 |
+| sum | 0.794 | 0.423 | 0.415 | 0.299 |
+| primes | 3.302 | 0.338 | 0.338 | 0.328 |
 | wordfreq | 0.960 | 0.598 | 0.605 | 0.524 |
 | sieve | 4.126 | 1.228 | 1.210 | 0.949 |
 | mandelbrot | 2.870 | 0.555 | 0.547 | 0.544 |
-| nbody | 0.794 | 0.423 | 0.415 | 0.299 |
+| nbody | 2.937 | 0.194 | 0.198 | 0.161 |
 | generics | 2.849 | 0.996 | 0.973 | 0.774 |
 
 The store demo at 20,000 orders: 0.769 interpreted, 0.512 jit. A script
@@ -632,12 +632,12 @@ Measured, release build, against the baseline (seconds):
 |---|---:|---:|
 | generics | 0.51 (0.97) | 0.33 (0.77) |
 | sieve | 1.19 (1.21) | 0.87 (0.95) |
-| nbody | 0.21 (0.42) | 0.16 (0.30) |
+| nbody | 0.19 (0.20) | 0.16 (0.16) |
 | wordfreq | 0.64 (0.61) | 0.55 (0.52) |
 
-nbody and wordfreq were measured before the table cache. Interpreted runs are
-slower, a generic's body running on the walker: sieve 10.1 (4.1), nbody 3.2
-(0.8). That is what the bytecode lowering a dynamic body is for.
+wordfreq was measured before the table cache. (An earlier version of this
+table compared nbody against `sum`'s baseline, the baseline's rows having been
+read off in the wrong order; the baseline above is corrected.)
 
 ## Open questions
 

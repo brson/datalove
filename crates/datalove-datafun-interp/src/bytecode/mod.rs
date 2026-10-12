@@ -428,6 +428,13 @@ pub(crate) enum Op {
     /// Jump through the switch table `table`.
     Switch { disc: Loc, table: u32 },
     Return { src: Loc, len: u32 },
+    /// Under generics by reference: copy the value the pointer and
+    /// descriptor at `src` name to where the pointer at `dst` says, as many
+    /// bytes as the descriptor says. A dynamic value's fat pointer and a
+    /// parameter's `Value` are both such a pair.
+    CopyFat { dst: Loc, src: Loc },
+    /// Return the value the pointer and descriptor at `src` name.
+    ReturnFat { src: Loc },
     /// Return `Ok` of the `len` bytes at `src`, the payload at `at`.
     ReturnOk { src: Loc, at: u32, len: u32 },
     ReturnUnit,
@@ -467,7 +474,10 @@ struct FastCall {
     /// pointer each, which is most calls outside generic code.
     resolved: Option<Vec<(Loc, *const rtdt::TyDesc)>>,
     dest: Loc,
+    /// Null for a destination of a dynamic type, which is where its fat
+    /// pointer says and is read through the frame.
     dest_tydesc: *const rtdt::TyDesc,
+    dest_id: datalove_datafun_ir::ValueId,
     /// What the call has found out about its callee.
     ///
     /// Written only on the slow path -- `resolve_callee`, `call_native` and
@@ -518,6 +528,10 @@ pub(crate) struct CallCache {
     /// The call worked out, if it is one the loop can make without asking
     /// anything again; see `Plan`.
     plan: Option<Plan>,
+    /// Under generics by reference, the descriptors the call hands over:
+    /// the callee's type parameters', or for a native, or a forwarder to one,
+    /// those the native's signature asks for. Each worked out once.
+    descriptors: std::rc::Rc<[crate::BindingRef]>,
     /// The dispatcher epoch the plan was made in, if a dispatcher was
     /// installed, whose `SitePolicy` it follows.
     ///
@@ -553,6 +567,9 @@ enum Plan {
 /// A call to a bytecode body in the same unit or a module: push its frame,
 /// write the arguments and switch to it.
 struct BodyPlan {
+    /// Under generics by reference, the callee's type parameters'
+    /// descriptors.
+    descriptors: std::rc::Rc<[crate::BindingRef]>,
     layout: std::rc::Rc<IrLayout>,
     bc: std::rc::Rc<BcFunction>,
     func: *const IrCodeUnit,
@@ -665,8 +682,12 @@ struct NativePlan {
     /// which it may be another's.
     generation: u64,
     args: Box<[ArgRecipe]>,
-    /// The result's descriptor, as the native's own call would give it.
+    /// The result's descriptor, as the native's own call would give it; null
+    /// where that is dynamic, and the destination's says.
     dest_tydesc: *const rtdt::TyDesc,
+    /// What follows the result, under generics by reference: the
+    /// descriptors the native's signature asks for.
+    descriptors: std::rc::Rc<[crate::BindingRef]>,
 }
 
 /// How a planned call reads one argument, and what it hands over.

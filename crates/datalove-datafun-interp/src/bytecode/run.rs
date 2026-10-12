@@ -535,6 +535,16 @@ impl IrInterpreter {
                         copy_bytes(src.at(base), d.add(at as usize), len as usize);
                         ret!();
                     }
+                    Op::CopyFat { dst, src } => {
+                        let (from, tydesc) = fat_at(src.at(base));
+                        let (to, _) = fat_at(dst.at(base));
+                        copy_bytes(from, to, (*tydesc).size as usize);
+                    }
+                    Op::ReturnFat { src } => {
+                        let (from, tydesc) = fat_at(src.at(base));
+                        copy_bytes(from, regs.ret_dest.ptr, (*tydesc).size as usize);
+                        ret!();
+                    }
                     Op::ReturnUnit => ret!(),
                     Op::ReturnIr { block } => {
                         self.run_return_ir(regs, block);
@@ -719,4 +729,15 @@ impl IrInterpreter {
             }
         }
     }
+}
+
+/// The pointer and descriptor at `at`: a dynamic value's fat pointer, or a
+/// parameter's `Value`, which is laid out the same.
+///
+/// # Safety
+///
+/// `at` holds such a pair.
+#[inline(always)]
+unsafe fn fat_at(at: *mut u8) -> (*mut u8, *const rtdt::TyDesc) {
+    unsafe { ((at as *const *mut u8).read(), (at as *const *const rtdt::TyDesc).add(1).read()) }
 }

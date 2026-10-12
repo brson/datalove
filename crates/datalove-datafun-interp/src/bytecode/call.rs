@@ -37,6 +37,7 @@ impl IrInterpreter {
         if len == 0 {
             return None;
         }
+        self.leave_dynamic(&regs.frame);
         self.frame_stack.pop(regs.frame);
         // SAFETY: the top activation, taken off the vector first and then
         // read out of where it was, its two owned fields moved out, so that
@@ -170,6 +171,20 @@ impl IrInterpreter {
         }
         frame.stop_keeping_liveness();
         frame.clear_tracking();
+        // Under generics by reference, the type parameters' descriptors, and
+        // the table and storage they make.
+        if !plan.descriptors.is_empty() {
+            for (i, &r) in plan.descriptors.iter().enumerate() {
+                frame.set_type_param(i, Self::resolve_binding(r, &regs.frame));
+            }
+            self.enter_dynamic(&frame);
+        }
+        let dest = if call.dest_tydesc.is_null() {
+            regs.frame.value_dest(call.dest_id)
+        } else {
+            // SAFETY: lowered against the caller's frame.
+            Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc }
+        };
         let callee = Callee {
             frame,
             bc: std::rc::Rc::as_ptr(&plan.bc),
@@ -179,8 +194,7 @@ impl IrInterpreter {
             func: unsafe { &*plan.func },
             code_ref: unsafe { &*plan.code_ref },
             ctx: None,
-            // SAFETY: lowered against the caller's frame.
-            dest: Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc },
+            dest,
             scratch,
         };
         Ok(self.switch_to(regs, callee, resume))
@@ -233,9 +247,22 @@ impl IrInterpreter {
             words[1 + 2 * i] = arg.ptr as usize;
             words[2 + 2 * i] = arg.tydesc as usize;
         }
-        // SAFETY: the destination was lowered against the caller's frame.
-        words[1 + 2 * n] = unsafe { call.dest.at(base) } as usize;
-        words[2 + 2 * n] = plan.dest_tydesc as usize;
+        // A dynamic destination is where its fat pointer says, described by
+        // what is there; so is a forwarder's dynamic result.
+        let dest = if call.dest_tydesc.is_null() {
+            regs.frame.value_dest(call.dest_id)
+        } else {
+            // SAFETY: the destination was lowered against the caller's frame.
+            Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc }
+        };
+        words[1 + 2 * n] = dest.ptr as usize;
+        words[2 + 2 * n] = if plan.dest_tydesc.is_null() { dest.tydesc } else { plan.dest_tydesc } as usize;
+        // Then, under generics by reference, the descriptors the native's
+        // signature asks for.
+        for (k, &r) in plan.descriptors.iter().enumerate() {
+            words[len + k] = Self::resolve_binding(r, &regs.frame) as usize;
+        }
+        let len = len + plan.descriptors.len();
         // SAFETY: the table registered this as a rider function in the
         // generation the plan was checked against, and holds its code until
         // that changes.
@@ -416,6 +443,42 @@ impl IrInterpreter {
         Self::suits_native(inner, native).then_some(bc)
     }
 
+    /// The descriptors a call to `callee` binding `bindings` hands over, as a
+    /// site keeps them: the type parameters', a native's undetermined ones,
+    /// or, for a forwarder, its native's, through both calls' bindings.
+    fn site_descriptors(
+        &mut self,
+        callee: &IrCodeUnit,
+        bindings: &[IrType],
+        forwarded: Option<&[datalove_datafun_ir::DescriptorShape]>,
+        caller: &IrLayout,
+    ) -> Vec<crate::BindingRef> {
+        // A wrapper that is not generic may still forward to a generic native,
+        // binding its type parameters concretely itself.
+        if bindings.is_empty() && forwarded.is_none() {
+            return Vec::new();
+        }
+        let wanted: Vec<IrType> = match &callee.context {
+            CodeUnitContext::Native(native) => native.descriptor_shapes.iter()
+                .map(|s| s.to_ir_type().substitute(bindings))
+                .collect(),
+            _ if forwarded.is_some() => {
+                let Instruction::Call { bindings: inner, .. } = &callee.blocks[0].instructions[0] else {
+                    unreachable!("a forwarder is a call")
+                };
+                if inner.is_empty() {
+                    Vec::new()
+                } else {
+                    forwarded.unwrap_or_default().iter()
+                        .map(|s| s.to_ir_type().substitute(inner).substitute(bindings))
+                        .collect()
+                }
+            }
+            _ => bindings.to_vec(),
+        };
+        wanted.iter().map(|ty| self.binding_ref(ty, caller)).collect()
+    }
+
     /// Call a native from a fast call, with each argument from `arg`.
     ///
     /// # Safety
@@ -492,6 +555,7 @@ impl IrInterpreter {
         layout: Option<&std::rc::Rc<IrLayout>>,
         forward: Option<&std::rc::Rc<BcFunction>>,
         policy: Option<crate::dispatch::SitePolicy>,
+        descriptors: &std::rc::Rc<[crate::BindingRef]>,
     ) -> Option<Plan> {
         use crate::dispatch::SitePolicy;
         // The argument as the call reads it, `mode` being the parameter's.
@@ -508,8 +572,9 @@ impl IrInterpreter {
         };
         let native_plan = |this: &Self, native: &datalove_datafun_ir::NativeContext, args: Box<[ArgRecipe]>, dest_tydesc| {
             let NativeTarget::C(fn_ptr) = this.native_table.lookup(native.symbol()).ok()? else { return None };
-            (1 + 2 * args.len() + 2 <= MAX_C_WORDS).then(|| Plan::Native(NativePlan {
+            (1 + 2 * args.len() + 2 + descriptors.len() <= MAX_C_WORDS).then(|| Plan::Native(NativePlan {
                 fn_ptr, generation: this.native_table.generation(), args, dest_tydesc,
+                descriptors: std::rc::Rc::clone(descriptors),
             }))
         };
         match (layout, forward) {
@@ -533,7 +598,10 @@ impl IrInterpreter {
                 };
                 let args = (0..call.args.len()).map(|i| {
                     let mut recipe = read(i, layout.param_modes[i]);
-                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out) {
+                    // A dynamic parameter keeps the descriptor it came with.
+                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
+                        && !layout.param_tydescs[i].is_null()
+                    {
                         recipe.retype = Some(layout.param_tydescs[i]);
                     }
                     match &inner.resolved {
@@ -569,6 +637,7 @@ impl IrInterpreter {
             // A body, whose frame holds an owned argument with its own
             // descriptor and a borrowed one with the argument's.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
+                descriptors: std::rc::Rc::clone(descriptors),
                 countdown: match policy {
                     Some(SitePolicy::Count(n)) => Some(Countdown::new(n)),
                     _ => None,
@@ -581,15 +650,16 @@ impl IrInterpreter {
                     Some(resolved) => PlannedParams::At(layout.param_modes.iter().enumerate().map(|(i, mode)| AtParam {
                         src: resolved[i].0,
                         value: layout.param_offsets[i],
+                        // A dynamic parameter keeps the argument's.
                         tydesc: match mode {
-                            ParamMode::In | ParamMode::Out => layout.param_tydescs[i],
-                            ParamMode::Ref | ParamMode::Mut => resolved[i].1,
+                            ParamMode::In | ParamMode::Out if !layout.param_tydescs[i].is_null() => layout.param_tydescs[i],
+                            _ => resolved[i].1,
                         },
                         copy: layout.param_copies[i],
                     }).collect()),
                     None => PlannedParams::Recipes(layout.param_modes.iter().enumerate().map(|(i, mode)| {
                         let mut arg = read(i, *mode);
-                        if matches!(mode, ParamMode::In | ParamMode::Out) {
+                        if matches!(mode, ParamMode::In | ParamMode::Out) && !layout.param_tydescs[i].is_null() {
                             arg.retype = Some(layout.param_tydescs[i]);
                         }
                         PlannedParam { arg, value: layout.param_offsets[i], copy: layout.param_copies[i] }
@@ -626,14 +696,14 @@ impl IrInterpreter {
         // which the plan made here then follows; this call it is offered.
         let dispatched = self.call_dispatcher.borrow().is_some();
         let dispatcher_epoch = self.dispatcher_epoch.get();
-        let Instruction::Call { func: code_ref, args: ir_args, shape_descriptors, .. } =
+        let Instruction::Call { func: code_ref, args: ir_args, shape_descriptors, bindings, .. } =
             &caller.blocks[call.block as usize].instructions[call.index as usize] else {
             unreachable!("a fast call is a call")
         };
         let callee = Self::resolve_callee(call, code_ref, ctx, registry);
         let callee_ctx = ctx.for_callee(code_ref, registry);
         let address = callee as *const IrCodeUnit as usize;
-        let (layout, suits, forward) = {
+        let (layout, suits, forward, descriptors) = {
             let mut site = call.site.borrow_mut();
             let cache = &mut site.callee;
             match &*cache {
@@ -641,7 +711,7 @@ impl IrInterpreter {
                     && c.generation == self.native_table.generation()
                     && !(dispatched && c.needs_policy(dispatcher_epoch)) =>
                 {
-                    (c.layout.clone(), c.suits, c.forward.clone())
+                    (c.layout.clone(), c.suits, c.forward.clone(), c.descriptors.clone())
                 }
                 _ => {
                     let (layout, suits, forward) = match &callee.context {
@@ -660,7 +730,28 @@ impl IrInterpreter {
                             (Some(layout), suits, forward)
                         }
                     };
-                    let plannable = suits && shape_descriptors.is_empty() && !matches!(code_ref, CodeRef::External { .. });
+                    // A forwarder's native, for the descriptors it asks for.
+                    let forwarded = forward.as_ref().map(|bc| {
+                        let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
+                            unreachable!("a forwarder is a call")
+                        };
+                        let native_body = Self::resolve_callee(&bc.calls[0], inner_ref, &callee_ctx, registry);
+                        match &native_body.context {
+                            CodeUnitContext::Native(native) => native.descriptor_shapes.clone(),
+                            _ => unreachable!("a forwarder calls a native"),
+                        }
+                    });
+                    let descriptors: std::rc::Rc<[crate::BindingRef]> =
+                        self.site_descriptors(callee, bindings, forwarded.as_deref(), frame.layout()).into();
+                    // A call binding type parameters is planned only where it
+                    // lands on a native, which takes its descriptors from the
+                    // plan; a body is handed them on the fast path.
+                    // Under a dispatcher a body's plan may be compiled code's,
+                    // which takes no type parameter descriptors from a plan.
+                    let natively = layout.is_none() || forward.is_some();
+                    let plannable = suits && shape_descriptors.is_empty()
+                        && (bindings.is_empty() || natively || !dispatched)
+                        && !matches!(code_ref, CodeRef::External { .. });
                     let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
                         let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
                         self.call_dispatcher.borrow_mut().as_mut()
@@ -668,13 +759,14 @@ impl IrInterpreter {
                             .site_policy(identity, callee)
                     });
                     let plan = if plannable {
-                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy)
+                        self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy, &descriptors)
                     } else {
                         None
                     };
                     let fresh = CallCache {
                         address, epoch: self.code_epoch, generation: self.native_table.generation(),
                         layout: layout.clone(), suits, forward: forward.clone(), plan,
+                        descriptors: descriptors.clone(),
                         dispatcher: dispatched.then_some(dispatcher_epoch),
                     };
                     // A planned call's frame borrows its layout and bytecode
@@ -682,7 +774,7 @@ impl IrInterpreter {
                     if let Some(old) = cache.replace(fresh) {
                         self.retired_call_caches.push(old);
                     }
-                    (layout, suits, forward)
+                    (layout, suits, forward, descriptors)
                 }
             }
         };
@@ -691,7 +783,11 @@ impl IrInterpreter {
         if !suits || (dispatched && layout.is_some() && forward.is_none()) {
             return Ok(Called::General);
         }
-        let dest = Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc };
+        let dest = if call.dest_tydesc.is_null() {
+            frame.value_dest(call.dest_id)
+        } else {
+            Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc }
+        };
 
         // A borrowed argument that arrives wrapped is read through its
         // wrapper, into here if it has no address of its own; held until the
@@ -726,13 +822,24 @@ impl IrInterpreter {
                 unreachable!("a forwarder calls a native, and its body is fixed while the registry is")
             };
             let mut inner_scratch: crate::BorrowScratch = Vec::new();
-            let inner_dest = Destination { ptr: dest.ptr, tydesc: inner.dest_tydesc };
+            // A dynamic result is the forwarder's, which is this call's.
+            let inner_tydesc = if inner.dest_tydesc.is_null() { dest.tydesc } else { inner.dest_tydesc };
+            let inner_dest = Destination { ptr: dest.ptr, tydesc: inner_tydesc };
+            // A generic forwarder's native is handed what its call bound, with
+            // what this call bound the forwarder's own type parameters to
+            // substituted in.
+            let supplied: Vec<*const rtdt::TyDesc> = descriptors.iter()
+                .map(|&r| Self::resolve_binding(r, frame))
+                .collect();
             // SAFETY: the arguments are read as the forwarder would read them.
             unsafe { self.call_native(
-                inner, native_body as *const IrCodeUnit as usize, native, inner_dest, &[],
+                inner, native_body as *const IrCodeUnit as usize, native, inner_dest, &supplied,
                 |this, i, mode| {
                     let mut val = read(this, i, layout.param_modes[i], frame);
-                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out) {
+                    // A dynamic parameter keeps the descriptor it came with.
+                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
+                        && !layout.param_tydescs[i].is_null()
+                    {
                         val.tydesc = layout.param_tydescs[i];
                     }
                     match &inner.resolved {
@@ -756,6 +863,13 @@ impl IrInterpreter {
         let Some(layout) = layout else {
             // A native: no frame, just the arguments.
             let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
+            // Under generics by reference, a descriptor for each type
+            // parameter no argument determines, for what this call bound it to.
+            let shapes: Vec<*const rtdt::TyDesc> = if bindings.is_empty() {
+                shapes
+            } else {
+                descriptors.iter().map(|&r| Self::resolve_binding(r, frame)).collect()
+            };
             // SAFETY: the arguments are read from this frame as lowered.
             unsafe { self.call_native(call, address, native, dest, &shapes, |this, i, mode| read(this, i, mode, frame)) }?;
             return Ok(Called::Done);
@@ -768,7 +882,11 @@ impl IrInterpreter {
         for (i, tydesc) in shapes.into_iter().enumerate() {
             callee_frame.set_shape_descriptor(i, tydesc);
         }
+        for (i, &r) in descriptors.iter().enumerate() {
+            callee_frame.set_type_param(i, Self::resolve_binding(r, frame));
+        }
         callee_frame.enter();
+        self.enter_dynamic(&callee_frame);
         callee_frame.stop_keeping_liveness();
         // The caller's frame keeps no record of an argument moved into a fast
         // call: those with tracking bytes do not suit it.

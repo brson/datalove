@@ -100,6 +100,10 @@ pub struct IrLayout {
     pub table: Vec<TableEntry>,
     /// The type each entry of the table is the descriptor of.
     pub table_types: Vec<IrType>,
+    /// The type parameter descriptors of the last call, and the table they
+    /// filled, so that a call at the same binding copies the table rather
+    /// than building it: a cache of one, as compiled code keeps.
+    pub table_cache: std::cell::RefCell<(Vec<*const TyDesc>, Vec<*const TyDesc>)>,
     /// Where the shadow stack's top and limit on entry are kept, for a
     /// function that takes space on it.
     pub shadow_mark_offset: Option<u32>,
@@ -312,6 +316,7 @@ impl IrLayout {
             table_offset,
             table,
             table_types: extras.descriptor_table.to_vec(),
+            table_cache: Default::default(),
             shadow_mark_offset,
             dynamic_places,
             ref_desc_offsets,

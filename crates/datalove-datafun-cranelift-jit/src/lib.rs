@@ -217,6 +217,7 @@ impl JitEngine {
             header,
             param_offsets: layout.param_offsets.clone(),
             shape_offset: layout.shape_offset,
+            table_offset: layout.table_offset,
         };
         let start = Instant::now();
         match self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec) {
