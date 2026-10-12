@@ -34,12 +34,6 @@ pub struct RuntimeImports {
     pub tydesc_instantiate: FuncId,
     /// `dtlv_rti_shadow_alloc(rt, size: u32, align: u32) -> *mut u8`
     pub shadow_alloc: FuncId,
-    /// `dtlv_rti_field_tydesc(tydesc: *const TyDesc, index: u32) -> *const TyDesc`
-    pub field_tydesc: FuncId,
-    /// `dtlv_rti_field_read_local(rt, dest, dest_td, base, base_td, index) -> RtStatus`
-    pub field_read: FuncId,
-    /// `dtlv_rti_element_tydesc(tydesc: *const TyDesc) -> *const TyDesc`
-    pub element_tydesc: FuncId,
     /// `dtlv_rti_btreemap_contains_key_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
     pub map_contains_key_erased: FuncId,
     /// `dtlv_rti_btreemap_get_value_ref_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
@@ -74,12 +68,6 @@ pub struct RuntimeImports {
     pub set_insert: FuncId,
     /// `dtlv_rti_btreemap_create_local(rt, value_out, tydesc) -> RtStatus`
     pub map_create: FuncId,
-    /// `dtlv_rti_list_push_erased_local(rt, list, list_td, element_in, element_td) -> RtStatus`
-    pub list_push_erased: FuncId,
-    /// `dtlv_rti_btreeset_insert_erased_local(rt, set, set_td, element_in, element_td, bool_out) -> RtStatus`
-    pub set_insert_erased: FuncId,
-    /// `dtlv_rti_btreemap_insert_erased_local(rt, map, map_td, key_in, key_td, value_in, value_td) -> RtStatus`
-    pub map_insert_erased: FuncId,
     /// `dtlv_rti_btreemap_insert_local(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) -> RtStatus`
     pub map_insert: FuncId,
     /// `dtlv_rti_tensor_init_local(rt, element_data_in, element_count, element_tydesc, shape_ptr, rank, tensor_out, tensor_tydesc) -> RtStatus`
@@ -142,22 +130,12 @@ pub struct RuntimeImports {
     pub error_from: FuncId,
     /// `dtlv_rti_data_from_local(rt, inner_in, inner_tydesc, dest_out) -> RtStatus`
     pub data_from: FuncId,
-    /// `dtlv_rti_erase_local(rt, src_in, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
-    pub erase: FuncId,
-    /// `dtlv_rti_reify_local(rt, src_in, src_tydesc, dst_out, dst_tydesc) -> RtStatus`
-    pub reify: FuncId,
-    /// `dtlv_rti_data_parts(data_in, value_out, tydesc_out) -> RtStatus`
-    pub data_parts: FuncId,
-    /// `dtlv_rti_data_borrow(data_in, scratch, value_out, tydesc_out) -> RtStatus`
-    pub data_borrow: FuncId,
     /// `dtlv_rti_dyn_binop(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td)`
     pub dyn_binop: FuncId,
     /// `dtlv_rti_dyn_binop_checked(rt, op, lhs, lhs_td, rhs, rhs_td, out, out_td, overflow)`
     pub dyn_binop_checked: FuncId,
     /// `dtlv_rti_dyn_neg_checked(rt, value, value_td, out, out_td, overflow)`
     pub dyn_neg_checked: FuncId,
-    /// `dtlv_rti_list_get_erased_local(rt, list, list_td, index, opt_out, opt_td) -> RtStatus`
-    pub list_get_erased: FuncId,
     /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
     pub clone_erased: FuncId,
 }
@@ -320,42 +298,6 @@ impl RuntimeImports {
             module
                 .declare_function("dtlv_rti_list_push_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_list_push_local: {}", e)))?
-        };
-
-        // The same three again, taking an element that may have arrived in the
-        // erased shape. See `dtlv_rti_list_push_erased_local`.
-        let list_push_erased = {
-            let mut sig = cl_ir::Signature::new(call_conv);
-            for _ in 0..5 {
-                sig.params.push(AbiParam::new(PTR_TYPE));
-            }
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_list_push_erased_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_list_push_erased_local: {}", e)))?
-        };
-        let set_insert_erased = {
-            let mut sig = cl_ir::Signature::new(call_conv);
-            for _ in 0..6 {
-                sig.params.push(AbiParam::new(PTR_TYPE));
-            }
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_btreeset_insert_erased_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_btreeset_insert_erased_local: {}", e)))?
-        };
-        let map_insert_erased = {
-            let mut sig = cl_ir::Signature::new(call_conv);
-            for _ in 0..7 {
-                sig.params.push(AbiParam::new(PTR_TYPE));
-            }
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_btreemap_insert_erased_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_btreemap_insert_erased_local: {}", e)))?
         };
 
         // dtlv_rti_list_build_from_slice_local(rt, list_out, element_tydesc, elements_ptr, num_elements) -> u8
@@ -697,8 +639,8 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
 
-        // Erasure conversions: five pointers in, a status out. Both tydescs
-        // are needed because the two shapes differ only where one has `data`.
+        // Five pointers in, a status out: a source and a destination, each with
+        // its descriptor.
         let erasure_sig = || {
             let mut sig = cl_ir::Signature::new(call_conv);
             sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
@@ -708,42 +650,6 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE)); // dst_tydesc
             sig.returns.push(AbiParam::new(cl_types::I8));
             sig
-        };
-
-        let erase = module
-            .declare_function("dtlv_rti_erase_local", Linkage::Import, &erasure_sig())
-            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_erase_local: {}", e)))?;
-
-        let reify = module
-            .declare_function("dtlv_rti_reify_local", Linkage::Import, &erasure_sig())
-            .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_reify_local: {}", e)))?;
-
-        // Borrowing what a wrapper holds takes no runtime handle: it reads two
-        // words out of the wrapper and lends them, allocating nothing.
-        let data_parts = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE)); // data_in
-            sig.params.push(AbiParam::new(PTR_TYPE)); // value_out
-            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc_out
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_data_parts", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_data_parts: {}", e)))?
-        };
-
-        // Moving a freshly built collection into the wrapper that carries its
-        // descriptor with it.
-        let data_borrow = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE)); // data in
-            sig.params.push(AbiParam::new(PTR_TYPE)); // scratch
-            sig.params.push(AbiParam::new(PTR_TYPE)); // value out
-            sig.params.push(AbiParam::new(PTR_TYPE)); // tydesc out
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module.declare_function("dtlv_rti_data_borrow", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_data_borrow: {}", e)))?
         };
 
         // An operator on a bounded type parameter, whose type only the
@@ -787,25 +693,6 @@ impl RuntimeImports {
             module.declare_function("dtlv_rti_dyn_neg_checked", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(
                     format!("declare dtlv_rti_dyn_neg_checked: {}", e)))?
-        };
-
-        // Indexing a list whose elements a generic cannot name. The runtime
-        // decides whether the element wants packing, since a list of `data`
-        // does not.
-        let list_get_erased = {
-            use crate::index_types::INDEX_TYPE;
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
-            sig.params.push(AbiParam::new(PTR_TYPE));      // list
-            sig.params.push(AbiParam::new(PTR_TYPE));      // list tydesc
-            sig.params.push(AbiParam::new(INDEX_TYPE));    // index
-            sig.params.push(AbiParam::new(PTR_TYPE));      // option out
-            sig.params.push(AbiParam::new(PTR_TYPE));      // option tydesc
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_list_get_erased_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_list_get_erased_local: {}", e)))?
         };
 
         // Cloning into a destination that may be the erased shape. The
@@ -877,31 +764,6 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(
                     format!("declare dtlv_rti_shadow_alloc: {}", e)))?
         };
-        let field_tydesc = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
-            sig.params.push(AbiParam::new(cl_types::I32)); // index
-            sig.returns.push(AbiParam::new(PTR_TYPE));
-            module
-                .declare_function("dtlv_rti_field_tydesc", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_field_tydesc: {}", e)))?
-        };
-
-        // Reading such a field out into a value. Whether what is found wants
-        // packing on the way is the runtime's to decide, for the reason
-        // `list_get_erased` gives.
-        // What a container holds, for a reference reaching into one inside a
-        // generic, where the static element type is a `data` of the wrong width.
-        let element_tydesc = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
-            sig.returns.push(AbiParam::new(PTR_TYPE));
-            module
-                .declare_function("dtlv_rti_element_tydesc", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_element_tydesc: {}", e)))?
-        };
 
         // The lookup half of a map inside a generic: the map's descriptor is
         // the truthful one and the key may have arrived packed into a `data`,
@@ -970,21 +832,6 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_btreemap_set_value_erased_local: {}", e)))?
         };
 
-        let field_read = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
-            sig.params.push(AbiParam::new(PTR_TYPE));      // dest
-            sig.params.push(AbiParam::new(PTR_TYPE));      // dest tydesc
-            sig.params.push(AbiParam::new(PTR_TYPE));      // base
-            sig.params.push(AbiParam::new(PTR_TYPE));      // base tydesc
-            sig.params.push(AbiParam::new(cl_types::I32)); // index
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_field_read_local", Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_field_read_local: {}", e)))?
-        };
-
         Ok(Self {
             init,
             shutdown,
@@ -997,9 +844,6 @@ impl RuntimeImports {
             payload_tydesc,
             tydesc_instantiate,
             shadow_alloc,
-            field_tydesc,
-            field_read,
-            element_tydesc,
             map_contains_key_erased,
             map_get_value_ref_erased,
             list_set_erased,
@@ -1012,9 +856,6 @@ impl RuntimeImports {
             string_from_bytes,
             list_create,
             list_push,
-            list_push_erased,
-            set_insert_erased,
-            map_insert_erased,
             list_build_from_slice,
             set_create,
             set_insert,
@@ -1045,15 +886,10 @@ impl RuntimeImports {
             clone_local,
             error_from,
             data_from,
-            erase,
-            data_parts,
-            data_borrow,
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
-            list_get_erased,
             clone_erased,
-            reify,
         })
     }
     /// Every import, for a backend that resolves them itself.
@@ -1070,9 +906,6 @@ impl RuntimeImports {
             payload_tydesc,
             tydesc_instantiate,
             shadow_alloc,
-            field_tydesc,
-            field_read,
-            element_tydesc,
             map_contains_key_erased,
             map_get_value_ref_erased,
             list_set_erased,
@@ -1089,9 +922,6 @@ impl RuntimeImports {
             set_create,
             set_insert,
             map_create,
-            list_push_erased,
-            set_insert_erased,
-            map_insert_erased,
             map_insert,
             tensor_init,
             tensor_hyperplane_clone,
@@ -1118,32 +948,27 @@ impl RuntimeImports {
             map_set_value,
             error_from,
             data_from,
-            erase,
-            reify,
-            data_parts,
-            data_borrow,
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
-            list_get_erased,
             clone_erased,
         } = self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
             payload_offset, payload_tydesc, tydesc_instantiate, shadow_alloc,
-            field_tydesc, field_read, element_tydesc, map_contains_key_erased,
+            map_contains_key_erased,
             map_get_value_ref_erased, list_set_erased, tensor_set_erased,
             map_set_value_erased, mem_alloc_raw, mem_free_raw, string_create,
             string_push_bytes, string_from_bytes, list_create, list_push,
-            list_build_from_slice, set_create, set_insert, map_create, list_push_erased,
-            set_insert_erased, map_insert_erased, map_insert, tensor_init,
+            list_build_from_slice, set_create, set_insert, map_create,
+            map_insert, tensor_init,
             tensor_hyperplane_clone, table_create, table_push_row,
             table_build_from_rows, int_add, int_sub, int_mul, int_div, int_neg,
             int_add_assign, int_sub_assign, int_mul_assign, int_div_assign,
             int_from_fixed, int_from_limbs, int_cmp, eq, move_value, clone_local,
             map_contains_key, map_get_value_ref, map_set_value, error_from, data_from,
-            erase, reify, data_parts, data_borrow, dyn_binop, dyn_binop_checked,
-            dyn_neg_checked, list_get_erased, clone_erased,
+            dyn_binop, dyn_binop_checked,
+            dyn_neg_checked, clone_erased,
         ]
     }
 }

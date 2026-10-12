@@ -2301,19 +2301,10 @@ pub fn dyn_op_code(op: BinOp) -> Option<datalove_rtdt::DynOp> {
     })
 }
 
-/// A type a function needs a descriptor for, written over its own type/// A type a function needs a descriptor for, written over its own type
-/// parameters.
-///
-/// A generic is compiled once with `data` standing where a type parameter was
-/// written, so `IrType` cannot say this: `[T]` and `[data]` are the same there.
-/// A function that *builds* a collection has to know what its elements are, and
-/// nothing in the frame says. So it declares the shape and the call site, which
-/// is the only place that knows what the parameter was bound to, hands over a
-/// descriptor for it.
-///
-/// The call site's descriptor is a static symbol. Nothing is put together at
-/// run time: substituting `[T0]` with `T0 = string` gives `[string]`, and that
-/// has a descriptor already.
+/// A type a native needs a descriptor for, written over its own type
+/// parameters: one no argument determines, such as the element type of a list
+/// it builds. A call substitutes what it bound them to and hands over the
+/// descriptor of the result. See `NativeContext::descriptor_shapes`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum DescriptorShape {
     /// One of this function's type parameters, by declaration order.
@@ -2326,32 +2317,6 @@ pub enum DescriptorShape {
     Option(Box<DescriptorShape>),
     Result(Box<DescriptorShape>),
     Tuple(Vec<DescriptorShape>),
-}
-
-impl std::fmt::Display for DescriptorShape {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            // Written the way the source writes it, so an error naming a shape
-            // names something the reader typed.
-            DescriptorShape::Param(i) => write!(f, "T{}", i),
-            DescriptorShape::Concrete(t) => write!(f, "{:?}", t),
-            DescriptorShape::List(i) => write!(f, "[{}]", i),
-            DescriptorShape::Set(i) => write!(f, "#{{{}}}", i),
-            DescriptorShape::Option(i) => write!(f, "?{}", i),
-            DescriptorShape::Result(i) => write!(f, "!{}", i),
-            DescriptorShape::Map(k, v) => write!(f, "%{{{} = {}}}", k, v),
-            DescriptorShape::Tuple(fields) => {
-                write!(f, "(")?;
-                for (n, field) in fields.iter().enumerate() {
-                    if n > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", field)?;
-                }
-                write!(f, ")")
-            }
-        }
-    }
 }
 
 impl DescriptorShape {
@@ -2367,103 +2332,6 @@ impl DescriptorShape {
             DescriptorShape::Map(k, v) => IrType::Map(Box::new(k.to_ir_type()), Box::new(v.to_ir_type())),
             DescriptorShape::Tuple(fields) => IrType::Tuple(fields.iter().map(|f| f.to_ir_type()).collect()),
         }
-    }
-
-    /// Whether a type parameter appears anywhere in this shape.
-    pub fn mentions_param(&self) -> bool {
-        match self {
-            DescriptorShape::Param(_) => true,
-            DescriptorShape::Concrete(_) => false,
-            DescriptorShape::List(i)
-            | DescriptorShape::Set(i)
-            | DescriptorShape::Option(i)
-            | DescriptorShape::Result(i) => i.mentions_param(),
-            DescriptorShape::Map(k, v) => k.mentions_param() || v.mentions_param(),
-            DescriptorShape::Tuple(fields) => fields.iter().any(|f| f.mentions_param()),
-        }
-    }
-
-    /// Every type parameter occurring in this shape.
-    pub fn params(&self) -> Vec<u32> {
-        let mut out = Vec::new();
-        self.collect_params(&mut out);
-        out
-    }
-
-    fn collect_params(&self, out: &mut Vec<u32>) {
-        match self {
-            DescriptorShape::Param(i) => out.push(*i),
-            DescriptorShape::Concrete(_) => {}
-            DescriptorShape::List(i)
-            | DescriptorShape::Set(i)
-            | DescriptorShape::Option(i)
-            | DescriptorShape::Result(i) => i.collect_params(out),
-            DescriptorShape::Map(k, v) => {
-                k.collect_params(out);
-                v.collect_params(out);
-            }
-            DescriptorShape::Tuple(fields) => {
-                for f in fields {
-                    f.collect_params(out);
-                }
-            }
-        }
-    }
-
-    /// How deeply this shape nests, used to notice a cycle that grows one.
-    pub fn depth(&self) -> u32 {
-        match self {
-            DescriptorShape::Param(_) | DescriptorShape::Concrete(_) => 1,
-            DescriptorShape::List(i)
-            | DescriptorShape::Set(i)
-            | DescriptorShape::Option(i)
-            | DescriptorShape::Result(i) => 1 + i.depth(),
-            DescriptorShape::Map(k, v) => 1 + k.depth().max(v.depth()),
-            DescriptorShape::Tuple(fields) => {
-                1 + fields.iter().map(|f| f.depth()).max().unwrap_or(0)
-            }
-        }
-    }
-
-    /// Replace each type parameter with what a call site bound it to.
-    ///
-    /// The result is written over the *caller's* type parameters, so it is
-    /// concrete when the caller bound them all to concrete types, and mentions
-    /// the caller's own where it did not.
-    pub fn substitute(&self, args: &[DescriptorShape]) -> Option<DescriptorShape> {
-        Some(match self {
-            DescriptorShape::Param(i) => args.get(*i as usize)?.clone(),
-            DescriptorShape::Concrete(t) => DescriptorShape::Concrete(t.clone()),
-            DescriptorShape::List(i) => DescriptorShape::List(Box::new(i.substitute(args)?)),
-            DescriptorShape::Set(i) => DescriptorShape::Set(Box::new(i.substitute(args)?)),
-            DescriptorShape::Option(i) => DescriptorShape::Option(Box::new(i.substitute(args)?)),
-            DescriptorShape::Result(i) => DescriptorShape::Result(Box::new(i.substitute(args)?)),
-            DescriptorShape::Map(k, v) => DescriptorShape::Map(
-                Box::new(k.substitute(args)?),
-                Box::new(v.substitute(args)?),
-            ),
-            DescriptorShape::Tuple(fields) => DescriptorShape::Tuple(
-                fields.iter().map(|f| f.substitute(args)).collect::<Option<Vec<_>>>()?,
-            ),
-        })
-    }
-
-    /// The concrete type this shape stands for, where no parameter is left.
-    pub fn as_concrete(&self) -> Option<IrType> {
-        Some(match self {
-            DescriptorShape::Param(_) => return None,
-            DescriptorShape::Concrete(t) => t.clone(),
-            DescriptorShape::List(i) => IrType::List(Box::new(i.as_concrete()?)),
-            DescriptorShape::Set(i) => IrType::Set(Box::new(i.as_concrete()?)),
-            DescriptorShape::Option(i) => IrType::Option(Box::new(i.as_concrete()?)),
-            DescriptorShape::Result(i) => IrType::Result(Box::new(i.as_concrete()?)),
-            DescriptorShape::Map(k, v) => {
-                IrType::Map(Box::new(k.as_concrete()?), Box::new(v.as_concrete()?))
-            }
-            DescriptorShape::Tuple(fields) => IrType::Tuple(
-                fields.iter().map(|f| f.as_concrete()).collect::<Option<Vec<_>>>()?,
-            ),
-        })
     }
 }
 
@@ -2542,10 +2410,8 @@ pub fn descriptor_table(unit: &IrCodeUnit) -> Vec<IrType> {
     table
 }
 
-/// Whether a unit is a generic compiled by reference, or calls one: either
-/// way it takes or hands over a descriptor per type parameter.
-///
-/// What a backend that does not handle that yet refuses on.
+/// Whether a unit is a generic, or calls one: either way it takes or hands
+/// over a descriptor per type parameter.
 pub fn uses_generics_by_reference(unit: &IrCodeUnit) -> bool {
     let generic = unit.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
     generic || unit.blocks.iter().flat_map(|b| &b.instructions).any(|instr| matches!(instr,
@@ -2642,10 +2508,7 @@ pub struct NativeContext {
     /// A native reads a type off a descriptor that came with a value. A type
     /// parameter appearing only in the return type has no such value, so it is
     /// listed here as `Param(i)` and the call site passes a descriptor for it.
-    /// Every other native has this empty and is called exactly as before.
-    ///
-    /// A native makes no calls, so unlike a function's this never grows in the
-    /// closure: it is what the signature says and nothing more.
+    /// Every other native has this empty.
     pub descriptor_shapes: Vec<DescriptorShape>,
 }
 

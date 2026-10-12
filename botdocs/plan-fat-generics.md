@@ -519,9 +519,10 @@ caller of an interpreted generic has to pass what the new convention expects.
    parameter its own storage, so that copy is a `memmove`.
 6. **C AOT** (done): the same again, in C. See [Where phase 6
    stands](#user-content-where-phase-6-stands).
-7. **Flip and delete.** The feature becomes the default and then goes; the
-   list in [What goes away](#user-content-what-goes-away) is deleted; a call
-   at a growing type gets a fixture.
+7. **Flip and delete** (done above the runtime). The feature is gone, the
+   compiler and the backends no longer erase, and a call at a growing type
+   has a fixture. The runtime's erased entries remain; see [Where phase 7
+   stands](#user-content-where-phase-7-stands).
 8. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
    measurements recorded.
@@ -688,6 +689,63 @@ Cranelift's choices, written out as C:
   aliases, so a generic storing its `T` parameter into a var zeroed the
   caller's own copy value. A plain value owns nothing, so it is not zeroed
   (`moved_size`).
+
+## Where phase 7 stands
+
+There is one configuration: lowering keeps a generic's types as written, and
+`fat-generics`, `test-fat` and its CI runner are gone. The fixtures that had a
+`.expected.fat` took it as their default. Engine fixture `module_060` calls a
+generic at a growing type, `nest<T>` binding `T` to `[T]` four deep, on every
+engine.
+
+Deleted, from [What goes away](#user-content-what-goes-away):
+
+- in lowering, the argument and return conversions, the binding moved out
+  before one, wrapped container shapes and `open_container`, built shapes
+  and the erased collection literals, and every shape closure (script,
+  module and script compiler), with `LowerError::UnboundedDescriptorShape`;
+- the signature check refusing an unerasable type parameter
+  (`TypeParamNotErasable`, F060, now retired) and its predicates;
+- in the IR, `Erase`, `EraseTracked`, `Reify`, `DataBorrow`, the collection
+  literals' `descriptor`, `type_args` and `shape_descriptors` on calls,
+  `descriptor_params` and `descriptor_shapes` on `FunctionContext`,
+  `DescriptorRef`, `RefDesc` and `resolve_ref_descriptors`, the closure
+  (`close_shapes` and the rest), `erased_param_type` and its family,
+  `from_type_hint_erasing` and the container predicates;
+- in the interpreter, the shape descriptors in the frame, reading an argument
+  through a wrapper (`borrow_through_wrapper`), the erased collection
+  builders, `EraseRt` and `ReifyRt`, the erased list get, and the `data`
+  guards on the bytecode's static paths, a `data` in a static type being a
+  real one now;
+- in cranelift and C, reference descriptors, wrapper borrows, erasure
+  codegen, descriptor parameters, the erased list get, and the runtime
+  imports and declarations only those used;
+- in the JIT, the bridge's and trampoline's second descriptor group. The
+  dispatcher's `shape_descriptors` is `type_params`.
+
+Kept, and why:
+
+- `NativeContext::descriptor_shapes`, as planned, and `DescriptorShape` for
+  it, now only `to_ir_type`. A call's bindings fill it.
+- `from_datalit` maps a type variable outside a generic body to `data`: that
+  is a native's signature, which the rider ABI takes as a pointer and a
+  descriptor.
+- `codegen/boxing.rs`, which also compiles `ErrorFrom` and `DataFrom`; only
+  its erasure functions went.
+
+**What remains: the runtime's erased entries.** The backends and `sys/std`'s
+rider still call the `*_erased_local` collection entries
+(`list_set`, `list_insert`, `list_remove`, `list_pop`, `tensor_set`, the map
+lookups and `set_value`, `clone_erased`), and the interpreter writes a field
+through `reify_local`. With every descriptor truthful they behave as their
+plain counterparts, so nothing is wrong, but the conversion machinery behind
+them is still there (`erase_local`, `reify_local`, `convert`,
+`needs_erasure`, `data_into_local`, `unwraps_the_element`,
+`borrow_lookup_key`, `data_borrow`). Folding them into the plain entries
+changes the rider ABI (`abi_table.rs`, the `datalove-rti` shims, the
+`sys/std` rider), and some differ in more than conversion -- the erased
+`list_set` destroys the element it is handed when the index is out of
+range -- so it is its own change.
 
 ## Open questions
 
