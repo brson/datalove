@@ -13,12 +13,16 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn setify(p0):
+                      desc0 = T0
+                      desc1 = set<T0>
                     block0:
                         v0 = move p0
                         v1 = #{v0}
                         return v1
                     
                     fn listify(p0, p1):
+                      desc0 = T0
+                      desc1 = list<T0>
                     block0:
                         v0 = move p0
                         v1 = move p1
@@ -26,6 +30,9 @@ Analysis(
                         return v2
                     
                     fn mapify(p0, p1):
+                      desc0 = T0
+                      desc1 = T1
+                      desc2 = map<T0, T1>
                     block0:
                         v0 = move p0
                         v1 = move p1
@@ -33,6 +40,7 @@ Analysis(
                         return v2
                     
                     fn identity(p0):
+                      desc0 = T0
                     block0:
                         v0 = move p0
                         return v0
@@ -40,38 +48,28 @@ Analysis(
                     fn a_set():
                     block0:
                         v1 = const 5u16
-                        v2 = erase v1
-                        v3 = call m0.u0(v2)
-                        v4 = reify v3
-                        return v4
+                        v2 = call m0.u0(v1) <u16>
+                        return v2
                     
                     fn a_list():
                     block0:
                         v1 = const 7u16
-                        v2 = erase v1
-                        v3 = const 8u16
-                        v4 = erase v3
-                        v5 = call m0.u1(v2, v4)
-                        v6 = reify v5
-                        return v6
+                        v2 = const 8u16
+                        v3 = call m0.u1(v1, v2) <u16>
+                        return v3
                     
                     fn a_map():
                     block0:
                         v1 = const 1u16
-                        v2 = erase v1
-                        v3 = const "held"
-                        v4 = erase v3
-                        v5 = call m0.u2(v2, v4)
-                        v6 = reify v5
-                        return v6
+                        v2 = const "held"
+                        v3 = call m0.u2(v1, v2) <u16, string>
+                        return v3
                     
                     fn nothing_built():
                     block0:
                         v1 = const 9u16
-                        v2 = erase v1
-                        v3 = call m0.u3(v2)
-                        v4 = reify v3
-                        return v4
+                        v2 = call m0.u3(v1) <u16>
+                        return v2
                     
                     fn main():
                     block0:

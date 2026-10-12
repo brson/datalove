@@ -13,6 +13,8 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn unwrap_or(p0, p1):
+                      desc0 = T0
+                      desc1 = option<T0>
                     block0:
                         v0 = move p0
                         v1, v2 = unwrap_option v0
@@ -25,6 +27,8 @@ Analysis(
                         return v3
                     
                     fn ok_or(p0, p1):
+                      desc0 = T0
+                      desc1 = result<T0>
                     block0:
                         v0 = move p0
                         v1, v2, v3 = unwrap_result v0
@@ -38,66 +42,50 @@ Analysis(
                         return v4
                     
                     fn flatten_or(p0, p1):
+                      desc0 = T0
+                      desc1 = option<T0>
+                      desc2 = option<option<T0>>
                     block0:
-                        v0 = erase p0
-                        v1 = none
-                        v2 = erase v1
-                        v3 = call m0.u0(v0, v2)
-                        v4 = reify v3
-                        v5 = call m0.u0(v4, p1)
-                        return v5
+                        v0 = none
+                        v1 = call m0.u0(p0, v0) <option<T0>>
+                        v2 = call m0.u0(v1, p1) <T0>
+                        return v2
                     
                     fn pass_through(p0, p1):
+                      desc0 = T0
+                      desc1 = option<T0>
                     block0:
-                        v0 = call m0.u0(p0, p1)
+                        v0 = call m0.u0(p0, p1) <T0>
                         return v0
                     
                     fn main():
                     block0:
                         v0 = const 7u32
                         v1 = some v0
-                        v2 = erase v1
-                        v3 = const 0u32
-                        v4 = erase v3
-                        v5 = call m0.u0(v2, v4)
-                        v6 = reify v5
-                        v7 = none
-                        v8 = erase v7
-                        v9 = const "fallback"
-                        v10 = erase v9
-                        v11 = call m0.u0(v8, v10)
-                        v12 = reify v11
-                        v13 = const 12345678901234567890int
-                        v14 = some v13
-                        v15 = erase v14
-                        v16 = const 0int
-                        v17 = erase v16
-                        v18 = call m0.u0(v15, v17)
-                        v19 = reify v18
-                        v20 = const "deep"
-                        v21 = some v20
-                        v22 = some v21
-                        v23 = erase v22
-                        v24 = const "missing"
-                        v25 = erase v24
-                        v26 = call m0.u2(v23, v25)
-                        v27 = reify v26
-                        v28 = const 99int
-                        v29 = some v28
-                        v30 = erase v29
-                        v31 = const 0int
-                        v32 = erase v31
-                        v33 = call m0.u3(v30, v32)
-                        v34 = reify v33
-                        v35 = const 3u32
-                        v36 = ok v35
-                        v37 = erase v36
-                        v38 = const 0u32
-                        v39 = erase v38
-                        v40 = call m0.u1(v37, v39)
-                        v41 = reify v40
-                        v42 = pack Tuple6 {v6, v12, v19, v27, v34, v41}
-                        return v42
+                        v2 = const 0u32
+                        v3 = call m0.u0(v1, v2) <u32>
+                        v4 = none
+                        v5 = const "fallback"
+                        v6 = call m0.u0(v4, v5) <string>
+                        v7 = const 12345678901234567890int
+                        v8 = some v7
+                        v9 = const 0int
+                        v10 = call m0.u0(v8, v9) <int>
+                        v11 = const "deep"
+                        v12 = some v11
+                        v13 = some v12
+                        v14 = const "missing"
+                        v15 = call m0.u2(v13, v14) <string>
+                        v16 = const 99int
+                        v17 = some v16
+                        v18 = const 0int
+                        v19 = call m0.u3(v17, v18) <int>
+                        v20 = const 3u32
+                        v21 = ok v20
+                        v22 = const 0u32
+                        v23 = call m0.u1(v21, v22) <u32>
+                        v24 = pack Tuple6 {v3, v6, v10, v15, v19, v23}
+                        return v24
                 """,
             ),
             output: "",

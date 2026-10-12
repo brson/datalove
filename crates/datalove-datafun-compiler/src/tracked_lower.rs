@@ -1714,7 +1714,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     //
     // Under generics by reference there are no shapes: a generic is handed one
     // descriptor per type parameter, which its signature says.
-    let (mut lowered_modules, mut shape_errors) = if cfg!(feature = "fat-generics") {
+    let (mut lowered_modules, mut shape_errors) = if true {
         (first_stratum, Default::default())
     } else {
         let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, first_stratum);
@@ -1770,7 +1770,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Closing again rather than only over the new ones, because a shape
         // reaches whatever calls into it: a second-stratum function is a caller
         // the first pass did not know about.
-        if !cfg!(feature = "fat-generics") {
+        if !true {
             let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, lowered_modules);
             lowered_modules = closed.modules.clone();
             shape_errors.extend(closed.errors.iter().cloned());

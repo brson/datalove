@@ -13,6 +13,8 @@ Analysis(
                 status: "Success",
                 ir: """
                     fn dup(p0):
+                      desc0 = T0
+                      desc1 = (T0, T0)
                     block0:
                         v0 = clone p0
                         v1 = move p0
@@ -22,11 +24,9 @@ Analysis(
                     fn f():
                     block0:
                         v0 = const 149index
-                        v1 = erase v0
-                        v2 = call m0.u0(v1)
-                        drop v2
-                        v5 = const 56i32
-                        return v5
+                        v1 = call m0.u0(v0) <index>
+                        v3 = const 56i32
+                        return v3
                 """,
             ),
             output: "",

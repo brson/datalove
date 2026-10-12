@@ -243,7 +243,7 @@ pub fn lower_function_body<'db>(
         }),
         nested_units: Vec::new(),
     };
-    if cfg!(feature = "fat-generics") {
+    if crate::FAT_GENERICS {
         let table = datalove_datafun_ir::descriptor_table(&unit);
         if let CodeUnitContext::Function(fctx) = &mut unit.context {
             fctx.descriptor_table = table;

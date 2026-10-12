@@ -38,8 +38,6 @@ datalove-datafun-cranelift-aot.workspace = true
 datalove-datafun-c-aot.workspace = true
 
 [features]
-# Generics by reference; see datalove-datafun-lower.
-fat-generics = ["datalove-datafun-compiler/fat-generics", "datalove-exampletest/fat-generics"]
 default = []
 index-64 = [
     "datalove-rt/index-64",

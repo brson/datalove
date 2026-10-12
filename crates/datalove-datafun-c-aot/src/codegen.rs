@@ -354,6 +354,7 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::EnumVariant { .. }
         | Instruction::EnumDiscriminant { .. }
         | Instruction::EnumPayload { .. }
+        | Instruction::DropField { .. }
         | Instruction::ListNew { descriptor: None, .. }
         | Instruction::SetNew { descriptor: None, .. }
         | Instruction::MapNew { descriptor: None, .. }

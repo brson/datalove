@@ -11,9 +11,6 @@ repository.workspace = true
 
 [features]
 index-64 = []
-# Generics by reference; see datalove-datafun-lower. A fixture whose
-# expected output differs under it keeps that beside the default.
-fat-generics = []
 
 [dependencies]
 rmx.workspace = true

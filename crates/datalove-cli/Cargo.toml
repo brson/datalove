@@ -7,10 +7,6 @@ authors.workspace = true
 edition.workspace = true
 repository.workspace = true
 
-[features]
-# Generics by reference; see datalove-datafun-lower.
-fat-generics = ["datalove/fat-generics", "datalove-exampletest/fat-generics"]
-
 [dependencies]
 rmx.workspace = true
 serde = { version = "1", features = ["derive"] }

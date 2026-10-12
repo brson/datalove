@@ -59,9 +59,8 @@ use datalove_datafun_sema::FunctionAnalysis;
 
 /// Whether lowering keeps a generic's types as written, type parameters and
 /// all, rather than erasing them to `data`: generics by reference, which
-/// `botdocs/plan-fat-generics.md` plans. Its own test configuration until it
-/// is the only way.
-pub(crate) const FAT_GENERICS: bool = cfg!(feature = "fat-generics");
+/// `botdocs/plan-fat-generics.md` plans. Always, now; it goes with erasure.
+pub(crate) const FAT_GENERICS: bool = true;
 
 mod context;
 mod datafile;

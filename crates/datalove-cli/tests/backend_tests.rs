@@ -70,18 +70,8 @@ fn run_every_backend(path: &Path) -> Result<String, String> {
         return Err(format!("interpreter and jit disagree:\n{interp}---\n{jit}"));
     }
 
-    // No compiled backend handles generics by reference yet, and each refuses
-    // a program that uses them; under that configuration such a program is
-    // compared on the interpreter and the jit, which leaves it interpreted.
-    let refused = |e: &String| cfg!(feature = "fat-generics") && e.contains("compiled by reference");
-    let aot = match run_aot(&binary, script, &[]) {
-        Err(e) if refused(&e) => return Ok(interp),
-        result => result.map_err(|e| format!("aot: {}", e))?,
-    };
-    let c_aot = match run_aot(&binary, script, &["--c"]) {
-        Err(e) if refused(&e) => return Ok(interp),
-        result => result.map_err(|e| format!("c aot: {}", e))?,
-    };
+    let aot = run_aot(&binary, script, &[]).map_err(|e| format!("aot: {}", e))?;
+    let c_aot = run_aot(&binary, script, &["--c"]).map_err(|e| format!("c aot: {}", e))?;
     if interp != aot {
         return Err(format!("interpreter and aot disagree:\n{interp}---\n{aot}"));
     }

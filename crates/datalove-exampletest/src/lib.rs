@@ -232,17 +232,6 @@ where
         #[cfg(not(feature = "index-64"))]
         let expected_path = self.output_path(&base_path, "expected");
 
-        // Under generics by reference, a fixture whose output differs -- the
-        // IR a generic lowers to, mostly -- keeps it in its own file, and
-        // every other fixture is held to its default.
-        let default_expected = expected_path.clone();
-        let fat_expected = self.output_path(&base_path, "expected.fat");
-        let expected_path = if cfg!(feature = "fat-generics") && fat_expected.exists() {
-            fat_expected.clone()
-        } else {
-            expected_path
-        };
-
         let analysis = match (self.analyzer)(ctx, input_path) {
             Ok(result) => result,
             Err(error) => {
@@ -261,17 +250,7 @@ where
 
         let bless = std::env::var("BLESS").is_ok();
 
-        if bless && cfg!(feature = "fat-generics") {
-            // Blessed beside the default rather than over it, and only where
-            // it differs from it.
-            let default = std::fs::read_to_string(&default_expected).ok();
-            if default.as_deref() == Some(analysis.as_str()) {
-                let _ = std::fs::remove_file(&fat_expected);
-            } else {
-                std::fs::copy(&actual_path, &fat_expected).X();
-            }
-            TestResult::Blessed
-        } else if bless {
+        if bless {
             std::fs::copy(&actual_path, &expected_path).X();
             TestResult::Blessed
         } else if expected_path.exists() {
