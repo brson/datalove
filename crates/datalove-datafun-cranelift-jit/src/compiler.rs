@@ -745,11 +745,8 @@ fn runtime_addresses() -> HashMap<&'static str, *const u8> {
         dtlv_rti_payload_tydesc,
         dtlv_rti_tydesc_instantiate,
         dtlv_rti_shadow_alloc,
-        dtlv_rti_btreemap_contains_key_erased_local,
-        dtlv_rti_btreemap_get_value_ref_erased_local,
-        dtlv_rti_list_set_erased_local,
-        dtlv_rti_tensor_set_erased_local,
-        dtlv_rti_btreemap_set_value_erased_local,
+        dtlv_rti_list_set_local,
+        dtlv_rti_tensor_set_local,
         dtlv_rti_string_create_local,
         dtlv_rti_string_push_bytes_local,
         dtlv_rti_string_from_bytes,
@@ -788,7 +785,6 @@ fn runtime_addresses() -> HashMap<&'static str, *const u8> {
         dtlv_rti_dyn_binop,
         dtlv_rti_dyn_binop_checked,
         dtlv_rti_dyn_neg_checked,
-        dtlv_rti_clone_erased_local,
     }
 }
 

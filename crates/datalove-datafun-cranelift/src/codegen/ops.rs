@@ -1074,15 +1074,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Clone requires runtime handle".into())
         })?;
 
-        // The source's descriptor says what is really there, which inside a
-        // generic its static type does not: a borrowed `T` reads as a `data`
-        // there and as a string at the call site.
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
-
-        // The destination's says what shape the clone has to arrive in. Where
-        // the two differ the value is wrapped on the way, which the runtime
-        // decides rather than this.
         let dest_ty = self.func.value_types[dest.0 as usize].clone();
         let dest_tydesc_ptr = self.static_tydesc(builder, &dest_ty)?;
 
@@ -1090,7 +1083,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let result_ptr = self.dest_addr(builder, dest)?;
 
         // Call runtime function: dtlv_rti_clone_local(rt, src_ref, src_tydesc, dst_out, dst_tydesc) -> status
-        let func_ref = self.module.declare_func_in_func(runtime.clone_erased, builder.func);
+        let func_ref = self.module.declare_func_in_func(runtime.clone_local, builder.func);
         builder.ins().call(func_ref, &[
             rt_handle,
             src_ptr,

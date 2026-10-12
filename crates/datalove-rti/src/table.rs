@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 144;
+pub const EXPORTED: usize = 117;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 144;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x8a07d4428f373676;
+pub const TABLE_SHAPE: u64 = 0x189d5037c6211f35;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -56,18 +56,13 @@ pub struct RtiTable {
     pub dtlv_rti_any_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_error_from_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
     pub dtlv_rti_data_from_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
-    pub dtlv_rti_clone_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_dyn_binop: unsafe extern "C-unwind" fn(LocalRtHandle, u8, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_dyn_binop_checked: unsafe extern "C-unwind" fn(LocalRtHandle, u8, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
     pub dtlv_rti_dyn_unop: unsafe extern "C-unwind" fn(LocalRtHandle, u8, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_dyn_const: unsafe extern "C-unwind" fn(LocalRtHandle, u8, *mut u8, *const rtdt::TyDesc, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_dyn_float_const: unsafe extern "C-unwind" fn(LocalRtHandle, u8, *mut u8, *const rtdt::TyDesc, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_dyn_neg_checked: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
-    pub dtlv_rti_data_parts: unsafe extern "C-unwind" fn(*const u8, *mut *const u8, *mut *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_data_borrow: unsafe extern "C-unwind" fn(*const u8, *mut u8, *mut *const u8, *mut *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_data_into_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_erase_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_reify_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_string_create_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_string_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_string_push_bytes_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, rtdt::IndexRepr) -> RtStatus,
@@ -81,31 +76,20 @@ pub struct RtiTable {
     pub dtlv_rti_btreemap_add_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
     pub dtlv_rti_btreemap_insert_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_remove_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreemap_key_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc, bool) -> RtStatus,
-    pub dtlv_rti_btreemap_value_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc, bool) -> RtStatus,
+    pub dtlv_rti_btreemap_key_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_btreemap_value_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_keys_into_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_values_into_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_entries_into_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreeset_into_list_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreeset_get_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc, bool) -> RtStatus,
+    pub dtlv_rti_btreeset_get_at_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_get_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreemap_get_as_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_push_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreemap_set_value_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_remove_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_pop_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_set_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_insert_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreeset_insert_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
-    pub dtlv_rti_btreemap_insert_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreemap_insert_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const u8) -> RtStatus,
-    pub dtlv_rti_btreeset_insert_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *mut u8) -> RtStatus,
     pub dtlv_rti_btreemap_len_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
     pub dtlv_rti_btreeset_len_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
     pub dtlv_rti_btreemap_clear_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreemap_contains_key_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
     pub dtlv_rti_btreemap_get_value_ref_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut *mut u8) -> RtStatus,
-    pub dtlv_rti_btreemap_set_value_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_btreemap_set_value_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreeset_create_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreeset_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_btreeset_insert_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
@@ -119,14 +103,7 @@ pub struct RtiTable {
     pub dtlv_rti_list_build_from_slice_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, rtdt::IndexRepr) -> RtStatus,
     pub dtlv_rti_list_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_list_clear_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_set_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *const u8) -> RtStatus,
-    pub dtlv_rti_list_insert_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *const u8) -> RtStatus,
-    pub dtlv_rti_list_remove_as_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_list_len_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut u8) -> RtStatus,
-    pub dtlv_rti_list_get_as_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_pop_as_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_list_push_data_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8) -> RtStatus,
-    pub dtlv_rti_list_get_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_list_get_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_list_set_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_list_push_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
@@ -140,7 +117,6 @@ pub struct RtiTable {
     pub dtlv_rti_tensor_destroy_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_tensor_get_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_tensor_set_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_tensor_set_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const rtdt::IndexRepr, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_tensor_transpose_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u32, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_tensor_slice_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const rtdt::SliceRange, *mut u8, *const rtdt::TyDesc) -> RtStatus,
     pub dtlv_rti_tensor_reshape_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc, *mut u8, *const rtdt::TyDesc) -> RtStatus,
@@ -169,8 +145,5 @@ pub struct RtiTable {
     pub dtlv_rti_payload_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_tydesc_instantiate: unsafe extern "C-unwind" fn(LocalRtHandle, *const rtdt::TyDesc, *const *const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_shadow_alloc: unsafe extern "C-unwind" fn(LocalRtHandle, u32, u32) -> *mut u8,
-    pub dtlv_rti_field_read_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, u32) -> RtStatus,
     pub dtlv_rti_element_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc) -> *const rtdt::TyDesc,
-    pub dtlv_rti_btreemap_contains_key_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,
-    pub dtlv_rti_btreemap_get_value_ref_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut *mut u8) -> RtStatus,
 }

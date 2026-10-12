@@ -437,11 +437,11 @@ impl CAotCompiler {
         writeln!(out, "    if (start + td->size <= h->shadow_limit) {{ h->shadow_top = start + td->size; return (void*)start; }}").unwrap();
         writeln!(out, "    return dtlv_rti_shadow_alloc(rt, td->size, td->align);").unwrap();
         writeln!(out, "}}").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_btreemap_contains_key_erased_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, bool_t* result_out);").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_btreemap_get_value_ref_erased_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void** value_ptr_out);").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_list_set_erased_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, index_t index, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_tensor_set_erased_local(void* rt, void* tensor_mut, const dtlv_tydesc_t* tensor_tydesc, const index_t* indices, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_btreemap_set_value_erased_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreemap_contains_key_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, bool_t* result_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreemap_get_value_ref_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void** value_ptr_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_list_set_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, index_t index, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_tensor_set_local(void* rt, void* tensor_mut, const dtlv_tydesc_t* tensor_tydesc, const index_t* indices, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_btreemap_set_value_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();
         writeln!(out, "extern void* dtlv_rti_mem_alloc_raw_local(void* rt, uint32_t size, uint32_t align, index_t count);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_string_from_bytes(void* rt, const uint8_t* bytes, uint32_t len, void* result_out, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_create_local(void* rt, void* value_out, const dtlv_tydesc_t* tydesc);").unwrap();
@@ -475,7 +475,6 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop_checked(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_dyn_neg_checked(void* rt, const void* value, const dtlv_tydesc_t* value_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
-        writeln!(out, "extern uint8_t dtlv_rti_clone_erased_local(void* rt, const void* src_in, const dtlv_tydesc_t* src_tydesc, void* dst_out, const dtlv_tydesc_t* dst_tydesc);").unwrap();
         writeln!(out).unwrap();
 
         // Rider functions, which the linker resolves against the native

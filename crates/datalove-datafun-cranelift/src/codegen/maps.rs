@@ -96,7 +96,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let result_addr = builder.ins().stack_addr(PTR_TYPE, result_slot, 0);
 
-        let func_ref = self.module.declare_func_in_func(s.runtime.map_contains_key_erased, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_contains_key, builder.func);
         builder.ins().call(func_ref, &[
             s.rt_handle,
             s.map_ptr,
@@ -140,7 +140,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
-        let getref_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref_erased, builder.func);
+        let getref_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref, builder.func);
         builder.ins().call(getref_ref, &[
             s.rt_handle,
             s.map_ptr,
@@ -237,7 +237,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let value_ptr = self.get_operand_ptr(builder, value)?;
         let value_tydesc_ptr = self.resolve_tydesc_ptr(builder, &s.value_ty)?;
 
-        let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value_erased, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_set_value, builder.func);
         let call = builder.ins().call(func_ref, &[
             s.rt_handle,
             s.map_ptr,
@@ -276,7 +276,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ));
         let vref_addr = builder.ins().stack_addr(PTR_TYPE, vref_slot, 0);
 
-        let func_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref_erased, builder.func);
+        let func_ref = self.module.declare_func_in_func(s.runtime.map_get_value_ref, builder.func);
         builder.ins().call(func_ref, &[
             s.rt_handle,
             s.map_ptr,

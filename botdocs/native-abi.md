@@ -59,32 +59,17 @@ backend reads it back with `NativeContext::symbol`.
 
 ## Where the type comes from
 
-Every pointer travels with a descriptor, but the descriptor describes the
-**slot**, not necessarily the value. That distinction is the whole of what
-follows.
+Every pointer travels with a descriptor, and the descriptor says what the value
+is. In a non-generic caller it is a static one: a `u32` argument arrives as a
+pointer at four bytes with the `u32` descriptor beside it. A generic caller is
+compiled by reference and hands over its descriptor-table entry for the type
+it has, so the descriptor is just as truthful there; a native never sees a
+`data` standing in for a type parameter.
 
-In a non-generic caller the two are the same thing: a `u32` argument arrives as
-a pointer at four bytes with the `u32` descriptor beside it.
-
-Inside a generic the slot is `data`, because that is what erasure compiled. So
-both `t0` and `result_tydesc` read `Data` there, and neither says what the type
-parameter turned out to be. A native still works, because the type rides in the
-**value**: an argument of a type parameter is a `data`, and a `data` carries its
-own descriptor. `dtlv_rti_data_parts` reads through one; the helpers in
-`impls::dyn_ops` do it for the numbers.
-
-So the rule for reading an argument is: look at the slot descriptor first, and
-if it says `data`, the value inside says the rest.
-
-Two conveniences sit on top of that, both decided by the caller:
-
-- A **borrowed** collection is unwrapped before the call, so a native declaring
-  `ref self: [T]` gets a pointer at the collection itself with a real
-  descriptor for `[T]`, not a wrapper around it. Decided by the parameter's
-  mode rather than its type, because a generic native's declared types are
-  erased too.
-- A **forwarded** parameter --- one the calling generic itself received a
-  descriptor for --- is passed with that descriptor rather than the static one.
+A native's own signature says `data` where it was written over a type
+parameter (`NativeContext::param_types`), because one compiled native takes any
+type there. That is the native's business only; what it is handed is described
+by the descriptor beside it.
 
 ## Return-position type parameters
 
@@ -107,47 +92,41 @@ parsed, and again on `NativeContext::descriptor_shapes` when the code unit is
 built --- the same computation from the same signature, so the two agree about
 how many trailing arguments there are.
 
-The call sites are found by the same shape closure that serves ordinary
-generics (`close_shapes`). A native is seeded into it as a fixed point: it makes
-no calls of its own, so nothing is ever added to its set. What propagates is the
-*requirement* --- a generic that calls `fixedint_zero()` needs a descriptor for
-`T` itself, and so does its caller, until some call site names a type outright.
-That is why
+The call site substitutes what it bound the native's type parameters to into
+each of those types and hands over the descriptor of the result: a static one
+where the binding is concrete, and the caller's own descriptor-table entry
+where it was written over the caller's type parameters. So
 
 ```
 fun zero<T>(): T with { T is fixedint, }
   ret fixedint_zero()
 end fun
 
-let a: u8 = zero()      -- names `u8`, so the chain ends here
+let a: u8 = zero()
 ```
 
-works, and why
+works: `zero` hands `fixedint_zero` its entry for `T`, which the script filled
+with `u8`'s descriptor. And
 
 ```
 ret self == zero()      -- refused
 ```
 
 does not: an operand is read for what it is, not checked against what is
-wanted, so nothing on that line says what `T` is. The typechecker refuses it
-rather than standing in a `data` descriptor, which would build the wrong thing.
+wanted, so nothing on that line says what `T` is. The typechecker refuses it.
 
 ## Writing the result
 
-`result_out` points at the destination slot and `result_tydesc` describes it.
-Where the slot is `data` --- which it is whenever the caller is a generic that
-cannot name the type --- the value has to be **wrapped** on the way in.
+`result_out` points at the destination slot and `result_tydesc` describes it,
+truthfully, as for an argument. A native writes a value of that type there.
 
-`dtlv_rti_data_from_local` does this, and decides for itself whether the value
-packs into the `data`'s own words or goes on the heap.
+## Ownership
 
-There is a wrinkle behind that entry point worth knowing if you write one of
-the runtime's own helpers. The narrow scalars pack into a `data`'s two words
-with **no descriptor at all** --- the tag rides in the second word --- so a
-value taken back out of one has no descriptor to hand back in.
-`impls::boxing::data_from_local_tagged` takes the tag beside the pointer and
-only reads the descriptor when the packing needs it; that is a Rust-side
-helper, not part of this C ABI.
+A value a native is handed by value (`in`) is the native's. A value the native
+moves into the runtime -- pushing it, setting it, inserting it -- is the
+runtime's whatever the status: an entry that cannot place it (an index past the
+end, a key the map does not have) destroys it and reports `Error`. So a native
+never has to clean up after a refused move, and nothing is destroyed twice.
 
 ## Declaring a native
 
@@ -183,24 +162,21 @@ Three places have to agree, and all three derive from the same `.dli` line.
    A rider is visible only to modules in its own package. A script reaches one
    through a module that re-exports it.
 
-## Borrowing a type parameter
+## Borrowing a `data`
 
-A `ref T` parameter is read through its wrapper before the call, so the native
-gets the thing itself with a real descriptor. That works for a value the
-wrapper keeps on the heap, which lends the address it already has.
-
-A narrow scalar is packed into the `data`'s own words instead. It has no
+A real `data` value carries its own descriptor. A native that wants to read
+what one holds uses `dtlv_rti_data_borrow`, which lends a pointer at the value
+and its descriptor. A value the `data` keeps on the heap lends the address it
+has. A narrow scalar is packed into the `data`'s own words instead; it has no
 address to lend, and the narrowest carry no descriptor beside them either --
-only a tag. So `dtlv_rti_data_borrow` unpacks one into eight bytes the caller
-lends and takes the descriptor from `rtdt::packed_tydesc`, which is a constant
-per type rather than anything made up at run time. The scratch lives in the
-caller's frame and so outlasts the call.
+only a tag. So `data_borrow` unpacks one into eight bytes the caller lends and
+takes the descriptor from `rtdt::packed_tydesc`, which is a constant per type
+rather than anything made up at run time.
 
-One consequence: a descriptor reaching a native may be one of those runtime
+One consequence: a descriptor reached that way is one of those runtime
 constants rather than the one the compiler emitted. Descriptors were never
 deduplicated, so nothing may compare them by address; `same_tydesc` in the
-runtime compares them structurally, and the assertions that guard the
-collection entries use it.
+runtime compares them structurally.
 
 ## Arity
 

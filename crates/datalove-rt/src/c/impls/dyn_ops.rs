@@ -1,7 +1,7 @@
 //! Operators on values whose type only a descriptor says.
 //!
 //! A generic bounded to `float` or `fixedint` may operate on its type
-//! parameter. Erasure compiles one body, so the machine code cannot hold an
+//! parameter. A generic is compiled once, so the machine code cannot hold an
 //! `fadd.f32` for one call and an `fadd.f64` for another: which type it is is
 //! not known until the call supplies it. The operation comes here with the
 //! descriptors instead, and the tag says what to do.
@@ -11,11 +11,6 @@
 //! off a descriptor rather than by code that knew it; this reads an operator's
 //! operands the same way.
 //!
-//! The operands may arrive wrapped, because a type parameter is a `data` where
-//! it is written, and the result goes back wrapped if that is what the
-//! destination is. Both are undone and redone here so that no backend has to
-//! know which case it is looking at.
-//!
 //! Integer arithmetic is done in 128 bits and narrowed back on the way out.
 //! Every fixed width this language has fits twice over in that, so the wide
 //! sum is exact and the narrowing is where overflow is noticed — the same
@@ -23,7 +18,6 @@
 //! of ten times.
 
 use datalove_rtdt as rtdt;
-use rtdt::anypack::Tag;
 use rtdt::{DynOp, DynUnOp, TyTag};
 
 use crate::c::{LocalRtHandle, RtStatus};
@@ -54,20 +48,6 @@ unsafe fn scalar_bits(value: *const u8, tag: TyTag) -> u64 {
     }
 }
 
-/// Read the bits out of a wrapped value.
-///
-/// A narrow scalar and a 64-bit one ride in the `data`'s own words; anything
-/// that cannot be packed that way, which among the numbers is `index` and
-/// `offset`, sits behind a pointer instead.
-unsafe fn wrapped_bits(data: &rtdt::Data) -> u64 {
-    unsafe {
-        match data.tag() {
-            Tag::TwoPointers => scalar_bits(data.value_ptr(), data.tytag()),
-            _ => data.inline_bits(),
-        }
-    }
-}
-
 /// Interpret bits as the number its tag says they are.
 fn from_bits(bits: u64, tag: TyTag) -> core::option::Option<Num> {
     core::option::Option::Some(match tag {
@@ -87,25 +67,15 @@ fn from_bits(bits: u64, tag: TyTag) -> core::option::Option<Num> {
     })
 }
 
-/// Read a number that may have arrived wrapped.
-///
-/// The descriptor of what was really there comes back with it, because a
-/// wrapped operand's static descriptor says only `data` and packing the answer
-/// needs to say what the answer is.
+/// Read a number, and the tag of its type.
 unsafe fn read_num(
     value: *const u8,
     tydesc: *const rtdt::TyDesc,
-) -> core::option::Option<(Num, TyTag, *const rtdt::TyDesc)> {
+) -> core::option::Option<(Num, TyTag)> {
     unsafe {
         let tag = (*tydesc).type_tag;
-        if tag == TyTag::Data {
-            let data = &*(value as *const rtdt::Data);
-            let inner_tag = data.tytag();
-            let num = from_bits(wrapped_bits(data), inner_tag)?;
-            return core::option::Option::Some((num, inner_tag, data.tydesc()));
-        }
         let num = from_bits(scalar_bits(value, tag), tag)?;
-        core::option::Option::Some((num, tag, tydesc))
+        core::option::Option::Some((num, tag))
     }
 }
 
@@ -190,16 +160,9 @@ fn pack_unsigned_wide(value: i128, tag: TyTag) -> (u64, bool) {
     }
 }
 
-/// Put a freshly computed value where the destination wants it, wrapping it if
-/// the destination is a `data`.
-unsafe fn place_bits(
-    rt: LocalRtHandle,
-    bits: u64,
-    tag: TyTag,
-    tydesc: *const rtdt::TyDesc,
-    out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
+/// Put a freshly computed value of type `tag` at `out`, which need not be
+/// aligned for it.
+unsafe fn place_bits(bits: u64, tag: TyTag, out: *mut u8) -> RtStatus {
     unsafe {
         // Written through a pointer of the right width rather than copied from
         // the low bytes, so that the byte order is the machine's own.
@@ -210,11 +173,6 @@ unsafe fn place_bits(
             2 => *(value as *mut u16) = bits as u16,
             4 => *(value as *mut u32) = bits as u32,
             _ => *(value as *mut u64) = bits,
-        }
-
-        if (*out_tydesc).type_tag == TyTag::Data {
-            return crate::c::impls::boxing::data_from_local_tagged(
-                rt, value, tag, tydesc, out);
         }
         std::ptr::copy_nonoverlapping(value as *const u8, out, width(tag));
         RtStatus::Ok
@@ -239,20 +197,20 @@ fn float_bits(value: Num) -> u64 {
 /// integer has no bare `+`, so a `T is fixedint` cannot ask for one either, and
 /// its arithmetic goes through `dyn_binop_checked` instead.
 pub unsafe fn dyn_binop(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: DynOp,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
     rhs: *const u8,
     rhs_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let core::option::Option::Some((lhs, tag, lhs_ty)) = read_num(lhs, lhs_tydesc) else {
+        let core::option::Option::Some((lhs, tag)) = read_num(lhs, lhs_tydesc) else {
             return RtStatus::Error;
         };
-        let core::option::Option::Some((rhs, _, _)) = read_num(rhs, rhs_tydesc) else {
+        let core::option::Option::Some((rhs, _)) = read_num(rhs, rhs_tydesc) else {
             return RtStatus::Error;
         };
 
@@ -265,8 +223,6 @@ pub unsafe fn dyn_binop(
                 // One type parameter is one type, so the two always agree.
                 _ => return RtStatus::Error,
             };
-            // A comparison gives a bool, which is never a type parameter and so
-            // never wrapped.
             *(out as *mut bool) = answer;
             return RtStatus::Ok;
         }
@@ -278,7 +234,7 @@ pub unsafe fn dyn_binop(
             // nothing asks for it here.
             _ => return RtStatus::Error,
         };
-        place_bits(rt, float_bits(answer), tag, lhs_ty, out, out_tydesc)
+        place_bits(float_bits(answer), tag, out)
     }
 }
 
@@ -289,21 +245,21 @@ pub unsafe fn dyn_binop(
 /// what the width-specific instruction does and what the caller's overflow
 /// branch expects to be able to drop.
 pub unsafe fn dyn_binop_checked(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: DynOp,
     lhs: *const u8,
     lhs_tydesc: *const rtdt::TyDesc,
     rhs: *const u8,
     rhs_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
     unsafe {
-        let core::option::Option::Some((lhs, tag, lhs_ty)) = read_num(lhs, lhs_tydesc) else {
+        let core::option::Option::Some((lhs, tag)) = read_num(lhs, lhs_tydesc) else {
             return RtStatus::Error;
         };
-        let core::option::Option::Some((rhs, _, _)) = read_num(rhs, rhs_tydesc) else {
+        let core::option::Option::Some((rhs, _)) = read_num(rhs, rhs_tydesc) else {
             return RtStatus::Error;
         };
 
@@ -333,7 +289,7 @@ pub unsafe fn dyn_binop_checked(
         };
 
         *overflow_out = overflowed;
-        place_bits(rt, bits, tag, lhs_ty, out, out_tydesc)
+        place_bits(bits, tag, out)
     }
 }
 
@@ -368,15 +324,15 @@ fn compare<T: PartialOrd + PartialEq>(op: DynOp, lhs: T, rhs: T) -> bool {
 
 /// Apply a one-operand `op` to a value whose type is read off its descriptor.
 pub unsafe fn dyn_unop(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     op: DynUnOp,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     unsafe {
-        let core::option::Option::Some((x, tag, x_ty)) = read_num(value, value_tydesc) else {
+        let core::option::Option::Some((x, tag)) = read_num(value, value_tydesc) else {
             return RtStatus::Error;
         };
         let answer = match x {
@@ -385,7 +341,7 @@ pub unsafe fn dyn_unop(
             // An integer's one-operand work is the rider's, not an operator's.
             _ => return RtStatus::Error,
         };
-        place_bits(rt, float_bits(answer), tag, x_ty, out, out_tydesc)
+        place_bits(float_bits(answer), tag, out)
     }
 }
 
@@ -397,15 +353,15 @@ pub unsafe fn dyn_unop(
 /// because the most negative value has no counterpart and zero is the only
 /// unsigned value that survives.
 pub unsafe fn dyn_neg_checked(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     value: *const u8,
     value_tydesc: *const rtdt::TyDesc,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
     overflow_out: *mut bool,
 ) -> RtStatus {
     unsafe {
-        let core::option::Option::Some((x, tag, x_ty)) = read_num(value, value_tydesc) else {
+        let core::option::Option::Some((x, tag)) = read_num(value, value_tydesc) else {
             return RtStatus::Error;
         };
         let (bits, overflowed) = match x {
@@ -422,7 +378,7 @@ pub unsafe fn dyn_neg_checked(
             _ => return RtStatus::Error,
         };
         *overflow_out = overflowed;
-        place_bits(rt, bits, tag, x_ty, out, out_tydesc)
+        place_bits(bits, tag, out)
     }
 }
 
@@ -432,10 +388,10 @@ pub unsafe fn dyn_neg_checked(
 /// appears only in a native's return type has no argument to bring it. See
 /// `NativeContext::descriptor_shapes`.
 pub unsafe fn dyn_const(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     which: rtdt::DynConst,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     use rtdt::DynConst;
@@ -463,7 +419,7 @@ pub unsafe fn dyn_const(
             },
         };
 
-        place_bits(rt, bits, tag, value_tydesc, out, out_tydesc)
+        place_bits(bits, tag, out)
     }
 }
 
@@ -473,10 +429,10 @@ pub unsafe fn dyn_const(
 /// than computed from one, because the two are different types and the
 /// constants of each are its own.
 pub unsafe fn dyn_float_const(
-    rt: LocalRtHandle,
+    _rt: LocalRtHandle,
     which: rtdt::DynFloatConst,
     out: *mut u8,
-    out_tydesc: *const rtdt::TyDesc,
+    _out_tydesc: *const rtdt::TyDesc,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     use rtdt::DynFloatConst as K;
@@ -519,7 +475,7 @@ pub unsafe fn dyn_float_const(
             _ => return RtStatus::Error,
         };
 
-        place_bits(rt, bits, tag, value_tydesc, out, out_tydesc)
+        place_bits(bits, tag, out)
     }
 }
 
@@ -590,9 +546,7 @@ fn unary_f64(op: DynUnOp, x: f64) -> f64 {
 /// The offset of field `index`, from the descriptor of the aggregate holding it.
 ///
 /// See `dtlv_rti_field_offset` for why this is here rather than in each
-/// backend. A `Ref` descriptor is a one-field tuple wrapping what it points
-/// at, which the interpreter builds and the compiled backends do not, so it is
-/// unwrapped here when it appears.
+/// backend.
 pub unsafe fn field_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
     unsafe {
         match (*tydesc).type_tag {
@@ -669,60 +623,11 @@ pub unsafe fn payload_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const 
     }
 }
 
-/// Read field `index` out of an aggregate whose layout only its descriptor
-/// says, into a destination laid out as `dest_tydesc`.
-///
-/// A borrowed parameter inside a generic is not converted at the boundary, so
-/// its static type says `data` where a type parameter stood and its real
-/// layout is something else. A field read from one therefore differs from an
-/// ordinary one twice over: the offset comes from the descriptor, and the value
-/// found there may need putting into a different shape on the way out.
-///
-/// The two readings of a `data`-shaped destination coincide the way they do in
-/// `list_get_erased_impl`: a generic asking for a field it cannot name wants
-/// one packed, and a field that really is a `data` wants one cloned. Comparing
-/// the field's own tag as well as the destination's is what tells them apart,
-/// and both are owned, which is what the `drop` lowering emits after such a
-/// read expects to find.
-///
-/// A destination that is not a `data` is one whose static type is the truth,
-/// and then this is the shallow copy `GetField` means everywhere else.
-pub unsafe fn field_read(
-    rt: LocalRtHandle,
-    dest_out: *mut u8,
-    dest_tydesc: *const rtdt::TyDesc,
-    base_in: *const u8,
-    base_tydesc: *const rtdt::TyDesc,
-    index: u32,
-) -> RtStatus {
-    unsafe {
-        let offset = field_offset(base_tydesc, index);
-        let field_ty = field_tydesc(base_tydesc, index);
-        let src = base_in.add(offset as usize);
-
-        // Nothing replaced by `data` means the destination's static type is the
-        // truth, and this is the shallow copy `GetField` means everywhere else.
-        // A destination that is a `data`, or that holds one where the field
-        // holds something real, is owned by the reader and wants a clone in
-        // that shape; `clone_erased_local` decides which.
-        if (*dest_tydesc).type_tag != TyTag::Data
-            && !crate::c::impls::boxing::needs_erasure(field_ty, dest_tydesc)
-        {
-            core::ptr::copy_nonoverlapping(src, dest_out, (*field_ty).size as usize);
-            return RtStatus::Ok;
-        }
-        crate::c::impls::boxing::clone_erased_local(rt, src, field_ty, dest_out, dest_tydesc)
-    }
-}
-
 /// What a container holds, from the container's descriptor.
 ///
 /// The element of a list, set or tensor, and the *value* of a map, which is
 /// what indexing one reaches. The counterpart of `field_tydesc` for the other
-/// way of getting further into a borrowed generic value: a reference into a
-/// container inside a generic has a static element type of `data`, whose width
-/// is not the width of what is really in there, so the stride and the type of
-/// what is found both have to come from here.
+/// way of getting further into a value.
 pub unsafe fn element_tydesc(tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
     unsafe {
         let ty = rtdt::TyDescRef::from_ptr(tydesc);

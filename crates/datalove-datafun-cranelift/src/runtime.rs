@@ -34,16 +34,10 @@ pub struct RuntimeImports {
     pub tydesc_instantiate: FuncId,
     /// `dtlv_rti_shadow_alloc(rt, size: u32, align: u32) -> *mut u8`
     pub shadow_alloc: FuncId,
-    /// `dtlv_rti_btreemap_contains_key_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
-    pub map_contains_key_erased: FuncId,
-    /// `dtlv_rti_btreemap_get_value_ref_erased_local(rt, map, map_td, key, key_td, out) -> RtStatus`
-    pub map_get_value_ref_erased: FuncId,
-    /// `dtlv_rti_list_set_erased_local(rt, list, list_td, index, value, value_td) -> RtStatus`
-    pub list_set_erased: FuncId,
-    /// `dtlv_rti_tensor_set_erased_local(rt, tensor, tensor_td, indices, value, value_td) -> RtStatus`
-    pub tensor_set_erased: FuncId,
-    /// `dtlv_rti_btreemap_set_value_erased_local(rt, map, map_td, key, key_td, value, value_td)`
-    pub map_set_value_erased: FuncId,
+    /// `dtlv_rti_list_set_local(rt, list, list_td, index, value, value_td) -> RtStatus`
+    pub list_set: FuncId,
+    /// `dtlv_rti_tensor_set_local(rt, tensor, tensor_td, indices, value, value_td) -> RtStatus`
+    pub tensor_set: FuncId,
     /// `dtlv_rti_mem_alloc_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: u32) -> *mut u8`
     pub mem_alloc_raw: FuncId,
     /// `dtlv_rti_mem_free_raw_local(rt: LocalRtHandle, size: u32, align: u32, count: IndexRepr, ptr: *mut u8) -> RtStatus`
@@ -136,8 +130,6 @@ pub struct RuntimeImports {
     pub dyn_binop_checked: FuncId,
     /// `dtlv_rti_dyn_neg_checked(rt, value, value_td, out, out_td, overflow)`
     pub dyn_neg_checked: FuncId,
-    /// `dtlv_rti_clone_erased_local(rt, src, src_td, dst, dst_td) -> RtStatus`
-    pub clone_erased: FuncId,
 }
 
 impl RuntimeImports {
@@ -639,19 +631,6 @@ impl RuntimeImports {
             .declare_function("dtlv_rti_data_from_local", Linkage::Import, &boxing_sig())
             .map_err(|e| CraneliftError::Module(format!("declare dtlv_rti_data_from_local: {}", e)))?;
 
-        // Five pointers in, a status out: a source and a destination, each with
-        // its descriptor.
-        let erasure_sig = || {
-            let mut sig = cl_ir::Signature::new(call_conv);
-            sig.params.push(AbiParam::new(PTR_TYPE)); // rt handle
-            sig.params.push(AbiParam::new(PTR_TYPE)); // src_in
-            sig.params.push(AbiParam::new(PTR_TYPE)); // src_tydesc
-            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_out
-            sig.params.push(AbiParam::new(PTR_TYPE)); // dst_tydesc
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            sig
-        };
-
         // An operator on a bounded type parameter, whose type only the
         // descriptor says.
         fn dyn_binop_sig(mut sig: cl_ir::Signature, checked: bool) -> cl_ir::Signature {
@@ -695,18 +674,8 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_dyn_neg_checked: {}", e)))?
         };
 
-        // Cloning into a destination that may be the erased shape. The
-        // runtime decides whether the clone wants wrapping, since only the
-        // descriptors say and a call site has one of them statically.
-        let clone_erased = module
-            .declare_function("dtlv_rti_clone_erased_local", Linkage::Import, &erasure_sig())
-            .map_err(|e| CraneliftError::Module(
-                format!("declare dtlv_rti_clone_erased_local: {}", e)))?;
-
-        // Where a field of a borrowed generic aggregate is, and what it is.
-        // The offsets in a descriptor are the only truthful ones inside a
-        // generic, where the static type says `data` at a type parameter and a
-        // `data` is a different width from what stands behind it.
+        // Where a field of an aggregate of a dynamic type is, which only its
+        // descriptor says.
         let field_offset = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // tydesc
@@ -765,35 +734,9 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_shadow_alloc: {}", e)))?
         };
 
-        // The lookup half of a map inside a generic: the map's descriptor is
-        // the truthful one and the key may have arrived packed into a `data`,
-        // which the runtime unpacks so that the four backends do not each
-        // decide whether it is packed.
-        let map_lookup_sig = {
-            let mut sig = module.make_signature();
-            sig.params.push(AbiParam::new(PTR_TYPE));      // rt
-            sig.params.push(AbiParam::new(PTR_TYPE));      // map
-            sig.params.push(AbiParam::new(PTR_TYPE));      // map tydesc
-            sig.params.push(AbiParam::new(PTR_TYPE));      // key
-            sig.params.push(AbiParam::new(PTR_TYPE));      // key tydesc
-            sig.params.push(AbiParam::new(PTR_TYPE));      // out
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            sig
-        };
-        let map_contains_key_erased = module
-            .declare_function("dtlv_rti_btreemap_contains_key_erased_local",
-                Linkage::Import, &map_lookup_sig)
-            .map_err(|e| CraneliftError::Module(
-                format!("declare dtlv_rti_btreemap_contains_key_erased_local: {}", e)))?;
-        let map_get_value_ref_erased = module
-            .declare_function("dtlv_rti_btreemap_get_value_ref_erased_local",
-                Linkage::Import, &map_lookup_sig)
-            .map_err(|e| CraneliftError::Module(
-                format!("declare dtlv_rti_btreemap_get_value_ref_erased_local: {}", e)))?;
-
-        // Replacing an element, whatever shape the value arrived in; each
-        // checks the index and takes the value whether or not it lands.
-        let list_set_erased = {
+        // Replacing an element; each checks the index and takes the value
+        // whether or not it lands.
+        let list_set = {
             let mut sig = module.make_signature();
             sig.params.push(AbiParam::new(PTR_TYPE));      // rt
             sig.params.push(AbiParam::new(PTR_TYPE));      // list
@@ -803,33 +746,20 @@ impl RuntimeImports {
             sig.params.push(AbiParam::new(PTR_TYPE));      // value tydesc
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
-                .declare_function("dtlv_rti_list_set_erased_local", Linkage::Import, &sig)
+                .declare_function("dtlv_rti_list_set_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_list_set_erased_local: {}", e)))?
+                    format!("declare dtlv_rti_list_set_local: {}", e)))?
         };
-        let tensor_set_erased = {
+        let tensor_set = {
             let mut sig = module.make_signature();
             for _ in 0..6 {
                 sig.params.push(AbiParam::new(PTR_TYPE));  // rt, tensor, tydesc, indices, value, tydesc
             }
             sig.returns.push(AbiParam::new(cl_types::I8));
             module
-                .declare_function("dtlv_rti_tensor_set_erased_local", Linkage::Import, &sig)
+                .declare_function("dtlv_rti_tensor_set_local", Linkage::Import, &sig)
                 .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_tensor_set_erased_local: {}", e)))?
-        };
-
-        let map_set_value_erased = {
-            let mut sig = module.make_signature();
-            for _ in 0..7 {
-                sig.params.push(AbiParam::new(PTR_TYPE));
-            }
-            sig.returns.push(AbiParam::new(cl_types::I8));
-            module
-                .declare_function("dtlv_rti_btreemap_set_value_erased_local",
-                    Linkage::Import, &sig)
-                .map_err(|e| CraneliftError::Module(
-                    format!("declare dtlv_rti_btreemap_set_value_erased_local: {}", e)))?
+                    format!("declare dtlv_rti_tensor_set_local: {}", e)))?
         };
 
         Ok(Self {
@@ -844,11 +774,8 @@ impl RuntimeImports {
             payload_tydesc,
             tydesc_instantiate,
             shadow_alloc,
-            map_contains_key_erased,
-            map_get_value_ref_erased,
-            list_set_erased,
-            tensor_set_erased,
-            map_set_value_erased,
+            list_set,
+            tensor_set,
             mem_alloc_raw,
             mem_free_raw,
             string_create,
@@ -889,7 +816,6 @@ impl RuntimeImports {
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
-            clone_erased,
         })
     }
     /// Every import, for a backend that resolves them itself.
@@ -906,11 +832,8 @@ impl RuntimeImports {
             payload_tydesc,
             tydesc_instantiate,
             shadow_alloc,
-            map_contains_key_erased,
-            map_get_value_ref_erased,
-            list_set_erased,
-            tensor_set_erased,
-            map_set_value_erased,
+            list_set,
+            tensor_set,
             mem_alloc_raw,
             mem_free_raw,
             string_create,
@@ -951,14 +874,12 @@ impl RuntimeImports {
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
-            clone_erased,
         } = self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
             payload_offset, payload_tydesc, tydesc_instantiate, shadow_alloc,
-            map_contains_key_erased,
-            map_get_value_ref_erased, list_set_erased, tensor_set_erased,
-            map_set_value_erased, mem_alloc_raw, mem_free_raw, string_create,
+            list_set, tensor_set,
+            mem_alloc_raw, mem_free_raw, string_create,
             string_push_bytes, string_from_bytes, list_create, list_push,
             list_build_from_slice, set_create, set_insert, map_create,
             map_insert, tensor_init,
@@ -968,7 +889,7 @@ impl RuntimeImports {
             int_from_fixed, int_from_limbs, int_cmp, eq, move_value, clone_local,
             map_contains_key, map_get_value_ref, map_set_value, error_from, data_from,
             dyn_binop, dyn_binop_checked,
-            dyn_neg_checked, clone_erased,
+            dyn_neg_checked,
         ]
     }
 }

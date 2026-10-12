@@ -70,50 +70,6 @@ impl<N> std::ops::Deref for NodePath<N> {
     }
 }
 
-/// Somewhere to unpack a key, value or element out of a `data` on its way into
-/// a tree, which then moves it out again.
-///
-/// On the stack when it fits, as nearly every one does; it was taken from the
-/// allocator and given back on every insert.
-pub(crate) struct UnpackSlot {
-    inline: InlineSlot,
-    heap: *mut u8,
-    size: u32,
-    align: u32,
-}
-
-#[repr(C, align(16))]
-struct InlineSlot([u8; 64]);
-
-impl UnpackSlot {
-    /// A slot for a value of `ty`, or none if the allocator had nothing.
-    pub(crate) unsafe fn new(rt: &mut RtLocal, ty: rtdt::TyDescRef) -> std::option::Option<UnpackSlot> {
-        let (size, align) = (ty.size(), ty.align());
-        let heap = if size as usize <= size_of::<InlineSlot>() && align as usize <= align_of::<InlineSlot>() {
-            std::ptr::null_mut()
-        } else {
-            let ptr = unsafe { rt.alloc.alloc(size, align, 1) };
-            if ptr.is_null() {
-                return None;
-            }
-            ptr
-        };
-        Some(UnpackSlot { inline: InlineSlot([0; 64]), heap, size, align })
-    }
-
-    /// Where the value goes. The slot must not move while this is in use.
-    pub(crate) fn ptr(&mut self) -> *mut u8 {
-        if self.heap.is_null() { self.inline.0.as_mut_ptr() } else { self.heap }
-    }
-
-    /// Give the storage back, whatever it held having been moved out.
-    pub(crate) unsafe fn release(self, rt: &mut RtLocal) {
-        if !self.heap.is_null() {
-            unsafe { rt.alloc.free(self.size, self.align, 1, self.heap) };
-        }
-    }
-}
-
 /// Where `key` falls among the first `len` keys at `keys`: `Ok` with the
 /// position of the one equal to it, or `Err` with the position it would go at.
 ///
@@ -444,11 +400,7 @@ unsafe fn destroy_tree_recursive(
     }
 }
 
-/// Clear a BTreeMap (destroy and recreate empty).
 /// The number of entries in a map.
-///
-/// A generic function has no static type for the keys or values, but the count
-/// does not need one.
 pub unsafe fn btreemap_len_impl(
     map_value_ref: *const u8,
     len_out: *mut u8,
@@ -870,8 +822,7 @@ unsafe fn split_internal_node(
 /// cloned only if it's new. The value type is a fixed-width integer, and a
 /// sum that overflows leaves the map as it was and writes false to `fit_out`.
 ///
-/// The amount is consumed. It arrives as itself or, from a caller that knew
-/// its type only as a type parameter, boxed in a `data`.
+/// The amount is consumed.
 pub unsafe fn btreemap_add_impl(
     rt: &mut RtLocal,
     btreemap_value_mut: *mut u8,
@@ -886,19 +837,13 @@ pub unsafe fn btreemap_add_impl(
         let ty = MapTy::of(btreemap_tydesc);
         let value_ty = btreemap_tydesc.map_value_ty();
         assert!(super::cmp::eq_tydesc(key_tydesc, ty.key), "a key of the map's own type");
+        debug_assert!(super::cmp::eq_tydesc(amount_tydesc, value_ty), "an amount of the map's value type");
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
 
         // Every fixed-width integer fits in eight bytes.
         let mut amount = 0u64;
         let amount_ptr = &mut amount as *mut u64 as *mut u8;
-        if amount_tydesc.type_tag() == rtdt::TyTag::Data && value_ty.type_tag() != rtdt::TyTag::Data {
-            let status = super::boxing::data_into_local(rt_handle, amount_in, amount_ptr, value_ty.as_ptr());
-            if status != RtStatus::Ok {
-                return status;
-            }
-        } else {
-            std::ptr::copy_nonoverlapping(amount_in, amount_ptr, value_ty.size() as usize);
-        }
+        std::ptr::copy_nonoverlapping(amount_in, amount_ptr, value_ty.size() as usize);
 
         let map_ptr = btreemap_value_mut as *mut Map;
         let root = (*map_ptr).root as *mut MapNode;
@@ -1210,102 +1155,6 @@ unsafe fn propagate_split_up(
     }
 }
 
-/// Get a value from the BTreeMap by key.
-///
-/// Returns the value as an Option<V>:
-/// - If the key is found, sets the option to Some and clones the value.
-/// - If the key is not found, sets the option to None.
-/// Insert an entry whose key and value arrive packed into `data`.
-///
-/// Each is moved out into a value of the map's own key or value type, which
-/// the map's descriptor names, and the typed insert takes it from there. Both
-/// datas are consumed.
-pub unsafe fn btreemap_insert_data_impl(
-    rt: &mut RtLocal,
-    btreemap_value_mut: *mut u8,
-    btreemap_tydesc: rtdt::TyDescRef,
-    key_data_in: *const u8,
-    value_data_in: *const u8,
-) -> RtStatus {
-    unsafe {
-        btreemap_insert_sides_impl(
-            rt, btreemap_value_mut, btreemap_tydesc,
-            key_data_in as *mut u8, true, value_data_in as *mut u8, true,
-        )
-    }
-}
-
-/// Insert an entry where either side may have arrived packed into a `data`.
-///
-/// A side that arrived packed is moved out into a value of the map's own key
-/// or value type on the way in, consuming the `data`; a side that did not is
-/// moved in as it stands. The two are decided apart, because a map built
-/// inside a generic can be erased on one side and not the other: `%{k = v}`
-/// written in a generic over `K` and `V`, called at `K := data`, hands over a
-/// key that is already what the map holds and a value that is not.
-pub unsafe fn btreemap_insert_sides_impl(
-    rt: &mut RtLocal,
-    btreemap_value_mut: *mut u8,
-    btreemap_tydesc: rtdt::TyDescRef,
-    // Value is moved.
-    key_in: *mut u8,
-    key_is_data: bool,
-    // Value is moved.
-    value_in: *mut u8,
-    value_is_data: bool,
-) -> RtStatus {
-    unsafe {
-        let key_ty = btreemap_tydesc.map_key_ty();
-        let value_ty = btreemap_tydesc.map_value_ty();
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-
-        // A side that arrived packed needs somewhere of the real type to be
-        // unpacked into. One that did not is already there.
-        let mut key_unpacked = None;
-        let mut value_unpacked = None;
-        let status = 'unpack: {
-            let key_slot = if key_is_data {
-                let Some(slot) = UnpackSlot::new(rt, key_ty) else { break 'unpack RtStatus::Error };
-                let slot = key_unpacked.insert(slot).ptr();
-                let status = crate::c::impls::boxing::data_into_local(
-                    rt_handle, key_in, slot, key_ty.as_ptr(),
-                );
-                if status != RtStatus::Ok {
-                    break 'unpack RtStatus::Error;
-                }
-                slot
-            } else {
-                key_in
-            };
-
-            let value_slot = if value_is_data {
-                let Some(slot) = UnpackSlot::new(rt, value_ty) else { break 'unpack RtStatus::Error };
-                let slot = value_unpacked.insert(slot).ptr();
-                let status = crate::c::impls::boxing::data_into_local(
-                    rt_handle, value_in, slot, value_ty.as_ptr(),
-                );
-                if status != RtStatus::Ok {
-                    break 'unpack RtStatus::Error;
-                }
-                slot
-            } else {
-                value_in
-            };
-
-            btreemap_insert_impl(
-                rt, btreemap_value_mut, btreemap_tydesc,
-                key_slot, key_ty, value_slot, value_ty,
-            )
-        };
-        // A slot held its value only on the way in; the map has it now, so the
-        // storage goes back and what it held does not.
-        for slot in [key_unpacked, value_unpacked].into_iter().flatten() {
-            slot.release(rt);
-        }
-        status
-    }
-}
-
 pub unsafe fn btreemap_get_impl(
     rt: &mut RtLocal,
     btreemap_value_ref: *const u8,
@@ -1314,45 +1163,6 @@ pub unsafe fn btreemap_get_impl(
     key_tydesc: rtdt::TyDescRef,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
-) -> RtStatus {
-    unsafe {
-        btreemap_get_inner(
-            rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc,
-            option_value_out, option_tydesc, false,
-        )
-    }
-}
-
-/// Look a key up, giving the value back packed into a `data`.
-///
-/// What a generic function asks for: it has no static type for the values, so
-/// its option is an option of `data`, and the value is packed to reach it.
-pub unsafe fn btreemap_get_as_data_impl(
-    rt: &mut RtLocal,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: rtdt::TyDescRef,
-    key_ref: *const u8,
-    key_tydesc: rtdt::TyDescRef,
-    option_value_out: *mut u8,
-    option_tydesc: rtdt::TyDescRef,
-) -> RtStatus {
-    unsafe {
-        btreemap_get_inner(
-            rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc,
-            option_value_out, option_tydesc, true,
-        )
-    }
-}
-
-unsafe fn btreemap_get_inner(
-    rt: &mut RtLocal,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: rtdt::TyDescRef,
-    key_ref: *const u8,
-    key_tydesc: rtdt::TyDescRef,
-    option_value_out: *mut u8,
-    option_tydesc: rtdt::TyDescRef,
-    as_data: bool,
 ) -> RtStatus {
     unsafe {
         let ty = MapTy::of(btreemap_tydesc);
@@ -1391,26 +1201,15 @@ unsafe fn btreemap_get_inner(
 
         // Search for the key in the leaf.
         if let Ok(i) = search_keys(keys_ptr, len as usize, key_ref, ty) {
-            // Key found! Clone the value into the option payload. A
-            // caller with no static type for the value asks for it
-            // packed into a `data`, which is the shape it does have.
+            // Key found! Clone the value into the option payload.
             let value_slot = values_ptr.add(i * value_size);
             let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-            let status = if as_data {
-                crate::c::impls::boxing::data_clone_from_local(
-                    rt_handle,
-                    value_slot,
-                    map_value_ty.as_ptr(),
-                    option_payload_ptr,
-                )
-            } else {
-                crate::c::impls::clone::clone_value(
-                    rt_handle,
-                    value_slot,
-                    map_value_ty.as_ptr(),
-                    option_payload_ptr,
-                )
-            };
+            let status = crate::c::impls::clone::clone_value(
+                rt_handle,
+                value_slot,
+                map_value_ty.as_ptr(),
+                option_payload_ptr,
+            );
 
             if status != RtStatus::Ok {
                 return status;
@@ -1445,10 +1244,9 @@ pub unsafe fn btreemap_key_at_impl(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
-    as_data: bool,
 ) -> RtStatus {
     unsafe { btreemap_at_inner(rt, btreemap_value_ref, btreemap_tydesc, index,
-                               option_value_out, option_tydesc, as_data, true) }
+                               option_value_out, option_tydesc, true) }
 }
 
 /// The value of the entry at `index` in sort order. See `btreemap_key_at_impl`.
@@ -1459,10 +1257,9 @@ pub unsafe fn btreemap_value_at_impl(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
-    as_data: bool,
 ) -> RtStatus {
     unsafe { btreemap_at_inner(rt, btreemap_value_ref, btreemap_tydesc, index,
-                               option_value_out, option_tydesc, as_data, false) }
+                               option_value_out, option_tydesc, false) }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1473,7 +1270,6 @@ unsafe fn btreemap_at_inner(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
-    as_data: bool,
     want_key: bool,
 ) -> RtStatus {
     unsafe {
@@ -1531,13 +1327,8 @@ unsafe fn btreemap_at_inner(
         };
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = if as_data {
-            crate::c::impls::boxing::data_clone_from_local(
-                rt_handle, slot, slot_ty.as_ptr(), option_payload_ptr)
-        } else {
-            crate::c::impls::clone::clone_value(
-                rt_handle, slot, slot_ty.as_ptr(), option_payload_ptr)
-        };
+        let status = crate::c::impls::clone::clone_value(
+            rt_handle, slot, slot_ty.as_ptr(), option_payload_ptr);
         if status != RtStatus::Ok {
             return status;
         }
@@ -1722,24 +1513,20 @@ pub unsafe fn btreemap_get_value_ref_impl(
 /// Set the value for an existing key in a map.
 ///
 /// Finds the key, destroys the old value, and stores the new value.
-/// Returns `Error` if the key is not found.
+/// Returns `Error` if the key is not found. The value is taken either way: one
+/// that does not land is destroyed.
 pub unsafe fn btreemap_set_value_impl(
     rt: &mut RtLocal,
     btreemap_value_ref: *mut u8,
     btreemap_tydesc: rtdt::TyDescRef,
     key_ref: *const u8,
     key_tydesc: rtdt::TyDescRef,
-    value_in: *const u8,
+    value_in: *mut u8,
     value_tydesc: rtdt::TyDescRef,
 ) -> RtStatus {
     unsafe {
         let ty = MapTy::of(btreemap_tydesc);
-        if btreemap_value_ref.is_null()
-            || key_ref.is_null()
-            || value_in.is_null() {
-            return RtStatus::Error;
-        }
-
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
         let map_value_ty = btreemap_tydesc.map_value_ty();
 
         let map_ptr = btreemap_value_ref as *const Map;
@@ -1748,6 +1535,7 @@ pub unsafe fn btreemap_set_value_impl(
         // The key's descriptor is checked once here, where it used to be
         // checked at every comparison; a key of another type is in no map.
         if root.is_null() || !super::cmp::eq_tydesc(key_tydesc, ty.key) {
+            crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, value_tydesc.as_ptr());
             return RtStatus::Error;
         }
 
@@ -1761,7 +1549,6 @@ pub unsafe fn btreemap_set_value_impl(
             let value_slot = values_ptr.add(i * value_size);
 
             // Destroy old value.
-            let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
             let status = crate::c::impls::destroy::any_destroy_local(
                 rt_handle,
                 value_slot,
@@ -1781,6 +1568,7 @@ pub unsafe fn btreemap_set_value_impl(
             return RtStatus::Ok;
         }
 
+        crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, value_tydesc.as_ptr());
         RtStatus::Error
     }
 }

@@ -1045,44 +1045,6 @@ pub extern "C-unwind" fn dlr_std__string_parse_int(
 // These are generic over the element type. Each parameter arrives as a pointer
 // and a descriptor, so the element type is read off the list at runtime rather
 // than being known when this is compiled.
-//
-// The descriptor also says which side of the boundary the caller is on. A call
-// site that knows the element type asks for the element itself, and its
-// descriptor names that type. A generic function calling one of these has no
-// such type, so its slot is a `data` and its descriptor says so; the element
-// then has to be packed into one on the way out and unpacked on the way in. A
-// list of `data` is the case where the two readings coincide, so the element
-// type is compared as well: a position is boxed only when the caller asks for
-// a `data` and the element is not one already.
-
-/// Whether an element has to be packed into a `data` to reach `slot_ty`.
-fn boxes_the_element(slot_ty: rtdt::TyDescRef, element_ty: rtdt::TyDescRef) -> bool {
-    slot_ty.type_tag() == rtdt::TyTag::Data && element_ty.type_tag() != rtdt::TyTag::Data
-}
-
-/// Report whether an element-taking operation succeeded, destroying the
-/// element if it did not.
-///
-/// These take ownership of the element whatever happens, because the call site
-/// gave it up to make the call. An index past the end is a `false` rather than
-/// a failed call, so the element it could not place is dropped here rather
-/// than left to no one.
-unsafe fn placed_or_dropped(
-    rt: *mut u8,
-    status: datalove_rti::RtStatus,
-    elem_ptr: *mut u8,
-    elem_td: *const u8,
-) -> bool {
-    if status == datalove_rti::RtStatus::Ok {
-        return true;
-    }
-    unsafe {
-        datalove_rti::call::dtlv_rti_any_destroy_local(
-            rt, elem_ptr, elem_td as *const rtdt::TyDesc,
-        );
-    }
-    false
-}
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__list_len(
@@ -1144,7 +1106,7 @@ pub extern "C-unwind" fn dlr_std__list_get(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::call::dtlv_rti_list_get_erased_local(
+        datalove_rti::call::dtlv_rti_list_get_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1161,12 +1123,7 @@ pub extern "C-unwind" fn dlr_std__list_push(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     unsafe {
-        // The erased entry rather than the two branches, because there are
-        // three cases and not two: an element wrapped whole, one already in
-        // the slot's shape, and one that is the slot's shape with `data` at
-        // some position inside it -- a `(A, B)` pushed into a `[(string,
-        // u32)]` -- which is converted position by position.
-        datalove_rti::call::dtlv_rti_list_push_erased_local(
+        datalove_rti::call::dtlv_rti_list_push_local(
             rt, list_ptr, list_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(),
         ) as u8
     }
@@ -1182,7 +1139,7 @@ pub extern "C-unwind" fn dlr_std__list_pop(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::call::dtlv_rti_list_pop_erased_local(
+        datalove_rti::call::dtlv_rti_list_pop_local(
             rt, list_ptr, list_ty.as_ptr(), out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1214,7 +1171,7 @@ pub extern "C-unwind" fn dlr_std__list_set(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        datalove_rti::call::dtlv_rti_list_set_erased_local(
+        datalove_rti::call::dtlv_rti_list_set_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
         )
     };
@@ -1236,12 +1193,12 @@ pub extern "C-unwind" fn dlr_std__list_insert(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     let status = unsafe {
-        datalove_rti::call::dtlv_rti_list_insert_erased_local(
+        datalove_rti::call::dtlv_rti_list_insert_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, elem_ptr, elem_ty.as_ptr(),
         )
     };
-    let placed = unsafe { placed_or_dropped(rt, status, elem_ptr, elem_td) };
-    unsafe { write_result(_out, placed) };
+    // The runtime has taken the element either way.
+    unsafe { write_result(_out, status == datalove_rti::RtStatus::Ok) };
     OK
 }
 
@@ -1257,7 +1214,7 @@ pub extern "C-unwind" fn dlr_std__list_remove(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        datalove_rti::call::dtlv_rti_list_remove_erased_local(
+        datalove_rti::call::dtlv_rti_list_remove_local(
             rt, list_ptr, list_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
@@ -1338,17 +1295,10 @@ pub extern "C-unwind" fn dlr_std__map_get(
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(out_ty.option_inner_ty(), map_ty.map_value_ty()) {
-            datalove_rti::call::dtlv_rti_btreemap_get_as_data_local(
-                rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
-                out, out_ty.as_ptr(),
-            ) as u8
-        } else {
-            datalove_rti::call::dtlv_rti_btreemap_get_local(
-                rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
-                out, out_ty.as_ptr(),
-            ) as u8
-        }
+        datalove_rti::call::dtlv_rti_btreemap_get_local(
+            rt, map_ptr, map_ty.as_ptr(), key_ptr, key_td as *const rtdt::TyDesc,
+            out, out_ty.as_ptr(),
+        ) as u8
     }
 }
 
@@ -1365,20 +1315,10 @@ pub extern "C-unwind" fn dlr_std__map_insert(
     let value_ty = unsafe { rtdt::TyDescRef::from_ptr(value_td as *const rtdt::TyDesc) };
 
     unsafe {
-        // Both positions are boxed together or neither is, since a generic
-        // caller has a static type for neither.
-        if boxes_the_element(key_ty, map_ty.map_key_ty())
-            || boxes_the_element(value_ty, map_ty.map_value_ty())
-        {
-            datalove_rti::call::dtlv_rti_btreemap_insert_data_local(
-                rt, map_ptr, map_ty.as_ptr(), key_ptr, value_ptr,
-            ) as u8
-        } else {
-            datalove_rti::call::dtlv_rti_btreemap_insert_local(
-                rt, map_ptr, map_ty.as_ptr(),
-                key_ptr, key_ty.as_ptr(), value_ptr, value_ty.as_ptr(),
-            ) as u8
-        }
+        datalove_rti::call::dtlv_rti_btreemap_insert_local(
+            rt, map_ptr, map_ty.as_ptr(),
+            key_ptr, key_ty.as_ptr(), value_ptr, value_ty.as_ptr(),
+        ) as u8
     }
 }
 
@@ -1441,8 +1381,7 @@ pub extern "C-unwind" fn dlr_std__set_clear(
     }
 }
 
-/// The element at a position in sort order. See `dlr_std__list_get`: the same
-/// choice of packing, for the same reason.
+/// The element at a position in sort order.
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__set_get(
     rt: *mut u8,
@@ -1453,10 +1392,9 @@ pub extern "C-unwind" fn dlr_std__set_get(
     let index = unsafe { *(index_ptr as *const rtdt::Index) };
     let set_ty = unsafe { rtdt::TyDescRef::from_ptr(set_td as *const rtdt::TyDesc) };
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    let as_data = boxes_the_element(out_ty.option_inner_ty(), set_ty.set_element_ty());
     unsafe {
         datalove_rti::call::dtlv_rti_btreeset_get_at_local(
-            rt, set_ptr, set_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
+            rt, set_ptr, set_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
 }
@@ -1472,10 +1410,9 @@ pub extern "C-unwind" fn dlr_std__map_key_at(
     let index = unsafe { *(index_ptr as *const rtdt::Index) };
     let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    let as_data = boxes_the_element(out_ty.option_inner_ty(), map_ty.map_key_ty());
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_key_at_local(
-            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
+            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
 }
@@ -1491,10 +1428,9 @@ pub extern "C-unwind" fn dlr_std__map_value_at(
     let index = unsafe { *(index_ptr as *const rtdt::Index) };
     let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
     let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    let as_data = boxes_the_element(out_ty.option_inner_ty(), map_ty.map_value_ty());
     unsafe {
         datalove_rti::call::dtlv_rti_btreemap_value_at_local(
-            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(), as_data,
+            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
         ) as u8
     }
 }
@@ -1602,15 +1538,9 @@ pub extern "C-unwind" fn dlr_std__set_insert(
     let elem_ty = unsafe { rtdt::TyDescRef::from_ptr(elem_td as *const rtdt::TyDesc) };
 
     unsafe {
-        if boxes_the_element(elem_ty, set_ty.set_element_ty()) {
-            datalove_rti::call::dtlv_rti_btreeset_insert_data_local(
-                rt, set_ptr, set_ty.as_ptr(), elem_ptr, out,
-            ) as u8
-        } else {
-            datalove_rti::call::dtlv_rti_btreeset_insert_local(
-                rt, set_ptr, set_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(), out,
-            ) as u8
-        }
+        datalove_rti::call::dtlv_rti_btreeset_insert_local(
+            rt, set_ptr, set_ty.as_ptr(), elem_ptr, elem_ty.as_ptr(), out,
+        ) as u8
     }
 }
 

@@ -1135,46 +1135,6 @@ unsafe fn propagate_split_up(
     }
 }
 
-/// Inserts an element into a set.
-/// Insert an element that arrives packed into a `data`.
-///
-/// The element is moved out into a value of the set's own element type, which
-/// the set's descriptor names, and the typed insert takes it from there. The
-/// data is consumed.
-pub unsafe fn btreeset_insert_data_impl(
-    rt: &mut RtLocal,
-    btreeset_value_mut: *mut u8,
-    btreeset_tydesc: rtdt::TyDescRef,
-    data_in: *const u8,
-    bool_out: *mut u8,
-) -> RtStatus {
-    unsafe {
-        let element_ty = btreeset_tydesc.set_element_ty();
-        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-
-        let Some(mut unpacked) = super::btreemap::UnpackSlot::new(rt, element_ty) else {
-            return RtStatus::Error;
-        };
-        let slot = unpacked.ptr();
-
-        let status = crate::c::impls::boxing::data_into_local(
-            rt_handle, data_in, slot, element_ty.as_ptr(),
-        );
-        let status = if status == RtStatus::Ok {
-            btreeset_insert_impl(
-                rt, btreeset_value_mut, btreeset_tydesc.as_ptr(),
-                slot, element_ty.as_ptr(), bool_out,
-            )
-        } else {
-            status
-        };
-
-        // The slot held the element only on the way in.
-        unpacked.release(rt);
-        status
-    }
-}
-
 pub unsafe fn btreeset_insert_impl(
     rt: &mut RtLocal,
     btreeset_value_ref: *mut u8,
@@ -1479,7 +1439,6 @@ pub unsafe fn btreeset_get_at_impl(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: rtdt::TyDescRef,
-    as_data: bool,
 ) -> RtStatus {
     unsafe {
         if set_value_ref.is_null() || option_value_out.is_null() {
@@ -1532,13 +1491,8 @@ pub unsafe fn btreeset_get_at_impl(
         let slot = keys_ptr.add(remaining as usize * element_ty.size() as usize);
 
         let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-        let status = if as_data {
-            crate::c::impls::boxing::data_clone_from_local(
-                rt_handle, slot, element_ty.as_ptr(), option_payload_ptr)
-        } else {
-            crate::c::impls::clone::clone_value(
-                rt_handle, slot, element_ty.as_ptr(), option_payload_ptr)
-        };
+        let status = crate::c::impls::clone::clone_value(
+            rt_handle, slot, element_ty.as_ptr(), option_payload_ptr);
         if status != RtStatus::Ok {
             return status;
         }

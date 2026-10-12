@@ -519,9 +519,8 @@ caller of an interpreted generic has to pass what the new convention expects.
    parameter its own storage, so that copy is a `memmove`.
 6. **C AOT** (done): the same again, in C. See [Where phase 6
    stands](#user-content-where-phase-6-stands).
-7. **Flip and delete** (done above the runtime). The feature is gone, the
-   compiler and the backends no longer erase, and a call at a growing type
-   has a fixture. The runtime's erased entries remain; see [Where phase 7
+7. **Flip and delete** (done). The feature is gone, nothing erases, and a
+   call at a growing type has a fixture. See [Where phase 7
    stands](#user-content-where-phase-7-stands).
 8. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
@@ -733,19 +732,24 @@ Kept, and why:
 - `codegen/boxing.rs`, which also compiles `ErrorFrom` and `DataFrom`; only
   its erasure functions went.
 
-**What remains: the runtime's erased entries.** The backends and `sys/std`'s
-rider still call the `*_erased_local` collection entries
-(`list_set`, `list_insert`, `list_remove`, `list_pop`, `tensor_set`, the map
-lookups and `set_value`, `clone_erased`), and the interpreter writes a field
-through `reify_local`. With every descriptor truthful they behave as their
-plain counterparts, so nothing is wrong, but the conversion machinery behind
-them is still there (`erase_local`, `reify_local`, `convert`,
-`needs_erasure`, `data_into_local`, `unwraps_the_element`,
-`borrow_lookup_key`, `data_borrow`). Folding them into the plain entries
-changes the rider ABI (`abi_table.rs`, the `datalove-rti` shims, the
-`sys/std` rider), and some differ in more than conversion -- the erased
-`list_set` destroys the element it is handed when the index is out of
-range -- so it is its own change.
+**The runtime.** Its erased entries are gone too, and with them the
+conversion machinery behind them (`erase_local`, `reify_local`,
+`clone_erased_local`, `convert`, `needs_erasure`, `data_into_local`,
+`unwraps_the_element`, `borrow_lookup_key`, `write_element`), the
+`*_data_local` and `*_as_data_local` families the rider used for a caller with
+no static type, the `as_data` flag on the sorted-position reads, the erased
+field read, and the operand unwrapping and result packing in `dyn_ops`. Every
+engine and the `sys/std` rider call the plain entries. `data_borrow` stays, to
+read a real `data`.
+
+Where the erased and plain entries differed in more than conversion, the
+erased behaviour was the one the IR relies on, so the plain entries took it:
+**a value moved into the runtime is the runtime's whatever the status.**
+`list_set`, `list_insert`, `tensor_set` and the map's `set_value` destroy a
+value they cannot place, and report `Error`; `set_value` takes its value
+`*mut` accordingly. `botdocs/native-abi.md` says so for rider authors. The
+rider ABI changed with this, which `ABI_VERSION`, derived from the table,
+records by itself.
 
 ## Open questions
 

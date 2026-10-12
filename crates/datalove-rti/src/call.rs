@@ -13,7 +13,6 @@
 //! reach them through [`table`](crate::table) directly:
 //!
 //! - `dtlv_rti_init`
-//! - `dtlv_rti_data_parts`
 //! - `dtlv_rti_data_borrow`
 //! - `dtlv_rti_field_offset`
 //! - `dtlv_rti_field_tydesc`
@@ -311,17 +310,6 @@ pub unsafe fn dtlv_rti_data_from_local(rt: LocalRtHandle, inner_in: *const u8, i
     unsafe { (crate::table(rt).dtlv_rti_data_from_local)(rt, inner_in, inner_tydesc, dest_out) }
 }
 
-/// Calls [`RtiTable::dtlv_rti_clone_erased_local`](crate::table::RtiTable::dtlv_rti_clone_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_clone_erased_local(rt: LocalRtHandle, src_in: *const u8, src_tydesc: *const rtdt::TyDesc, dst_out: *mut u8, dst_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_clone_erased_local)(rt, src_in, src_tydesc, dst_out, dst_tydesc) }
-}
-
 /// Calls [`RtiTable::dtlv_rti_dyn_binop`](crate::table::RtiTable::dtlv_rti_dyn_binop).
 ///
 /// # Safety
@@ -386,39 +374,6 @@ pub unsafe fn dtlv_rti_dyn_float_const(rt: LocalRtHandle, which: u8, out: *mut u
 #[inline]
 pub unsafe fn dtlv_rti_dyn_neg_checked(rt: LocalRtHandle, value: *const u8, value_tydesc: *const rtdt::TyDesc, out: *mut u8, out_tydesc: *const rtdt::TyDesc, overflow_out: *mut bool) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_dyn_neg_checked)(rt, value, value_tydesc, out, out_tydesc, overflow_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_data_into_local`](crate::table::RtiTable::dtlv_rti_data_into_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_data_into_local(rt: LocalRtHandle, data_in: *const u8, dest_out: *mut u8, dest_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_data_into_local)(rt, data_in, dest_out, dest_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_erase_local`](crate::table::RtiTable::dtlv_rti_erase_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_erase_local(rt: LocalRtHandle, src_in: *const u8, src_tydesc: *const rtdt::TyDesc, dst_out: *mut u8, dst_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_erase_local)(rt, src_in, src_tydesc, dst_out, dst_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_reify_local`](crate::table::RtiTable::dtlv_rti_reify_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_reify_local(rt: LocalRtHandle, src_in: *const u8, src_tydesc: *const rtdt::TyDesc, dst_out: *mut u8, dst_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_reify_local)(rt, src_in, src_tydesc, dst_out, dst_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_string_create_local`](crate::table::RtiTable::dtlv_rti_string_create_local).
@@ -571,8 +526,8 @@ pub unsafe fn dtlv_rti_btreemap_remove_local(rt: LocalRtHandle, btreemap_value_m
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_key_at_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc, as_data: bool) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_key_at_local)(rt, btreemap_value_ref, btreemap_tydesc, index, option_value_out, option_tydesc, as_data) }
+pub unsafe fn dtlv_rti_btreemap_key_at_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_key_at_local)(rt, btreemap_value_ref, btreemap_tydesc, index, option_value_out, option_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_btreemap_value_at_local`](crate::table::RtiTable::dtlv_rti_btreemap_value_at_local).
@@ -582,8 +537,8 @@ pub unsafe fn dtlv_rti_btreemap_key_at_local(rt: LocalRtHandle, btreemap_value_r
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_value_at_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc, as_data: bool) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_value_at_local)(rt, btreemap_value_ref, btreemap_tydesc, index, option_value_out, option_tydesc, as_data) }
+pub unsafe fn dtlv_rti_btreemap_value_at_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_value_at_local)(rt, btreemap_value_ref, btreemap_tydesc, index, option_value_out, option_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_btreemap_keys_into_local`](crate::table::RtiTable::dtlv_rti_btreemap_keys_into_local).
@@ -637,8 +592,8 @@ pub unsafe fn dtlv_rti_btreeset_into_list_local(rt: LocalRtHandle, set_value_ref
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreeset_get_at_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc, as_data: bool) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreeset_get_at_local)(rt, set_value_ref, set_tydesc, index, option_value_out, option_tydesc, as_data) }
+pub unsafe fn dtlv_rti_btreeset_get_at_local(rt: LocalRtHandle, set_value_ref: *const u8, set_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreeset_get_at_local)(rt, set_value_ref, set_tydesc, index, option_value_out, option_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_btreemap_get_local`](crate::table::RtiTable::dtlv_rti_btreemap_get_local).
@@ -650,127 +605,6 @@ pub unsafe fn dtlv_rti_btreeset_get_at_local(rt: LocalRtHandle, set_value_ref: *
 #[inline]
 pub unsafe fn dtlv_rti_btreemap_get_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_get_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_get_as_data_local`](crate::table::RtiTable::dtlv_rti_btreemap_get_as_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_get_as_data_local(rt: LocalRtHandle, map_value_ref: *const u8, map_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_get_as_data_local)(rt, map_value_ref, map_tydesc, key_ref, key_tydesc, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_push_erased_local`](crate::table::RtiTable::dtlv_rti_list_push_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_push_erased_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_push_erased_local)(rt, list_value_mut, list_tydesc, element_in, element_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_set_value_erased_local`](crate::table::RtiTable::dtlv_rti_btreemap_set_value_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_set_value_erased_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_set_value_erased_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc, value_in, value_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_remove_erased_local`](crate::table::RtiTable::dtlv_rti_list_remove_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_remove_erased_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_remove_erased_local)(rt, list_value_mut, list_tydesc, index, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_pop_erased_local`](crate::table::RtiTable::dtlv_rti_list_pop_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_pop_erased_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_pop_erased_local)(rt, list_value_mut, list_tydesc, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_set_erased_local`](crate::table::RtiTable::dtlv_rti_list_set_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_set_erased_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_set_erased_local)(rt, list_value_mut, list_tydesc, index, element_in, element_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_insert_erased_local`](crate::table::RtiTable::dtlv_rti_list_insert_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_insert_erased_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_insert_erased_local)(rt, list_value_mut, list_tydesc, index, element_in, element_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreeset_insert_erased_local`](crate::table::RtiTable::dtlv_rti_btreeset_insert_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreeset_insert_erased_local(rt: LocalRtHandle, set_value_mut: *mut u8, set_tydesc: *const rtdt::TyDesc, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc, bool_out: *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreeset_insert_erased_local)(rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_insert_erased_local`](crate::table::RtiTable::dtlv_rti_btreemap_insert_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_insert_erased_local(rt: LocalRtHandle, map_value_mut: *mut u8, map_tydesc: *const rtdt::TyDesc, key_in: *mut u8, key_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_insert_erased_local)(rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_insert_data_local`](crate::table::RtiTable::dtlv_rti_btreemap_insert_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_insert_data_local(rt: LocalRtHandle, map_value_mut: *mut u8, map_tydesc: *const rtdt::TyDesc, key_data_in: *const u8, value_data_in: *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_insert_data_local)(rt, map_value_mut, map_tydesc, key_data_in, value_data_in) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreeset_insert_data_local`](crate::table::RtiTable::dtlv_rti_btreeset_insert_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreeset_insert_data_local(rt: LocalRtHandle, set_value_mut: *mut u8, set_tydesc: *const rtdt::TyDesc, data_in: *const u8, bool_out: *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreeset_insert_data_local)(rt, set_value_mut, set_tydesc, data_in, bool_out) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_btreemap_len_local`](crate::table::RtiTable::dtlv_rti_btreemap_len_local).
@@ -835,7 +669,7 @@ pub unsafe fn dtlv_rti_btreemap_get_value_ref_local(rt: LocalRtHandle, btreemap_
 /// `rt` must be a handle the runtime gave out, and the remaining
 /// arguments must be what that function requires.
 #[inline]
-pub unsafe fn dtlv_rti_btreemap_set_value_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_in: *const u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
+pub unsafe fn dtlv_rti_btreemap_set_value_local(rt: LocalRtHandle, btreemap_value_mut: *mut u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_in: *mut u8, value_tydesc: *const rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_set_value_local)(rt, btreemap_value_mut, btreemap_tydesc, key_ref, key_tydesc, value_in, value_tydesc) }
 }
 
@@ -982,39 +816,6 @@ pub unsafe fn dtlv_rti_list_clear_local(rt: LocalRtHandle, value_mut: *mut u8, t
     unsafe { (crate::table(rt).dtlv_rti_list_clear_local)(rt, value_mut, tydesc) }
 }
 
-/// Calls [`RtiTable::dtlv_rti_list_set_data_local`](crate::table::RtiTable::dtlv_rti_list_set_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_set_data_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, data_in: *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_set_data_local)(rt, list_value_mut, list_tydesc, index, data_in) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_insert_data_local`](crate::table::RtiTable::dtlv_rti_list_insert_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_insert_data_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, data_in: *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_insert_data_local)(rt, list_value_mut, list_tydesc, index, data_in) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_remove_as_data_local`](crate::table::RtiTable::dtlv_rti_list_remove_as_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_remove_as_data_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_remove_as_data_local)(rt, list_value_mut, list_tydesc, index, option_value_out, option_tydesc) }
-}
-
 /// Calls [`RtiTable::dtlv_rti_list_len_local`](crate::table::RtiTable::dtlv_rti_list_len_local).
 ///
 /// # Safety
@@ -1024,50 +825,6 @@ pub unsafe fn dtlv_rti_list_remove_as_data_local(rt: LocalRtHandle, list_value_m
 #[inline]
 pub unsafe fn dtlv_rti_list_len_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: *const rtdt::TyDesc, len_out: *mut u8) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_list_len_local)(rt, list_value_ref, list_tydesc, len_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_get_as_data_local`](crate::table::RtiTable::dtlv_rti_list_get_as_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_get_as_data_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_get_as_data_local)(rt, list_value_ref, list_tydesc, index, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_pop_as_data_local`](crate::table::RtiTable::dtlv_rti_list_pop_as_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_pop_as_data_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_pop_as_data_local)(rt, list_value_mut, list_tydesc, option_value_out, option_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_push_data_local`](crate::table::RtiTable::dtlv_rti_list_push_data_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_push_data_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, data_in: *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_push_data_local)(rt, list_value_mut, list_tydesc, data_in) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_list_get_erased_local`](crate::table::RtiTable::dtlv_rti_list_get_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_list_get_erased_local(rt: LocalRtHandle, list_value_ref: *const u8, list_tydesc: *const rtdt::TyDesc, index: rtdt::IndexRepr, option_value_out: *mut u8, option_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_list_get_erased_local)(rt, list_value_ref, list_tydesc, index, option_value_out, option_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_list_get_local`](crate::table::RtiTable::dtlv_rti_list_get_local).
@@ -1211,17 +968,6 @@ pub unsafe fn dtlv_rti_tensor_get_local(rt: LocalRtHandle, tensor_value_ref: *co
 #[inline]
 pub unsafe fn dtlv_rti_tensor_set_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_set_local)(rt, tensor_value_mut, tensor_tydesc, indices_ptr, element_in, element_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_tensor_set_erased_local`](crate::table::RtiTable::dtlv_rti_tensor_set_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_tensor_set_erased_local(rt: LocalRtHandle, tensor_value_mut: *mut u8, tensor_tydesc: *const rtdt::TyDesc, indices_ptr: *const rtdt::IndexRepr, element_in: *mut u8, element_tydesc: *const rtdt::TyDesc) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_tensor_set_erased_local)(rt, tensor_value_mut, tensor_tydesc, indices_ptr, element_in, element_tydesc) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_tensor_transpose_local`](crate::table::RtiTable::dtlv_rti_tensor_transpose_local).
@@ -1486,37 +1232,4 @@ pub unsafe fn dtlv_rti_tydesc_instantiate(rt: LocalRtHandle, template: *const rt
 #[inline]
 pub unsafe fn dtlv_rti_shadow_alloc(rt: LocalRtHandle, size: u32, align: u32) -> *mut u8 {
     unsafe { (crate::table(rt).dtlv_rti_shadow_alloc)(rt, size, align) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_field_read_local`](crate::table::RtiTable::dtlv_rti_field_read_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_field_read_local(rt: LocalRtHandle, dest_out: *mut u8, dest_tydesc: *const rtdt::TyDesc, base_in: *const u8, base_tydesc: *const rtdt::TyDesc, index: u32) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_field_read_local)(rt, dest_out, dest_tydesc, base_in, base_tydesc, index) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_contains_key_erased_local`](crate::table::RtiTable::dtlv_rti_btreemap_contains_key_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_contains_key_erased_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, result_out: *mut bool) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_contains_key_erased_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, result_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_btreemap_get_value_ref_erased_local`](crate::table::RtiTable::dtlv_rti_btreemap_get_value_ref_erased_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_btreemap_get_value_ref_erased_local(rt: LocalRtHandle, btreemap_value_ref: *const u8, btreemap_tydesc: *const rtdt::TyDesc, key_ref: *const u8, key_tydesc: *const rtdt::TyDesc, value_ptr_out: *mut *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_btreemap_get_value_ref_erased_local)(rt, btreemap_value_ref, btreemap_tydesc, key_ref, key_tydesc, value_ptr_out) }
 }

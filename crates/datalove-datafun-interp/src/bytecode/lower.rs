@@ -612,8 +612,7 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::FieldRef { dst: self.value_loc(*dest), src, offset });
                 true
             }
-            // A shallow copy of the field, as `field_read` makes where no
-            // `data` is involved.
+            // A shallow copy of the field.
             Instruction::GetField { dest, src, field_index } => {
                 let (Some(ty), Some(src)) = (self.typed(src), self.loc(src)) else { return false };
                 let Some((offset, field_ty)) = static_field(ty, *field_index) else { return false };

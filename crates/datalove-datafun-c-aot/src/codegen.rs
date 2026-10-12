@@ -1252,15 +1252,11 @@ impl<'a> FunctionCodegenContext<'a> {
     fn emit_clone(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(src);
-        // The source's descriptor says what is really there, which inside a
-        // generic its static type does not, and the destination's says what
-        // shape the clone has to arrive in. Where the two differ the value is
-        // wrapped on the way, which the runtime decides rather than this.
         let src_tydesc = self.operand_tydesc(src);
         let dest_ty = self.value_type(dest).clone();
         let dest_tydesc = self.tydesc_name(&dest_ty);
 
-        writeln!(out, "    dtlv_rti_clone_erased_local(rt, {}, {}, {}, &{});",
+        writeln!(out, "    dtlv_rti_clone_local(rt, {}, {}, {}, &{});",
             src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
         Ok(())
     }
@@ -3093,15 +3089,11 @@ impl<'a> FunctionCodegenContext<'a> {
             return Ok(());
         }
 
-        // The runtime checks the index, destroys what was there, decides
-        // whether the value in hand is wrapped, in the slot's shape already,
-        // or the slot's shape with `data` at some position inside it, and
-        // stores it; past the end it destroys the value instead. Inside a
-        // generic the value is a wrapper, and writing its bytes as the element
-        // stores the wrapper's tag where the number belongs.
+        // The runtime checks the index, destroys what was there and stores the
+        // value; past the end it destroys the value instead.
         let list_tydesc = self.operand_tydesc(list);
         let value_tydesc = self.operand_tydesc(value);
-        writeln!(out, "    *(bool_t*){} = dtlv_rti_list_set_erased_local(rt, {}, {}, *(index_t*){}, {}, {}) == 1;",
+        writeln!(out, "    *(bool_t*){} = dtlv_rti_list_set_local(rt, {}, {}, *(index_t*){}, {}, {}) == 1;",
             self.value_addr(is_valid), list_addr, list_tydesc, index_addr, value_addr, value_tydesc).unwrap();
         Ok(())
     }
@@ -3154,14 +3146,10 @@ impl<'a> FunctionCodegenContext<'a> {
             ))),
         };
 
-        // The map's descriptor is whichever one tells the truth: inside a
-        // generic the static type describes a `%{data = data}`, and looking a
-        // `string` up against that ordering finds nothing. The key may have
-        // arrived packed, which the runtime decides rather than this.
         let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
 
-        writeln!(out, "    dtlv_rti_btreemap_contains_key_erased_local(rt, {}, {}, {}, &{}, (bool_t*){});",
+        writeln!(out, "    dtlv_rti_btreemap_contains_key_local(rt, {}, {}, {}, &{}, (bool_t*){});",
             map_addr, map_tydesc, key_addr, key_tydesc, is_valid_addr).unwrap();
         Ok(())
     }
@@ -3189,8 +3177,6 @@ impl<'a> FunctionCodegenContext<'a> {
         };
         let value_repr = types::ir_type_to_crepr(&value_ty);
 
-        // The truthful map descriptor, and a key the runtime unpacks if it
-        // arrived packed. See the containment check above.
         let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
         let value_tydesc = self.tydesc_name(&value_ty);
@@ -3198,7 +3184,7 @@ impl<'a> FunctionCodegenContext<'a> {
         // Get pointer to value (returns null on miss).
         writeln!(out, "    {{").unwrap();
         writeln!(out, "        void* __vptr;").unwrap();
-        writeln!(out, "        dtlv_rti_btreemap_get_value_ref_erased_local(rt, {}, {}, {}, &{}, &__vptr);",
+        writeln!(out, "        dtlv_rti_btreemap_get_value_ref_local(rt, {}, {}, {}, &{}, &__vptr);",
             map_addr, map_tydesc, key_addr, key_tydesc).unwrap();
         writeln!(out, "        *(bool_t*){} = __vptr != NULL;", is_valid_addr).unwrap();
 
@@ -3244,23 +3230,19 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_addr = self.operand_addr(value);
 
         let map_ty = self.operand_type(map).clone();
-        let (key_ty, value_ty) = match &map_ty {
-            IrType::Map(k, v) => (k.as_ref().clone(), v.as_ref().clone()),
+        let key_ty = match &map_ty {
+            IrType::Map(k, _) => k.as_ref().clone(),
             _ => return Err(CAotError::Codegen(format!(
                 "MapSetValue on non-map type: {:?}", map_ty
             ))),
         };
 
-        let _ = value_ty;
-        // The truthful map descriptor; the key may have arrived packed and the
-        // value may be in the erased shape, both of which the runtime sorts
-        // out. See the containment check above.
         let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
         let value_tydesc = self.operand_tydesc(value);
 
         // The runtime takes the value whether or not the key is there.
-        writeln!(out, "    *(bool_t*){} = dtlv_rti_btreemap_set_value_erased_local(rt, {}, {}, {}, &{}, {}, {}) == 1;",
+        writeln!(out, "    *(bool_t*){} = dtlv_rti_btreemap_set_value_local(rt, {}, {}, {}, &{}, {}, {}) == 1;",
             self.value_addr(is_valid), map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
         Ok(())
     }
@@ -3317,14 +3299,10 @@ impl<'a> FunctionCodegenContext<'a> {
             ))),
         };
 
-        // As at the containment check: the truthful map descriptor, and a key
-        // the runtime unpacks if it arrived packed. What the pointer reaches is
-        // the map's real value type rather than the `data` this function's
-        // static type claims, so the reference carries that descriptor on.
         let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
 
-        writeln!(out, "    dtlv_rti_btreemap_get_value_ref_erased_local(rt, {}, {}, {}, &{}, (void**){});",
+        writeln!(out, "    dtlv_rti_btreemap_get_value_ref_local(rt, {}, {}, {}, &{}, (void**){});",
             map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).unwrap();
         Ok(())
     }
@@ -4132,7 +4110,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let value_addr = self.operand_addr(value);
         let tensor_tydesc = self.operand_tydesc(tensor);
         let value_tydesc = self.operand_tydesc(value);
-        writeln!(out, "    *(bool_t*){} = dtlv_rti_tensor_set_erased_local(rt, {}, {}, (const index_t*){}, {}, {}) == 1;",
+        writeln!(out, "    *(bool_t*){} = dtlv_rti_tensor_set_local(rt, {}, {}, (const index_t*){}, {}, {}) == 1;",
             self.value_addr(is_valid), tensor_addr, tensor_tydesc, index_addr, value_addr, value_tydesc).unwrap();
         Ok(())
     }

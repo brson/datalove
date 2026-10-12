@@ -1,9 +1,9 @@
 //! Round-tripping values through Data.
 //!
-//! `data_from_local` moves a value in, `data_into_local` moves it back out
-//! given the type that went in. A value has to survive the trip unchanged
-//! whichever of the three forms it takes, and the trip must not leak: the
-//! pointer form allocates a box that only the extract frees.
+//! `data_from_local` moves a value in and `data_borrow` reads it back. A value
+//! has to survive the trip unchanged whichever of the three forms it takes, and
+//! the trip must not leak: the pointer form allocates a box that destroying the
+//! Data frees.
 
 use rmx::prelude::*;
 
@@ -23,7 +23,7 @@ fn compile_str<'db>(db: &'db Database, source_text: &str) -> AnyResult<datalove_
     Ok(compile(db, source))
 }
 
-/// Move `source` into a Data and back out, and compare the bytes with the
+/// Move `source` into a Data, read it back, and compare the bytes with the
 /// original. Returns the tag the value took on the way through.
 fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     let db = Database::default();
@@ -66,30 +66,38 @@ fn round_trip(source_text: &str) -> AnyResult<datalove_rtdt::anypack::Tag> {
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "{}", source_text);
 
-    // Out.
-    let mut out_buffer = datalove_rt::rust::AlignedBuffer::new(size);
+    // Back.
+    let mut scratch = [0u8; 16];
+    let mut value_ptr: *const u8 = std::ptr::null();
+    let mut value_tydesc: *const datalove_rtdt::TyDesc = std::ptr::null();
     let status = unsafe {
-        datalove_rt::c::dtlv_rti_data_into_local(
-            rt.handle(),
+        datalove_rt::c::dtlv_rti_data_borrow(
             data_buffer.as_ptr(),
-            out_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            scratch.as_mut_ptr(),
+            &mut value_ptr,
+            &mut value_tydesc,
         )
     };
     assert_eq!(status, datalove_rt::c::RtStatus::Ok, "{}", source_text);
 
-    let recovered: &[u8] = unsafe {
-        std::slice::from_raw_parts(out_buffer.as_ptr(), size)
-    };
+    let recovered: &[u8] = unsafe { std::slice::from_raw_parts(value_ptr, size) };
     assert_eq!(recovered, original.as_slice(), "value changed: {}", source_text);
 
-    // The value came back out, so destroying it is the caller's job now. The
-    // Data itself is dead and must not be destroyed as well.
+    // The Data owns the value, and destroying it frees whatever it holds.
+    let data_tydesc = datalove_rtdt::TyDesc {
+        type_tag: datalove_rtdt::TyTag::Data,
+        flags: 0,
+        size: std::mem::size_of::<datalove_rtdt::Data>() as u32,
+        align: std::mem::align_of::<datalove_rtdt::Data>() as u32,
+        type_info: datalove_rtdt::TyInfo {
+            nothing: datalove_rtdt::TyInfoNothing { unused: 0 },
+        },
+    };
     unsafe {
         datalove_rt::c::dtlv_rti_any_destroy_local(
             rt.handle(),
-            out_buffer.as_mut_ptr(),
-            inst.tydesc.as_ptr(),
+            data_buffer.as_mut_ptr(),
+            &data_tydesc,
         );
     }
 

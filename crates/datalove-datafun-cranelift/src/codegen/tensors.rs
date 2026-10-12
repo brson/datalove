@@ -253,7 +253,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         index: &Operand,
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let set = self.runtime.tensor_set_erased;
+        let set = self.runtime.tensor_set;
         let tensor_ptr = self.get_operand_ptr(builder, tensor)?;
         let tensor_tydesc = self.operand_tydesc(builder, tensor)?;
         let indices = self.get_operand_ptr(builder, index)?;

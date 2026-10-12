@@ -644,28 +644,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_from_local(
     }
 }
 
-/// Clone a value into a destination that may be the erased shape.
-///
-/// A `@` inside a generic clones something whose type only the descriptor
-/// knows, into a slot holding a `data`. See `boxing::clone_erased_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_clone_erased_local(
-    rt: LocalRtHandle,
-    src_in: *const u8,
-    src_tydesc: *const rtdt::TyDesc,
-    dst_out: *mut u8,
-    dst_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!src_in.is_null(), "src_in is null");
-    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
-    debug_assert!(!dst_out.is_null(), "dst_out is null");
-    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
-    unsafe {
-        crate::c::impls::boxing::clone_erased_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
-    }
-}
-
 /// Apply an operator to two numbers whose type only their descriptors say.
 ///
 /// `op` is a `rtdt::DynOp`. See `dyn_ops`: this is how a generic bounded to
@@ -805,22 +783,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_dyn_neg_checked(
     }
 }
 
-/// Borrow what a Data holds, as a value pointer and its descriptor.
-///
-/// The Data keeps ownership; both outputs point into it. See
-/// `boxing::data_parts`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_data_parts(
-    data_in: *const u8,
-    value_out: *mut *const u8,
-    tydesc_out: *mut *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert!(!value_out.is_null(), "value_out is null");
-    debug_assert!(!tydesc_out.is_null(), "tydesc_out is null");
-    unsafe { crate::c::impls::boxing::data_parts(data_in, value_out, tydesc_out) }
-}
-
 /// Borrow what a Data holds, unpacking into `scratch` when it has to.
 ///
 /// Like `dtlv_rti_data_parts`, but works for a value the `data` keeps in its
@@ -838,68 +800,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_data_borrow(
     debug_assert!(!value_out.is_null(), "value_out is null");
     debug_assert!(!tydesc_out.is_null(), "tydesc_out is null");
     unsafe { crate::c::impls::boxing::data_borrow(data_in, scratch, value_out, tydesc_out) }
-}
-
-/// Move the value back out of a Data, given the type that went in.
-///
-/// The caller supplies the tydesc, so this is a move rather than a checked
-/// downcast; the Data is dead afterwards. See `boxing::data_into_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_data_into_local(
-    rt: LocalRtHandle,
-    data_in: *const u8,
-    dest_out: *mut u8,
-    dest_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert!(!dest_out.is_null(), "dest_out is null");
-    debug_assert!(!dest_tydesc.is_null(), "dest_tydesc is null");
-    debug_assert_aligned(dest_out, dest_tydesc, "data_into_local:dest_out");
-    unsafe {
-        crate::c::impls::boxing::data_into_local(rt, data_in, dest_out, dest_tydesc)
-    }
-}
-
-/// Move a value into the erased shape a generic callee was compiled for.
-///
-/// The two tydescs have the same shape except where the callee's has `data`.
-/// See `boxing::erase_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_erase_local(
-    rt: LocalRtHandle,
-    src_in: *const u8,
-    src_tydesc: *const rtdt::TyDesc,
-    dst_out: *mut u8,
-    dst_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!src_in.is_null(), "src_in is null");
-    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
-    debug_assert!(!dst_out.is_null(), "dst_out is null");
-    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
-    unsafe {
-        crate::c::impls::boxing::erase_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
-    }
-}
-
-/// Move a value back out of its erased shape. The inverse of `dtlv_rti_erase_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_reify_local(
-    rt: LocalRtHandle,
-    src_in: *const u8,
-    src_tydesc: *const rtdt::TyDesc,
-    dst_out: *mut u8,
-    dst_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!src_in.is_null(), "src_in is null");
-    debug_assert!(!src_tydesc.is_null(), "src_tydesc is null");
-    debug_assert!(!dst_out.is_null(), "dst_out is null");
-    debug_assert!(!dst_tydesc.is_null(), "dst_tydesc is null");
-    unsafe {
-        crate::c::impls::boxing::reify_local(rt, src_in, src_tydesc, dst_out, dst_tydesc)
-    }
 }
 
 #[unsafe(no_mangle)]
@@ -1238,8 +1138,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
 
 /// The key of the entry at `index` in sort order, or none past the end.
 ///
-/// `as_data` packs the result into a `data`, which is what a caller with no
-/// static type for the keys asks for. See `btreemap_key_at_impl`.
+/// See `btreemap_key_at_impl`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_key_at_local(
     rt: LocalRtHandle,
@@ -1248,7 +1147,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_key_at_local(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
-    as_data: bool,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
@@ -1257,7 +1155,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_key_at_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         crate::c::impls::btreemap::btreemap_key_at_impl(
             rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc), as_data,
+            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
         )
     }
 }
@@ -1271,7 +1169,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_value_at_local(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
-    as_data: bool,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
@@ -1280,7 +1177,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_value_at_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         crate::c::impls::btreemap::btreemap_value_at_impl(
             rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc), as_data,
+            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
         )
     }
 }
@@ -1395,7 +1292,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_get_at_local(
     index: rtdt::IndexRepr,
     option_value_out: *mut u8,
     option_tydesc: *const rtdt::TyDesc,
-    as_data: bool,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
     debug_assert!(!set_value_ref.is_null(), "set_value_ref is null");
@@ -1404,7 +1300,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_get_at_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         crate::c::impls::set::btreeset_get_at_impl(
             rt_ref, set_value_ref, rtdt::TyDescRef::from_ptr(set_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc), as_data,
+            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
         )
     }
 }
@@ -1450,470 +1346,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_local(
     }
 }
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_as_data_local(
-    rt: LocalRtHandle,
-    map_value_ref: *const u8,
-    map_tydesc: *const rtdt::TyDesc,
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!map_value_ref.is_null(), "map_value_ref is null");
-    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
-    debug_assert!(!key_ref.is_null(), "key_ref is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::btreemap::btreemap_get_as_data_impl(
-            rt_ref,
-            map_value_ref,
-            rtdt::TyDescRef::from_ptr(map_tydesc),
-            key_ref,
-            rtdt::TyDescRef::from_ptr(key_tydesc),
-            option_value_out,
-            rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
-    }
-}
-
-/// Whether an element has to be unpacked from a `data` to reach a slot.
-///
-/// A collection built inside a generic is made against the descriptor the call
-/// site handed over, so its elements are the real type. The element in hand is
-/// in the erased shape, which for a single type parameter is a `data`. The one
-/// case where the two readings coincide is a collection whose elements really
-/// are `data`, so the slot's own type is compared as well.
-///
-/// Here rather than at each call site, so that the four backends cannot each
-/// have their own answer. The same reading as `boxes_the_element` in the rider,
-/// running the other way.
-unsafe fn unwraps_the_element(
-    element_in_hand: *const rtdt::TyDesc,
-    slot_ty: rtdt::TyDescRef,
-) -> bool {
-    unsafe {
-        (*element_in_hand).type_tag == rtdt::TyTag::Data
-            && slot_ty.type_tag() != rtdt::TyTag::Data
-    }
-}
-
-/// Move a value in the erased shape into the real one, and do something with
-/// it there.
-///
-/// An element crossing into a collection built inside a generic is in the shape
-/// the generic holds it in, which for a bare type parameter is a `data` the
-/// collection unwraps. For anything composite -- `(A, B)` becoming a tuple of
-/// two `data`, `?T` an option of one -- the shapes differ position by position
-/// instead, and `reify_local` is what walks them. The scratch is the real
-/// shape's width, which only the collection's descriptor says, so it is
-/// allocated rather than found on a frame.
-unsafe fn reified_then(
-    rt: LocalRtHandle,
-    src: *mut u8,
-    src_tydesc: *const rtdt::TyDesc,
-    want: *const rtdt::TyDesc,
-    then: impl FnOnce(*mut u8) -> RtStatus,
-) -> RtStatus {
-    unsafe {
-        let size = (*want).size;
-        let align = (*want).align;
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let scratch = rt_ref.alloc.alloc(size, align, 1);
-        if scratch.is_null() {
-            return RtStatus::Error;
-        }
-        let mut status = crate::c::impls::boxing::reify_local(rt, src, src_tydesc, scratch, want);
-        if status == RtStatus::Ok {
-            status = then(scratch);
-        }
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        rt_ref.alloc.free(size, align, 1, scratch);
-        status
-    }
-}
-
-
-/// Push an element that may have arrived in the erased shape.
-///
-/// A collection literal written inside a generic has its elements as `data`
-/// and its list as the caller's real type, so the two disagree and the element
-/// has to be unpacked on the way in. Copying it in as it stands would put a
-/// two-word wrapper where a value of the element type belongs.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_push_erased_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    element_in: *mut u8,
-    element_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
-    unsafe {
-        let list_ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let elem_ty = list_ty.list_element_ty();
-        if unwraps_the_element(element_tydesc, elem_ty) {
-            return dtlv_rti_list_push_data_local(
-                rt, list_value_mut, list_tydesc, element_in as *const u8);
-        }
-        if crate::c::impls::boxing::needs_erasure(elem_ty.as_ptr(), element_tydesc) {
-            return reified_then(rt, element_in, element_tydesc, elem_ty.as_ptr(), |scratch| {
-                dtlv_rti_list_push_local(
-                    rt, list_value_mut, list_tydesc, scratch, elem_ty.as_ptr())
-            });
-        }
-        dtlv_rti_list_push_local(rt, list_value_mut, list_tydesc, element_in, element_tydesc)
-    }
-}
-
-/// Write a value into a slot whose type the caller names, whatever shape the
-/// value arrived in.
-///
-/// What is already in the slot is destroyed first. The value is then unwrapped
-/// if it came wrapped whole, converted position by position if it came in the
-/// slot's erased shape, and moved as it stands otherwise -- the same three
-/// cases `dtlv_rti_list_push_erased_local` decides between, for a slot whose
-/// address the caller worked out rather than one a collection owns.
-unsafe fn write_element(
-    rt: LocalRtHandle,
-    slot_out: *mut u8,
-    slot_tydesc: *const rtdt::TyDesc,
-    value_in: *mut u8,
-    value_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!slot_out.is_null(), "slot_out is null");
-    debug_assert!(!slot_tydesc.is_null(), "slot_tydesc is null");
-    debug_assert!(!value_in.is_null(), "value_in is null");
-    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
-    unsafe {
-        let status = crate::c::impls::destroy::any_destroy_local(rt, slot_out, slot_tydesc);
-        if status != RtStatus::Ok {
-            return status;
-        }
-        if unwraps_the_element(value_tydesc, rtdt::TyDescRef::from_ptr(slot_tydesc)) {
-            return crate::c::impls::boxing::data_into_local(rt, value_in, slot_out, slot_tydesc);
-        }
-        if crate::c::impls::boxing::needs_erasure(slot_tydesc, value_tydesc) {
-            return crate::c::impls::boxing::reify_local(
-                rt, value_in, value_tydesc, slot_out, slot_tydesc);
-        }
-        let size = (*slot_tydesc).size as usize;
-        core::ptr::copy_nonoverlapping(value_in as *const u8, slot_out, size);
-        RtStatus::Ok
-    }
-}
-
-/// Replace a map value, where the key or the value may have arrived in the
-/// erased shape.
-/// See `borrow_lookup_key` and `dtlv_rti_list_push_erased_local`.
-///
-/// Takes the value whatever happens: a key the map does not hold is `Error`,
-/// with the map as it was and the value destroyed.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_erased_local(
-    rt: LocalRtHandle,
-    btreemap_value_mut: *mut u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    value_in: *mut u8,
-    value_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
-    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
-    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
-    unsafe {
-        let map_ty = rtdt::TyDescRef::from_ptr(btreemap_tydesc);
-        let value_ty = map_ty.map_value_ty();
-        let mut key_scratch = [0u8; 16];
-        let (key, key_ty) = borrow_lookup_key(
-            btreemap_tydesc, key_ref, key_tydesc, key_scratch.as_mut_ptr());
-
-        // Taken out of the wrapper rather than borrowed from it: the map
-        // keeps the value, so the wrapper has given it up and its own
-        // allocation goes with it. Borrowing would leave the box behind.
-        // Whichever shape the value ends up in is destroyed if it did not
-        // land.
-        let set_or_destroy = |value: *mut u8, value_tydesc: *const rtdt::TyDesc| {
-            let status = dtlv_rti_btreemap_set_value_local(
-                rt, btreemap_value_mut, btreemap_tydesc, key, key_ty, value, value_tydesc);
-            if status != RtStatus::Ok {
-                crate::c::impls::destroy::any_destroy_local(rt, value, value_tydesc);
-            }
-            status
-        };
-        if unwraps_the_element(value_tydesc, value_ty) {
-            return unwrapped_then(rt, value_in, value_ty.as_ptr(), |scratch| {
-                set_or_destroy(scratch, value_ty.as_ptr())
-            });
-        }
-        if crate::c::impls::boxing::needs_erasure(value_ty.as_ptr(), value_tydesc) {
-            return reified_then(rt, value_in, value_tydesc, value_ty.as_ptr(), |scratch| {
-                set_or_destroy(scratch, value_ty.as_ptr())
-            });
-        }
-        set_or_destroy(value_in, value_tydesc)
-    }
-}
-
-/// Take the element at an index out, in whatever shape the destination is.
-/// See `dtlv_rti_list_push_erased_local` for the three cases.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_erased_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::list::list_remove_erased_impl(
-            rt_ref,
-            list_value_mut,
-            rtdt::TyDescRef::from_ptr(list_tydesc),
-            index,
-            option_value_out,
-            rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
-    }
-}
-
-/// Take the last element off, in whatever shape the destination is.
-/// See `dtlv_rti_list_push_erased_local` for the three cases.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_erased_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::list::list_pop_erased_impl(
-            rt_ref,
-            list_value_mut,
-            rtdt::TyDescRef::from_ptr(list_tydesc),
-            option_value_out,
-            rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
-    }
-}
-
-/// Replace an element with one that may have arrived in the erased shape.
-/// See `dtlv_rti_list_push_erased_local`.
-///
-/// Takes the element whatever happens: an index past the end is `Error`, with
-/// the list as it was and the element destroyed.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_set_erased_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    element_in: *mut u8,
-    element_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
-    unsafe {
-        if index >= (*(list_value_mut as *const rtdt::List)).size.0 {
-            crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc);
-            return RtStatus::Error;
-        }
-        let list_ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let elem_ty = list_ty.list_element_ty();
-        if unwraps_the_element(element_tydesc, elem_ty) {
-            return dtlv_rti_list_set_data_local(
-                rt, list_value_mut, list_tydesc, index, element_in as *const u8);
-        }
-        if crate::c::impls::boxing::needs_erasure(elem_ty.as_ptr(), element_tydesc) {
-            return reified_then(rt, element_in, element_tydesc, elem_ty.as_ptr(), |scratch| {
-                dtlv_rti_list_set_local(
-                    rt, list_value_mut, list_tydesc, index, scratch, elem_ty.as_ptr())
-            });
-        }
-        dtlv_rti_list_set_local(
-            rt, list_value_mut, list_tydesc, index, element_in, element_tydesc)
-    }
-}
-
-/// Insert an element at a position, which may have arrived in the erased shape.
-/// See `dtlv_rti_list_push_erased_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_erased_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    element_in: *mut u8,
-    element_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
-    unsafe {
-        let list_ty = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let elem_ty = list_ty.list_element_ty();
-        if unwraps_the_element(element_tydesc, elem_ty) {
-            return dtlv_rti_list_insert_data_local(
-                rt, list_value_mut, list_tydesc, index, element_in as *const u8);
-        }
-        if crate::c::impls::boxing::needs_erasure(elem_ty.as_ptr(), element_tydesc) {
-            return reified_then(rt, element_in, element_tydesc, elem_ty.as_ptr(), |scratch| {
-                dtlv_rti_list_insert_local(
-                    rt, list_value_mut, list_tydesc, index, scratch, elem_ty.as_ptr())
-            });
-        }
-        dtlv_rti_list_insert_local(
-            rt, list_value_mut, list_tydesc, index, element_in, element_tydesc)
-    }
-}
-
-/// Insert an element that may have arrived in the erased shape.
-/// See `dtlv_rti_list_push_erased_local`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_erased_local(
-    rt: LocalRtHandle,
-    set_value_mut: *mut u8,
-    set_tydesc: *const rtdt::TyDesc,
-    element_in: *mut u8,
-    element_tydesc: *const rtdt::TyDesc,
-    bool_out: *mut u8,
-) -> RtStatus {
-    debug_assert!(!set_tydesc.is_null(), "set_tydesc is null");
-    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
-    unsafe {
-        let set_ty = rtdt::TyDescRef::from_ptr(set_tydesc);
-        let elem_ty = set_ty.set_element_ty();
-        if unwraps_the_element(element_tydesc, elem_ty) {
-            return dtlv_rti_btreeset_insert_data_local(
-                rt, set_value_mut, set_tydesc, element_in as *const u8, bool_out);
-        }
-        if crate::c::impls::boxing::needs_erasure(elem_ty.as_ptr(), element_tydesc) {
-            return reified_then(rt, element_in, element_tydesc, elem_ty.as_ptr(), |scratch| {
-                dtlv_rti_btreeset_insert_local(
-                    rt, set_value_mut, set_tydesc, scratch, elem_ty.as_ptr(), bool_out)
-            });
-        }
-        dtlv_rti_btreeset_insert_local(
-            rt, set_value_mut, set_tydesc, element_in, element_tydesc, bool_out)
-    }
-}
-
-/// Insert an entry whose key or value may have arrived in the erased shape.
-///
-/// The two are decided separately, because a map may be generic in one and
-/// concrete in the other. See `dtlv_rti_list_push_erased_local`.
-#[unsafe(no_mangle)]
-#[allow(clippy::too_many_arguments)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_erased_local(
-    rt: LocalRtHandle,
-    map_value_mut: *mut u8,
-    map_tydesc: *const rtdt::TyDesc,
-    key_in: *mut u8,
-    key_tydesc: *const rtdt::TyDesc,
-    value_in: *mut u8,
-    value_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
-    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
-    debug_assert!(!value_tydesc.is_null(), "value_tydesc is null");
-    unsafe {
-        let map_ty = rtdt::TyDescRef::from_ptr(map_tydesc);
-        let key_ty = map_ty.map_key_ty();
-        let value_ty = map_ty.map_value_ty();
-        let key_wrapped = unwraps_the_element(key_tydesc, key_ty);
-        let value_wrapped = unwraps_the_element(value_tydesc, value_ty);
-
-        // A side that is composite differs position by position rather than
-        // being wrapped whole, so it is moved into the real shape first and
-        // then inserted as itself. Either side may be the one that needs it.
-        if crate::c::impls::boxing::needs_erasure(key_ty.as_ptr(), key_tydesc) {
-            return reified_then(rt, key_in, key_tydesc, key_ty.as_ptr(), |key_scratch| {
-                dtlv_rti_btreemap_insert_erased_local(
-                    rt, map_value_mut, map_tydesc, key_scratch, key_ty.as_ptr(),
-                    value_in, value_tydesc)
-            });
-        }
-        if crate::c::impls::boxing::needs_erasure(value_ty.as_ptr(), value_tydesc) {
-            return reified_then(rt, value_in, value_tydesc, value_ty.as_ptr(), |value_scratch| {
-                dtlv_rti_btreemap_insert_erased_local(
-                    rt, map_value_mut, map_tydesc, key_in, key_tydesc,
-                    value_scratch, value_ty.as_ptr())
-            });
-        }
-
-        if !key_wrapped && !value_wrapped {
-            return dtlv_rti_btreemap_insert_local(
-                rt, map_value_mut, map_tydesc, key_in, key_tydesc, value_in, value_tydesc);
-        }
-        // One side may be wrapped and the other not: a map generic in both its
-        // key and its value, called with `data` for the key, holds a key that
-        // is already what it wants and a value that is still packed.
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::btreemap::btreemap_insert_sides_impl(
-            rt_ref, map_value_mut, map_ty, key_in, key_wrapped, value_in, value_wrapped)
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_insert_data_local(
-    rt: LocalRtHandle,
-    map_value_mut: *mut u8,
-    map_tydesc: *const rtdt::TyDesc,
-    key_data_in: *const u8,
-    value_data_in: *const u8,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!map_value_mut.is_null(), "map_value_mut is null");
-    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
-    debug_assert!(!key_data_in.is_null(), "key_data_in is null");
-    debug_assert!(!value_data_in.is_null(), "value_data_in is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::btreemap::btreemap_insert_data_impl(
-            rt_ref,
-            map_value_mut,
-            rtdt::TyDescRef::from_ptr(map_tydesc),
-            key_data_in,
-            value_data_in,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_insert_data_local(
-    rt: LocalRtHandle,
-    set_value_mut: *mut u8,
-    set_tydesc: *const rtdt::TyDesc,
-    data_in: *const u8,
-    bool_out: *mut u8,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!set_value_mut.is_null(), "set_value_mut is null");
-    debug_assert!(!set_tydesc.is_null(), "set_tydesc is null");
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert!(!bool_out.is_null(), "bool_out is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::set::btreeset_insert_data_impl(
-            rt_ref,
-            set_value_mut,
-            rtdt::TyDescRef::from_ptr(set_tydesc),
-            data_in,
-            bool_out,
-        )
-    }
-}
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_len_local(
@@ -2022,6 +1454,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_value_ref_local(
     }
 }
 
+/// Replace the value at a key the map already has, moving the new one in.
+///
+/// A key the map does not have is `Error`. The value is taken either way, as
+/// every value moved into the runtime is: one that does not land is destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
     rt: LocalRtHandle,
@@ -2029,7 +1465,7 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_set_value_local(
     btreemap_tydesc: *const rtdt::TyDesc,
     key_ref: *const u8,
     key_tydesc: *const rtdt::TyDesc,
-    value_in: *const u8,
+    value_in: *mut u8,
     value_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     debug_assert!(!rt.is_null(), "rt is null");
@@ -2423,72 +1859,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_clear_local(
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_set_data_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    data_in: *const u8,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert_aligned(list_value_mut, list_tydesc, "list_set_data:list");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        crate::c::impls::list::list_set_data_impl(rt_ref, list_value_mut, list_tydesc_ref, index, data_in)
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_data_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    data_in: *const u8,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert_aligned(list_value_mut, list_tydesc, "list_insert_data:list");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        crate::c::impls::list::list_insert_data_impl(rt_ref, list_value_mut, list_tydesc_ref, index, data_in)
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_as_data_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    debug_assert_aligned(list_value_mut, list_tydesc, "list_remove_as_data:list");
-    debug_assert_aligned(option_value_out, option_tydesc, "list_remove_as_data:option");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::c::impls::list::list_remove_as_data_impl(
-            rt_ref, list_value_mut, list_tydesc_ref, index, option_value_out, option_tydesc_ref,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_len_local(
     rt: LocalRtHandle,
     list_value_ref: *const u8,
@@ -2504,116 +1874,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_len_local(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
         crate::c::impls::list::list_len_impl(rt_ref, list_value_ref, list_tydesc_ref, len_out)
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_get_as_data_local(
-    rt: LocalRtHandle,
-    list_value_ref: *const u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_ref.is_null(), "list_value_ref is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    debug_assert_aligned(list_value_ref, list_tydesc, "list_get_as_data:list");
-    debug_assert_aligned(option_value_out, option_tydesc, "list_get_as_data:option");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::c::impls::list::list_get_as_data_impl(
-            rt_ref,
-            list_value_ref,
-            list_tydesc_ref,
-            index,
-            option_value_out,
-            option_tydesc_ref,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_as_data_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    debug_assert_aligned(list_value_mut, list_tydesc, "list_pop_as_data:list");
-    debug_assert_aligned(option_value_out, option_tydesc, "list_pop_as_data:option");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        let option_tydesc_ref = rtdt::TyDescRef::from_ptr(option_tydesc);
-        crate::c::impls::list::list_pop_as_data_impl(
-            rt_ref,
-            list_value_mut,
-            list_tydesc_ref,
-            option_value_out,
-            option_tydesc_ref,
-        )
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_push_data_local(
-    rt: LocalRtHandle,
-    list_value_mut: *mut u8,
-    list_tydesc: *const rtdt::TyDesc,
-    data_in: *const u8,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!data_in.is_null(), "data_in is null");
-    debug_assert_aligned(list_value_mut, list_tydesc, "list_push_data:list");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let list_tydesc_ref = rtdt::TyDescRef::from_ptr(list_tydesc);
-        crate::c::impls::list::list_push_data_impl(rt_ref, list_value_mut, list_tydesc_ref, data_in)
-    }
-}
-
-/// Read an element, packing it into a `data` only if it is not one already.
-///
-/// The decision is here rather than at each call site so that the four
-/// backends cannot each have their own answer. See `list_get_erased_impl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_list_get_erased_local(
-    rt: LocalRtHandle,
-    list_value_ref: *const u8,
-    list_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!list_value_ref.is_null(), "list_value_ref is null");
-    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    debug_assert!(!option_tydesc.is_null(), "option_tydesc is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::list::list_get_erased_impl(
-            rt_ref,
-            list_value_ref,
-            rtdt::TyDescRef::from_ptr(list_tydesc),
-            index,
-            option_value_out,
-            rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
     }
 }
 
@@ -2648,6 +1908,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_get_local(
     }
 }
 
+/// Replace the element at `index`, moving the new one in.
+///
+/// An index past the end is `Error`. The element is taken either way, as every
+/// value moved into the runtime is: one that does not land is destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_set_local(
     rt: LocalRtHandle,
@@ -2745,6 +2009,11 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_pop_local(
     }
 }
 
+/// Insert an element before `index`, or at the end for an index equal to the
+/// length, moving it in.
+///
+/// An index past the end is `Error`. The element is taken either way, as every
+/// value moved into the runtime is: one that does not land is destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_insert_local(
     rt: LocalRtHandle,
@@ -2991,8 +2260,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_get_local(
 
 /// Replace the element at `indices`, one per axis, moving the new one in.
 ///
-/// An index past the end of its axis is `Error`, with the tensor as it was and
-/// the element still the caller's.
+/// An index past the end of its axis is `Error`, with the tensor as it was.
+/// The element is taken either way, as every value moved into the runtime is:
+/// one that does not land is destroyed.
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
     rt: LocalRtHandle,
@@ -3023,35 +2293,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_local(
             indices_ptr,
             element_in,
         )
-    }
-}
-
-/// Replace the element at `indices`, one per axis, with one that may have
-/// arrived in the erased shape. See `dtlv_rti_list_set_erased_local`.
-///
-/// Takes the element whatever happens: an index past the end of its axis is
-/// `Error`, with the tensor as it was and the element destroyed.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tensor_set_erased_local(
-    rt: LocalRtHandle,
-    tensor_value_mut: *mut u8,
-    tensor_tydesc: *const rtdt::TyDesc,
-    indices_ptr: *const rtdt::IndexRepr,
-    element_in: *mut u8,
-    element_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!tensor_tydesc.is_null(), "tensor_tydesc is null");
-    debug_assert!(!element_tydesc.is_null(), "element_tydesc is null");
-    unsafe {
-        let tensor_ty = rtdt::TyDescRef::from_ptr(tensor_tydesc);
-        match crate::c::impls::tensor::tensor_element_slot(tensor_value_mut, tensor_ty, indices_ptr) {
-            Some(slot) => write_element(
-                rt, slot, tensor_ty.tensor_element_ty().as_ptr(), element_in, element_tydesc),
-            None => {
-                crate::c::impls::destroy::any_destroy_local(rt, element_in, element_tydesc);
-                RtStatus::Error
-            }
-        }
     }
 }
 
@@ -3666,28 +2907,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_shadow_alloc(
     }
 }
 
-/// Read a field out of an aggregate whose layout only its descriptor says.
-///
-/// See `crate::c::impls::dyn_ops::field_read`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_field_read_local(
-    rt: LocalRtHandle,
-    dest_out: *mut u8,
-    dest_tydesc: *const rtdt::TyDesc,
-    base_in: *const u8,
-    base_tydesc: *const rtdt::TyDesc,
-    index: u32,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!dest_out.is_null(), "dest_out is null");
-    debug_assert!(!dest_tydesc.is_null(), "dest_tydesc is null");
-    debug_assert!(!base_in.is_null(), "base_in is null");
-    debug_assert!(!base_tydesc.is_null(), "base_tydesc is null");
-    unsafe {
-        crate::c::impls::dyn_ops::field_read(rt, dest_out, dest_tydesc, base_in, base_tydesc, index)
-    }
-}
-
 /// The descriptor of what a container holds.
 ///
 /// See `crate::c::impls::dyn_ops::element_tydesc`.
@@ -3699,110 +2918,3 @@ pub unsafe extern "C-unwind" fn dtlv_rti_element_tydesc(
     unsafe { crate::c::impls::dyn_ops::element_tydesc(tydesc) }
 }
 
-/// Whether a key reaching a map lookup has to come out of a `data` first, and
-/// where it is if so.
-///
-/// Inside a generic a map's key parameter is erased to `data`, so the key in
-/// hand is packed while the map holds the real thing. The same reading as
-/// `unwraps_the_element` makes for an insert, running on the lookup side.
-///
-/// `scratch` is two words the caller owns for the lifetime of the lookup, which
-/// is what `data_borrow` wants for a key that rides inline in the `data`.
-unsafe fn borrow_lookup_key(
-    map_tydesc: *const rtdt::TyDesc,
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    scratch: *mut u8,
-) -> (*const u8, *const rtdt::TyDesc) {
-    unsafe {
-        let map_ty = rtdt::TyDescRef::from_ptr(map_tydesc);
-        if !unwraps_the_element(key_tydesc, map_ty.map_key_ty()) {
-            return (key_ref, key_tydesc);
-        }
-        let mut value_out: *const u8 = core::ptr::null();
-        let mut tydesc_out: *const rtdt::TyDesc = core::ptr::null();
-        crate::c::impls::boxing::data_borrow(key_ref, scratch, &mut value_out, &mut tydesc_out);
-        (value_out, tydesc_out)
-    }
-}
-
-/// Move a value out of the wrapper it crossed in, and do something with it.
-///
-/// The counterpart of `reified_then` for a value that arrived wrapped whole
-/// rather than in a shape that has to be walked. `data_into_local` takes the
-/// payload and releases the box, which is right where whatever comes next
-/// keeps the value; borrowing would leave the box behind.
-unsafe fn unwrapped_then(
-    rt: LocalRtHandle,
-    data_in: *mut u8,
-    want: *const rtdt::TyDesc,
-    then: impl FnOnce(*mut u8) -> RtStatus,
-) -> RtStatus {
-    unsafe {
-        let size = (*want).size;
-        let align = (*want).align;
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        let scratch = rt_ref.alloc.alloc(size, align, 1);
-        if scratch.is_null() {
-            return RtStatus::Error;
-        }
-        let mut status = crate::c::impls::boxing::data_into_local(rt, data_in, scratch, want);
-        if status == RtStatus::Ok {
-            status = then(scratch);
-        }
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        rt_ref.alloc.free(size, align, 1, scratch);
-        status
-    }
-}
-
-/// Ask whether a map holds a key that may have arrived packed.
-///
-/// See `borrow_lookup_key`. The map's descriptor is the one the call site
-/// supplied, which inside a generic is the only truthful one: the static type
-/// there describes a `%{data = data}`, and looking a `string` up against that
-/// ordering finds nothing.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_contains_key_erased_local(
-    rt: LocalRtHandle,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    result_out: *mut bool,
-) -> RtStatus {
-    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
-    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
-    unsafe {
-        let mut scratch = [0u8; 16];
-        let (key, key_ty) = borrow_lookup_key(
-            btreemap_tydesc, key_ref, key_tydesc, scratch.as_mut_ptr());
-        dtlv_rti_btreemap_contains_key_local(
-            rt, btreemap_value_ref, btreemap_tydesc, key, key_ty, result_out)
-    }
-}
-
-/// Find a map value by a key that may have arrived packed.
-///
-/// See `borrow_lookup_key`. The pointer that comes back is into the map, and
-/// what it points at is the map's real value type rather than the `data` the
-/// caller's static type claims; `dtlv_rti_element_tydesc` says which.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_get_value_ref_erased_local(
-    rt: LocalRtHandle,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    key_ref: *const u8,
-    key_tydesc: *const rtdt::TyDesc,
-    value_ptr_out: *mut *mut u8,
-) -> RtStatus {
-    debug_assert!(!btreemap_tydesc.is_null(), "btreemap_tydesc is null");
-    debug_assert!(!key_tydesc.is_null(), "key_tydesc is null");
-    unsafe {
-        let mut scratch = [0u8; 16];
-        let (key, key_ty) = borrow_lookup_key(
-            btreemap_tydesc, key_ref, key_tydesc, scratch.as_mut_ptr());
-        dtlv_rti_btreemap_get_value_ref_local(
-            rt, btreemap_value_ref, btreemap_tydesc, key, key_ty, value_ptr_out)
-    }
-}

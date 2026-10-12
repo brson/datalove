@@ -459,7 +459,7 @@ pub unsafe fn tensor_element_slot(
 /// Replace the element at the specified indices, moving the new value in.
 ///
 /// Destroys the old value. An index past the end of its axis is `Error`, with
-/// the tensor as it was and the value still the caller's.
+/// the tensor as it was and the value destroyed: it is taken either way.
 pub unsafe fn tensor_set_impl(
     rt_ref: &mut RtLocal,
     tensor_value_ref: *mut u8,
@@ -468,12 +468,13 @@ pub unsafe fn tensor_set_impl(
     value_in: *mut u8,
 ) -> RtStatus {
     unsafe {
+        let element_ty = tensor_tydesc_ref.tensor_element_ty();
+        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let Some(element_ptr) = tensor_element_slot(tensor_value_ref, tensor_tydesc_ref, indices_ptr) else {
+            crate::c::impls::destroy::any_destroy_local(rt_handle, value_in, element_ty.as_ptr());
             return RtStatus::Error;
         };
-        let element_ty = tensor_tydesc_ref.tensor_element_ty();
 
-        let rt_handle = rt_ref as *mut RtLocal as crate::c::LocalRtHandle;
         let status = crate::c::impls::destroy::any_destroy_local(
             rt_handle,
             element_ptr,

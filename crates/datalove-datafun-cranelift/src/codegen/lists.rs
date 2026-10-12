@@ -200,7 +200,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return self.compile_list_set_copy(builder, is_valid, list, index, value, &elem_ty);
         }
 
-        let set = self.runtime.list_set_erased;
+        let set = self.runtime.list_set;
         let list_ptr = self.get_operand_ptr(builder, list)?;
         let list_tydesc = self.operand_tydesc(builder, list)?;
         let idx = self.get_operand_value(builder, index)?;

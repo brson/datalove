@@ -558,10 +558,7 @@ impl IrInterpreter {
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = element_ptr;
                 }
-                // And what it points at. The stride was already read off the
-                // list's own descriptor; the element's descriptor was read with
-                // it and then thrown away, which is what left a reference into
-                // an erased container saying `data` about a string.
+                // And what it points at, which the list's descriptor says.
                 frame.set_value_tydesc(*dest, element_tydesc);
                 frame.mark_value_live(*dest);
             }
@@ -591,14 +588,8 @@ impl IrInterpreter {
                 // Clone a linear value (deep copy for @ operator).
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
-                // The source's descriptor says what is really there, which
-                // inside a generic its static type does not, and the
-                // destination's says what shape the clone has to arrive in.
-                // Where those differ the value is wrapped on the way, and the
-                // runtime decides that rather than the four backends each
-                // deciding it.
                 unsafe {
-                    datalove_rt::c::dtlv_rti_clone_erased_local(
+                    datalove_rt::c::dtlv_rti_clone_local(
                         self.runtime.handle(),
                         src_val.ptr,
                         src_val.tydesc,
@@ -613,20 +604,14 @@ impl IrInterpreter {
             Instruction::GetField { dest, src, field_index } => {
                 let src_val = self.read_operand(src, frame, frames);
                 let dest_slot = frame.value_dest(*dest);
-                // The offsets come from the descriptor of what is really there,
-                // and so does the decision about whether the field wants
-                // packing on the way out: a destination the static type calls a
-                // `data` holding something that is not one is a generic asking
-                // for a field it cannot name. Both are the runtime's, so that
-                // this and the three compiled backends give one answer.
+                // A shallow copy of the field, at the offset the descriptor of
+                // what is there says.
                 unsafe {
-                    datalove_rt::c::dtlv_rti_field_read_local(
-                        self.runtime.handle(),
+                    let offset = datalove_rt::c::dtlv_rti_field_offset(src_val.tydesc, *field_index);
+                    std::ptr::copy_nonoverlapping(
+                        src_val.ptr.add(offset as usize),
                         dest_slot.ptr,
-                        dest_slot.tydesc,
-                        src_val.ptr,
-                        src_val.tydesc,
-                        *field_index,
+                        (*dest_slot.tydesc).size as usize,
                     );
                 }
                 frame.mark_value_live(*dest);
@@ -897,12 +882,10 @@ impl IrInterpreter {
                 let value_val = self.read_operand(value, frame, frames);
                 let idx = unsafe { *(idx_val.ptr as *const rtdt::IndexRepr) };
 
-                // The runtime checks the index, destroys what was there and
-                // decides which shape the value in hand is in: wrapped, the
-                // slot's own, or the slot's with `data` at some position inside
-                // it. It takes the value whether or not it lands.
+                // The runtime checks the index and destroys what was there. It
+                // takes the value whether or not it lands.
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_list_set_erased_local(
+                    datalove_rt::c::dtlv_rti_list_set_local(
                         self.runtime.handle(), list_val.ptr as *mut u8, list_val.tydesc,
                         idx, value_val.ptr as *mut u8, value_val.tydesc)
                 };
@@ -928,11 +911,10 @@ impl IrInterpreter {
 
                 let (map_tydesc, _, _) = unsafe { map_tydesc_info(&map_val) };
 
-                // The key's own descriptor; see the MapGet above.
                 let mut found = false;
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_contains_key_erased_local(
+                    datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
@@ -954,13 +936,10 @@ impl IrInterpreter {
 
                 let (map_tydesc, _, _) = unsafe { map_tydesc_info(&map_val) };
 
-                // Both sides by their own descriptors: the key may have arrived
-                // packed and the value may be in the erased shape. See the
-                // MapGet above and `dtlv_rti_list_set_erased_local`. The runtime
-                // takes the value whether or not the key is there.
+                // The runtime takes the value whether or not the key is there.
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_set_value_erased_local(
+                    datalove_rt::c::dtlv_rti_btreemap_set_value_local(
                         rt_handle,
                         map_val.ptr as *mut u8,
                         map_tydesc,
@@ -984,11 +963,10 @@ impl IrInterpreter {
                 let (map_tydesc, _, value_tydesc) =
                     unsafe { map_tydesc_info(&map_val) };
 
-                // The key's own descriptor; see the MapGet above.
                 let mut value_ptr: *mut u8 = std::ptr::null_mut();
                 let rt_handle = self.runtime.handle();
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
+                    datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
                         rt_handle,
                         map_val.ptr,
                         map_tydesc,
@@ -1079,13 +1057,10 @@ impl IrInterpreter {
                         let element_ptr = unsafe {
                             tensor_struct.ptr_base.add(linear_offset as usize * element_size)
                         };
-                        // What is in the tensor is the real element type and
-                        // the destination is whatever this function's static
-                        // type says, so the clone may want wrapping on the way.
                         let dest_slot = frame.value_dest(*dest);
                         let rt_handle = self.runtime.handle();
                         let status = unsafe {
-                            datalove_rt::c::dtlv_rti_clone_erased_local(
+                            datalove_rt::c::dtlv_rti_clone_local(
                                 rt_handle,
                                 element_ptr,
                                 element_tydesc,
@@ -1119,7 +1094,7 @@ impl IrInterpreter {
 
                 // As ListSet. Rank 1 only, so the index is the indices array.
                 let status = unsafe {
-                    datalove_rt::c::dtlv_rti_tensor_set_erased_local(
+                    datalove_rt::c::dtlv_rti_tensor_set_local(
                         self.runtime.handle(), tensor_val.ptr as *mut u8, tensor_val.tydesc,
                         idx_val.ptr as *const rtdt::IndexRepr,
                         value_val.ptr as *mut u8, value_val.tydesc)
@@ -1409,14 +1384,10 @@ impl IrInterpreter {
     pub(crate) fn map_get(&mut self, map_val: &Value, key_val: &Value, dest: Destination) -> bool {
         let (map_tydesc, _, value_tydesc) = unsafe { map_tydesc_info(map_val) };
 
-        // The key's own descriptor rather than the map's, because inside a
-        // generic the key arrives packed into a `data` while the map holds the
-        // real thing. Which of the two it is is the runtime's to decide; see
-        // `borrow_lookup_key`.
         let mut value_ptr: *mut u8 = std::ptr::null_mut();
         let rt_handle = self.runtime.handle();
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_get_value_ref_erased_local(
+            datalove_rt::c::dtlv_rti_btreemap_get_value_ref_local(
                 rt_handle, map_val.ptr, map_tydesc, key_val.ptr, key_val.tydesc, &mut value_ptr,
             )
         };
@@ -1425,26 +1396,15 @@ impl IrInterpreter {
             return false;
         }
 
-        // What is in the map is the real value type and the destination is
-        // whatever this function's static type says, so the clone may want
-        // wrapping on the way. The same decision `list_get_erased` makes, and
-        // the runtime's for the same reason.
         let status = unsafe {
-            datalove_rt::c::dtlv_rti_clone_erased_local(rt_handle, value_ptr, value_tydesc, dest.ptr, dest.tydesc)
+            datalove_rt::c::dtlv_rti_clone_local(rt_handle, value_ptr, value_tydesc, dest.ptr, dest.tydesc)
         };
         assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapGet clone failed");
         true
     }
 
-    /// Navigate a field path to get the pointer and tydesc for a nested field.
-    /// Move a value into a field, converting if the two sides are the same type
-    /// in different shapes.
-    ///
-    /// Inside a generic they are. The target's descriptor says what is really
-    /// there and the value's says the erased shape. `reify_local` walks the two
-    /// and converts wherever one of them says `data`, which for two descriptors
-    /// that agree everywhere -- every write outside a generic -- is the move it
-    /// always was.
+    /// Move a value into a field, whatever the field held having been
+    /// destroyed already.
     fn write_field(
         &mut self,
         target_ptr: *mut u8,
@@ -1452,12 +1412,11 @@ impl IrInterpreter {
         value: &crate::value::Value,
     ) {
         unsafe {
-            let status = datalove_rt::c::dtlv_rti_reify_local(
-                self.runtime.handle(), value.ptr, value.tydesc, target_ptr, target_tydesc);
-            assert_eq!(status, datalove_rt::c::RtStatus::Ok, "field write failed");
+            std::ptr::copy_nonoverlapping(value.ptr, target_ptr, (*target_tydesc).size as usize);
         }
     }
 
+    /// Navigate a field path to get the pointer and tydesc for a nested field.
     fn navigate_field_path(
         &self,
         base_ptr: *mut u8,

@@ -691,7 +691,7 @@ impl IrInterpreter {
                 Op::CloneRt { at } => {
                     let [d, s, _] = bc.rt[at as usize];
                     let (src, dest) = (rt_value(frame, base, s), rt_dest(frame, base, d));
-                    datalove_rt::c::dtlv_rti_clone_erased_local(
+                    datalove_rt::c::dtlv_rti_clone_local(
                         self.runtime.handle(), src.ptr, src.tydesc, dest.ptr, dest.tydesc);
                 }
                 Op::WidenFixedRt { at } => {
