@@ -1,9 +1,9 @@
 # Writing Style
 
-How to write prose for this project: botdocs, and blog post drafts for
-`mandocs/posts/`. Read this before writing either. It is a distillation of a
-few well-known sources, listed at the end; when this guide is silent, they are
-the tiebreaker.
+How to write prose for this project: botdocs, and how to review and edit blog
+posts in `mandocs/posts/`. Read this before writing or reviewing either. It is
+a distillation of a few well-known sources, listed at the end; when this guide
+is silent, they are the tiebreaker.
 
 ## Contents
 
@@ -137,30 +137,39 @@ Observed from the existing docs; follow them.
 
 ## Blog posts
 
-Posts live in `mandocs/posts/` and are Brian's. Bots draft them only when
-asked, in `mandocs/drafts/`. The `claude-skills:interview` skill has the full
-voice rules; the essentials:
+Posts live in `mandocs/posts/` and Brian writes them. Bots do not draft posts;
+they review and edit them when asked. The job is to make the post more itself,
+not to make it sound like a bot wrote it.
 
-- **Frontmatter**: `title`, `category` (`dev` or `news`), `summary` (one short
-  line). Files are named `YYYYMMDDX-slug.md`.
-- **First person**, conversational, peer to peer. Opinionated where Brian has
-  an opinion; do not sand it down into "it depends".
-- **Line-per-clause formatting**: break lines at clause boundaries, not at a
+When reviewing, look for:
+
+- **Spine.** Does the middle hold together with *but* and *therefore*, or does
+  it wander? Point out sections that do not advance the argument. The usual
+  shape of a `dev` post -- problem, exploration, results, lessons, future work
+  -- is fine if the exploration has a spine.
+- **Buried takeaway.** If the main point first appears in the lessons at the
+  end, suggest moving it up.
+- **Unbacked claims.** Opinions should rest on code, numbers, or a specific
+  experience. Flag claims that need a receipt and places where a snippet,
+  benchmark, or link to a commit would help.
+- **Unclear sentences.** Apply the sentence rules above. Flag jargon a reader
+  outside the project would not know.
+- **Factual errors.** Check claims about the code and the language against
+  the code and the specs.
+- **Mechanics.** Frontmatter (`title`, `category` of `dev` or `news`,
+  `summary`), file name `YYYYMMDDX-slug.md`, broken relative links, typos.
+
+When editing, preserve the voice:
+
+- First person, conversational, opinionated. Do not sand opinions down into
+  "it depends", and do not add hedges.
+- Line-per-clause formatting: lines break at clause boundaries, not at a
   column. This is distinct from botdocs.
-- **Declarative first sentence.** Jump straight in: "I've decided to close out
-  Checkpoint 1."
-- **Understated ending.** A quiet observation, a callback, or just stop. No
-  "In conclusion", no calls to action.
-- **Separate what was done from what was learned.** Sections like "Some things
-  I like" / "Some things I don't love" or "Learnings" work well.
-- **Receipts.** Every opinion is backed by code, numbers, or a specific
-  experience. Link to commits and docs.
-- **Length follows type.** `news` posts can be a few paragraphs. `dev` posts
-  that argue something need the spine described above.
-
-The usual shape of a `dev` post -- problem, exploration, results, lessons,
-future work -- is fine, provided the exploration has a *but/therefore* spine
-and the main takeaway shows up early, not only in the lessons at the end.
+- Direct first sentence, understated ending. Do not add an introduction, a
+  conclusion, or a call to action.
+- Rough edges, fragments, and casual phrasing are the voice, not mistakes.
+- Prefer suggesting changes over rewriting. Make direct edits only to
+  mechanics and clear errors unless asked for more.
 
 ## Checklist
 
