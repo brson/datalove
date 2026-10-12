@@ -53,7 +53,7 @@ I want to write that function like the following.
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
   var found = false
-  for item in self
+  for item in ref self
     if equal(ref item, ref elem)
       set found = true
       break
@@ -82,7 +82,7 @@ just as for a list.
 ```datalove
 fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord }
   var all_present = true
-  for elem in self
+  for elem in ref self
     if not contains(ref other, ref elem)
       set all_present = false
       break
@@ -98,7 +98,7 @@ changing an element in place could move where it belongs in the order.
 Maps bind two references, the key and the value.
 
 ```datalove
-for key, value in totals
+for key, value in ref totals
   debuglog (key@, value@)
 end for
 ```
@@ -146,4 +146,36 @@ let table = {|
 for { name, number, .. } in table
   ...
 end for
+```
+
+
+## Getting the index
+
+Many of the collections iterations in the system library
+also make use of the loop induction variable for more than just indexing the collection
+once every time through the loop.
+
+```datalove
+todo example
+```
+
+So it's not enough to just make collections iterable.
+Unless I want to force users to keep their own index counter in sync with the collection index
+(which would mean they probably do the same wrapping math I want to avoid)
+then the iteration needs to provide the index value as well.
+
+Go and Zig and probably others do this with another form of `for` that adds another term to
+the loop header to represent the index. So I guess I'll just do that too.
+
+```datalove
+todo example
+```
+
+I don't know if Datalove will ever grow an iterator protocol like Rust has.
+Datalove isn't intended for that level of expressivity in its language integration.
+
+For maps I guess this means a third term in the header.
+
+```
+datalove
 ```
