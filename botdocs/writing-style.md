@@ -146,7 +146,7 @@ not to make it sound like a bot wrote it.
 Nobody uses Datalove, so the reader is not a Datalove user. The primary reader
 is a practitioner who has the same problem the post is about: language
 implementers, people building interpreters, JITs, and runtimes in Rust, and PL
-enthusiasts. Potential employers read the same posts and judge them the same
+enthusiasts. Potential customers, employers etc read the same posts and judge them the same
 way, by whether peers find them worth reading; do not write at them.
 
 Make the problem general and Datalove the worked example. "How I made drops

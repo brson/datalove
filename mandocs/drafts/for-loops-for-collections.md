@@ -17,11 +17,13 @@ in the common case of iterating collections.
 <!-- the problem -->
 
 In my [previous round of benchmarking](../posts/20261009A-compound-assignment.md)
-I noted that the system library iterates over collections by maintaining
+I noted that Datalove's system library iterates over collections by maintaining
 a loop induction variable of type [`index`](todo),
 incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element,
 and that this is a problem to be solved soon.
+
+Here's how it's done today:
 
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
@@ -64,7 +66,7 @@ so I'll go ahead and do it now!
 
 
 
-<!-- the expected outcome -->
+<!-- the thesis -->
 
 ## A simple design of `for` loops
 
@@ -221,7 +223,7 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
 end fun
 ```
 
-Personally this smells a bit to me - feels like a big special case,
+Personally this smells a bit to me, smells like a big special case,
 and I'm used to Rust with its many iterator adapters that
 can do this and much more (what abour reverse iteration? seems important...).
 I don't know if Datalove will grow an iterator protocol like Rust has.
@@ -245,8 +247,8 @@ All the existing accessors are per-element.
 I've sketched one cursor shape for all four collections.
 It's a small plain-data struct:
 a pointer to the current element
-(plus one to the current value, for maps),
 a position, and a count.
+(plus additional fields for sets and maps),
 
 ```rust
 #[repr(C)]
@@ -278,3 +280,19 @@ instead of descending from the root for every element like `key_at` does.
 
 The compiler knows the layout of `Cursor`,
 which provides a simple protocol for the compiler to codegen against.
+
+
+
+
+<!-- todo any implementation obstacles -->
+
+
+<!-- the results -->
+
+<!--
+
+don't expect much problems here.
+maybe number of loop conversions that were able to remove the explicit variable.
+cases where there's still wrapping addition related to loops or the for loop wasn't sufficient.
+
+-->

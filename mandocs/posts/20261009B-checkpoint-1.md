@@ -1,6 +1,6 @@
 ---
 title: "Checkpoint 1"
-category: dev
+category: news
 summary: "We've reached the first stop in the roadmap"
 ---
 
