@@ -1625,11 +1625,7 @@ fn lower_place_expression<'db>(
                 } else {
                     // Intermediate field step -- navigate by reference rather
                     // than copying the whole intermediate out to read one field
-                    // of it. Cheaper everywhere, and the only thing that works
-                    // inside a generic: an intermediate whose static type says
-                    // `data` where a type parameter stood has a different
-                    // layout from the value it would be copied into, so the
-                    // copy garbles it before the next step even runs.
+                    // of it.
                     let field_type = field_type_from_base(&base_type, field_index);
                     let dest = ctx.fresh_value(IrType::Ref(Box::new(field_type)));
                     ctx.emit(Instruction::GetFieldRef {

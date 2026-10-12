@@ -10,15 +10,12 @@ import set.contains
 // `102_generic_forwarding` covers forwarding a borrowed *container* of a type
 // parameter. This is the other borrowed shape: the type parameter itself.
 //
-// Both read `data` in the erased signature, and the compiled backends decided
-// from that type alone that an argument the callee wants borrowed must be a
-// wrapper to read through. A borrowed type parameter is not one: it arrives as
-// a pointer at the value with its descriptor passed beside it, because nothing
-// is converted at a borrow. Reading through it took the value's first bytes
-// for a wrapper's two pointers, so the descriptor handed to the rider was
-// whatever those bytes happened to be. The interpreter was right here already,
-// because it looks at the descriptor that actually came with the value rather
-// than at the static type.
+// A borrowed type parameter arrives as a pointer at the value with its
+// descriptor passed beside it, and goes on to the next callee the same way:
+// the descriptor handed over has to be the one that came in, never one
+// worked out from the static type. The compiled backends once read the
+// value's first bytes as a wrapper's two pointers, so the descriptor handed
+// to the rider was whatever those bytes happened to be.
 
 fun has_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
   ret contains_key(ref self, ref key)

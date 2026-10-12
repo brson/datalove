@@ -5,10 +5,9 @@ import option.zip_option
 import result.zip_result
 
 
-// Pairing two options or two results, which needs a tuple of type parameters:
-// a shape a generic could not name until erasure learned to convert one field
-// by field. The two sides need not hold the same type, and the function that
-// builds the pair knows neither.
+// Pairing two options or two results, which needs a tuple of type parameters,
+// laid out from the two descriptors. The two sides need not hold the same
+// type, and the function that builds the pair knows neither.
 
 let both = zip_option(some "a", some 1)
 let first_missing = zip_option(: ?string / none, some 1)

@@ -2,22 +2,14 @@
 //
 // `16_generic_element_borrow` did this for lists. A map needs one thing a list
 // does not: a lookup has a *key* as well as a container, and inside a generic
-// the key parameter is erased too, so the key in hand is packed into a `data`
-// while the map holds the real thing. Both halves were wrong and in opposite
-// directions -- the compiled backends described the map by its static type,
-// which is a `%{data = data}`, and the interpreter described the key by the
-// map's real key type while holding a packed one. Either way the comparison
-// looked at the wrong bytes and the lookup returned `none` for a key that is
-// there. Silently, and in all four backends alike, so running them against each
-// other did not catch it.
+// the key is a value of a type parameter, described by its own descriptor. The
+// map and the key have to be described by what they really are, or the
+// comparison looks at the wrong bytes and the lookup returns `none` for a key
+// that is there. Silently, and in all four backends alike, so running them
+// against each other would not catch it.
 //
-// Whether the key is packed is the runtime's to decide, in `borrow_lookup_key`,
-// for the reason `unwraps_the_element` gives on the insert side: a map whose
-// keys really are `data` wants no unwrapping and the two look alike from a call
-// site.
-//
-// A tensor is the list's problem again -- a stride taken from the static
-// element type, which inside a generic is a `data`'s.
+// A tensor is the list's problem again: the stride comes from the element's
+// descriptor rather than the static element type.
 
 fun take<T>(ref x: T): ?T
   ret some (x@)
@@ -46,8 +38,7 @@ fun tensor_borrow<T>(ref t: [|T, 1|], i: index): ?T
 end fun
 
 // Concrete callers, which were always right and stay right: the static type is
-// truthful there, so the stride is still a compile-time constant and the key
-// needs no unwrapping.
+// the whole truth there, so the stride is still a compile-time constant.
 fun concrete_map_at(ref m: %{string = string}, k: string): ?string
   ret some (m[k]?@)
 end fun
@@ -60,7 +51,8 @@ let words: %{string = string} = %{"a" = "alpha", "b" = "beta"}
 debuglog map_at(ref words, "b")
 debuglog map_borrow(ref words, "a")
 
-// Narrow keys and values, where a `data`'s width is wrong in both directions.
+// Narrow keys and values, where a width taken from anything but the
+// descriptor is wrong.
 let small: %{u8 = u8} = %{1 = 10, 2 = 20}
 debuglog map_at(ref small, 2)
 

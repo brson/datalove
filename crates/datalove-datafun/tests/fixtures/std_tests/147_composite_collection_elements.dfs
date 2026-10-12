@@ -15,12 +15,9 @@ import set.to_list
 // A collection whose element is a *composite* of type parameters, rather than
 // one of them on its own.
 //
-// An element of a collection built inside a generic used to have to be a whole
-// `data`: a `(A, B)` erases to a tuple of two, and pushing that as though it
-// were one wrote the wrong number of bytes, so it was refused. The refusal is
-// gone because the shapes are now walked position by position against the
-// collection's own descriptor, which is the same conversion an owned parameter
-// crossing a call already used. `needs_erasure` is what says which way to walk.
+// A `(A, B)` inside a generic has a layout only its descriptor knows, built
+// from the two the call site handed over, and the element is copied in as many
+// bytes as that says.
 //
 // What it buys is `zip`, `entries` and `from_entries`, none of which could be
 // written before: a pair of two type parameters is what they are all about.

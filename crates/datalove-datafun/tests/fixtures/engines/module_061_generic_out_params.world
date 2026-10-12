@@ -2,17 +2,15 @@
 module local/test/main
 ----------
 
-// An out parameter of a generic function. The callee has no slot that fits a
-// value of a type it does not know, so it writes a `data`, and the call site
-// moves the value back out into the type it keeps there. That is what the
-// return value does, in the other direction.
+// An out parameter of a generic function. The callee writes through a pointer
+// at the caller's destination, as many bytes as the descriptor says, so the
+// value lands in the type the caller keeps there with nothing to convert. The
+// return value works the same way.
 //
-// What was already at the out parameter is erased into the value the callee is
-// given, so the call destroys it exactly once, the way it does for any out
-// parameter. `erase.tracked` is that erase: a destination that has never been
-// written has nothing to hand over, and reading it would read the frame's own
-// poison, so it asks the tracking byte first. A destination reached through a
-// reference -- the tuple fields below -- has no byte here and is always read.
+// What was already at the destination is destroyed exactly once, the way it
+// is for any out parameter, and a destination that has never been written has
+// nothing to destroy. A destination reached through a reference -- the tuple
+// fields below -- goes through the same pointer.
 
 fun copy_out<T>(src: T, out dst: T): bool
   set dst = src

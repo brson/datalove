@@ -62,23 +62,22 @@ var fresh_forwarded: string
 call forward_out_string(out fresh_forwarded, "relayed")
 debuglog fresh_forwarded
 
-// And through a generic, which is the harder half: a generic erases its
-// arguments on the way in, and the destination is erased along with them so
-// that the call destroys what was there. A destination holding nothing has
-// nothing to erase, and reading it anyway read the frame's own poison.
+// And through a generic, which is the harder half: the destination is a value
+// of a type parameter, written through its descriptor. A destination holding
+// nothing has nothing to destroy, and once reading it anyway read the frame's
+// own poison.
 var generic_fresh: string
-call take_out(out generic_fresh, "erased")
+call take_out(out generic_fresh, "generic")
 debuglog generic_fresh
 
 var generic_unread: string
-call take_out(out generic_unread, "erased and dropped")
+call take_out(out generic_unread, "generic and dropped")
 
 var generic_forwarded: string
-call forward_out(out generic_forwarded, "erased and relayed")
+call forward_out(out generic_forwarded, "generic and relayed")
 debuglog generic_forwarded
 
-// A copy type through the same path, where the erased shape is packed into
-// the wrapper's own words rather than pointed at.
+// A copy type through the same path, which the descriptor says is plain.
 var generic_narrow: u32
 call take_out(out generic_narrow, 7)
 debuglog generic_narrow

@@ -16,6 +16,8 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
+  - [A binding moved into a call inside an intrinsic's arguments is dropped again](#user-content-a-binding-moved-into-a-call-inside-an-intrinsics-arguments-is-dropped-again)
+  - [An owned argument leaks when a sibling argument's `?` returns early](#user-content-an-owned-argument-leaks-when-a-sibling-arguments--returns-early)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
@@ -37,6 +39,7 @@ home here.
 
 - [Backends and performance](#user-content-backends-and-performance)
   - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
+  - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
   - [A script's data const is copied into the unit that declares it](#user-content-a-scripts-data-const-is-copied-into-the-unit-that-declares-it)
@@ -51,11 +54,55 @@ home here.
 
 - [Testing](#user-content-testing)
   - [Nothing proves the suite runs with leak checking on](#user-content-nothing-proves-the-suite-runs-with-leak-checking-on)
-  - [Borrowed enum payloads and tables inside a generic were never probed](#user-content-borrowed-enum-payloads-and-tables-inside-a-generic-were-never-probed)
 
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
+
+### A binding moved into a call inside an intrinsic's arguments is dropped again
+
+**Reproduced, on every engine, before generics by reference too.** A `let`
+binding handed by value to a call that is itself an argument of an `icall` is
+moved into the call and then dropped at the end of its scope as well:
+
+```datalove
+fun matcherc(e: enum { term A string, atom C }): u32
+  ... (matches e, returns a number)
+end fun
+var tot: u32 = 0
+loop while tot .< 1
+  let ea: enum { term A string, atom C } = term A "x"
+  set tot = icall add_wrapping_u32(tot, matcherc(ea))
+end loop
+```
+
+The IR has `v5 = call u0(v4)` and then `drop v4`, so the string is freed twice:
+`free() called on untracked pointer` under leak checking on all four engines.
+Calling `matcherc(ea)` on its own line instead is fine, which points at the
+ownership analysis not seeing a move made inside an intrinsic call's
+arguments. Not investigated past the IR.
+
+### An owned argument leaks when a sibling argument's `?` returns early
+
+**Reproduced, on every engine, before generics by reference too.** When a
+call's argument is a place with `?` -- `call put(mut xs[i]?, v)` -- and the
+index is out of range, the function returns `none` from the `?` without
+dropping `v`, which the caller had handed over by value:
+
+```datalove
+fun put(mut x: [string], v: string)
+end fun
+fun add_to(mut xs: [[string]], i: index, v: string): ?index
+  call put(mut xs[i]?, v)
+  ret some i
+end fun
+var xs: [[string]] = [["a"], []]
+debuglog add_to(mut xs, : index / 5, "lost")
+```
+
+The early-return block is `v1 = none; return v1` with no `drop p2`, so the
+string leaks. The drop schedule for an early return from inside a call's
+arguments has to include the owned parameters not yet consumed.
 
 ### A REPL unit that returns early reports success
 
@@ -472,6 +519,25 @@ One instruction executed twice in the same activation, in a loop, reuses its
 view in every backend; whether a reference from an earlier iteration can still
 be live then is a separate question, not looked at.
 
+### A generic's descriptor-table cache holds one binding
+
+**Reasoned about, not measured.** Every engine fills a generic's descriptor
+table on entry through a cache of one: the last call's type-parameter
+descriptors and the table they built (`IrLayout::table_cache` in the
+interpreter, a `static` per function in C, a data object per function in
+Cranelift). A call at the same binding as the last costs a compare per type
+parameter; any other rebuilds the table, instantiating every template entry.
+
+So a generic called alternately at two bindings rebuilds on every call. The
+plainest case is recursion at a growing type, `f<T>` calling `f<[T]>`, where no
+two consecutive calls share a binding; a hot loop calling one generic at two
+types is the other. It is a cost only, never a wrong answer.
+
+A few entries keyed by binding would cover both. The compiled caches are also
+plain statics, written without synchronization, which is fine with one runtime
+per process and wrong with two on different threads; a per-runtime cache, as
+the instantiation cache already is, would fix that too.
+
 ### No inlining in Cranelift, and the C backend is built at -O0
 
 **Reasoned from the code; the speedups are measured.** Gaps in what the
@@ -640,21 +706,3 @@ inherit `panic` and test a configuration no user runs. Either clear the variable
 at the spawn sites (seven `Command::new`s in `datalove-cli/tests`, built inline,
 which is where a helper would earn its place) or accept that they are not testing
 the shipped default.
-
-### Borrowed enum payloads and tables inside a generic were never probed
-
-**Not probed.** Borrowed generic values carry their descriptor, and field
-projections, list, map and tensor indexing under a borrow are covered by
-`backend/15` to `backend/23`. Two shapes are not:
-
-- An enum or term payload reached through a borrow inside a generic --
-  matching on a `ref` parameter like `?{a: T, b: u32}` and reading the payload.
-  `TyInfoEnumVariant` has an offset and a payload descriptor, so the same rule
-  should apply, but whether payload projection goes through `GetFieldRef` or its
-  own path was never checked. `backend/18`'s `get_opt` returns such an option
-  whole; nothing reads into it.
-- A table as a borrowed generic value, `ref t: {| a: T, ... |}`. Nothing can look
-  inside a table yet (see above), so this is about moving and cloning one.
-
-What it would take is a fixture in `backend/` for each, run across the four
-backends.

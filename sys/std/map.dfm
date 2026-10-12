@@ -1,11 +1,7 @@
 // Map module.
 //
-// Generic over the key and value types. A map is not converted when it is
-// passed to one of these: it is borrowed, and the descriptor saying what it
-// holds comes from the call site. A key being looked up is borrowed too, so it
-// arrives as itself. A value crossing the boundary has no type the function
-// knows, so it is carried as a `data` and moved back out where the type is
-// known.
+// Generic over the key and value types. A map, a key or a value goes across
+// as it stands, and the descriptor saying what it is comes from the call site.
 
 require rider std
 

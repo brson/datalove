@@ -403,7 +403,7 @@ impl IrInterpreter {
         }
     }
 
-    /// Make a frame of a function compiled by reference ready to run, once
+    /// Make a frame of a generic function ready to run, once
     /// its type parameters' descriptors are set: fill its descriptor table,
     /// and point each of its dynamic values and slots at space on the shadow
     /// stack.
@@ -492,21 +492,23 @@ impl IrInterpreter {
             .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames))
             .collect();
         for (i, op) in args.iter().enumerate() {
-            // A native's type parameter is a `data` in its signature, which a
-            // copy argument bound to it is not; whether the argument is given
-            // up is its own type's to say.
-            let moves = match &native_ctx.param_types[i] {
-                IrType::Data if !bindings.is_empty() => !is_plain(&arg_vals[i]),
-                ty => !ty.is_copy(),
+            // A generic native's signature names its type parameters, which
+            // are never copy, while what is bound to one may be; whether the
+            // argument is given up is its own descriptor's to say, which
+            // agrees with its type's wherever there is no type parameter.
+            let moves = if bindings.is_empty() {
+                !native_ctx.param_types[i].is_copy()
+            } else {
+                !is_plain(&arg_vals[i])
             };
             if mode(i) == ParamMode::In && moves {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
-        // A native's descriptors are for types over its type parameters,
-        // which the call's bindings fill in.
-        let supplied: Vec<*const rtdt::TyDesc> = native_ctx.descriptor_shapes.iter()
-            .map(|shape| self.binding_descriptor(&shape.to_ir_type().substitute(bindings), frame))
+        // A descriptor for each type parameter no argument determines, for
+        // what the call bound it to.
+        let supplied: Vec<*const rtdt::TyDesc> = native_ctx.undetermined_bindings(bindings).iter()
+            .map(|ty| self.binding_descriptor(ty, frame))
             .collect();
         let dest_slot = frame.value_dest(dest);
 

@@ -239,7 +239,7 @@ impl<'a> Lowering<'a> {
             }
             for (i, instr) in block.instructions.iter().enumerate() {
                 self.index = i;
-                // Under generics by reference, an instruction on a value of a
+                // An instruction on a value of a
                 // dynamic type runs on the walker, which reads it through its
                 // fat pointer.
                 // A call is the exception: its arguments are read through the

@@ -3,8 +3,8 @@ module local/test/m
 ----------
 
 // A `const` makes the function's IR go through const inlining's dead code
-// pass, which once removed `v = reify (call dup a)` because nothing read `v`,
-// and with it the only thing that consumed the call's erased result.
+// pass, which once removed an instruction whose result nothing read, and with
+// it the only thing that consumed the generic call's result.
 fun dup<T>(x: T): (T, T)
   ret (x@, x)
 end fun

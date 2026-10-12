@@ -1,0 +1,44 @@
+// Generics calling themselves at a type one constructor larger each time.
+//
+// No finite set of descriptors covers these ahead of time; each call builds
+// the descriptor for the one below it from its own. A tuple, an option and a
+// map each grow differently, and a deep enough chain of large values takes the
+// shadow stack past a chunk boundary and back.
+
+fun nest_pair<T>(x: T, n: u32): !u32
+  if n .< 1
+    debuglog x
+    ret ok 0
+  end if
+  ret ok (nest_pair((x@, x), n -! 1)! +! 1)
+end fun
+
+fun nest_opt<T>(x: T, n: u32): !u32
+  if n .< 1
+    debuglog x
+    ret ok 0
+  end if
+  ret ok (nest_opt(some x, n -! 1)! +! 1)
+end fun
+
+fun nest_map<T>(x: T, n: u32): !u32
+  if n .< 1
+    debuglog x
+    ret ok 0
+  end if
+  let m: %{u32 = T} = %{n = x}
+  ret ok (nest_map(m, n -! 1)! +! 1)
+end fun
+
+fun deep<T>(x: T, n: u32): !T
+  if n .< 1
+    ret ok x
+  end if
+  ret ok deep(x, n -! 1)!
+end fun
+
+debuglog nest_pair("a", 3)
+debuglog nest_opt(: u8 / 1, 4)
+debuglog nest_map("v", 2)
+let big = ("a long string, held on the heap", (: u64 / 1, : u64 / 2, : u64 / 3, : u64 / 4))
+debuglog deep(big, 3000)

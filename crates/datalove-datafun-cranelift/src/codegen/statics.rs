@@ -133,7 +133,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         ctx.func = cl_func;
         self.module
             .define_function(func_id, &mut ctx)
-            .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
+            .map_err(define_error)?;
         Ok(())
     }
 }

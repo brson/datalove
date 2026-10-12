@@ -31,7 +31,7 @@ import fixedint.sub_saturating
 // The comparisons are the same for all ten once the descriptor has said
 // whether the bits are signed.
 //
-// Erasure still compiles one body, so the machine code cannot hold the
+// A generic is still compiled once, so the machine code cannot hold the
 // instruction for all ten widths. The operands arrive with their descriptors
 // and the runtime reads which integer it is, exactly as a collection of a type
 // parameter has its elements walked by size read off a descriptor.

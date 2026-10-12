@@ -378,7 +378,7 @@ impl IrType {
     /// Convert from AST type hint to IR type, keeping the given type
     /// parameters as `IrType::Param` by their position.
     ///
-    /// How a generic sees its own types under generics by reference: `(T, u32)`
+    /// How a generic sees its own types: `(T, u32)`
     /// is `Tuple([Param(0), U32])`, and its layout is the descriptor's to say.
     pub fn from_type_hint_generic<'db>(
         db: &'db dyn salsa::Database,
@@ -1222,7 +1222,7 @@ pub enum Instruction {
     /// What `set p op= v` lowers to, for an operator that cannot fail. `place`
     /// is a slot, a parameter, an earlier unit's slot, or a reference to the
     /// place, as for `RefStore`. Its type is `f32`, `f64` or `int`, never
-    /// `Data`: an erased type's arithmetic is a store of a `BinOp`'s result.
+    /// dynamic: a type parameter's arithmetic is a store of a `BinOp`'s result.
     ///
     /// The place's value is replaced where it is. For an `int` that can mean
     /// reusing its buffer, and `rhs` may be the place itself.
@@ -2301,40 +2301,6 @@ pub fn dyn_op_code(op: BinOp) -> Option<datalove_rtdt::DynOp> {
     })
 }
 
-/// A type a native needs a descriptor for, written over its own type
-/// parameters: one no argument determines, such as the element type of a list
-/// it builds. A call substitutes what it bound them to and hands over the
-/// descriptor of the result. See `NativeContext::descriptor_shapes`.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DescriptorShape {
-    /// One of this function's type parameters, by declaration order.
-    Param(u32),
-    /// A subtree with no type parameter in it, which describes itself.
-    Concrete(IrType),
-    List(Box<DescriptorShape>),
-    Set(Box<DescriptorShape>),
-    Map(Box<DescriptorShape>, Box<DescriptorShape>),
-    Option(Box<DescriptorShape>),
-    Result(Box<DescriptorShape>),
-    Tuple(Vec<DescriptorShape>),
-}
-
-impl DescriptorShape {
-    /// The shape as an IR type, its type parameters as `IrType::Param`.
-    pub fn to_ir_type(&self) -> IrType {
-        match self {
-            DescriptorShape::Param(i) => IrType::Param(*i),
-            DescriptorShape::Concrete(t) => t.clone(),
-            DescriptorShape::List(i) => IrType::List(Box::new(i.to_ir_type())),
-            DescriptorShape::Set(i) => IrType::Set(Box::new(i.to_ir_type())),
-            DescriptorShape::Option(i) => IrType::Option(Box::new(i.to_ir_type())),
-            DescriptorShape::Result(i) => IrType::Result(Box::new(i.to_ir_type())),
-            DescriptorShape::Map(k, v) => IrType::Map(Box::new(k.to_ir_type()), Box::new(v.to_ir_type())),
-            DescriptorShape::Tuple(fields) => IrType::Tuple(fields.iter().map(|f| f.to_ir_type()).collect()),
-        }
-    }
-}
-
 /// Context for function execution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionContext {
@@ -2370,16 +2336,6 @@ pub struct FunctionContext {
     pub descriptor_table: Vec<IrType>,
 }
 
-impl FunctionContext {
-    /// The index of a dynamic type's entry in the descriptor table.
-    pub fn descriptor_index(&self, ty: &IrType) -> usize {
-        match self.descriptor_table.iter().position(|t| t == ty) {
-            Some(index) => index,
-            None => panic!("{ty} is not in the descriptor table"),
-        }
-    }
-}
-
 /// The descriptor table of a function: every dynamic type it uses.
 ///
 /// Read off the function's parameters, return type, values and slots, and the
@@ -2412,7 +2368,7 @@ pub fn descriptor_table(unit: &IrCodeUnit) -> Vec<IrType> {
 
 /// Whether a unit is a generic, or calls one: either way it takes or hands
 /// over a descriptor per type parameter.
-pub fn uses_generics_by_reference(unit: &IrCodeUnit) -> bool {
+pub fn uses_descriptors(unit: &IrCodeUnit) -> bool {
     let generic = unit.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
     generic || unit.blocks.iter().flat_map(|b| &b.instructions).any(|instr| matches!(instr,
         Instruction::Call { bindings, .. } | Instruction::ComptimeCall { bindings, .. }
@@ -2503,13 +2459,14 @@ pub struct NativeContext {
     /// Kept rather than spelled out per call, because the interpreter looks a
     /// native up by it on every call.
     symbol: String,
-    /// Descriptors the call site has to hand over, after the arguments.
+    /// The type parameters no argument determines, by position, whose
+    /// descriptors the call site hands over after the arguments.
     ///
     /// A native reads a type off a descriptor that came with a value. A type
-    /// parameter appearing only in the return type has no such value, so it is
-    /// listed here as `Param(i)` and the call site passes a descriptor for it.
-    /// Every other native has this empty.
-    pub descriptor_shapes: Vec<DescriptorShape>,
+    /// parameter appearing only in the return type has no such value, so the
+    /// call site passes a descriptor for what it bound it to. Every other
+    /// native has this empty.
+    pub undetermined_type_params: Vec<u32>,
 }
 
 impl NativeContext {
@@ -2520,15 +2477,21 @@ impl NativeContext {
         param_modes: Vec<ParamMode>,
         param_types: Vec<IrType>,
         return_type: IrType,
-        descriptor_shapes: Vec<DescriptorShape>,
+        undetermined_type_params: Vec<u32>,
     ) -> Self {
         Self {
             param_modes,
             param_types,
             return_type,
             symbol: native_symbol(rider, function),
-            descriptor_shapes,
+            undetermined_type_params,
         }
+    }
+
+    /// What a call binding `bindings` bound each undetermined type parameter
+    /// to, in order: the types whose descriptors it hands over.
+    pub fn undetermined_bindings(&self, bindings: &[IrType]) -> Vec<IrType> {
+        self.undetermined_type_params.iter().map(|&i| bindings[i as usize].clone()).collect()
     }
 
     /// The linker symbol the native is called by.

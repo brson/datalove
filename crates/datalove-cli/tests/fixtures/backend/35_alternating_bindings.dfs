@@ -1,0 +1,24 @@
+// One generic called at two bindings in turn, in a loop.
+//
+// Each engine keeps the descriptor table it last built for a generic and
+// reuses it at the same binding; a different binding rebuilds it. Alternating
+// rebuilds every time, which has to give the same answers as never doing so.
+
+fun describe<T>(x: T): (T, u32)
+  ret (x, 1)
+end fun
+
+fun go(n: u32): u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    let (s, a) = describe("s")
+    let (u, b) = describe(: u8 / 2)
+    let (l, c) = describe([: u64 / 3])
+    set total = icall add_wrapping_u32(total, icall add_wrapping_u32(a, icall add_wrapping_u32(b, c)))
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret total
+end fun
+
+debuglog go(: u32 / 500)

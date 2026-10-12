@@ -124,9 +124,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ///
     /// Only what can be reached from the header is compiled. A value the
     /// loop reads that the code reached also makes -- an enclosing loop's, for
-    /// an inner loop's header -- is a variable; see `carried_into`. Refused,
-    /// as `CraneliftError::Unsupported`, where a value read from the frame is
-    /// a reference whose descriptor only its making works out.
+    /// an inner loop's header -- is a variable; see `carried_into`.
     pub fn compile_osr_as(mut self, symbol: &str, spec: OsrSpec) -> Result<Defined, CraneliftError> {
         let mut sig = cl_ir::Signature::new(self.isa.default_call_conv());
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));

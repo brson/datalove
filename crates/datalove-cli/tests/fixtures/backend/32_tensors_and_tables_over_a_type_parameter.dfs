@@ -1,0 +1,60 @@
+// Tensors and tables built, indexed and copied inside a generic.
+//
+// A tensor or table literal over a type parameter was once refused, since
+// nothing at hand said what its elements were. Each engine now sizes the
+// elements from their descriptor. A rank 2 tensor of `T` indexed
+// twice reads through a view of a row, which is itself a reference to a
+// dynamic type and has to be described as one.
+//
+// The concrete versions are here too: a tensor or table literal's cells were
+// not counted as moved into it, so the bindings they came from were dropped
+// again afterwards, on every engine.
+
+fun row_of_strings(a: string, b: string): [|string, 1|]
+  ret [| a b |]
+end fun
+
+fun tab_of_strings(a: string, b: string): {| x: string, n: u32 |}
+  ret {| x, n; a, 1; b, 2 |}
+end fun
+
+fun row<T>(a: T, b: T): [|T, 1|]
+  ret [| a b |]
+end fun
+
+fun grid<T>(a: T, b: T): [|T, 2|]
+  ret [| a@ b@, b a |]
+end fun
+
+fun empty<T>(x: T): [|T, 1|]
+  ret [| |]
+end fun
+
+fun at2<T>(ref t: [|T, 2|], i: index, j: index): ?T
+  ret some t[i]?[j]?@
+end fun
+
+fun tab<T>(a: T, b: T): {| x: T, n: u32 |}
+  ret {| x, n; a, 1; b, 2 |}
+end fun
+
+fun copy_tab<T>(ref t: {| x: T, n: u32 |}): {| x: T, n: u32 |}
+  ret t@
+end fun
+
+debuglog row_of_strings("p", "q")
+debuglog tab_of_strings("p", "q")
+debuglog row("p", "q")
+debuglog row(: u8 / 1, : u8 / 2)
+debuglog grid((: u8 / 1, "z"), (: u8 / 2, "y"))
+debuglog empty("z")
+
+let m: [|string, 2|] = [| "a" "b", "c" "d" |]
+debuglog at2(ref m, : index / 1, : index / 0)
+let n: [|u8, 2|] = [| 1 2, 3 4 |]
+debuglog at2(ref n, : index / 0, : index / 1)
+debuglog at2(ref n, : index / 5, : index / 1)
+
+let t = tab("p", "q")
+debuglog copy_tab(ref t)
+debuglog tab(: u64 / 7, : u64 / 8)

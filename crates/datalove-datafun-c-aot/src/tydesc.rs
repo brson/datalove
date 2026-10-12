@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 use std::fmt::Write;
 
 use datalove_datafun_ir::IrType;
-use datalove_datafun_ir::layout as ir_layout;
 use crate::types::{self, compute_option_layout, compute_result_layout, compute_tuple_field_offsets};
 use crate::CAotCompiler;
 
@@ -303,24 +302,16 @@ pub fn emit_tydesc(
 
         IrType::Option(inner) => {
             let inner_tydesc = compiler.get_tydesc_name(inner);
-            let (opt_layout, payload_offset) = if ty.is_dynamic() {
-                (layout, 0)
-            } else {
-                (compute_option_layout(inner), ir_layout::option_payload_offset(inner))
-            };
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{}, .payload_offset = {} }} }} }};",
-                name, opt_layout.size, opt_layout.align, inner_tydesc, payload_offset).unwrap();
+            let opt_layout = if ty.is_dynamic() { layout } else { compute_option_layout(inner) };
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{} }} }} }};",
+                name, opt_layout.size, opt_layout.align, inner_tydesc).unwrap();
         }
 
         IrType::Result(ok) => {
             let ok_tydesc = compiler.get_tydesc_name(ok);
-            let (res_layout, payload_offset) = if ty.is_dynamic() {
-                (layout, 0)
-            } else {
-                (compute_result_layout(ok), ir_layout::result_payload_offset(ok))
-            };
-            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{}, .payload_offset = {} }} }} }};",
-                name, res_layout.size, res_layout.align, ok_tydesc, payload_offset).unwrap();
+            let res_layout = if ty.is_dynamic() { layout } else { compute_result_layout(ok) };
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{} }} }} }};",
+                name, res_layout.size, res_layout.align, ok_tydesc).unwrap();
         }
 
         IrType::Tensor(elem, rank) => {

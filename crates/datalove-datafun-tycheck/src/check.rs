@@ -130,7 +130,6 @@ pub fn check_expr<'db>(
         ExprFunKind::Table(table_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Table(table_ty)) => {
-                    refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check rows against expected column types.
                     check_table_rows(ctx, expr, &table_expr.header, &table_expr.rows, table_ty)?;
                     ctx.store_expr_type(expr, &expected);
@@ -203,7 +202,6 @@ pub fn check_expr<'db>(
         ExprFunKind::Tensor(tensor_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Tensor(_)) => {
-                    refuse_building_over_a_type_param(ctx, expr, &expected)?;
                     // Check shape and elements against expected type.
                     check_tensor_shape_and_elements(ctx, expr, tensor_expr.C(), &expected)?;
                     ctx.store_expr_type(expr, &expected);
@@ -932,30 +930,6 @@ pub fn check_table_rows<'db>(
     }
 
     Ok(())
-}
-
-/// Refuse to build a collection whose element type is a type parameter.
-///
-/// One can be taken, stored, passed on and returned, because it arrives with a
-/// descriptor saying what its elements are. Making one from nothing has no
-/// such descriptor to work from: an empty `[T]` inside a generic would have to
-/// say what a `T` is, and nothing at hand does.
-fn refuse_building_over_a_type_param<'db>(
-    ctx: &mut TypeContext<'db>,
-    expr: ExprFun<'db>,
-    expected: &Type<'db>,
-) -> Result<(), TypeError> {
-    let Type::Datalit(dt) = expected else { return Ok(()) };
-    if !datalove_datafun_common::generics::contains_type_param(dt) {
-        return Ok(());
-    }
-    let shown = type_to_string(ctx.db, expected);
-    Err(ctx.error_cannot_synthesize(expr, &format!(
-        "cannot build a {shown} here: it is written over a type parameter, and \
-         nothing at hand says what one is. A collection of a type parameter can \
-         be taken, stored, passed on and returned, because it arrives with a \
-         descriptor saying what it holds; one made here would have none",
-    )))
 }
 
 /// Report a literal whose shape does not fit the type it is checked against,

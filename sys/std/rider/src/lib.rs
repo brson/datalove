@@ -1238,9 +1238,7 @@ pub extern "C-unwind" fn dlr_std__list_reserve(
 // --- Maps and sets ---
 //
 // Same shape as the lists above: the container comes with a descriptor naming
-// its key, value or element type, and a position the caller has no static type
-// for is carried as a `data`. A key being looked up is borrowed rather than
-// given away, so it arrives as itself and needs none of this.
+// its key, value or element type, and a key or value comes with its own.
 
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__map_len(
@@ -2396,8 +2394,7 @@ pub extern "C-unwind" fn dlr_std__fixedint_max_value(
 
 /// The total order every value has, as a three-way comparison.
 ///
-/// The operands are borrowed, so inside a generic each arrives read through
-/// the `data` wrapping it, as the thing itself with a real descriptor.
+/// The operands are borrowed, each with its own descriptor.
 #[no_mangle]
 pub extern "C-unwind" fn dlr_std__ord_compare(
     rt: *mut u8,

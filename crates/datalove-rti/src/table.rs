@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 117;
+pub const EXPORTED: usize = 116;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 117;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x189d5037c6211f35;
+pub const TABLE_SHAPE: u64 = 0x65bbdfbc2dc0351d;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -145,5 +145,4 @@ pub struct RtiTable {
     pub dtlv_rti_payload_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_tydesc_instantiate: unsafe extern "C-unwind" fn(LocalRtHandle, *const rtdt::TyDesc, *const *const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_shadow_alloc: unsafe extern "C-unwind" fn(LocalRtHandle, u32, u32) -> *mut u8,
-    pub dtlv_rti_element_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc) -> *const rtdt::TyDesc,
 }

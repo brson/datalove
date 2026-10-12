@@ -1,0 +1,24 @@
+// Taking the payload out of an enum or term whose payload is a type parameter.
+//
+// The payload is as wide as what `T` was bound to, which only its descriptor
+// says. The C backend copied it at the width of the fat pointer standing for
+// it, so a three-field tuple lost its last field and a `u8` overran its
+// neighbour.
+
+fun get_or<T>(x: enum { term Some T, atom None }, d: T): T
+  match x
+  case term Some v
+    ret v
+  case atom None
+    ret d
+  end match
+end fun
+
+let a: enum { term Some u8, atom None } = term Some 5
+debuglog get_or(a, 1)
+let b: enum { term Some (u64, u64, u64), atom None } = term Some (1, 2, 3)
+debuglog get_or(b, (0, 0, 0))
+let c: enum { term Some string, atom None } = term Some "hello"
+debuglog get_or(c, "x")
+let d: enum { term Some string, atom None } = atom None
+debuglog get_or(d, "fallback")

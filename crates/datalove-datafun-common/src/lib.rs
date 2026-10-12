@@ -401,11 +401,6 @@ pub enum TypeError {
     DuplicateImport { name: String, first: String, second: String },
     /// A const expression referenced a binding that is not itself const.
     NonConstInConstExpr(String),
-    /// A type parameter appeared inside a composite type.
-    ///
-    /// Erasure replaces the parameter itself with `data`, which works wherever
-    /// the parameter stands alone. Inside a list or an option the element type
-    /// would have to change too, and converting a caller's collection to match
     /// Call-site mode marker disagrees with the parameter's declared mode.
     ArgumentModeMismatch {
         param_idx: usize,

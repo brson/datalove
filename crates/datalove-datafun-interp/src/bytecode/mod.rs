@@ -426,7 +426,7 @@ pub(crate) enum Op {
     /// Jump through the switch table `table`.
     Switch { disc: Loc, table: u32 },
     Return { src: Loc, len: u32 },
-    /// Under generics by reference: copy the value the pointer and
+    /// In a generic: copy the value the pointer and
     /// descriptor at `src` name to where the pointer at `dst` says, as many
     /// bytes as the descriptor says. A dynamic value's fat pointer and a
     /// parameter's `Value` are both such a pair.
@@ -526,7 +526,7 @@ pub(crate) struct CallCache {
     /// The call worked out, if it is one the loop can make without asking
     /// anything again; see `Plan`.
     plan: Option<Plan>,
-    /// Under generics by reference, the descriptors the call hands over:
+    /// For a generic callee, the descriptors the call hands over:
     /// the callee's type parameters', or for a native, or a forwarder to one,
     /// those the native's signature asks for. Each worked out once.
     descriptors: std::rc::Rc<[crate::BindingRef]>,
@@ -565,8 +565,7 @@ enum Plan {
 /// A call to a bytecode body in the same unit or a module: push its frame,
 /// write the arguments and switch to it.
 struct BodyPlan {
-    /// Under generics by reference, the callee's type parameters'
-    /// descriptors.
+    /// The callee's type parameters' descriptors.
     descriptors: std::rc::Rc<[crate::BindingRef]>,
     layout: std::rc::Rc<IrLayout>,
     bc: std::rc::Rc<BcFunction>,
@@ -633,6 +632,9 @@ struct JitPlan {
     func: crate::dispatch::FuncIdentity,
     entry: crate::dispatch::CompiledEntry,
     args: Box<[ArgRecipe]>,
+    /// The descriptors of what the call bound the callee's type parameters
+    /// to, entered with after the arguments.
+    descriptors: std::rc::Rc<[crate::BindingRef]>,
 }
 
 /// The arguments of a planned call to a body.
@@ -681,7 +683,7 @@ struct NativePlan {
     /// The result's descriptor, as the native's own call would give it; null
     /// where that is dynamic, and the destination's says.
     dest_tydesc: *const rtdt::TyDesc,
-    /// What follows the result, under generics by reference: the
+    /// What follows the result, for a generic native: the
     /// descriptors the native's signature asks for.
     descriptors: std::rc::Rc<[crate::BindingRef]>,
 }

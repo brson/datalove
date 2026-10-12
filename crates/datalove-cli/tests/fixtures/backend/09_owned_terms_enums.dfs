@@ -1,16 +1,15 @@
-// A term is its payload under a name, laid out exactly as the payload is, so
-// converting one is converting that at the same address with a different
-// descriptor. An enum is a payload chosen by a discriminant, which is the
-// option's case with more than one thing it could be.
+// A term is its payload under a name, laid out exactly as the payload is. An
+// enum is a payload chosen by a discriminant, which is the option's case with
+// more than one thing it could be.
 //
 // The discriminant is an index into the variant list, and that list is sorted
-// by name, so both sides of a conversion have to sort it the same way or the
-// walk reads one variant's payload at another's offset. Building the erased
-// enum in source order rather than sorted is what this first did, and an
-// `atom None` came out as a variant that wanted a payload.
+// by name, so the generic's descriptor and the caller's have to sort it the
+// same way or one variant's payload is read at another's offset. Building the
+// enum in source order rather than sorted is what this once did, and an `atom
+// None` came out as a variant that wanted a payload.
 //
-// Strings for the payloads, so a conversion that loses a move leaks and one
-// that doubles it faults.
+// Strings for the payloads, so a call that loses a move leaks and one that
+// doubles it faults.
 
 fun through_term<T>(x: term Wrapped T): term Wrapped T
   ret x

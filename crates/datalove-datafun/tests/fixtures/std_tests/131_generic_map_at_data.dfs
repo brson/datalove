@@ -2,20 +2,15 @@ require module sys/std/map
 
 import map.len
 
-// A map literal built in a generic, over a type parameter standing at `data`.
+// A map literal built in a generic, over a type parameter bound to `data`.
 //
-// A collection built inside a generic is made against the descriptor the call
-// site handed over, so its elements go in as what they really are, and an
-// element in hand is in the erased shape -- a `data` -- and has to be unpacked
-// on the way. The one case where the two readings coincide is a collection
-// whose elements really are `data`: then the value in hand is already what the
-// map wants and unpacking it would take it apart.
-//
-// A map has two sides, and they are read separately, because they can differ:
-// `%{k = v}` in a generic over both, called at `K := data`, has a key that
-// wants leaving alone and a value that wants unpacking. The insert took both
-// sides the same way, so that entry went nowhere and everything in it was
-// leaked -- silently, because a map nobody counts looks much the same empty.
+// A `data` bound to a type parameter is a value like any other, and goes into
+// the map as it stands. A map has two sides, and they can be bound
+// differently: `%{k = v}` in a generic over both, called at `K := data`, has a
+// `data` key and a value of some other type. When elements in a generic were
+// themselves wrapped in a `data`, the insert took both sides the same way, so
+// that entry went nowhere and everything in it was leaked -- silently, because
+// a map nobody counts looks much the same empty.
 
 fun pair<K, V>(k: K, v: V): %{K = V} with { K is ord, }
   ret %{k = v}

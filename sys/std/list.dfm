@@ -1,16 +1,10 @@
 // List module.
 //
-// These are generic over the element type. A list is not converted when it is
-// passed to one: a borrowed parameter goes across as it stands, and the
-// descriptor that says what it holds comes from the call site, which is the
-// place that knows. So there is one of each of these however many element
-// types go through them, and passing a list to one costs nothing.
-//
-// An element is a different matter. A generic function has no slot that fits a
-// value of a type it does not know, so an element crossing that boundary is
-// carried as a `data`, which fits any value and carries what is needed to
-// clone and drop it. The descriptors are what tell the implementation which of
-// the two it is looking at.
+// These are generic over the element type. A list or an element goes across
+// as it stands, and the descriptor that says what it is comes from the call
+// site, which is the place that knows. So there is one of each of these
+// however many element types go through them, and passing a list to one costs
+// nothing.
 
 require rider std
 require module sys/std/option

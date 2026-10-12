@@ -2,11 +2,11 @@
 module local/test/main
 ----------
 
-// A generic function is compiled once, with each type parameter erased to
-// `data`. The call site wraps the arguments on the way in and moves the value
-// back out on the way back, which it can do because it is the place that knows
-// the concrete type. So there is one `identity` in the IR below, taking and
-// returning a data, and three different types go through it.
+// A generic function is compiled once, and the call site hands it one
+// descriptor per type parameter, which it can do because it is the place that
+// knows the concrete type. Values pass as they stand, laid out by those
+// descriptors. So there is one `identity` in the IR below, and three different
+// types go through it.
 
 fun identity<T>(x: T): T
   ret x

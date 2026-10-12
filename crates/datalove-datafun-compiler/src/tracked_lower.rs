@@ -678,15 +678,12 @@ pub fn add_native_rider_units<'db>(
                     .collect();
                 let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
 
-                // What the shape closure was told this native needs, said
-                // the same way here so that the two cannot disagree about
-                // the trailing arguments. A native makes no calls, so its
-                // set is exactly what its signature says.
-                let descriptor_shapes = rider.generic_functions.iter()
+                // The type parameters a call site has to hand descriptors
+                // for, which the rider interface worked out from the
+                // signature.
+                let undetermined_type_params = rider.generic_functions.iter()
                     .find(|(n, _)| *n == *func_name)
-                    .map(|(_, generics)| generics.undetermined.iter()
-                        .map(|i| datalove_datafun_ir::DescriptorShape::Param(*i))
-                        .collect())
+                    .map(|(_, generics)| generics.undetermined.clone())
                     .unwrap_or_default();
 
                 let native_ctx = NativeContext::new(
@@ -695,7 +692,7 @@ pub fn add_native_rider_units<'db>(
                     param_modes,
                     param_types,
                     return_type,
-                    descriptor_shapes,
+                    undetermined_type_params,
                 );
                 let code_unit = datalove_datafun_ir::IrCodeUnit::native(
                     CodeUnitId(func_id.0),

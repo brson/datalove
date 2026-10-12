@@ -47,6 +47,37 @@ fn bytecode_recursion_is_not_bounded_by_the_rust_stack() {
     assert_eq!(stderr.trim(), "200000");
 }
 
+/// The same depth through a generic, under the JIT before anything is
+/// compiled: every call is offered to the dispatcher, and a call binding type
+/// parameters has to be planned there as any other is, or it is made on the
+/// Rust stack and overflows it a few thousand levels down.
+#[test]
+fn generic_recursion_under_the_jit_is_not_bounded_by_the_rust_stack() {
+    let dir = rmx::tempfile::tempdir().X();
+    let script = dir.path().join("deep.dfs");
+    std::fs::write(&script, "\
+fun down<T>(x: T, n: u32): u32
+  if n == 0
+    ret 0
+  end if
+  ret icall add_wrapping_u32(down(x, icall sub_wrapping_u32(n, : u32 / 1)), : u32 / 1)
+end fun
+debuglog(down(\"s\", : u32 / 200000))
+").X();
+    let output = Command::new(env!("CARGO_BIN_EXE_datalove"))
+        .arg("script")
+        .arg("--jit")
+        .arg("--jit-threshold")
+        .arg("1000000000")
+        .arg(&script)
+        .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
+        .output()
+        .expect("failed to run datalove");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "the script failed: {}", stderr);
+    assert_eq!(stderr.trim(), "200000");
+}
+
 /// Ten million levels runs out of frame stack, which is an error the process
 /// reports and exits from, not a signal.
 #[test]

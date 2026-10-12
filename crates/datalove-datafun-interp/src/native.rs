@@ -19,7 +19,7 @@ use crate::error::InterpError;
 /// Argument values follow the same conventions as interpreter calls: In params
 /// are moved values, Out params are destination pointers, Ref/Mut params are
 /// borrowed pointers. The descriptors are for the type parameters no argument
-/// determines; see `NativeContext::descriptor_shapes`. Almost every native has
+/// determines; see `NativeContext::undetermined_type_params`. Almost every native has
 /// none.
 pub type NativeFnImpl = Box<
     dyn Fn(

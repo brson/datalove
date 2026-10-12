@@ -389,8 +389,8 @@ impl CAotCompiler {
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; dtlv_set_leaf_layout_t leaf; dtlv_node_internal_layout_t internal; }} set;").unwrap();
         writeln!(out, "    struct {{ const dtlv_tydesc_t* element_tydesc; uint32_t rank; }} tensor;").unwrap();
         writeln!(out, "    struct {{ uint32_t num_columns; const dtlv_table_column_t* columns; }} table;").unwrap();
-        writeln!(out, "    struct {{ const dtlv_tydesc_t* inner_tydesc; uint32_t payload_offset; }} option;").unwrap();
-        writeln!(out, "    struct {{ const dtlv_tydesc_t* ok_tydesc; uint32_t payload_offset; }} result;").unwrap();
+        writeln!(out, "    struct {{ const dtlv_tydesc_t* inner_tydesc; }} option;").unwrap();
+        writeln!(out, "    struct {{ const dtlv_tydesc_t* ok_tydesc; }} result;").unwrap();
         writeln!(out, "    struct {{ const char* name; uint32_t name_len; }} atom;").unwrap();
         writeln!(out, "    struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* payload; }} term;").unwrap();
         writeln!(out, "    struct {{ uint32_t index; }} param;").unwrap();
@@ -425,7 +425,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_debuglog_local(void* rt, const void* value_ref, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_any_destroy_local(void* rt, void* value, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint32_t dtlv_rti_field_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
-        // Under generics by reference: payload offsets, a generic's descriptor
+        // For generics: payload offsets, a generic's descriptor
         // table, and the shadow stack its dynamic values live on, bumped here
         // and the runtime asked only when a chunk has no room.
         writeln!(out, "extern uint32_t dtlv_rti_payload_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
@@ -443,6 +443,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_tensor_set_local(void* rt, void* tensor_mut, const dtlv_tydesc_t* tensor_tydesc, const index_t* indices, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_set_value_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();
         writeln!(out, "extern void* dtlv_rti_mem_alloc_raw_local(void* rt, uint32_t size, uint32_t align, index_t count);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_mem_free_raw_local(void* rt, uint32_t size, uint32_t align, index_t count, void* ptr);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_string_from_bytes(void* rt, const uint8_t* bytes, uint32_t len, void* result_out, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_create_local(void* rt, void* value_out, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_push_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
@@ -724,8 +725,8 @@ fn native_declaration(ctx: &datalove_datafun_ir::NativeContext) -> String {
     }
     params.push_str(", void* result_out, const dtlv_tydesc_t* result_tydesc");
     // Then a descriptor for each type parameter no argument determines. See
-    // `NativeContext::descriptor_shapes` and `botdocs/native-abi.md`.
-    for i in 0..ctx.descriptor_shapes.len() {
+    // `NativeContext::undetermined_type_params` and `botdocs/native-abi.md`.
+    for i in 0..ctx.undetermined_type_params.len() {
         params.push_str(&format!(", const dtlv_tydesc_t* s{i}"));
     }
     format!("extern uint8_t {}({});", ctx.symbol(), params)

@@ -18,7 +18,6 @@
 //! - `dtlv_rti_field_tydesc`
 //! - `dtlv_rti_payload_offset`
 //! - `dtlv_rti_payload_tydesc`
-//! - `dtlv_rti_element_tydesc`
 
 use datalove_rtdt as rtdt;
 

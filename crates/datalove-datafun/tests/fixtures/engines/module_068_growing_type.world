@@ -7,9 +7,9 @@ module local/test/main
 // `nest` binds its own `T` to `[T]` at the recursive call, so each level is
 // a type one constructor deeper than the last: `string`, `[string]`,
 // `[[string]]`, and so on, as deep as `n` says. No finite set of descriptors
-// covers that ahead of time, which under erasure was refused at compile time.
-// By reference, each call builds the descriptor for the one below it from its
-// own, so it runs, and stops where the program's base case stops it.
+// covers that ahead of time. Each call builds the descriptor for the one below
+// it from its own, so it runs, and stops where the program's base case stops
+// it.
 
 fun nest<T>(x: T, n: u32): !u32
   if n .< 1

@@ -183,9 +183,8 @@ impl EncodedFuncKey {
 /// * `ret_dest` - Pointer to return value destination (NULL for void)
 /// * `arg_count` - Number of arguments
 /// * `args` - Pointer to array of argument pointers
-/// * `descriptors` - Pointer to the callee's descriptor arguments: one per
-///   entry of its `descriptor_params`, then one per entry of its
-///   `descriptor_shapes`, in those orders; NULL if it has none
+/// * `descriptors` - Pointer to the callee's descriptor arguments, one per type
+///   parameter; NULL if it has none
 ///
 /// # Safety
 ///

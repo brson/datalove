@@ -8,10 +8,8 @@ import map.len
 
 // A map reached by position, for the same reason a set is.
 //
-// The key and the value are reached separately rather than as a pair, because
-// a collection whose elements are a pair of two type parameters is a shape
-// erasure cannot yet carry. Reaching them one at a time needs nothing of the
-// sort and gives `keys` and `values` directly.
+// The key and the value are reached separately rather than as a pair, which
+// gives `keys` and `values` directly.
 
 let scores = %{"c" = 3, "a" = 1, "b" = 2}
 let by_number = %{7 = "seven", 1 = "one"}

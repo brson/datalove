@@ -1,0 +1,7 @@
+((("a", "a"), ("a", "a")), (("a", "a"), ("a", "a")))
+ok 3
+some some some some 1
+ok 4
+%{1 = %{2 = "v"}}
+ok 2
+ok ("a long string, held on the heap", (1, 2, 3, 4))

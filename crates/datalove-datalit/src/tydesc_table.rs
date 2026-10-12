@@ -218,7 +218,7 @@ impl<'db> TyDescTable<'db> {
         match ty {
             Type::Var(name) => unreachable!(
                 "type parameter {name:?} reached tydesc construction; \
-                 type parameters are erased to data during lowering",
+                 a generic's descriptors are built at run time",
             ),
             Type::Bool => {
                 Box::new(rtdt::TyDesc {

@@ -801,6 +801,14 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                         || self.expr_may_early_return(entry.value)
                 })
             }
+            ExprFunKind::Tensor(tensor) => {
+                tensor.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+            }
+            ExprFunKind::Table(table) => {
+                table.rows.iter()
+                    .flat_map(|row| &row.elements)
+                    .any(|elem| self.expr_may_early_return(*elem))
+            }
             ExprFunKind::AnonTuple(tuple) => {
                 tuple.elements.iter().any(|elem| self.expr_may_early_return(*elem))
             }
@@ -990,6 +998,20 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 for entry in &map.entries {
                     self.analyze_expr_moves(entry.key, true);
                     self.analyze_expr_moves(entry.value, true);
+                }
+                None
+            }
+            ExprFunKind::Tensor(tensor) => {
+                // Tensor elements are consumed.
+                for elem in &tensor.elements {
+                    self.analyze_expr_moves(*elem, true);
+                }
+                None
+            }
+            ExprFunKind::Table(table) => {
+                // Table cells are consumed, row by row.
+                for elem in table.rows.iter().flat_map(|row| &row.elements) {
+                    self.analyze_expr_moves(*elem, true);
                 }
                 None
             }

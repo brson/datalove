@@ -1,9 +1,7 @@
 // Set module.
 //
-// Generic over the element type. A set is not converted when it is passed to
-// one of these: it is borrowed, and the descriptor saying what it holds comes
-// from the call site. An element being looked up is borrowed, so it arrives as
-// itself; one being inserted is given away, so it is carried as a `data`.
+// Generic over the element type. A set or an element goes across as it
+// stands, and the descriptor saying what it is comes from the call site.
 
 require rider std
 import std.set_len

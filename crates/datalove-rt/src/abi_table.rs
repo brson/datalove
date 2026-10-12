@@ -134,13 +134,12 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_payload_tydesc: c::dtlv_rti_payload_tydesc,
     dtlv_rti_tydesc_instantiate: c::dtlv_rti_tydesc_instantiate,
     dtlv_rti_shadow_alloc: c::dtlv_rti_shadow_alloc,
-    dtlv_rti_element_tydesc: c::dtlv_rti_element_tydesc,
 };
 
 /// The declarations must cover every export, not merely agree with the ones
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 117,
+    datalove_rti::table::EXPORTED == 116,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

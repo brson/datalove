@@ -186,7 +186,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         self.module
             .define_function(func_id, &mut ctx)
-            .map_err(|e| CraneliftError::Codegen(format!("define function: {}", e)))?;
+            .map_err(define_error)?;
         let code_size = ctx.compiled_code().expect("a function just defined").code_info().total_size;
 
         Ok(Defined { id: func_id, code_size })

@@ -35,7 +35,7 @@ import float.e
 // one of two types, and in exchange the body may do what both have in common: the
 // arithmetic, the comparisons, and the operations the rider offers.
 //
-// Erasure still compiles one body, so the machine code cannot hold an `fadd`
+// A generic is still compiled once, so the machine code cannot hold an `fadd`
 // for one width and another for the other. The operands arrive with their
 // descriptors and the runtime reads which float it is, exactly as a collection
 // of a type parameter has its elements walked by size read off a descriptor.

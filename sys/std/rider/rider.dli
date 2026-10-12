@@ -133,8 +133,8 @@ native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 native fun map_key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
 native fun map_value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
 // The whole map read out in one walk, onto the end of a list, which reaching
-// every position does not. The list is the caller's, so that it has a real
-// descriptor where a result would only be a `data`.
+// every position does not. The list is the caller's, so a walk can append
+// to one it already has.
 native fun map_keys_into<K, V>(ref self: %{K = V}, mut out: [K]) with { K is ord, }
 native fun map_values_into<K, V>(ref self: %{K = V}, mut out: [V]) with { K is ord, }
 native fun map_entries_into<K, V>(ref self: %{K = V}, mut out: [(K, V)]) with { K is ord, }
@@ -258,9 +258,7 @@ native fun fixedint_max_value<T>(): T with { T is fixedint, }
 // maps keep their keys in, which for floats is IEEE 754-2008 `totalOrder` and
 // so differs from `.<` over NaN and signed zero. See `sys/std/ord`.
 //
-// Borrows its operands, so comparing clones nothing. A value packed into a
-// `data`'s own words is unpacked into scratch the caller lends -- see
-// `botdocs/native-abi.md`.
+// Borrows its operands, so comparing clones nothing.
 native fun ord_compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
 
 // Constants of a type parameter bounded to `float`.

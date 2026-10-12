@@ -58,6 +58,45 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.mark_tracking_live(builder, &Operand::Slot(sid));
     }
 
+    /// Record that a call took every owned `in` argument away.
+    ///
+    /// The callee owns what it is handed by value, and the tracked drop at the
+    /// end of the argument's scope must see that it has gone. A moved value
+    /// that is not zeroed -- a callee moving its parameter on, or a native
+    /// keeping it -- is otherwise freed again by that drop. Whether a value of
+    /// a type known only at run time is given up or copied is its
+    /// descriptor's to say, as the interpreter asks.
+    pub(super) fn mark_in_arguments_moved(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        modes: &[ParamMode],
+        args: &[Operand],
+    ) -> Result<(), CraneliftError> {
+        use datalove_datafun_ir::frame_layout::tracking;
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) != Some(&ParamMode::In) {
+                continue;
+            }
+            let Some(track_offset) = self.tracking_byte_offset(arg) else { continue };
+            let ty = self.get_operand_type(arg)?;
+            if !ty.is_dynamic() && ty.is_copy() {
+                continue;
+            }
+            let frame_slot = self.frame_slot.expect("tracking requires frame slot");
+            let track_addr = frame_slot.addr(builder, track_offset as i32);
+            let moved = builder.ins().iconst(cl_types::I8, tracking::MOVED as i64);
+            let state = if ty.is_dynamic() {
+                let plain = self.is_plain(builder, &ty)?;
+                let current = builder.ins().load(cl_types::I8, MemFlagsData::new(), track_addr, 0);
+                builder.ins().select(plain, current, moved)
+            } else {
+                moved
+            };
+            builder.ins().store(MemFlagsData::new(), state, track_addr, 0);
+        }
+        Ok(())
+    }
+
     /// Get tracking byte offset for a param, if tracked.
     pub(super) fn param_tracking_byte_offset(&self, pid: ParamId) -> Option<u32> {
         self.layout.param_tracking[pid.0 as usize]

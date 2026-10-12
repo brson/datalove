@@ -2,16 +2,14 @@
 //
 // `10_generic_indexing` covers the reading half, which goes through the runtime
 // and takes the stride from the list's descriptor. This is the borrowing half.
-// `ListElementRef` used to store a bare pointer computed at a stride taken from
-// the static element type, which inside a generic is a `data`'s: sixteen bytes
-// where the caller's list holds a one byte `u8` or a three word string. The
-// address landed between elements and it segfaulted in every backend.
+// `ListElementRef` once stored a bare pointer computed at a stride taken from
+// the static element type, where the caller's list holds a one byte `u8` or a
+// three word string. The address landed between elements and it segfaulted in
+// every backend.
 //
 // The stride now comes from the list's own descriptor, and the element's
 // descriptor rides along with the pointer, so passing the borrow to something
-// that takes it by reference tells that callee what it really has. Without the
-// second half the callee would read the value as the `data` its signature
-// claims and take the first two words of a string for a wrapper's pointers.
+// that takes it by reference tells that callee what it really has.
 
 fun take<T>(ref x: T): ?T
   ret some (x@)
@@ -38,7 +36,7 @@ let words: [string] = ["alpha", "beta", "gamma"]
 debuglog via(ref words, 0)
 debuglog via(ref words, 2)
 
-// A one byte element, where a `data`'s stride would be sixteen times too far.
+// A one byte element, where any stride but the descriptor's is too far.
 let ns: [u8] = [1, 2, 3]
 debuglog via(ref ns, 1)
 

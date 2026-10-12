@@ -24,29 +24,10 @@ fun order_chooses_the_type(): u32
   ret pick_first(: u32 / 1, 99)
 end fun
 
-// Erasure converts a value into the shape the callee was compiled for. An
-// option holds its payload inline, so converting one means converting the
-// payload and writing it at the other side's offset, and a parameter under an
-// option is reachable that way.
-//
-// A collection is reachable by not converting it at all: it is wrapped whole,
-// which copies a pointer and two indices and leaves the elements where they
-// are, and the wrapper carries the descriptor that says what they are. So
-// `in_list` and `in_map` below are accepted, and their bodies hand the value
-// back the way they were given it.
-//
-// A tuple does need converting -- `(u32, u32)` is eight bytes where
-// `(data, data)` is thirty-two -- but by a walk over as many fields as the
-// type has rather than over anything the value holds, so it is converted
-// rather than refused.
-//
-// A container inside a tuple is converted the way a container anywhere is, by
-// wrapping it: the tuple's walk reaches the field and the field's conversion is
-// the wrapping one, and the two compose without either knowing about the other.
-//
-// A term is its payload under a name, and an enum is a payload chosen by a
-// discriminant, so both convert the way an option does. Every position a type
-// parameter can occupy is one erasure reaches, which is why nothing below is
+// Nothing is converted at a call: a value passes as it stands, and the callee
+// reads its layout from a descriptor built from the ones the call site handed
+// over. So a type parameter may sit at any depth in a signature -- in a list,
+// a map, a tuple, a container inside a tuple, a term -- and nothing below is
 // refused for its signature.
 fun in_list<T>(x: [T]): [T]
   ret x
@@ -73,25 +54,16 @@ fun main(): u32
 end fun
 
 // Indexing reads the stride from the list's descriptor rather than from the
-// static element type, so this works too. What is left in this file is not a
-// limit of erasure at all: it is that nothing can be done to a `T` but move
-// it, drop it, clone it and hand it back, which is what bounds are for.
+// static element type, so this works too.
 fun first<T>(ref xs: [T]): ?T
   ret some (xs[: index / 0]?@)
 end fun
 
-// Building a collection of a type parameter, which used to be the one thing
-// erasure could not reach.
+// Building a collection of a type parameter.
 //
-// A `[T]` that arrives carries a descriptor saying what its elements are. One
-// written here has no value to read one off, so the call site hands one over:
-// it is the only place that knows what the parameter was bound to. Nothing is
-// put together at run time, because `[T]` with `T` bound to a concrete type is
-// a concrete type, and that has a static descriptor already.
-//
-// Which shapes a function is handed is what its own body builds, closed over
-// its calls: one that passes its type parameter to a function that builds a
-// collection of it carries a descriptor too, and forwards it.
+// A `[T]` written here has no value to read a descriptor off, so it is built
+// from the descriptor of `T` the call site handed over: the call site is the
+// only place that knows what the parameter was bound to.
 //
 // A type parameter appearing solely in the return type is bound by what the
 // call site expects, so these are callable as well as compilable.
@@ -110,9 +82,8 @@ fun build_a_set<T>(): #{T} with { T is ord, }
   ret out
 end fun
 
-// What is left is not a limit of erasure at all: it is that nothing can be done
-// to a `T` but move it, drop it, clone it, print it and hand it back, which is
-// what bounds are for.
+// What is left is that nothing can be done to a `T` but move it, drop it,
+// clone it, print it and hand it back, which is what bounds are for.
 
 ----------
 scriptunit-fragment

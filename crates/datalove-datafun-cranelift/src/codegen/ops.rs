@@ -52,11 +52,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // to `float`, which the call site fixed at one width or the other. This
         // body was compiled once and cannot hold the instruction for both, so
         // the runtime reads the descriptor and picks.
-        // Under generics by reference the operand is what it is, and only
-        // its descriptor says which.
-        if matches!(lhs_ty, IrType::Data) || matches!(rhs_ty, IrType::Data)
-            || lhs_ty.is_dynamic() || rhs_ty.is_dynamic()
-        {
+        if lhs_ty.is_dynamic() || rhs_ty.is_dynamic() {
             return self.compile_binop_dynamic(builder, dest, op, lhs, rhs);
         }
 
@@ -540,7 +536,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // A type parameter bounded to `fixedint`, whose width and signedness
         // only the descriptor says. This body was compiled once and cannot hold
         // the instruction for all ten, so the runtime reads and picks.
-        if matches!(dest_ty, IrType::Data) || dest_ty.is_dynamic() {
+        if dest_ty.is_dynamic() {
             return self.compile_binop_checked_dynamic(
                 builder, dest, overflow_dest, op, lhs, rhs);
         }
@@ -988,7 +984,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // A type parameter bounded to `fixedint`, which may turn out to be
         // unsigned; the runtime reads the descriptor and decides.
-        if matches!(dest_ty, IrType::Data) || dest_ty.is_dynamic() {
+        if dest_ty.is_dynamic() {
             return self.compile_neg_checked_dynamic(builder, dest, overflow_dest, operand);
         }
 
@@ -1032,9 +1028,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Widen requires runtime handle".into())
         })?;
 
-        // The source's descriptor says what is really there, which inside a
-        // generic its static type does not: a borrowed `T` is a `data` by
-        // that reading and a string by the caller's.
         let src_ptr = self.get_operand_ptr(builder, src)?;
         let src_tydesc_ptr = self.operand_tydesc(builder, src)?;
 

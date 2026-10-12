@@ -1,6 +1,6 @@
-//! Values of a dynamic type: generics by reference.
+//! Values of a dynamic type: those of a generic's type parameters.
 //!
-//! A generic compiled by reference is handed one descriptor per type
+//! A generic is handed one descriptor per type
 //! parameter, after its other arguments. On entry it fills its descriptor
 //! table from them -- a bare parameter is its descriptor, anything else is
 //! instantiated from a template the emitter wrote -- and takes space on the
@@ -280,11 +280,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// value, handed to a `T` by pointer and still the caller's to read.
     pub(super) fn moved_size(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
         let size = self.value_size(builder, ty)?;
-        let desc = self.static_tydesc(builder, ty)?;
-        let flags = builder.ins().load(cl_types::I8, MemFlagsData::new(), desc, TYDESC_FLAGS_OFFSET);
-        let plain = builder.ins().band_imm_u(flags, TyDesc::PLAIN as i64);
+        let plain = self.is_plain(builder, ty)?;
         let zero = builder.ins().iconst(PTR_TYPE, 0);
         Ok(builder.ins().select(plain, zero, size))
+    }
+
+    /// Whether a value of dynamic `ty` owns nothing, as its descriptor says:
+    /// nonzero if so.
+    pub(super) fn is_plain(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
+        let desc = self.static_tydesc(builder, ty)?;
+        let flags = builder.ins().load(cl_types::I8, MemFlagsData::new(), desc, TYDESC_FLAGS_OFFSET);
+        Ok(builder.ins().band_imm_u(flags, TyDesc::PLAIN as i64))
+    }
+
+    /// The size and alignment of a value of dynamic `ty`, as 32-bit values
+    /// read from its descriptor.
+    pub(super) fn size_and_align(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<(cl_ir::Value, cl_ir::Value), CraneliftError> {
+        let desc = self.static_tydesc(builder, ty)?;
+        let size = builder.ins().load(cl_types::I32, MemFlagsData::new(), desc, TYDESC_SIZE_OFFSET);
+        let align = builder.ins().load(cl_types::I32, MemFlagsData::new(), desc, TYDESC_ALIGN_OFFSET);
+        Ok((size, align))
     }
 
     /// Copy a value of `ty` from `src` to `dst`, as many bytes as it has.
@@ -403,11 +418,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Refuse a function using an instruction on a dynamic value that the
     /// codegen does not handle yet, rather than compile it wrong.
     ///
-    /// Generics by reference are new to the compiled backends, and come to
-    /// them an instruction at a time. A refusal leaves the function to the
-    /// interpreter under the JIT, and fails the AOT build.
+    /// A refusal leaves the function to the interpreter under the JIT, and
+    /// fails the AOT build.
     pub(super) fn check_dynamic_support(&self) -> Result<(), CraneliftError> {
-        if !datalove_datafun_ir::uses_generics_by_reference(self.func) {
+        if !datalove_datafun_ir::uses_descriptors(self.func) {
             return Ok(());
         }
 
@@ -439,7 +453,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 }
                 if touches && !supports_dynamic(instr) {
                     return Err(CraneliftError::Unsupported(format!(
-                        "{} on a value of a type a generic is compiled by reference over",
+                        "{} on a value of a generic's type parameter",
                         instruction_name(instr))));
                 }
             }
@@ -485,6 +499,8 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::EnumDiscriminant { .. }
         | Instruction::EnumPayload { .. }
         | Instruction::ListNew { .. }
+        | Instruction::TensorNew { .. }
+        | Instruction::TableNew { .. }
         | Instruction::SetNew { .. }
         | Instruction::MapNew { .. }
         | Instruction::ListBoundsCheck { .. }

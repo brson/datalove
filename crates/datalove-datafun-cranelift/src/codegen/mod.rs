@@ -51,7 +51,7 @@ mod tensors;
 mod ops;
 /// Option and Result operations.
 mod options;
-/// Values of a dynamic type: generics by reference.
+/// Values of a dynamic type: those of a generic's type parameters.
 mod dynamic;
 /// Boxing operations (ErrorFrom, DataFrom).
 mod boxing;
@@ -71,6 +71,17 @@ mod signature;
 mod statics;
 /// Tracking bytes.
 mod tracking;
+
+/// Why defining a function failed, with the verifier's own account where it
+/// is the verifier that refused it: `ModuleError` says only "Verifier errors".
+fn define_error(e: cranelift_module::ModuleError) -> CraneliftError {
+    match e {
+        cranelift_module::ModuleError::Compilation(
+            cranelift_codegen::CodegenError::Verifier(errors),
+        ) => CraneliftError::Codegen(format!("define function: verifier errors:\n{}", errors)),
+        e => CraneliftError::Codegen(format!("define function: {}", e)),
+    }
+}
 /// Compiling a body, its blocks and its instructions.
 mod translate;
 #[cfg(test)]
@@ -166,7 +177,7 @@ pub struct FunctionCompiler<'a, M: Module> {
     static_consts: StaticConsts,
     /// The stack memory constants are built in; see `constants::ConstScratch`.
     const_scratch: constants::ConstScratchArea,
-    /// Under generics by reference, the descriptor handed over for each of
+    /// In a generic, the descriptor handed over for each of
     /// this function's type parameters.
     type_param_values: Vec<cl_ir::Value>,
     /// The descriptor table, filled on entry; see `dynamic`.
@@ -287,7 +298,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     pub(crate) fn tydesc(&mut self, ty: &IrType) -> Result<cranelift_module::DataId, CraneliftError> {
         if ty.is_dynamic() {
             return Err(CraneliftError::Unsupported(format!(
-                "a static descriptor for {ty}, which a generic is compiled by reference over")));
+                "a static descriptor for {ty}, which mentions a type parameter")));
         }
         self.tydesc_emitter.emit(self.module, ty)
     }

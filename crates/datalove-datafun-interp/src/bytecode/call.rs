@@ -269,6 +269,9 @@ impl IrInterpreter {
             args[i] = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames) };
             push(args[i].ptr as usize);
         }
+        for &r in plan.descriptors.iter() {
+            push(Self::resolve_binding(r, &regs.frame) as usize);
+        }
 
         self.with_dispatcher(&regs.ctx, regs.registry, regs.frames, &[], 1,
                 |dispatcher, call_ctx| dispatcher.call_compiled(plan.func, plan.entry, &words[..len], call_ctx))
@@ -331,6 +334,9 @@ impl IrInterpreter {
     #[cold]
     pub(super) fn unwind(&mut self, regs: &mut Regs<'_>) {
         while let Some(caller) = regs.stack.pop() {
+            // Each frame gives back the shadow stack space it took, innermost
+            // first, as `leave` does on the way out of a call.
+            self.leave_dynamic(&regs.frame);
             self.frame_stack.pop(regs.frame);
             // SAFETY: the caller's frame, still on the stack.
             regs.frame = unsafe { Frame::without_liveness(caller.base, caller.layout) };
@@ -424,7 +430,7 @@ impl IrInterpreter {
         &mut self,
         callee: &IrCodeUnit,
         bindings: &[IrType],
-        forwarded: Option<&[datalove_datafun_ir::DescriptorShape]>,
+        forwarded: Option<&[u32]>,
         caller: &IrLayout,
     ) -> Vec<crate::BindingRef> {
         // A wrapper that is not generic may still forward to a generic native,
@@ -433,9 +439,7 @@ impl IrInterpreter {
             return Vec::new();
         }
         let wanted: Vec<IrType> = match &callee.context {
-            CodeUnitContext::Native(native) => native.descriptor_shapes.iter()
-                .map(|s| s.to_ir_type().substitute(bindings))
-                .collect(),
+            CodeUnitContext::Native(native) => native.undetermined_bindings(bindings),
             _ if forwarded.is_some() => {
                 let Instruction::Call { bindings: inner, .. } = &callee.blocks[0].instructions[0] else {
                     unreachable!("a forwarder is a call")
@@ -444,7 +448,7 @@ impl IrInterpreter {
                     Vec::new()
                 } else {
                     forwarded.unwrap_or_default().iter()
-                        .map(|s| s.to_ir_type().substitute(inner).substitute(bindings))
+                        .map(|&i| inner[i as usize].substitute(bindings))
                         .collect()
                 }
             }
@@ -585,11 +589,12 @@ impl IrInterpreter {
             (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_))) => {
                 let Some(SitePolicy::Enter(entry)) = policy else { unreachable!() };
                 let args: Box<[ArgRecipe]> = (0..layout.param_modes.len()).map(read).collect();
-                let width = 1 + entry.uses_sret as usize + args.len();
+                let width = 1 + entry.uses_sret as usize + args.len() + descriptors.len();
                 (width <= crate::dispatch::MAX_ENTRY_WORDS)
                     .then(|| Plan::Jit(JitPlan {
                         func: crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
                         entry, args,
+                        descriptors: std::rc::Rc::clone(descriptors),
                     }))
             }
             // A body, whose frame holds an owned argument with its own
@@ -695,21 +700,17 @@ impl IrInterpreter {
                         };
                         let native_body = Self::resolve_callee(&bc.calls[0], inner_ref, &callee_ctx, registry);
                         match &native_body.context {
-                            CodeUnitContext::Native(native) => native.descriptor_shapes.clone(),
+                            CodeUnitContext::Native(native) => native.undetermined_type_params.clone(),
                             _ => unreachable!("a forwarder calls a native"),
                         }
                     });
                     let descriptors: std::rc::Rc<[crate::BindingRef]> =
                         self.site_descriptors(callee, bindings, forwarded.as_deref(), frame.layout()).into();
-                    // A call binding type parameters is planned only where it
-                    // lands on a native, which takes its descriptors from the
-                    // plan; a body is handed them on the fast path.
-                    // Under a dispatcher a body's plan may be compiled code's,
-                    // which takes no type parameter descriptors from a plan.
-                    let natively = layout.is_none() || forward.is_some();
-                    let plannable = suits
-                        && (bindings.is_empty() || natively || !dispatched)
-                        && !matches!(code_ref, CodeRef::External { .. });
+                    // Every plan hands over the descriptors of what the call
+                    // bound the callee's type parameters to: a native and a
+                    // body from `descriptors`, and compiled code as the words
+                    // after its arguments.
+                    let plannable = suits && !matches!(code_ref, CodeRef::External { .. });
                     let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
                         let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
                         self.call_dispatcher.borrow_mut().as_mut()

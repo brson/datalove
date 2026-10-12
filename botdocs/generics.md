@@ -284,7 +284,7 @@ signature asks for and the stub forwards what it was handed. That covers the
 first group and not the second: the trampoline consumed only the parameter
 prefix and called `call_in_context`, so a jit-compiled function calling
 `sys/std/list.reversed` built its result from whatever was in the register, and
-every other backend was right. `backend/23_shape_descriptors_across_jit.dfs` is
+every other backend was right. `backend/23_descriptors_across_jit.dfs` is
 the case the other fixtures missed -- a plain function calling a generic that
 builds, which is ungated and therefore compiled, where every generic fixture
 before it called from the script unit body or from another generic that

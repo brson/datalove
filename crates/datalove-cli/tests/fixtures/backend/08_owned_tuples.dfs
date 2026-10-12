@@ -1,9 +1,8 @@
-// A tuple or a struct holding a type parameter, owned. Unlike a container it
-// does need converting -- `(u32, u32)` is eight bytes where `(data, data)` is
-// thirty-two -- and the conversion is a walk over as many fields as the type
-// has, not over anything the value holds.
+// A tuple or a struct holding a type parameter, owned. Unlike a container its
+// size and field offsets depend on what the parameter is bound to, so it is a
+// dynamic value laid out by its descriptor.
 //
-// Strings in the fields, so a conversion that loses a move leaks and one that
+// Strings in the fields, so a call that loses a move leaks and one that
 // doubles it faults.
 
 require module sys/std/list
@@ -23,15 +22,12 @@ fun through_nested<T>(x: (T, (T, u32))): (T, (T, u32))
   ret x
 end fun
 
-// Under an option, which converts its payload and hands the walk a tuple.
+// Under an option, whose payload offset comes from the descriptor.
 fun through_optional<T>(x: ?(T, u32)): ?(T, u32)
   ret x
 end fun
 
-// A container as a field. The tuple converts field by field, so the field is
-// converted too, and wrapping is the only conversion a container has: leaving
-// it alone would hand the callee a stride that does not match what it was
-// given, silently, since `[u32]` and `[data]` are the same size.
+// A container as a field, whose element stride comes from the descriptor too.
 fun with_container<T>(x: ([T], u32)): ([T], u32)
   ret x
 end fun

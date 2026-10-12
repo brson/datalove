@@ -7,16 +7,14 @@ import set.insert
 
 // Handing a copy value to a generic does not use it up.
 //
-// A generic takes its argument erased, so passing an `index` to one puts an
-// `erase` between the two. The interpreter took that for a move and marked the
-// source gone, so the next read of it found nothing: `push(mut l, i)` followed
-// by anything that reads `i` again panicked, which any counting loop does. The
-// lowering never thought so -- it reads the counter back with `load.copy` --
-// and the compiled backends were right all along.
+// Whether an argument to a generic is given up is its descriptor's to say, and
+// an `index`'s says it is copied. Taking it for a move marks the source gone,
+// so the next read of it finds nothing: `push(mut l, i)` followed by anything
+// that reads `i` again fails, which any counting loop does. The interpreter
+// once did exactly that, where the lowering reads the counter back with
+// `load.copy`.
 //
-// It wanted a function to show: the same code at script level was fine, and so
-// was a generic one, because there the counter is a type parameter and gets
-// copied rather than erased.
+// It wanted a function to show: the same code at script level was fine.
 
 fun count_up(n: index): index
   var built: [index] = []
@@ -28,8 +26,8 @@ fun count_up(n: index): index
   ret len(ref built)
 end fun
 
-// One erase and one read after it, with no loop at all, which is the whole bug.
-fun erase_then_read(): index
+// One push and one read after it, with no loop at all, which is the whole bug.
+fun push_then_read(): index
   var built: [index] = []
   var i: index = : index / 5
   call push(mut built, i)
@@ -48,7 +46,7 @@ fun count_up_set(n: index): index
 end fun
 
 // A copy that is not a scalar: a tuple of two of them.
-fun erase_a_tuple(): (u32, u32)
+fun push_a_tuple(): (u32, u32)
   var built: [(u32, u32)] = []
   let pair: (u32, u32) = (: u32 / 1, : u32 / 2)
   call push(mut built, pair)
@@ -56,8 +54,8 @@ fun erase_a_tuple(): (u32, u32)
 end fun
 
 let counted = count_up(: index / 4)
-let read_back = erase_then_read()
+let read_back = push_then_read()
 let counted_set = count_up_set(: index / 3)
-let tuple_back = erase_a_tuple()
+let tuple_back = push_a_tuple()
 
 let output = (counted, read_back, counted_set, tuple_back)

@@ -4,7 +4,8 @@ A plan to replace erasure with one representation: inside a generic, every
 value whose type mentions a type parameter is a pointer at the value in its
 real layout together with that value's descriptor, and the descriptors a body
 needs are built at run time from one descriptor per type parameter. Written
-October 2026; not started.
+October 2026. Phases 0 to 7 are done, and a review's findings are fixed; see
+[After the review](#user-content-after-the-review). Phase 8 is next.
 
 This supersedes the erasure half of [Generics and
 Specialization](plan-generics.md) and, once done, most of [Generics: how it
@@ -29,6 +30,9 @@ stays the plan for speed, and comes after this.
 - [Phases](#user-content-phases)
 - [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand)
 - [Where phase 5 stands](#user-content-where-phase-5-stands)
+- [Where phase 6 stands](#user-content-where-phase-6-stands)
+- [Where phase 7 stands](#user-content-where-phase-7-stands)
+- [After the review](#user-content-after-the-review)
 - [Open questions](#user-content-open-questions)
 
 ## Why
@@ -269,7 +273,7 @@ each projection.
 The rider ABI does not change: `(ptr, tydesc)` per argument, the result
 through an out pair, trailing descriptors for a type parameter that appears
 only in the return -- one per type parameter no argument determines, as
-`DescriptorShape::Param` entries on `NativeContext`, which stay. A generic
+`NativeContext::undetermined_type_params`. A generic
 calling a native passes its fat pointers
 through, and the trailing descriptors come from its table instead of from a
 closure.
@@ -367,8 +371,10 @@ across chunk boundaries, reset, and restore across a boundary.
   `close_shapes`, `close_shapes_over_calls`, `close_shapes_in_units`,
   `growing_parameters`, and the refusal of a call at a growing type
   (`LowerError::UnboundedDescriptorShape`, whose fixture
-  `engines/module_060_unbounded_shape` flips to passing). `NativeContext`'s
-  own `descriptor_shapes` stays; see [Natives](#user-content-natives).
+  `engines/module_060_unbounded_shape` flips to passing, now
+  `module_068_growing_type`). `NativeContext`'s
+  own `descriptor_shapes` stays, as `undetermined_type_params`; see
+  [Natives](#user-content-natives).
 - `DescriptorShape` for functions, `shape_descriptors_for`,
   `write_call_descriptors`, and the `shape_descriptors` on `Call`, replaced by
   the per-type-parameter descriptors
@@ -512,8 +518,8 @@ caller of an interpreted generic has to pass what the new convention expects.
    trampoline and OSR carrying fat pointers and type-parameter descriptors.
    See [Where phase 5 stands](#user-content-where-phase-5-stands). OSR shares
    the interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather
-   than building one: `OsrSpec` has a descriptor-table offset beside
-   `shape_offset`, and `enter_osr` loads the table and the fat pointers from
+   than building one: `OsrSpec` has a descriptor-table offset,
+   `table_offset`, and `enter_osr` loads the table and the fat pointers from
    the frame. Cranelift's one-at-a-time block-parameter copy is safe by the
    lowering check in phase 2, except that an OSR entry hands a dynamic block
    parameter its own storage, so that copy is a `memmove`.
@@ -569,7 +575,7 @@ what differs from the sections above:
 - **Fixtures whose output differs** under the feature have an
   `.out.expected.fat` beside the default, as `index-64` has `.expected.64`;
   blessing under the feature writes one only where the output differs. Eight
-  engine fixtures differ only in the IR they print. `module_060` now compiles,
+  engine fixtures differ only in the IR they print. `module_068` now compiles,
   as it should. Backend fixture `22_comptime_and_generic` is a fix: under
   erasure a generic's `debuglog x` printed `data "said"`, the wrapper leaking
   into the output, and it now prints `"said"`.
@@ -693,7 +699,7 @@ Cranelift's choices, written out as C:
 
 There is one configuration: lowering keeps a generic's types as written, and
 `fat-generics`, `test-fat` and its CI runner are gone. The fixtures that had a
-`.expected.fat` took it as their default. Engine fixture `module_060` calls a
+`.expected.fat` took it as their default. Engine fixture `module_068` calls a
 generic at a growing type, `nest<T>` binding `T` to `[T]` four deep, on every
 engine.
 
@@ -724,8 +730,9 @@ Deleted, from [What goes away](#user-content-what-goes-away):
 
 Kept, and why:
 
-- `NativeContext::descriptor_shapes`, as planned, and `DescriptorShape` for
-  it, now only `to_ir_type`. A call's bindings fill it.
+- `NativeContext::descriptor_shapes`, as planned. After the review it is
+  `undetermined_type_params`, the positions alone, and `DescriptorShape` is
+  gone; a call's bindings at those positions are the descriptors.
 - `from_datalit` maps a type variable outside a generic body to `data`: that
   is a native's signature, which the rider ABI takes as a pointer and a
   descriptor.
@@ -751,15 +758,54 @@ value they cannot place, and report `Error`; `set_value` takes its value
 rider ABI changed with this, which `ABI_VERSION`, derived from the table,
 records by itself.
 
+## After the review
+
+A review of the outcome against this plan found bugs in the new code, and
+traces of erasure. Fixed:
+
+- **Moves into a callee in cranelift.** An `in` argument a call moved stayed
+  live in the caller's tracking, and was dropped again on the way out. Both
+  compiled backends now mark each moved argument after a call, a dynamic one
+  by its descriptor's `PLAIN` flag at run time, natives included.
+- **A generic returning `T` at `()`.** Cranelift passed no return pointer to a
+  callee that took one, which the verifier refused. It asks the callee now.
+- **An enum payload in C** was sized from its static type rather than its
+  descriptor.
+- **Generic recursion under the JIT.** A planned call into JIT code dropped
+  the descriptors, and the walker's fallback recursed on the Rust stack. The
+  JIT plan carries them now, and deep generic recursion has a test.
+- **A rank-2 tensor view in the walker** kept the tensor's descriptor rather
+  than the view's.
+- **Unwinding** gave back no shadow stack space for the frames it popped; a
+  native's move rule read the static type where it had to read the
+  descriptor; C list and set literals passed the element's descriptor where
+  the container's was wanted.
+
+F011's refusal of a tensor or table literal over a type parameter is lifted:
+every engine builds one from the descriptors. That exposed a double free of
+tensor and table literals that predated generics, in the ownership analysis,
+fixed with it. F077 stays, its note reworded.
+
+The erasure leftovers went: the `data` operator arms, `DescriptorShape`,
+`FunctionContext::descriptor_index`, `dtlv_rti_element_tydesc`, the option
+descriptor's `payload_offset` mirror in C, the predicates in
+`datafun-common`, and the comments and fixture headers that described
+erasure.
+
+Filed in `botdocs/issues.md` rather than fixed: a binding moved into a call
+inside an intrinsic's arguments is dropped again, and an owned argument leaks
+when a sibling's `?` returns early. Both predate this work. The one-binding
+descriptor-table cache, and the static caches' thread-safety, are filed too.
+
 ## Open questions
 
 - **Entry-time or lazy storage.** Bumping once at entry for every dynamic
   value costs per call in proportion to how many the body has, used or not.
   Allocating each on its first definition costs a test per definition
   instead. Entry-time is simpler; measure on `sys/std` before choosing.
-- **The table-fill cache.** Whether the one-entry cache per function in
-  [Descriptors](#user-content-descriptors) is needed, and whether it lives in
-  the callee or at the call site.
+- **The table-fill cache.** It is one entry per function, in the callee.
+  Whether a call alternating between two bindings needs more is for the
+  measurements; see `botdocs/issues.md`.
 - **Inline containers.** A `[T]` header is the same three words whatever `T`
   is, so it could live in the frame with its descriptor beside it rather than
   behind a pointer. An optimization for after, once everything is one shape.

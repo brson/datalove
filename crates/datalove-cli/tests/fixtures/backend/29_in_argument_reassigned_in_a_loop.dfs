@@ -1,0 +1,57 @@
+// A var handed by value to a call, then assigned again, in a loop.
+//
+// The callee owns what it is handed, so the var's tracking byte has to say it
+// has gone; the drop the next assignment makes, and the one at the end of the
+// var's scope, must then skip it. A native callee keeps the value it is given,
+// so if the var still claimed it the next assignment freed the element `push`
+// had just stored. Cranelift never recorded the move and freed the same list
+// twice; a callee that drops its parameter in place zeroes the caller's copy,
+// which is what hid it.
+
+require module sys/std/list
+import list.push
+
+fun keep_concrete(n: u32): [[u32]]
+  var out: [[u32]] = []
+  var v: [u32] = [1, 2]
+  var i: u32 = 0
+  loop while i .< n
+    call push(mut out, v)
+    set v = [3]
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret out
+end fun
+
+fun keep_generic<T>(x: T, n: u32): [T]
+  var out: [T] = []
+  var v: T = x@
+  var i: u32 = 0
+  loop while i .< n
+    call push(mut out, v)
+    set v = x@
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret out
+end fun
+
+fun id<T>(x: T): T
+  ret x
+end fun
+
+fun relay(n: u32): [u32]
+  var v: [u32] = [7]
+  var i: u32 = 0
+  loop while i .< n
+    let w = id(v)
+    set v = w
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret v
+end fun
+
+debuglog keep_concrete(: u32 / 3)
+debuglog keep_generic("s", : u32 / 3)
+debuglog keep_generic([: u8 / 1], : u32 / 2)
+debuglog keep_generic(: u64 / 9, : u32 / 2)
+debuglog relay(: u32 / 4)

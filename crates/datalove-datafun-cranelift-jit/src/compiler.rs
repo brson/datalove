@@ -574,8 +574,8 @@ impl JitCompiler {
             builder.ins().iconst(PTR_TYPE, 0)
         };
 
-        // The descriptors travel the same way, in the order the callee's
-        // `descriptor_params` names, which is the order they arrived in.
+        // The descriptors travel the same way, one per type parameter of the
+        // callee in order, which is the order they arrived in.
         let descriptors_ptr = if descriptors.is_empty() {
             builder.ins().iconst(PTR_TYPE, 0)
         } else {

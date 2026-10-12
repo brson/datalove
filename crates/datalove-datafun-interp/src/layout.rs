@@ -109,6 +109,9 @@ pub struct IrLayout {
     /// lasts as long as a reference can, which is the frame, and costs nothing
     /// to make again.
     pub tensor_view_offsets: Vec<Option<u32>>,
+    /// For each tensor view reference to a dynamic type, the descriptor table
+    /// entry of the view's type, which is what the reference describes.
+    pub tensor_view_entries: Vec<Option<u32>>,
     /// Where the liveness bytes start, if this frame keeps them: one per value,
     /// then one per slot, then one per parameter.
     pub liveness_offset: Option<u32>,
@@ -262,7 +265,11 @@ impl IrLayout {
             }
         }
         let mut tensor_view_offsets = vec![None; value_types.len()];
+        let mut tensor_view_entries = vec![None; value_types.len()];
         for id in extras.tensor_views {
+            if let IrType::Ref(view) = &value_types[id.0 as usize] && view.is_dynamic() {
+                tensor_view_entries[id.0 as usize] = Some(entry_of(view));
+            }
             tensor_view_offsets[id.0 as usize] = Some(offset);
             offset += align_up(std::mem::size_of::<datalove_rtdt::Tensor>() as u32, WORD);
         }
@@ -297,6 +304,7 @@ impl IrLayout {
             dynamic_places,
             ref_desc_offsets,
             tensor_view_offsets,
+            tensor_view_entries,
             liveness_offset,
             is_script: extras.is_script,
             bytecode: std::cell::OnceCell::new(),

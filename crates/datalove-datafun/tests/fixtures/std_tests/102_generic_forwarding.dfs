@@ -7,18 +7,12 @@ import list.get
 // A generic function handing its own type parameter to another generic
 // function, written in a script rather than a module.
 //
-// Three things had to be right for this to work, and none of them were. The
-// call site erased a value that was already erased, so the native underneath
-// found a box holding a box. The descriptors a script-local generic asks for
-// were never passed to it, because the call site only looked them up for a
-// callee in a module. And the jit's stub dropped them on the way to its
-// dispatch, which then worked each argument's type out from the callee's own
-// signature, where a type parameter reads as `data`.
-//
-// All three are silent. The first gives a wrong number for a `u32` and a
-// fault for a `string`; the second is a verifier error under the cranelift
-// aot and a wrong element type under the jit; the third is the same wrong
-// element type by another route.
+// The descriptor the inner call hands over is one the outer call received, so
+// each level has to forward its own rather than work one out from the
+// callee's signature, where a type parameter says nothing. A lost descriptor
+// is silent: a wrong number for a `u32` and a fault for a `string`. Once they
+// were also never passed to a script-local generic, and the jit's stub
+// dropped them on the way to its dispatch.
 
 fun push_through<T>(mut self: [T], elem: T)
   call push(mut self, elem)

@@ -1,0 +1,48 @@
+// Values moved into a list, tensor or map position that does not exist.
+//
+// The runtime takes a value moved into it whatever happens, destroying one it
+// cannot place, so the caller must not destroy it again. Strings, so that a
+// value destroyed twice or not at all shows under leak checking; in a loop,
+// so that a slot reused after a refused move is exercised too.
+
+fun put_list<T>(mut xs: [T], v: T): ?bool
+  set xs[: index / 9]? = v
+  ret some true
+end fun
+
+fun put_tensor<T>(mut t: [|T, 1|], v: T): ?bool
+  set t[: index / 9]? = v
+  ret some true
+end fun
+
+fun put_map<T>(mut m: %{u32 = T}, k: u32, v: T): ?bool
+  set m[k]? = v
+  ret some true
+end fun
+
+fun count(o: ?bool): u32
+  if o |b|
+    ret 0
+  end if
+  ret 1
+end fun
+
+fun fill<T>(x: T, n: u32): u32
+  var xs: [T] = [x@]
+  var t: [|T, 1|] = [| x@ |]
+  var m: %{u32 = T} = %{1 = x@}
+  var refused: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    set refused = icall add_wrapping_u32(refused, count(put_list(mut xs, x@)))
+    set refused = icall add_wrapping_u32(refused, count(put_tensor(mut t, x@)))
+    set refused = icall add_wrapping_u32(refused, count(put_map(mut m, : u32 / 7, x@)))
+    set refused = icall add_wrapping_u32(refused, count(put_map(mut m, : u32 / 1, x@)))
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  debuglog (xs, t, m)
+  ret refused
+end fun
+
+debuglog fill("lost", : u32 / 3)
+debuglog fill(: u8 / 1, : u32 / 2)

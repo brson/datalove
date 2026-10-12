@@ -686,7 +686,7 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(
                     format!("declare dtlv_rti_field_offset: {}", e)))?
         };
-        // Under generics by reference: where an option's, a result's or an
+        // For generics: where an option's, a result's or an
         // enum variant's payload is, and what it is, by the descriptor.
         let payload_offset = {
             let mut sig = module.make_signature();

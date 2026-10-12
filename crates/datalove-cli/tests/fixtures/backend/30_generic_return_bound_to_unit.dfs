@@ -1,0 +1,19 @@
+// A generic returning its type parameter, bound to `()`.
+//
+// Whether a call returns through a pointer is the callee's own return type's
+// to say. A generic returning `T` takes the pointer whatever a caller bound
+// `T` to; deciding it from the caller's destination, which is `()` here,
+// called the function with one argument too few and the verifier refused it.
+
+fun id<T>(x: T): T
+  ret x
+end fun
+
+fun twice<T>(x: T): (T, T)
+  ret (x@, x)
+end fun
+
+debuglog id(())
+debuglog twice(())
+let u: () = id(())
+debuglog u

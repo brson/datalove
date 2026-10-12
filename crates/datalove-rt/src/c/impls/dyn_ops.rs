@@ -386,7 +386,7 @@ pub unsafe fn dyn_neg_checked(
 ///
 /// The descriptor comes from the call site, because a type parameter that
 /// appears only in a native's return type has no argument to bring it. See
-/// `NativeContext::descriptor_shapes`.
+/// `NativeContext::undetermined_type_params`.
 pub unsafe fn dyn_const(
     _rt: LocalRtHandle,
     which: rtdt::DynConst,
@@ -623,20 +623,3 @@ pub unsafe fn payload_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const 
     }
 }
 
-/// What a container holds, from the container's descriptor.
-///
-/// The element of a list, set or tensor, and the *value* of a map, which is
-/// what indexing one reaches. The counterpart of `field_tydesc` for the other
-/// way of getting further into a value.
-pub unsafe fn element_tydesc(tydesc: *const rtdt::TyDesc) -> *const rtdt::TyDesc {
-    unsafe {
-        let ty = rtdt::TyDescRef::from_ptr(tydesc);
-        match (*tydesc).type_tag {
-            TyTag::List => ty.list_element_ty().as_ptr(),
-            TyTag::Set => ty.set_element_ty().as_ptr(),
-            TyTag::Map => ty.map_value_ty().as_ptr(),
-            TyTag::Tensor => ty.tensor_element_ty().as_ptr(),
-            other => panic!("element descriptor wanted from a {:?}", other),
-        }
-    }
-}

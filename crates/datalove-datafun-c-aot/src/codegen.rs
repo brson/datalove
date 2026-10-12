@@ -161,7 +161,7 @@ pub fn emit_function(
     Ok(())
 }
 
-/// Under generics by reference, fill the descriptor table into `__t{i}`
+/// In a generic, fill the descriptor table into `__t{i}`
 /// locals and take shadow stack space for each dynamic value and slot.
 /// Whether any was taken, which every return then gives back.
 ///
@@ -230,7 +230,7 @@ fn emit_dynamic_prologue(
 /// Refuse a function using an instruction on a dynamic value that this
 /// backend does not handle yet, rather than emit it wrong.
 fn check_dynamic_support(unit: &IrCodeUnit) -> Result<(), CAotError> {
-    if !datalove_datafun_ir::uses_generics_by_reference(unit) {
+    if !datalove_datafun_ir::uses_descriptors(unit) {
         return Ok(());
     }
     let ctx = unit.function_context();
@@ -274,7 +274,7 @@ fn check_dynamic_support(unit: &IrCodeUnit) -> Result<(), CAotError> {
                 let name = format!("{:?}", instr);
                 let name = name.split([' ', '{', '(']).next().unwrap_or("an instruction").to_string();
                 return Err(CAotError::Unsupported(format!(
-                    "{name} on a value of a type a generic is compiled by reference over, in {}",
+                    "{name} on a value of a generic's type parameter, in {}",
                     unit.name)));
             }
         }
@@ -335,6 +335,8 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::EnumPayload { .. }
         | Instruction::DropField { .. }
         | Instruction::ListNew { .. }
+        | Instruction::TensorNew { .. }
+        | Instruction::TableNew { .. }
         | Instruction::SetNew { .. }
         | Instruction::MapNew { .. }
         | Instruction::ListBoundsCheck { .. }
@@ -431,7 +433,7 @@ struct FunctionCodegenContext<'a> {
     /// into the list being built, and came out empty. The count makes each
     /// name its own.
     const_scratch: u32,
-    /// Under generics by reference, the descriptor table: entry `i` is in the
+    /// In a generic, the descriptor table: entry `i` is in the
     /// local `__t{i}`, filled in the prologue.
     table: Vec<IrType>,
     /// Whether the function takes shadow stack space on entry, which every
@@ -1278,8 +1280,7 @@ impl<'a> FunctionCodegenContext<'a> {
         // bounded to `float`, fixed at one width or the other by the call site.
         // This body was compiled once and cannot hold both, so the runtime
         // reads the descriptor and picks.
-        if matches!(lhs_ty, IrType::Data) || matches!(self.operand_type(rhs), IrType::Data)
-            || lhs_ty.is_dynamic() || self.operand_type(rhs).is_dynamic()
+        if lhs_ty.is_dynamic() || self.operand_type(rhs).is_dynamic()
         {
             let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
                 CAotError::Codegen(format!("no dynamic form of {:?}", op))
@@ -1483,7 +1484,7 @@ impl<'a> FunctionCodegenContext<'a> {
         // A type parameter bounded to `fixedint`, whose width and signedness
         // only the descriptor says. This body is emitted once and cannot hold
         // the arithmetic for all ten, so the runtime reads and picks.
-        if matches!(lhs_ty, IrType::Data) || lhs_ty.is_dynamic() {
+        if lhs_ty.is_dynamic() {
             let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
                 CAotError::Codegen(format!("no dynamic form of {:?}", op))
             })? as u8;
@@ -1690,7 +1691,7 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // A type parameter bounded to `fixedint`, which may turn out to be
         // unsigned; the runtime reads the descriptor and decides.
-        if matches!(src_ty, IrType::Data) || src_ty.is_dynamic() {
+        if src_ty.is_dynamic() {
             if op != UnaryOp::Neg {
                 return Err(CAotError::Unsupported(format!(
                     "no dynamic form of checked {:?}", op)));
@@ -2173,9 +2174,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_payload};").unwrap();
             }
             CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
+                if payload_ty.is_dynamic() || layout.size > 0 {
                     let src_payload = format!("({} + {})", src_addr, payload_offset);
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_payload, layout.size).unwrap();
+                    writeln!(out, "    memcpy({}, {}, {});",
+                        dest_addr, src_payload, self.size_expr(payload_ty)).unwrap();
                 }
             }
         }
@@ -2231,7 +2233,8 @@ impl<'a> FunctionCodegenContext<'a> {
         let elem_layout = types::ir_type_to_crepr(&elem_ty).layout();
 
         if elements.is_empty() {
-            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, elem_tydesc).unwrap();
+            let list_tydesc = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).unwrap();
         } else if elem_ty.is_dynamic() {
             // Elements of a size known only at run time are pushed one at a
             // time rather than laid out in a buffer here.
@@ -2274,14 +2277,12 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let dest_ty = self.value_type(dest).clone();
 
-        let elem_ty = match &dest_ty {
-            IrType::Set(e) => e.as_ref().clone(),
-            _ => return Err(CAotError::Codegen("set_new requires Set type".into())),
-        };
-        let elem_tydesc = self.tydesc_name(&elem_ty);
+        if !matches!(dest_ty, IrType::Set(_)) {
+            return Err(CAotError::Codegen("set_new requires Set type".into()));
+        }
         let set_tydesc = self.tydesc_name(&dest_ty);
 
-        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, elem_tydesc).unwrap();
+        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, {}, &{});", dest_addr, set_tydesc).unwrap();
         if elements.is_empty() {
             return Ok(());
         }
@@ -2346,6 +2347,28 @@ impl<'a> FunctionCodegenContext<'a> {
 
         let elem_tydesc = self.tydesc_name(&elem_ty);
         let dest_tydesc = self.tydesc_name(&dest_ty);
+        let shape_str: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
+
+        // An element whose size only its descriptor says is gathered in a
+        // buffer the runtime allocates at that size, and freed once
+        // `tensor_init` has moved the elements into the tensor's own.
+        if elem_ty.is_dynamic() {
+            let n = elements.len();
+            writeln!(out, "    {{ uint8_t* __elems = dtlv_rti_mem_alloc_raw_local(rt, {td}.size, {td}.align, {n});",
+                td = elem_tydesc).unwrap();
+            for (i, elem_op) in elements.iter().enumerate() {
+                let elem_addr = self.operand_addr(elem_op);
+                writeln!(out, "    memcpy(__elems + {i} * (size_t){td}.size, {}, (size_t){td}.size);",
+                    elem_addr, td = elem_tydesc).unwrap();
+            }
+            writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
+            writeln!(out, "    dtlv_rti_tensor_init_local(rt, __elems, {n}, &{}, __shape, {}, {}, &{});",
+                elem_tydesc, rank, dest_addr, dest_tydesc).unwrap();
+            writeln!(out, "    dtlv_rti_mem_free_raw_local(rt, {td}.size, {td}.align, {n}, __elems); }}",
+                td = elem_tydesc).unwrap();
+            return Ok(());
+        }
+
         let elem_layout = types::ir_type_to_crepr(&elem_ty).layout();
 
         // Allocate temp buffer for elements.
@@ -2371,7 +2394,6 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // Emit shape array. An extent is a `u32` in the IR and the runtime
         // reads it as one, whatever width an index happens to be.
-        let shape_str: Vec<String> = shape.iter().map(|s| s.to_string()).collect();
         writeln!(out, "    static const uint32_t __shape[] = {{ {} }};", shape_str.join(", ")).unwrap();
 
         writeln!(out, "    dtlv_rti_tensor_init_local(rt, __elems, {}, &{}, __shape, {}, {}, &{}); }}",
@@ -2399,6 +2421,16 @@ impl<'a> FunctionCodegenContext<'a> {
 
         if rows.is_empty() {
             writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).unwrap();
+        } else if row_ty.is_dynamic() {
+            // Rows of a size known only at run time are pushed one at a time,
+            // each with its own descriptor.
+            writeln!(out, "    dtlv_rti_table_create_local(rt, {}, &{});", dest_addr, dest_tydesc).unwrap();
+            for row_op in rows {
+                let row_addr = self.operand_addr(row_op);
+                let row_td = self.operand_tydesc(row_op);
+                writeln!(out, "    dtlv_rti_table_push_row_local(rt, {}, &{}, {}, {});",
+                    dest_addr, dest_tydesc, row_addr, row_td).unwrap();
+            }
         } else {
             let total_size = row_layout.size * rows.len() as u32;
             // Aligned, because the runtime reads each row through the tuple
@@ -2438,10 +2470,11 @@ impl<'a> FunctionCodegenContext<'a> {
                     let symbol = native.symbol().to_string();
                     // A descriptor for each type parameter no argument
                     // determines, for what this call bound it to.
-                    let undetermined: Vec<IrType> = native.descriptor_shapes.iter()
-                        .map(|s| s.to_ir_type().substitute(bindings))
-                        .collect();
-                    return self.emit_native_call(out, dest, &symbol, args, &undetermined);
+                    let undetermined = native.undetermined_bindings(bindings);
+                    let modes = native.param_modes.clone();
+                    self.emit_native_call(out, dest, &symbol, args, &undetermined)?;
+                    self.mark_in_arguments_moved(out, &modes, args);
+                    return Ok(());
                 }
             }
         }
@@ -2478,7 +2511,8 @@ impl<'a> FunctionCodegenContext<'a> {
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
         self.mark_out_destinations_live(out, func, args);
-        self.mark_in_arguments_moved(out, func, args);
+        let modes = self.callee_param_modes(func);
+        self.mark_in_arguments_moved(out, &modes, args);
         Ok(())
     }
 
@@ -2490,9 +2524,8 @@ impl<'a> FunctionCodegenContext<'a> {
     /// but one that moves the parameter elsewhere leaves the caller still
     /// holding what the callee frees. Whether a value of a type known only at
     /// run time is given up or copied is its descriptor's to say.
-    fn mark_in_arguments_moved(&mut self, out: &mut String, func: &CodeRef, args: &[Operand]) {
+    fn mark_in_arguments_moved(&mut self, out: &mut String, modes: &[datalove_datafun_ir::ParamMode], args: &[Operand]) {
         use datalove_datafun_ir::ParamMode;
-        let modes = self.callee_param_modes(func);
         for (i, arg) in args.iter().enumerate() {
             if modes.get(i) != Some(&ParamMode::In) {
                 continue;

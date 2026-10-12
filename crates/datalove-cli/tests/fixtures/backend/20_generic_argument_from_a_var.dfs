@@ -1,16 +1,15 @@
 // Giving a `var` away to a generic function that takes it by value.
 //
 // An `in` argument is consumed by the call, and the call is what ownership
-// analysis sees taking it. Where the parameter is erased there is a conversion
-// in between -- the caller wraps the list into a `data` -- so the call takes
-// the *erased value* and the binding it came from is never seen going. The var
-// was then destroyed at the end of its scope as well as by the callee, which
-// freed the same list twice: `free() called on untracked pointer` under both
-// AOT backends, while the interpreter and the jit happened to survive it.
+// analysis sees taking it. Once a conversion stood between the binding and a
+// generic's parameter, so the binding was never seen going and the var was
+// destroyed at the end of its scope as well as by the callee, which freed the
+// same list twice: `free() called on untracked pointer` under both AOT
+// backends, while the interpreter and the jit happened to survive it.
 //
-// The binding is moved out before the conversion now, which is what says it has
-// gone. A copy type is left where it stands: it has nothing to free, and
-// reading it twice is exactly what a copy is for.
+// A copy type is left where it stands: it has nothing to free, and reading it
+// twice is exactly what a copy is for. Whether the argument is given up is its
+// descriptor's to say.
 //
 // A list written as a literal never showed this, because a literal is a value
 // rather than a binding and a value is already seen being moved. It took a var
@@ -45,13 +44,13 @@ var again: [string] = []
 call push(mut again, "a")
 debuglog last_of(again)
 
-// A literal, which always worked, and a concrete callee, which never converts.
+// A literal, which always worked, and a concrete callee.
 debuglog size(["x", "y", "z"])
 var third: [string] = []
 call push(mut third, "c")
 debuglog concrete_size(third)
 
-// A copy-typed var handed to a generic twice over: erasing it does not take it
+// A copy-typed var handed to a generic twice over: passing it does not take it
 // away, so it is still there for the second call and for this read.
 fun identity<T>(x: T): T
   ret x

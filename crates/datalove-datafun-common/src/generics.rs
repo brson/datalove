@@ -174,7 +174,7 @@ pub fn substitute_type_params<'db>(
 /// Whether a type parameter appears anywhere in a type.
 ///
 /// A signature holding one of these is generic at that position, so the call
-/// site has to erase into it rather than pass the value along unchanged.
+/// site has to hand a descriptor for what it binds there.
 pub fn contains_type_param(ty: &Type<'_>) -> bool {
     match ty {
         Type::Var(_) => true,
@@ -307,96 +307,3 @@ fn first_unordered_param<'db>(
     }
 }
 
-/// The first type parameter sitting somewhere erasure cannot convert.
-///
-/// Erasing a value into the shape a generic callee was compiled for converts
-/// it in place, and that only works where the conversion can reach the
-/// parameter's position. An option or a result holds its payload inline, so
-/// converting one means converting the payload and writing it at the other
-/// side's offset. A collection holds its elements packed by size, so `[T]` and
-/// `[data]` do not agree on where any element after the first begins, and
-/// converting between them would mean rebuilding the collection element by
-/// element. Until that is worth its cost, a type parameter under one is
-/// refused rather than reinterpreted.
-pub fn first_unerasable_type_param<'db>(ty: &Type<'db>) -> Option<InternedText<'db>> {
-    match ty {
-        // Erasure converts the payload of these and writes it where the other
-        // side keeps it, so a parameter below one is still reachable.
-        Type::Option(t) => first_unerasable_type_param(&t.inner_type),
-        Type::Result(t) => first_unerasable_type_param(&t.inner_type),
-
-        // A parameter standing alone is the position erasure is built for.
-        Type::Var(_) => None,
-
-        // A container of one is wrapped whole rather than erased structurally,
-        // so it reaches the callee as a `data` carrying the descriptor that
-        // says what its elements are. Nothing walks the elements and nothing
-        // is rebuilt.
-        _ if is_container_of_type_param(ty) => None,
-
-        // A tuple and a struct hold their fields inline, so converting one
-        // means converting each field and writing it at the other side's
-        // offset. That is real work, unlike a container, but it is a walk of
-        // as many fields as the type has rather than of what the value holds.
-        Type::AnonTuple(t) => t.fields.iter().find_map(first_unerasable_type_param),
-        Type::AnonStruct(t) => t.fields.iter()
-            .find_map(|f| first_unerasable_type_param(&f.ty)),
-
-        // A term is its payload under a name, and an enum is a payload chosen
-        // by a discriminant. Both convert the way an option does, one payload
-        // at a time.
-        Type::Term(t) => first_unerasable_type_param(&t.payload),
-        Type::Enum(t) => t.variants.iter()
-            .find_map(|v| v.payload.as_ref().and_then(|p| first_unerasable_type_param(p))),
-
-        other => first_type_param(other),
-    }
-}
-
-/// Whether this is a container holding a type parameter.
-///
-/// The same question is asked of a type hint by
-/// `datafun-ir::type_hint_is_container_of_param`, which decides the shape the
-/// parameter takes. This one decides whether the signature is allowed to say
-/// it at all, and the two have to agree.
-pub fn is_container_of_type_param(ty: &Type<'_>) -> bool {
-    match ty {
-        Type::List(t) => first_type_param(&t.element_type).is_some(),
-        Type::Set(t) => first_type_param(&t.element_type).is_some(),
-        Type::Tensor(t) => first_type_param(&t.element_type).is_some(),
-        Type::Map(t) => {
-            first_type_param(&t.key_type).is_some() || first_type_param(&t.value_type).is_some()
-        }
-        Type::Table(t) => t.columns.iter().any(|c| first_type_param(&c.ty).is_some()),
-        _ => false,
-    }
-}
-
-/// The first type parameter appearing anywhere in a type.
-fn first_type_param<'db>(ty: &Type<'db>) -> Option<InternedText<'db>> {
-    match ty {
-        Type::Var(name) => Some(*name),
-
-        Type::List(t) => first_type_param(&t.element_type),
-        Type::Set(t) => first_type_param(&t.element_type),
-        Type::Option(t) => first_type_param(&t.inner_type),
-        Type::Result(t) => first_type_param(&t.inner_type),
-        Type::Tensor(t) => first_type_param(&t.element_type),
-        Type::Term(t) => first_type_param(&t.payload),
-        Type::Map(t) => {
-            first_type_param(&t.key_type).or_else(|| first_type_param(&t.value_type))
-        }
-
-        Type::AnonTuple(t) => t.fields.iter().find_map(first_type_param),
-        Type::AnonStruct(t) => t.fields.iter().find_map(|f| first_type_param(&f.ty)),
-        Type::Table(t) => t.columns.iter().find_map(|c| first_type_param(&c.ty)),
-        Type::Enum(t) => t.variants.iter()
-            .find_map(|v| v.payload.as_ref().and_then(|p| first_type_param(p))),
-
-        Type::Bool | Type::U8 | Type::I8 | Type::U16 | Type::I16
-        | Type::U32 | Type::I32 | Type::U64 | Type::I64
-        | Type::Index | Type::Offset | Type::F32 | Type::F64
-        | Type::Int | Type::String | Type::Data | Type::Error
-        | Type::Atom(_) => None,
-    }
-}

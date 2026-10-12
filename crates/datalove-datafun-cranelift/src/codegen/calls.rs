@@ -34,6 +34,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
+    /// Whether `code_ref`'s signature takes a pointer to return through.
+    fn callee_uses_sret(&self, code_ref: &CodeRef) -> bool {
+        match code_ref {
+            CodeRef::Local(_) | CodeRef::External { .. } => {
+                self.declared_callee(code_ref)
+                    .expect("resolve_code_ref rejects a callee never declared")
+                    .uses_sret
+            }
+            CodeRef::Module { module, id } => {
+                let registry = self.registry.expect("a module callee is resolved through the registry");
+                let unit = registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
+                    .expect("resolve_code_ref rejects a callee never declared");
+                let ctx = unit.function_context().expect("a module callee that is not native is a function");
+                uses_sret(&ctx.return_type)
+            }
+        }
+    }
+
     /// How `code_ref` takes each of its parameters.
     ///
     /// The instruction says what to pass but not how the callee takes it, and
@@ -178,10 +196,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     if let Some(native) = unit.native_context() {
                         // A descriptor for each type parameter no argument
                         // determines, from what this call bound it to.
-                        let undetermined: Vec<IrType> = native.descriptor_shapes.iter()
-                            .map(|s| s.to_ir_type().substitute(bindings))
-                            .collect();
-                        return self.compile_native_call(builder, dest, code_ref, args, &undetermined);
+                        let undetermined = native.undetermined_bindings(bindings);
+                        let modes = native.param_modes.clone();
+                        self.compile_native_call(builder, dest, code_ref, args, &undetermined)?;
+                        return self.mark_in_arguments_moved(builder, &modes, args);
                     }
                 }
             }
@@ -194,16 +212,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let callee_func_id = self.resolve_code_ref(code_ref)?;
 
-        // All non-Unit returns use sret convention.
+        // The callee's own return type says whether it returns through a
+        // pointer; a generic returning `T` does even where this call bound `T`
+        // to `()`.
         let dest_ty = &self.func.value_types[dest.0 as usize];
-        let callee_uses_sret = uses_sret(dest_ty);
+        let callee_uses_sret = self.callee_uses_sret(code_ref);
 
         // Build call arguments: [rt_handle, sret?, user_args...]
         let mut call_args = Vec::with_capacity(2 + args.len());
         call_args.push(rt_handle);
 
         // Allocate space in caller's frame and pass sret pointer.
-        if callee_uses_sret {
+        if callee_uses_sret && uses_sret(dest_ty) {
             let ptr = self.dest_addr(builder, dest)?;
             call_args.push(ptr);
 
@@ -228,6 +248,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let dest_offset = self.layout.value_offset(dest.0);
             let ptr = frame_slot.addr(builder, dest_offset as i32);
             self.values.insert(dest, ptr);
+            // A generic returning a `T` bound to `()` still takes the
+            // pointer, and writes nothing through it.
+            if callee_uses_sret {
+                call_args.push(ptr);
+            }
         }
 
         self.destroy_out_destinations(builder, code_ref, args)?;
@@ -251,9 +276,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.return_if_abandoning(builder)?;
 
         self.mark_out_destinations_live(builder, code_ref, args);
+        let modes = self.callee_param_modes(code_ref);
+        self.mark_in_arguments_moved(builder, &modes, args)?;
 
         // For scalar sret returns, load the value from the sret location.
-        if callee_uses_sret {
+        if callee_uses_sret && uses_sret(dest_ty) {
             if let CraneliftRepr::Scalar(scalar_ty) = types::ir_type_to_cranelift(dest_ty) {
                 let frame_slot = self.frame_slot.unwrap();
                 let dest_offset = self.layout.value_offset(dest.0);

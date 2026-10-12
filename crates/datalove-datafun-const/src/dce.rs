@@ -434,8 +434,8 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
 /// Remove instructions that define unused values.
 ///
 /// An instruction removed this way may have been what ended an operand's life:
-/// `v3 = reify v2`, its `v3` a tuple of indexes nothing reads, was the only
-/// thing consuming the erased `v2`, and removing it leaked the boxes `v2` held.
+/// `v3 = move v2`, its `v3` nothing reads, was the only thing consuming `v2`,
+/// and removing it leaked whatever `v2` held.
 /// So a removed instruction leaves a drop of each value it consumed that is not
 /// copy, unless what defined that value is itself pure and so goes the same way
 /// once nothing reads it -- the chain building a value const inlining folded.

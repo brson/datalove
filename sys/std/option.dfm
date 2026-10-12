@@ -1,9 +1,8 @@
 // Option utilities.
 //
-// These are generic over the contained type. A type parameter is erased to
-// `data` when the function is compiled, and the call site converts on the way
-// in and back out, so there is one copy of each of these no matter how many
-// types go through it.
+// These are generic over the contained type. Each is compiled once and handed
+// a descriptor of the type it is called at, so there is one copy of each of
+// these no matter how many types go through it.
 //
 // A type parameter is never copy, because the caller may supply a linear type.
 // So a value taken out of an option by `if self |value|` has moved out of
@@ -97,8 +96,7 @@ end fun
 // Pairs two options, which is some only when both are.
 //
 // The two need not hold the same type, and the pair is built inside a function
-// that knows neither: a tuple of type parameters is a shape erasure reaches,
-// converted field by field on the way across.
+// that knows neither: its layout comes from the descriptors of `A` and `B`.
 fun zip_option<A, B>(self: ?A, other: ?B): ?(A, B)
   if self |a|
     if other |b|

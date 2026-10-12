@@ -1,10 +1,9 @@
 //! The IR walker: the reference engine, which runs a body's IR an instruction
 //! at a time, and runs whatever the bytecode leaves to it.
 //!
-//! Inside a generic a value's static type can say `data` where the frame holds
-//! something else; the descriptor read with the value says what is really
-//! there, and the arms below read layouts and widths from it rather than from
-//! the static type.
+//! Inside a generic a value's static type can name a type parameter; the
+//! descriptor read with the value says what is really there, and the arms
+//! below read layouts and widths from it rather than from the static type.
 
 use super::*;
 
@@ -978,8 +977,8 @@ impl IrInterpreter {
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapValueRef failed");
 
                 // Store pointer in dest, and what it points at: the map's real
-                // value type rather than the `data` a generic's static type
-                // claims.
+                // value type rather than the type parameter a generic's static
+                // type names.
                 let dest_slot = frame.value_dest(*dest);
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = value_ptr;
@@ -1126,8 +1125,7 @@ impl IrInterpreter {
                     };
                     let dest_slot = frame.value_dest(*dest);
                     unsafe { *(dest_slot.ptr as *mut *mut u8) = element_ptr; }
-                    // And what it points at: the tensor's real element type
-                    // rather than the `data` a generic's static type claims.
+                    // And what it points at, which the tensor's descriptor says.
                     frame.set_value_tydesc(*dest, element_tydesc);
                 } else {
                     // Rank > 1: a view of the row, made where the frame keeps
@@ -1147,6 +1145,11 @@ impl IrInterpreter {
                     }
                     let dest_slot = frame.value_dest(*dest);
                     unsafe { *(dest_slot.ptr as *mut *mut u8) = view_ptr as *mut u8; }
+                    // A view of a tensor of a dynamic type is described by
+                    // its own table entry.
+                    if let Some(entry) = frame.layout().tensor_view_entries[dest.0 as usize] {
+                        frame.set_value_tydesc(*dest, frame.table_entry(entry as usize));
+                    }
                 }
                 frame.mark_value_live(*dest);
             }

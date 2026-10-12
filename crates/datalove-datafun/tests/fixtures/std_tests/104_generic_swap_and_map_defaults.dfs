@@ -12,8 +12,8 @@ import map.insert_if_absent
 // handed. None of this needs to know what a `T` is, which is why these can
 // live in the language rather than the rider.
 
-// Swapping at the ends also exercises inserting at the length. The erased
-// insert took the pointer to element `i` without checking whether `i` was the
+// Swapping at the ends also exercises inserting at the length. The generic
+// insert once took the pointer to element `i` without checking whether `i` was the
 // length, so appending to a list whose element type is a type parameter wrote
 // one element past the end. Under a debug runtime that tripped an assert;
 // without one it silently corrupted the allocation next door.

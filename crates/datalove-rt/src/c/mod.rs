@@ -2793,12 +2793,10 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clear_debug_buffer(
 
 /// The offset of a field of an aggregate, taken from its descriptor.
 ///
-/// A reference inside a generic points at a value whose static type says `data`
-/// where a type parameter stood, and a `data` is two words where the `u8`
-/// really behind it is one byte. So a field offset computed from that type is
-/// wrong by the difference, and has to be read from the descriptor of what
-/// arrived instead. The offset is already in there: building a descriptor is
-/// what settled the alignment.
+/// Inside a generic an aggregate holding a type parameter has a layout only
+/// its descriptor knows, so a field offset has to be read from there. The
+/// offset is already in there: building a descriptor is what settled the
+/// alignment.
 ///
 /// Here rather than in each backend because a tuple and a struct do not agree
 /// on the order of their two fields -- `TyInfoTuple` is count then pointer and
@@ -2905,16 +2903,5 @@ pub unsafe extern "C-unwind" fn dtlv_rti_shadow_alloc(
         let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
         rt_ref.shadow.alloc(&mut rt_ref.header, size as usize, align as usize)
     }
-}
-
-/// The descriptor of what a container holds.
-///
-/// See `crate::c::impls::dyn_ops::element_tydesc`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_element_tydesc(
-    tydesc: *const rtdt::TyDesc,
-) -> *const rtdt::TyDesc {
-    debug_assert!(!tydesc.is_null(), "tydesc is null");
-    unsafe { crate::c::impls::dyn_ops::element_tydesc(tydesc) }
 }
 

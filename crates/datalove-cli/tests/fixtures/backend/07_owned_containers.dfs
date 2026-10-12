@@ -1,6 +1,5 @@
-// A container of a type parameter, owned. It is wrapped whole on the way in
-// rather than rebuilt element by element, so the value carries the descriptor
-// that says what its elements are and keeps it wherever it goes.
+// A container of a type parameter, owned. It goes across as it stands, and
+// the descriptor that says what its elements are comes from the call site.
 //
 // A `[string]` throughout, so a drop that goes missing leaks and one that
 // happens twice faults. A `[u32]` would say nothing.
@@ -25,8 +24,7 @@ fun relay<T>(xs: [T]): [T]
   ret ys
 end fun
 
-// Forwarded to another generic, which erases nothing because the value is
-// already in the shape that callee was compiled for.
+// Forwarded to another generic, which hands its own descriptor along.
 fun relay_twice<T>(xs: [T]): [T]
   ret relay(xs)
 end fun
@@ -44,7 +42,7 @@ let d: [string] = ["g", "h"]
 debuglog len(ref relay_twice(d))
 
 // Used, not just moved. A borrowed parameter wants the container itself with
-// a descriptor beside it, and both come out of the wrapper together.
+// a descriptor beside it.
 fun count<T>(xs: [T]): index
   ret len(ref xs)
 end fun
@@ -52,7 +50,7 @@ end fun
 let e: [string] = ["i", "j", "k", "l"]
 debuglog count(e)
 
-// Mutated through the wrapper, so what push writes lands inside it.
+// Mutated in a local, so what push writes lands in the moved list.
 fun grow<T>(xs: [T], v: T): index
   var ys = xs
   call push(mut ys, v)

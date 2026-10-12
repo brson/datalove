@@ -1,24 +1,14 @@
 // Indexing a container a generic function owns.
 //
-// An owned container of a type parameter is the one thing erasure does not
-// walk: `erased_param_type` wraps `[T]` whole into a `data`, because converting
-// it to `[data]` would mean rebuilding the elements at a different stride. So
-// inside the callee the value is a wrapper, and `ListGet` was emitted straight
-// at it. Both AOT backends refused outright ("ListGet on non-list type: Data"),
-// the jit turned that into a panic, and the interpreter read the anypack's
-// bytes as a list header and segfaulted.
+// An owned container of a type parameter is a dynamic value like any other
+// `T`-dependent one: the container itself is a fixed-size header, and the
+// element stride comes from the descriptor the call site supplied. Indexing it
+// is the same as indexing a borrowed one, and the element read out carries the
+// element's descriptor on.
 //
-// `DataBorrow` opens the wrapper: the pointer and the descriptor come out
-// together, and the reference it makes carries the descriptor on, which is what
-// every index into a borrowed container already reads. So nothing here needed a
-// new way of indexing, only a way of getting at the container.
-//
-// Knowing there *is* a container to open is the awkward half. `from_datalit`
-// collapses a container of a type parameter to `data` everywhere -- parameter,
-// local and call result alike -- so the IR type says nothing about being a
-// list, and a place like `xs[0]` has no expression node for its root to ask the
-// typechecker about. The shape is recorded where the binding is made instead;
-// see `LowerBody::wrapped_shapes`.
+// This once went wrong in every backend: both AOT backends refused it, the jit
+// turned that into a panic, and the interpreter read the wrong bytes as a list
+// header and segfaulted.
 
 fun take<T>(ref x: T): ?T
   ret some (x@)
@@ -33,14 +23,14 @@ fun at<T>(xs: [T], i: index): ?T
   ret some (xs[i]?@)
 end fun
 
-// Moved into a local first, which is a wrapper too.
+// Moved into a local first, which is dynamic too.
 fun via_local<T>(xs: [T]): ?T
   var local: [T] = xs
   ret some (local[0]?@)
 end fun
 
 // A borrow taken out of an owned container, so the element's descriptor is
-// narrowed from the one the wrapper carried.
+// narrowed from the container's.
 fun borrow_first<T>(xs: [T]): ?T
   ret take(ref xs[0]?)
 end fun
@@ -66,7 +56,7 @@ debuglog via_local(words@)
 debuglog borrow_first(words@)
 debuglog beyond(words@)
 
-// A one byte element, where a `data`'s stride would be sixteen times too far.
+// A one byte element, where any stride but the descriptor's is too far.
 let ns: [u8] = [1, 2, 3]
 debuglog first(ns@)
 debuglog at(ns@, 1)
@@ -78,7 +68,7 @@ debuglog map_at(m@, "z")
 let t: [|u32, 1|] = [| 10 20 30 |]
 debuglog tensor_at(t@, 1)
 
-// A concrete caller, which was always fine: nothing is wrapped there, so the
+// A concrete caller, which was always fine: nothing is dynamic there, so the
 // index is the same code it always was.
 fun concrete_first(xs: [string]): ?string
   ret some (xs[0]?@)

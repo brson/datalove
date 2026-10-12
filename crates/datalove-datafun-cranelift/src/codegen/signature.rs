@@ -75,8 +75,8 @@ pub fn build_native_signature(
     sig.params.push(cl_ir::AbiParam::new(PTR_TYPE)); // result tydesc ptr
 
     // Then a descriptor for each type parameter no argument determines. See
-    // `NativeContext::descriptor_shapes`; almost every native has none.
-    for _ in &ctx.descriptor_shapes {
+    // `NativeContext::undetermined_type_params`; almost every native has none.
+    for _ in &ctx.undetermined_type_params {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
@@ -110,6 +110,10 @@ pub struct LocalCallee {
     pub param_modes: Vec<ParamMode>,
     /// How many type parameters the callee takes a descriptor for, last.
     pub type_param_count: u32,
+    /// Whether the callee's signature takes a pointer to return through,
+    /// which is its own return type's to say: a generic returning `T` does,
+    /// whatever a caller bound `T` to.
+    pub uses_sret: bool,
 }
 
 impl LocalCallee {
@@ -120,6 +124,7 @@ impl LocalCallee {
             func_id,
             param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
             type_param_count: ctx.map(|c| c.type_param_count).unwrap_or(0),
+            uses_sret: ctx.is_some_and(|c| uses_sret(&c.return_type)),
         }
     }
 }

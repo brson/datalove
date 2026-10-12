@@ -258,23 +258,19 @@ pub fn check_statement<'db>(
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);
 
-            // A const parameter fixes a value at compile time and a type
-            // parameter is erased to a `data`, so a parameter cannot be both.
-            // The const argument would be the only thing saying what the type
-            // parameter is, which means pinning it concretely for that
-            // instantiation -- and specialization builds a copy by substituting
-            // parameters into cloned blocks, so it cannot change the copy's
-            // signature, its descriptor shapes, or the erasure decisions inside
-            // its body. Left alone it goes wrong quietly: the const argument is
-            // erased before the call, `comptime_values` cannot read a constant
-            // back out of an `Erase`, and the parameter silently stays a
-            // runtime one.
+            // A const parameter fixes a value at compile time, and a parameter
+            // whose type is a type parameter would have that value be the only
+            // thing saying what the type parameter is. Specialization builds
+            // one copy per const value by substituting it into cloned blocks,
+            // and the copy stays generic -- it is still handed a descriptor per
+            // type parameter -- so a constant of the caller's type has no place
+            // to go in it: it would mean a copy per type as well, which is
+            // monomorphization, and nothing does that yet.
             //
             // Only the parameter is refused. A const parameter of an ordinary
             // type in a generic function is fine, because the two vary a
-            // function along different axes: specialization deletes const
-            // parameters and erasure replaces type parameters, so one copy per
-            // const instantiation serves every type instantiation.
+            // function along different axes: one copy per const value serves
+            // every binding of the type parameters.
             if !stmt.type_params(db).is_empty() {
                 for (i, param) in params.iter().enumerate().filter(|(_, p)| p.is_comptime) {
                     let generic = matches!(
@@ -287,8 +283,8 @@ pub fn check_statement<'db>(
                             "F077",
                             fmt!("const parameter `{}` has a type that depends on a type parameter", param.name.as_str(db)),
                             S("a const parameter's type must be known before the function is specialized"),
-                            Some(S("specialization substitutes const values and erasure replaces type \
-parameters, and neither can see through the other. Give the const parameter a concrete type.")),
+                            Some(S("specialization makes one copy per const value, and the copy is still \
+generic, so a const whose type is a type parameter has nowhere to go. Give the const parameter a concrete type.")),
                         );
                         ctx.add_error(TypeError::ComptimeParamOfGenericType {
                             func_name: name.as_str(db).to_string(),

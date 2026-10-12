@@ -93,7 +93,7 @@ pub enum Shape {
     /// `fun f<T>(x: T): (T, T)` -- clones, so the value is used twice.
     Duplicate,
     /// `fun f<T>(x: T): ?T` -- puts it somewhere that holds its payload
-    /// inline, which erasure converts field by field.
+    /// inline, at an offset only the descriptor knows.
     Wrap,
     /// `fun f<T>(x: T): [T]` -- builds a collection of a type it cannot name,
     /// which the call site has to hand a descriptor for.

@@ -1,24 +1,14 @@
 // A plain function calling a generic that builds a collection.
 //
-// The descriptor for a shape a callee builds has no value to travel with, so it
-// crosses as a trailing argument after the ones that describe a parameter. That
-// is what `build_signature` lays out and what both AOT backends read. The jit
-// knew only about the first group: `bridge::call_jit` had no shape parameter at
-// all, and the trampoline consumed the parameter prefix of the descriptor array
-// and dropped the rest, then called the interpreter through `call_in_context`
-// rather than `call_in_context_with_shapes`. So a jit-compiled function calling
+// A JIT-compiled function hands a generic callee one descriptor per type
+// parameter after its arguments, through the bridge and the trampoline. This
+// once dropped a group of them, so a JIT-compiled function calling
 // `sys/std/list.reversed` built the result list from whatever was in the
-// register: `list_create:value_out: pointer ... not aligned to 738201760 bytes`.
+// register. Every other backend was right the whole time.
 //
-// Every other backend was right the whole time, which is what this file is for.
-//
-// The shape the old fixtures missed is the one here: a function whose own
-// declared shapes are empty, so nothing gates it and the jit compiles it, whose
-// body then calls something that does declare shapes. Every generic fixture
-// before this called the generic from the script unit body, which is not a
-// compilable function, or from another generic that forwards the shape and is
-// gated for the same reason. A plain function calling `sys/std` is the common
-// case and had no coverage at all.
+// The caller here is a plain function, which the JIT compiles, calling a
+// generic. The script unit body is not a compilable function, and a generic
+// caller forwards its own descriptors, so neither covers this.
 
 require module sys/std/list
 

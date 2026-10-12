@@ -214,36 +214,45 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         // Get element TyDesc.
         let elem_tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
-        // Get element size from the type.
-        let elem_size = crate::types::ir_type_size(&elem_ty);
         let element_count = elements.len() as u32;
         let rank = shape.len() as u32;
+        use crate::index_types::INDEX_TYPE;
 
-        // Allocate a temporary stack buffer for element data.
-        let data_buffer_size = (element_count as usize) * (elem_size as usize);
-        let data_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot,
-            data_buffer_size as u32,
-            align_shift(ir_type_align(&elem_ty)),
-        ));
-        let data_ptr = builder.ins().stack_addr(PTR_TYPE, data_slot, 0);
-
-        // Copy each element into the data buffer.
-        for (i, elem) in elements.iter().enumerate() {
-            let elem_src_ptr = self.get_operand_ptr(builder, elem)?;
-            let elem_dest_offset = (i as u32) * elem_size;
-            let elem_dest_ptr = builder.ins().stack_addr(PTR_TYPE, data_slot, elem_dest_offset as i32);
-
-            // Use memcpy to copy the element.
-            // For small fixed sizes, could use load/store, but memcpy is simpler.
-            let size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
-            builder.call_memcpy(
-                self.isa.frontend_config(),
-                elem_dest_ptr,
-                elem_src_ptr,
-                size_val,
-            );
-        }
+        // The elements are gathered in a buffer `tensor_init` moves them out
+        // of. One whose size only its descriptor says is gathered in a buffer
+        // the runtime allocates at that size, freed afterwards; any other in a
+        // stack slot.
+        let mut dynamic_buffer = None;
+        let data_ptr = if elem_ty.is_dynamic() {
+            let (size, align) = self.size_and_align(builder, &elem_ty)?;
+            let count = builder.ins().iconst(INDEX_TYPE, element_count as i64);
+            let alloc_ref = self.module.declare_func_in_func(runtime.mem_alloc_raw, builder.func);
+            let call = builder.ins().call(alloc_ref, &[rt_handle, size, align, count]);
+            let buffer = builder.inst_results(call)[0];
+            let stride = builder.ins().uextend(PTR_TYPE, size);
+            for (i, elem) in elements.iter().enumerate() {
+                let src = self.get_operand_ptr(builder, elem)?;
+                let offset = builder.ins().imul_imm_u(stride, i as i64);
+                let dst = builder.ins().iadd(buffer, offset);
+                self.copy_value_bytes(builder, dst, src, &elem_ty)?;
+            }
+            dynamic_buffer = Some((buffer, size, align, count));
+            buffer
+        } else {
+            let elem_size = crate::types::ir_type_size(&elem_ty);
+            let data_slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
+                cl_ir::StackSlotKind::ExplicitSlot,
+                element_count * elem_size,
+                align_shift(ir_type_align(&elem_ty)),
+            ));
+            for (i, elem) in elements.iter().enumerate() {
+                let src = self.get_operand_ptr(builder, elem)?;
+                let dst = builder.ins().stack_addr(PTR_TYPE, data_slot, (i as u32 * elem_size) as i32);
+                let size_val = builder.ins().iconst(PTR_TYPE, elem_size as i64);
+                builder.call_memcpy(self.isa.frontend_config(), dst, src, size_val);
+            }
+            builder.ins().stack_addr(PTR_TYPE, data_slot, 0)
+        };
 
         // Allocate stack buffer for shape array and fill it.
         let shape_buffer_size = (rank as usize) * std::mem::size_of::<u32>();
@@ -263,8 +272,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Call tensor_init runtime function.
         // element_count is IndexRepr type (I32 or I64 depending on index-64 feature).
-        use crate::index_types::INDEX_TYPE;
-
         let init_ref = self.module.declare_func_in_func(runtime.tensor_init, builder.func);
         let element_count_val = builder.ins().iconst(INDEX_TYPE, element_count as i64);
         let rank_val = builder.ins().iconst(cl_types::I32, rank as i64);
@@ -278,6 +285,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             tensor_ptr,
             tensor_tydesc_ptr,
         ]);
+        if let Some((buffer, size, align, count)) = dynamic_buffer {
+            let free_ref = self.module.declare_func_in_func(runtime.mem_free_raw, builder.func);
+            builder.ins().call(free_ref, &[rt_handle, size, align, count, buffer]);
+        }
 
         // Store pointer for this value.
         self.values.insert(dest, tensor_ptr);
@@ -301,24 +312,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         // Get table type from dest.
         let table_ty = self.func.value_types[dest.0 as usize].clone();
-        let columns = match &table_ty {
-            IrType::Table(cols) => cols.clone(),
-            _ => return Err(CraneliftError::Codegen(format!(
+        if !matches!(table_ty, IrType::Table(_)) {
+            return Err(CraneliftError::Codegen(format!(
                 "TableNew dest has non-table type: {:?}", table_ty
-            ))),
-        };
-
-        // Build row tuple type from column types.
-        let row_ty = IrType::Tuple(columns.iter().map(|(_, t)| (**t).clone()).collect());
+            )));
+        }
 
         // Get frame slot and destination address.
         let table_ptr = self.dest_addr(builder, dest)?;
 
         // Get Table TyDesc.
         let table_tydesc_ptr = self.tydesc_value(builder, &table_ty)?;
-
-        // Get row (tuple) TyDesc.
-        let row_tydesc_ptr = self.tydesc_value(builder, &row_ty)?;
 
         // Create empty table.
         let create_ref = self.module.declare_func_in_func(runtime.table_create, builder.func);
@@ -328,6 +332,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let push_ref = self.module.declare_func_in_func(runtime.table_push_row, builder.func);
         for row in rows {
             let row_ptr = self.get_operand_ptr(builder, row)?;
+            let row_tydesc_ptr = self.operand_tydesc(builder, row)?;
             builder.ins().call(push_ref, &[
                 rt_handle, table_ptr, table_tydesc_ptr, row_ptr, row_tydesc_ptr
             ]);
