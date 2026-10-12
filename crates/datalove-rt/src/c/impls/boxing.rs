@@ -340,6 +340,12 @@ pub unsafe fn needs_erasure(
     src_tydesc: *const rtdt::TyDesc,
     dst_tydesc: *const rtdt::TyDesc,
 ) -> bool {
+    // One descriptor on both sides converts nothing, which is the common case:
+    // a value in the shape its slot has, including always under generics by
+    // reference.
+    if std::ptr::eq(src_tydesc, dst_tydesc) {
+        return false;
+    }
     unsafe {
         let src_tag = (*src_tydesc).type_tag;
         let dst_tag = (*dst_tydesc).type_tag;

@@ -55,14 +55,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         tensor: &Operand,
         elem_ty: &IrType,
     ) -> Result<(cl_ir::Value, Option<cl_ir::Value>), CraneliftError> {
-        let Some(desc) = self.operand_ref_desc(tensor) else {
-            let size = types::ir_type_to_cranelift(elem_ty).layout().size;
-            return Ok((builder.ins().iconst(INDEX_TYPE, size as i64), None));
+        let elem_desc = match self.operand_ref_desc(tensor) {
+            Some(desc) => {
+                let runtime = self.runtime;
+                let elem_fn = self.module.declare_func_in_func(runtime.element_tydesc, builder.func);
+                let call = builder.ins().call(elem_fn, &[desc]);
+                builder.inst_results(call)[0]
+            }
+            // Under generics by reference the element's descriptor is its
+            // table entry.
+            None if elem_ty.is_dynamic() => self.table_entry(elem_ty)?,
+            None => {
+                let size = types::ir_type_to_cranelift(elem_ty).layout().size;
+                return Ok((builder.ins().iconst(INDEX_TYPE, size as i64), None));
+            }
         };
-        let runtime = self.runtime;
-        let elem_fn = self.module.declare_func_in_func(runtime.element_tydesc, builder.func);
-        let call = builder.ins().call(elem_fn, &[desc]);
-        let elem_desc = builder.inst_results(call)[0];
         let size_offset = std::mem::offset_of!(datalove_rtdt::TyDesc, size) as i32;
         let size = builder.ins().load(
             cl_types::I32, MemFlagsData::new(), elem_desc, size_offset);

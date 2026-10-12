@@ -28,6 +28,7 @@ stays the plan for speed, and comes after this.
 - [Cost](#user-content-cost)
 - [Phases](#user-content-phases)
 - [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand)
+- [Where phase 5 stands](#user-content-where-phase-5-stands)
 - [Open questions](#user-content-open-questions)
 
 ## Why
@@ -509,13 +510,16 @@ caller of an interpreted generic has to pass what the new convention expects.
    body runs on the IR walker. The JIT refuses as above; the AOT backends
    refuse. Done when every fixture passes on the interpreter under the feature
    with leak checking on, which it does.
-5. **Cranelift**, AOT and JIT: the same, plus the bridge, the trampoline and
-   OSR carrying fat pointers and type-parameter descriptors. OSR shares the
-   interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather than
-   building one: `OsrSpec` gains a descriptor-table offset beside
-   `shape_offset`, and `enter_osr` loads it the same way. Cranelift's
-   one-at-a-time block-parameter copy is safe by the verifier rule in phase 2.
-   The JIT's refusal is lifted.
+5. **Cranelift**, AOT and JIT (done but for OSR into a generic): the same,
+   plus the bridge, the trampoline and OSR carrying fat pointers and
+   type-parameter descriptors. See [Where phase 5
+   stands](#user-content-where-phase-5-stands). OSR shares the interpreter's
+   frame (`osr.rs`) and so would adopt its dynamic frame rather than build
+   one: `OsrSpec` gains a descriptor-table offset beside `shape_offset`, and
+   `enter_osr` loads it the same way. That waits on the bytecode, since only
+   the bytecode enters loops and it does not run a generic's body yet.
+   Cranelift's one-at-a-time block-parameter copy is safe by the lowering
+   check in phase 2.
 6. **C AOT.**
 7. **Flip and delete.** The feature becomes the default and then goes; the
    list in [What goes away](#user-content-what-goes-away) is deleted; a call
@@ -582,6 +586,58 @@ what differs from the sections above:
 Not done in phase 4, and wanted before phase 7: the bytecode lowering
 dynamic bodies itself, rather than leaving them to the walker; and the
 measurements, since nothing compiled runs a generic yet.
+
+## Where phase 5 stands
+
+Under the feature the JIT and Cranelift AOT compile generics; the full suite
+passes with them doing so, and C AOT still refuses.
+
+- **Calling convention.** A dynamic parameter is passed by pointer, like any
+  parameter, and one descriptor per type parameter comes last in the
+  signature. The callee does not take a descriptor per dynamic argument: its
+  table entry for the parameter's type describes it, so the plan's `(ptr,
+  tydesc)` per argument was left to natives. Where something has a dynamic
+  argument's pointer and not its descriptor -- the JIT's trampoline into the
+  interpreter -- it describes it from the type parameters
+  (`IrInterpreter::describe`).
+- **A dynamic value** is an aggregate whose Cranelift value is the address of
+  its storage on the shadow stack, taken on entry, inline, calling the runtime
+  only when a chunk is full (`codegen/dynamic.rs`). Moves alias, as they do
+  for any aggregate. Its descriptor is its table entry: `static_tydesc` and
+  `tydesc_value` answer a dynamic type there, and `tydesc` refuses one, so a
+  site that wanted a static symbol fails to compile rather than compiles
+  wrong. Sizes come from the descriptor (`value_size`, `copy_value_bytes`),
+  and offsets from the runtime (`field_addr`, `payload_addr`).
+- **The descriptor table** is filled through a one-entry cache per function,
+  a writable data object holding the last call's type parameter descriptors
+  and what they built; a repeat binding costs a compare per type parameter.
+  This was the fix the plan expected, and it was needed: before it, the table
+  fill was a fifth of compiled `sieve`.
+- **A gate** (`check_dynamic_support`) refuses a function using an
+  instruction on a dynamic value that the codegen does not handle, naming it.
+  It now admits everything `sys/std` and the fixtures use; the JIT's refusal
+  of generics is gone, and `--jit-stats` lists any refusal with its reason.
+  `ENGINE_TESTS_JIT_REFUSALS=1` makes the engine suite print them.
+- **The bridge, the trampoline and the dispatcher** carry the type parameter
+  descriptors as the trailing descriptors, where erasure's shapes went; a
+  function has one or the other.
+- **Found on the way:** `dyn_ops` read an `index` or `offset` as eight bytes
+  whatever `index-64` said, unreached under erasure because those arrived
+  boxed; and `needs_erasure` had no shortcut for one descriptor on both
+  sides, which is every call now.
+
+Measured, release build, against the baseline (seconds):
+
+| Bench | jit | aot |
+|---|---:|---:|
+| generics | 0.51 (0.97) | 0.33 (0.77) |
+| sieve | 1.19 (1.21) | 0.87 (0.95) |
+| nbody | 0.21 (0.42) | 0.16 (0.30) |
+| wordfreq | 0.64 (0.61) | 0.55 (0.52) |
+
+nbody and wordfreq were measured before the table cache. Interpreted runs are
+slower, a generic's body running on the walker: sieve 10.1 (4.1), nbody 3.2
+(0.8). That is what the bytecode lowering a dynamic body is for.
 
 ## Open questions
 

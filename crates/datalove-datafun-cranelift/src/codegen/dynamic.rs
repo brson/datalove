@@ -54,18 +54,22 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         };
         let num_params = builder.ins().iconst(cl_types::I32, count as i64);
 
+        // The entries built from templates, by their table index.
         let table = self.func_ctx.descriptor_table.clone();
+        let built: Vec<(usize, IrType)> = table.iter().enumerate()
+            .filter(|(_, ty)| !matches!(ty, IrType::Param(_)))
+            .map(|(i, ty)| (i, ty.clone()))
+            .collect();
+        let built_values = if built.is_empty() {
+            Vec::new()
+        } else {
+            self.fill_cached(builder, rt, params, num_params, &built)?
+        };
+        let mut built_values = built_values.into_iter();
         for ty in &table {
             let desc = match ty {
                 IrType::Param(i) => self.type_param_values[*i as usize],
-                _ => {
-                    let template = self.tydesc_emitter.emit(self.module, ty)?;
-                    let gv = self.module.declare_data_in_func(template, builder.func);
-                    let template = builder.ins().symbol_value(PTR_TYPE, gv);
-                    let instantiate = self.module.declare_func_in_func(self.runtime.tydesc_instantiate, builder.func);
-                    let call = builder.ins().call(instantiate, &[rt, template, params, num_params]);
-                    builder.inst_results(call)[0]
-                }
+                _ => built_values.next().expect("one built value per template entry"),
             };
             self.table_values.push(desc);
         }
@@ -96,15 +100,132 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
+    /// The descriptors the table's template entries `built` instantiate to,
+    /// through a cache of one: the type parameter descriptors of the last
+    /// call and what they built.
+    ///
+    /// A call at the binding the last one had -- nearly every call, at a
+    /// given call site -- then costs a compare per type parameter rather than
+    /// a runtime lookup per entry. The cache is a data object of this
+    /// function's own, `[params..., built...]`, zero to begin with, which no
+    /// descriptor pointer is. It holds the descriptors a runtime handle built,
+    /// and so lives no longer than code running on one does: the JIT's code
+    /// goes with its interpreter, and an AOT program has the one handle.
+    fn fill_cached(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        rt: cl_ir::Value,
+        params: cl_ir::Value,
+        num_params: cl_ir::Value,
+        built: &[(usize, IrType)],
+    ) -> Result<Vec<cl_ir::Value>, CraneliftError> {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static CACHES: AtomicU32 = AtomicU32::new(0);
+
+        let word = types::PTR_SIZE as i32;
+        let count = self.type_param_values.len();
+        let name = format!("__dtlv_table_cache_{}", CACHES.fetch_add(1, Ordering::Relaxed));
+        let data = self.module
+            .declare_data(&name, Linkage::Local, true, false)
+            .map_err(|e| CraneliftError::Module(format!("declare table cache: {}", e)))?;
+        let mut description = cranelift_module::DataDescription::new();
+        description.define_zeroinit((count + built.len()) * types::PTR_SIZE as usize);
+        description.set_align(types::PTR_ALIGN as u64);
+        self.module.define_data(data, &description)
+            .map_err(|e| CraneliftError::Module(format!("define table cache: {}", e)))?;
+        let gv = self.module.declare_data_in_func(data, builder.func);
+        let cache = builder.ins().symbol_value(PTR_TYPE, gv);
+
+        let hit_block = builder.create_block();
+        let miss_block = builder.create_block();
+        let join = builder.create_block();
+        for _ in built {
+            builder.append_block_param(join, PTR_TYPE);
+        }
+
+        let mut hit = builder.ins().iconst(cl_types::I8, 1);
+        for (i, &param) in self.type_param_values.clone().iter().enumerate() {
+            let cached = builder.ins().load(PTR_TYPE, MemFlagsData::new(), cache, i as i32 * word);
+            let same = builder.ins().icmp(cl_ir::condcodes::IntCC::Equal, cached, param);
+            hit = builder.ins().band(hit, same);
+        }
+        builder.ins().brif(hit, hit_block, &[], miss_block, &[]);
+
+        builder.switch_to_block(hit_block);
+        builder.seal_block(hit_block);
+        let cached: Vec<cl_ir::BlockArg> = (0..built.len())
+            .map(|k| builder.ins().load(PTR_TYPE, MemFlagsData::new(), cache, (count + k) as i32 * word).into())
+            .collect();
+        builder.ins().jump(join, &cached);
+
+        builder.switch_to_block(miss_block);
+        builder.seal_block(miss_block);
+        builder.set_cold_block(miss_block);
+        let mut fresh = Vec::with_capacity(built.len());
+        for (k, (_, ty)) in built.iter().enumerate() {
+            let template = self.tydesc_emitter.emit(self.module, ty)?;
+            let gv = self.module.declare_data_in_func(template, builder.func);
+            let template = builder.ins().symbol_value(PTR_TYPE, gv);
+            let instantiate = self.module.declare_func_in_func(self.runtime.tydesc_instantiate, builder.func);
+            let call = builder.ins().call(instantiate, &[rt, template, params, num_params]);
+            let desc = builder.inst_results(call)[0];
+            builder.ins().store(MemFlagsData::new(), desc, cache, (count + k) as i32 * word);
+            fresh.push(desc.into());
+        }
+        for (i, &param) in self.type_param_values.clone().iter().enumerate() {
+            builder.ins().store(MemFlagsData::new(), param, cache, i as i32 * word);
+        }
+        builder.ins().jump(join, &fresh);
+
+        builder.switch_to_block(join);
+        builder.seal_block(join);
+        Ok(builder.block_params(join).to_vec())
+    }
+
     /// Space on the shadow stack for a value of dynamic type `ty`.
+    ///
+    /// Bumped inline, as `ShadowStack::alloc` would; the runtime is called
+    /// only when the current chunk has no room.
     fn shadow_alloc(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
         let rt = self.rt_handle_param.expect("the entry block has the runtime handle");
         let desc = self.static_tydesc(builder, ty)?;
         let size = builder.ins().load(cl_types::I32, MemFlagsData::new(), desc, TYDESC_SIZE_OFFSET);
         let align = builder.ins().load(cl_types::I32, MemFlagsData::new(), desc, TYDESC_ALIGN_OFFSET);
+        let size_wide = builder.ins().uextend(PTR_TYPE, size);
+        let align_wide = builder.ins().uextend(PTR_TYPE, align);
+
+        // start = (top + align - 1) & !(align - 1); fits if start + size <= limit.
+        let top = builder.ins().load(PTR_TYPE, MemFlagsData::new(), rt, SHADOW_TOP_OFFSET);
+        let limit = builder.ins().load(PTR_TYPE, MemFlagsData::new(), rt, SHADOW_LIMIT_OFFSET);
+        let mask = builder.ins().iadd_imm_s(align_wide, -1);
+        let bumped = builder.ins().iadd(top, mask);
+        let not_mask = builder.ins().bnot(mask);
+        let start = builder.ins().band(bumped, not_mask);
+        let end = builder.ins().iadd(start, size_wide);
+        let fits = builder.ins().icmp(cl_ir::condcodes::IntCC::UnsignedLessThanOrEqual, end, limit);
+
+        let fast = builder.create_block();
+        let slow = builder.create_block();
+        let join = builder.create_block();
+        builder.append_block_param(join, PTR_TYPE);
+        builder.ins().brif(fits, fast, &[], slow, &[]);
+
+        builder.switch_to_block(fast);
+        builder.seal_block(fast);
+        builder.ins().store(MemFlagsData::new(), end, rt, SHADOW_TOP_OFFSET);
+        builder.ins().jump(join, &[start.into()]);
+
+        builder.switch_to_block(slow);
+        builder.seal_block(slow);
+        builder.set_cold_block(slow);
         let alloc = self.module.declare_func_in_func(self.runtime.shadow_alloc, builder.func);
         let call = builder.ins().call(alloc, &[rt, size, align]);
-        Ok(builder.inst_results(call)[0])
+        let ptr = builder.inst_results(call)[0];
+        builder.ins().jump(join, &[ptr.into()]);
+
+        builder.switch_to_block(join);
+        builder.seal_block(join);
+        Ok(builder.block_params(join)[0])
     }
 
     /// Give back the shadow stack space taken on entry, before a return.
@@ -381,6 +502,12 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::MapSetValue { .. }
         | Instruction::MapValueRef { .. }
         | Instruction::MapUpsert { .. }
+        | Instruction::TensorBoundsCheck { .. }
+        | Instruction::TensorSet { .. }
+        | Instruction::TensorGet { .. }
+        | Instruction::TensorIndexRef { .. }
+        | Instruction::DataFrom { .. }
+        | Instruction::ErrorFrom { .. }
     )
 }
 

@@ -233,6 +233,15 @@ impl ExecutorHooks for Setup {
         };
         if let Some(chaos) = dispatcher.as_any().downcast_ref::<OptimizingDispatcher>() {
             let stats = chaos.jit().stats();
+            // What the backend would not compile, and why, for whoever is
+            // teaching it more.
+            if std::env::var_os("ENGINE_TESTS_JIT_REFUSALS").is_some() {
+                for f in stats.functions.values() {
+                    if let Some(why) = &f.refusal {
+                        eprintln!("jit refused {}: {}", f.name, why);
+                    }
+                }
+            }
             CHAOS_COMPILED.fetch_add(stats.compiled_count, Ordering::Relaxed);
             CHAOS_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
             CHAOS_LOOPS_REFUSED.fetch_add(stats.osr_refused_count, Ordering::Relaxed);
