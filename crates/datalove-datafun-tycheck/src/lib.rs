@@ -118,13 +118,6 @@ pub enum PendingDiagnostic<'db> {
         name: InternedText<'db>,
         first: InternedText<'db>,
     },
-    /// F060: A type parameter sat somewhere erasure could not reach.
-    TypeParamNotErasable {
-        local_index: u32,
-        module_id: Option<ModuleId<'db>>,
-        param: InternedText<'db>,
-        position: InternedText<'db>,
-    },
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered {
         local_index: u32,

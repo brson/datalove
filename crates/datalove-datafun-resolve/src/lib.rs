@@ -82,12 +82,6 @@ pub fn resolve_names_impl<'db>(
 
     for statement in statements {
         // Extract function signature from either regular or native fun.
-        // A native function's arguments are passed as they stand, each with a
-        // descriptor saying what it is, so its implementation can read the
-        // element type off a container at runtime. Nothing is converted, so
-        // the positions erasure cannot reach do not apply to one.
-        let is_native = matches!(statement, Statement::NativeFun(_));
-
         let (name, type_params, type_bounds, params, return_type, func_ast) = match statement {
             Statement::Fun(stmt) => {
                 (stmt.name(db), stmt.type_params(db).clone(), stmt.type_bounds(db).clone(),
@@ -134,28 +128,11 @@ pub fn resolve_names_impl<'db>(
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {
                 Ok(ty) => {
-                    // Nothing is converted at a borrowed parameter: the value
-                    // goes across as it stands and the callee never drops it,
-                    // so a type parameter under a container is reachable there
-                    // even though erasing one is not. What the callee lacks is
-                    // a descriptor, since its own type says `data` where the
-                    // parameter was written, and the call site supplies that.
-                    // A native's parameters are the same case by construction.
-                    let borrowed = matches!(param.mode, ParamMode::Ref | ParamMode::Mut);
                     let position = format!("parameter `{}`", param.name.as_str(db));
-                    // A native is exempt from erasability, because nothing is
-                    // converted at its boundary, but not from this: whatever
-                    // it is handed, the runtime still has to order.
+                    // Whatever a function is handed, the runtime still has to
+                    // order it.
                     if let Some(e) =
                         unordered_collection_key_error(db, &ty, &position, fun_local_index, &ordered)
-                    {
-                        errors.push(e);
-                        has_error = true;
-                        break;
-                    }
-                    if let Some(e) = (!is_native && !borrowed)
-                        .then(|| unerasable_type_param_error(db, &ty, &position, fun_local_index))
-                        .flatten()
                     {
                         errors.push(e);
                         has_error = true;
@@ -183,10 +160,6 @@ pub fn resolve_names_impl<'db>(
                 match convert_type_hint_with_aliases(db, type_hint, &type_aliases_map) {
                     Ok(ty) => match unordered_collection_key_error(
                         db, &ty, "the return type", fun_local_index, &ordered)
-                        .or_else(|| (!is_native)
-                            .then(|| unerasable_type_param_error(
-                                db, &ty, "the return type", fun_local_index))
-                            .flatten())
                     {
                         Some(e) => {
                             errors.push(e);
@@ -410,24 +383,6 @@ fn unordered_collection_key_error<'db>(
     let Type::Datalit(dt) = ty else { return None };
     let name = datalove_datafun_common::generics::first_unordered_collection_key(dt, ordered)?;
     Some(TypeError::CollectionKeyNotOrdered {
-        param: name.as_str(db).to_string(),
-        position: position.to_string(),
-        fun_local_index,
-    })
-}
-
-/// Reject a signature whose type parameter sits where erasure cannot reach it.
-///
-/// See `first_unerasable_type_param` for which positions those are.
-fn unerasable_type_param_error<'db>(
-    db: &'db dyn Db,
-    ty: &Type<'db>,
-    position: &str,
-    fun_local_index: u32,
-) -> Option<TypeError> {
-    let Type::Datalit(dt) = ty else { return None };
-    let name = datalove_datafun_common::generics::first_unerasable_type_param(dt)?;
-    Some(TypeError::TypeParamNotErasable {
         param: name.as_str(db).to_string(),
         position: position.to_string(),
         fun_local_index,

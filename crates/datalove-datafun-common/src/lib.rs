@@ -376,12 +376,6 @@ pub enum TypeError {
     /// `local_index` is the alias's key into the span table, so that whoever
     /// reports this can point at the name rather than at whatever encloses it.
     UnresolvedTypeAlias { name: String, local_index: Option<u32> },
-    /// A type parameter sat somewhere erasure could not reach.
-    ///
-    /// `position` says which part of the signature, and `fun_local_index` is
-    /// where that signature is, so the call site's "cannot find function" is
-    /// not the only thing the reader gets.
-    TypeParamNotErasable { param: String, position: String, fun_local_index: u32 },
     /// F061: A set or map was written over a type parameter with no order.
     CollectionKeyNotOrdered { param: String, position: String, fun_local_index: u32 },
     /// F063: A function with a return type can reach the end of its body.

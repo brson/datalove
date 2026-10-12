@@ -29,19 +29,6 @@ pub struct FrameState<'db> {
     /// The type parameters this function declared, in order, so that a name in
     /// a type can be turned into the position a descriptor arrives at.
     pub type_params: Vec<bct::text::InternedText<'db>>,
-    /// Shapes this function's own body builds, in the order first seen.
-    ///
-    /// What the call sites add on top is worked out afterwards, once every
-    /// function's own shapes are known; see the shape closure pass.
-    pub built_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
-    /// The container shape behind a binding whose IR type is the wrapper.
-    ///
-    /// `from_datalit` collapses a container of a type parameter to `data`
-    /// everywhere, so a `[T]` parameter or local says nothing about being a
-    /// list. Indexing one has to know which container it is, and a place walk
-    /// has only the operand to go on -- there is no expression node for a
-    /// place's root. This is where the shape it was bound with is kept.
-    pub wrapped_shapes: HashMap<Operand, IrType>,
     /// Blocks being built.
     pub blocks: Vec<IrBlock>,
     /// Instructions for current block.
@@ -134,8 +121,6 @@ impl<'db> FrameState<'db> {
     pub fn new() -> Self {
         Self {
             type_params: Vec::new(),
-            built_shapes: Vec::new(),
-            wrapped_shapes: HashMap::new(),
             blocks: Vec::new(),
             current_instructions: Vec::new(),
             current_block: BlockId(0),
@@ -334,111 +319,22 @@ impl<'db> LowerCtx<'db> {
         }
     }
 
-    /// Get the IrType for an expression from the typechecker.
-    /// The shape a type stands for, over this function's type parameters.
-    ///
-    /// `None` where the type has no parameter in it, which describes itself.
-    pub fn shape_of(
-        &self,
-        ty: &datalove_datalit::tycheck::Type<'db>,
-    ) -> Option<datalove_datafun_ir::DescriptorShape> {
-        use datalove_datafun_ir::DescriptorShape as S;
-        use datalove_datalit::tycheck::Type as DT;
-        if !datalove_datafun_common::generics::contains_type_param(ty) {
-            return Some(S::Concrete(IrType::from_datalit(self.db, ty)));
-        }
-        Some(match ty {
-            DT::Var(name) => {
-                S::Param(self.body.type_params.iter().position(|p| p == name)? as u32)
-            }
-            DT::List(t) => S::List(Box::new(self.shape_of(&t.element_type)?)),
-            DT::Set(t) => S::Set(Box::new(self.shape_of(&t.element_type)?)),
-            DT::Option(t) => S::Option(Box::new(self.shape_of(&t.inner_type)?)),
-            DT::Result(t) => S::Result(Box::new(self.shape_of(&t.inner_type)?)),
-            DT::Map(t) => S::Map(
-                Box::new(self.shape_of(&t.key_type)?),
-                Box::new(self.shape_of(&t.value_type)?),
-            ),
-            DT::AnonTuple(t) => S::Tuple(
-                t.fields.iter().map(|f| self.shape_of(f)).collect::<Option<Vec<_>>>()?,
-            ),
-            // Any other shape holding a type parameter is one no collection
-            // literal can be written over here.
-            _ => return None,
-        })
-    }
-
-    /// Record that this body builds a collection of `ty`, and say where its
-    /// descriptor will arrive.
-    pub fn build_shape(
-        &mut self,
-        ty: &datalove_datalit::tycheck::Type<'db>,
-    ) -> Option<u32> {
-        // Under generics by reference a collection built over a type
-        // parameter is a dynamic value, and its descriptor is its own.
-        if crate::FAT_GENERICS {
-            return None;
-        }
-        let shape = self.shape_of(ty)?;
-        if !shape.mentions_param() {
-            return None;
-        }
-        if let Some(i) = self.body.built_shapes.iter().position(|s| *s == shape) {
-            return Some(i as u32);
-        }
-        self.body.built_shapes.push(shape);
-        Some((self.body.built_shapes.len() - 1) as u32)
-    }
-
-    /// The shape an element of a built collection is carried in.
-    ///
-    /// A bare type parameter is a `data`, but a tuple of them is a tuple of
-    /// `data` and an option of one is an option of `data`: erasure reaches
-    /// inside. The descriptor the call site hands over describes the same
-    /// shape, so the two have to agree. Assuming `data` here made a
-    /// `[(A, B)]` push thirty-two byte elements as sixteen.
-    pub fn erased_element(&self, ty: &datalove_datalit::tycheck::Type<'db>) -> IrType {
-        self.ir_type(ty)
-    }
-
-    /// The IR type of a typechecker type, in the function being lowered.
-    ///
-    /// Erasing its type parameters to `data`, or under generics by reference
-    /// keeping them as `IrType::Param`.
+    /// The IR type of a typechecker type, in the function being lowered,
+    /// keeping its type parameters as `IrType::Param`.
     pub fn ir_type(&self, ty: &datalove_datalit::tycheck::Type<'db>) -> IrType {
-        if crate::FAT_GENERICS {
-            IrType::from_datalit_generic(self.db, ty, &self.body.type_params)
-        } else {
-            IrType::from_datalit(self.db, ty)
-        }
+        IrType::from_datalit_generic(self.db, ty, &self.body.type_params)
     }
 
     /// The IR type of a type hint written in the function being lowered; see
     /// `ir_type`.
     pub fn hint_type(&self, hint: &datalove_datalit::ast::TypeHint<'db>) -> IrType {
-        if crate::FAT_GENERICS {
-            IrType::from_type_hint_generic(self.db, hint, &self.body.type_params)
-        } else {
-            IrType::from_type_hint(self.db, hint)
-        }
-    }
-
-    /// The unerased type the typechecker gave an expression.
-    ///
-    /// `expr_type` erases, which is what the rest of lowering wants. A
-    /// collection built over a type parameter is the exception: `[T]` and
-    /// `[data]` are the same `IrType`, and only this says which parameter.
-    pub fn expr_source_type(
-        &self,
-        expr: ExprFun<'db>,
-    ) -> Option<datalove_datafun_common::Type<'db>> {
-        self.expr_types.get(&ExprKey::of(self.db, expr)).cloned()
+        IrType::from_type_hint_generic(self.db, hint, &self.body.type_params)
     }
 
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = ExprKey::of(self.db, expr);
         match self.expr_types.get(&key) {
-            Some(datalove_datafun_common::Type::Datalit(dl)) if crate::FAT_GENERICS => self.ir_type(dl),
+            Some(datalove_datafun_common::Type::Datalit(dl)) => self.ir_type(dl),
             Some(ty) => IrType::from_tycheck(self.db, ty),
             None => panic!(
                 "Expression must have type from typechecker. {:?} but the table holds {} entries",
@@ -684,19 +580,6 @@ impl<'db> LowerCtx<'db> {
     }
 
     /// Bind a variable name to an operand.
-    /// Remember the container shape a binding's wrapper holds.
-    ///
-    /// Only for a binding whose IR type is `data` where the source type was a
-    /// container; everything else describes itself.
-    pub fn record_wrapped_shape(&mut self, operand: Operand, shape: IrType) {
-        self.body.wrapped_shapes.insert(operand, shape);
-    }
-
-    /// The container shape behind an operand, if it is a wrapper.
-    pub fn wrapped_shape(&self, operand: &Operand) -> Option<IrType> {
-        self.body.wrapped_shapes.get(operand).cloned()
-    }
-
     pub fn bind_var(&mut self, name: &str, operand: Operand) {
         if let Some(scope) = self.body.variable_scopes.last_mut() {
             scope.push(ShadowedBinding {
@@ -1206,32 +1089,14 @@ impl<'db> LowerCtx<'db> {
         self.emit(Instruction::ListNew { dest, elements, descriptor: None });
     }
 
-    /// Emit ListNew for a collection whose element type only a declared shape
-    /// says, naming which of this function's shapes describes it.
-    pub fn emit_list_new_erased(&mut self, dest: ValueId, elements: Vec<Operand>, descriptor: u32) {
-        self.emit(Instruction::ListNew { dest, elements, descriptor: Some(descriptor) });
-    }
-
     /// Emit SetNew.
     pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
         self.emit(Instruction::SetNew { dest, elements, descriptor: None });
     }
 
-    /// Emit SetNew for a collection whose element type only a declared shape
-    /// says, naming which of this function's shapes describes it.
-    pub fn emit_set_new_erased(&mut self, dest: ValueId, elements: Vec<Operand>, descriptor: u32) {
-        self.emit(Instruction::SetNew { dest, elements, descriptor: Some(descriptor) });
-    }
-
     /// Emit MapNew.
     pub fn emit_map_new(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>) {
         self.emit(Instruction::MapNew { dest, entries, descriptor: None });
-    }
-
-    /// Emit MapNew for a collection whose element type only a declared shape
-    /// says, naming which of this function's shapes describes it.
-    pub fn emit_map_new_erased(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>, descriptor: u32) {
-        self.emit(Instruction::MapNew { dest, entries, descriptor: Some(descriptor) });
     }
 
     /// Emit TensorNew.

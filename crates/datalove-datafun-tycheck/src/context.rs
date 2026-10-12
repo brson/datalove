@@ -1159,14 +1159,6 @@ replace the view rather than the elements it shows. Index down to single element
         module_id: Option<ModuleId<'db>>,
     ) {
         for error in errors {
-            if let TypeError::TypeParamNotErasable { param, position, fun_local_index } = error {
-                self.pending_diagnostics.push(PendingDiagnostic::TypeParamNotErasable {
-                    local_index: *fun_local_index,
-                    module_id,
-                    param: InternedText::new(self.db, param.S()),
-                    position: InternedText::new(self.db, position.S()),
-                });
-            }
             if let TypeError::CollectionKeyNotOrdered { param, position, fun_local_index } = error {
                 self.pending_diagnostics.push(PendingDiagnostic::CollectionKeyNotOrdered {
                     local_index: *fun_local_index,

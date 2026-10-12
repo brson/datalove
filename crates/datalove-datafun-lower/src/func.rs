@@ -100,15 +100,11 @@ pub fn lower_function_body<'db>(
 
     let type_params = func.type_params(ctx.db).clone();
 
-    // A return mentioning a type parameter is shaped by the erasure rule, the
-    // same one the call site reads. Everything else keeps its resolved type.
+    // A return mentioning a type parameter keeps it as written, and the call
+    // site substitutes what it binds. Everything else keeps its resolved type.
     ctx.return_type = match func.return_type(ctx.db) {
-        // Under generics by reference a type is what it was written as.
-        Some(hint) if crate::FAT_GENERICS && datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
-            Some(IrType::from_type_hint_generic(ctx.db, &hint, &type_params))
-        }
         Some(hint) if datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
-            Some(datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params))
+            Some(IrType::from_type_hint_generic(ctx.db, &hint, &type_params))
         }
         _ => match resolved_return_type {
             Some(ty) => Some(ty),
@@ -120,11 +116,6 @@ pub fn lower_function_body<'db>(
     // Record binding operands to match analysis order.
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
-    // A borrowed parameter whose type mentions one of this function's type
-    // parameters is not converted at the boundary, so this function's own type
-    // for it does not describe what arrives. The caller supplies the
-    // descriptor; see `FunctionContext::descriptor_params`.
-    let mut descriptor_params: Vec<ParamId> = Vec::new();
     let func_params = func.params(ctx.db);
     for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
@@ -139,54 +130,29 @@ pub fn lower_function_body<'db>(
             ast::ParamMode::Ref => ParamMode::Ref,
             ast::ParamMode::Mut => ParamMode::Mut,
         };
-        // A parameter mentioning a type parameter is shaped by the erasure
-        // rule rather than by what it was written as, and the call site reads
-        // the same rule so the two cannot disagree about the same bytes.
-        // Everything else keeps its resolved type.
-        let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut);
+        // A parameter mentioning a type parameter keeps it as written, as the
+        // return does. Everything else keeps its resolved type.
         let mentions_param = datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params);
-        let param_type = if crate::FAT_GENERICS && mentions_param {
+        let param_type = if mentions_param {
             IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
-        } else if mentions_param {
-            datalove_datafun_ir::erased_param_type(ctx.db, &p.type_hint, &type_params, borrowed)
         } else {
             match resolved_param_types {
                 Some(types) => types[i].clone(),
                 None => IrType::from_type_hint(ctx.db, &p.type_hint),
             }
         };
-        let id = ctx.fresh_param(param_type.clone(), mode);
+        let id = ctx.fresh_param(param_type, mode);
         let operand = Operand::Param(id);
         ctx.bind_var(&param_name, operand);
-        // An owned container of a type parameter arrives wrapped, so its IR
-        // type says nothing about being a list. Indexing it needs the shape,
-        // which only the type it was written as gives.
-        if param_type == IrType::Data {
-            let shape = datalove_datafun_ir::IrType::from_type_hint_erasing(
-                ctx.db, &p.type_hint, &type_params);
-            if !matches!(shape, IrType::Data) {
-                ctx.record_wrapped_shape(operand, shape);
-            }
-        }
         // Record binding operand for drop schedule.
         ctx.record_binding_operand(operand);
         params.push(id);
         param_modes.push(mode);
-
-        // A parameter whose own type does not say what arrives at it takes a
-        // descriptor from the call site. That is every borrowed one mentioning
-        // a type parameter, since nothing is converted at one. An owned
-        // container needs none: it arrives wrapped, and the wrapper carries
-        // the descriptor with it.
-        if borrowed && mentions_param && !crate::FAT_GENERICS {
-            descriptor_params.push(id);
-        }
     }
 
-    // A collection built in the body names its element type by a parameter
-    // name, and a descriptor arrives by position, so the names have to be here.
+    // A type in the body names a type parameter by name, and its descriptor
+    // arrives by position, so the names have to be here.
     ctx.body.type_params = type_params.clone();
-    ctx.body.built_shapes.clear();
 
     // Lower the function body with statement indices.
     let body = func.body(ctx.db);
@@ -211,7 +177,6 @@ pub fn lower_function_body<'db>(
 
     // Get return type from context (set from function signature) before restoring.
     let return_type = ctx.return_type.clone().unwrap_or(IrType::Unit);
-    let descriptor_shapes = std::mem::take(&mut ctx.body.built_shapes);
 
     // Restore saved context.
     ctx.return_type = saved_return_type;
@@ -234,20 +199,16 @@ pub fn lower_function_body<'db>(
             param_types: std::mem::take(&mut ctx.body.param_types),
             return_type,
             tracked_params: ctx.compute_tracked_params(),
-            descriptor_params,
-            descriptor_shapes,
-            // Under erasure a generic takes no descriptor per type parameter;
-            // a count here says the function is compiled by reference.
-            type_param_count: if crate::FAT_GENERICS { type_params.len() as u32 } else { 0 },
+            descriptor_params: Vec::new(),
+            descriptor_shapes: Vec::new(),
+            type_param_count: type_params.len() as u32,
             descriptor_table: Vec::new(),
         }),
         nested_units: Vec::new(),
     };
-    if crate::FAT_GENERICS {
-        let table = datalove_datafun_ir::descriptor_table(&unit);
-        if let CodeUnitContext::Function(fctx) = &mut unit.context {
-            fctx.descriptor_table = table;
-        }
+    let table = datalove_datafun_ir::descriptor_table(&unit);
+    if let CodeUnitContext::Function(fctx) = &mut unit.context {
+        fctx.descriptor_table = table;
     }
     if let Some((from, to)) = datalove_datafun_ir::permuted_block_args(&unit) {
         panic!("{}: block {from:?} passes block {to:?}'s parameters back to it permuted", unit.name);

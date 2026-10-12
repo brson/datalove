@@ -6,7 +6,6 @@
 use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode, ExprKey};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
-    SlotDest,
 };
 use datalove_datafun_intrinsics::IntrinsicId;
 use super::context::LowerCtx;
@@ -266,8 +265,7 @@ fn lower_index_as_ref<'db>(
 ) -> Result<Operand, LowerError> {
     let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = indexed_base_type(ctx, index_expr.base);
-    let base_op = open_container(ctx, base_op, &base_type);
+    let base_type = ctx.expr_type(index_expr.base);
     super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode, false)?;
     let dest = super::stmt::emit_collection_element_ref(ctx, base_op, &base_type, key_op);
     Ok(Operand::Value(dest))
@@ -555,147 +553,39 @@ pub fn lower_expression<'db>(
                     .map(|p| if p.is_comptime { ParamMode::Ref } else { p.mode })
                     .collect())
                 .unwrap_or_default();
-            // A parameter whose type mentions one of the callee's type
-            // parameters was erased to `data` at that position when the callee
-            // was lowered, so the argument has to be converted on the way in.
-            // The parameter need not be the whole type: `[T]` was lowered as
-            // `[data]`, and the conversion walks into the list. Everything else
-            // keeps its own type.
+            // The callee is handed a descriptor for each of its type
+            // parameters, and every argument is passed as it stands. What this
+            // site binds them to is `bindings`, written over the caller's own
+            // type parameters, and a parameter's type here is the callee's
+            // written type with those substituted in.
             let type_params: Vec<bct::text::InternedText<'db>> = target
                 .map(|t| t.func(ctx.db).type_params(ctx.db).clone())
                 .unwrap_or_default();
-            let names_a_type_param = |hint: &datalove_datafun_ast::datalit::ast::TypeHint<'db>| {
-                datalove_datafun_ir::type_hint_mentions_param(hint, &type_params)
-            };
-            // A borrowed parameter is not converted: the callee gets the value
-            // as it stands, and a descriptor saying what it is, and never drops
-            // it. Only a parameter the callee takes ownership of is erased,
-            // because that one needs a slot and `data` is the shape that fits.
-            //
-            // Under generics by reference nothing is converted: an argument is
-            // passed as it stands, and the callee is handed a descriptor for
-            // each of its type parameters instead. What the caller binds them
-            // to is `bindings`, written over the caller's own parameters, and
-            // a parameter's type at this call site is the callee's written
-            // type with those substituted in.
-            let bindings: Vec<IrType> = if crate::FAT_GENERICS {
-                target
-                    .map(|t| t.type_args(ctx.db).clone())
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|ty| ctx.ir_type(ty))
-                    .collect()
-            } else {
-                Vec::new()
-            };
-            let param_is_erased: Vec<bool> = target
-                .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| {
-                        let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
-                        !crate::FAT_GENERICS && !borrowed && names_a_type_param(&p.type_hint)
-                    })
-                    .collect())
-                .unwrap_or_default();
+            let bindings: Vec<IrType> = target
+                .map(|t| t.type_args(ctx.db).clone())
+                .unwrap_or_default()
+                .iter()
+                .map(|ty| ctx.ir_type(ty))
+                .collect();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .enumerate()
-                    .map(|(i, p)| {
-                        let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
-                        if crate::FAT_GENERICS && names_a_type_param(&p.type_hint) {
+                    .map(|p| {
+                        if datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params) {
                             IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
                                 .substitute(&bindings)
-                        } else if param_is_erased.get(i).copied().unwrap_or(false) {
-                            datalove_datafun_ir::erased_param_type(
-                                ctx.db, &p.type_hint, &type_params, borrowed)
                         } else {
                             IrType::from_type_hint(ctx.db, &p.type_hint)
                         }
                     })
                     .collect())
                 .unwrap_or_default();
-            // The erased return shape, by the same rule the callee shaped it
-            // with: `data` for a bare `T`, `?data` for a `?T`, and `data` for
-            // a container, which is wrapped whole rather than walked.
-            let erased_return_type = target
-                .and_then(|t| t.func(ctx.db).return_type(ctx.db))
-                .filter(|hint| !crate::FAT_GENERICS && names_a_type_param(hint))
-                .map(|hint| datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params));
 
             // Lower each arg, tracking in-mode args as pending intermediates.
             let call_args = call.args(ctx.db);
             let mut args = Vec::with_capacity(call_args.len());
-            // Out parameters the callee writes in the erased shape, paired with
-            // where the caller wants the value once it is moved back out.
-            let mut erased_out_params: Vec<(Operand, ValueId)> = Vec::new();
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                // An erased out parameter drops what was already there by
-                // erasing it into the value the callee is given, which the call
-                // then destroys as it does for any out parameter. So no
-                // separate drop is wanted, and passing no type asks for none.
-                let erased_out = mode == ParamMode::Out
-                    && param_is_erased.get(i).copied().unwrap_or(false);
-                let arg_type = if erased_out { None } else { param_types.get(i) };
-                let mut operand = lower_call_arg(ctx, *arg, mode, arg_type)?;
-                // Convert into the shape the erased callee was compiled for,
-                // which is the parameter's own type with `data` at each type
-                // parameter rather than `data` outright.
-                //
-                // An out parameter also comes back. What was there is erased
-                // into the value the callee is given, so that the call destroys
-                // it exactly once as it does for any out parameter, and what
-                // the callee writes there is moved back out into the caller's
-                // type below. That is the same thing the return value does, in
-                // the other direction.
-                // An argument already in the erased shape is one the caller
-                // holds under a type parameter of its own, which is what a
-                // generic function passing its `T` to another has. Erasing it
-                // again would box the box, and the callee would find a `data`
-                // where the value it was told to expect should be.
-                let param_erased = param_is_erased.get(i).copied().unwrap_or(false);
-                if param_erased && param_types.get(i) != Some(&operand_type(ctx, &operand)) {
-                    let erased_shape = param_types[i].clone();
-                    let erased = ctx.fresh_value(erased_shape);
-                    if mode == ParamMode::Out {
-                        erased_out_params.push((operand.clone(), erased));
-                        // The destination may be holding nothing: a `var`
-                        // declared without a value is what an out parameter is
-                        // usually given, and there is nothing there to move
-                        // across. Reading it anyway read the frame's own
-                        // poison, which the interpreter refused outright and
-                        // cranelift boxed and then freed.
-                        ctx.emit(Instruction::EraseTracked { dest: erased, src: operand.clone() });
-                    } else {
-                        // An `in` argument is given away, and what is seen
-                        // taking it is the call. With a conversion in between,
-                        // the call takes the erased value and the binding it
-                        // came from is never seen going -- so a slot is
-                        // destroyed at the end of its scope as well as by the
-                        // callee, which frees the same list twice. Moving it
-                        // out first is what says it has gone.
-                        //
-                        // Only a non-copy slot. A copy type has nothing to free
-                        // and is read where it stands, which is what lets one
-                        // binding be erased into two calls.
-                        if mode == ParamMode::In {
-                            if let Operand::Slot(slot) = operand {
-                                let slot_ty = operand_type(ctx, &operand);
-                                if !slot_ty.is_copy() {
-                                    let moved = ctx.fresh_value(slot_ty);
-                                    if ctx.is_operand_tracked(operand) {
-                                        ctx.emit(Instruction::SlotLoadMoveTracked {
-                                            dest: moved, slot });
-                                    } else {
-                                        ctx.emit(Instruction::SlotLoadMove { dest: moved, slot });
-                                    }
-                                    operand = Operand::Value(moved);
-                                }
-                            }
-                        }
-                        ctx.emit(Instruction::Erase { dest: erased, src: operand.clone() });
-                    }
-                    operand = Operand::Value(erased);
-                }
+                let operand = lower_call_arg(ctx, *arg, mode, param_types.get(i))?;
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {
@@ -709,13 +599,13 @@ pub fn lower_expression<'db>(
             }
 
             let result_type = ctx.expr_type(expr);
-            // An erased return arrives in the erased shape, and the value is
-            // moved back out of it below into the type this call site expects.
-            let call_result_type = erased_return_type.clone().unwrap_or_else(|| result_type.clone());
-            let dest = ctx.fresh_value(call_result_type);
+            let dest = ctx.fresh_value(result_type);
 
             // A call to a function with const parameters is a `ComptimeCall`,
-            // which specialization points at the copy for its arguments.
+            // which specialization points at the copy for its arguments. A
+            // callee's const parameters and its type parameters are
+            // independent, so a comptime callee may be generic, and the copy
+            // built for an instantiation takes the same descriptors.
             let comptime_param_indices: Vec<usize> = target
                 .map(|t| {
                     t.func(ctx.db).params(ctx.db)
@@ -726,94 +616,16 @@ pub fn lower_expression<'db>(
                 })
                 .unwrap_or_default();
 
-            // What this site bound each of the callee's type parameters to, in
-            // the callee's order and written over this function's own. Which of
-            // them the callee wants a descriptor for is settled afterwards,
-            // once every function's shapes are known.
-            //
-            // Computed for both kinds of call. A callee's const parameters and
-            // its type parameters are independent -- specialization deletes the
-            // first and erasure replaces the second -- so a comptime callee may
-            // be generic, and the copy built for an instantiation wants the same
-            // descriptors the original did.
-            let type_args: Vec<datalove_datafun_ir::DescriptorShape> = if crate::FAT_GENERICS {
-                Vec::new()
-            } else {
-                target
-                    .map(|t| t.type_args(ctx.db).clone())
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|ty| ctx.shape_of(ty).unwrap_or_else(|| {
-                        datalove_datafun_ir::DescriptorShape::Concrete(
-                            IrType::from_datalit(ctx.db, ty))
-                    }))
-                    .collect()
-            };
-
             if !comptime_param_indices.is_empty() {
-                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, type_args, bindings);
+                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, Vec::new(), bindings);
             } else {
-                ctx.emit_call_with_type_args(dest, func_ref, args, type_args, bindings);
-            }
-            // Move what the callee wrote to an erased out parameter back out
-            // into the type the caller keeps there.
-            for (dest_operand, written) in erased_out_params {
-                let real_ty = ctx.operand_type(dest_operand.clone())
-                    .ok_or_else(|| LowerError::NotImplemented(
-                        "out parameter of a generic function has no type here".to_string()
-                    ))?
-                    .clone();
-                // A reference names the type it points at, and that is what the
-                // value moved back out of the erased shape has to be.
-                let real_ty = match real_ty {
-                    IrType::Ref(inner) => (*inner).clone(),
-                    other => other,
-                };
-                let reified = ctx.fresh_value(real_ty.clone());
-                ctx.emit(Instruction::Reify { dest: reified, src: Operand::Value(written) });
-                match dest_operand {
-                    Operand::Slot(slot) => {
-                        // A copy type was not dropped before the call, so its
-                        // slot still holds something and takes a copying store.
-                        if real_ty.is_copy() {
-                            ctx.emit_slot_store_copy(SlotDest::Local(slot), Operand::Value(reified));
-                        } else {
-                            ctx.emit_slot_store_move(SlotDest::Local(slot), Operand::Value(reified));
-                        }
-                    }
-                    // Anything else is a reference to where the caller keeps
-                    // the value: a field, or an element. Storing back through
-                    // one loses the value and leaks what it replaced, so it is
-                    // refused rather than written wrong. Only a whole binding
-                    // takes an out parameter of a generic function for now.
-                    // Anything else is a reference to where the caller keeps
-                    // the value: a field, or an element. What was there was
-                    // dropped before the call, so this is a write into a place
-                    // holding nothing, which is what the tracked store is for.
-                    // The plain one would destroy the old value a second time.
-                    reference => {
-                        ctx.emit(Instruction::RefStoreTracked {
-                            dest: reference,
-                            value: Operand::Value(reified),
-                        });
-                    }
-                }
+                ctx.emit_call_with_type_args(dest, func_ref, args, Vec::new(), bindings);
             }
 
             // Args consumed by Call/ComptimeCall; pop scope.
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             ctx.emit_expr_temp_drops_since(expr_temp_mark);
-
-            // Move the value back out of the shape the erased callee returned,
-            // unless the caller keeps it in that shape too, which is the case
-            // when a generic function returns what another gave it under a
-            // type parameter of its own.
-            if erased_return_type.is_some() && erased_return_type != Some(result_type.clone()) {
-                let unwrapped = ctx.fresh_value(result_type);
-                ctx.emit(Instruction::Reify { dest: unwrapped, src: Operand::Value(dest) });
-                return Ok(unwrapped);
-            }
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {
@@ -860,23 +672,10 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            // A list built over a type parameter erases to `data`, so its own
-            // type says nothing about its elements and a descriptor has to come
-            // from the call site. The elements are erased too, which is what a
-            // `T` is anywhere.
-            let source = ctx.expr_source_type(expr);
-            let source_dt = match &source {
-                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
-                _ => None,
+            let IrType::List(elem_type) = &result_type else {
+                panic!("expected List type from typechecker");
             };
-            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
-            let elem_type = match (&result_type, &source_dt, &built) {
-                (IrType::List(t), _, _) => (**t).clone(),
-                (_, Some(datalove_datalit::tycheck::Type::List(t)), Some(_)) => {
-                    ctx.erased_element(&t.element_type)
-                }
-                _ => panic!("expected List type from typechecker"),
-            };
+            let elem_type = (**elem_type).clone();
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in list.elements.iter() {
@@ -885,10 +684,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            match built {
-                Some(shape) => ctx.emit_list_new_erased(dest, elements, shape),
-                None => ctx.emit_list_new(dest, elements),
-            }
+            ctx.emit_list_new(dest, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -898,22 +694,10 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            // A set built over a type parameter erases to `data`, so its own
-            // type says nothing about its elements and a descriptor has to come
-            // from the call site. See the list arm above.
-            let source = ctx.expr_source_type(expr);
-            let source_dt = match &source {
-                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
-                _ => None,
+            let IrType::Set(elem_type) = &result_type else {
+                panic!("expected Set type from typechecker");
             };
-            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
-            let elem_type = match (&result_type, &source_dt, &built) {
-                (IrType::Set(t), _, _) => (**t).clone(),
-                (_, Some(datalove_datalit::tycheck::Type::Set(t)), Some(_)) => {
-                    ctx.erased_element(&t.element_type)
-                }
-                _ => panic!("expected Set type from typechecker"),
-            };
+            let elem_type = (**elem_type).clone();
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in set.elements.iter() {
@@ -922,10 +706,7 @@ pub fn lower_expression<'db>(
                 elements.push(Operand::Value(value));
             }
             let dest = ctx.fresh_value(result_type);
-            match built {
-                Some(shape) => ctx.emit_set_new_erased(dest, elements, shape),
-                None => ctx.emit_set_new(dest, elements),
-            }
+            ctx.emit_set_new(dest, elements);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -935,22 +716,10 @@ pub fn lower_expression<'db>(
             ctx.push_pending_scope();
 
             let result_type = ctx.expr_type(expr);
-            // A map built over a type parameter erases the same way, and both
-            // its key and its value become `data`.
-            let source = ctx.expr_source_type(expr);
-            let source_dt = match &source {
-                Some(datalove_datafun_common::Type::Datalit(dt)) => Some(dt.clone()),
-                _ => None,
+            let IrType::Map(key_type, val_type) = &result_type else {
+                panic!("expected Map type from typechecker");
             };
-            let built = source_dt.as_ref().and_then(|dt| ctx.build_shape(dt));
-            let (key_type, val_type) = match (&result_type, &source_dt, &built) {
-                (IrType::Map(k, v), _, _) => ((**k).clone(), (**v).clone()),
-                (_, Some(datalove_datalit::tycheck::Type::Map(t)), Some(_)) => (
-                    ctx.erased_element(&t.key_type),
-                    ctx.erased_element(&t.value_type),
-                ),
-                _ => panic!("expected Map type from typechecker"),
-            };
+            let (key_type, val_type) = ((**key_type).clone(), (**val_type).clone());
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
             for e in map.entries.iter() {
@@ -961,10 +730,7 @@ pub fn lower_expression<'db>(
                 entries.push((Operand::Value(k), Operand::Value(v)));
             }
             let dest = ctx.fresh_value(result_type);
-            match built {
-                Some(shape) => ctx.emit_map_new_erased(dest, entries, shape),
-                None => ctx.emit_map_new(dest, entries),
-            }
+            ctx.emit_map_new(dest, entries);
             ctx.clear_pending_intermediates();
             ctx.pop_pending_scope();
             Ok(dest)
@@ -1455,21 +1221,6 @@ fn lower_unaryop<'db>(
 /// - Performs checked arithmetic
 /// - On success: returns the result value
 /// - On overflow/error: early returns with None
-/// Drop the result a checked operator wrote, on the path that throws it away.
-///
-/// The operator writes its answer whether or not it fit, so that the overflow
-/// branch has something whole to leave behind. For every fixed-width integer
-/// that is free -- the answer is a scalar the frame owns nothing of. Inside a
-/// generic it is a `data`, which for `index` and `offset` is on the heap,
-/// because those are the two the erased shape cannot pack into its own words.
-/// So the early return has to let it go.
-fn drop_discarded_checked_result<'db>(ctx: &mut LowerCtx<'db>, dest: ValueId) {
-    if ctx.body.value_types[dest.0 as usize] != IrType::Data {
-        return;
-    }
-    ctx.emit(Instruction::Drop { operand: Operand::Value(dest) });
-}
-
 fn lower_optional_binop<'db>(
     ctx: &mut LowerCtx<'db>,
     op: BinOp,
@@ -1503,7 +1254,6 @@ fn lower_optional_binop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
-    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value. The early return
@@ -1553,7 +1303,6 @@ fn lower_checked_result_binop<'db>(
     // Early return block: create error and return Err.
     let message = checked_failure_message(op, &operand_type(ctx, &lhs));
     ctx.start_block(early_return_block);
-    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message(message, false);
 
     // Continue block: dest already has the computed value. The early return
@@ -1573,7 +1322,7 @@ fn checked_failure_message(op: BinOp, ty: &IrType) -> &'static str {
         BinOp::Add | BinOp::Sub | BinOp::Mul => "arithmetic overflow",
         BinOp::Div => match ty {
             // A `fixedint` type parameter may turn out to be signed.
-            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset | IrType::Data
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset
             | IrType::Param(_) => {
                 "division by zero or overflow"
             }
@@ -1623,7 +1372,6 @@ fn lower_optional_unaryop<'db>(
 
     // Early return block: wrap None and return.
     ctx.start_block(early_return_block);
-    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_none(false);
 
     // Continue block: dest already has the computed value. The early return
@@ -1670,7 +1418,6 @@ fn lower_checked_result_unaryop<'db>(
 
     // Early return block: create error and return Err.
     ctx.start_block(early_return_block);
-    drop_discarded_checked_result(ctx, dest);
     ctx.emit_early_return_err_message("negation overflow", false);
 
     // Continue block: dest already has the computed value. The early return
@@ -1783,8 +1530,7 @@ fn lower_collection_index_value<'db>(
     let temps_mark = ctx.expr_temps_mark();
     let base_op = lower_operand(ctx, index_expr.base)?;
     let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = indexed_base_type(ctx, index_expr.base);
-    let base_op = open_container(ctx, base_op, &base_type);
+    let base_type = ctx.expr_type(index_expr.base);
     let is_map = matches!(&base_type, IrType::Map(_, _));
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
@@ -1897,8 +1643,7 @@ fn lower_place_expression<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                let base_type = place_index_type(ctx, &current_op);
-                current_op = open_container(ctx, current_op, &base_type);
+                let base_type = operand_type(ctx, &current_op);
                 // As in `lower_collection_index_value`: a get borrows its key,
                 // so anything made to hand it over is dropped on both ways out.
                 let temps_mark = ctx.expr_temps_mark();
@@ -2004,8 +1749,7 @@ fn lower_place_as_ref<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
-                let base_type = place_index_type(ctx, &current_op);
-                current_op = open_container(ctx, current_op, &base_type);
+                let base_type = operand_type(ctx, &current_op);
                 let key_op = lower_operand(ctx, idx.index)?;
                 super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, false)?;
                 let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
@@ -2019,87 +1763,6 @@ fn lower_place_as_ref<'db>(
         // Zero-step Place or field-only steps that end on a slot/param — pass through.
         other => Ok(other),
     }
-}
-
-/// The container shape behind an expression whose IR type is the wrapper.
-///
-/// `from_datalit` collapses a container of a type parameter to `data`
-/// everywhere -- parameter, local and call result alike -- so an expression of
-/// type `[T]` has IR type `data` and says nothing about being a list. Indexing
-/// one has to know which container it is and what its elements are called, and
-/// only the unerased type the typechecker gave says.
-///
-/// The shape is structural: `[T]` becomes `[data]`, whose header is the same
-/// three words a `[u32]` has. What the elements really are is the descriptor's
-/// to say, which is what a `DataBorrow` carries out of the wrapper.
-pub(crate) fn container_shape<'db>(
-    ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> Option<IrType> {
-    use datalove_datalit::tycheck::Type as DlType;
-    let Some(datalove_datafun_common::Type::Datalit(dl)) = ctx.expr_source_type(expr) else {
-        return None;
-    };
-    let elem = |t: &datalove_datalit::tycheck::Type<'db>| IrType::from_datalit(ctx.db, t);
-    Some(match &dl {
-        DlType::List(t) => IrType::List(Box::new(elem(&t.element_type))),
-        DlType::Set(t) => IrType::Set(Box::new(elem(&t.element_type))),
-        DlType::Map(t) => IrType::Map(
-            Box::new(elem(&t.key_type)), Box::new(elem(&t.value_type))),
-        DlType::Tensor(t) => IrType::Tensor(Box::new(elem(&t.element_type)), t.rank),
-        _ => return None,
-    })
-}
-
-/// The type to index a place's operand at, opened out of the wrapper if it is
-/// one.
-///
-/// A place's root has no expression node, so a wrapped container is
-/// recognised by the shape it was bound with (`LowerBody::wrapped_shapes`).
-pub(crate) fn place_index_type(ctx: &LowerCtx, op: &Operand) -> IrType {
-    match operand_type(ctx, op) {
-        IrType::Data => ctx.wrapped_shape(op).unwrap_or(IrType::Data),
-        other => other,
-    }
-}
-
-/// The type to index an expression at, opened out of the wrapper if it is one.
-pub(crate) fn indexed_base_type<'db>(
-    ctx: &LowerCtx<'db>,
-    expr: ExprFun<'db>,
-) -> IrType {
-    let ty = ctx.expr_type(expr);
-    match ty {
-        IrType::Data => container_shape(ctx, expr).unwrap_or(IrType::Data),
-        other => other,
-    }
-}
-
-/// Open a container that crossed a boundary wrapped.
-///
-/// `erased_param_type` makes an owned `[T]` a `data`, because converting it to
-/// `[data]` would mean rebuilding the elements at a different stride. So inside
-/// a generic the value is a wrapper, and indexing it needs the pointer and the
-/// descriptor the rest of the runtime speaks in. `DataBorrow` reads both out,
-/// and the reference it makes carries the descriptor on, which is what every
-/// index into a borrowed container already reads.
-///
-/// `collection_type` is what the typechecker says, which is the container even
-/// where the operand's own IR type is the wrapper. Anything already in the
-/// container's shape is left alone.
-pub(crate) fn open_container(
-    ctx: &mut LowerCtx,
-    op: Operand,
-    collection_type: &IrType,
-) -> Operand {
-    if !matches!(operand_type(ctx, &op), IrType::Data)
-        || matches!(collection_type, IrType::Data)
-    {
-        return op;
-    }
-    let dest = ctx.fresh_value(IrType::Ref(Box::new(collection_type.clone())));
-    ctx.emit(Instruction::DataBorrow { dest, src: op });
-    Operand::ValueRef(dest)
 }
 
 /// Get type of an operand for place lowering.

@@ -190,13 +190,6 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "kind": "VariableNotMutable"
             })
         }
-        TypeError::TypeParamNotErasable { param, position, fun_local_index: _ } => {
-            json!({
-                "kind": "TypeParamNotErasable",
-                "name": param,
-                "position": position
-            })
-        }
         TypeError::CollectionKeyNotOrdered { param, position, fun_local_index: _ } => {
             json!({
                 "kind": "CollectionKeyNotOrdered",

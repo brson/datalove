@@ -165,11 +165,7 @@ pub fn lower_script_fragment_raw<'db>(
             result_name: None,
             exports: ctx.exports,
         }),
-        nested_units: {
-            let mut units = ctx.functions;
-            close_shapes_in_units(&mut units)?;
-            units
-        },
+        nested_units: ctx.functions,
     })
 }
 
@@ -341,11 +337,7 @@ pub fn lower_script_expr<'db>(
             result_name,
             exports: ctx.exports,
         }),
-        nested_units: {
-            let mut units = ctx.functions;
-            close_shapes_in_units(&mut units)?;
-            units
-        },
+        nested_units: ctx.functions,
     })
 }
 
@@ -406,7 +398,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            for (name, slot) in lower_var(ctx, var_stmt, false)? {
+            for (name, slot) in lower_var(ctx, var_stmt)? {
                 ctx.exports.push((name, ExportBinding::Slot(slot)));
             }
             Ok(())
@@ -640,83 +632,4 @@ fn lower_statement_for_script<'db>(
             panic!("parse error node reached lowering - callers should check for parse errors before lowering")
         }
     }
-}
-
-/// Give each script-local function the shapes its callees need of it.
-///
-/// The same step the module path takes, over the functions defined beside a
-/// script unit. See `close_shapes`.
-pub(crate) fn close_shapes_in_units(units: &mut [IrCodeUnit]) -> Result<(), LowerError> {
-    use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
-    use std::collections::HashMap;
-
-    // Under generics by reference there are no shapes to close.
-    if crate::FAT_GENERICS {
-        return Ok(());
-    }
-
-    let mut calls: HashMap<u32, Vec<(u32, Vec<DescriptorShape>)>> = HashMap::new();
-    let mut shapes: HashMap<u32, Vec<DescriptorShape>> = HashMap::new();
-    for unit in units.iter() {
-        shapes.insert(
-            unit.id.0,
-            unit.function_context().map(|c| c.descriptor_shapes.clone()).unwrap_or_default(),
-        );
-        let mut sites = Vec::new();
-        for block in &unit.blocks {
-            for instr in &block.instructions {
-                let Instruction::Call { func, type_args, .. } = instr else { continue };
-                if type_args.is_empty() {
-                    continue;
-                }
-                if let CodeRef::Local(id) = func {
-                    sites.push((id.0, type_args.clone()));
-                }
-            }
-        }
-        calls.insert(unit.id.0, sites);
-    }
-
-    if let Err(growing) = datalove_datafun_ir::close_shapes(&calls, &mut shapes) {
-        let name = |id: u32| units.iter().find(|u| u.id.0 == id)
-            .map(|u| u.name.clone())
-            .unwrap_or_else(|| format!("#{}", id));
-        return Err(LowerError::UnboundedDescriptorShape(format!(
-            "`{}` calls `{}` binding its type parameter {} to `{}`, which holds one of \
-             `{}`'s own, so every call round that cycle needs a descriptor one level \
-             deeper than the last. `{}` would be handed `{}` and there is no end to it",
-            name(growing.caller), name(growing.callee), growing.param, growing.bound,
-            name(growing.caller), name(growing.function), growing.shape,
-        )));
-    }
-
-    for unit in units.iter_mut() {
-        let Some(shape_set) = shapes.get(&unit.id.0) else { continue };
-        if let datalove_datafun_ir::CodeUnitContext::Function(ctx) = &mut unit.context {
-            ctx.descriptor_shapes = shape_set.clone();
-        }
-    }
-
-    // With the sets settled, say what each call hands over. Stored rather than
-    // worked out again in each backend, so that the descriptor emitter makes a
-    // descriptor for every type named only here.
-    for unit in units.iter_mut() {
-        let own = shapes.get(&unit.id.0).cloned().unwrap_or_default();
-        let callee_shapes = |code_ref: &CodeRef| -> Vec<DescriptorShape> {
-            match code_ref {
-                CodeRef::Local(id) => shapes.get(&id.0).cloned().unwrap_or_default(),
-                _ => Vec::new(),
-            }
-        };
-        if let Err(missing) = datalove_datafun_ir::set_call_descriptors(
-            unit, &own, &callee_shapes,
-        ) {
-            return Err(LowerError::UnboundedDescriptorShape(format!(
-                "`{}` hands a type parameter to a function that builds a collection \
-                 of it and was given no descriptor for `{}` to pass on",
-                unit.name, missing,
-            )));
-        }
-    }
-    Ok(())
 }

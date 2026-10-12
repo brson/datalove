@@ -79,12 +79,9 @@ pub(super) fn lower_destructure<'db>(
 /// Lower a `var`, giving each name it binds a slot of its own.
 ///
 /// Returns each name with its slot, in the order the pattern names them.
-/// Script lowering does not keep a wrapped container's shape, and passes
-/// `record_shape` false.
 pub(super) fn lower_var<'db>(
     ctx: &mut LowerCtx<'db>,
     var_stmt: &ast::StmtVar<'db>,
-    record_shape: bool,
 ) -> Result<Vec<(String, SlotId)>, LowerError> {
     let Some(init_expr) = var_stmt.value else {
         // Uninitialized var - get type from type hint.
@@ -108,11 +105,6 @@ pub(super) fn lower_var<'db>(
         let slot = ctx.fresh_slot(slot_type);
         let operand = Operand::Slot(slot);
         ctx.bind_var(&name, operand);
-        if record_shape && var_stmt.binding.as_name().is_some() {
-            if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
-                ctx.record_wrapped_shape(operand, shape);
-            }
-        }
         // Record binding operand for drop schedule. This has to happen
         // before the store, which asks whether the slot is tracked.
         ctx.record_binding_operand(operand);
@@ -184,20 +176,13 @@ fn lower_statement_with_id<'db>(
             for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, init_expr, value_id) {
                 let operand = Operand::Value(value_id);
                 ctx.bind_var(&name, operand);
-                // A wrapped container keeps the shape it was written as; see
-                // `LowerBody::wrapped_shapes`.
-                if let_stmt.binding.as_name().is_some() {
-                    if let Some(shape) = super::expr::container_shape(ctx, init_expr) {
-                        ctx.record_wrapped_shape(operand, shape);
-                    }
-                }
                 // Record binding operand for drop schedule.
                 ctx.record_binding_operand(operand);
             }
             Ok(())
         }
         Statement::Var(var_stmt) => {
-            lower_var(ctx, var_stmt, true)?;
+            lower_var(ctx, var_stmt)?;
             Ok(())
         }
         Statement::Set(set_stmt) => {
@@ -800,8 +785,8 @@ fn store_slot<'db>(ctx: &mut LowerCtx<'db>, slot: SlotId, value_id: ValueId) {
 
 /// Lower a compound assignment: `set x += v`, `set xs[i]!.n +!= v`.
 ///
-/// One instruction updates the place in place, once it has been reached. An
-/// erased type's arithmetic is the runtime's, by its descriptor, so for one
+/// One instruction updates the place in place, once it has been reached. A
+/// dynamic type's arithmetic is the runtime's, by its descriptor, so for one
 /// the operator's result is stored back instead.
 fn lower_set_compound<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -814,9 +799,9 @@ fn lower_set_compound<'db>(
     let target = navigate_place(ctx, place, keys, place.steps.len())?;
     let ty = operand_type(ctx, &target);
     // A place whose type only a descriptor says is updated by the operator
-    // and a store, as one of `data` is; an update in place is for a type
-    // whose operation the backend can emit.
-    if ty != IrType::Data && !ty.is_dynamic() {
+    // and a store; an update in place is for a type whose operation the
+    // backend can emit.
+    if !ty.is_dynamic() {
         return crate::expr::lower_op_assign(ctx, op, target, rhs, &ty, expr_temp_mark);
     }
     let result = crate::expr::lower_binop_operands(ctx, op, target, rhs, ty.clone(), expr_temp_mark)?;
@@ -860,8 +845,7 @@ fn lower_set_indexed<'db>(
             // the index itself and takes the value whether or not it lands, so
             // the early return has nothing of the value's to drop.
             let error_mode = idx.error_mode.unwrap();
-            let base_type = super::expr::place_index_type(ctx, &base_op);
-            let base_op = super::expr::open_container(ctx, base_op, &base_type);
+            let base_type = super::expr::operand_type(ctx, &base_op);
             let value = take_value(ctx, value);
             let is_valid = ctx.fresh_value(IrType::Bool);
             match &base_type {
@@ -929,7 +913,6 @@ pub(crate) fn emit_fallible_index_check(
     error_mode: ast::IndexErrorMode,
     set_target: bool,
 ) -> Result<(), LowerError> {
-    let collection_op = super::expr::open_container(ctx, collection_op, collection_type);
     let is_valid = ctx.fresh_value(IrType::Bool);
     match collection_type {
         IrType::Map(_, _) => {
@@ -1001,7 +984,6 @@ pub(crate) fn emit_collection_element_ref(
     collection_type: &IrType,
     key_op: Operand,
 ) -> ValueId {
-    let collection_op = super::expr::open_container(ctx, collection_op, collection_type);
     match collection_type {
         IrType::Map(_, v) => {
             let value_type = v.as_ref().clone();
@@ -1112,7 +1094,7 @@ fn navigate_place<'db>(
             ast::PlaceStep::Index(idx) => {
                 let error_mode = idx.error_mode
                     .expect("bare index (upsert) cannot appear in intermediate set target position");
-                let base_type = super::expr::place_index_type(ctx, &current_op);
+                let base_type = super::expr::operand_type(ctx, &current_op);
                 let key_op = *keys.next().expect("a key for every index step");
                 emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, true)?;
                 let dest = emit_collection_element_ref(ctx, current_op, &base_type, key_op);
