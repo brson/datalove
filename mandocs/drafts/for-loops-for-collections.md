@@ -35,7 +35,7 @@ end fun
 This has a number of deficiencies,
 but for the purposes of the work at hand I care about the
 `self[i]?`, which does a bounds check every iteration
-(and for which `equal_to_at` exists just to accomodate the error handling),
+(and for which `equal_to_at` exists just to accommodate the error handling),
 and the intrinsic call to `add_wrapping_index`.
 The indexing is a performance hazard,
 but maybe more importantly the wrapping math is a big
@@ -43,7 +43,7 @@ cognitive/maintainability hazard:
 every time I see wrapping math I must stop and think hard about the invariants.
 
 Both of these are solvable with language-level container iteration.
-The design for this is fairly obvious and implementation easy,
+The design for this is fairly obvious and implementation is mostly straightforward,
 so I'll go ahead and do it now.
 Trying to clean up the code quality in the system library,
 modest as it is.
@@ -65,7 +65,7 @@ end fun
 
 The `item` variable is a reference binding,
 a pointer directly into the container.
-So `item` can't be moved, nor can the iteratee, `self`
+So `item` can't be moved, nor can the iteratee, `self`,
 be mutably referenced or mutated via indexing.
 This is in contrast to `match` and destructuring `if`
 which fully destructure their operands.
@@ -129,8 +129,8 @@ with the same restrictions.
 So walking every element of a matrix is two loops:
 
 ```datalove
-for row in grid
-  for cell in row
+for row in ref grid
+  for cell in ref row
     set total = total + cell
   end for
 end for
@@ -151,7 +151,7 @@ let table = {|
   "sid", 2, false
 |}
 
-for { name, number, .. } in table
+for { name, number, .. } in ref table
   ...
 end for
 ```
@@ -164,7 +164,19 @@ also make use of the loop induction variable for more than just indexing the col
 once every time through the loop.
 
 ```datalove
-todo example
+fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
+  var at: ?index = none
+  let n = list_len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if equal(ref self[i]?, ref elem)
+      set at = some i
+      break
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret at
+end fun
 ```
 
 So it's not enough to just make collections iterable.
@@ -176,21 +188,48 @@ Go and Zig and probably others do this with another form of `for` that adds anot
 the loop header to represent the index. So I guess I'll just do that too.
 
 ```datalove
-todo example
+fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
+  var at: ?index = none
+  for i, item in ref self
+    if equal(ref item, ref elem)
+      set at = some i
+      break
+    end if
+  end for
+  ret at
+end fun
 ```
 
 I don't know if Datalove will ever grow an iterator protocol like Rust has.
 Datalove isn't intended for that level of expressivity in its language integration.
 
-For maps I guess this means a third term in the header.
-
-```
-datalove
-```
+For sets and maps I guess it doesn't make sense to support this
+since they are not index by number.
 
 
-## Implementation details
+## Implementation considerations
 
 The big missing piece to make this all work is some kind of
 collection cursors in the runtime.
 Most of the compiler work is relatively straightforward extensions to what already exists.
+
+I've sketched one cursor shape for all four collections.
+It's a small plain-data struct:
+a pointer to the current element
+(plus one to the current value, for maps),
+a position, and a count.
+Each collection gets a "begin" and an "advance" function with the same signature,
+and "done" is just comparing the position to the count,
+which every backend can do inline.
+The position doubles as the loop index, so the indexed form is free.
+
+For lists and tensors the fast backends don't call the runtime at all:
+advancing is a pointer bump.
+Sets and maps are B+trees whose leaves are already linked in order,
+so advancing steps along a leaf and hops to the next one,
+instead of descending from the root for every element like `key_at` does.
+
+The cursor is also what keeps the compiler side simple.
+The thing that lives across the loop body is the cursor, which is just data.
+Each use of `item` makes a fresh reference from it,
+the same kind of short-lived reference that indexing makes today.
