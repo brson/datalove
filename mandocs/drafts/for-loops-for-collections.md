@@ -70,6 +70,14 @@ be mutably referenced or mutated via indexing.
 This is in contrast to `match` and destructuring `if`
 which fully destructure their operands.
 
+Even though I don't plan immediately to have by-value iteration,
+it probably makes sense to write the word `ref` somewhere in the loop header -
+I've got a pretty consistent explicit philosophy of writing `ref` everywhere
+there's a reference binding.
+Here I've put it next to the _collection_, not the binding,
+since as we'll see below there may be many bindings in a loop header.
+We'll see how it goes.
+
 Besides lists we also have other collections that need
 iteration consideration: maps, sets, tensors, and tables.
 
@@ -179,3 +187,10 @@ For maps I guess this means a third term in the header.
 ```
 datalove
 ```
+
+
+## Implementation details
+
+The big missing piece to make this all work is some kind of
+collection cursors in the runtime.
+Most of the compiler work is relatively straightforward extensions to what already exists.
