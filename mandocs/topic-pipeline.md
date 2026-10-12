@@ -1,5 +1,6 @@
 ## Blog topic pipeline
 
+- generic representation details
 - for loops for collections
 - repl experience week
 - recursive types
