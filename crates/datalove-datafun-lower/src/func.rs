@@ -103,6 +103,10 @@ pub fn lower_function_body<'db>(
     // A return mentioning a type parameter is shaped by the erasure rule, the
     // same one the call site reads. Everything else keeps its resolved type.
     ctx.return_type = match func.return_type(ctx.db) {
+        // Under generics by reference a type is what it was written as.
+        Some(hint) if crate::FAT_GENERICS && datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
+            Some(IrType::from_type_hint_generic(ctx.db, &hint, &type_params))
+        }
         Some(hint) if datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
             Some(datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params))
         }
@@ -140,7 +144,10 @@ pub fn lower_function_body<'db>(
         // the same rule so the two cannot disagree about the same bytes.
         // Everything else keeps its resolved type.
         let borrowed = matches!(mode, ParamMode::Ref | ParamMode::Mut);
-        let param_type = if datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params) {
+        let mentions_param = datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params);
+        let param_type = if crate::FAT_GENERICS && mentions_param {
+            IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
+        } else if mentions_param {
             datalove_datafun_ir::erased_param_type(ctx.db, &p.type_hint, &type_params, borrowed)
         } else {
             match resolved_param_types {
@@ -171,9 +178,7 @@ pub fn lower_function_body<'db>(
         // a type parameter, since nothing is converted at one. An owned
         // container needs none: it arrives wrapped, and the wrapper carries
         // the descriptor with it.
-        if borrowed
-            && datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params)
-        {
+        if borrowed && mentions_param && !crate::FAT_GENERICS {
             descriptor_params.push(id);
         }
     }
@@ -231,7 +236,9 @@ pub fn lower_function_body<'db>(
             tracked_params: ctx.compute_tracked_params(),
             descriptor_params,
             descriptor_shapes,
-            type_param_count: type_params.len() as u32,
+            // Under erasure a generic takes no descriptor per type parameter;
+            // a count here says the function is compiled by reference.
+            type_param_count: if crate::FAT_GENERICS { type_params.len() as u32 } else { 0 },
             descriptor_table: Vec::new(),
         }),
         nested_units: Vec::new(),

@@ -34,6 +34,9 @@ use crate::tydesc::IrTyDescTable;
 /// - a copy of each small owned parameter of a copied type, which its `Value`
 ///   points at, so that reading it is one load;
 /// - a descriptor per shape the function declares;
+/// - under generics by reference, the descriptor handed over for each type
+///   parameter, the descriptor table, and the shadow stack's position on
+///   entry;
 /// - a descriptor word for each reference whose referent's static type does
 ///   not describe it, as `resolve_ref_descriptors` says, the answer every
 ///   backend reads;
@@ -88,6 +91,22 @@ pub struct IrLayout {
     /// Where the descriptors for the declared shapes start, and how many.
     pub shape_offset: u32,
     pub shape_count: u32,
+    /// Under generics by reference, where the descriptors handed over for
+    /// the function's type parameters go, and how many.
+    pub type_param_offset: u32,
+    pub type_param_count: u32,
+    /// Where the descriptor table's words start, and what fills each.
+    pub table_offset: u32,
+    pub table: Vec<TableEntry>,
+    /// The type each entry of the table is the descriptor of.
+    pub table_types: Vec<IrType>,
+    /// Where the shadow stack's top and limit on entry are kept, for a
+    /// function that takes space on it.
+    pub shadow_mark_offset: Option<u32>,
+    /// Each value and slot of a dynamic type, as its frame offset and its
+    /// type's descriptor table entry. Its frame bytes are a fat pointer, set
+    /// on entry to space on the shadow stack its descriptor sizes.
+    pub dynamic_places: Vec<(u32, u32)>,
     /// The descriptor word of each reference value that has one: those
     /// `resolve_ref_descriptors` names. Any other reference points at what its
     /// static type says.
@@ -119,8 +138,22 @@ pub struct IrLayout {
     pub frame_align: u32,
 }
 
+/// What fills one entry of a descriptor table on entry.
+#[derive(Clone, Copy, Debug)]
+pub enum TableEntry {
+    /// The descriptor handed over for this type parameter.
+    Param(u32),
+    /// This template, instantiated against those.
+    Template(*const TyDesc),
+}
+
 /// What a layout is for, beyond its types: what the extension holds.
 pub struct LayoutExtras<'a> {
+    /// How many type parameters the function was declared with, under
+    /// generics by reference.
+    pub type_param_count: u32,
+    /// The function's descriptor table; see `FunctionContext::descriptor_table`.
+    pub descriptor_table: &'a [IrType],
     /// How many shapes the function declares.
     pub shape_count: usize,
     /// The reference values that get a descriptor word.
@@ -150,10 +183,24 @@ impl IrLayout {
         let frame = FrameLayout::compute(
             param_types, value_types, slot_types, tracked_slots, tracked_params);
 
+        // A reference to a dynamic type is a fat pointer, and is moved as one:
+        // two words, plainly copied. Its second word is its descriptor word.
+        let fat_reference = tydesc_table.get_or_create(&IrType::Tuple(vec![IrType::U64, IrType::U64]));
+
         // The interpreter reads and writes a value by its descriptor's size, so
         // the descriptor has to agree with the layout the offsets came from.
+        //
+        // A value of a dynamic type has none: its frame bytes are a fat
+        // pointer, and the descriptor is the one in it. Null says so to the
+        // frame's accessors.
         let mut described = |types: &[IrType], places: &[SlotLayout]| -> Vec<*const TyDesc> {
             types.iter().zip(places).map(|(ty, place)| {
+                if ty.is_dynamic() {
+                    return match ty {
+                        IrType::Ref(_) => fat_reference,
+                        _ => std::ptr::null(),
+                    };
+                }
                 let tydesc = tydesc_table.get_or_create(ty);
                 let (size, align) = unsafe { ((*tydesc).size, (*tydesc).align) };
                 assert_eq!((size, align), (place.size, place.align),
@@ -164,10 +211,33 @@ impl IrLayout {
         let value_tydescs = described(value_types, &frame.values);
         let slot_tydescs = described(slot_types, &frame.slots);
 
+        // A dynamic parameter keeps the descriptor the caller handed over with
+        // it, which is the only one that says what it is; null says so.
+        let static_tydesc = |table: &mut IrTyDescTable, ty: &IrType| {
+            if ty.is_dynamic() { std::ptr::null() } else { table.get_or_create(ty) }
+        };
         let param_tydescs = param_types.iter()
-            .map(|ty| tydesc_table.get_or_create(ty))
+            .map(|ty| static_tydesc(tydesc_table, ty))
             .collect();
-        let return_tydesc = return_type.map(|ty| tydesc_table.get_or_create(ty));
+        let return_tydesc = return_type.map(|ty| static_tydesc(tydesc_table, ty));
+
+        let entry_of = |ty: &IrType| -> u32 {
+            match extras.descriptor_table.iter().position(|t| t == ty) {
+                Some(i) => i as u32,
+                None => panic!("{ty} is not in the descriptor table"),
+            }
+        };
+        let dynamic_places: Vec<(u32, u32)> = value_types.iter().zip(&frame.values)
+            .chain(slot_types.iter().zip(&frame.slots))
+            .filter(|(ty, _)| ty.is_dynamic() && !matches!(ty, IrType::Ref(_)))
+            .map(|(ty, place)| (place.offset, entry_of(ty)))
+            .collect();
+        let table: Vec<TableEntry> = extras.descriptor_table.iter()
+            .map(|ty| match ty {
+                IrType::Param(i) => TableEntry::Param(*i),
+                _ => TableEntry::Template(tydesc_table.get_or_create(ty)),
+            })
+            .collect();
 
         // The extension, after the shared layout: the words first, then the
         // liveness bytes.
@@ -188,10 +258,26 @@ impl IrLayout {
         }).collect();
         let shape_offset = offset;
         offset += extras.shape_count as u32 * WORD;
+        let type_param_offset = offset;
+        offset += extras.type_param_count * WORD;
+        let table_offset = offset;
+        offset += table.len() as u32 * WORD;
+        let shadow_mark_offset = (!dynamic_places.is_empty()).then(|| {
+            let at = offset;
+            offset += 2 * WORD;
+            at
+        });
         let mut ref_desc_offsets = vec![None; value_types.len()];
         for id in extras.described_refs {
             ref_desc_offsets[id.0 as usize] = Some(offset);
             offset += WORD;
+        }
+        // A reference to a dynamic type carries its descriptor in its own
+        // second word.
+        for (i, ty) in value_types.iter().enumerate() {
+            if matches!(ty, IrType::Ref(_)) && ty.is_dynamic() {
+                ref_desc_offsets[i] = Some(frame.values[i].offset + WORD);
+            }
         }
         let mut tensor_view_offsets = vec![None; value_types.len()];
         for id in extras.tensor_views {
@@ -221,6 +307,13 @@ impl IrLayout {
             param_copies,
             shape_offset,
             shape_count: extras.shape_count as u32,
+            type_param_offset,
+            type_param_count: extras.type_param_count,
+            table_offset,
+            table,
+            table_types: extras.descriptor_table.to_vec(),
+            shadow_mark_offset,
+            dynamic_places,
             ref_desc_offsets,
             tensor_view_offsets,
             liveness_offset,
@@ -252,6 +345,7 @@ impl IrLayout {
             // that failed part way had bound, and later units read and move
             // its bindings.
             let extras = LayoutExtras {
+                type_param_count: 0, descriptor_table: &[],
                 shape_count: 0, described_refs: &described_refs, tensor_views: &tensor_views,
                 keep_liveness: true, is_script: true,
                 param_modes: &[],
@@ -266,6 +360,8 @@ impl IrLayout {
             .map(|i| ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In))
             .collect();
         let extras = LayoutExtras {
+            type_param_count: ctx.type_param_count,
+            descriptor_table: &ctx.descriptor_table,
             shape_count: ctx.descriptor_shapes.len(),
             described_refs: &described_refs,
             tensor_views: &tensor_views,

@@ -357,6 +357,7 @@ mod tests {
                     args: vec![],
                     type_args: Vec::new(),
                     shape_descriptors: Vec::new(),
+                    bindings: Vec::new(),
                 },
             ],
             terminator: Terminator::UnitEnd { result: None },

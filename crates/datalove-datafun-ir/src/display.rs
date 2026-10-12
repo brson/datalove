@@ -398,7 +398,7 @@ impl fmt::Display for Instruction {
             Instruction::Clone { dest, src } => {
                 write!(f, "{} = clone {}", dest, src)
             }
-            Instruction::Call { dest, func, args, .. } => {
+            Instruction::Call { dest, func, args, bindings, .. } => {
                 write!(f, "{} = call {}(", dest, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
@@ -406,7 +406,18 @@ impl fmt::Display for Instruction {
                     }
                     write!(f, "{}", arg)?;
                 }
-                write!(f, ")")
+                write!(f, ")")?;
+                if !bindings.is_empty() {
+                    write!(f, " <")?;
+                    for (i, ty) in bindings.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "{}", ty)?;
+                    }
+                    write!(f, ">")?;
+                }
+                Ok(())
             }
             Instruction::ComptimeCall { dest, func, args, comptime_param_indices, .. } => {
                 write!(f, "{} = comptime_call {}(", dest, func)?;

@@ -27,6 +27,7 @@ stays the plan for speed, and comes after this.
 - [What it does for other work](#user-content-what-it-does-for-other-work)
 - [Cost](#user-content-cost)
 - [Phases](#user-content-phases)
+- [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand)
 - [Open questions](#user-content-open-questions)
 
 ## Why
@@ -496,17 +497,18 @@ caller of an interpreted generic has to pass what the new convention expects.
    are not checked, since no value in one is dynamic. The `fat-generics`
    feature exists on `datalove-datafun-lower`, and so far only fills the
    descriptor table. No lowering produces a `Param` yet.
-3. **Lowering**, under the feature: written types kept, the table built,
-   type-parameter descriptors at call sites, no `Erase` or `Reify`. Ownership
-   analysis is unchanged, the language being unchanged.
-4. **Interpreter, bytecode and CTFE**, the reference: the dynamic frame, the
-   operations table above, calls. The interpreter's frame is the one the JIT
-   shares for OSR, so the dynamic frame is laid out here once for both. CTFE
-   is this interpreter, so it comes along. The bytecode is the default engine
-   and is part of this phase; where it does not lower an instruction yet, it
-   falls back to the IR walker as it does now. The JIT refuses as above; the
-   AOT backends refuse. Done when every fixture passes on the interpreter
-   under the feature with leak checking on.
+3. **Lowering** (done), under the feature: written types kept, the table
+   built, type-parameter descriptors at call sites, no `Erase` or `Reify`.
+   Ownership analysis is unchanged, the language being unchanged. See
+   [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand).
+4. **Interpreter, bytecode and CTFE** (done but for the bytecode), the
+   reference: the dynamic frame, the operations table above, calls. The
+   interpreter's frame is the one the JIT shares for OSR, so the dynamic frame
+   is laid out here once for both. CTFE is this interpreter, so it comes along.
+   The bytecode is the default engine; until it lowers a dynamic body, such a
+   body runs on the IR walker. The JIT refuses as above; the AOT backends
+   refuse. Done when every fixture passes on the interpreter under the feature
+   with leak checking on, which it does.
 5. **Cranelift**, AOT and JIT: the same, plus the bridge, the trampoline and
    OSR carrying fat pointers and type-parameter descriptors. OSR shares the
    interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather than
@@ -521,6 +523,65 @@ caller of an interpreted generic has to pass what the new convention expects.
 8. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
    measurements recorded.
+
+## Where phases 3 and 4 stand
+
+`just test-fat` passes, leak checking on: every engine fixture, every
+`sys/std` fixture and every backend fixture, on the walker, the bytecode and
+the jit, with the AOT backends skipped where they refuse. How it came out, and
+what differs from the sections above:
+
+- **Calls carry `bindings`**, a `Vec<IrType>` on `Call` and `ComptimeCall`:
+  what the site bound each of the callee's type parameters to, written over
+  the caller's. `type_args` and `shape_descriptors` are left empty under the
+  feature, and the shape closure is skipped (`close_shapes_over_calls`,
+  `close_shapes_in_units`), as is `build_shape`. A native's trailing
+  descriptors are its `descriptor_shapes` substituted with the bindings.
+- **The lowering switch** is `crate::FAT_GENERICS` in `datafun-lower`, read
+  at the handful of places a type is made (`LowerCtx::ir_type`, `hint_type`,
+  `expr_type`, the parameter and return types in `func.rs`, and the call
+  site). The rest of the erasure machinery -- `container_shape`,
+  `wrapped_shapes`, `open_container` -- fires only on an IR type of `data`,
+  which a generic's values no longer have, so it is inert rather than
+  switched off. `type_param_count` is set only under the feature, which is
+  how every backend tells a generic compiled by reference from an erased one.
+- **The interpreter resolves a fat pointer in the frame accessors.** A value
+  or slot of a dynamic type has a null static descriptor in `IrLayout`, and
+  `Frame::value`, `value_dest`, `slot` and `slot_dest` read the fat pointer
+  when they see one. Everything the walker does goes through those, and its
+  operations were already driven by the descriptor in hand, so almost no
+  instruction needed changing. A reference to a dynamic type is a fat
+  pointer whose second word is its descriptor word (`ref_desc_offsets`).
+  `enter_dynamic` fills the table and takes shadow stack space after
+  `Frame::enter`; `leave_dynamic` gives it back.
+- **Which side gives an argument up.** A type parameter is never a copy type
+  in the callee, but a copy value handed to one is copied, not moved, so for
+  a dynamic parameter the caller asks the argument's own descriptor
+  (`TyDesc::PLAIN`), not the callee's type.
+- **The bytecode** runs a body with a descriptor table on the walker
+  (`run_frame`), and lowers a call with bindings to the general lane, since
+  its fast paths do not hand over type parameter descriptors.
+- **The JIT refuses** any function that is generic or calls a generic
+  (`uses_generics_by_reference`), and the AOT backends refuse a program with
+  one; the engine and backend harnesses skip a refusal under the feature.
+- **Fixtures whose output differs** under the feature have an
+  `.out.expected.fat` beside the default, as `index-64` has `.expected.64`;
+  blessing under the feature writes one only where the output differs. Eight
+  engine fixtures differ only in the IR they print. `module_060` now compiles,
+  as it should. Backend fixture `22_comptime_and_generic` is a fix: under
+  erasure a generic's `debuglog x` printed `data "said"`, the wrapper leaking
+  into the output, and it now prints `"said"`.
+- **A call at a growing type** -- a generic calling itself at `[T]` -- runs,
+  building one more descriptor per level. It gets a fixture in phase 7, since
+  the default configuration still refuses it.
+- **A bounded operation on a `T`** is dispatched by the interpreter on the
+  descriptor's tag, which is now the real type rather than `data`; so a
+  `fixedint` `T` bound to `u32` reaches the native `u32` arithmetic, and the
+  one operation with no unsigned case, checked negation, goes to `dyn_ops`.
+
+Not done in phase 4, and wanted before phase 7: the bytecode lowering
+dynamic bodies itself, rather than leaving them to the walker; and the
+measurements, since nothing compiled runs a generic yet.
 
 ## Open questions
 

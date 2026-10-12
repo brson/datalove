@@ -1,0 +1,159 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/genct"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn wrap(p0, p1):
+                      desc0 = T0
+                      desc1 = list<T0>
+                    block0:
+                        v0 = move p1
+                        v1 = list [v0]
+                        store.move.tracked s0, v1
+                        v2 = load.move.tracked s0
+                        return v2
+                    
+                    fn pick(p0, p1, p2):
+                      desc0 = T0
+                    block0:
+                        v0 = move p1
+                        drop p2
+                        return v0
+                    
+                    fn wrap_one(p0):
+                    block0:
+                        v1 = call m0.u4(p0) <u32>
+                        return v1
+                    
+                    fn announce(p0, p1):
+                    block0:
+                        debuglog p1
+                        drop p1
+                        return
+                    
+                    fn wrap__ct4(p0):
+                      desc0 = T0
+                      desc1 = list<T0>
+                    block0:
+                        v0 = move p0
+                        v1 = list [v0]
+                        store.move.tracked s0, v1
+                        v2 = load.move.tracked s0
+                        return v2
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 7u32
+                        v3 = call u0(v2) <u32>
+                        debuglog v3
+                        drop v3
+                        v4 = const "s"
+                        v5 = call u0(v4) <string>
+                        debuglog v5
+                        drop v5
+                        v6 = const "s"
+                        v7 = call u1(v6) <string>
+                        debuglog v7
+                        drop v7
+                        v8 = const 3u32
+                        v9 = const 4u32
+                        v10 = call u2(v8, v9) <u32>
+                        debuglog v10
+                        v11 = const 9u32
+                        v12 = call m0.u2(v11)
+                        debuglog v12
+                        drop v12
+                        v13 = const "spoken"
+                        v14 = call u3(v13)
+                        v15 = const "kept"
+                        v16 = const "dropped"
+                        v17 = call u2(v15, v16) <string>
+                        unit_end_drop v0
+                        unit_end_drop v1
+                        unit_end_drop v17
+                        unit_end
+                    
+                    fn wrap__ct0(p0):
+                      desc0 = T0
+                      desc1 = list<T0>
+                    block0:
+                        v0 = move p0
+                        v1 = list [v0]
+                        store.move.tracked s0, v1
+                        v2 = load.move.tracked s0
+                        return v2
+                    
+                    fn wrap__ct1(p0):
+                      desc0 = T0
+                      desc1 = list<T0>
+                    block0:
+                        v0 = move p0
+                        v1 = list [v0]
+                        store.move.tracked s0, v1
+                        v2 = load.move.tracked s0
+                        return v2
+                    
+                    fn pick__ct2(p0, p1):
+                      desc0 = T0
+                    block0:
+                        v0 = move p0
+                        drop p1
+                        return v0
+                    
+                    fn announce__ct3(p0):
+                    block0:
+                        debuglog p0
+                        drop p0
+                        return
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("[7]\n[\"s\"]\n[\"s\"]\n3\n[9]\n\"spoken\"\n"),
+        ),
+        SectionResult(
+            section_type: "scriptunit-expr",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                """,
+            ),
+            output: "\"kept\"",
+        ),
+    ],
+)

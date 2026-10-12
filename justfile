@@ -31,6 +31,13 @@ test-sys-riders:
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
 
+# Run tests with generics by reference, which replaces erasure; see
+# botdocs/plan-fat-generics.md. A fixture whose expected output differs under
+# it has a `.expected.fat` beside the default. No compiled backend handles it
+# yet, so they refuse such a program and the engine suites skip them for it.
+test-fat:
+    DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features fat-generics
+
 # The slow configuration: the property tests and exhaustive cases, the wasm
 # build, the whole suite against sys riders built from source, and generated
 # programs.
@@ -56,7 +63,7 @@ test-demos:
     cd demos/store && just gen 2000 && just check
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-parallel test-demos
+test-ci: test test-slow test-64 test-fat test-parallel test-demos
 
 # Run tests with parallelism enabled.
 test-parallel:

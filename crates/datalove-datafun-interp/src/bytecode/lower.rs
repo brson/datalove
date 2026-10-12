@@ -668,6 +668,13 @@ impl<'a> Lowering<'a> {
                 });
                 true
             }
+            // A call binding type parameters, under generics by reference,
+            // hands the callee descriptors for them, which only the general
+            // lane does.
+            Instruction::Call { bindings, .. } if !bindings.is_empty() => {
+                self.emit(Op::Call { block: self.block as u32, index: self.index as u32 });
+                true
+            }
             Instruction::Call { dest, args, .. } => {
                 // Anything but an earlier unit's binding, which a function
                 // body never names.

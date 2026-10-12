@@ -300,7 +300,7 @@ pub fn rewrite_comptime_calls(
 
         for instr in &block.instructions {
             let Instruction::ComptimeCall {
-                dest, func, args, comptime_param_indices, type_args, shape_descriptors, ..
+                dest, func, args, comptime_param_indices, type_args, shape_descriptors, bindings,
             } = instr
             else {
                 instructions.push(instr.clone());
@@ -336,6 +336,7 @@ pub fn rewrite_comptime_calls(
                 // recomputed, because the shape sets settled then.
                 type_args: type_args.clone(),
                 shape_descriptors: shape_descriptors.clone(),
+                bindings: bindings.clone(),
             });
         }
 

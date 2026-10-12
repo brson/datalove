@@ -1,0 +1,110 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn setify(p0):
+                      desc0 = T0
+                      desc1 = set<T0>
+                    block0:
+                        v0 = move p0
+                        v1 = #{v0}
+                        return v1
+                    
+                    fn listify(p0, p1):
+                      desc0 = T0
+                      desc1 = list<T0>
+                    block0:
+                        v0 = move p0
+                        v1 = move p1
+                        v2 = list [v0, v1]
+                        return v2
+                    
+                    fn mapify(p0, p1):
+                      desc0 = T0
+                      desc1 = T1
+                      desc2 = map<T0, T1>
+                    block0:
+                        v0 = move p0
+                        v1 = move p1
+                        v2 = %{v0: v1}
+                        return v2
+                    
+                    fn identity(p0):
+                      desc0 = T0
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn a_set():
+                    block0:
+                        v1 = const 5u16
+                        v2 = call m0.u0(v1) <u16>
+                        return v2
+                    
+                    fn a_list():
+                    block0:
+                        v1 = const 7u16
+                        v2 = const 8u16
+                        v3 = call m0.u1(v1, v2) <u16>
+                        return v3
+                    
+                    fn a_map():
+                    block0:
+                        v1 = const 1u16
+                        v2 = const "held"
+                        v3 = call m0.u2(v1, v2) <u16, string>
+                        return v3
+                    
+                    fn nothing_built():
+                    block0:
+                        v1 = const 9u16
+                        v2 = call m0.u3(v1) <u16>
+                        return v2
+                    
+                    fn main():
+                    block0:
+                        v0 = call m0.u4()
+                        v1 = call m0.u5()
+                        v2 = call m0.u6()
+                        v3 = call m0.u7()
+                        v4 = pack Tuple4 {v0, v1, v2, v3}
+                        return v4
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u8()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(#{5}, [7, 8], %{1 = \"held\"}, 9)\n"),
+        ),
+    ],
+)

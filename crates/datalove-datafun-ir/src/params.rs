@@ -123,16 +123,17 @@ pub fn map_operands_in_instruction(
         // The descriptors say what the callee's type parameters were bound to,
         // which no operand substitution changes. Blanking them would drop what
         // a generic callee needs wherever nothing recomputes them afterwards.
-        Instruction::Call { dest, func, args, type_args, shape_descriptors } =>
+        Instruction::Call { dest, func, args, type_args, shape_descriptors, bindings } =>
             Instruction::Call {
                 dest: *dest,
                 func: func.clone(),
                 args: args.iter().map(replace_operand).collect(),
                 type_args: type_args.clone(),
                 shape_descriptors: shape_descriptors.clone(),
+                bindings: bindings.clone(),
             },
         Instruction::ComptimeCall {
-            dest, func, args, comptime_param_indices, type_args, shape_descriptors,
+            dest, func, args, comptime_param_indices, type_args, shape_descriptors, bindings,
         } => Instruction::ComptimeCall {
             dest: *dest,
             func: func.clone(),
@@ -140,6 +141,7 @@ pub fn map_operands_in_instruction(
             comptime_param_indices: comptime_param_indices.clone(),
             type_args: type_args.clone(),
             shape_descriptors: shape_descriptors.clone(),
+            bindings: bindings.clone(),
         },
         Instruction::Pack { dest, ty, fields } => Instruction::Pack {
             dest: *dest,

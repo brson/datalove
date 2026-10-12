@@ -841,7 +841,9 @@ fn is_plain(td: &TyDesc) -> bool {
         | TyTag::F32 | TyTag::F64 | TyTag::Atom => true,
         TyTag::Int | TyTag::List | TyTag::String | TyTag::Map | TyTag::Set
         | TyTag::Tensor | TyTag::Table | TyTag::Data | TyTag::Error => false,
-        TyTag::Param => panic!("a template has no flags until it is instantiated"),
+        // Not known until a call binds it. Instantiation works the flags of
+        // what it builds out again.
+        TyTag::Param => false,
         // The error side of a result is an `error`, which is boxed.
         TyTag::Result => false,
         TyTag::Option => component(unsafe { td.type_info.option.inner_tydesc }),

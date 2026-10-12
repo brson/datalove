@@ -580,16 +580,16 @@ impl IrInterpreter {
         if self.bc_stats.counting {
             self.bc_stats.count(|| "(general call)".into());
         }
-        let (func_ref, args, shapes, dest) =
+        let (func_ref, args, shapes, bindings, dest) =
             match &regs.func.blocks[block as usize].instructions[index as usize] {
-                Instruction::Call { dest, func: f, args, shape_descriptors, .. }
-                | Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, .. } => {
-                    (f, args, shape_descriptors, *dest)
+                Instruction::Call { dest, func: f, args, shape_descriptors, bindings, .. }
+                | Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, bindings, .. } => {
+                    (f, args, shape_descriptors, bindings, *dest)
                 }
                 i => unreachable!("Call op on {:?}", i),
             };
         let frames = &mut *regs.frames;
-        self.execute_call(func_ref, args, shapes, dest, &mut regs.frame, &regs.ctx, regs.registry, frames)
+        self.execute_call(func_ref, args, shapes, bindings, dest, &mut regs.frame, &regs.ctx, regs.registry, frames)
     }
 
     /// Make a fast call without a plan: a native, a forwarder, a bytecode

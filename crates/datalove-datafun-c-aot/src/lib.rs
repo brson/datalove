@@ -156,6 +156,17 @@ impl CAotCompiler {
         script_unit: &IrCodeUnit,
         registry: &FunctionRegistry,
     ) -> Result<CompilationOutput, CAotError> {
+        // Nothing compiled takes a generic's descriptors per type parameter
+        // yet; see `uses_generics_by_reference`.
+        let by_reference = std::iter::once(script_unit)
+            .chain(script_unit.nested_units.iter())
+            .chain(registry.iter_module_code_units_with_ids().map(|(_, u)| u))
+            .find(|u| datalove_datafun_ir::uses_generics_by_reference(u));
+        if let Some(u) = by_reference {
+            return Err(CAotError::Unsupported(format!(
+                "{} is a generic compiled by reference, or calls one", u.name)));
+        }
+
         let mut files = Vec::new();
 
         self.collect_statics(script_unit, registry);

@@ -650,6 +650,11 @@ pub(crate) fn close_shapes_in_units(units: &mut [IrCodeUnit]) -> Result<(), Lowe
     use datalove_datafun_ir::{CodeRef, DescriptorShape, Instruction};
     use std::collections::HashMap;
 
+    // Under generics by reference there are no shapes to close.
+    if crate::FAT_GENERICS {
+        return Ok(());
+    }
+
     let mut calls: HashMap<u32, Vec<(u32, Vec<DescriptorShape>)>> = HashMap::new();
     let mut shapes: HashMap<u32, Vec<DescriptorShape>> = HashMap::new();
     for unit in units.iter() {

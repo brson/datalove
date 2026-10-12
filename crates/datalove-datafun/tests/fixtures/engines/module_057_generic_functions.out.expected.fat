@@ -1,0 +1,88 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn identity(p0):
+                      desc0 = T0
+                    block0:
+                        v0 = move p0
+                        return v0
+                    
+                    fn pick_first(p0, p1):
+                      desc0 = T0
+                    block0:
+                        v0 = move p0
+                        drop p1
+                        return v0
+                    
+                    fn second(p0, p1):
+                      desc0 = T0
+                      desc1 = T1
+                    block0:
+                        v0 = move p1
+                        drop p0
+                        return v0
+                    
+                    fn twice(p0):
+                      desc0 = T0
+                    block0:
+                        v0 = call m0.u0(p0) <T0>
+                        return v0
+                    
+                    fn main():
+                    block0:
+                        v0 = const 7u32
+                        v1 = call m0.u0(v0) <u32>
+                        v2 = const "hello"
+                        v3 = call m0.u0(v2) <string>
+                        v4 = const 12345678901234567890int
+                        v5 = call m0.u0(v4) <int>
+                        v6 = const true
+                        v7 = const false
+                        v8 = call m0.u1(v6, v7) <bool>
+                        v9 = const "ignored"
+                        v10 = const 9u32
+                        v11 = call m0.u2(v9, v10) <string, u32>
+                        v12 = const "through two"
+                        v13 = call m0.u3(v12) <string>
+                        v14 = pack Tuple6 {v1, v3, v5, v8, v11, v13}
+                        return v14
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u4()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, \"hello\", 12345678901234567890, true, 9, \"through two\")\n"),
+        ),
+    ],
+)

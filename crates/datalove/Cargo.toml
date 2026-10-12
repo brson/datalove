@@ -7,6 +7,10 @@ authors.workspace = true
 edition.workspace = true
 repository.workspace = true
 
+[features]
+# Generics by reference; see datalove-datafun-lower.
+fat-generics = ["datalove-datafun/fat-generics"]
+
 [dependencies]
 bct.workspace = true
 datalove-datalit.workspace = true

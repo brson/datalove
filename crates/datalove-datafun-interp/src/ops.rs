@@ -899,6 +899,12 @@ impl IrInterpreter {
                 rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
                 rtdt::TyTag::Offset => Self::execute_checked_neg::<rtdt::OffsetRepr>(src, dest, overflow_dest),
                 rtdt::TyTag::Data => self.execute_checked_neg_dynamic(src, dest, overflow_dest),
+                // Only a generic negates an unsigned value: a `fixedint` type
+                // parameter, which under generics by reference arrives as what
+                // it is. The runtime's rule is the one the generic was written
+                // against -- only zero negates without overflowing.
+                rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64
+                | rtdt::TyTag::Index => self.execute_checked_neg_dynamic(src, dest, overflow_dest),
                 // Checked negation only for signed ints; type checker ensures this.
                 _ => unreachable!("checked negation only supported for signed integers, got {:?}", tag),
             }

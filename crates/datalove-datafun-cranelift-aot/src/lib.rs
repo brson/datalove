@@ -132,6 +132,17 @@ impl AotCompiler {
         unit: &IrCodeUnit,
         registry: &datalove_datafun_ir::FunctionRegistry,
     ) -> Result<ObjectProduct, AotError> {
+        // Nothing compiled takes a generic's descriptors per type parameter
+        // yet; see `uses_generics_by_reference`.
+        let by_reference = std::iter::once(unit)
+            .chain(unit.nested_units.iter())
+            .chain(registry.iter_module_code_units_with_ids().map(|(_, u)| u))
+            .find(|u| datalove_datafun_ir::uses_generics_by_reference(u));
+        if let Some(u) = by_reference {
+            return Err(AotError::Unsupported(format!(
+                "{} is a generic compiled by reference, or calls one", u.name)));
+        }
+
         let obj_builder = ObjectBuilder::new(
             self.isa.clone(),
             "script",

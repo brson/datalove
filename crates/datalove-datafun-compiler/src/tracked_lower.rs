@@ -1711,9 +1711,15 @@ pub fn lower_module_graph_with_evaluator<'db>(
     //
     // Done before anything reads a signature, because the shapes are part of
     // one: they say what trailing arguments a call has to pass.
-    let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, first_stratum);
-    let mut lowered_modules = closed.modules.clone();
-    let mut shape_errors = closed.errors.clone();
+    //
+    // Under generics by reference there are no shapes: a generic is handed one
+    // descriptor per type parameter, which its signature says.
+    let (mut lowered_modules, mut shape_errors) = if cfg!(feature = "fat-generics") {
+        (first_stratum, Default::default())
+    } else {
+        let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, first_stratum);
+        (closed.modules.clone(), closed.errors.clone())
+    };
 
     // Phase 5a/b boundary: evaluate module-level consts against what is lowered
     // so far. Done even when const inlining is skipped, since a module const is
@@ -1764,9 +1770,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Closing again rather than only over the new ones, because a shape
         // reaches whatever calls into it: a second-stratum function is a caller
         // the first pass did not know about.
-        let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, lowered_modules);
-        lowered_modules = closed.modules.clone();
-        shape_errors.extend(closed.errors.iter().cloned());
+        if !cfg!(feature = "fat-generics") {
+            let closed = close_shapes_over_calls(db_salsa, parsed_graph, func_id_map, lowered_modules);
+            lowered_modules = closed.modules.clone();
+            shape_errors.extend(closed.errors.iter().cloned());
+        }
     }
 
     // Phase 5b: Evaluate consts (skip if skip_const_inlining is enabled, or if

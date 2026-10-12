@@ -530,7 +530,20 @@ pub fn type_hint_mentions_param<'db>(
 impl IrType {
     /// Convert from AST type hint to IR type.
     pub fn from_type_hint<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
-        Self::from_type_hint_inner(db, ty, &[])
+        Self::from_type_hint_inner(db, ty, &[], false)
+    }
+
+    /// Convert from AST type hint to IR type, keeping the given type
+    /// parameters as `IrType::Param` by their position.
+    ///
+    /// How a generic sees its own types under generics by reference: `(T, u32)`
+    /// is `Tuple([Param(0), U32])`, and its layout is the descriptor's to say.
+    pub fn from_type_hint_generic<'db>(
+        db: &'db dyn salsa::Database,
+        ty: &datalove_datalit::ast::TypeHint<'db>,
+        type_params: &[bct::text::InternedText<'db>],
+    ) -> Self {
+        Self::from_type_hint_inner(db, ty, type_params, true)
     }
 
     /// Convert from AST type hint to IR type, erasing the given type parameters.
@@ -543,7 +556,7 @@ impl IrType {
         ty: &datalove_datalit::ast::TypeHint<'db>,
         type_params: &[bct::text::InternedText<'db>],
     ) -> Self {
-        Self::from_type_hint_inner(db, ty, type_params)
+        Self::from_type_hint_inner(db, ty, type_params, false)
     }
 
     /// Convert from AST TypeHint to IR type.
@@ -551,6 +564,7 @@ impl IrType {
         db: &'db dyn salsa::Database,
         ty: &datalove_datalit::ast::TypeHint<'db>,
         type_params: &[bct::text::InternedText<'db>],
+        keep: bool,
     ) -> Self {
         use datalove_datalit::ast::TypeHint;
 
@@ -575,7 +589,7 @@ impl IrType {
             TypeHint::AnonTuple(tuple) => {
                 let fields: Vec<_> = tuple.fields
                     .iter()
-                    .map(|f| Self::from_type_hint_inner(db, f, type_params))
+                    .map(|f| Self::from_type_hint_inner(db, f, type_params, keep))
                     .collect();
                 if fields.is_empty() {
                     IrType::Unit
@@ -586,34 +600,34 @@ impl IrType {
             TypeHint::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params)))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params, keep)))
                     .collect();
                 IrType::Struct(fields)
             }
 
             TypeHint::List(list) => {
-                let elem = Self::from_type_hint_inner(db, &list.element_type, type_params);
+                let elem = Self::from_type_hint_inner(db, &list.element_type, type_params, keep);
                 IrType::List(Box::new(elem))
             }
             TypeHint::Set(set) => {
-                let elem = Self::from_type_hint_inner(db, &set.element_type, type_params);
+                let elem = Self::from_type_hint_inner(db, &set.element_type, type_params, keep);
                 IrType::Set(Box::new(elem))
             }
             TypeHint::Map(map) => {
-                let key = Self::from_type_hint_inner(db, &map.key_type, type_params);
-                let val = Self::from_type_hint_inner(db, &map.value_type, type_params);
+                let key = Self::from_type_hint_inner(db, &map.key_type, type_params, keep);
+                let val = Self::from_type_hint_inner(db, &map.value_type, type_params, keep);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             TypeHint::Option(opt) => {
-                let inner = Self::from_type_hint_inner(db, &opt.inner_type, type_params);
+                let inner = Self::from_type_hint_inner(db, &opt.inner_type, type_params, keep);
                 IrType::Option(Box::new(inner))
             }
             TypeHint::Result(res) => {
-                let ok = Self::from_type_hint_inner(db, &res.inner_type, type_params);
+                let ok = Self::from_type_hint_inner(db, &res.inner_type, type_params, keep);
                 IrType::Result(Box::new(ok))
             }
             TypeHint::Tensor(t) => {
-                let elem = Self::from_type_hint_inner(db, &t.element_type, type_params);
+                let elem = Self::from_type_hint_inner(db, &t.element_type, type_params, keep);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             TypeHint::Table(table) => {
@@ -629,7 +643,7 @@ impl IrType {
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
-                        let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params);
+                        let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params, keep);
                         (name, Box::new(ty))
                     })
                     .collect();
@@ -641,14 +655,14 @@ impl IrType {
             }
             TypeHint::Term(t) => {
                 let name = t.name.text(db).to_string();
-                let payload = Self::from_type_hint_inner(db, &t.payload, type_params);
+                let payload = Self::from_type_hint_inner(db, &t.payload, type_params, keep);
                 IrType::Term(name, Box::new(payload))
             }
             TypeHint::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params));
+                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params, keep));
                         (name, payload)
                     })
                     .collect();
@@ -659,7 +673,9 @@ impl IrType {
                 IrType::Error
             }
             TypeHint::Alias(alias) => {
-                if type_params.contains(&alias.name) {
+                if let Some(i) = type_params.iter().position(|p| *p == alias.name).filter(|_| keep) {
+                    IrType::Param(i as u32)
+                } else if type_params.contains(&alias.name) {
                     // A type parameter is erased: the function is compiled once
                     // over `data`, and the call site converts on the way in and
                     // back out.
@@ -674,9 +690,36 @@ impl IrType {
 
     /// Convert from datalit typechecker type to IR type.
     pub fn from_datalit<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> Self {
+        Self::from_datalit_inner(db, ty, None)
+    }
+
+    /// Convert from datalit typechecker type to IR type, keeping the given
+    /// type parameters as `IrType::Param` by their position; see
+    /// `from_type_hint_generic`.
+    pub fn from_datalit_generic<'db>(
+        db: &'db dyn salsa::Database,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+        type_params: &[bct::text::InternedText<'db>],
+    ) -> Self {
+        Self::from_datalit_inner(db, ty, Some(type_params))
+    }
+
+    /// `keep` is the type parameters to keep, or `None` to erase them all.
+    fn from_datalit_inner<'db>(
+        db: &'db dyn salsa::Database,
+        ty: &datalove_datalit::tycheck::Type<'db>,
+        keep: Option<&[bct::text::InternedText<'db>]>,
+    ) -> Self {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
+            DlType::Var(name) if keep.is_some() => {
+                match keep.unwrap_or_default().iter().position(|p| p == name) {
+                    Some(i) => IrType::Param(i as u32),
+                    None => panic!("type variable {} is not a parameter of the function it is in",
+                        name.as_str(db)),
+                }
+            }
             // Erasure happens here, and only here: a type parameter is `data`
             // in the IR no matter how deeply it is nested in the source type.
             DlType::Var(_) => IrType::Data,
@@ -686,7 +729,7 @@ impl IrType {
             // value is a `data` -- in a parameter, in a local, and as the
             // result of a call alike. Shaping only the parameters would leave
             // the body holding one shape and calling with another.
-            _ if datalit_is_container_of_var(ty) => IrType::Data,
+            _ if keep.is_none() && datalit_is_container_of_var(ty) => IrType::Data,
             DlType::Bool => IrType::Bool,
             DlType::U8 => IrType::U8,
             DlType::I8 => IrType::I8,
@@ -707,7 +750,7 @@ impl IrType {
             DlType::AnonTuple(tuple) => {
                 let fields: Vec<_> = tuple.fields
                     .iter()
-                    .map(|f| Self::from_datalit(db, f))
+                    .map(|f| Self::from_datalit_inner(db, f, keep))
                     .collect();
                 if fields.is_empty() {
                     IrType::Unit
@@ -718,34 +761,34 @@ impl IrType {
             DlType::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit(db, &*f.ty)))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_datalit_inner(db, &*f.ty, keep)))
                     .collect();
                 IrType::Struct(fields)
             }
 
             DlType::List(list) => {
-                let elem = Self::from_datalit(db, &*list.element_type);
+                let elem = Self::from_datalit_inner(db, &*list.element_type, keep);
                 IrType::List(Box::new(elem))
             }
             DlType::Set(set) => {
-                let elem = Self::from_datalit(db, &*set.element_type);
+                let elem = Self::from_datalit_inner(db, &*set.element_type, keep);
                 IrType::Set(Box::new(elem))
             }
             DlType::Map(map) => {
-                let key = Self::from_datalit(db, &*map.key_type);
-                let val = Self::from_datalit(db, &*map.value_type);
+                let key = Self::from_datalit_inner(db, &*map.key_type, keep);
+                let val = Self::from_datalit_inner(db, &*map.value_type, keep);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             DlType::Option(opt) => {
-                let inner = Self::from_datalit(db, &*opt.inner_type);
+                let inner = Self::from_datalit_inner(db, &*opt.inner_type, keep);
                 IrType::Option(Box::new(inner))
             }
             DlType::Result(res) => {
-                let ok = Self::from_datalit(db, &*res.inner_type);
+                let ok = Self::from_datalit_inner(db, &*res.inner_type, keep);
                 IrType::Result(Box::new(ok))
             }
             DlType::Tensor(t) => {
-                let elem = Self::from_datalit(db, &*t.element_type);
+                let elem = Self::from_datalit_inner(db, &*t.element_type, keep);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             DlType::Table(table) => {
@@ -754,7 +797,7 @@ impl IrType {
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
-                        let ty = Self::from_datalit(db, &*c.ty);
+                        let ty = Self::from_datalit_inner(db, &*c.ty, keep);
                         (name, Box::new(ty))
                     })
                     .collect();
@@ -766,14 +809,14 @@ impl IrType {
             }
             DlType::Term(t) => {
                 let name = t.name.text(db).to_string();
-                let payload = Self::from_datalit(db, &t.payload);
+                let payload = Self::from_datalit_inner(db, &t.payload, keep);
                 IrType::Term(name, Box::new(payload))
             }
             DlType::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.as_ref().map(|p| Self::from_datalit(db, p));
+                        let payload = v.payload.as_ref().map(|p| Self::from_datalit_inner(db, p, keep));
                         (name, payload)
                     })
                     .collect();
@@ -1457,6 +1500,15 @@ pub enum Instruction {
         /// for it.
         #[serde(default)]
         shape_descriptors: Vec<DescriptorRef>,
+        /// Under generics by reference, what this call site bound each of the
+        /// callee's type parameters to, in the callee's declaration order and
+        /// written over this function's own: concrete, or mentioning this
+        /// function's `Param`s where it passed them along. The callee is
+        /// handed a descriptor for each, a static one or this function's
+        /// table entry for it. Empty for a non-generic callee, and under
+        /// erasure, which uses `type_args`.
+        #[serde(default)]
+        bindings: Vec<IrType>,
     },
 
     /// Call to a function with const parameters.
@@ -1493,6 +1545,9 @@ pub enum Instruction {
         /// [`Instruction::Call`] and worked out by the same pass.
         #[serde(default)]
         shape_descriptors: Vec<DescriptorRef>,
+        /// As on [`Instruction::Call`].
+        #[serde(default)]
+        bindings: Vec<IrType>,
     },
 
     // ========================================================================
@@ -3239,14 +3294,25 @@ pub fn descriptor_table(unit: &IrCodeUnit) -> Vec<IrType> {
     }
     for block in &unit.blocks {
         for instr in &block.instructions {
-            if let Instruction::Call { type_args, .. } | Instruction::ComptimeCall { type_args, .. } = instr {
-                for arg in type_args {
-                    arg.to_ir_type().dynamic_parts(&mut table);
+            if let Instruction::Call { bindings, .. } | Instruction::ComptimeCall { bindings, .. } = instr {
+                for binding in bindings {
+                    binding.dynamic_parts(&mut table);
                 }
             }
         }
     }
     table
+}
+
+/// Whether a unit is a generic compiled by reference, or calls one: either
+/// way it takes or hands over a descriptor per type parameter.
+///
+/// What a backend that does not handle that yet refuses on.
+pub fn uses_generics_by_reference(unit: &IrCodeUnit) -> bool {
+    let generic = unit.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
+    generic || unit.blocks.iter().flat_map(|b| &b.instructions).any(|instr| matches!(instr,
+        Instruction::Call { bindings, .. } | Instruction::ComptimeCall { bindings, .. }
+            if !bindings.is_empty()))
 }
 
 /// The first jump in `unit` that passes a block's own parameters back to it

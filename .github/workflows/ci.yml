@@ -39,6 +39,11 @@ jobs:
             recipe: test-slow
           - name: index-64
             recipe: test-64
+          # Generics by reference, which replaces erasure; its own
+          # configuration until it is the only one. See
+          # botdocs/plan-fat-generics.md.
+          - name: fat-generics
+            recipe: test-fat
           # The same suite under DATALOVE_PARALLEL=1. It has been run green by
           # hand many times, which is not the same as anything holding it.
           - name: parallel

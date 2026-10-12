@@ -358,6 +358,10 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
                 Ok(value) if value != &interp_value => mismatches.push(format!(
                     "{} output mismatch:\n  interp: {}\n  {}: {}",
                     name, interp_value, name, value)),
+                // No compiled backend handles generics by reference yet; under
+                // that configuration a program using them is compared on the
+                // interpreters only.
+                Err(e) if cfg!(feature = "fat-generics") && e.contains("compiled by reference") => {}
                 Err(e) => mismatches.push(format!("{} error: {}", name, e)),
                 _ => {}
             }

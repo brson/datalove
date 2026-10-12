@@ -729,6 +729,7 @@ mod tests {
                         ],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -819,6 +820,7 @@ mod tests {
                         ],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {

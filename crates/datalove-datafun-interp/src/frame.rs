@@ -349,6 +349,66 @@ impl Frame {
         unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
     }
 
+    /// Hand over the descriptor for type parameter `index`.
+    #[inline]
+    pub fn set_type_param(&self, index: usize, tydesc: *const TyDesc) {
+        let layout = self.layout();
+        assert!(index < layout.type_param_count as usize,
+            "a descriptor for type parameter {} of {}", index, layout.type_param_count);
+        let offset = layout.type_param_offset + (index * std::mem::size_of::<usize>()) as u32;
+        // SAFETY: inside the type parameter region, word-aligned.
+        unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
+    }
+
+    /// The descriptors handed over for the type parameters, once every one
+    /// has been set.
+    pub fn type_params(&self) -> &[*const TyDesc] {
+        let layout = self.layout();
+        // SAFETY: the region is consecutive words in the frame, all set.
+        unsafe {
+            std::slice::from_raw_parts(
+                self.at_offset(layout.type_param_offset) as *const *const TyDesc,
+                layout.type_param_count as usize)
+        }
+    }
+
+    /// Entry `index` of the descriptor table, once the frame is entered.
+    #[inline]
+    pub fn table_entry(&self, index: usize) -> *const TyDesc {
+        let layout = self.layout();
+        debug_assert!(index < layout.table.len());
+        let offset = layout.table_offset + (index * std::mem::size_of::<usize>()) as u32;
+        // SAFETY: inside the table, word-aligned, filled on entry.
+        unsafe { (self.at_offset(offset) as *const *const TyDesc).read() }
+    }
+
+    /// Fill entry `index` of the descriptor table.
+    #[inline]
+    pub fn set_table_entry(&self, index: usize, tydesc: *const TyDesc) {
+        let layout = self.layout();
+        let offset = layout.table_offset + (index * std::mem::size_of::<usize>()) as u32;
+        // SAFETY: inside the table, word-aligned.
+        unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
+    }
+
+    /// Point the fat pointer at `offset` at `ptr`, described by `tydesc`.
+    #[inline]
+    pub fn set_fat_pointer(&self, offset: u32, ptr: *mut u8, tydesc: *const TyDesc) {
+        let at = self.at_offset(offset) as *mut usize;
+        // SAFETY: a dynamic place: two words in the frame.
+        unsafe {
+            at.write(ptr as usize);
+            at.add(1).write(tydesc as usize);
+        }
+    }
+
+    /// The word pair at `offset`, which the shadow stack's position on entry
+    /// is kept in.
+    #[inline]
+    pub fn shadow_mark(&self, offset: u32) -> *mut [usize; 2] {
+        self.at_offset(offset) as *mut [usize; 2]
+    }
+
     /// The descriptor handed over for the shape declared at `index`.
     pub fn shape_descriptor(&self, index: u32) -> Option<*const TyDesc> {
         self.shape_descriptors().get(index as usize).copied()
@@ -391,11 +451,14 @@ impl Frame {
     /// value at that pointer is whatever the caller actually has; for a function
     /// that is not generic the two agree anyway. An `out` parameter starts
     /// uninitialized, since the callee writes it first.
+    ///
+    /// A parameter of a dynamic type keeps the descriptor it came with,
+    /// whatever its mode: it is the only one that says what is there.
     #[inline]
     pub fn enter(&self) {
         let layout = self.layout();
         for (i, mode) in layout.param_modes.iter().enumerate() {
-            if matches!(mode, ParamMode::In | ParamMode::Out) {
+            if matches!(mode, ParamMode::In | ParamMode::Out) && !layout.param_tydescs[i].is_null() {
                 let offset = layout.param_offsets[i] + std::mem::size_of::<usize>() as u32;
                 // SAFETY: the descriptor half of a parameter's place.
                 unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(layout.param_tydescs[i]) };
@@ -484,7 +547,25 @@ impl Frame {
     pub fn value_dest(&self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
-        Destination { ptr: self.at_offset(layout.value_offsets[idx]), tydesc: layout.value_tydescs[idx] }
+        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx]);
+        Destination { ptr, tydesc }
+    }
+
+    /// Where a value or slot at `offset` is, and what describes it.
+    ///
+    /// One of a dynamic type, whose static descriptor is null, is a fat
+    /// pointer in the frame: the value is where that says, and its descriptor
+    /// is beside it. Everything that reads or writes a value goes through
+    /// here, so nothing else has to know.
+    #[inline(always)]
+    fn place(&self, offset: u32, tydesc: *const TyDesc) -> (*mut u8, *const TyDesc) {
+        let at = self.at_offset(offset);
+        if tydesc.is_null() {
+            // SAFETY: a dynamic place's bytes are a fat pointer, set on entry.
+            unsafe { ((at as *const *mut u8).read(), (at as *const *const TyDesc).add(1).read()) }
+        } else {
+            (at, tydesc)
+        }
     }
 
     /// Get value (for reading).
@@ -497,7 +578,8 @@ impl Frame {
     pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
         let layout = self.layout();
-        Value { ptr: self.at_offset(layout.value_offsets[idx]), tydesc: layout.value_tydescs[idx] }
+        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx]);
+        Value { ptr, tydesc }
     }
 
     /// Dereference a ref value to get the pointed-to data.
@@ -547,7 +629,8 @@ impl Frame {
     pub fn slot_dest(&self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
-        Destination { ptr: self.at_offset(layout.slot_offsets[idx]), tydesc: layout.slot_tydescs[idx] }
+        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx]);
+        Destination { ptr, tydesc }
     }
 
     /// Get slot value (for reading).
@@ -559,7 +642,8 @@ impl Frame {
         let idx = id.0 as usize;
         debug_assert!(self.kept_live(self.slot_index(id)) != Some(false), "read of an empty slot {:?}", id);
         let layout = self.layout();
-        Value { ptr: self.at_offset(layout.slot_offsets[idx]), tydesc: layout.slot_tydescs[idx] }
+        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx]);
+        Value { ptr, tydesc }
     }
 
     /// Whether a slot holds something to destroy.

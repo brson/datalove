@@ -304,6 +304,13 @@ fn compiled_cleanly(reference: &Analysis) -> bool {
     })
 }
 
+/// Whether an AOT backend refused a program for using generics by reference,
+/// which no compiled backend handles yet; under that configuration, such a
+/// program is compared on the interpreters only.
+fn refused_by_reference(error: &str) -> bool {
+    cfg!(feature = "fat-generics") && error.contains("compiled by reference")
+}
+
 /// Whether the AOT backends apply: one fragment, no expressions, nothing but
 /// modules and data beside it, and every unit compiled and run to completion by the
 /// reference.
@@ -471,7 +478,10 @@ fn check(path: &Path) -> Result<String, String> {
             _ => c_build_and_run,
         };
         RAN[i].fetch_add(1, Ordering::Relaxed);
-        let stderr = run_aot(&parsed, build_and_run).map_err(|e| format!("{}: {e}", engine.name()))?;
+        let stderr = match run_aot(&parsed, build_and_run) {
+            Err(e) if refused_by_reference(&e) => continue,
+            result => result.map_err(|e| format!("{}: {e}", engine.name()))?,
+        };
         let fragment = reference.sections.iter().find(|s| s.section_type == "scriptunit-fragment").X();
         let expected = fragment.debug_output.as_deref().unwrap_or("");
         if stderr != expected {

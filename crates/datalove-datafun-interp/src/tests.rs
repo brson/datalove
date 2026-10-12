@@ -125,6 +125,7 @@ fn test_layout_computation() {
     let param_types = vec![IrType::Bool, IrType::I64];
 
     let extras = |keep_liveness| crate::layout::LayoutExtras {
+        type_param_count: 0, descriptor_table: &[],
         shape_count: 0, described_refs: &[], tensor_views: &[], keep_liveness, is_script: false,
         param_modes: &[],
     };
@@ -220,6 +221,7 @@ fn test_simple_function_call() {
                         ],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -293,6 +295,7 @@ fn test_nested_function_calls() {
                         args: vec![Operand::Param(ParamId(0))],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                     // Second call: passthrough(result)
                     Instruction::Call {
@@ -301,6 +304,7 @@ fn test_nested_function_calls() {
                         args: vec![Operand::Value(ValueId(0))],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 ],
                 terminator: Terminator::Return {
@@ -1689,6 +1693,7 @@ fn test_crossunit_external_function() {
                         args: vec![Operand::Value(ValueId(0))],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                 ],
                 terminator: Terminator::UnitEnd { result: Some(Operand::Value(ValueId(1))) },
@@ -1955,6 +1960,7 @@ fn test_script_with_function_and_list_drop() {
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
                         type_args: Vec::new(),
                         shape_descriptors: Vec::new(),
+                        bindings: Vec::new(),
                     },
                     // Explicit drop of list (values are precise).
                     Instruction::Drop { operand: Operand::Value(ValueId(4)) },

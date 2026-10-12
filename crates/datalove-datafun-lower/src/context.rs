@@ -374,6 +374,11 @@ impl<'db> LowerCtx<'db> {
         &mut self,
         ty: &datalove_datalit::tycheck::Type<'db>,
     ) -> Option<u32> {
+        // Under generics by reference a collection built over a type
+        // parameter is a dynamic value, and its descriptor is its own.
+        if crate::FAT_GENERICS {
+            return None;
+        }
         let shape = self.shape_of(ty)?;
         if !shape.mentions_param() {
             return None;
@@ -393,7 +398,29 @@ impl<'db> LowerCtx<'db> {
     /// shape, so the two have to agree. Assuming `data` here made a
     /// `[(A, B)]` push thirty-two byte elements as sixteen.
     pub fn erased_element(&self, ty: &datalove_datalit::tycheck::Type<'db>) -> IrType {
-        IrType::from_datalit(self.db, ty)
+        self.ir_type(ty)
+    }
+
+    /// The IR type of a typechecker type, in the function being lowered.
+    ///
+    /// Erasing its type parameters to `data`, or under generics by reference
+    /// keeping them as `IrType::Param`.
+    pub fn ir_type(&self, ty: &datalove_datalit::tycheck::Type<'db>) -> IrType {
+        if crate::FAT_GENERICS {
+            IrType::from_datalit_generic(self.db, ty, &self.body.type_params)
+        } else {
+            IrType::from_datalit(self.db, ty)
+        }
+    }
+
+    /// The IR type of a type hint written in the function being lowered; see
+    /// `ir_type`.
+    pub fn hint_type(&self, hint: &datalove_datalit::ast::TypeHint<'db>) -> IrType {
+        if crate::FAT_GENERICS {
+            IrType::from_type_hint_generic(self.db, hint, &self.body.type_params)
+        } else {
+            IrType::from_type_hint(self.db, hint)
+        }
     }
 
     /// The unerased type the typechecker gave an expression.
@@ -411,6 +438,7 @@ impl<'db> LowerCtx<'db> {
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = ExprKey::of(self.db, expr);
         match self.expr_types.get(&key) {
+            Some(datalove_datafun_common::Type::Datalit(dl)) if crate::FAT_GENERICS => self.ir_type(dl),
             Some(ty) => IrType::from_tycheck(self.db, ty),
             None => panic!(
                 "Expression must have type from typechecker. {:?} but the table holds {} entries",
@@ -1084,21 +1112,24 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: CodeRef, args: Vec<Operand>) {
-        self.emit_call_with_type_args(dest, func, args, Vec::new());
+        self.emit_call_with_type_args(dest, func, args, Vec::new(), Vec::new());
     }
 
-    /// Emit Call, handing the callee a descriptor for each shape it declared.
+    /// Emit Call, handing the callee a descriptor for each shape it declared,
+    /// or, under generics by reference, for each of its type parameters.
     pub fn emit_call_with_type_args(
         &mut self,
         dest: ValueId,
         func: CodeRef,
         args: Vec<Operand>,
         type_args: Vec<datalove_datafun_ir::DescriptorShape>,
+        bindings: Vec<IrType>,
     ) {
         self.emit(Instruction::Call {
             dest, func, args, type_args,
             // Filled in once the shape sets have settled.
             shape_descriptors: Vec::new(),
+            bindings,
         });
     }
 
@@ -1110,11 +1141,13 @@ impl<'db> LowerCtx<'db> {
         args: Vec<Operand>,
         comptime_param_indices: Vec<usize>,
         type_args: Vec<datalove_datafun_ir::DescriptorShape>,
+        bindings: Vec<IrType>,
     ) {
         self.emit(Instruction::ComptimeCall {
             dest, func, args, comptime_param_indices, type_args,
             // Filled in once the shape sets have settled, as for `Call`.
             shape_descriptors: Vec::new(),
+            bindings,
         });
     }
 

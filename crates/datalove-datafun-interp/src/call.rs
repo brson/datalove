@@ -69,6 +69,12 @@ impl IrInterpreter {
             None => Rc::new(IrLayout::of_unit(func, &mut self.tydesc_table)),
         };
 
+        // Nothing that enters here has type parameter descriptors to give:
+        // the jit's trampoline leaves a generic's callers interpreted, and a
+        // program reaches a generic through a call instruction.
+        assert_eq!(layout.type_param_count, 0,
+            "{} is a generic compiled by reference, entered with no descriptors for its type parameters",
+            func.name);
         let mut frame = self.frame_stack.push(layout)?;
         for (i, arg) in args.into_iter().enumerate() {
             frame.set_param(i, arg);
@@ -163,7 +169,12 @@ impl IrInterpreter {
         if (&here as *const u8 as usize) < unsafe { datalove_rt::c::dtlv_rti_native_stack_limit(self.runtime.handle()) } {
             return Err(InterpError::StackOverflow);
         }
-        if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode) {
+        // A body compiled by reference runs on the walker, which reads every
+        // value through the frame and so through its fat pointer; the
+        // bytecode does not yet.
+        if matches!(self.engine, Engine::Bytecode | Engine::PlainBytecode)
+            && frame.layout().table.is_empty()
+        {
             let bc = self.bytecode_for(frame.layout(), func);
             frame.stop_keeping_liveness();
             return self.run_bytecode(&bc, func, frame, ret_dest, ctx, registry, frames, code_ref);
@@ -401,6 +412,7 @@ impl IrInterpreter {
         code_ref: &CodeRef,
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
         ctx: &ExecutionContext,
@@ -410,11 +422,76 @@ impl IrInterpreter {
         let callee = ctx.get_unit(code_ref, registry);
         match &callee.context {
             datalove_datafun_ir::CodeUnitContext::Native(native_ctx) => {
-                self.execute_native_call(native_ctx, args, shape_refs, dest, frame, frames)
+                self.execute_native_call(native_ctx, args, shape_refs, bindings, dest, frame, frames)
             }
             _ => self.execute_call_site(
-                code_ref, callee, args, shape_refs, dest,
+                code_ref, callee, args, shape_refs, bindings, dest,
                 frame, ctx, registry, frames),
+        }
+    }
+
+    /// The descriptor of what a call site bound a type parameter to.
+    ///
+    /// A concrete binding has a static descriptor. One written over the
+    /// caller's own type parameters is an entry of the caller's descriptor
+    /// table, filled when the caller was entered.
+    pub(super) fn binding_descriptor(&mut self, binding: &IrType, frame: &Frame) -> *const rtdt::TyDesc {
+        if !binding.is_dynamic() {
+            return self.tydesc_table.get_or_create(binding);
+        }
+        let layout = frame.layout();
+        match layout.table_types.iter().position(|t| t == binding) {
+            Some(index) => frame.table_entry(index),
+            None => panic!("{binding} is bound at a call and not in the caller's descriptor table"),
+        }
+    }
+
+    /// Make a frame of a function compiled by reference ready to run, once
+    /// its type parameters' descriptors are set: fill its descriptor table,
+    /// and point each of its dynamic values and slots at space on the shadow
+    /// stack.
+    pub(super) fn enter_dynamic(&mut self, frame: &Frame) {
+        let layout = frame.layout();
+        if layout.table.is_empty() {
+            return;
+        }
+        let rt = self.runtime.handle();
+        let params = frame.type_params();
+        for (i, entry) in layout.table.iter().enumerate() {
+            let tydesc = match *entry {
+                crate::layout::TableEntry::Param(p) => params[p as usize],
+                crate::layout::TableEntry::Template(template) => unsafe {
+                    datalove_rt::c::dtlv_rti_tydesc_instantiate(
+                        rt, template, params.as_ptr(), params.len() as u32)
+                },
+            };
+            frame.set_table_entry(i, tydesc);
+        }
+        if let Some(mark) = layout.shadow_mark_offset {
+            // SAFETY: the handle's header, and the frame's mark words.
+            unsafe {
+                let header = rt as *mut datalove_rt::c::RtHeader;
+                *frame.shadow_mark(mark) = [(*header).shadow_top, (*header).shadow_limit];
+            }
+            for &(offset, entry) in &layout.dynamic_places {
+                let tydesc = frame.table_entry(entry as usize);
+                let (size, align) = unsafe { ((*tydesc).size, (*tydesc).align) };
+                let ptr = unsafe { datalove_rt::c::dtlv_rti_shadow_alloc(rt, size, align) };
+                frame.set_fat_pointer(offset, ptr, tydesc);
+            }
+        }
+    }
+
+    /// Give back the shadow stack space `enter_dynamic` took.
+    pub(super) fn leave_dynamic(&mut self, frame: &Frame) {
+        if let Some(mark) = frame.layout().shadow_mark_offset {
+            // SAFETY: as in `enter_dynamic`.
+            unsafe {
+                let header = self.runtime.handle() as *mut datalove_rt::c::RtHeader;
+                let [top, limit] = *frame.shadow_mark(mark);
+                (*header).shadow_top = top;
+                (*header).shadow_limit = limit;
+            }
         }
     }
 
@@ -429,6 +506,7 @@ impl IrInterpreter {
         native_ctx: &datalove_datafun_ir::NativeContext,
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
         frames: &mut FrameStore,
@@ -442,13 +520,29 @@ impl IrInterpreter {
             .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames, &mut scratch))
             .collect();
         for (i, op) in args.iter().enumerate() {
-            if mode(i) == ParamMode::In && !native_ctx.param_types[i].is_copy() {
+            // A native's type parameter is a `data` in its signature, which a
+            // copy argument bound to it is not, under generics by reference;
+            // whether the argument is given up is its own type's to say.
+            let moves = match &native_ctx.param_types[i] {
+                IrType::Data if !bindings.is_empty() => !is_plain(&arg_vals[i]),
+                ty => !ty.is_copy(),
+            };
+            if mode(i) == ParamMode::In && moves {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
-        let supplied: Vec<*const rtdt::TyDesc> = shape_refs.iter()
-            .map(|r| self.resolve_shape_ref(r, frame))
-            .collect();
+        // Under generics by reference a native's descriptors come from what
+        // the call bound its type parameters to; under erasure, from the
+        // shapes worked out across the call graph.
+        let supplied: Vec<*const rtdt::TyDesc> = if !bindings.is_empty() {
+            native_ctx.descriptor_shapes.iter()
+                .map(|shape| self.binding_descriptor(&shape.to_ir_type().substitute(bindings), frame))
+                .collect()
+        } else {
+            shape_refs.iter()
+                .map(|r| self.resolve_shape_ref(r, frame))
+                .collect()
+        };
         let dest_slot = frame.value_dest(dest);
 
         self.native_table.call(
@@ -489,6 +583,7 @@ impl IrInterpreter {
         callee: &IrCodeUnit,
         args: &[Operand],
         shape_refs: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
         ctx: &ExecutionContext,
@@ -508,8 +603,19 @@ impl IrInterpreter {
             callee_frame.set_param(i, val);
         }
         // After every argument is read, in case one place is passed twice.
+        //
+        // A type parameter is never a copy type in the callee, which owns
+        // whatever it is handed, but the argument may be: a copy value handed
+        // to a `T` is copied, not given up. So for a dynamic parameter the
+        // argument's own descriptor says.
         for (i, op) in args.iter().enumerate() {
-            if callee_frame.layout().param_moves[i] {
+            let layout = callee_frame.layout();
+            let moves = if layout.param_tydescs[i].is_null() {
+                layout.param_modes[i] == ParamMode::In && !is_plain(&callee_frame.params()[i])
+            } else {
+                layout.param_moves[i]
+            };
+            if moves {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
@@ -517,19 +623,33 @@ impl IrInterpreter {
             let tydesc = self.resolve_shape_ref(r, frame);
             callee_frame.set_shape_descriptor(i, tydesc);
         }
+        let by_reference = callee_frame.layout().type_param_count > 0;
+        for (i, binding) in bindings.iter().enumerate() {
+            let tydesc = self.binding_descriptor(binding, frame);
+            callee_frame.set_type_param(i, tydesc);
+        }
         let dest_slot = frame.value_dest(dest);
 
-        let dispatched = self.try_dispatch_call(
-            code_ref, callee, callee_frame.params(), callee_frame.shape_descriptors(),
-            dest_slot, ctx, registry, frames);
+        // Nothing compiled takes a generic's type parameter descriptors yet,
+        // so a generic compiled by reference is not offered to the dispatcher.
+        let dispatched = if by_reference {
+            None
+        } else {
+            self.try_dispatch_call(
+                code_ref, callee, callee_frame.params(), callee_frame.shape_descriptors(),
+                dest_slot, ctx, registry, frames)
+        };
         let result = match dispatched {
             Some(result) => result,
             None => {
                 callee_frame.enter();
+                self.enter_dynamic(&callee_frame);
                 let callee_ctx = ctx.for_callee(code_ref, registry);
-                self.run_frame(
+                let result = self.run_frame(
                     callee, &mut callee_frame, dest_slot, &callee_ctx, registry, frames,
-                    Some(code_ref))
+                    Some(code_ref));
+                self.leave_dynamic(&callee_frame);
+                result
             }
         };
 
@@ -544,4 +664,11 @@ impl IrInterpreter {
         self.frame_stack.pop(callee_frame);
         result
     }
+}
+
+/// Whether a value owns nothing, so that handing it over copies it rather
+/// than giving it up.
+fn is_plain(value: &Value) -> bool {
+    // SAFETY: a value's descriptor.
+    unsafe { (*value.tydesc).flags & rtdt::TyDesc::PLAIN != 0 }
 }

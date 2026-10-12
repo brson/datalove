@@ -861,10 +861,10 @@ impl IrInterpreter {
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass.
-            Instruction::Call { dest, func, args, shape_descriptors, .. }
-            | Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
+            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. }
+            | Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
                 self.execute_call(
-                    func, args, shape_descriptors, *dest, frame, ctx, registry, frames)?;
+                    func, args, shape_descriptors, bindings, *dest, frame, ctx, registry, frames)?;
             }
             Instruction::ListNew { dest, elements, descriptor } => {
                 let dest_slot = frame.value_dest(*dest);

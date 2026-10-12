@@ -571,11 +571,28 @@ pub fn lower_expression<'db>(
             // as it stands, and a descriptor saying what it is, and never drops
             // it. Only a parameter the callee takes ownership of is erased,
             // because that one needs a slot and `data` is the shape that fits.
+            //
+            // Under generics by reference nothing is converted: an argument is
+            // passed as it stands, and the callee is handed a descriptor for
+            // each of its type parameters instead. What the caller binds them
+            // to is `bindings`, written over the caller's own parameters, and
+            // a parameter's type at this call site is the callee's written
+            // type with those substituted in.
+            let bindings: Vec<IrType> = if crate::FAT_GENERICS {
+                target
+                    .map(|t| t.type_args(ctx.db).clone())
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|ty| ctx.ir_type(ty))
+                    .collect()
+            } else {
+                Vec::new()
+            };
             let param_is_erased: Vec<bool> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
                     .map(|p| {
                         let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
-                        !borrowed && names_a_type_param(&p.type_hint)
+                        !crate::FAT_GENERICS && !borrowed && names_a_type_param(&p.type_hint)
                     })
                     .collect())
                 .unwrap_or_default();
@@ -584,7 +601,10 @@ pub fn lower_expression<'db>(
                     .enumerate()
                     .map(|(i, p)| {
                         let borrowed = matches!(p.mode, ast::ParamMode::Ref | ast::ParamMode::Mut);
-                        if param_is_erased.get(i).copied().unwrap_or(false) {
+                        if crate::FAT_GENERICS && names_a_type_param(&p.type_hint) {
+                            IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
+                                .substitute(&bindings)
+                        } else if param_is_erased.get(i).copied().unwrap_or(false) {
                             datalove_datafun_ir::erased_param_type(
                                 ctx.db, &p.type_hint, &type_params, borrowed)
                         } else {
@@ -598,7 +618,7 @@ pub fn lower_expression<'db>(
             // a container, which is wrapped whole rather than walked.
             let erased_return_type = target
                 .and_then(|t| t.func(ctx.db).return_type(ctx.db))
-                .filter(|hint| names_a_type_param(hint))
+                .filter(|hint| !crate::FAT_GENERICS && names_a_type_param(hint))
                 .map(|hint| datalove_datafun_ir::erased_return_type(ctx.db, &hint, &type_params));
 
             // Lower each arg, tracking in-mode args as pending intermediates.
@@ -716,20 +736,24 @@ pub fn lower_expression<'db>(
             // first and erasure replaces the second -- so a comptime callee may
             // be generic, and the copy built for an instantiation wants the same
             // descriptors the original did.
-            let type_args: Vec<datalove_datafun_ir::DescriptorShape> = target
-                .map(|t| t.type_args(ctx.db).clone())
-                .unwrap_or_default()
-                .iter()
-                .map(|ty| ctx.shape_of(ty).unwrap_or_else(|| {
-                    datalove_datafun_ir::DescriptorShape::Concrete(
-                        IrType::from_datalit(ctx.db, ty))
-                }))
-                .collect();
+            let type_args: Vec<datalove_datafun_ir::DescriptorShape> = if crate::FAT_GENERICS {
+                Vec::new()
+            } else {
+                target
+                    .map(|t| t.type_args(ctx.db).clone())
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|ty| ctx.shape_of(ty).unwrap_or_else(|| {
+                        datalove_datafun_ir::DescriptorShape::Concrete(
+                            IrType::from_datalit(ctx.db, ty))
+                    }))
+                    .collect()
+            };
 
             if !comptime_param_indices.is_empty() {
-                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, type_args);
+                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, type_args, bindings);
             } else {
-                ctx.emit_call_with_type_args(dest, func_ref, args, type_args);
+                ctx.emit_call_with_type_args(dest, func_ref, args, type_args, bindings);
             }
             // Move what the callee wrote to an erased out parameter back out
             // into the type the caller keeps there.
@@ -1549,7 +1573,8 @@ fn checked_failure_message(op: BinOp, ty: &IrType) -> &'static str {
         BinOp::Add | BinOp::Sub | BinOp::Mul => "arithmetic overflow",
         BinOp::Div => match ty {
             // A `fixedint` type parameter may turn out to be signed.
-            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset | IrType::Data => {
+            IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Offset | IrType::Data
+            | IrType::Param(_) => {
                 "division by zero or overflow"
             }
             IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index | IrType::Int => {

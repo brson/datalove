@@ -93,7 +93,7 @@ pub(super) fn lower_var<'db>(
             .text(ctx.db).to_string();
         let type_hint = var_stmt.type_hint.as_ref()
             .expect("uninitialized var must have type hint");
-        let slot = ctx.fresh_slot(IrType::from_type_hint(ctx.db, type_hint));
+        let slot = ctx.fresh_slot(ctx.hint_type(type_hint));
         let operand = Operand::Slot(slot);
         ctx.bind_var(&name, operand);
         // The slot is uninitialized and tracked.
