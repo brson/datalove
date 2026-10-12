@@ -42,6 +42,7 @@ Specifications, research, design documents, implementation plans, and reports.
 - [Consts Built Once](plan-static-consts.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
 - [Immutable Cursors for the Collections](plan-cursors.md)
+- [Generics by Reference](plan-fat-generics.md)
 - [Carry/Bring](carry-bring.md)
 
 ---

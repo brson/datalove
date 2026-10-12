@@ -1,5 +1,8 @@
 # Generics: how it works
 
+> **Being replaced.** [Generics by Reference](plan-fat-generics.md) plans to
+> replace what this describes. Until it lands, this is still how it works.
+
 A generic function is compiled once, whatever it is called with. A type
 parameter has no fixed size, so the positions it stands in are shaped to fit any
 type, and a *type descriptor* -- the runtime's `TyDesc` -- says what is really

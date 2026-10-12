@@ -1,5 +1,9 @@
 # Generics and Specialization
 
+> **Being replaced.** [Generics by Reference](plan-fat-generics.md) plans to
+> replace erasure with fat pointers and descriptors built at run time. The
+> erasure sections here describe what is being replaced.
+
 How datalove should implement type parameters, and what to do about const parameter
 specialization now that it has been built and measured.
 
