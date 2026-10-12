@@ -502,24 +502,21 @@ caller of an interpreted generic has to pass what the new convention expects.
    built, type-parameter descriptors at call sites, no `Erase` or `Reify`.
    Ownership analysis is unchanged, the language being unchanged. See
    [Where phases 3 and 4 stand](#user-content-where-phases-3-and-4-stand).
-4. **Interpreter, bytecode and CTFE** (done but for the bytecode), the
-   reference: the dynamic frame, the operations table above, calls. The
-   interpreter's frame is the one the JIT shares for OSR, so the dynamic frame
-   is laid out here once for both. CTFE is this interpreter, so it comes along.
-   The bytecode is the default engine; until it lowers a dynamic body, such a
-   body runs on the IR walker. The JIT refuses as above; the AOT backends
-   refuse. Done when every fixture passes on the interpreter under the feature
-   with leak checking on, which it does.
-5. **Cranelift**, AOT and JIT (done but for OSR into a generic): the same,
-   plus the bridge, the trampoline and OSR carrying fat pointers and
-   type-parameter descriptors. See [Where phase 5
-   stands](#user-content-where-phase-5-stands). OSR shares the interpreter's
-   frame (`osr.rs`) and so would adopt its dynamic frame rather than build
-   one: `OsrSpec` gains a descriptor-table offset beside `shape_offset`, and
-   `enter_osr` loads it the same way. That waits on the bytecode, since only
-   the bytecode enters loops and it does not run a generic's body yet.
-   Cranelift's one-at-a-time block-parameter copy is safe by the lowering
-   check in phase 2.
+4. **Interpreter, bytecode and CTFE** (done), the reference: the dynamic
+   frame, the operations table above, calls. The interpreter's frame is the
+   one the JIT shares for OSR, so the dynamic frame is laid out here once for
+   both. CTFE is this interpreter, so it comes along. The bytecode runs a
+   generic's body; see [Where phases 3 and 4
+   stand](#user-content-where-phases-3-and-4-stand).
+5. **Cranelift**, AOT and JIT (done): the same, plus the bridge, the
+   trampoline and OSR carrying fat pointers and type-parameter descriptors.
+   See [Where phase 5 stands](#user-content-where-phase-5-stands). OSR shares
+   the interpreter's frame (`osr.rs`) and so adopts its dynamic frame rather
+   than building one: `OsrSpec` has a descriptor-table offset beside
+   `shape_offset`, and `enter_osr` loads the table and the fat pointers from
+   the frame. Cranelift's one-at-a-time block-parameter copy is safe by the
+   lowering check in phase 2, except that an OSR entry hands a dynamic block
+   parameter its own storage, so that copy is a `memmove`.
 6. **C AOT.**
 7. **Flip and delete.** The feature becomes the default and then goes; the
    list in [What goes away](#user-content-what-goes-away) is deleted; a call
@@ -583,9 +580,18 @@ what differs from the sections above:
   `fixedint` `T` bound to `u32` reaches the native `u32` arithmetic, and the
   one operation with no unsigned case, checked negation, goes to `dyn_ops`.
 
-Not done in phase 4, and wanted before phase 7: the bytecode lowering
-dynamic bodies itself, rather than leaving them to the walker; and the
-measurements, since nothing compiled runs a generic yet.
+**The bytecode** runs a generic's body too. An instruction on a dynamic value
+runs on the walker (`Op::Ir`), as any instruction the bytecode has no op for
+does, except a move and a return, which have ops of their own (`CopyFat`,
+`ReturnFat`: a dynamic value's fat pointer and a parameter's `Value` are the
+same pair). A call binding type parameters takes the fast path and is
+planned, a call site resolving its descriptors once (`BindingRef`: a static
+descriptor or a table entry), and a generic wrapper around a native is
+forwarded straight to the native, its descriptors substituted through both
+calls. The table fill goes through a one-entry cache per function on the
+layout, as compiled code's does, and shadow stack space is bumped inline.
+Interpreted, against the baseline (seconds): generics 2.50 (2.85), sieve 4.01
+(4.13), wordfreq 0.99 (0.96), the store demo 0.76 (0.77).
 
 ## Where phase 5 stands
 
