@@ -4,11 +4,24 @@ category: dev
 summary: "Yeah of course we need `for` loops"
 ---
 
+<!--
+
+Audience: programming language hackers.
+Problem: traditional loops impose performance and cognitive overhead
+in the common case of iterating collections.
+
+-->
+
+
+
+<!-- the problem -->
+
 In my [previous round of benchmarking](../posts/20261009A-compound-assignment.md)
 I noted that the system library iterates over collections by maintaining
-a loop induction variable of type `index`,
+a loop induction variable of type [`index`](todo),
 incrementing it with wrapping math,
-and indexing into the collection on each iteration to access the element.
+and indexing into the collection on each iteration to access the element,
+and that this is a problem to be solved soon.
 
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
@@ -35,20 +48,27 @@ end fun
 This has a number of deficiencies,
 but for the purposes of the work at hand I care about the
 `self[i]?`, which does a bounds check every iteration
-(and for which `equal_to_at` exists just to accommodate the error handling),
+(and for which `equal_to_at` exists just to accommodate the
+[early-return error handling indicated by `?`](todo)),
 and the intrinsic call to `add_wrapping_index`.
 The indexing is a performance hazard,
-but maybe more importantly the wrapping math is a big
+but maybe more importantly - the wrapping math is a
 cognitive/maintainability hazard:
 every time I see wrapping math I must stop and think hard about the invariants.
 
-Both of these are solvable with language-level container iteration.
-The design for this is fairly obvious and implementation is mostly straightforward,
-so I'll go ahead and do it now.
-Trying to clean up the code quality in the system library,
-modest as it is.
+Both of these are solvable with language-level container iteration,
+like `for .. in` loops in whatever, and example here todo.
+The simple design for this is fairly obvious and implementation is mostly straightforward,
+so I'll go ahead and do it now!
 
-I want to write that function like the following.
+
+
+
+<!-- the expected outcome -->
+
+## A simple design of `for` loops
+
+I want to write the previous `contains` function like the following.
 
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
@@ -63,20 +83,20 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
 end fun
 ```
 
-The `item` variable is a reference binding,
+The `item` variable is a [reference (`ref`) binding](todo),
 a pointer directly into the container.
 So `item` can't be moved, nor can the iteratee, `self`,
 be mutably referenced or mutated via indexing.
-This is in contrast to `match` and destructuring `if`
+This is in contrast to [`match` and destructuring `if`](todo),
 which fully destructure their operands.
 
 Even though I don't plan immediately to have by-value iteration,
 it probably makes sense to write the word `ref` somewhere in the loop header -
-I've got a pretty consistent explicit philosophy of writing `ref` everywhere
-there's a reference binding.
+I've got a mostly consistent explicit philosophy of writing `ref` everywhere
+there is a reference binding.
 Here I've put it next to the _collection_, not the binding,
 since as we'll see below there may be many bindings in a loop header.
-We'll see how it goes.
+We'll see how that feels over time.
 
 Besides lists we also have other collections that need
 iteration consideration: maps, sets, tensors, and tables.
@@ -112,13 +132,10 @@ end for
 ```
 
 Not a tuple: a `(K, V)` would be a new value built from the two,
-not a place in the map,
-and building it means cloning both.
-Today `sys/std/map` exposes `key_at` and `value_at`
-precisely so maps can be walked with an index like a list,
-and each of those walks the tree to the position from the top.
-A `for` walks it once.
-As with sets, the key binding is immutable forever;
+not a place in the map.
+Datalove doesn't have first-class references that could be shoved into a tuple
+so building one means cloning both elements.
+As with sets, the key binding is immutable;
 the value could someday be `mut`.
 
 Tensors iterate along axis 0, the same axis `t[i]?` indexes.
@@ -157,11 +174,15 @@ end for
 ```
 
 
-## Getting the index
+
+<!-- but ... -->
+
+## Getting at that loop induction variable
 
 Many of the collections iterations in the system library
 also make use of the loop induction variable for more than just indexing the collection
-once every time through the loop.
+once every time through the loop. Here the `list.index_of` function
+needs to hold onto that index and return it:
 
 ```datalove
 fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
@@ -179,13 +200,13 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
 end fun
 ```
 
-So it's not enough to just make collections iterable.
-Unless I want to force users to keep their own index counter in sync with the collection index
+So it's not enough to just make collections iterable:
+unless I want to force users to keep their own index counter in sync with the collection index
 (which would mean they probably do the same wrapping math I want to avoid)
 then the iteration needs to provide the index value as well.
 
 Go and Zig and probably others do this with another form of `for` that adds another term to
-the loop header to represent the index. So I guess I'll just do that too.
+the loop header to represent the index. So I guess I'll just do that too!
 
 ```datalove
 fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
@@ -200,28 +221,54 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
 end fun
 ```
 
-I don't know if Datalove will ever grow an iterator protocol like Rust has.
-Datalove isn't intended for that level of expressivity in its language integration.
+Personally this smells a bit to me - feels like a big special case,
+and I'm used to Rust with its many iterator adapters that
+can do this and much more (what abour reverse iteration? seems important...).
+I don't know if Datalove will grow an iterator protocol like Rust has.
+I don't intend Datalove to have a high level of expressivity in its language integration.
 
-For sets and maps I guess it doesn't make sense to support this
-since they are not index by number.
+Sets and maps won't support this form since they don't index by number.
 
+
+
+
+<!-- but, but ... -->
 
 ## Implementation considerations
 
-The big missing piece to make this all work is some kind of
+Implementing this is a somewhat large piece of work,
+but most of the compiler bits are relatively straightforward extensions to what already exists.
+The big missing piece to make this all work is
 collection cursors in the runtime.
-Most of the compiler work is relatively straightforward extensions to what already exists.
+All the existing accessors are per-element.
 
 I've sketched one cursor shape for all four collections.
 It's a small plain-data struct:
 a pointer to the current element
 (plus one to the current value, for maps),
 a position, and a count.
+
+```rust
+#[repr(C)]
+pub struct Cursor {
+    pub elem: *const u8,   // The current element; a map's current key.
+    pub value: *const u8,  // A map's current value; null for the rest.
+    pub node: *const u8,   // A tree's current leaf; null for the rest.
+    pub step: usize,       // How to get to the next one.
+    pub pos: Index,        // How many elements have been passed.
+    pub end: Index,        // How many there are.
+}
+```
+
+The position doubles as the loop index, so the indexed form of `for` is free.
 Each collection gets a "begin" and an "advance" function with the same signature,
 and "done" is just comparing the position to the count,
 which every backend can do inline.
-The position doubles as the loop index, so the indexed form is free.
+
+```rust
+dtlv_rti_list_cursor_begin_local(rt, coll_ref, coll_tydesc, cursor_out, scratch) -> RtStatus
+dtlv_rti_list_cursor_advance_local(rt, cursor, coll_tydesc) -> RtStatus
+```
 
 For lists and tensors the fast backends don't call the runtime at all:
 advancing is a pointer bump.
@@ -229,7 +276,5 @@ Sets and maps are B+trees whose leaves are already linked in order,
 so advancing steps along a leaf and hops to the next one,
 instead of descending from the root for every element like `key_at` does.
 
-The cursor is also what keeps the compiler side simple.
-The thing that lives across the loop body is the cursor, which is just data.
-Each use of `item` makes a fresh reference from it,
-the same kind of short-lived reference that indexing makes today.
+The compiler knows the layout of `Cursor`,
+which provides a simple protocol for the compiler to codegen against.
