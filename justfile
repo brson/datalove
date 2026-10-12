@@ -33,8 +33,8 @@ test-64:
 
 # Run tests with generics by reference, which replaces erasure; see
 # botdocs/plan-fat-generics.md. A fixture whose expected output differs under
-# it has a `.expected.fat` beside the default. No compiled backend handles it
-# yet, so they refuse such a program and the engine suites skip them for it.
+# it has a `.expected.fat` beside the default. Every backend handles it; a
+# function one cannot compile is refused, and the engine suites skip it.
 test-fat:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features fat-generics
 

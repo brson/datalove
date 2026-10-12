@@ -60,6 +60,8 @@ pub fn emit_static_lifecycle(
         uses_sret: false,
         const_scratch: 0,
         ref_descs: Default::default(),
+        table: Vec::new(),
+        takes_shadow: false,
     };
 
     writeln!(out, "static void __dtlv_statics_init(void* rt) {{").unwrap();
@@ -116,6 +118,10 @@ pub fn emit_function(
     for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
         write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
     }
+    // Under generics by reference, one per type parameter, last.
+    for i in 0..func_ctx.type_param_count {
+        write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).unwrap();
+    }
 
     let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {
         "void"
@@ -148,6 +154,9 @@ pub fn emit_function(
         writeln!(out, "    const dtlv_tydesc_t* __rd{};", vid.0).unwrap();
     }
 
+    check_dynamic_support(unit)?;
+    let takes_shadow = emit_dynamic_prologue(out, unit, &layout, compiler);
+
     // Create function context for codegen.
     let mut ctx = FunctionCodegenContext {
         unit,
@@ -158,6 +167,8 @@ pub fn emit_function(
         uses_sret,
         const_scratch: 0,
         ref_descs,
+        table: func_ctx.descriptor_table.clone(),
+        takes_shadow,
     };
 
     // Emit blocks.
@@ -169,6 +180,197 @@ pub fn emit_function(
     writeln!(out).unwrap();
 
     Ok(())
+}
+
+/// Under generics by reference, fill the descriptor table into `__t{i}`
+/// locals and take shadow stack space for each dynamic value and slot.
+/// Whether any was taken, which every return then gives back.
+///
+/// The table goes through a one-entry cache, a static array of the last
+/// call's type parameter descriptors and what they built: an AOT program has
+/// the one runtime handle, so what it built lives as long as the cache.
+fn emit_dynamic_prologue(
+    out: &mut String,
+    unit: &IrCodeUnit,
+    layout: &FrameLayout,
+    compiler: &mut CAotCompiler,
+) -> bool {
+    let Some(func_ctx) = unit.function_context() else { return false };
+    let table = &func_ctx.descriptor_table;
+    if table.is_empty() {
+        return false;
+    }
+    let n = func_ctx.type_param_count as usize;
+    let built: Vec<(usize, &IrType)> = table.iter().enumerate()
+        .filter(|(_, ty)| !matches!(ty, IrType::Param(_)))
+        .collect();
+    for (i, ty) in table.iter().enumerate() {
+        match ty {
+            IrType::Param(p) => writeln!(out, "    const dtlv_tydesc_t* __t{i} = tp{p};").unwrap(),
+            _ => writeln!(out, "    const dtlv_tydesc_t* __t{i};").unwrap(),
+        }
+    }
+    if !built.is_empty() {
+        let params: Vec<String> = (0..n).map(|i| format!("tp{i}")).collect();
+        writeln!(out, "    const dtlv_tydesc_t* __tp[{}] = {{ {} }};", n.max(1), params.join(", ")).unwrap();
+        writeln!(out, "    static const dtlv_tydesc_t* __tc[{}];", n + built.len()).unwrap();
+        let hit: Vec<String> = (0..n).map(|i| format!("__tc[{i}] == tp{i}")).collect();
+        writeln!(out, "    if ({}) {{", if hit.is_empty() { "1".to_string() } else { hit.join(" && ") }).unwrap();
+        for (k, (i, _)) in built.iter().enumerate() {
+            writeln!(out, "        __t{i} = __tc[{}];", n + k).unwrap();
+        }
+        writeln!(out, "    }} else {{").unwrap();
+        for (k, (i, ty)) in built.iter().enumerate() {
+            let template = compiler.get_tydesc_name(ty);
+            writeln!(out, "        __t{i} = dtlv_rti_tydesc_instantiate(rt, &{template}, __tp, {n});").unwrap();
+            writeln!(out, "        __tc[{}] = __t{i};", n + k).unwrap();
+        }
+        for i in 0..n {
+            writeln!(out, "        __tc[{i}] = tp{i};").unwrap();
+        }
+        writeln!(out, "    }}").unwrap();
+    }
+    let places: Vec<(u32, usize)> = unit.value_types.iter().enumerate()
+        .filter(|(_, ty)| FunctionCodegenContext::is_dynamic_value(ty))
+        .map(|(v, ty)| (layout.value_offset(v as u32), table.iter().position(|t| t == ty).expect("in the table")))
+        .chain(unit.slot_types.iter().enumerate()
+            .filter(|(_, ty)| FunctionCodegenContext::is_dynamic_value(ty))
+            .map(|(s, ty)| (layout.slot_offset(s as u32), table.iter().position(|t| t == ty).expect("in the table"))))
+        .collect();
+    if places.is_empty() {
+        return false;
+    }
+    writeln!(out, "    uintptr_t __shadow_top = ((dtlv_rt_header_t*)rt)->shadow_top;").unwrap();
+    writeln!(out, "    uintptr_t __shadow_limit = ((dtlv_rt_header_t*)rt)->shadow_limit;").unwrap();
+    for (offset, entry) in places {
+        writeln!(out, "    *(void**)(__frame + {offset}) = dtlv_shadow_bump(rt, __t{entry});").unwrap();
+    }
+    true
+}
+
+/// Refuse a function using an instruction on a dynamic value that this
+/// backend does not handle yet, rather than emit it wrong.
+fn check_dynamic_support(unit: &IrCodeUnit) -> Result<(), CAotError> {
+    if !datalove_datafun_ir::uses_generics_by_reference(unit) {
+        return Ok(());
+    }
+    let ctx = unit.function_context();
+    let operand_type = |op: &Operand| -> Option<&IrType> {
+        match op {
+            Operand::Value(v) => Some(&unit.value_types[v.0 as usize]),
+            Operand::ValueRef(v) => match &unit.value_types[v.0 as usize] {
+                IrType::Ref(inner) => Some(inner.as_ref()),
+                other => Some(other),
+            },
+            Operand::Slot(s) => Some(&unit.slot_types[s.0 as usize]),
+            Operand::Param(p) => ctx.map(|c| &c.param_types[p.0 as usize]),
+            _ => None,
+        }
+    };
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            let mut touches = instr.dests().into_iter()
+                .any(|v| unit.value_types[v.0 as usize].is_dynamic());
+            instr.for_each_operand(|op: &Operand| {
+                touches |= operand_type(op).is_some_and(|t| t.is_dynamic());
+            });
+            match instr {
+                Instruction::SlotStoreCopy { dest: SlotDest::Local(s), .. }
+                | Instruction::SlotStoreMove { dest: SlotDest::Local(s), .. }
+                | Instruction::SlotStoreCopyTracked { dest: SlotDest::Local(s), .. }
+                | Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(s), .. }
+                | Instruction::SetField { slot: SlotDest::Local(s), .. }
+                | Instruction::SetFieldTracked { slot: SlotDest::Local(s), .. } => {
+                    touches |= unit.slot_types[s.0 as usize].is_dynamic();
+                }
+                Instruction::ParamStore { param, .. }
+                | Instruction::ParamStoreTracked { param, .. }
+                | Instruction::ParamSetField { param, .. }
+                | Instruction::ParamSetFieldTracked { param, .. } => {
+                    touches |= ctx.is_some_and(|c| c.param_types[param.0 as usize].is_dynamic());
+                }
+                _ => {}
+            }
+            if touches && !supports_dynamic(instr) {
+                let name = format!("{:?}", instr);
+                let name = name.split([' ', '{', '(']).next().unwrap_or("an instruction").to_string();
+                return Err(CAotError::Unsupported(format!(
+                    "{name} on a value of a type a generic is compiled by reference over, in {}",
+                    unit.name)));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether this backend handles an instruction whose operands or result are
+/// dynamic.
+fn supports_dynamic(instr: &Instruction) -> bool {
+    matches!(instr,
+        Instruction::Copy { .. }
+        | Instruction::Move { .. }
+        | Instruction::Clone { .. }
+        | Instruction::Call { .. }
+        | Instruction::ComptimeCall { .. }
+        | Instruction::SlotStoreCopy { .. }
+        | Instruction::SlotStoreMove { .. }
+        | Instruction::SlotStoreCopyTracked { .. }
+        | Instruction::SlotStoreMoveTracked { .. }
+        | Instruction::SlotLoadCopy { .. }
+        | Instruction::SlotLoadMove { .. }
+        | Instruction::SlotLoadMoveTracked { .. }
+        | Instruction::ParamStore { .. }
+        | Instruction::ParamStoreTracked { .. }
+        | Instruction::RefStore { .. }
+        | Instruction::RefStoreTracked { .. }
+        | Instruction::Drop { .. }
+        | Instruction::DropTracked { .. }
+        | Instruction::DropViaRef { .. }
+        | Instruction::UnitEndDrop { .. }
+        | Instruction::UnitEndDropTracked { .. }
+        | Instruction::DebugLog { .. }
+        | Instruction::DataFrom { .. }
+        | Instruction::ErrorFrom { .. }
+        | Instruction::Nop
+        | Instruction::BinOp { .. }
+        | Instruction::BinOpChecked { .. }
+        | Instruction::UnaryOpChecked { .. }
+        | Instruction::Pack { .. }
+        | Instruction::Unpack { .. }
+        | Instruction::GetField { .. }
+        | Instruction::GetFieldRef { .. }
+        | Instruction::SetField { .. }
+        | Instruction::SetFieldTracked { .. }
+        | Instruction::ParamSetField { .. }
+        | Instruction::ParamSetFieldTracked { .. }
+        | Instruction::RefSetField { .. }
+        | Instruction::RefSetFieldTracked { .. }
+        | Instruction::WrapSome { .. }
+        | Instruction::WrapNone { .. }
+        | Instruction::WrapOk { .. }
+        | Instruction::WrapErr { .. }
+        | Instruction::UnwrapOption { .. }
+        | Instruction::UnwrapResult { .. }
+        | Instruction::EnumVariant { .. }
+        | Instruction::EnumDiscriminant { .. }
+        | Instruction::EnumPayload { .. }
+        | Instruction::ListNew { descriptor: None, .. }
+        | Instruction::SetNew { descriptor: None, .. }
+        | Instruction::MapNew { descriptor: None, .. }
+        | Instruction::ListBoundsCheck { .. }
+        | Instruction::ListGet { .. }
+        | Instruction::ListSet { .. }
+        | Instruction::ListElementRef { .. }
+        | Instruction::MapGet { .. }
+        | Instruction::MapContainsKey { .. }
+        | Instruction::MapSetValue { .. }
+        | Instruction::MapValueRef { .. }
+        | Instruction::MapUpsert { .. }
+        | Instruction::TensorBoundsCheck { .. }
+        | Instruction::TensorSet { .. }
+        | Instruction::TensorGet { .. }
+        | Instruction::TensorIndexRef { .. }
+    )
 }
 
 /// Emit the script body function.
@@ -217,6 +419,8 @@ pub fn emit_script_body(
         uses_sret: false,
         const_scratch: 0,
         ref_descs: Default::default(),
+        table: Vec::new(),
+        takes_shadow: false,
     };
 
     // Emit blocks.
@@ -253,9 +457,75 @@ struct FunctionCodegenContext<'a> {
     /// Carried in a `__rd{n}` declared in the prologue. See
     /// `datalove_datafun_ir::RefDesc`.
     ref_descs: std::collections::BTreeMap<ValueId, datalove_datafun_ir::RefDesc>,
+    /// Under generics by reference, the descriptor table: entry `i` is in the
+    /// local `__t{i}`, filled in the prologue.
+    table: Vec<IrType>,
+    /// Whether the function takes shadow stack space on entry, which every
+    /// return gives back.
+    takes_shadow: bool,
 }
 
 impl<'a> FunctionCodegenContext<'a> {
+    /// The local a dynamic type's descriptor is in.
+    fn table_local(&self, ty: &IrType) -> String {
+        match self.table.iter().position(|t| t == ty) {
+            Some(i) => format!("__t{}", i),
+            None => panic!("{ty} is not in the descriptor table of {}", self.unit.name),
+        }
+    }
+
+    /// The size of a value of `ty`, as a C expression: a constant, or a
+    /// dynamic type's descriptor's.
+    fn size_expr(&self, ty: &IrType) -> String {
+        if ty.is_dynamic() && !matches!(ty, IrType::Ref(_)) {
+            return format!("(size_t){}->size", self.table_local(ty));
+        }
+        types::ir_type_to_crepr(ty).layout().size.to_string()
+    }
+
+    /// Each field's offset in a tuple or struct of type `ty` (or one a
+    /// reference to `ty` points at), as C expressions: constants, or for a
+    /// dynamic type, read from its descriptor.
+    fn field_offsets(&self, ty: &IrType, count: usize) -> Vec<String> {
+        let ty = match ty {
+            IrType::Ref(inner) => inner.as_ref(),
+            other => other,
+        };
+        if ty.is_dynamic() {
+            let local = self.table_local(ty);
+            return (0..count).map(|i| format!("dtlv_rti_field_offset({local}, {i})")).collect();
+        }
+        let field_types: Vec<IrType> = match ty {
+            IrType::Tuple(tys) => tys.clone(),
+            IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+            _ => Vec::new(),
+        };
+        types::compute_tuple_field_offsets(&field_types).iter().map(|o| o.to_string()).collect()
+    }
+
+    /// The offset of the payload of an option, result, term or enum (variant
+    /// `index`) of type `ty`, as a C expression.
+    fn payload_offset(&self, ty: &IrType, index: u32) -> String {
+        if ty.is_dynamic() {
+            return format!("dtlv_rti_payload_offset({}, {index})", self.table_local(ty));
+        }
+        match ty {
+            IrType::Option(inner) => ir_layout::option_payload_offset(inner),
+            IrType::Result(ok) => ir_layout::result_payload_offset(ok),
+            IrType::Enum(variants) => match &variants[index as usize].1 {
+                Some(payload) => ir_layout::enum_payload_offset(payload),
+                None => 0,
+            },
+            _ => 0,
+        }.to_string()
+    }
+
+    /// Whether a value of `ty` lives on the shadow stack, its frame slot
+    /// holding a pointer to it.
+    fn is_dynamic_value(ty: &IrType) -> bool {
+        ty.is_dynamic() && !matches!(ty, IrType::Ref(_))
+    }
+
     /// Emit a basic block.
     fn emit_block(
         &mut self,
@@ -414,11 +684,11 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::TableNew { dest, rows } => {
                 self.emit_table_new(out, *dest, rows)?;
             }
-            Instruction::Call { dest, func, args, shape_descriptors, .. } => {
-                self.emit_call(out, *dest, func, args, shape_descriptors)?;
+            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. } => {
+                self.emit_call(out, *dest, func, args, shape_descriptors, bindings)?;
             }
-            Instruction::ComptimeCall { dest, func, args, shape_descriptors, .. } => {
-                self.emit_call(out, *dest, func, args, shape_descriptors)?;
+            Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
+                self.emit_call(out, *dest, func, args, shape_descriptors, bindings)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.emit_slot_store(out, dest, value, true, false)?;
@@ -537,12 +807,18 @@ impl<'a> FunctionCodegenContext<'a> {
     /// Get the address expression for a value.
     fn value_addr(&self, vid: ValueId) -> String {
         let offset = self.layout.value_offset(vid.0);
+        if Self::is_dynamic_value(&self.unit.value_types[vid.0 as usize]) {
+            return format!("(*(uint8_t**)(__frame + {}))", offset);
+        }
         format!("(__frame + {})", offset)
     }
 
     /// Get the address expression for a slot.
     fn slot_addr(&self, sid: SlotId) -> String {
         let offset = self.layout.slot_offset(sid.0);
+        if Self::is_dynamic_value(&self.unit.slot_types[sid.0 as usize]) {
+            return format!("(*(uint8_t**)(__frame + {}))", offset);
+        }
         format!("(__frame + {})", offset)
     }
 
@@ -608,7 +884,13 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// Get the tydesc name for a type.
+    ///
+    /// A dynamic type's is its table entry, written as what it points at so
+    /// that `&` of it, which is how a descriptor is passed, is the pointer.
     fn tydesc_name(&mut self, ty: &IrType) -> String {
+        if ty.is_dynamic() && !matches!(ty, IrType::Ref(_)) {
+            return format!("(*{})", self.table_local(ty));
+        }
         self.compiler.get_tydesc_name(ty)
     }
 
@@ -1006,10 +1288,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
             }
         }
         Ok(())
@@ -1049,7 +1329,9 @@ impl<'a> FunctionCodegenContext<'a> {
         // bounded to `float`, fixed at one width or the other by the call site.
         // This body was compiled once and cannot hold both, so the runtime
         // reads the descriptor and picks.
-        if matches!(lhs_ty, IrType::Data) || matches!(self.operand_type(rhs), IrType::Data) {
+        if matches!(lhs_ty, IrType::Data) || matches!(self.operand_type(rhs), IrType::Data)
+            || lhs_ty.is_dynamic() || self.operand_type(rhs).is_dynamic()
+        {
             let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
                 CAotError::Codegen(format!("no dynamic form of {:?}", op))
             })? as u8;
@@ -1252,7 +1534,7 @@ impl<'a> FunctionCodegenContext<'a> {
         // A type parameter bounded to `fixedint`, whose width and signedness
         // only the descriptor says. This body is emitted once and cannot hold
         // the arithmetic for all ten, so the runtime reads and picks.
-        if matches!(lhs_ty, IrType::Data) {
+        if matches!(lhs_ty, IrType::Data) || lhs_ty.is_dynamic() {
             let code = datalove_datafun_ir::dyn_op_code(op).ok_or_else(|| {
                 CAotError::Codegen(format!("no dynamic form of {:?}", op))
             })? as u8;
@@ -1459,7 +1741,7 @@ impl<'a> FunctionCodegenContext<'a> {
 
         // A type parameter bounded to `fixedint`, which may turn out to be
         // unsigned; the runtime reads the descriptor and decides.
-        if matches!(src_ty, IrType::Data) {
+        if matches!(src_ty, IrType::Data) || src_ty.is_dynamic() {
             if op != UnaryOp::Neg {
                 return Err(CAotError::Unsupported(format!(
                     "no dynamic form of checked {:?}", op)));
@@ -1551,10 +1833,10 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen(format!("pack requires tuple/struct type, got {:?}", dest_ty))),
         };
 
-        let offsets = types::compute_tuple_field_offsets(&field_types);
+        let offsets = self.field_offsets(dest_ty, field_types.len());
 
         for (i, field_op) in fields.iter().enumerate() {
-            let field_offset = offsets[i];
+            let field_offset = &offsets[i];
             let field_ty = &field_types[i];
             let repr = types::ir_type_to_crepr(field_ty);
             let field_addr = format!("({} + {})", dest_addr, field_offset);
@@ -1564,10 +1846,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "    *({c_ty}*){field_addr} = *({c_ty}*){src_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "    memcpy({}, {}, {});", field_addr, src_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "    memcpy({}, {}, {});", field_addr, src_addr, self.size_expr(field_ty)).unwrap();
                 }
             }
         }
@@ -1585,10 +1865,10 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("unpack requires tuple/struct type".into())),
         };
 
-        let offsets = types::compute_tuple_field_offsets(&field_types);
+        let offsets = self.field_offsets(src_ty, field_types.len());
 
         for (i, dest_vid) in dests.iter().enumerate() {
-            let field_offset = offsets[i];
+            let field_offset = &offsets[i];
             let field_ty = &field_types[i];
             let repr = types::ir_type_to_crepr(field_ty);
             let field_addr = format!("({} + {})", src_addr, field_offset);
@@ -1598,10 +1878,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).unwrap();
                 }
             }
         }
@@ -1632,8 +1910,8 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("get_field requires tuple/struct type".into())),
         };
 
-        let offsets = types::compute_tuple_field_offsets(&field_types);
-        let field_offset = offsets[field_index as usize];
+        let offsets = self.field_offsets(&src_ty, field_types.len());
+        let field_offset = &offsets[field_index as usize];
         let field_ty = &field_types[field_index as usize];
         let repr = types::ir_type_to_crepr(field_ty);
         let field_addr = format!("({} + {})", src_addr, field_offset);
@@ -1642,10 +1920,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){field_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, field_addr, self.size_expr(field_ty)).unwrap();
             }
         }
         Ok(())
@@ -1698,8 +1974,8 @@ impl<'a> FunctionCodegenContext<'a> {
             _ => return Err(CAotError::Codegen("get_field_ref requires tuple/struct type".into())),
         };
 
-        let offsets = types::compute_tuple_field_offsets(&field_types);
-        let field_offset = offsets[field_index as usize];
+        let offsets = self.field_offsets(&src_ty, field_types.len());
+        let field_offset = &offsets[field_index as usize];
 
         // Store pointer to field.
         writeln!(out, "    *(void**){} = {} + {};", dest_addr, src_addr, field_offset).unwrap();
@@ -1735,8 +2011,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => return Err(CAotError::Codegen("set_field requires tuple/struct type".into())),
             };
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            let field_offset = offsets[idx as usize];
+            let offsets = self.field_offsets(&current_ty, field_types.len());
+            let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
             current_ty = field_types[idx as usize].clone();
         }
@@ -1749,10 +2025,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
             }
         }
 
@@ -1772,8 +2046,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let inner_ty = self.operand_type(inner).clone();
         let inner_repr = types::ir_type_to_crepr(&inner_ty);
-        let inner_layout = inner_repr.layout();
-        let payload_offset = ir_layout::option_payload_offset(&inner_ty);
+        let payload_offset = self.payload_offset(&self.value_type(dest).clone(), 0);
 
         // Set tag to Some (2).
         writeln!(out, "    *(uint8_t*){} = OPTION_SOME;", dest_addr).unwrap();
@@ -1784,19 +2057,14 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).unwrap();
             }
         }
 
         // Zero source for non-copy types to implement move semantics.
         if !inner_ty.is_copy() {
-            let size = inner_layout.size;
-            if size > 0 {
-                writeln!(out, "    memset({}, 0, {});", inner_addr, size).unwrap();
-            }
+            self.emit_zero(out, &inner_addr, &inner_ty);
         }
         Ok(())
     }
@@ -1816,12 +2084,11 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_ty = self.operand_type(inner).clone();
         let dest_ty = self.value_type(dest);
 
-        let ok_ty = match dest_ty {
-            IrType::Result(ok) => ok.as_ref(),
-            _ => return Err(CAotError::Codegen("wrap_ok requires Result type".into())),
-        };
+        if !matches!(dest_ty, IrType::Result(_)) {
+            return Err(CAotError::Codegen("wrap_ok requires Result type".into()));
+        }
 
-        let payload_offset = ir_layout::result_payload_offset(ok_ty);
+        let payload_offset = self.payload_offset(&dest_ty.clone(), 0);
 
         // Set tag to Ok (1).
         writeln!(out, "    *(uint8_t*){} = RESULT_OK;", dest_addr).unwrap();
@@ -1833,19 +2100,14 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){payload_addr} = *({c_ty}*){inner_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", payload_addr, inner_addr, self.size_expr(&inner_ty)).unwrap();
             }
         }
 
         // Zero source for non-copy types to implement move semantics.
         if !inner_ty.is_copy() {
-            let size = inner_repr.layout().size;
-            if size > 0 {
-                writeln!(out, "    memset({}, 0, {});", inner_addr, size).unwrap();
-            }
+            self.emit_zero(out, &inner_addr, &inner_ty);
         }
         Ok(())
     }
@@ -1856,13 +2118,12 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let dest_ty = self.value_type(dest);
 
-        let ok_ty = match dest_ty {
-            IrType::Result(ok) => ok.as_ref(),
-            _ => return Err(CAotError::Codegen("wrap_err requires Result type".into())),
-        };
+        if !matches!(dest_ty, IrType::Result(_)) {
+            return Err(CAotError::Codegen("wrap_err requires Result type".into()));
+        }
 
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let payload_offset = ir_layout::result_payload_offset(ok_ty);
+        let payload_offset = self.payload_offset(&dest_ty.clone(), 0);
 
         // Set tag to Err (2).
         writeln!(out, "    *(uint8_t*){} = RESULT_ERR;", dest_addr).unwrap();
@@ -1880,7 +2141,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let is_some_addr = self.value_addr(is_some);
         let src_addr = self.operand_addr(src);
         let dest_ty = self.value_type(dest);
-        let payload_offset = ir_layout::option_payload_offset(dest_ty);
+        let payload_offset = self.payload_offset(&self.operand_type(src).clone(), 0);
 
         // Read tag.
         writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == OPTION_SOME);", is_some_addr, src_addr).unwrap();
@@ -1891,10 +2152,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){payload_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, payload_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, payload_addr, self.size_expr(dest_ty)).unwrap();
             }
         }
         Ok(())
@@ -1916,7 +2175,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let ok_ty = self.value_type(ok_dest);
 
         let error_size = std::mem::size_of::<datalove_rtdt::Error>() as u32;
-        let payload_offset = ir_layout::result_payload_offset(ok_ty);
+        let payload_offset = self.payload_offset(&self.operand_type(src).clone(), 0);
 
         // Read tag.
         writeln!(out, "    *(bool_t*){} = (*(uint8_t*){} == RESULT_OK);", is_ok_addr, src_addr).unwrap();
@@ -1927,10 +2186,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){ok_addr} = *({c_ty}*){payload_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", ok_addr, payload_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", ok_addr, payload_addr, self.size_expr(ok_ty)).unwrap();
             }
         }
 
@@ -1956,17 +2213,15 @@ impl<'a> FunctionCodegenContext<'a> {
         if let Some(payload_op) = payload {
             let payload_addr = self.operand_addr(payload_op);
             let payload_ty = self.operand_type(payload_op);
-            let payload_offset = ir_layout::enum_payload_offset(payload_ty);
+            let payload_offset = self.payload_offset(&self.value_type(dest).clone(), variant_index);
             let dest_payload_addr = format!("({} + {})", dest_addr, payload_offset);
 
             match types::ir_type_to_crepr(payload_ty) {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "    *({c_ty}*){dest_payload_addr} = *({c_ty}*){payload_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "    memcpy({}, {}, {});", dest_payload_addr, payload_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "    memcpy({}, {}, {});", dest_payload_addr, payload_addr, self.size_expr(payload_ty)).unwrap();
                 }
             }
         }
@@ -2003,7 +2258,7 @@ impl<'a> FunctionCodegenContext<'a> {
             .expect("EnumPayload src must be enum-like type");
         let payload_ty = variants[variant_index as usize].1.as_ref()
             .unwrap_or_else(|| panic!("EnumPayload variant has no payload type"));
-        let payload_offset = ir_layout::enum_payload_offset(payload_ty);
+        let payload_offset = self.payload_offset(&src_ty, variant_index);
 
         match types::ir_type_to_crepr(payload_ty) {
             CRepr::Scalar(c_ty) => {
@@ -2026,15 +2281,19 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let inner_ty = self.operand_type(inner).clone();
         let inner_tydesc = self.tydesc_name(&inner_ty);
-        let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size;
 
         writeln!(out, "    dtlv_rti_error_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
 
         // Zero source to implement move semantics (prevents double-free/leak).
-        if inner_size > 0 {
-            writeln!(out, "    memset({}, 0, {});", inner_addr, inner_size).unwrap();
-        }
+        self.emit_zero(out, &inner_addr, &inner_ty);
         Ok(())
+    }
+
+    /// Zero a value of `ty` at `addr`, which is how a move leaves its source.
+    fn emit_zero(&self, out: &mut String, addr: &str, ty: &IrType) {
+        if ty.is_dynamic() || types::ir_type_to_crepr(ty).layout().size > 0 {
+            writeln!(out, "    memset({}, 0, {});", addr, self.size_expr(ty)).unwrap();
+        }
     }
 
     /// Emit data from.
@@ -2043,14 +2302,11 @@ impl<'a> FunctionCodegenContext<'a> {
         let inner_addr = self.operand_addr(inner);
         let inner_ty = self.operand_type(inner).clone();
         let inner_tydesc = self.tydesc_name(&inner_ty);
-        let inner_size = types::ir_type_to_crepr(&inner_ty).layout().size;
 
         writeln!(out, "    dtlv_rti_data_from_local(rt, {}, &{}, {});", inner_addr, inner_tydesc, dest_addr).unwrap();
 
         // Zero source to implement move semantics (prevents double-free/leak).
-        if inner_size > 0 {
-            writeln!(out, "    memset({}, 0, {});", inner_addr, inner_size).unwrap();
-        }
+        self.emit_zero(out, &inner_addr, &inner_ty);
         Ok(())
     }
 
@@ -2122,6 +2378,16 @@ impl<'a> FunctionCodegenContext<'a> {
 
         if elements.is_empty() {
             writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, elem_tydesc).unwrap();
+        } else if elem_ty.is_dynamic() {
+            // Elements of a size known only at run time are pushed one at a
+            // time rather than laid out in a buffer here.
+            let list_tydesc = self.tydesc_name(&dest_ty);
+            writeln!(out, "    dtlv_rti_list_create_local(rt, {}, &{});", dest_addr, list_tydesc).unwrap();
+            for elem_op in elements {
+                let elem_addr = self.operand_addr(elem_op);
+                writeln!(out, "    dtlv_rti_list_push_local(rt, {}, &{}, {}, &{});",
+                    dest_addr, list_tydesc, elem_addr, elem_tydesc).unwrap();
+            }
         } else {
             // Allocate temp buffer for elements.
             let total_size = elem_layout.size * elements.len() as u32;
@@ -2309,6 +2575,7 @@ impl<'a> FunctionCodegenContext<'a> {
         func: &CodeRef,
         args: &[Operand],
         shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
+        bindings: &[IrType],
     ) -> Result<(), CAotError> {
         // A rider function is reached through the runtime C ABI rather than
         // this backend's own convention, so it is a different call entirely.
@@ -2317,8 +2584,18 @@ impl<'a> FunctionCodegenContext<'a> {
                 if let Some(native) = unit.native_context() {
                     let symbol = native.symbol().to_string();
                     let param_modes = native.param_modes.clone();
+                    // Under generics by reference, a descriptor for each type
+                    // parameter no argument determines, for what this call
+                    // bound it to.
+                    let undetermined: Vec<IrType> = if bindings.is_empty() {
+                        Vec::new()
+                    } else {
+                        native.descriptor_shapes.iter()
+                            .map(|s| s.to_ir_type().substitute(bindings))
+                            .collect()
+                    };
                     return self.emit_native_call(
-                        out, dest, &symbol, args, &param_modes, shape_descriptors);
+                        out, dest, &symbol, args, &param_modes, shape_descriptors, &undetermined);
                 }
             }
         }
@@ -2359,7 +2636,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
         let func_name = self.compiler.resolve_func_name_with_registry(func, lookup_unit, self.registry);
         let dest_ty = self.value_type(dest).clone();
-        let uses_sret = types::uses_sret(&dest_ty);
+        let uses_sret = types::uses_sret(&dest_ty) || self.callee_returns_dynamic(func);
 
         // Build argument list.
         let mut call_args = String::from("rt");
@@ -2404,6 +2681,13 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
+        // Then, under generics by reference, one for each of the callee's type
+        // parameters, for what this call bound it to.
+        for binding in bindings {
+            let name = self.tydesc_name(binding);
+            write!(&mut call_args, ", &{}", name).unwrap();
+        }
+
         if uses_sret || dest_ty == IrType::Unit {
             writeln!(out, "    {}({});", func_name, call_args).unwrap();
         } else {
@@ -2412,7 +2696,39 @@ impl<'a> FunctionCodegenContext<'a> {
             writeln!(out, "    *({c_ty}*){dest_addr} = {}({});", func_name, call_args).unwrap();
         }
         self.mark_out_destinations_live(out, func, args);
+        self.mark_in_arguments_moved(out, func, args);
         Ok(())
+    }
+
+    /// Record that the call took every owned `in` argument away.
+    ///
+    /// The callee owns what it is handed by value, and the tracked drop at the
+    /// end of the argument's scope must see that it has gone. A callee that
+    /// drops its parameter in place zeroes the caller's copy, which hid this,
+    /// but one that moves the parameter elsewhere leaves the caller still
+    /// holding what the callee frees. Whether a value of a type known only at
+    /// run time is given up or copied is its descriptor's to say.
+    fn mark_in_arguments_moved(&mut self, out: &mut String, func: &CodeRef, args: &[Operand]) {
+        use datalove_datafun_ir::ParamMode;
+        let modes = self.callee_param_modes(func);
+        for (i, arg) in args.iter().enumerate() {
+            if modes.get(i) != Some(&ParamMode::In) {
+                continue;
+            }
+            let offset = match arg {
+                Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
+                Operand::Param(id) => self.layout.param_tracking_byte(id.0),
+                _ => None,
+            };
+            let Some(offset) = offset else { continue };
+            let ty = self.operand_type(arg).clone();
+            if ty.is_dynamic() {
+                writeln!(out, "    if (!({}.flags & {})) __frame[{}] = TRACK_MOVED;",
+                    self.tydesc_name(&ty), datalove_rtdt::TyDesc::PLAIN, offset).unwrap();
+            } else if !ty.is_copy() {
+                writeln!(out, "    __frame[{}] = TRACK_MOVED;", offset).unwrap();
+            }
+        }
     }
 
     /// Record that the call wrote every `out` argument's destination.
@@ -2526,6 +2842,20 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// How `func` takes each of its parameters.
+    /// Whether the callee returns a dynamic type, which it writes through an
+    /// sret pointer whatever the caller makes of the result.
+    fn callee_returns_dynamic(&self, func: &CodeRef) -> bool {
+        let unit = match func {
+            CodeRef::Module { module, id } => self.registry.get_module_function_as_unit(*module, *id),
+            CodeRef::Local(id) => {
+                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
+                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
+            }
+            CodeRef::External { .. } => None,
+        };
+        unit.and_then(|u| u.function_context()).is_some_and(|c| c.return_type.is_dynamic())
+    }
+
     fn callee_param_modes(&self, func: &CodeRef) -> Vec<datalove_datafun_ir::ParamMode> {
         let unit = match func {
             CodeRef::Module { module, id } => {
@@ -2685,6 +3015,7 @@ impl<'a> FunctionCodegenContext<'a> {
         args: &[Operand],
         native_param_modes: &[datalove_datafun_ir::ParamMode],
         shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
+        undetermined: &[IrType],
     ) -> Result<(), CAotError> {
         let mut call_args = String::from("rt");
         // A collection of a type parameter is wrapped once it is owned, and a
@@ -2725,6 +3056,10 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_tydesc = self.tydesc_name(&dest_ty);
         write!(&mut call_args, ", {}, &{}", dest_addr, dest_tydesc).unwrap();
 
+        for ty in undetermined {
+            let name = self.tydesc_name(ty);
+            write!(&mut call_args, ", &{}", name).unwrap();
+        }
         for r in shape_descriptors {
             match r {
                 datalove_datafun_ir::DescriptorRef::Static(ty) => {
@@ -2764,10 +3099,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).unwrap();
             }
         }
 
@@ -2790,10 +3123,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){slot_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, slot_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, slot_addr, self.size_expr(ty)).unwrap();
             }
         }
         Ok(())
@@ -2811,10 +3142,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){param_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", param_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", param_addr, src_addr, self.size_expr(ty)).unwrap();
             }
         }
 
@@ -2872,8 +3201,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => return Err(CAotError::Codegen("param_set_field requires tuple/struct type".into())),
             };
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            let field_offset = offsets[idx as usize];
+            let offsets = self.field_offsets(&current_ty, field_types.len());
+            let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
             current_ty = field_types[idx as usize].clone();
         }
@@ -2885,10 +3214,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
             }
         }
 
@@ -2911,10 +3238,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(&ty)).unwrap();
             }
         }
 
@@ -2967,8 +3292,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
                 _ => return Err(CAotError::Codegen("ref_set_field requires tuple/struct type".into())),
             };
-            let offsets = types::compute_tuple_field_offsets(&field_types);
-            let field_offset = offsets[idx as usize];
+            let offsets = self.field_offsets(&current_ty, field_types.len());
+            let field_offset = &offsets[idx as usize];
             current_addr = format!("({} + {})", current_addr, field_offset);
             current_ty = field_types[idx as usize].clone();
         }
@@ -2980,10 +3305,8 @@ impl<'a> FunctionCodegenContext<'a> {
             CRepr::Scalar(c_ty) => {
                 writeln!(out, "    *({c_ty}*){current_addr} = *({c_ty}*){src_addr};").unwrap();
             }
-            CRepr::Aggregate(layout) => {
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, layout.size).unwrap();
-                }
+            CRepr::Aggregate(_) => {
+                writeln!(out, "    memcpy({}, {}, {});", current_addr, src_addr, self.size_expr(&current_ty)).unwrap();
             }
         }
 
@@ -3048,7 +3371,7 @@ impl<'a> FunctionCodegenContext<'a> {
                         other => return Err(CAotError::Codegen(format!(
                             "field path steps through a {:?}, which has no fields", other))),
                     };
-                    let offsets = types::compute_tuple_field_offsets(&field_types);
+                    let offsets = self.field_offsets(&ty, field_types.len());
                     addr = format!("({} + {})", addr, offsets[idx as usize]);
                     ty = field_types[idx as usize].clone();
                 }
@@ -3157,7 +3480,7 @@ impl<'a> FunctionCodegenContext<'a> {
         }
 
         let elem_repr = types::ir_type_to_crepr(&elem_ty);
-        let elem_size = elem_repr.layout().size;
+        let elem_size = self.size_expr(&elem_ty);
 
         // Bounds check.
         writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
@@ -3286,8 +3609,7 @@ impl<'a> FunctionCodegenContext<'a> {
             return Ok(());
         }
 
-        let elem_repr = types::ir_type_to_crepr(&elem_ty);
-        let elem_size = elem_repr.layout().size;
+        let elem_size = self.size_expr(&elem_ty);
 
         // Store pointer to element: dest = &list.data[index].
         writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * {};",
@@ -4079,10 +4401,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "    *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "    memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
                 }
             }
         }
@@ -4120,10 +4440,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
                 }
             }
         }
@@ -4146,10 +4464,8 @@ impl<'a> FunctionCodegenContext<'a> {
                 CRepr::Scalar(c_ty) => {
                     writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*){src_addr};").unwrap();
                 }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, layout.size).unwrap();
-                    }
+                CRepr::Aggregate(_) => {
+                    writeln!(out, "        memcpy({}, {}, {});", dest_addr, src_addr, self.size_expr(ty)).unwrap();
                 }
             }
         }
@@ -4168,20 +4484,28 @@ impl<'a> FunctionCodegenContext<'a> {
             if self.uses_sret {
                 // Copy to sret pointer.
                 let src_addr = self.operand_addr(val);
-                let layout = types::ir_type_to_crepr(ret_ty).layout();
-                if layout.size > 0 {
-                    writeln!(out, "    memcpy(__sret, {}, {});", src_addr, layout.size).unwrap();
-                }
+                writeln!(out, "    memcpy(__sret, {}, {});", src_addr, self.size_expr(ret_ty)).unwrap();
+                self.emit_give_back_shadow(out);
                 writeln!(out, "    return;").unwrap();
             } else {
                 let src_addr = self.operand_addr(val);
                 let c_ty = types::ir_type_to_c(ret_ty);
+                self.emit_give_back_shadow(out);
                 writeln!(out, "    return *({c_ty}*){src_addr};").unwrap();
             }
         } else {
+            self.emit_give_back_shadow(out);
             writeln!(out, "    return;").unwrap();
         }
         Ok(())
+    }
+
+    /// Give back the shadow stack space the prologue took, before a return.
+    fn emit_give_back_shadow(&self, out: &mut String) {
+        if self.takes_shadow {
+            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_top = __shadow_top;").unwrap();
+            writeln!(out, "    ((dtlv_rt_header_t*)rt)->shadow_limit = __shadow_limit;").unwrap();
+        }
     }
 
     /// Emit unit end.
@@ -4256,7 +4580,7 @@ impl<'a> FunctionCodegenContext<'a> {
                 .map(|d| format!("dtlv_rti_element_tydesc({})", d));
             let elem_size = match &erased_desc {
                 Some(elem) => format!("{}->size", elem),
-                None => elem_repr.layout().size.to_string(),
+                None => self.size_expr(&elem_ty),
             };
 
             // elem_addr = ptr_base + (offset + index * strides[0]) * elem_size
@@ -4358,7 +4682,7 @@ impl<'a> FunctionCodegenContext<'a> {
                     writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});", dest.0, desc).unwrap();
                     format!("__rd{}->size", dest.0)
                 }
-                None => types::ir_type_to_crepr(&elem_ty).layout().size.to_string(),
+                None => self.size_expr(&elem_ty),
             };
 
             // Element pointer.

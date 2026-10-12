@@ -46,8 +46,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let size = self.value_size(builder, &slot_ty)?;
             builder.call_memcpy(self.isa.frontend_config(), dest_addr, src_ptr, size);
             if !is_copy {
+                let moved = self.moved_size(builder, &slot_ty)?;
                 let zero = builder.ins().iconst(cranelift_codegen::ir::types::I8, 0);
-                builder.call_memset(self.isa.frontend_config(), src_ptr, zero, size);
+                builder.call_memset(self.isa.frontend_config(), src_ptr, zero, moved);
             }
             return Ok(());
         }

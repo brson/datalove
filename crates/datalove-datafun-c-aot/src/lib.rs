@@ -156,17 +156,6 @@ impl CAotCompiler {
         script_unit: &IrCodeUnit,
         registry: &FunctionRegistry,
     ) -> Result<CompilationOutput, CAotError> {
-        // Nothing compiled takes a generic's descriptors per type parameter
-        // yet; see `uses_generics_by_reference`.
-        let by_reference = std::iter::once(script_unit)
-            .chain(script_unit.nested_units.iter())
-            .chain(registry.iter_module_code_units_with_ids().map(|(_, u)| u))
-            .find(|u| datalove_datafun_ir::uses_generics_by_reference(u));
-        if let Some(u) = by_reference {
-            return Err(CAotError::Unsupported(format!(
-                "{} is a generic compiled by reference, or calls one", u.name)));
-        }
-
         let mut files = Vec::new();
 
         self.collect_statics(script_unit, registry);
@@ -436,6 +425,18 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_debuglog_local(void* rt, const void* value_ref, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_any_destroy_local(void* rt, void* value, const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint32_t dtlv_rti_field_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
+        // Under generics by reference: payload offsets, a generic's descriptor
+        // table, and the shadow stack its dynamic values live on, bumped here
+        // and the runtime asked only when a chunk has no room.
+        writeln!(out, "extern uint32_t dtlv_rti_payload_offset(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
+        writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_tydesc_instantiate(void* rt, const dtlv_tydesc_t* template_, const dtlv_tydesc_t* const* params, uint32_t num_params);").unwrap();
+        writeln!(out, "extern void* dtlv_rti_shadow_alloc(void* rt, uint32_t size, uint32_t align);").unwrap();
+        writeln!(out, "static inline void* dtlv_shadow_bump(void* rt, const dtlv_tydesc_t* td) {{").unwrap();
+        writeln!(out, "    dtlv_rt_header_t* h = (dtlv_rt_header_t*)rt;").unwrap();
+        writeln!(out, "    uintptr_t start = (h->shadow_top + td->align - 1) & ~((uintptr_t)td->align - 1);").unwrap();
+        writeln!(out, "    if (start + td->size <= h->shadow_limit) {{ h->shadow_top = start + td->size; return (void*)start; }}").unwrap();
+        writeln!(out, "    return dtlv_rti_shadow_alloc(rt, td->size, td->align);").unwrap();
+        writeln!(out, "}}").unwrap();
         writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_field_tydesc(const dtlv_tydesc_t* tydesc, uint32_t index);").unwrap();
         writeln!(out, "extern const dtlv_tydesc_t* dtlv_rti_element_tydesc(const dtlv_tydesc_t* tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_contains_key_erased_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, bool_t* result_out);").unwrap();
@@ -609,6 +610,10 @@ impl CAotCompiler {
         // value carries.
         for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
             write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
+        }
+        // Under generics by reference, one per type parameter, last.
+        for i in 0..func_ctx.type_param_count {
+            write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).unwrap();
         }
 
         let return_type = if func_ctx.return_type == IrType::Unit || uses_sret {

@@ -23,6 +23,7 @@ const SHADOW_TOP_OFFSET: i32 = std::mem::offset_of!(RtHeader, shadow_top) as i32
 const SHADOW_LIMIT_OFFSET: i32 = std::mem::offset_of!(RtHeader, shadow_limit) as i32;
 const TYDESC_SIZE_OFFSET: i32 = std::mem::offset_of!(TyDesc, size) as i32;
 const TYDESC_ALIGN_OFFSET: i32 = std::mem::offset_of!(TyDesc, align) as i32;
+const TYDESC_FLAGS_OFFSET: i32 = std::mem::offset_of!(TyDesc, flags) as i32;
 
 /// Whether a type is held as a dynamic value: dynamic, and not a reference.
 pub(super) fn is_dynamic_value(ty: &IrType) -> bool {
@@ -269,6 +270,21 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return Ok(builder.ins().uextend(PTR_TYPE, size));
         }
         Ok(builder.ins().iconst(PTR_TYPE, types::ir_type_size(ty) as i64))
+    }
+
+    /// How many bytes of a moved-from value of dynamic `ty` to zero: its size,
+    /// or none for a plain one.
+    ///
+    /// Zeroing is what keeps a moved value from being freed twice, and a plain
+    /// value owns nothing to free. Its source may also be the caller's own copy
+    /// value, handed to a `T` by pointer and still the caller's to read.
+    pub(super) fn moved_size(&mut self, builder: &mut FunctionBuilder, ty: &IrType) -> Result<cl_ir::Value, CraneliftError> {
+        let size = self.value_size(builder, ty)?;
+        let desc = self.static_tydesc(builder, ty)?;
+        let flags = builder.ins().load(cl_types::I8, MemFlagsData::new(), desc, TYDESC_FLAGS_OFFSET);
+        let plain = builder.ins().band_imm_u(flags, TyDesc::PLAIN as i64);
+        let zero = builder.ins().iconst(PTR_TYPE, 0);
+        Ok(builder.ins().select(plain, zero, size))
     }
 
     /// Copy a value of `ty` from `src` to `dst`, as many bytes as it has.

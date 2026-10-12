@@ -1,0 +1,41 @@
+// A callee that moves its `in` parameter somewhere else rather than dropping
+// it where it stands.
+//
+// The callee owns what it is handed, so the caller's tracked var has to know
+// it has gone. The C backend never marked it: a callee dropping its parameter
+// in place zeroes the caller's copy, which hid that, but one moving the
+// parameter into a var of its own left the caller freeing the same list a
+// second time at the end of its scope.
+
+require module sys/std/list
+import list.push
+import list.pop
+
+fun last_of(items: [string]): ?string
+  var owned: [string] = items
+  ret pop(mut owned)
+end fun
+
+fun last_of_any<T>(items: [T]): ?T
+  var owned: [T] = items
+  ret pop(mut owned)
+end fun
+
+var words: [string] = []
+call push(mut words, "a")
+call push(mut words, "b")
+debuglog last_of(words)
+
+var more: [string] = []
+call push(mut more, "c")
+debuglog last_of_any(more)
+
+// A copy value is copied, not given up, so it is still there to read.
+fun keep<T>(x: T): T
+  var held: T = x
+  ret held
+end fun
+
+var n: u32 = 7
+debuglog keep(n)
+debuglog n

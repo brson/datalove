@@ -517,7 +517,8 @@ caller of an interpreted generic has to pass what the new convention expects.
    the frame. Cranelift's one-at-a-time block-parameter copy is safe by the
    lowering check in phase 2, except that an OSR entry hands a dynamic block
    parameter its own storage, so that copy is a `memmove`.
-6. **C AOT.**
+6. **C AOT** (done): the same again, in C. See [Where phase 6
+   stands](#user-content-where-phase-6-stands).
 7. **Flip and delete.** The feature becomes the default and then goes; the
    list in [What goes away](#user-content-what-goes-away) is deleted; a call
    at a growing type gets a fixture.
@@ -596,7 +597,7 @@ Interpreted, against the baseline (seconds): generics 2.50 (2.85), sieve 4.01
 ## Where phase 5 stands
 
 Under the feature the JIT and Cranelift AOT compile generics; the full suite
-passes with them doing so, and C AOT still refuses.
+passes with them doing so. C AOT followed in phase 6.
 
 - **Calling convention.** A dynamic parameter is passed by pointer, like any
   parameter, and one descriptor per type parameter comes last in the
@@ -644,6 +645,49 @@ Measured, release build, against the baseline (seconds):
 wordfreq was measured before the table cache. (An earlier version of this
 table compared nbody against `sum`'s baseline, the baseline's rows having been
 read off in the wrong order; the baseline above is corrected.)
+
+## Where phase 6 stands
+
+Under the feature the C backend compiles generics too, and every backend
+fixture, `sys/std` included, agrees with the interpreter on it. It follows
+Cranelift's choices, written out as C:
+
+- **The signature** ends with one `const dtlv_tydesc_t* tp{i}` per type
+  parameter, and a call appends `&` the descriptor of each binding, a static
+  symbol or the caller's own table entry. A callee returning a dynamic type
+  always returns through `__sret`.
+- **The prologue** declares the table as locals `__t{i}`, a type parameter's
+  entry being its `tp`, and fills the rest through a one-entry `static` cache
+  per function, keyed on the type parameter descriptors, calling
+  `dtlv_rti_tydesc_instantiate` on a miss. It then saves the shadow stack's
+  top and limit and bumps space for every dynamic value and slot
+  (`dtlv_shadow_bump`, inline, calling the runtime only when a chunk is
+  full). Every return gives the space back.
+- **A dynamic place** is a pointer in the frame at the value's or slot's
+  offset, and its address expression reads through it, so most of the
+  codegen is unchanged. A dynamic type's descriptor is `(*__t{i})`, written
+  wherever a static symbol's name went. Sizes come from the descriptor
+  (`size_expr`) and offsets from the runtime (`field_offsets`,
+  `payload_offset`). A list literal of a dynamic element type pushes its
+  elements one at a time rather than building them in a buffer of a static
+  size.
+- **A gate** (`check_dynamic_support`) refuses a function using an
+  instruction on a dynamic value that the codegen does not handle, naming it,
+  as Cranelift's does.
+- **Found on the way:** the backend had never marked an owned `in` argument
+  moved after a call. A callee dropping its parameter in place zeroes the
+  caller's copy, which hid it, and under erasure a generic's argument was
+  moved out explicitly before the conversion; but a callee that moves its
+  parameter elsewhere left the caller's tracked drop freeing it a second
+  time, concrete callees included. `mark_in_arguments_moved` does what the
+  interpreter does, asking the descriptor's `PLAIN` flag for a dynamic
+  argument. And a move zeroed its source at the static size, which for a
+  `T` is a `data`'s sixteen bytes, overrunning a smaller value's shadow
+  space into its neighbor's (`emit_zero`). The fixture for the first,
+  `28_callee_moves_its_parameter`, found a third in Cranelift: a move
+  aliases, so a generic storing its `T` parameter into a var zeroed the
+  caller's own copy value. A plain value owns nothing, so it is not zeroed
+  (`moved_size`).
 
 ## Open questions
 

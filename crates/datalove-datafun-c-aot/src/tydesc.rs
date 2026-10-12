@@ -207,8 +207,10 @@ pub fn emit_tydesc(
                 internal.size, internal.align, internal.keys_offset, internal.child_ptrs_offset).unwrap();
         }
 
+        // A template's offsets, sizes and alignments are the instance's to work
+        // out; see `rtdt::TyInfoParam`. Zero stands in for each.
         IrType::Tuple(fields) => {
-            let offsets = compute_tuple_field_offsets(fields);
+            let offsets = if ty.is_dynamic() { vec![0; fields.len()] } else { compute_tuple_field_offsets(fields) };
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
@@ -231,7 +233,7 @@ pub fn emit_tydesc(
 
         IrType::Struct(fields) => {
             let field_types: Vec<_> = fields.iter().map(|(_, ty)| ty.clone()).collect();
-            let offsets = compute_tuple_field_offsets(&field_types);
+            let offsets = if ty.is_dynamic() { vec![0; fields.len()] } else { compute_tuple_field_offsets(&field_types) };
             let fields_name = format!("{}_fields", name);
 
             if fields.is_empty() {
@@ -262,7 +264,11 @@ pub fn emit_tydesc(
             } else {
                 // Each variant's payload is placed at its own alignment, matching
                 // what codegen writes and what the runtime recomputes.
-                let variant_offsets = types::compute_enum_variant_offsets(variants);
+                let variant_offsets = if ty.is_dynamic() {
+                    vec![0; variants.len()]
+                } else {
+                    types::compute_enum_variant_offsets(variants)
+                };
 
                 // Emit variant array.
                 write!(out, "static const dtlv_enum_variant_t {}[] = {{ ", variants_name).unwrap();
@@ -297,16 +303,22 @@ pub fn emit_tydesc(
 
         IrType::Option(inner) => {
             let inner_tydesc = compiler.get_tydesc_name(inner);
-            let opt_layout = compute_option_layout(inner);
-            let payload_offset = ir_layout::option_payload_offset(inner);
+            let (opt_layout, payload_offset) = if ty.is_dynamic() {
+                (layout, 0)
+            } else {
+                (compute_option_layout(inner), ir_layout::option_payload_offset(inner))
+            };
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x60, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .option = {{ .inner_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, opt_layout.size, opt_layout.align, inner_tydesc, payload_offset).unwrap();
         }
 
         IrType::Result(ok) => {
             let ok_tydesc = compiler.get_tydesc_name(ok);
-            let res_layout = compute_result_layout(ok);
-            let payload_offset = ir_layout::result_payload_offset(ok);
+            let (res_layout, payload_offset) = if ty.is_dynamic() {
+                (layout, 0)
+            } else {
+                (compute_result_layout(ok), ir_layout::result_payload_offset(ok))
+            };
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x61, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .result = {{ .ok_tydesc = &{}, .payload_offset = {} }} }} }};",
                 name, res_layout.size, res_layout.align, ok_tydesc, payload_offset).unwrap();
         }
