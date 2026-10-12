@@ -18,7 +18,6 @@ impl IrInterpreter {
             layout: regs.frame.layout_ptr(),
             ret_dest: regs.ret_dest,
             pc,
-            _scratch: callee.scratch,
         });
         regs.bc = callee.bc;
         regs.func = callee.func;
@@ -40,7 +39,7 @@ impl IrInterpreter {
         self.leave_dynamic(&regs.frame);
         self.frame_stack.pop(regs.frame);
         // SAFETY: the top activation, taken off the vector first and then
-        // read out of where it was, its two owned fields moved out, so that
+        // read out of where it was, its owned field moved out, so that
         // nothing in it is dropped twice whatever happens after.
         //
         // Field by field, and volatile so that the compiler does not merge
@@ -52,7 +51,6 @@ impl IrInterpreter {
             use std::ptr::{addr_of, read_volatile};
             regs.stack.set_len(len - 1);
             let top = regs.stack.as_ptr().add(len - 1);
-            let scratch = std::ptr::read(addr_of!((*top)._scratch));
             regs.bc = read_volatile(addr_of!((*top).bc));
             regs.bc_keep = std::ptr::read(addr_of!((*top).bc_keep));
             regs.func = &*(*regs.bc).func;
@@ -67,9 +65,7 @@ impl IrInterpreter {
                 ptr: read_volatile(addr_of!((*top).ret_dest.ptr)),
                 tydesc: read_volatile(addr_of!((*top).ret_dest.tydesc)),
             };
-            let pc = read_volatile(addr_of!((*top).pc));
-            drop(scratch);
-            Some(pc)
+            Some(read_volatile(addr_of!((*top).pc)))
         }
     }
 
@@ -131,7 +127,6 @@ impl IrInterpreter {
         // left (`release_retired_call_caches`).
         let mut frame = unsafe { self.frame_stack.push_borrowed(&plan.layout) }?;
         let callee_base = frame.base_ptr();
-        let mut scratch = None;
         match &plan.params {
             PlannedParams::At(params) => for param in params.iter() {
                 // SAFETY: `src` was lowered against the caller's frame, which
@@ -147,32 +142,25 @@ impl IrInterpreter {
                         .write(crate::value::Value { ptr, tydesc: param.tydesc });
                 }
             },
-            PlannedParams::Recipes(params) => {
-                // Allocated only if an argument is read through a wrapper.
-                let mut read: crate::BorrowScratch = Vec::new();
-                for param in params.iter() {
-                    // SAFETY: the recipe was made against the caller's frame,
-                    // which `base` is, and `value` and `copy` are places in
-                    // the callee's.
-                    unsafe {
-                        let mut arg = self.arg_value(&param.arg, base, &regs.frame, regs.frames, &mut read);
-                        if let Some((at, size)) = param.copy {
-                            let copy = callee_base.add(at as usize);
-                            copy_bytes(arg.ptr, copy, size as usize);
-                            arg.ptr = copy;
-                        }
-                        (callee_base.add(param.value as usize) as *mut crate::value::Value).write(arg);
+            PlannedParams::Recipes(params) => for param in params.iter() {
+                // SAFETY: the recipe was made against the caller's frame,
+                // which `base` is, and `value` and `copy` are places in the
+                // callee's.
+                unsafe {
+                    let mut arg = self.arg_value(&param.arg, base, &regs.frame, regs.frames);
+                    if let Some((at, size)) = param.copy {
+                        let copy = callee_base.add(at as usize);
+                        copy_bytes(arg.ptr, copy, size as usize);
+                        arg.ptr = copy;
                     }
+                    (callee_base.add(param.value as usize) as *mut crate::value::Value).write(arg);
                 }
-                if !read.is_empty() {
-                    scratch = Some(Box::new(read));
-                }
-            }
+            },
         }
         frame.stop_keeping_liveness();
         frame.clear_tracking();
-        // Under generics by reference, the type parameters' descriptors, and
-        // the table and storage they make.
+        // The type parameters' descriptors, and the table and storage they
+        // make.
         if !plan.descriptors.is_empty() {
             for (i, &r) in plan.descriptors.iter().enumerate() {
                 frame.set_type_param(i, Self::resolve_binding(r, &regs.frame));
@@ -195,7 +183,6 @@ impl IrInterpreter {
             code_ref: unsafe { &*plan.code_ref },
             ctx: None,
             dest,
-            scratch,
         };
         Ok(self.switch_to(regs, callee, resume))
     }
@@ -213,21 +200,14 @@ impl IrInterpreter {
         base: *mut u8,
         frame: &Frame,
         frames: &FrameStore,
-        scratch: &mut crate::BorrowScratch,
     ) -> crate::value::Value {
         let mut arg = match recipe.src {
             // SAFETY: the caller's.
             ArgSource::At(loc, tydesc) => crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc },
             ArgSource::Read(operand) => self.read_operand(&operand, frame, frames),
         };
-        if recipe.unwrap {
-            arg = IrInterpreter::borrow_through_wrapper(arg, scratch);
-        }
         if let Some(tydesc) = recipe.retype {
             arg.tydesc = tydesc;
-        }
-        if recipe.unwrap_again {
-            arg = IrInterpreter::borrow_through_wrapper(arg, scratch);
         }
         arg
     }
@@ -239,11 +219,10 @@ impl IrInterpreter {
         let n = plan.args.len();
         let len = 1 + 2 * n + 2;
         let mut words = [0usize; MAX_C_WORDS];
-        let mut scratch: crate::BorrowScratch = Vec::new();
         words[0] = self.runtime.handle() as usize;
         for (i, recipe) in plan.args.iter().enumerate() {
             // SAFETY: the recipe was made against the caller's frame.
-            let arg = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames, &mut scratch) };
+            let arg = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames) };
             words[1 + 2 * i] = arg.ptr as usize;
             words[2 + 2 * i] = arg.tydesc as usize;
         }
@@ -257,8 +236,7 @@ impl IrInterpreter {
         };
         words[1 + 2 * n] = dest.ptr as usize;
         words[2 + 2 * n] = if plan.dest_tydesc.is_null() { dest.tydesc } else { plan.dest_tydesc } as usize;
-        // Then, under generics by reference, the descriptors the native's
-        // signature asks for.
+        // Then the descriptors the native's signature asks for.
         for (k, &r) in plan.descriptors.iter().enumerate() {
             words[len + k] = Self::resolve_binding(r, &regs.frame) as usize;
         }
@@ -279,7 +257,6 @@ impl IrInterpreter {
             words[len] = word;
             len += 1;
         };
-        let mut scratch: crate::BorrowScratch = Vec::new();
         push(self.runtime.handle() as usize);
         if plan.entry.uses_sret {
             // SAFETY: the destination was lowered against the caller's frame.
@@ -289,11 +266,8 @@ impl IrInterpreter {
             crate::dispatch::MAX_ENTRY_WORDS];
         for (i, recipe) in plan.args.iter().enumerate() {
             // SAFETY: the recipe was made against the caller's frame.
-            args[i] = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames, &mut scratch) };
+            args[i] = unsafe { self.arg_value(recipe, base, &regs.frame, regs.frames) };
             push(args[i].ptr as usize);
-        }
-        for &param in plan.descriptor_params.iter() {
-            push(args[param as usize].tydesc as usize);
         }
 
         self.with_dispatcher(&regs.ctx, regs.registry, regs.frames, &[], 1,
@@ -407,8 +381,8 @@ impl IrInterpreter {
     /// The bytecode of a body that only forwards its parameters to a native,
     /// if `callee` is one.
     ///
-    /// A forwarder is one call that passes the parameters in order and has no
-    /// shapes to hand over, then returns what the call returned: most of the
+    /// A forwarder is one call that passes the parameters in order, then
+    /// returns what the call returned: most of the
     /// standard library's wrappers around natives. Calling the native from
     /// the forwarder's caller saves a frame and a call.
     fn forwarder(
@@ -419,7 +393,7 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
     ) -> Option<std::rc::Rc<BcFunction>> {
         let [block] = &callee.blocks[..] else { return None };
-        let [Instruction::Call { func, dest, args, shape_descriptors, .. }] = &block.instructions[..] else {
+        let [Instruction::Call { func, dest, args, .. }] = &block.instructions[..] else {
             return None;
         };
         let in_order = args.len() == layout.param_modes.len()
@@ -429,7 +403,7 @@ impl IrInterpreter {
             Terminator::Return { value: Some(Operand::Value(v)) } => v == dest,
             _ => false,
         };
-        if !in_order || !returns || !shape_descriptors.is_empty() {
+        if !in_order || !returns {
             return None;
         }
         let bc = self.bytecode_for(layout, callee);
@@ -536,13 +510,13 @@ impl IrInterpreter {
         f(self.runtime.handle(), args, dest, shapes)
     }
 
-    /// The plan for a call whose arguments suit it and that hands over no
-    /// shapes: a body, a rider function, or a forwarder to one.
+    /// The plan for a call whose arguments suit it: a body, a rider function,
+    /// or a forwarder to one.
     ///
     /// Each argument is read as `fast_call` would read it, so the plan makes
     /// the same call: from where the lowering resolved it, or as the IR walker
-    /// reads its operand, through a wrapper if it is borrowed; then, for a
-    /// forwarder, as the forwarder's own call reads its parameter.
+    /// reads its operand; then, for a forwarder, as the forwarder's own call
+    /// reads its parameter.
     #[allow(clippy::too_many_arguments)]
     fn make_plan(
         &mut self,
@@ -558,17 +532,10 @@ impl IrInterpreter {
         descriptors: &std::rc::Rc<[crate::BindingRef]>,
     ) -> Option<Plan> {
         use crate::dispatch::SitePolicy;
-        // The argument as the call reads it, `mode` being the parameter's.
-        let read = |i: usize, mode: ParamMode| match &call.resolved {
-            Some(resolved) => ArgRecipe {
-                src: ArgSource::At(resolved[i].0, resolved[i].1),
-                unwrap: false, retype: None, unwrap_again: false,
-            },
-            None => ArgRecipe {
-                src: ArgSource::Read(ir_args[i]),
-                unwrap: matches!(mode, ParamMode::Ref | ParamMode::Mut),
-                retype: None, unwrap_again: false,
-            },
+        // The argument as the call reads it.
+        let read = |i: usize| match &call.resolved {
+            Some(resolved) => ArgRecipe { src: ArgSource::At(resolved[i].0, resolved[i].1), retype: None },
+            None => ArgRecipe { src: ArgSource::Read(ir_args[i]), retype: None },
         };
         let native_plan = |this: &Self, native: &datalove_datafun_ir::NativeContext, args: Box<[ArgRecipe]>, dest_tydesc| {
             let NativeTarget::C(fn_ptr) = this.native_table.lookup(native.symbol()).ok()? else { return None };
@@ -581,8 +548,7 @@ impl IrInterpreter {
             // A rider function.
             (None, _) => {
                 let CodeUnitContext::Native(native) = &callee.context else { unreachable!("a body without a layout is a native") };
-                let mode = |i: usize| native.param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let args = (0..call.args.len()).map(|i| read(i, mode(i))).collect();
+                let args = (0..call.args.len()).map(read).collect();
                 native_plan(self, native, args, call.dest_tydesc)
             }
             // A forwarder: each argument as its frame would hold it -- an owned
@@ -597,19 +563,15 @@ impl IrInterpreter {
                     unreachable!("a forwarder calls a native")
                 };
                 let args = (0..call.args.len()).map(|i| {
-                    let mut recipe = read(i, layout.param_modes[i]);
+                    let mut recipe = read(i);
                     // A dynamic parameter keeps the descriptor it came with.
                     if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
                         && !layout.param_tydescs[i].is_null()
                     {
                         recipe.retype = Some(layout.param_tydescs[i]);
                     }
-                    match &inner.resolved {
-                        Some(resolved) => recipe.retype = Some(resolved[i].1),
-                        None => recipe.unwrap_again = matches!(
-                            native.param_modes.get(i).copied().unwrap_or(ParamMode::In),
-                            ParamMode::Ref | ParamMode::Mut,
-                        ),
+                    if let Some(resolved) = &inner.resolved {
+                        recipe.retype = Some(resolved[i].1);
                     }
                     recipe
                 }).collect();
@@ -622,16 +584,12 @@ impl IrInterpreter {
             // all, which is what a call offered to it is handed.
             (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_))) => {
                 let Some(SitePolicy::Enter(entry)) = policy else { unreachable!() };
-                let args: Box<[ArgRecipe]> = layout.param_modes.iter().enumerate()
-                    .map(|(i, mode)| read(i, *mode))
-                    .collect();
-                let function = callee.function_context().expect("a body with a layout is a function");
-                let descriptor_params: Box<[u32]> = function.descriptor_params.iter().map(|p| p.0).collect();
-                let width = 1 + entry.uses_sret as usize + args.len() + descriptor_params.len();
-                (function.descriptor_shapes.is_empty() && width <= crate::dispatch::MAX_ENTRY_WORDS)
+                let args: Box<[ArgRecipe]> = (0..layout.param_modes.len()).map(read).collect();
+                let width = 1 + entry.uses_sret as usize + args.len();
+                (width <= crate::dispatch::MAX_ENTRY_WORDS)
                     .then(|| Plan::Jit(JitPlan {
                         func: crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
-                        entry, args, descriptor_params,
+                        entry, args,
                     }))
             }
             // A body, whose frame holds an owned argument with its own
@@ -658,7 +616,7 @@ impl IrInterpreter {
                         copy: layout.param_copies[i],
                     }).collect()),
                     None => PlannedParams::Recipes(layout.param_modes.iter().enumerate().map(|(i, mode)| {
-                        let mut arg = read(i, *mode);
+                        let mut arg = read(i);
                         if matches!(mode, ParamMode::In | ParamMode::Out) && !layout.param_tydescs[i].is_null() {
                             arg.retype = Some(layout.param_tydescs[i]);
                         }
@@ -696,7 +654,7 @@ impl IrInterpreter {
         // which the plan made here then follows; this call it is offered.
         let dispatched = self.call_dispatcher.borrow().is_some();
         let dispatcher_epoch = self.dispatcher_epoch.get();
-        let Instruction::Call { func: code_ref, args: ir_args, shape_descriptors, bindings, .. } =
+        let Instruction::Call { func: code_ref, args: ir_args, bindings, .. } =
             &caller.blocks[call.block as usize].instructions[call.index as usize] else {
             unreachable!("a fast call is a call")
         };
@@ -749,7 +707,7 @@ impl IrInterpreter {
                     // Under a dispatcher a body's plan may be compiled code's,
                     // which takes no type parameter descriptors from a plan.
                     let natively = layout.is_none() || forward.is_some();
-                    let plannable = suits && shape_descriptors.is_empty()
+                    let plannable = suits
                         && (bindings.is_empty() || natively || !dispatched)
                         && !matches!(code_ref, CodeRef::External { .. });
                     let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
@@ -789,22 +747,13 @@ impl IrInterpreter {
             Destination { ptr: unsafe { call.dest.at(base) }, tydesc: call.dest_tydesc }
         };
 
-        // A borrowed argument that arrives wrapped is read through its
-        // wrapper, into here if it has no address of its own; held until the
-        // call returns.
-        let mut scratch: crate::BorrowScratch = Vec::new();
-        let mut read = |this: &Self, i: usize, mode: ParamMode, frame: &Frame| {
+        let read = |this: &Self, i: usize, frame: &Frame| {
             if let Some(resolved) = &call.resolved {
                 let (loc, tydesc) = resolved[i];
                 // SAFETY: lowered against this frame's layout.
                 return crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc };
             }
-            let val = this.read_operand(&ir_args[i], frame, frames);
-            if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
-                IrInterpreter::borrow_through_wrapper(val, &mut scratch)
-            } else {
-                val
-            }
+            this.read_operand(&ir_args[i], frame, frames)
         };
 
         if let (Some(wrapper), Some(layout)) = (&forward, &layout) {
@@ -821,7 +770,6 @@ impl IrInterpreter {
             let CodeUnitContext::Native(native) = &native_body.context else {
                 unreachable!("a forwarder calls a native, and its body is fixed while the registry is")
             };
-            let mut inner_scratch: crate::BorrowScratch = Vec::new();
             // A dynamic result is the forwarder's, which is this call's.
             let inner_tydesc = if inner.dest_tydesc.is_null() { dest.tydesc } else { inner.dest_tydesc };
             let inner_dest = Destination { ptr: dest.ptr, tydesc: inner_tydesc };
@@ -834,8 +782,8 @@ impl IrInterpreter {
             // SAFETY: the arguments are read as the forwarder would read them.
             unsafe { self.call_native(
                 inner, native_body as *const IrCodeUnit as usize, native, inner_dest, &supplied,
-                |this, i, mode| {
-                    let mut val = read(this, i, layout.param_modes[i], frame);
+                |this, i, _| {
+                    let mut val = read(this, i, frame);
                     // A dynamic parameter keeps the descriptor it came with.
                     if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
                         && !layout.param_tydescs[i].is_null()
@@ -844,9 +792,6 @@ impl IrInterpreter {
                     }
                     match &inner.resolved {
                         Some(resolved) => crate::value::Value { ptr: val.ptr, tydesc: resolved[i].1 },
-                        None if matches!(mode, ParamMode::Ref | ParamMode::Mut) => {
-                            IrInterpreter::borrow_through_wrapper(val, &mut inner_scratch)
-                        }
                         None => val,
                     }
                 },
@@ -854,33 +799,22 @@ impl IrInterpreter {
             return Ok(Called::Done);
         }
 
-        let shapes: Vec<*const rtdt::TyDesc> = if shape_descriptors.is_empty() {
-            Vec::new()
-        } else {
-            shape_descriptors.iter().map(|r| self.resolve_shape_ref(r, frame)).collect()
-        };
-
         let Some(layout) = layout else {
-            // A native: no frame, just the arguments.
+            // A native: no frame, just the arguments, and a descriptor for
+            // each type parameter no argument determines, for what this call
+            // bound it to.
             let CodeUnitContext::Native(native) = &callee.context else { unreachable!() };
-            // Under generics by reference, a descriptor for each type
-            // parameter no argument determines, for what this call bound it to.
-            let shapes: Vec<*const rtdt::TyDesc> = if bindings.is_empty() {
-                shapes
-            } else {
-                descriptors.iter().map(|&r| Self::resolve_binding(r, frame)).collect()
-            };
+            let supplied: Vec<*const rtdt::TyDesc> = descriptors.iter()
+                .map(|&r| Self::resolve_binding(r, frame))
+                .collect();
             // SAFETY: the arguments are read from this frame as lowered.
-            unsafe { self.call_native(call, address, native, dest, &shapes, |this, i, mode| read(this, i, mode, frame)) }?;
+            unsafe { self.call_native(call, address, native, dest, &supplied, |this, i, _| read(this, i, frame)) }?;
             return Ok(Called::Done);
         };
 
         let mut callee_frame = self.frame_stack.push(std::rc::Rc::clone(&layout))?;
         for i in 0..call.args.len() {
-            callee_frame.set_param(i, read(self, i, layout.param_modes[i], frame));
-        }
-        for (i, tydesc) in shapes.into_iter().enumerate() {
-            callee_frame.set_shape_descriptor(i, tydesc);
+            callee_frame.set_param(i, read(self, i, frame));
         }
         for (i, &r) in descriptors.iter().enumerate() {
             callee_frame.set_type_param(i, Self::resolve_binding(r, frame));
@@ -899,7 +833,6 @@ impl IrInterpreter {
             code_ref,
             ctx: Some(callee_ctx),
             dest,
-            scratch: (!scratch.is_empty()).then(|| Box::new(scratch)),
         }))
     }
 }

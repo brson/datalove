@@ -30,13 +30,11 @@ fn make_func_unit(
         const_values: vec![],
         symbols: datalove_datafun_ir::SymbolTable::new(),
         context: CodeUnitContext::Function(FunctionContext {
-            descriptor_params: Vec::new(),
             params,
             param_modes: vec![],
             param_types,
             return_type,
             tracked_params: vec![],
-            descriptor_shapes: Vec::new(),
             type_param_count: 0,
             descriptor_table: Vec::new(),
         }),
@@ -126,7 +124,7 @@ fn test_layout_computation() {
 
     let extras = |keep_liveness| crate::layout::LayoutExtras {
         type_param_count: 0, descriptor_table: &[],
-        shape_count: 0, described_refs: &[], tensor_views: &[], keep_liveness, is_script: false,
+        tensor_views: &[], keep_liveness, is_script: false,
         param_modes: &[],
     };
     let layout = IrLayout::compute(
@@ -219,8 +217,6 @@ fn test_simple_function_call() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                 ],
@@ -293,8 +289,6 @@ fn test_nested_function_calls() {
                         dest: ValueId(0),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Param(ParamId(0))],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                     // Second call: passthrough(result)
@@ -302,8 +296,6 @@ fn test_nested_function_calls() {
                         dest: ValueId(1),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(0))],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                 ],
@@ -1691,8 +1683,6 @@ fn test_crossunit_external_function() {
                         dest: ValueId(1),
                         func: CodeRef::External { unit: 0, id: CodeUnitId(0) },
                         args: vec![Operand::Value(ValueId(0))],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                 ],
@@ -1872,7 +1862,6 @@ fn test_list_with_explicit_drop() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
-                        descriptor: None,
                     },
                     // Explicit drop - this is required since list is not tracked.
                     Instruction::Drop { operand: Operand::Value(ValueId(2)) },
@@ -1949,7 +1938,6 @@ fn test_script_with_function_and_list_drop() {
                             Operand::Value(ValueId(2)),
                             Operand::Value(ValueId(3)),
                         ],
-                        descriptor: None,
                     },
                     // Call the function (just to exercise it).
                     Instruction::Const { dest: ValueId(5), value: ConstValue::I64(10) },
@@ -1958,8 +1946,6 @@ fn test_script_with_function_and_list_drop() {
                         dest: ValueId(7),
                         func: CodeRef::Local(CodeUnitId(0)),
                         args: vec![Operand::Value(ValueId(5)), Operand::Value(ValueId(6))],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                     // Explicit drop of list (values are precise).
@@ -2015,7 +2001,6 @@ fn test_multiple_explicit_drops() {
                             Operand::Value(ValueId(0)),
                             Operand::Value(ValueId(1)),
                         ],
-                        descriptor: None,
                     },
                     // Second list [3, 4].
                     Instruction::Const { dest: ValueId(3), value: ConstValue::I64(3) },
@@ -2026,7 +2011,6 @@ fn test_multiple_explicit_drops() {
                             Operand::Value(ValueId(3)),
                             Operand::Value(ValueId(4)),
                         ],
-                        descriptor: None,
                     },
                     // Explicit drops for both lists.
                     Instruction::Drop { operand: Operand::Value(ValueId(2)) },

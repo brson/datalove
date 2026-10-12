@@ -22,9 +22,6 @@ struct MapSetup {
     value_ty: IrType,
     runtime: RuntimeImports,
     rt_handle: cl_ir::Value,
-    /// Whether the map's descriptor came from the call site rather than from
-    /// its static type, which is to say whether this is a map inside a generic.
-    erased: bool,
 }
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
@@ -55,14 +52,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let map_ptr = self.get_operand_ptr(builder, map)?;
         let key_ptr = self.get_operand_ptr(builder, key)?;
 
-        // Inside a generic the static type describes a `%{data = data}`, and
-        // looking a `string` up against that ordering finds nothing. The call
-        // site's descriptor is the truthful one.
-        let erased = self.operand_ref_desc(map).is_some();
-        let map_tydesc_ptr = match self.operand_ref_desc(map) {
-            Some(desc) => desc,
-            None => self.tydesc_value(builder, &map_ty)?,
-        };
+        let map_tydesc_ptr = self.tydesc_value(builder, &map_ty)?;
 
         let key_tydesc_ptr = self.tydesc_value(builder, &key_ty)?;
 
@@ -74,7 +64,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             value_ty,
             runtime,
             rt_handle,
-            erased,
         })
     }
 
@@ -208,28 +197,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 builder.switch_to_block(load_block);
                 builder.seal_block(load_block);
 
-                // What is in the map is the real value type and the
-                // destination is whatever this function's static type says, so
-                // inside a generic the clone may want wrapping on the way --
-                // the same decision `list_get_erased` makes, and the runtime's
-                // for the same reason.
-                if s.erased {
-                    let elem_fn = self.module
-                        .declare_func_in_func(s.runtime.element_tydesc, builder.func);
-                    let call = builder.ins().call(elem_fn, &[s.map_tydesc_ptr]);
-                    let elem_desc = builder.inst_results(call)[0];
-                    let clone_ref = self.module
-                        .declare_func_in_func(s.runtime.clone_erased, builder.func);
-                    builder.ins().call(clone_ref, &[
-                        s.rt_handle, value_ptr, elem_desc, dest_addr, value_tydesc_ptr,
-                    ]);
-                } else {
-                    let clone_ref = self.module
-                        .declare_func_in_func(s.runtime.clone_local, builder.func);
-                    builder.ins().call(clone_ref, &[
-                        s.rt_handle, value_ptr, value_tydesc_ptr, dest_addr, value_tydesc_ptr,
-                    ]);
-                }
+                let clone_ref = self.module
+                    .declare_func_in_func(s.runtime.clone_local, builder.func);
+                builder.ins().call(clone_ref, &[
+                    s.rt_handle, value_ptr, value_tydesc_ptr, dest_addr, value_tydesc_ptr,
+                ]);
                 builder.ins().jump(merge_block, &[]);
 
                 // Skip block.
@@ -316,15 +288,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         let value_ptr = builder.ins().load(PTR_TYPE, MemFlagsData::new(), vref_addr, 0);
         self.values.insert(dest, value_ptr);
-        // What the pointer reaches is the map's real value type rather than the
-        // `data` a generic's static type claims.
-        if self.ref_descs.contains_key(&dest) {
-            let elem_fn = self.module
-                .declare_func_in_func(s.runtime.element_tydesc, builder.func);
-            let call = builder.ins().call(elem_fn, &[s.map_tydesc_ptr]);
-            let elem_desc = builder.inst_results(call)[0];
-            self.ref_desc_values.insert(dest, elem_desc);
-        }
         Ok(())
     }
 

@@ -44,7 +44,7 @@ impl BcFunction {
                 Op::ConstPool { at: pool_at, len, .. } | Op::ConstString { at: pool_at, len, .. } => {
                     assert!(pool_at + len <= self.pool.len() as u32, "{}: op {} reads past the pool", func.name, at);
                 }
-                Op::ListElementRefRt { at: i, .. } | Op::EraseRt { at: i } | Op::ReifyRt { at: i }
+                Op::ListElementRefRt { at: i, .. }
                 | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. }
                 | Op::OpAssignRt { at: i, .. } | Op::MapGetRt { at: i, .. } => {
                     in_table(i, self.rt.len(), "routine operands");

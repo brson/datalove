@@ -90,7 +90,7 @@ mod verify;
 pub(crate) use lower::lower;
 use crate::value::Destination;
 use datalove_datafun_ir::frame_layout::tracking;
-use crate::{copy_bytes, IrInterpreter, UnitTypes};
+use crate::{copy_bytes, IrInterpreter};
 
 /// Where an operand is: in the frame at an offset, or, with the top bit set,
 /// behind a pointer the frame holds at that offset.
@@ -361,8 +361,6 @@ pub(crate) enum Op {
     ListElementRefRt { dest: u32, at: u32 },
     /// IR walker routines on resolved operands: `rt[at]` holds the
     /// destination and the source.
-    EraseRt { at: u32 },
-    ReifyRt { at: u32 },
     CloneRt { at: u32 },
     WidenFixedRt { at: u32 },
 
@@ -635,8 +633,6 @@ struct JitPlan {
     func: crate::dispatch::FuncIdentity,
     entry: crate::dispatch::CompiledEntry,
     args: Box<[ArgRecipe]>,
-    /// The parameters whose descriptors follow the arguments, in order.
-    descriptor_params: Box<[u32]>,
 }
 
 /// The arguments of a planned call to a body.
@@ -694,14 +690,8 @@ struct NativePlan {
 #[derive(Clone, Copy)]
 struct ArgRecipe {
     src: ArgSource,
-    /// Read through a `data` wrapper, as a borrowed argument from a generic
-    /// caller is.
-    unwrap: bool,
     /// The descriptor to hand over in place of the one read.
     retype: Option<*const rtdt::TyDesc>,
-    /// Read through a wrapper again, after retyping: a forwarder's borrowed
-    /// parameter passed on to its native.
-    unwrap_again: bool,
 }
 
 /// Where a planned call's argument is.
@@ -711,7 +701,7 @@ enum ArgSource {
     /// as the lowering resolved it.
     At(Loc, *const rtdt::TyDesc),
     /// The operand, read at the call as the IR walker reads it: one whose
-    /// type, a `data` in it, only the running frame says.
+    /// type only the running frame says.
     Read(Operand),
 }
 
@@ -737,9 +727,6 @@ struct Callee<'r> {
     ctx: Option<ExecutionContext<'r>>,
     /// Where the result goes, in the caller's frame.
     dest: Destination,
-    /// What borrowed arguments were read into, if any were, held until the
-    /// call returns.
-    scratch: Option<Box<crate::BorrowScratch>>,
 }
 
 /// What a call made from the loop saves of its caller, to go back to.
@@ -761,9 +748,6 @@ struct Activation<'r> {
     ret_dest: Destination,
     /// The op after the call.
     pc: usize,
-    /// The callee's borrowed arguments' scratch, if it has any, held, not
-    /// read, until it returns.
-    _scratch: Option<Box<crate::BorrowScratch>>,
 }
 
 /// Push onto a vector, writing the value where it goes rather than building it

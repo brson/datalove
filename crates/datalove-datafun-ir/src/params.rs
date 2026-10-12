@@ -120,27 +120,22 @@ pub fn map_operands_in_instruction(
             dest: *dest,
             src: replace_operand(src),
         },
-        // The descriptors say what the callee's type parameters were bound to,
-        // which no operand substitution changes. Blanking them would drop what
-        // a generic callee needs wherever nothing recomputes them afterwards.
-        Instruction::Call { dest, func, args, type_args, shape_descriptors, bindings } =>
+        // The bindings say what the callee's type parameters were bound to,
+        // which no operand substitution changes.
+        Instruction::Call { dest, func, args, bindings } =>
             Instruction::Call {
                 dest: *dest,
                 func: func.clone(),
                 args: args.iter().map(replace_operand).collect(),
-                type_args: type_args.clone(),
-                shape_descriptors: shape_descriptors.clone(),
                 bindings: bindings.clone(),
             },
         Instruction::ComptimeCall {
-            dest, func, args, comptime_param_indices, type_args, shape_descriptors, bindings,
+            dest, func, args, comptime_param_indices, bindings,
         } => Instruction::ComptimeCall {
             dest: *dest,
             func: func.clone(),
             args: args.iter().map(replace_operand).collect(),
             comptime_param_indices: comptime_param_indices.clone(),
-            type_args: type_args.clone(),
-            shape_descriptors: shape_descriptors.clone(),
             bindings: bindings.clone(),
         },
         Instruction::Pack { dest, ty, fields } => Instruction::Pack {
@@ -169,10 +164,6 @@ pub fn map_operands_in_instruction(
             dest: *dest,
             src: replace_operand(src),
             field_index: *field_index,
-        },
-        Instruction::DataBorrow { dest, src } => Instruction::DataBorrow {
-            dest: *dest,
-            src: replace_operand(src),
         },
         Instruction::WrapSome { dest, inner } => Instruction::WrapSome {
             dest: *dest,
@@ -228,35 +219,20 @@ pub fn map_operands_in_instruction(
             dest: *dest,
             inner: replace_operand(inner),
         },
-        Instruction::Erase { dest, src } => Instruction::Erase {
-            dest: *dest,
-            src: replace_operand(src),
-        },
-        Instruction::EraseTracked { dest, src } => Instruction::EraseTracked {
-            dest: *dest,
-            src: replace_operand(src),
-        },
-        Instruction::Reify { dest, src } => Instruction::Reify {
-            dest: *dest,
-            src: replace_operand(src),
-        },
-        Instruction::ListNew { dest, elements, descriptor } => Instruction::ListNew {
+        Instruction::ListNew { dest, elements } => Instruction::ListNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
-            descriptor: *descriptor,
         },
-        Instruction::SetNew { dest, elements, descriptor } => Instruction::SetNew {
+        Instruction::SetNew { dest, elements } => Instruction::SetNew {
             dest: *dest,
             elements: elements.iter().map(replace_operand).collect(),
-            descriptor: *descriptor,
         },
-        Instruction::MapNew { dest, entries, descriptor } => Instruction::MapNew {
+        Instruction::MapNew { dest, entries } => Instruction::MapNew {
             dest: *dest,
             entries: entries
                 .iter()
                 .map(|(k, v)| (replace_operand(k), replace_operand(v)))
                 .collect(),
-            descriptor: *descriptor,
         },
         Instruction::TensorNew {
             dest,

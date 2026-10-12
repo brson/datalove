@@ -234,7 +234,6 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         | Instruction::Unpack { src, .. }
         | Instruction::GetField { src, .. }
         | Instruction::GetFieldRef { src, .. }
-        | Instruction::DataBorrow { src, .. }
         | Instruction::UnwrapOption { src, .. }
         | Instruction::UnwrapResult { src, .. } => add_operand_value(src, used),
 
@@ -322,9 +321,6 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
         // Boxing operations.
         Instruction::ErrorFrom { inner, .. }
         | Instruction::DataFrom { inner, .. } => add_operand_value(inner, used),
-        Instruction::Erase { src, .. }
-        | Instruction::EraseTracked { src, .. }
-        | Instruction::Reify { src, .. } => add_operand_value(src, used),
 
         // Slot load operations (no operand, just slot reference).
         Instruction::SlotLoadCopy { .. }
@@ -494,7 +490,7 @@ fn consumed_owned(
 ) -> Option<Vec<ValueId>> {
     if matches!(instr,
         Instruction::Clone { .. } | Instruction::Copy { .. }
-        | Instruction::GetFieldRef { .. } | Instruction::DataBorrow { .. }) {
+        | Instruction::GetFieldRef { .. }) {
         return Some(Vec::new());
     }
     let owned = |ty: Option<&IrType>| !ty.is_some_and(|t| t.is_copy());

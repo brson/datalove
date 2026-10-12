@@ -35,7 +35,7 @@ impl Op {
             | Op::SubCkI64 { .. } | Op::MulCkI64 { .. } | Op::AddCkU32I { .. } | Op::SubCkU32I { .. }
             | Op::MulCkU32I { .. } | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. }
             | Op::ListSetCopy { .. } | Op::ListStoreAt { .. } | Op::ListElementRef { .. }
-            | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. }
+            | Op::ListElementRefRt { .. } | Op::CloneRt { .. }
             | Op::WidenFixedRt { .. } | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. } | Op::Drop { .. } | Op::DropTracked { .. }
             | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. } | Op::Widen { .. } | Op::BinOpRt { .. }
@@ -53,7 +53,7 @@ impl Op {
         match *self {
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::Jump { .. } | Op::LoopHead { .. }
             | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
-            | Op::ListElementRefRt { .. } | Op::EraseRt { .. } | Op::ReifyRt { .. }
+            | Op::ListElementRefRt { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. }
             | Op::OpAssignRt { .. } => {}
             Op::CkAssign { ty, place, b, ovf, .. } => { f(place, ty.size()); f(b, ty.size()); f(ovf, 1) }
@@ -198,7 +198,7 @@ impl Op {
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListCopyAt { .. } | Op::ListStoreAt { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
-            | Op::EraseRt { .. } | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
+            | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. }
             | Op::Drop { .. } | Op::DropTracked { .. } | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. }

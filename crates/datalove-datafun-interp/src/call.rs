@@ -36,22 +36,19 @@ impl IrInterpreter {
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
-        self.call_in_context_with_shapes(
+        self.call_in_context_with_type_params(
             func, code_ref, args, Vec::new(), ret_dest, ctx, registry, frames)
     }
 
-    /// Call, handing the callee a descriptor for each shape it declared.
-    ///
-    /// Every other value here carries its own descriptor, so this is the only
-    /// thing passed beside the arguments: a collection the callee builds has no
-    /// value to read one off.
+    /// Call, handing a generic callee a descriptor for each of its type
+    /// parameters.
     #[allow(clippy::too_many_arguments)]
-    pub fn call_in_context_with_shapes(
+    pub fn call_in_context_with_type_params(
         &mut self,
         func: &IrCodeUnit,
         code_ref: Option<CodeRef>,
         args: Vec<Value>,
-        shape_descriptors: Vec<*const rtdt::TyDesc>,
+        type_params: Vec<*const rtdt::TyDesc>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -69,20 +66,12 @@ impl IrInterpreter {
             None => Rc::new(IrLayout::of_unit(func, &mut self.tydesc_table)),
         };
 
-        // The trailing descriptors are the declared shapes' under erasure, and
-        // the type parameters' for a generic compiled by reference: a function
-        // has one or the other, which is what compiled code passes last.
-        let by_reference = layout.type_param_count > 0;
         let mut frame = self.frame_stack.push(layout)?;
         for (i, arg) in args.into_iter().enumerate() {
             frame.set_param(i, arg);
         }
-        for (i, tydesc) in shape_descriptors.into_iter().enumerate() {
-            if by_reference {
-                frame.set_type_param(i, tydesc);
-            } else {
-                frame.set_shape_descriptor(i, tydesc);
-            }
+        for (i, tydesc) in type_params.into_iter().enumerate() {
+            frame.set_type_param(i, tydesc);
         }
         frame.enter();
         self.enter_dynamic(&frame);
@@ -180,7 +169,7 @@ impl IrInterpreter {
         }
         // Functions write their result to ret_dest, and always complete
         // normally.
-        self.execute_blocks(&func.blocks, &UnitTypes::of(func), frame, ret_dest, None, ctx, registry, frames)
+        self.execute_blocks(&func.blocks, frame, ret_dest, None, ctx, registry, frames)
             .map(|_| ())
     }
 
@@ -235,15 +224,13 @@ impl IrInterpreter {
     /// Resolve one argument for a parameter passed in `mode`.
     ///
     /// An `out` argument is the place the callee will write, emptied first if
-    /// it holds anything. Any other is the value as the caller has it, read
-    /// through a wrapper when it is borrowed.
+    /// it holds anything. Any other is the value as the caller has it.
     fn resolve_arg(
         &self,
         mode: ParamMode,
         op: &Operand,
         frame: &mut Frame,
         frames: &FrameStore,
-        scratch: &mut BorrowScratch,
     ) -> Value {
         if mode == ParamMode::Out {
             // Out param: the callee writes over whatever is there, so what
@@ -271,68 +258,8 @@ impl IrInterpreter {
             }
             val
         } else {
-            let mut val = self.read_operand(op, frame, frames);
-            // A container of a type parameter travels wrapped once it is
-            // owned, and a borrowed parameter wants the container itself
-            // with a descriptor beside it. Both are inside the wrapper.
-            if matches!(mode, ParamMode::Ref | ParamMode::Mut) {
-                val = Self::borrow_through_wrapper(val, scratch);
-            }
-            val
+            self.read_operand(op, frame, frames)
         }
-    }
-
-    /// The descriptor a `DescriptorRef` names.
-    ///
-    /// A static one is built from its type the way any type's is; a forwarded
-    /// one is what this function was itself handed. Nothing is put together
-    /// here: the call site named a whole type.
-    pub(super) fn resolve_shape_ref(
-        &mut self,
-        r: &datalove_datafun_ir::DescriptorRef,
-        frame: &Frame,
-    ) -> *const rtdt::TyDesc {
-        match r {
-            datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                self.tydesc_table.get_or_create(ty)
-            }
-            datalove_datafun_ir::DescriptorRef::Own(index) => frame
-                .shape_descriptor(*index)
-                .expect("a forwarded shape is one this function declared"),
-        }
-    }
-
-    /// Read through a wrapper, where one is what arrived.
-    ///
-    /// Only a wrapped value has anything to read through, and only a borrowed
-    /// parameter asks: an owned one takes the wrapper as it stands, since
-    /// owning it means dropping it and the wrapper is what knows how.
-    ///
-    /// A wrapper holding something on the heap lends the address it has. One
-    /// holding a narrow scalar in its own words has no address to lend, so the
-    /// value is unpacked into `scratch`, which the caller keeps alive for as
-    /// long as the borrow.
-    pub(super) fn borrow_through_wrapper(val: Value, scratch: &mut BorrowScratch) -> Value {
-        if unsafe { (*val.tydesc).type_tag } != rtdt::TyTag::Data {
-            return val;
-        }
-        // Only a value the wrapper keeps in its own words is unpacked, so only
-        // that takes a box; one on the heap is lent where it is. This runs on
-        // every call that passes a wrapped container on.
-        let mut inner_ptr: *const u8 = std::ptr::null();
-        let mut inner_tydesc: *const rtdt::TyDesc = std::ptr::null();
-        let held_inline = unsafe { (*(val.ptr as *const rtdt::Data)).tag() }
-            != rtdt::anypack::Tag::TwoPointers;
-        let status = if held_inline {
-            scratch.push(Box::new(0u64));
-            let slot = scratch.last_mut().expect("just pushed").as_mut() as *mut u64 as *mut u8;
-            unsafe { datalove_rt::c::dtlv_rti_data_borrow(val.ptr, slot, &mut inner_ptr, &mut inner_tydesc) }
-        } else {
-            unsafe { datalove_rt::c::dtlv_rti_data_parts(val.ptr, &mut inner_ptr, &mut inner_tydesc) }
-        };
-        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
-            "borrowing through a wrapper that holds nothing to borrow");
-        Value { ptr: inner_ptr as *mut u8, tydesc: inner_tydesc }
     }
 
     /// Try to dispatch a call via the JIT dispatcher.
@@ -344,7 +271,7 @@ impl IrInterpreter {
         func: &CodeRef,
         callee: &IrCodeUnit,
         arg_vals: &[Value],
-        shape_descriptors: &[*const rtdt::TyDesc],
+        type_params: &[*const rtdt::TyDesc],
         dest: Destination,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -352,7 +279,7 @@ impl IrInterpreter {
     ) -> Option<Result<(), InterpError>> {
         let rt_handle = self.runtime.handle();
         let weight = std::mem::replace(&mut self.call_weight, 1);
-        let result = self.with_dispatcher(ctx, registry, frames, shape_descriptors, weight,
+        let result = self.with_dispatcher(ctx, registry, frames, type_params, weight,
             |dispatcher, call_ctx| dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx))?;
         match result {
             dispatch::DispatchResult::Handled(result) => Some(result),
@@ -373,7 +300,7 @@ impl IrInterpreter {
         exec_ctx: &ExecutionContext,
         registry: &FunctionRegistry,
         frames: &mut FrameStore,
-        shape_descriptors: &[*const rtdt::TyDesc],
+        type_params: &[*const rtdt::TyDesc],
         weight: u32,
         f: impl FnOnce(&mut dyn CallDispatcher, dispatch::DispatchCallContext<'_, '_>) -> R,
     ) -> Option<R> {
@@ -383,7 +310,7 @@ impl IrInterpreter {
             registry,
             frames,
             interp: self,
-            shape_descriptors,
+            type_params,
             weight,
         };
         let result = f(&mut *dispatcher, call_ctx);
@@ -410,7 +337,6 @@ impl IrInterpreter {
         &mut self,
         code_ref: &CodeRef,
         args: &[Operand],
-        shape_refs: &[datalove_datafun_ir::DescriptorRef],
         bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
@@ -421,11 +347,10 @@ impl IrInterpreter {
         let callee = ctx.get_unit(code_ref, registry);
         match &callee.context {
             datalove_datafun_ir::CodeUnitContext::Native(native_ctx) => {
-                self.execute_native_call(native_ctx, args, shape_refs, bindings, dest, frame, frames)
+                self.execute_native_call(native_ctx, args, bindings, dest, frame, frames)
             }
             _ => self.execute_call_site(
-                code_ref, callee, args, shape_refs, bindings, dest,
-                frame, ctx, registry, frames),
+                code_ref, callee, args, bindings, dest, frame, ctx, registry, frames),
         }
     }
 
@@ -550,14 +475,12 @@ impl IrInterpreter {
     /// Call a native function.
     ///
     /// A native has no frame, so its arguments are collected into a list, and
-    /// the descriptors for its shapes go after them as they do at a call to a
-    /// module function. Otherwise the arguments are handled as
-    /// `execute_call_site` handles them.
+    /// the descriptors it wants go after them. Otherwise the arguments are
+    /// handled as `execute_call_site` handles them.
     fn execute_native_call(
         &mut self,
         native_ctx: &datalove_datafun_ir::NativeContext,
         args: &[Operand],
-        shape_refs: &[datalove_datafun_ir::DescriptorRef],
         bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
@@ -565,16 +488,13 @@ impl IrInterpreter {
     ) -> Result<(), InterpError> {
         let mode = |i: usize| native_ctx.param_modes.get(i).copied().unwrap_or(ParamMode::In);
 
-        // Held until the call returns, because a borrowed argument with no
-        // address of its own points into it.
-        let mut scratch: BorrowScratch = Vec::new();
         let arg_vals: Vec<Value> = args.iter().enumerate()
-            .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames, &mut scratch))
+            .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames))
             .collect();
         for (i, op) in args.iter().enumerate() {
             // A native's type parameter is a `data` in its signature, which a
-            // copy argument bound to it is not, under generics by reference;
-            // whether the argument is given up is its own type's to say.
+            // copy argument bound to it is not; whether the argument is given
+            // up is its own type's to say.
             let moves = match &native_ctx.param_types[i] {
                 IrType::Data if !bindings.is_empty() => !is_plain(&arg_vals[i]),
                 ty => !ty.is_copy(),
@@ -583,18 +503,11 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
-        // Under generics by reference a native's descriptors come from what
-        // the call bound its type parameters to; under erasure, from the
-        // shapes worked out across the call graph.
-        let supplied: Vec<*const rtdt::TyDesc> = if !bindings.is_empty() {
-            native_ctx.descriptor_shapes.iter()
-                .map(|shape| self.binding_descriptor(&shape.to_ir_type().substitute(bindings), frame))
-                .collect()
-        } else {
-            shape_refs.iter()
-                .map(|r| self.resolve_shape_ref(r, frame))
-                .collect()
-        };
+        // A native's descriptors are for types over its type parameters,
+        // which the call's bindings fill in.
+        let supplied: Vec<*const rtdt::TyDesc> = native_ctx.descriptor_shapes.iter()
+            .map(|shape| self.binding_descriptor(&shape.to_ir_type().substitute(bindings), frame))
+            .collect();
         let dest_slot = frame.value_dest(dest);
 
         self.native_table.call(
@@ -634,7 +547,6 @@ impl IrInterpreter {
         code_ref: &CodeRef,
         callee: &IrCodeUnit,
         args: &[Operand],
-        shape_refs: &[datalove_datafun_ir::DescriptorRef],
         bindings: &[IrType],
         dest: datalove_datafun_ir::ValueId,
         frame: &mut Frame,
@@ -646,12 +558,9 @@ impl IrInterpreter {
         let layout = self.layout_cache.get_or_compute(identity, callee, &mut self.tydesc_table);
         let mut callee_frame = self.frame_stack.push(layout)?;
 
-        // Held until the call returns, because a borrowed argument with no
-        // address of its own points into it.
-        let mut scratch: BorrowScratch = Vec::new();
         for (i, op) in args.iter().enumerate() {
             let mode = callee_frame.layout().param_modes[i];
-            let val = self.resolve_arg(mode, op, frame, frames, &mut scratch);
+            let val = self.resolve_arg(mode, op, frame, frames);
             callee_frame.set_param(i, val);
         }
         // After every argument is read, in case one place is passed twice.
@@ -671,26 +580,14 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(op, frame);
             }
         }
-        for (i, r) in shape_refs.iter().enumerate() {
-            let tydesc = self.resolve_shape_ref(r, frame);
-            callee_frame.set_shape_descriptor(i, tydesc);
-        }
-        let by_reference = callee_frame.layout().type_param_count > 0;
         for (i, binding) in bindings.iter().enumerate() {
             let tydesc = self.binding_descriptor(binding, frame);
             callee_frame.set_type_param(i, tydesc);
         }
         let dest_slot = frame.value_dest(dest);
 
-        // The trailing descriptors a compiled callee takes: its shapes', or
-        // its type parameters'.
-        let trailing = if by_reference {
-            callee_frame.type_params()
-        } else {
-            callee_frame.shape_descriptors()
-        };
         let dispatched = self.try_dispatch_call(
-            code_ref, callee, callee_frame.params(), trailing,
+            code_ref, callee, callee_frame.params(), callee_frame.type_params(),
             dest_slot, ctx, registry, frames);
         let result = match dispatched {
             Some(result) => result,

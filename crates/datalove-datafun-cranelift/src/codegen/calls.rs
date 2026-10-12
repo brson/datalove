@@ -4,7 +4,7 @@ use cranelift_codegen::ir::{self as cl_ir, InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::{FuncId, Module};
 
-use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamId, ParamMode, ValueId};
+use datalove_datafun_ir::{CodeRef, CodeUnitId, IrType, Operand, ParamMode, ValueId};
 
 use crate::types::{self, CraneliftRepr, PTR_TYPE};
 use crate::CraneliftError;
@@ -18,20 +18,6 @@ const ABANDONING_OFFSET: i32 = std::mem::offset_of!(RtHeader, abandoning) as i32
 const STACK_LIMIT_OFFSET: i32 = std::mem::offset_of!(RtHeader, stack_limit) as i32;
 
 impl<'a, M: Module> FunctionCompiler<'a, M> {
-    /// Compile a Call instruction.
-    ///
-    /// Threads rt_handle as implicit first argument to callee.
-    /// For native rider functions, marshals args from pointers to i64 scalars
-    /// and converts the i64 return value back to the destination type.
-    /// How a rider takes each of its parameters.
-    fn native_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
-        let CodeRef::Module { module, id } = code_ref else { return Vec::new() };
-        let Some(registry) = self.registry else { return Vec::new() };
-        registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
-            .and_then(|unit| unit.native_context().map(|c| c.param_modes.clone()))
-            .unwrap_or_default()
-    }
-
     /// The callee a `Local` or `External` reference names, as it was declared.
     ///
     /// Two keyspaces, because a `CodeUnitId` numbers one unit's functions from
@@ -48,36 +34,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// The parameters of `code_ref` whose descriptor the call site supplies.
-    ///
-    /// This has to agree with what `build_signature_for_func` put in the
-    /// callee's signature, so both read the same `descriptor_params`. A
-    /// function compiled beside this one carries its own on the `LocalCallee`
-    /// it was declared as; one in a module is read back off the registry.
-    fn callee_descriptor_params(&self, code_ref: &CodeRef) -> Vec<ParamId> {
-        match code_ref {
-            CodeRef::Local(_) | CodeRef::External { .. } => {
-                self.declared_callee(code_ref)
-                    .expect("resolve_code_ref rejects a callee never declared")
-                    .descriptor_params
-                    .clone()
-            }
-            CodeRef::Module { module, id } => {
-                let Some(registry) = self.registry else {
-                    return Vec::new();
-                };
-                registry.get_module_function_as_unit(*module, CodeUnitId(id.0))
-                    .and_then(|unit| unit.function_context().map(|c| c.descriptor_params.clone()))
-                    .unwrap_or_default()
-            }
-        }
-    }
-
     /// How `code_ref` takes each of its parameters.
     ///
-    /// Read from the same place the descriptor list is, and for the same
-    /// reason: the instruction says what to pass but not how the callee
-    /// takes it, and an `out` parameter is the caller's to clear.
+    /// The instruction says what to pass but not how the callee takes it, and
+    /// an `out` parameter is the caller's to clear.
     fn callee_param_modes(&self, code_ref: &CodeRef) -> Vec<ParamMode> {
         match code_ref {
             CodeRef::Local(_) | CodeRef::External { .. } => {
@@ -171,93 +131,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Borrow what a wrapped argument holds: its value pointer and descriptor.
-    ///
-    /// A container of a type parameter travels wrapped once it is owned, and a
-    /// borrowed parameter wants the container itself with a descriptor beside
-    /// it. Both come out of the wrapper together, so they are read together
-    /// and neither can be taken from somewhere the other was not.
-    fn borrow_through_wrapper(
-        &mut self,
-        builder: &mut FunctionBuilder,
-        arg: &Operand,
-    ) -> Result<(cl_ir::Value, cl_ir::Value), CraneliftError> {
-        let borrow = self.runtime
-            .data_borrow;
-
-        // Two words for the answers and a third to unpack into, for a value
-        // the wrapper keeps in its own words and so has no address to lend.
-        // The frame outlives the call, which is as long as the borrow lasts.
-        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, 3 * types::PTR_SIZE,
-            types::align_shift(types::PTR_ALIGN)));
-        let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
-        let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
-        let scratch = builder.ins().stack_addr(PTR_TYPE, slot, 16);
-
-        let data_ptr = self.get_operand_ptr(builder, arg)?;
-        let borrow_ref = self.module.declare_func_in_func(borrow, builder.func);
-        builder.ins().call(borrow_ref, &[data_ptr, scratch, value_out, tydesc_out]);
-
-        let value = builder.ins().load(PTR_TYPE, MemFlagsData::new(), value_out, 0);
-        let tydesc = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tydesc_out, 0);
-        Ok((value, tydesc))
-    }
-
-    /// Whether an argument arrives wrapped where the callee wants it borrowed.
-    fn arg_needs_unwrapping(
-        &self,
-        code_ref: &CodeRef,
-        args: &[Operand],
-        index: usize,
-    ) -> Result<bool, CraneliftError> {
-        let modes = self.callee_param_modes(code_ref);
-        if !matches!(modes.get(index), Some(ParamMode::Ref) | Some(ParamMode::Mut)) {
-            return Ok(false);
-        }
-        // Anything that carries its own descriptor is already a pointer at the
-        // value, never a wrapper around it, even though its type reads `data`.
-        // That is one of our own borrowed parameters, and any reference
-        // projected or indexed out of one. Reading through it would take the
-        // first bytes of the value for a wrapper's two pointers.
-        if self.operand_ref_desc(&args[index]).is_some() {
-            return Ok(false);
-        }
-        Ok(self.get_operand_type(&args[index])? == IrType::Data)
-    }
-
-    /// The descriptor for an operand, as a runtime pointer.
-    ///
-    /// A parameter whose descriptor was supplied by our own caller uses that:
-    /// its static type says `data` where a type parameter stood, so a
-    /// descriptor built from that type would misdescribe the value. Everything
-    /// else is described by its type, and the descriptor is a static symbol.
+    /// The descriptor for an operand, as a runtime pointer: its type's static
+    /// symbol, or for a dynamic type its table entry.
     pub(super) fn operand_tydesc(
         &mut self,
         builder: &mut FunctionBuilder,
         operand: &Operand,
     ) -> Result<cl_ir::Value, CraneliftError> {
-        if let Some(desc) = self.operand_ref_desc(operand) {
-            return Ok(desc);
-        }
         let ty = self.get_operand_type(operand)?;
         self.static_tydesc(builder, &ty)
-    }
-
-    /// The descriptor for what an operand names, where its static type does not
-    /// describe it.
-    ///
-    /// That is a borrowed parameter our own caller described, and any reference
-    /// projected out of one. `None` everywhere else, meaning the static type is
-    /// the truth and a constant offset is right.
-    pub(super) fn operand_ref_desc(&self, operand: &Operand) -> Option<cl_ir::Value> {
-        match operand {
-            Operand::Param(param_id) => self.descriptor_values.get(param_id).copied(),
-            Operand::Value(vid) | Operand::ValueRef(vid) => {
-                self.ref_desc_values.get(vid).copied()
-            }
-            _ => None,
-        }
     }
 
     /// The static descriptor symbol for a type, as a runtime pointer.
@@ -286,7 +168,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
-        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
         bindings: &[IrType],
     ) -> Result<(), CraneliftError> {
         // Check if target is a native rider function.
@@ -295,18 +176,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             if let Some(registry) = self.registry {
                 if let Some(unit) = registry.get_module_function_as_unit(*module, ir_func_id) {
                     if let Some(native) = unit.native_context() {
-                        // Under generics by reference, a descriptor for each
-                        // type parameter no argument determines, from what
-                        // this call bound it to. Under erasure, the shapes.
-                        let undetermined: Vec<IrType> = if bindings.is_empty() {
-                            Vec::new()
-                        } else {
-                            native.descriptor_shapes.iter()
-                                .map(|s| s.to_ir_type().substitute(bindings))
-                                .collect()
-                        };
-                        return self.compile_native_call(
-                            builder, dest, code_ref, args, shape_descriptors, bindings, &undetermined);
+                        // A descriptor for each type parameter no argument
+                        // determines, from what this call bound it to.
+                        let undetermined: Vec<IrType> = native.descriptor_shapes.iter()
+                            .map(|s| s.to_ir_type().substitute(bindings))
+                            .collect();
+                        return self.compile_native_call(builder, dest, code_ref, args, &undetermined);
                     }
                 }
             }
@@ -357,63 +232,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         self.destroy_out_destinations(builder, code_ref, args)?;
 
-        // Add user arguments (passed by pointer). An argument that arrives
-        // wrapped where the callee wants it borrowed is read through first,
-        // and the descriptor that comes with it is used below.
-        let mut borrowed_parts: Vec<Option<(cl_ir::Value, cl_ir::Value)>> =
-            vec![None; args.len()];
-        for (i, arg) in args.iter().enumerate() {
-            if self.arg_needs_unwrapping(code_ref, args, i)? {
-                borrowed_parts[i] = Some(self.borrow_through_wrapper(builder, arg)?);
-            }
-        }
-        for (i, arg) in args.iter().enumerate() {
-            let arg_val = match borrowed_parts[i] {
-                Some((value, _)) => value,
-                None => self.get_operand_ptr(builder, arg)?,
-            };
+        // Add user arguments, passed by pointer.
+        for arg in args {
+            let arg_val = self.get_operand_ptr(builder, arg)?;
             call_args.push(arg_val);
         }
 
-        // Then a descriptor for each parameter whose own type does not describe
-        // what it will receive. This is the place that knows: the argument here
-        // has a concrete type, or a descriptor our own caller handed us.
-        for param_id in self.callee_descriptor_params(code_ref) {
-            let index = param_id.0 as usize;
-            let arg = args.get(index).ok_or_else(|| {
-                CraneliftError::Codegen(format!(
-                    "callee wants a descriptor for parameter {} but got {} arguments",
-                    param_id.0, args.len(),
-                ))
-            })?.clone();
-            let tydesc_addr = match borrowed_parts.get(index).copied().flatten() {
-                Some((_, tydesc)) => tydesc,
-                None => self.operand_tydesc(builder, &arg)?,
-            };
-            call_args.push(tydesc_addr);
-        }
-
-        // Then one for each shape the callee builds a collection of, as worked
-        // out when the shape sets settled. Read rather than derived, so this
-        // side and the callee's signature cannot disagree about the trailing
-        // arguments, and so the descriptor emitter saw the same types.
-        for r in shape_descriptors {
-            let value = match r {
-                datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                    self.static_tydesc(builder, ty)?
-                }
-                datalove_datafun_ir::DescriptorRef::Own(i) => {
-                    *self.shape_descriptor_values.get(*i as usize).ok_or_else(|| {
-                        CraneliftError::Codegen(format!(
-                            "shape {} was declared but never passed", i))
-                    })?
-                }
-            };
-            call_args.push(value);
-        }
-
-        // Then, under generics by reference, a descriptor for each of the
-        // callee's type parameters, for what this call bound it to.
+        // Then a descriptor for each of the callee's type parameters, for what
+        // this call bound it to.
         for binding in bindings {
             let value = self.static_tydesc(builder, binding)?;
             call_args.push(value);
@@ -510,8 +336,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         dest: ValueId,
         code_ref: &CodeRef,
         args: &[Operand],
-        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
-        bindings: &[IrType],
         undetermined: &[IrType],
     ) -> Result<(), CraneliftError> {
         let rt_handle = self.rt_handle_param.ok_or_else(|| {
@@ -524,38 +348,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let mut call_args = Vec::with_capacity(1 + args.len() * 2 + 2);
         call_args.push(rt_handle);
 
-        // A collection of a type parameter is wrapped once it is owned, and a
-        // rider works on the collection itself with a descriptor beside it.
-        // Both are inside the wrapper, so an argument that arrives wrapped
-        // where the native wants the thing itself is read through first. The
-        // interpreter does this for every call; here it was done for calls to
-        // module functions and not for calls to riders, so a generic handing a
-        // list it had built to `list_push` gave it a `data`.
-        // Decided by the mode, not by the native's own parameter type: a
-        // generic native's types are erased too, so `mut self: [T]` reads
-        // `data` there just as the argument does. What tells them apart is that
-        // the native borrows its collection and takes its element, and only a
-        // borrow is passed through a wrapper.
-        let native_param_modes = self.native_param_modes(code_ref);
-        for (i, arg) in args.iter().enumerate() {
-            // One of our own borrowed parameters is already a pointer at the
-            // value with a descriptor beside it, never a wrapper around it,
-            // even though its type reads `data`. Same as at a call to a module
-            // function.
-            let forwarded = matches!(arg, Operand::Param(p)
-                if self.descriptor_values.contains_key(p));
-            let wants_unwrapping = !forwarded
-                && self.get_operand_type(arg)? == IrType::Data
-                && matches!(native_param_modes.get(i),
-                    Some(ParamMode::Ref) | Some(ParamMode::Mut));
-            let (arg_ptr, tydesc_addr) = if wants_unwrapping {
-                self.borrow_through_wrapper(builder, arg)?
-            } else {
-                (self.get_operand_ptr(builder, arg)?, self.operand_tydesc(builder, arg)?)
-            };
-
-            call_args.push(arg_ptr);
-            call_args.push(tydesc_addr);
+        for arg in args {
+            call_args.push(self.get_operand_ptr(builder, arg)?);
+            call_args.push(self.operand_tydesc(builder, arg)?);
         }
 
         // Result out-param: pointer to dest slot + tydesc.
@@ -566,29 +361,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         call_args.push(dest_ptr);
         call_args.push(dest_tydesc_addr);
 
-        // Then a descriptor for each type parameter no argument determines:
-        // under generics by reference, what the call bound it to; under
-        // erasure, read from what the shape closure settled rather than
-        // derived here, so this side and `build_native_signature` cannot
-        // disagree.
-        if !bindings.is_empty() {
-            for ty in undetermined {
-                let value = self.static_tydesc(builder, ty)?;
-                call_args.push(value);
-            }
-        }
-        for r in shape_descriptors {
-            let value = match r {
-                datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                    self.static_tydesc(builder, ty)?
-                }
-                datalove_datafun_ir::DescriptorRef::Own(i) => {
-                    *self.shape_descriptor_values.get(*i as usize).ok_or_else(|| {
-                        CraneliftError::Codegen(format!(
-                            "shape {} was declared but never passed", i))
-                    })?
-                }
-            };
+        // Then a descriptor for each type parameter no argument determines,
+        // for what the call bound it to.
+        for ty in undetermined {
+            let value = self.static_tydesc(builder, ty)?;
             call_args.push(value);
         }
 

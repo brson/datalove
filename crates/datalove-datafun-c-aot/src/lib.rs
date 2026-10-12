@@ -599,19 +599,7 @@ impl CAotCompiler {
             write!(&mut params, ", void* p{}", i).unwrap();
         }
 
-        // Then a descriptor for each parameter whose own type does not say what
-        // arrives at it, in the order `descriptor_params` names them. A generic
-        // function's type for a borrowed parameter reads `data` where its type
-        // parameter stood, so the caller has to say what the value really is.
-        for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
-            write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
-        }
-        // Then one for each shape the body builds a collection of, which no
-        // value carries.
-        for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
-            write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
-        }
-        // Under generics by reference, one per type parameter, last.
+        // Then a descriptor per type parameter, last.
         for i in 0..func_ctx.type_param_count {
             write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).unwrap();
         }

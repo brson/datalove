@@ -223,7 +223,7 @@ impl Drop for FrameStack {
 /// A handle, copied freely; the bytes belong to the `FrameStack` or to a
 /// `ScriptFrame`. Laid out by `IrLayout`: values, slots and tracking bytes where
 /// compiled code puts them, then the parameters, the copies of small owned
-/// parameters, the shape descriptors, the descriptors of references and, where
+/// parameters, the type parameter descriptors and descriptor table and, where
 /// they are kept, the liveness bytes.
 #[derive(Clone, Copy)]
 pub struct Frame {
@@ -338,17 +338,6 @@ impl Frame {
         unsafe { (self.at_offset(offset) as *mut Value).write(value) };
     }
 
-    /// Hand over the descriptor for the shape declared at `index`.
-    #[inline]
-    pub fn set_shape_descriptor(&self, index: usize, tydesc: *const TyDesc) {
-        let layout = self.layout();
-        assert!(index < layout.shape_count as usize,
-            "a descriptor for shape {} of {}", index, layout.shape_count);
-        let offset = layout.shape_offset + (index * std::mem::size_of::<usize>()) as u32;
-        // SAFETY: inside the shape region, word-aligned.
-        unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
-    }
-
     /// Hand over the descriptor for type parameter `index`.
     #[inline]
     pub fn set_type_param(&self, index: usize, tydesc: *const TyDesc) {
@@ -409,11 +398,6 @@ impl Frame {
         self.at_offset(offset) as *mut [usize; 2]
     }
 
-    /// The descriptor handed over for the shape declared at `index`.
-    pub fn shape_descriptor(&self, index: u32) -> Option<*const TyDesc> {
-        self.shape_descriptors().get(index as usize).copied()
-    }
-
     /// The arguments, once every one has been set.
     ///
     /// As the caller handed them over until `enter`, which gives the owned
@@ -430,27 +414,13 @@ impl Frame {
         }
     }
 
-    /// The shape descriptors, once every one has been set.
-    pub fn shape_descriptors(&self) -> &[*const TyDesc] {
-        let layout = self.layout();
-        // SAFETY: the shape region is consecutive words in the frame, all set.
-        unsafe {
-            std::slice::from_raw_parts(
-                self.at_offset(layout.shape_offset) as *const *const TyDesc,
-                layout.shape_count as usize)
-        }
-    }
-
     /// Make a function frame ready to run its body, once every argument has
     /// been set.
     ///
-    /// A parameter the callee owns gets the callee's own descriptor: the caller
-    /// has already converted it into the shape the callee was compiled for. A
-    /// borrowed one keeps the descriptor it came with, because a generic
-    /// function was compiled with `data` where its type parameter stood and the
-    /// value at that pointer is whatever the caller actually has; for a function
-    /// that is not generic the two agree anyway. An `out` parameter starts
-    /// uninitialized, since the callee writes it first.
+    /// A parameter the callee owns gets the callee's own descriptor, which is
+    /// the one the caller's agrees with; a borrowed one keeps the descriptor
+    /// it came with. An `out` parameter starts uninitialized, since the callee
+    /// writes it first.
     ///
     /// A parameter of a dynamic type keeps the descriptor it came with,
     /// whatever its mode: it is the only one that says what is there.
@@ -605,9 +575,9 @@ impl Frame {
 
     /// Record what a reference points at, as a projection found it.
     ///
-    /// Only a reference `resolve_ref_descriptors` names has a word for it;
-    /// any other is described by its static type, which the projection's
-    /// finding has to agree with.
+    /// Only a reference to a dynamic type has a word for it; any other is
+    /// described by its static type, which the projection's finding has to
+    /// agree with.
     #[inline]
     pub fn set_value_tydesc(&self, id: ValueId, tydesc: *const TyDesc) {
         let idx = id.0 as usize;

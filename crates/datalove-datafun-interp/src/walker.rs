@@ -13,7 +13,6 @@ impl IrInterpreter {
     pub(super) fn execute_blocks(
         &mut self,
         blocks: &[IrBlock],
-        unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
         ret_dest: Destination,
         expr_dest: Option<Destination>,
@@ -30,7 +29,7 @@ impl IrInterpreter {
             // Execute instructions.
             for instr in &block.instructions {
                 if !self.execute_hot(instr, frame, frames)
-                    && !self.execute_warm(instr, unit_types, frame, frames)
+                    && !self.execute_warm(instr, frame, frames)
                 {
                     self.execute_instruction(instr, frame, ctx, registry, frames)?;
                 }
@@ -314,7 +313,6 @@ impl IrInterpreter {
     pub(super) fn execute_warm(
         &mut self,
         instr: &Instruction,
-        unit_types: &UnitTypes<'_>,
         frame: &mut Frame,
         frames: &mut FrameStore,
     ) -> bool {
@@ -488,55 +486,6 @@ impl IrInterpreter {
                 frame.mark_value_live(*dest);
                 Self::mark_source_dropped_local(inner, frame);
             }
-            Instruction::Erase { dest, src } => {
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_erase(&src_val, dest_slot);
-                frame.mark_value_live(*dest);
-                // A copy source is still there afterwards. Lowering knows it --
-                // it reads the slot again with `load.copy` -- so saying the
-                // erase consumed it left the next read with nothing.
-                if !unit_types.is_copy(src) {
-                    Self::mark_source_dropped_local(src, frame);
-                }
-            }
-            Instruction::EraseTracked { dest, src } => {
-                // The destination of an erased out parameter, which may never
-                // have been written. There is nothing to carry across then, so
-                // the callee is handed an empty `data`: two zero words, which
-                // destroys as a no-op and which the call overwrites.
-                let live = match src {
-                    Operand::Slot(id) => frame.slot_is_live(*id),
-                    Operand::Param(id) => frame.param_is_live(*id),
-                    Operand::ExternalSlot { unit, slot } => {
-                        frames.is_external_slot_initialized(*unit, *slot)
-                    }
-                    Operand::Value(_) | Operand::ValueRef(_)
-                    | Operand::ExternalValue { .. } => true,
-                };
-                let dest_slot = frame.value_dest(*dest);
-                if live {
-                    let src_val = self.read_operand(src, frame, frames);
-                    self.execute_erase(&src_val, dest_slot);
-                } else {
-                    let size = unsafe { rtdt::TyDescRef::from_ptr(dest_slot.tydesc) }.size();
-                    unsafe { std::ptr::write_bytes(dest_slot.ptr, 0, size as usize) };
-                }
-                frame.mark_value_live(*dest);
-                if live && !unit_types.is_copy(src) {
-                    Self::mark_source_dropped_local(src, frame);
-                }
-            }
-            Instruction::Reify { dest, src } => {
-                let src_val = self.read_operand(src, frame, frames);
-                let dest_slot = frame.value_dest(*dest);
-                self.execute_reify(&src_val, dest_slot);
-                frame.mark_value_live(*dest);
-                // See `Erase`.
-                if !unit_types.is_copy(src) {
-                    Self::mark_source_dropped_local(src, frame);
-                }
-            }
             Instruction::Drop { operand } => {
                 // Precise drop: ownership analysis guarantees value exists.
                 let val = self.read_operand(operand, frame, frames);
@@ -682,24 +631,6 @@ impl IrInterpreter {
                 }
                 frame.mark_value_live(*dest);
             }
-            Instruction::DataBorrow { dest, src } => {
-                // Point at the container the wrapper holds, and carry the
-                // descriptor it holds it under. A container is never packed
-                // into the two words, so the scratch goes unused.
-                let src_val = self.read_operand(src, frame, frames);
-                let mut scratch = [0u8; 16];
-                let mut value_ptr: *const u8 = std::ptr::null();
-                let mut tydesc: *const rtdt::TyDesc = std::ptr::null();
-                let status = unsafe {
-                    datalove_rt::c::dtlv_rti_data_borrow(
-                        src_val.ptr, scratch.as_mut_ptr(), &mut value_ptr, &mut tydesc)
-                };
-                assert_eq!(status, datalove_rt::c::RtStatus::Ok, "DataBorrow failed");
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { *(dest_slot.ptr as *mut *const u8) = value_ptr; }
-                frame.set_value_tydesc(*dest, tydesc);
-                frame.mark_value_live(*dest);
-            }
             Instruction::SlotStoreCopyTracked { dest, value } => {
                 let src_val = self.read_operand(value, frame, frames);
                 match dest {
@@ -753,9 +684,7 @@ impl IrInterpreter {
         frames: &mut FrameStore,
     ) -> Result<(), InterpError> {
         match instr {
-            Instruction::Erase { .. }
-            | Instruction::Reify { .. }
-            | Instruction::ParamStore { .. }
+            Instruction::ParamStore { .. }
             | Instruction::ParamStoreTracked { .. }
             | Instruction::ListBoundsCheck { .. }
             | Instruction::ListElementRef { .. }
@@ -772,7 +701,6 @@ impl IrInterpreter {
             | Instruction::WrapNone { .. }
             | Instruction::ErrorFrom { .. }
             | Instruction::DataFrom { .. }
-            | Instruction::EraseTracked { .. }
             | Instruction::SlotStoreCopyTracked { .. }
             | Instruction::SlotStoreMoveTracked { .. }
             | Instruction::SlotLoadMoveTracked { .. }
@@ -780,7 +708,6 @@ impl IrInterpreter {
             | Instruction::Pack { .. }
             | Instruction::Unpack { .. }
             | Instruction::UnaryOpChecked { .. }
-            | Instruction::DataBorrow { .. }
             | Instruction::RefStore { .. }
             | Instruction::OpAssign { .. }
             | Instruction::OpAssignChecked { .. }
@@ -861,60 +788,31 @@ impl IrInterpreter {
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass.
-            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. }
-            | Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
-                self.execute_call(
-                    func, args, shape_descriptors, bindings, *dest, frame, ctx, registry, frames)?;
+            Instruction::Call { dest, func, args, bindings, .. }
+            | Instruction::ComptimeCall { dest, func, args, bindings, .. } => {
+                self.execute_call(func, args, bindings, *dest, frame, ctx, registry, frames)?;
             }
-            Instruction::ListNew { dest, elements, descriptor } => {
+            Instruction::ListNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                match descriptor {
-                    // The destination is a `data`, because a list built over a
-                    // type parameter erases to one. So the list is made against
-                    // the descriptor handed over and moved into the wrapper,
-                    // which is what any owned collection of a type parameter is.
-                    Some(index) => {
-                        let list_tydesc = frame.shape_descriptor(*index)
-                            .expect("a shape built with is one this function declared");
-                        self.execute_list_new_erased(
-                            elements, dest_slot, list_tydesc, frame, frames);
-                    }
-                    None => self.execute_list_new(elements, dest_slot, frame, frames),
-                }
+                self.execute_list_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::SetNew { dest, elements, descriptor } => {
+            Instruction::SetNew { dest, elements } => {
                 let dest_slot = frame.value_dest(*dest);
-                match descriptor {
-                    Some(index) => {
-                        let set_tydesc = frame.shape_descriptor(*index)
-                            .expect("a shape built with is one this function declared");
-                        self.execute_set_new_erased(
-                            elements, dest_slot, set_tydesc, frame, frames);
-                    }
-                    None => self.execute_set_new(elements, dest_slot, frame, frames),
-                }
+                self.execute_set_new(elements, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source elements as moved (linear semantics - consumes elements).
                 for elem in elements {
                     Self::mark_source_dropped_local(elem, frame);
                 }
             }
-            Instruction::MapNew { dest, entries, descriptor } => {
+            Instruction::MapNew { dest, entries } => {
                 let dest_slot = frame.value_dest(*dest);
-                match descriptor {
-                    Some(index) => {
-                        let map_tydesc = frame.shape_descriptor(*index)
-                            .expect("a shape built with is one this function declared");
-                        self.execute_map_new_erased(
-                            entries, dest_slot, map_tydesc, frame, frames);
-                    }
-                    None => self.execute_map_new(entries, dest_slot, frame, frames),
-                }
+                self.execute_map_new(entries, dest_slot, frame, frames);
                 frame.mark_value_live(*dest);
                 // Mark source entries as moved (linear semantics - consumes entries).
                 for (key, val) in entries {

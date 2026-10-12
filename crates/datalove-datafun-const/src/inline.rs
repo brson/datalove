@@ -355,8 +355,6 @@ mod tests {
                     dest: ValueId(0),
                     func: datalove_datafun_ir::CodeRef::Local(datalove_datafun_ir::CodeUnitId(0)),
                     args: vec![],
-                    type_args: Vec::new(),
-                    shape_descriptors: Vec::new(),
                     bindings: Vec::new(),
                 },
             ],

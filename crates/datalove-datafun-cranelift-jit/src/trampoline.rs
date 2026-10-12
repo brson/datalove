@@ -227,12 +227,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // compiled code to a function not yet compiled arrives here.
     let layout = ctx.interp.layout_for(key, ir_unit);
 
-    // Build argument Values.
-    //
-    // A parameter's own type describes what arrives at it, except where the
-    // callee is generic and that type says `data` in place of a type
-    // parameter. For those the caller supplied the real one, and using the
-    // signature's would say `[data]` of memory that holds a `[u32]`.
+    // Build argument Values, each described by its parameter's type.
     let mut arg_vals = Vec::with_capacity(arg_count as usize);
     for i in 0..arg_count as usize {
         let arg_ptr = unsafe { *args.add(i) };
@@ -241,28 +236,12 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             tydesc: layout.param_tydescs[i],
         });
     }
-    for (k, param_id) in func_ctx.descriptor_params.iter().enumerate() {
-        let supplied = unsafe { *descriptors.add(k) };
-        arg_vals[param_id.0 as usize].tydesc = supplied;
-    }
 
-    // The shapes the callee builds a collection of come after the ones that
-    // describe a parameter, which is the order `build_signature` lays out and
-    // the order the caller's compiled code wrote them in. Reading only the
-    // first group and dropping this one is what made a jit-compiled function
-    // calling `sys/std/list.reversed` build its result from whatever was in the
-    // register.
-    let shape_start = func_ctx.descriptor_params.len();
-    let shape_descriptors: Vec<*const rtdt::TyDesc> = (0..func_ctx.descriptor_shapes.len())
-        .map(|k| unsafe { *descriptors.add(shape_start + k) })
-        .collect();
-
-    // Under generics by reference, one per type parameter comes last. A
-    // dynamic argument arrives as a pointer alone, and what it is follows
-    // from them; so does a dynamic return.
-    let type_param_start = shape_start + func_ctx.descriptor_shapes.len();
+    // A descriptor per type parameter comes after the arguments. A dynamic
+    // argument arrives as a pointer alone, and what it is follows from them;
+    // so does a dynamic return.
     let type_params: Vec<*const rtdt::TyDesc> = (0..func_ctx.type_param_count as usize)
-        .map(|k| unsafe { *descriptors.add(type_param_start + k) })
+        .map(|k| unsafe { *descriptors.add(k) })
         .collect();
     for (i, value) in arg_vals.iter_mut().enumerate() {
         if value.tydesc.is_null() {
@@ -273,9 +252,6 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     if return_tydesc.is_null() {
         return_tydesc = ctx.interp.describe(&func_ctx.return_type, &type_params);
     }
-    // What goes after the arguments: the shapes', or the type parameters'.
-    let trailing = if type_params.is_empty() { shape_descriptors } else { type_params };
-
     let dest = Destination {
         ptr: ret_dest,
         tydesc: return_tydesc,
@@ -289,8 +265,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
-                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_vals, dest,
-                    &func_ctx.descriptor_params, &trailing,
+                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_vals, dest, &type_params,
                 )
             }
         }
@@ -303,11 +278,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // An `in` argument that is not copied belongs to the interpreter
             // now, which destroys it; the compiled caller does not touch it
             // after the call.
-            let result = ctx.interp.call_in_context_with_shapes(
+            let result = ctx.interp.call_in_context_with_type_params(
                 ir_unit,
                 Some(code_ref.clone()),
                 arg_vals,
-                trailing,
+                type_params,
                 dest,
                 &callee_ctx,
                 ctx.registry,

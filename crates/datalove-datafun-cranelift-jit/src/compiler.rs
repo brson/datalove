@@ -427,7 +427,7 @@ impl JitCompiler {
         // codegen compiles it as one, and its callee needs a stub as much.
         for block in &func.blocks {
             for inst in &block.instructions {
-                if let Some((code_ref, _)) = inst.call_target() {
+                if let Some(code_ref) = inst.call_target() {
                     targets.insert(code_ref.clone());
                 }
             }

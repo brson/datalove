@@ -6,7 +6,7 @@
 //! - Direct lowering to LLVM/Cranelift (SSA values -> registers, slots -> stack)
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 
 pub mod display;
 pub mod frame_layout;
@@ -332,168 +332,10 @@ impl std::fmt::Display for IrType {
     }
 }
 
-/// The type a parameter has inside the callee.
-///
-/// The one place that decides, because a call site converting into a shape the
-/// callee was not compiled for is not a mismatch anything reports: it is two
-/// sizes disagreeing about the same bytes.
-///
-/// A borrowed parameter is not converted at all. Its value crosses as it
-/// stands and the call site supplies a descriptor, so what this returns for
-/// one describes the shape but not the contents, and nothing reads it as
-/// though it did.
-///
-/// An owned parameter is converted, and how depends on where the type
-/// parameter sits:
-///
-/// - Standing alone, or under `?` or `!`, the erasure is structural: `T`
-///   becomes `data` and `?T` becomes `?data`, and the runtime walks the two
-///   shapes together writing each payload where the other side keeps it.
-/// - Under a container, the whole parameter becomes `data`. Erasing `[T]` to
-///   `[data]` would mean rebuilding the list element by element into a
-///   different stride; wrapping the list itself is one allocation and a copy
-///   of a pointer and two indices, and leaves a value that carries its own
-///   descriptor.
-pub fn erased_param_type<'db>(
-    db: &'db dyn salsa::Database,
-    ty: &datalove_datalit::ast::TypeHint<'db>,
-    type_params: &[bct::text::InternedText<'db>],
-    borrowed: bool,
-) -> IrType {
-    if borrowed {
-        // Nothing is converted here, so the shape stays as it was written and
-        // the call site supplies a descriptor for what is really behind it.
-        return IrType::from_type_hint_erasing(db, ty, type_params);
-    }
-    erased_owned_type(db, ty, type_params)
-}
-
-/// The shape an owned value takes once erased.
-///
-/// Structural, except that a container of a type parameter becomes `data`
-/// wherever it appears rather than only at the top. A tuple is converted field
-/// by field, so a container field is converted too, and wrapping is the only
-/// conversion a container has: `[u32]` to `[data]` would mean rebuilding it,
-/// and leaving it alone would hand the callee a stride that does not match
-/// what it was given -- silently, since the two are the same size.
-fn erased_owned_type<'db>(
-    db: &'db dyn salsa::Database,
-    ty: &datalove_datalit::ast::TypeHint<'db>,
-    type_params: &[bct::text::InternedText<'db>],
-) -> IrType {
-    use datalove_datalit::ast::TypeHint;
-
-    if type_hint_is_container_of_param(ty, type_params) {
-        return IrType::Data;
-    }
-    let recurse = |t: &TypeHint<'db>| erased_owned_type(db, t, type_params);
-    match ty {
-        TypeHint::AnonTuple(t) if t.fields.is_empty() => IrType::Unit,
-        TypeHint::AnonTuple(t) => IrType::Tuple(t.fields.iter().map(recurse).collect()),
-        TypeHint::AnonStruct(t) => IrType::Struct(
-            t.fields.iter()
-                .map(|f| (f.name.text(db).to_string(), recurse(&f.type_hint)))
-                .collect(),
-        ),
-        TypeHint::Option(t) => IrType::Option(Box::new(recurse(&t.inner_type))),
-        TypeHint::Result(t) => IrType::Result(Box::new(recurse(&t.inner_type))),
-        TypeHint::Term(t) => IrType::Term(
-            t.name.text(db).to_string(), Box::new(recurse(&t.payload))),
-        TypeHint::Enum(t) => {
-            // Sorted by name, the way `from_type_hint_inner` builds one. The
-            // discriminant is an index into this list, so the two sides of a
-            // conversion have to agree on the order or the walk reads one
-            // variant's payload at another's offset.
-            let mut variants: Vec<_> = t.variants.iter()
-                .map(|v| (
-                    v.name.text(db).to_string(),
-                    v.payload.as_ref().map(|p| recurse(p)),
-                ))
-                .collect();
-            variants.sort_by(|a, b| a.0.cmp(&b.0));
-            IrType::Enum(variants)
-        }
-        other => IrType::from_type_hint_erasing(db, other, type_params),
-    }
-}
-
-/// Whether a typechecker type is a container holding a type parameter.
-///
-/// The same question `type_hint_is_container_of_param` asks of a type hint and
-/// `datafun-common::generics::is_container_of_type_param` asks when deciding
-/// whether the signature is allowed. All three have to agree.
-fn datalit_is_container_of_var(ty: &datalove_datalit::tycheck::Type<'_>) -> bool {
-    use datalove_datalit::tycheck::Type as DlType;
-
-    fn has_var(ty: &DlType<'_>) -> bool {
-        match ty {
-            DlType::Var(_) => true,
-            DlType::List(t) => has_var(&t.element_type),
-            DlType::Set(t) => has_var(&t.element_type),
-            DlType::Tensor(t) => has_var(&t.element_type),
-            DlType::Option(t) => has_var(&t.inner_type),
-            DlType::Result(t) => has_var(&t.inner_type),
-            DlType::Term(t) => has_var(&t.payload),
-            DlType::Map(t) => has_var(&t.key_type) || has_var(&t.value_type),
-            DlType::AnonTuple(t) => t.fields.iter().any(has_var),
-            DlType::AnonStruct(t) => t.fields.iter().any(|f| has_var(&f.ty)),
-            DlType::Table(t) => t.columns.iter().any(|c| has_var(&c.ty)),
-            DlType::Enum(t) => t.variants.iter()
-                .any(|v| v.payload.as_ref().is_some_and(|p| has_var(p))),
-            _ => false,
-        }
-    }
-
-    match ty {
-        DlType::List(t) => has_var(&t.element_type),
-        DlType::Set(t) => has_var(&t.element_type),
-        DlType::Tensor(t) => has_var(&t.element_type),
-        DlType::Map(t) => has_var(&t.key_type) || has_var(&t.value_type),
-        DlType::Table(t) => t.columns.iter().any(|c| has_var(&c.ty)),
-        _ => false,
-    }
-}
-
-/// The type a return has inside the callee.
-///
-/// The same rule as a parameter the callee owns, because a return is one: the
-/// value crosses with nobody keeping a copy, so a container is wrapped whole
-/// and everything else is erased structurally.
-pub fn erased_return_type<'db>(
-    db: &'db dyn salsa::Database,
-    ty: &datalove_datalit::ast::TypeHint<'db>,
-    type_params: &[bct::text::InternedText<'db>],
-) -> IrType {
-    erased_param_type(db, ty, type_params, false)
-}
-
-/// Whether this position holds a container of a type parameter.
-///
-/// Such a parameter is wrapped whole rather than erased structurally, so an
-/// owned one arrives as a `data` carrying the descriptor that says what its
-/// elements really are.
-pub fn type_hint_is_container_of_param<'db>(
-    ty: &datalove_datalit::ast::TypeHint<'db>,
-    type_params: &[bct::text::InternedText<'db>],
-) -> bool {
-    use datalove_datalit::ast::TypeHint;
-
-    let mentions = |t: &TypeHint<'db>| type_hint_mentions_param(t, type_params);
-    match ty {
-        TypeHint::List(t) => mentions(&t.element_type),
-        TypeHint::Set(t) => mentions(&t.element_type),
-        TypeHint::Tensor(t) => mentions(&t.element_type),
-        TypeHint::Map(t) => mentions(&t.key_type) || mentions(&t.value_type),
-        TypeHint::Table(t) => t.columns.iter().any(|c| mentions(&c.type_hint)),
-        _ => false,
-    }
-}
-
 /// Whether a type hint names one of the given type parameters anywhere in it.
 ///
-/// A parameter whose type mentions one has a different shape inside the callee
-/// than at the call site, so the argument has to be converted rather than
-/// passed along as it stands.
+/// A parameter whose type mentions one is written over the callee's type
+/// parameters, and at a call site the bindings are substituted into it.
 pub fn type_hint_mentions_param<'db>(
     ty: &datalove_datalit::ast::TypeHint<'db>,
     type_params: &[bct::text::InternedText<'db>],
@@ -530,7 +372,7 @@ pub fn type_hint_mentions_param<'db>(
 impl IrType {
     /// Convert from AST type hint to IR type.
     pub fn from_type_hint<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::ast::TypeHint<'db>) -> Self {
-        Self::from_type_hint_inner(db, ty, &[], false)
+        Self::from_type_hint_inner(db, ty, &[])
     }
 
     /// Convert from AST type hint to IR type, keeping the given type
@@ -543,20 +385,7 @@ impl IrType {
         ty: &datalove_datalit::ast::TypeHint<'db>,
         type_params: &[bct::text::InternedText<'db>],
     ) -> Self {
-        Self::from_type_hint_inner(db, ty, type_params, true)
-    }
-
-    /// Convert from AST type hint to IR type, erasing the given type parameters.
-    ///
-    /// A hint naming one of `type_params` becomes `data` wherever it appears,
-    /// however deep, because that is the shape the generic function was
-    /// compiled for.
-    pub fn from_type_hint_erasing<'db>(
-        db: &'db dyn salsa::Database,
-        ty: &datalove_datalit::ast::TypeHint<'db>,
-        type_params: &[bct::text::InternedText<'db>],
-    ) -> Self {
-        Self::from_type_hint_inner(db, ty, type_params, false)
+        Self::from_type_hint_inner(db, ty, type_params)
     }
 
     /// Convert from AST TypeHint to IR type.
@@ -564,7 +393,6 @@ impl IrType {
         db: &'db dyn salsa::Database,
         ty: &datalove_datalit::ast::TypeHint<'db>,
         type_params: &[bct::text::InternedText<'db>],
-        keep: bool,
     ) -> Self {
         use datalove_datalit::ast::TypeHint;
 
@@ -589,7 +417,7 @@ impl IrType {
             TypeHint::AnonTuple(tuple) => {
                 let fields: Vec<_> = tuple.fields
                     .iter()
-                    .map(|f| Self::from_type_hint_inner(db, f, type_params, keep))
+                    .map(|f| Self::from_type_hint_inner(db, f, type_params))
                     .collect();
                 if fields.is_empty() {
                     IrType::Unit
@@ -600,34 +428,34 @@ impl IrType {
             TypeHint::AnonStruct(struct_) => {
                 let fields: Vec<_> = struct_.fields
                     .iter()
-                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params, keep)))
+                    .map(|f| (f.name.text(db).to_string(), Self::from_type_hint_inner(db, &f.type_hint, type_params)))
                     .collect();
                 IrType::Struct(fields)
             }
 
             TypeHint::List(list) => {
-                let elem = Self::from_type_hint_inner(db, &list.element_type, type_params, keep);
+                let elem = Self::from_type_hint_inner(db, &list.element_type, type_params);
                 IrType::List(Box::new(elem))
             }
             TypeHint::Set(set) => {
-                let elem = Self::from_type_hint_inner(db, &set.element_type, type_params, keep);
+                let elem = Self::from_type_hint_inner(db, &set.element_type, type_params);
                 IrType::Set(Box::new(elem))
             }
             TypeHint::Map(map) => {
-                let key = Self::from_type_hint_inner(db, &map.key_type, type_params, keep);
-                let val = Self::from_type_hint_inner(db, &map.value_type, type_params, keep);
+                let key = Self::from_type_hint_inner(db, &map.key_type, type_params);
+                let val = Self::from_type_hint_inner(db, &map.value_type, type_params);
                 IrType::Map(Box::new(key), Box::new(val))
             }
             TypeHint::Option(opt) => {
-                let inner = Self::from_type_hint_inner(db, &opt.inner_type, type_params, keep);
+                let inner = Self::from_type_hint_inner(db, &opt.inner_type, type_params);
                 IrType::Option(Box::new(inner))
             }
             TypeHint::Result(res) => {
-                let ok = Self::from_type_hint_inner(db, &res.inner_type, type_params, keep);
+                let ok = Self::from_type_hint_inner(db, &res.inner_type, type_params);
                 IrType::Result(Box::new(ok))
             }
             TypeHint::Tensor(t) => {
-                let elem = Self::from_type_hint_inner(db, &t.element_type, type_params, keep);
+                let elem = Self::from_type_hint_inner(db, &t.element_type, type_params);
                 IrType::Tensor(Box::new(elem), t.rank)
             }
             TypeHint::Table(table) => {
@@ -643,7 +471,7 @@ impl IrType {
                     .iter()
                     .map(|c| {
                         let name = c.name.text(db).to_string();
-                        let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params, keep);
+                        let ty = Self::from_type_hint_inner(db, &c.type_hint, type_params);
                         (name, Box::new(ty))
                     })
                     .collect();
@@ -655,14 +483,14 @@ impl IrType {
             }
             TypeHint::Term(t) => {
                 let name = t.name.text(db).to_string();
-                let payload = Self::from_type_hint_inner(db, &t.payload, type_params, keep);
+                let payload = Self::from_type_hint_inner(db, &t.payload, type_params);
                 IrType::Term(name, Box::new(payload))
             }
             TypeHint::Enum(e) => {
                 let mut variants: Vec<_> = e.variants.iter()
                     .map(|v| {
                         let name = v.name.text(db).to_string();
-                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params, keep));
+                        let payload = v.payload.as_ref().map(|p| Self::from_type_hint_inner(db, p, type_params));
                         (name, payload)
                     })
                     .collect();
@@ -673,13 +501,8 @@ impl IrType {
                 IrType::Error
             }
             TypeHint::Alias(alias) => {
-                if let Some(i) = type_params.iter().position(|p| *p == alias.name).filter(|_| keep) {
+                if let Some(i) = type_params.iter().position(|p| *p == alias.name) {
                     IrType::Param(i as u32)
-                } else if type_params.contains(&alias.name) {
-                    // A type parameter is erased: the function is compiled once
-                    // over `data`, and the call site converts on the way in and
-                    // back out.
-                    IrType::Data
                 } else {
                     // Type aliases should be resolved before IR generation.
                     IrType::Error
@@ -704,7 +527,8 @@ impl IrType {
         Self::from_datalit_inner(db, ty, Some(type_params))
     }
 
-    /// `keep` is the type parameters to keep, or `None` to erase them all.
+    /// `keep` is the type parameters in scope, or `None` outside a generic
+    /// body.
     fn from_datalit_inner<'db>(
         db: &'db dyn salsa::Database,
         ty: &datalove_datalit::tycheck::Type<'db>,
@@ -713,23 +537,17 @@ impl IrType {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
-            DlType::Var(name) if keep.is_some() => {
-                match keep.unwrap_or_default().iter().position(|p| p == name) {
+            DlType::Var(name) => match keep {
+                Some(params) => match params.iter().position(|p| p == name) {
                     Some(i) => IrType::Param(i as u32),
                     None => panic!("type variable {} is not a parameter of the function it is in",
                         name.as_str(db)),
-                }
-            }
-            // Erasure happens here, and only here: a type parameter is `data`
-            // in the IR no matter how deeply it is nested in the source type.
-            DlType::Var(_) => IrType::Data,
-
-            // A container of a type parameter is wrapped whole rather than
-            // erased structurally, so inside the generic that wrote it the
-            // value is a `data` -- in a parameter, in a local, and as the
-            // result of a call alike. Shaping only the parameters would leave
-            // the body holding one shape and calling with another.
-            _ if keep.is_none() && datalit_is_container_of_var(ty) => IrType::Data,
+                },
+                // Outside a generic body a type variable is in a native's
+                // signature, where the rider ABI takes it as a `data`: a
+                // pointer and a descriptor, whatever it was bound to.
+                None => IrType::Data,
+            },
             DlType::Bool => IrType::Bool,
             DlType::U8 => IrType::U8,
             DlType::I8 => IrType::I8,
@@ -1478,35 +1296,11 @@ pub enum Instruction {
         func: CodeRef,
         args: Vec<Operand>,
         /// What this call site bound each of the callee's type parameters to,
-        /// in the callee's declaration order, written over *this* function's
-        /// type parameters.
-        ///
-        /// Concrete at a call site that named concrete types, and mentioning
-        /// this function's own parameters where it passed them along. Together
-        /// with the callee's declared shapes it says what descriptors to hand
-        /// over, which `shape_descriptors_for` works out. Empty for a
+        /// in the callee's declaration order and written over this function's
+        /// own: concrete, or mentioning this function's `Param`s where it
+        /// passed them along. The callee is handed a descriptor for each, a
+        /// static one or this function's table entry for it. Empty for a
         /// non-generic callee.
-        #[serde(default)]
-        type_args: Vec<DescriptorShape>,
-        /// What this call hands over for each shape the callee declared, worked
-        /// out once the shape sets have settled.
-        ///
-        /// Derived from `type_args` and the callee's shapes by
-        /// `shape_descriptors_for`, and stored rather than recomputed so that
-        /// everything downstream reads the same answer: the backends emit these
-        /// and the descriptor emitter makes a descriptor for each static one.
-        /// A type named only here -- a `#{string}` built inside a generic whose
-        /// caller never mentions one -- would otherwise have no descriptor made
-        /// for it.
-        #[serde(default)]
-        shape_descriptors: Vec<DescriptorRef>,
-        /// Under generics by reference, what this call site bound each of the
-        /// callee's type parameters to, in the callee's declaration order and
-        /// written over this function's own: concrete, or mentioning this
-        /// function's `Param`s where it passed them along. The callee is
-        /// handed a descriptor for each, a static one or this function's
-        /// table entry for it. Empty for a non-generic callee, and under
-        /// erasure, which uses `type_args`.
         #[serde(default)]
         bindings: Vec<IrType>,
     },
@@ -1532,20 +1326,9 @@ pub enum Instruction {
         args: Vec<Operand>,
         /// Indices of const parameters (to be removed during specialization).
         comptime_param_indices: Vec<usize>,
-        /// What this call site bound each of the callee's type parameters to,
-        /// exactly as on [`Instruction::Call`].
-        ///
-        /// A callee's const parameters and its type parameters are independent:
-        /// specialization deletes the first and erasure replaces the second, so
-        /// a copy built for an instantiation is still generic and still wants
-        /// the same descriptors. These travel to the `Call` the rewrite emits.
-        #[serde(default)]
-        type_args: Vec<DescriptorShape>,
-        /// What this call hands over for each shape the callee declared, as on
-        /// [`Instruction::Call`] and worked out by the same pass.
-        #[serde(default)]
-        shape_descriptors: Vec<DescriptorRef>,
-        /// As on [`Instruction::Call`].
+        /// As on [`Instruction::Call`]. A callee's const parameters and its
+        /// type parameters are independent, so a copy built for an
+        /// instantiation is still generic and still takes these.
         #[serde(default)]
         bindings: Vec<IrType>,
     },
@@ -1592,21 +1375,6 @@ pub enum Instruction {
         dest: ValueId,
         src: Operand,
         field_index: u32,
-    },
-
-    /// Borrow the container a `data` holds, as the container it is.
-    ///
-    /// An owned container of a type parameter crosses a boundary wrapped:
-    /// `erased_param_type` makes `[T]` a `data`, because converting it to
-    /// `[data]` would mean rebuilding the elements at a different stride. So
-    /// inside the callee the value is a wrapper, and indexing it needs the
-    /// pointer and the descriptor the rest of the runtime speaks in.
-    ///
-    /// **Ownership:** Borrows `src`, produces `dest` (Ref type, always Copy).
-    /// The `data` keeps what it holds; this only points into it.
-    DataBorrow {
-        dest: ValueId,
-        src: Operand,
     },
 
     // ========================================================================
@@ -1711,36 +1479,6 @@ pub enum Instruction {
     /// **Ownership:** Consumes `inner`, produces `dest`.
     DataFrom { dest: ValueId, inner: Operand },
 
-    /// Move a value into the erased shape a generic callee expects.
-    ///
-    /// The destination's type is the source's with the erased positions
-    /// replaced by `data`. Emitted at a call site of a generic function, which
-    /// is where the concrete type is known.
-    ///
-    /// **Ownership:** Consumes `src`, produces `dest`.
-    Erase { dest: ValueId, src: Operand },
-
-    /// Erase a source that may be holding nothing yet.
-    ///
-    /// An erased `out` parameter is given the destination's current value, so
-    /// that the call destroys it once as it does for any out parameter. A
-    /// destination that has never been written has nothing to give, and
-    /// reading it is reading whatever the frame was left with, so `dest` is
-    /// zeroed instead -- an empty `data`, which destroys as a no-op and which
-    /// the callee overwrites.
-    ///
-    /// **Ownership:** Consumes `src` if `src` holds anything, produces `dest`.
-    EraseTracked { dest: ValueId, src: Operand },
-
-    /// Move the value back out of a Data, as the type of `dest`.
-    ///
-    /// The inverse of `DataFrom`. Emitted where the compiler knows what went
-    /// in, which is a call site of a function whose signature was erased, so
-    /// this is a move rather than a checked downcast.
-    ///
-    /// **Ownership:** Consumes `src`, produces `dest`.
-    Reify { dest: ValueId, src: Operand },
-
     // ========================================================================
     // Collection Construction
     // ========================================================================
@@ -1751,11 +1489,6 @@ pub enum Instruction {
     ListNew {
         dest: ValueId,
         elements: Vec<Operand>,
-        /// Which of this function's declared shapes describes the collection,
-        /// where its own type does not say. `None` is a collection whose
-        /// element type is concrete, which is every one outside a generic.
-        #[serde(default)]
-        descriptor: Option<u32>,
     },
 
     /// Create a new set.
@@ -1764,11 +1497,6 @@ pub enum Instruction {
     SetNew {
         dest: ValueId,
         elements: Vec<Operand>,
-        /// Which of this function's declared shapes describes the collection,
-        /// where its own type does not say. `None` is a collection whose
-        /// element type is concrete, which is every one outside a generic.
-        #[serde(default)]
-        descriptor: Option<u32>,
     },
 
     /// Create a new map.
@@ -1777,9 +1505,6 @@ pub enum Instruction {
     MapNew {
         dest: ValueId,
         entries: Vec<(Operand, Operand)>,
-        /// See `ListNew::descriptor`.
-        #[serde(default)]
-        descriptor: Option<u32>,
     },
 
     /// Create a new tensor.
@@ -2201,41 +1926,13 @@ impl Instruction {
     /// Where this instruction calls, and what it bound the callee's type
     /// parameters to, for the two instructions that call a named function.
     ///
-    /// `Call` and `ComptimeCall` carry the same descriptor fields and mean the
-    /// same thing by them: a callee's const parameters and its type parameters
-    /// are independent, so a comptime callee may be generic too. Read through
-    /// here rather than matched separately, because three passes have to agree
-    /// about which instructions are calls, and one of them missing a kind is a
-    /// call site and a callee disagreeing about the trailing arguments, which
-    /// is the failure this area keeps producing.
-    pub fn call_target(&self) -> Option<(&CodeRef, &[DescriptorShape])> {
+    /// The callee of a `Call` or a `ComptimeCall`.
+    ///
+    /// Read through here rather than matched separately, so that no pass
+    /// asking which instructions are calls misses a kind.
+    pub fn call_target(&self) -> Option<&CodeRef> {
         match self {
-            Instruction::Call { func, type_args, .. }
-            | Instruction::ComptimeCall { func, type_args, .. } => Some((func, type_args)),
-            _ => None,
-        }
-    }
-
-    /// The same, plus what the call currently says it hands over.
-    pub fn call_target_full(&self) -> Option<(&CodeRef, &[DescriptorShape], &[DescriptorRef])> {
-        match self {
-            Instruction::Call { func, type_args, shape_descriptors, .. }
-            | Instruction::ComptimeCall { func, type_args, shape_descriptors, .. } => {
-                Some((func, type_args, shape_descriptors))
-            }
-            _ => None,
-        }
-    }
-
-    /// The same, for writing the resolved descriptors back.
-    pub fn call_target_mut(
-        &mut self,
-    ) -> Option<(&CodeRef, &[DescriptorShape], &mut Vec<DescriptorRef>)> {
-        match self {
-            Instruction::Call { func, type_args, shape_descriptors, .. }
-            | Instruction::ComptimeCall { func, type_args, shape_descriptors, .. } => {
-                Some((func, type_args, shape_descriptors))
-            }
+            Instruction::Call { func, .. } | Instruction::ComptimeCall { func, .. } => Some(func),
             _ => None,
         }
     }
@@ -2275,7 +1972,6 @@ impl Instruction {
             Instruction::Unpack { dests, .. } => dests.clone(),
             Instruction::GetField { dest, .. } => vec![*dest],
             Instruction::GetFieldRef { dest, .. } => vec![*dest],
-            Instruction::DataBorrow { dest, .. } => vec![*dest],
 
             // Option/Result construction
             Instruction::WrapSome { dest, .. } => vec![*dest],
@@ -2295,9 +1991,6 @@ impl Instruction {
             // Boxing operations
             Instruction::ErrorFrom { dest, .. } => vec![*dest],
             Instruction::DataFrom { dest, .. } => vec![*dest],
-            Instruction::Erase { dest, .. } => vec![*dest],
-            Instruction::EraseTracked { dest, .. } => vec![*dest],
-            Instruction::Reify { dest, .. } => vec![*dest],
 
             // Collection construction
             Instruction::ListNew { dest, .. } => vec![*dest],
@@ -2392,10 +2085,9 @@ impl Instruction {
             | I::SlotLoadMove { .. } | I::SlotLoadMoveTracked { .. } | I::Nop => {}
             I::Copy { src, .. } | I::Move { src, .. } | I::Widen { src, .. }
             | I::WidenFixed { src, .. } | I::Clone { src, .. } | I::Unpack { src, .. }
-            | I::GetField { src, .. } | I::GetFieldRef { src, .. } | I::DataBorrow { src, .. }
+            | I::GetField { src, .. } | I::GetFieldRef { src, .. }
             | I::EnumDiscriminant { src, .. } | I::EnumPayload { src, .. }
-            | I::UnwrapOption { src, .. } | I::UnwrapResult { src, .. } | I::Erase { src, .. }
-            | I::EraseTracked { src, .. } | I::Reify { src, .. } => f(src),
+            | I::UnwrapOption { src, .. } | I::UnwrapResult { src, .. } => f(src),
             I::WrapSome { inner, .. } | I::WrapOk { inner, .. } | I::WrapErr { inner, .. }
             | I::ErrorFrom { inner, .. } | I::DataFrom { inner, .. } => f(inner),
             I::UnaryOp { operand, .. } | I::UnaryOpChecked { operand, .. }
@@ -2775,436 +2467,7 @@ impl DescriptorShape {
     }
 }
 
-/// Why a shape set cannot be closed.
-///
-/// Carries the call that makes it grow, so the message can name the thing the
-/// reader wrote rather than the deeply nested type it would have produced.
-#[derive(Clone, Debug)]
-pub struct GrowingShape<K> {
-    /// The function that would be handed a shape that never stops growing.
-    pub function: K,
-    /// A shape it would be handed.
-    pub shape: DescriptorShape,
-    /// The call responsible: `caller` calls `callee` binding the callee's type
-    /// parameter number `param` to `bound`, and `bound` holds one of the
-    /// caller's own parameters underneath a type constructor. Going round that
-    /// cycle adds a level every time.
-    pub caller: K,
-    pub callee: K,
-    pub param: u32,
-    pub bound: DescriptorShape,
-}
-
-/// Give each function the shapes it has to carry on its callees' behalf.
-///
-/// Lowering knows what a function's own body builds. That is not the whole set:
-/// a function handing its type parameter to one that builds a collection of it
-/// has to be handed a descriptor too, and pass it on. Which shapes those are
-/// depends on the callee, so it cannot be settled while a function is lowered
-/// on its own.
-///
-/// The rule is one step, applied until nothing changes:
-///
-/// > For every call, substitute the callee's shapes with what the call site
-/// > bound the callee's type parameters to. Whatever still mentions this
-/// > function's own parameters is a shape this function needs as well.
-///
-/// Each round only adds. Where a cycle of calls passes its type parameters
-/// along unchanged the substitution is a renaming, which cannot enlarge a
-/// shape, so the set is drawn from what the cycle's bodies already wrote and
-/// the iteration settles. Mutual recursion is no different from a chain.
-///
-/// What does not settle is a cycle whose substitution *grows* a shape. That is
-/// decided before the iteration, by `growing_parameters`, so this loop is only
-/// ever run on something known to terminate.
-///
-/// `calls` gives, for each function, the callee and what the call site bound
-/// the callee's type parameters to. `shapes` starts as what each body builds
-/// and is grown in place.
-///
-/// Generic over the hasher because its caller in the module pipeline keys
-/// these on `(IrModuleId, FuncId)` and builds an entry per function in the
-/// program on every compile that changes one, where SipHash on eight bytes is
-/// a measurable share of the pass.
-pub fn close_shapes<K: Copy + Eq + std::hash::Hash, S: std::hash::BuildHasher>(
-    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>, S>,
-    shapes: &mut std::collections::HashMap<K, Vec<DescriptorShape>, S>,
-) -> Result<(), GrowingShape<K>> {
-    let (growing, blame) = growing_parameters(calls);
-
-    loop {
-        let mut added = false;
-        for (caller, sites) in calls {
-            let mut wanted: Vec<DescriptorShape> = Vec::new();
-            for (callee, type_args) in sites {
-                let Some(callee_shapes) = shapes.get(callee) else { continue };
-                for shape in callee_shapes {
-                    let Some(here) = shape.substitute(type_args) else { continue };
-                    // Concrete means this call site names a static descriptor,
-                    // and nothing has to be passed in for it.
-                    if !here.mentions_param() {
-                        continue;
-                    }
-                    // A shape riding a parameter that reaches a growing cycle
-                    // is one that never stops growing, however small it looks
-                    // right now.
-                    for j in here.params() {
-                        if growing.contains(&(*caller, j)) {
-                            let (bl_caller, bl_callee, bl_param, bl_bound) =
-                                blame.clone().expect("a growing parameter has a cause");
-                            return Err(GrowingShape {
-                                function: *caller,
-                                shape: here,
-                                caller: bl_caller,
-                                callee: bl_callee,
-                                param: bl_param,
-                                bound: bl_bound,
-                            });
-                        }
-                    }
-                    wanted.push(here);
-                }
-            }
-            let own = shapes.entry(*caller).or_default();
-            for shape in wanted {
-                if !own.contains(&shape) {
-                    own.push(shape);
-                    added = true;
-                }
-            }
-        }
-        if !added {
-            return Ok(());
-        }
-    }
-}
-
-/// Work out what each call in `unit` hands over, now that the shapes are
-/// settled.
-///
-/// Run once, after the closure, so that the backends and the descriptor emitter
-/// read one answer rather than each deriving it.
-///
-/// Worked out rather than written, and `Ok(None)` when every call already
-/// holds what it should. The module path shares its units with a salsa memo,
-/// so writing means `Arc::make_mut` and a deep copy of the function; on a
-/// program where any shape exists at all, copying every function to write back
-/// what it already said was three quarters of this pass. A caller that owns
-/// its unit outright wants `set_call_descriptors` instead.
-///
-/// The answers come back in the order the calls were walked, which is the order
-/// [`write_call_descriptors`] writes them in.
-pub fn resolve_call_descriptors(
-    unit: &IrCodeUnit,
-    own_shapes: &[DescriptorShape],
-    callee_shapes: &dyn Fn(&CodeRef) -> Vec<DescriptorShape>,
-) -> Result<Option<Vec<Vec<DescriptorRef>>>, DescriptorShape> {
-    let mut resolved = Vec::new();
-    let mut changed = false;
-
-    for block in &unit.blocks {
-        for instr in &block.instructions {
-            let Some((func, type_args, held)) = instr.call_target_full() else {
-                continue;
-            };
-            let wanted = callee_shapes(func);
-            let next = if wanted.is_empty() {
-                Vec::new()
-            } else {
-                shape_descriptors_for(&wanted, type_args, own_shapes)?
-            };
-            changed |= next != held;
-            resolved.push(next);
-        }
-    }
-
-    Ok(changed.then_some(resolved))
-}
-
-/// Write back what [`resolve_call_descriptors`] worked out.
-pub fn write_call_descriptors(unit: &mut IrCodeUnit, resolved: Vec<Vec<DescriptorRef>>) {
-    let mut resolved = resolved.into_iter();
-    for block in &mut unit.blocks {
-        for instr in &mut block.instructions {
-            let Some((_, _, shape_descriptors)) = instr.call_target_mut() else {
-                continue;
-            };
-            *shape_descriptors = resolved.next()
-                .expect("one answer per call, in the order the calls were walked");
-        }
-    }
-    debug_assert!(resolved.next().is_none(), "more answers than calls");
-}
-
-/// Resolve and write in one step, for a caller that owns its unit.
-///
-/// A script unit is built fresh every time it is compiled, so there is nothing
-/// to save by asking whether the answer moved.
-pub fn set_call_descriptors(
-    unit: &mut IrCodeUnit,
-    own_shapes: &[DescriptorShape],
-    callee_shapes: &dyn Fn(&CodeRef) -> Vec<DescriptorShape>,
-) -> Result<(), DescriptorShape> {
-    if let Some(resolved) = resolve_call_descriptors(unit, own_shapes, callee_shapes)? {
-        write_call_descriptors(unit, resolved);
-    }
-    Ok(())
-}
-
-/// The type parameters whose shapes would grow without end.
-///
-/// Nodes are a function and one of its type parameters. A call from `f` to `g`
-/// binding `g`'s parameter `i` to a shape holding `f`'s parameter `j` draws an
-/// edge from `(g, i)` to `(f, j)`, which is the direction shapes travel: `g`'s
-/// shapes become `f`'s. The edge is *strict* when the binding is not simply
-/// `j` itself, meaning the shape gains a type constructor crossing it.
-///
-/// A cycle of plain edges is a renaming, and a shape going round it comes back
-/// the same size. A cycle holding one strict edge adds a level every lap, so
-/// any shape reaching it grows without end. That is the occurs check, read
-/// across the call graph rather than within one term.
-///
-/// Returns the nodes that can reach such a cycle, and a strict edge on one, for
-/// the error to point at.
-#[allow(clippy::type_complexity)]
-fn growing_parameters<K: Copy + Eq + std::hash::Hash, S: std::hash::BuildHasher>(
-    calls: &std::collections::HashMap<K, Vec<(K, Vec<DescriptorShape>)>, S>,
-) -> (
-    std::collections::HashSet<(K, u32)>,
-    Option<(K, K, u32, DescriptorShape)>,
-) {
-    use std::collections::{HashMap, HashSet, VecDeque};
-
-    type Node<K> = (K, u32);
-    let mut forward: HashMap<Node<K>, Vec<Node<K>>> = HashMap::new();
-    let mut backward: HashMap<Node<K>, Vec<Node<K>>> = HashMap::new();
-    let mut strict: Vec<(Node<K>, Node<K>, K, K, u32, DescriptorShape)> = Vec::new();
-
-    for (caller, sites) in calls {
-        for (callee, type_args) in sites {
-            for (i, bound) in type_args.iter().enumerate() {
-                for j in bound.params() {
-                    let from = (*callee, i as u32);
-                    let to = (*caller, j);
-                    forward.entry(from).or_default().push(to);
-                    backward.entry(to).or_default().push(from);
-                    if *bound != DescriptorShape::Param(j) {
-                        strict.push((from, to, *caller, *callee, i as u32, bound.clone()));
-                    }
-                }
-            }
-        }
-    }
-
-    // A strict edge lies on a cycle exactly when its head can get back to its
-    // tail.
-    let reaches = |start: Node<K>, target: Node<K>| -> bool {
-        let mut seen: HashSet<Node<K>> = HashSet::new();
-        let mut queue = VecDeque::new();
-        queue.push_back(start);
-        seen.insert(start);
-        while let Some(n) = queue.pop_front() {
-            if n == target {
-                return true;
-            }
-            for next in forward.get(&n).into_iter().flatten() {
-                if seen.insert(*next) {
-                    queue.push_back(*next);
-                }
-            }
-        }
-        false
-    };
-
-    let mut on_cycle: Vec<Node<K>> = Vec::new();
-    let mut blame = None;
-    for (from, to, caller, callee, param, bound) in &strict {
-        if reaches(*to, *from) {
-            on_cycle.push(*from);
-            if blame.is_none() {
-                blame = Some((*caller, *callee, *param, bound.clone()));
-            }
-        }
-    }
-
-    // Anything that can reach such a cycle feeds it, and what it feeds grows.
-    let mut growing: HashSet<Node<K>> = HashSet::new();
-    let mut queue: VecDeque<Node<K>> = VecDeque::new();
-    for node in on_cycle {
-        if growing.insert(node) {
-            queue.push_back(node);
-        }
-    }
-    while let Some(n) = queue.pop_front() {
-        for prev in backward.get(&n).into_iter().flatten() {
-            if growing.insert(*prev) {
-                queue.push_back(*prev);
-            }
-        }
-    }
-
-    (growing, blame)
-}
-
-/// What a call site has to hand over for each shape the callee declared.
-///
-/// Substituting the callee's shape with what this site bound its type
-/// parameters to gives the type the descriptor has to describe. Concrete means
-/// a static symbol; anything still mentioning this function's own parameters
-/// has to be forwarded from what this function was handed, and if it was handed
-/// no such thing the call cannot be made.
-///
-/// One implementation, read by every backend, because a call site and a callee
-/// signature disagreeing about the trailing arguments is the failure this area
-/// keeps producing.
-pub fn shape_descriptors_for(
-    callee_shapes: &[DescriptorShape],
-    type_args: &[DescriptorShape],
-    own_shapes: &[DescriptorShape],
-) -> Result<Vec<DescriptorRef>, DescriptorShape> {
-    let mut out = Vec::with_capacity(callee_shapes.len());
-    for shape in callee_shapes {
-        let wanted = shape.substitute(type_args).ok_or_else(|| shape.clone())?;
-        if let Some(concrete) = wanted.as_concrete() {
-            out.push(DescriptorRef::Static(concrete));
-            continue;
-        }
-        match own_shapes.iter().position(|s| *s == wanted) {
-            Some(i) => out.push(DescriptorRef::Own(i as u32)),
-            None => return Err(wanted),
-        }
-    }
-    Ok(out)
-}
-
-/// What a call site hands over for one of the callee's shapes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum DescriptorRef {
-    /// A static descriptor for a type this call site knows outright.
-    Static(IrType),
-    /// The descriptor this function was itself handed, by index into its own
-    /// `descriptor_shapes`.
-    Own(u32),
-}
-
-/// The descriptor for what a reference points at, where its own static type
-/// does not say.
-///
-/// A reference is a pointer and a descriptor. The descriptor is usually the one
-/// the referent's static type gives, and then it is a constant, nothing is
-/// carried, and a field offset folds at compile time -- which is every
-/// reference outside a generic. It is otherwise only where the static type says
-/// `data` because a type parameter stood there, and then it lies about the
-/// layout: a `data` is two words and the `u8` really behind it is one byte, so
-/// every field after it sits at an offset that is wrong by the difference.
-///
-/// A value absent from what `resolve_ref_descriptors` returns is the ordinary
-/// case: its static type describes it. The roots are the borrowed parameters in
-/// `FunctionContext::descriptor_params`, which is the only thing that lies, and
-/// the ways further in are projecting a field and indexing a container.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum RefDesc {
-    /// Field `index` of the descriptor handed over for a borrowed parameter,
-    /// named by its position in `descriptor_params`.
-    ParamField { param: u32, index: u32 },
-    /// Field `index` of the descriptor already worked out for `base`.
-    RefField { base: ValueId, index: u32 },
-    /// What a container described by a borrowed parameter's descriptor holds:
-    /// the element of a list, set or tensor, or the value of a map.
-    ParamElement { param: u32 },
-    /// What the container described for `base` holds.
-    RefElement { base: ValueId },
-    /// The descriptor a `data` carries, which a `DataBorrow` read out of it
-    /// along with the pointer. A root like a borrowed parameter, rather than a
-    /// narrowing of one.
-    Unwrapped,
-}
-
-/// Where a reference's base got its descriptor, before it is narrowed.
-#[derive(Clone, Copy)]
-enum Root {
-    Param(u32),
-    Ref(ValueId),
-}
-
-/// Say what each reference in `unit` points at, where its static type does not.
-///
-/// One answer read by every backend, for the reason `resolve_call_descriptors`
-/// gives: four derivations of one question is the shape of most of the bugs
-/// this area has had. Derived rather than stored, so that specialization
-/// renumbering values and inlining offsetting them cannot leave it stale --
-/// each backend calls this once for the unit it is about to compile.
-///
-/// The roots are `descriptor_params`, which is already exactly the set of
-/// parameters whose static type does not describe what arrived. Nothing else
-/// roots one: a local holding an erased value holds a `data` for real, so its
-/// static type is honest, and an owned parameter was converted at the boundary.
-pub fn resolve_ref_descriptors(unit: &IrCodeUnit) -> BTreeMap<ValueId, RefDesc> {
-    let param_slot: BTreeMap<ParamId, u32> = match unit.function_context() {
-        Some(ctx) => ctx.descriptor_params.iter()
-            .enumerate()
-            .map(|(i, p)| (*p, i as u32))
-            .collect(),
-        // A script unit has no type parameters and no borrowed parameters, but
-        // it can still call a generic, and a `DataBorrow` roots a descriptor on
-        // its own.
-        None => BTreeMap::new(),
-    };
-
-    // A projection chain reaches further in one step at a time, and a step's
-    // source is always defined before it. Rather than assume an order over the
-    // blocks, grow the set until it stops growing; a chain is a handful of
-    // steps, so this settles at once.
-    let mut descs: BTreeMap<ValueId, RefDesc> = BTreeMap::new();
-    loop {
-        let mut added = false;
-        for block in &unit.blocks {
-            for instr in &block.instructions {
-                // A borrow out of a wrapper reads the descriptor with the
-                // pointer, so it needs nothing from anywhere else.
-                if let Instruction::DataBorrow { dest, .. } = instr {
-                    if descs.insert(*dest, RefDesc::Unwrapped).is_none() {
-                        added = true;
-                    }
-                    continue;
-                }
-                let (dest, base, field) = match instr {
-                    Instruction::GetFieldRef { dest, src, field_index } => {
-                        (dest, src, Some(*field_index))
-                    }
-                    Instruction::ListElementRef { dest, list, .. } => (dest, list, None),
-                    Instruction::MapValueRef { dest, map, .. } => (dest, map, None),
-                    Instruction::TensorIndexRef { dest, tensor, .. } => (dest, tensor, None),
-                    _ => continue,
-                };
-                if descs.contains_key(dest) {
-                    continue;
-                }
-                let root = match base {
-                    Operand::Param(p) => param_slot.get(p).copied().map(Root::Param),
-                    Operand::Value(v) | Operand::ValueRef(v) => {
-                        descs.contains_key(v).then_some(Root::Ref(*v))
-                    }
-                    _ => None,
-                };
-                let Some(root) = root else { continue };
-                descs.insert(*dest, match (root, field) {
-                    (Root::Param(param), Some(index)) => RefDesc::ParamField { param, index },
-                    (Root::Ref(base), Some(index)) => RefDesc::RefField { base, index },
-                    (Root::Param(param), None) => RefDesc::ParamElement { param },
-                    (Root::Ref(base), None) => RefDesc::RefElement { base },
-                });
-                added = true;
-            }
-        }
-        if !added {
-            break;
-        }
-    }
-    descs
-}
-
-/// Context for function execution./// Context for function execution.
+/// Context for function execution.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FunctionContext {
     /// Parameter IDs (references to caller's data).
@@ -3218,35 +2481,10 @@ pub struct FunctionContext {
     /// Out params that need runtime tracking.
     #[serde(default)]
     pub tracked_params: Vec<ParamId>,
-    /// Shapes this function needs a descriptor for, in the order they arrive
-    /// as trailing arguments, after `descriptor_params`.
-    ///
-    /// `descriptor_params` describes a value that *arrived*, which is enough to
-    /// work on one. Building a fresh collection has no value to read a
-    /// descriptor off, so the shape is declared here and the call site hands
-    /// one over. Only a function that builds declares any, so a generic that
-    /// passes values along carries nothing extra.
-    #[serde(default)]
-    pub descriptor_shapes: Vec<DescriptorShape>,
-    /// Parameters whose descriptor the caller supplies, in parameter order.
-    ///
-    /// A generic function is compiled once, with `data` standing where a type
-    /// parameter was written, so `param_types` does not describe the value at
-    /// such a parameter: a `[T]` is compiled as `[data]` and the caller may
-    /// hand it a list of anything. Where the callee only borrows the value
-    /// nothing is converted at the boundary, so the descriptor has to come from
-    /// the call site, which is the place that knows the type.
-    ///
-    /// How it is carried is up to the backend. The interpreter needs nothing:
-    /// its values are a pointer and a descriptor already. The compiled
-    /// backends take one extra pointer parameter for each entry here, after
-    /// the ordinary parameters and in this order.
-    #[serde(default)]
-    pub descriptor_params: Vec<ParamId>,
     /// How many type parameters the function was declared with.
     ///
-    /// Under generics by reference, a generic is handed one descriptor per
-    /// type parameter, after its ordinary parameters and in this order. The
+    /// A generic is handed one descriptor per type parameter, after its
+    /// ordinary parameters and in this order. The
     /// count comes from the signature, never the body, so a callee's calling
     /// convention does not depend on what its body does.
     #[serde(default)]
@@ -3948,8 +3186,6 @@ mod dynamic_type_tests {
                 param_types,
                 return_type: IrType::Unit,
                 tracked_params: Vec::new(),
-                descriptor_shapes: Vec::new(),
-                descriptor_params: Vec::new(),
                 type_param_count: 1,
                 descriptor_table: Vec::new(),
             }),

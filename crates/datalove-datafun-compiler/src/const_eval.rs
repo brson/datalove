@@ -217,7 +217,7 @@ fn first_uncallable_target(
     let mut bodies = vec![unit];
     while let Some(body) = bodies.pop() {
         for instr in body.blocks.iter().flat_map(|block| &block.instructions) {
-            let Some((CodeRef::Module { module, id }, _)) = instr.call_target() else { continue };
+            let Some(CodeRef::Module { module, id }) = instr.call_target() else { continue };
             if !seen.insert((*module, *id)) {
                 continue;
             }

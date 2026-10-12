@@ -8,10 +8,10 @@ use super::*;
 // =============================================================================
 
 /// The offset and type of a field of a tuple or struct whose layout its static
-/// type says, which a type with no `data` in it does: elsewhere the runtime's
+/// type says, which a type that is not dynamic does: elsewhere the runtime's
 /// descriptor has the offsets.
 fn static_field(ty: &IrType, index: u32) -> Option<(u32, &IrType)> {
-    if has_data(ty) {
+    if ty.is_dynamic() {
         return None;
     }
     let types: Vec<&IrType> = match ty {
@@ -22,22 +22,6 @@ fn static_field(ty: &IrType, index: u32) -> Option<(u32, &IrType)> {
     let owned: Vec<IrType> = types.iter().map(|t| (*t).clone()).collect();
     let offset = *datalove_datafun_ir::layout::aggregate_field_offsets(&owned).get(index as usize)?;
     Some((offset, types[index as usize]))
-}
-
-/// Whether a type has a `data` anywhere in it: a type parameter, whose real
-/// layout only its descriptor knows at run time.
-fn has_data(ty: &IrType) -> bool {
-    match ty {
-        IrType::Data => true,
-        IrType::Tuple(fs) => fs.iter().any(has_data),
-        IrType::Struct(fs) => fs.iter().any(|(_, t)| has_data(t)),
-        IrType::Enum(vs) => vs.iter().any(|(_, t)| t.as_ref().is_some_and(has_data)),
-        IrType::Term(_, t) | IrType::List(t) | IrType::Set(t) | IrType::Option(t)
-        | IrType::Result(t) | IrType::Tensor(t, _) | IrType::Ref(t) => has_data(t),
-        IrType::Map(k, v) => has_data(k) || has_data(v),
-        IrType::Table(cs) => cs.iter().any(|(_, t)| has_data(t)),
-        _ => false,
-    }
 }
 
 struct Lowering<'a> {
@@ -80,16 +64,9 @@ struct Lowering<'a> {
 
 impl<'a> Lowering<'a> {
     /// The static type of an operand, where its layout and descriptor are the
-    /// truth about what is there.
-    ///
-    /// What the frame holds itself -- values, slots, parameters passed by
-    /// value -- it holds erased, so a `data` in its type is a `data` in its
-    /// bytes. What a borrowed parameter or a reference points at is the
-    /// caller's, as it really is, which inside a generic the static type does
-    /// not say; nor is anything that reaches another unit.
-    ///
-    /// A dynamic type is not one: its frame bytes are a fat pointer, and
-    /// only the IR walker reads through it.
+    /// truth about what is there: anything in this unit but a dynamic type,
+    /// whose frame bytes are a fat pointer that only the IR walker reads
+    /// through.
     fn typed(&self, op: &Operand) -> Option<&'a IrType> {
         self.typed_any(op).filter(|ty| !ty.is_dynamic())
     }
@@ -99,15 +76,9 @@ impl<'a> Lowering<'a> {
         match op {
             Operand::Value(id) => Some(&func.value_types[id.0 as usize]),
             Operand::Slot(id) => Some(&func.slot_types[id.0 as usize]),
-            Operand::Param(id) => {
-                let ctx = func.function_context()?;
-                let i = id.0 as usize;
-                let ty = &ctx.param_types[i];
-                let borrowed = matches!(ctx.param_modes.get(i), Some(ParamMode::Ref | ParamMode::Mut));
-                (!borrowed || !has_data(ty)).then_some(ty)
-            }
+            Operand::Param(id) => Some(&func.function_context()?.param_types[id.0 as usize]),
             Operand::ValueRef(id) => match &func.value_types[id.0 as usize] {
-                IrType::Ref(inner) if !has_data(inner) => Some(inner),
+                IrType::Ref(inner) => Some(inner),
                 _ => None,
             },
             Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
@@ -115,9 +86,9 @@ impl<'a> Lowering<'a> {
     }
 
     /// Where an operand's descriptor comes from: the layout where its static
-    /// type says, otherwise the frame, at run time -- a borrowed parameter's
-    /// from the caller, a reference's from its descriptor word, which only
-    /// the references `resolve_ref_descriptors` names have.
+    /// type says, otherwise the frame, at run time -- a dynamic parameter's
+    /// from the caller, a reference's from its descriptor word, which only a
+    /// reference to a dynamic type has.
     fn desc(&self, op: &Operand) -> Option<Desc> {
         if self.typed(op).is_some() {
             return Some(Desc::Static(self.desc_of(op)?));
@@ -473,7 +444,7 @@ impl<'a> Lowering<'a> {
                 let (ty, dst) = match dest {
                     Operand::ValueRef(_) => (self.typed(dest), self.loc(dest)),
                     Operand::Value(r) => match self.typed(dest) {
-                        Some(IrType::Ref(inner)) if !has_data(inner) => {
+                        Some(IrType::Ref(inner)) => {
                             (Some(&**inner), Some(Loc::indirect(self.layout.value_offsets[r.0 as usize])))
                         }
                         _ => return false,
@@ -533,8 +504,6 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::ListElementRefRt { dest: dest.0, at });
                 true
             }
-            Instruction::Erase { dest, src } => self.lower_rt_unary(*dest, src, |at| Op::EraseRt { at }),
-            Instruction::Reify { dest, src } => self.lower_rt_unary(*dest, src, |at| Op::ReifyRt { at }),
             // The source is borrowed.
             Instruction::Clone { dest, src } => {
                 let (Some(d), Some(s)) = (self.rt_operand(&Operand::Value(*dest)), self.rt_operand(src)) else {
@@ -761,19 +730,12 @@ impl<'a> Lowering<'a> {
                     self.loc(arg)?;
                     Some(self.consumed(arg).is_some())
                 }).collect();
-                let resolved: Option<Vec<_>> = match instr {
-                    Instruction::Call { shape_descriptors, .. } if shape_descriptors.is_empty() => {
-                        // A `data` handed to a borrowed parameter is read
-                        // through its wrapper, which the general lane does.
-                        args.iter().map(|arg| {
-                            if has_data(self.typed(arg)?) {
-                                return None;
-                            }
-                            Some((self.loc(arg)?, self.desc_of(arg)?))
-                        }).collect()
-                    }
-                    _ => None,
-                };
+                // An argument of a dynamic type is described only by the
+                // running frame, which the general lane reads.
+                let resolved: Option<Vec<_>> = args.iter().map(|arg| {
+                    self.typed(arg)?;
+                    Some((self.loc(arg)?, self.desc_of(arg)?))
+                }).collect();
                 match fast {
                     Some(args) => {
                         let site = self.calls.len() as u32;

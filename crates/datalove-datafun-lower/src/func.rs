@@ -199,8 +199,6 @@ pub fn lower_function_body<'db>(
             param_types: std::mem::take(&mut ctx.body.param_types),
             return_type,
             tracked_params: ctx.compute_tracked_params(),
-            descriptor_params: Vec::new(),
-            descriptor_shapes: Vec::new(),
             type_param_count: type_params.len() as u32,
             descriptor_table: Vec::new(),
         }),

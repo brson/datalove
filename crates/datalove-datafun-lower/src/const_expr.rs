@@ -89,7 +89,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         blocks.iter()
             .flat_map(|block| block.instructions.iter())
             .filter_map(|instr| match instr.call_target() {
-                Some((CodeRef::Local(id), _)) => Some(FuncId(id.0)),
+                Some(CodeRef::Local(id)) => Some(FuncId(id.0)),
                 _ => None,
             })
             .collect()

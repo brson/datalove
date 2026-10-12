@@ -37,20 +37,7 @@ pub fn build_signature_for_func(
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
 
-    // Then a descriptor for each parameter whose type does not describe what
-    // arrives, which the call site knows and this function does not.
-    for _ in &func_ctx.descriptor_params {
-        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-    }
-
-    // Then one for each shape this function builds a collection of. Those have
-    // no value to carry a descriptor with, so they come on their own, after the
-    // ones that describe a parameter.
-    for _ in &func_ctx.descriptor_shapes {
-        sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
-    }
-
-    // Under generics by reference, one for each type parameter, last.
+    // Then a descriptor for each type parameter, last.
     for _ in 0..func_ctx.type_param_count {
         sig.params.push(cl_ir::AbiParam::new(PTR_TYPE));
     }
@@ -118,10 +105,6 @@ pub fn uses_sret(ret_ty: &IrType) -> bool {
 #[derive(Clone)]
 pub struct LocalCallee {
     pub func_id: FuncId,
-    /// Parameters whose descriptor the call site supplies, in signature order.
-    pub descriptor_params: Vec<ParamId>,
-    /// Shapes whose descriptor the call site supplies, after those.
-    pub descriptor_shapes: Vec<datalove_datafun_ir::DescriptorShape>,
     /// How the callee takes each parameter, which the call site needs because
     /// an `out` one has its old value dropped here rather than there.
     pub param_modes: Vec<ParamMode>,
@@ -135,8 +118,6 @@ impl LocalCallee {
         let ctx = unit.function_context();
         LocalCallee {
             func_id,
-            descriptor_params: ctx.map(|c| c.descriptor_params.clone()).unwrap_or_default(),
-            descriptor_shapes: ctx.map(|c| c.descriptor_shapes.clone()).unwrap_or_default(),
             param_modes: ctx.map(|c| c.param_modes.clone()).unwrap_or_default(),
             type_param_count: ctx.map(|c| c.type_param_count).unwrap_or(0),
         }

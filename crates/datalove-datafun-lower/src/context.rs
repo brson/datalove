@@ -995,25 +995,19 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit Call.
     pub fn emit_call(&mut self, dest: ValueId, func: CodeRef, args: Vec<Operand>) {
-        self.emit_call_with_type_args(dest, func, args, Vec::new(), Vec::new());
+        self.emit_call_with_bindings(dest, func, args, Vec::new());
     }
 
-    /// Emit Call, handing the callee a descriptor for each shape it declared,
-    /// or, under generics by reference, for each of its type parameters.
-    pub fn emit_call_with_type_args(
+    /// Emit Call, handing the callee a descriptor for each of its type
+    /// parameters, for what `bindings` says it was bound to.
+    pub fn emit_call_with_bindings(
         &mut self,
         dest: ValueId,
         func: CodeRef,
         args: Vec<Operand>,
-        type_args: Vec<datalove_datafun_ir::DescriptorShape>,
         bindings: Vec<IrType>,
     ) {
-        self.emit(Instruction::Call {
-            dest, func, args, type_args,
-            // Filled in once the shape sets have settled.
-            shape_descriptors: Vec::new(),
-            bindings,
-        });
+        self.emit(Instruction::Call { dest, func, args, bindings });
     }
 
     /// Emit ComptimeCall (for calls to functions with const parameters).
@@ -1023,15 +1017,9 @@ impl<'db> LowerCtx<'db> {
         func: CodeRef,
         args: Vec<Operand>,
         comptime_param_indices: Vec<usize>,
-        type_args: Vec<datalove_datafun_ir::DescriptorShape>,
         bindings: Vec<IrType>,
     ) {
-        self.emit(Instruction::ComptimeCall {
-            dest, func, args, comptime_param_indices, type_args,
-            // Filled in once the shape sets have settled, as for `Call`.
-            shape_descriptors: Vec::new(),
-            bindings,
-        });
+        self.emit(Instruction::ComptimeCall { dest, func, args, comptime_param_indices, bindings });
     }
 
     /// Emit Pack.
@@ -1086,17 +1074,17 @@ impl<'db> LowerCtx<'db> {
 
     /// Emit ListNew.
     pub fn emit_list_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::ListNew { dest, elements, descriptor: None });
+        self.emit(Instruction::ListNew { dest, elements });
     }
 
     /// Emit SetNew.
     pub fn emit_set_new(&mut self, dest: ValueId, elements: Vec<Operand>) {
-        self.emit(Instruction::SetNew { dest, elements, descriptor: None });
+        self.emit(Instruction::SetNew { dest, elements });
     }
 
     /// Emit MapNew.
     pub fn emit_map_new(&mut self, dest: ValueId, entries: Vec<(Operand, Operand)>) {
-        self.emit(Instruction::MapNew { dest, entries, descriptor: None });
+        self.emit(Instruction::MapNew { dest, entries });
     }
 
     /// Emit TensorNew.

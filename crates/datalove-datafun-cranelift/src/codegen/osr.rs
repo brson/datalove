@@ -93,8 +93,6 @@ pub struct OsrSpec {
     pub header: BlockId,
     /// Where each parameter's `Value` is: its pointer, then its descriptor.
     pub param_offsets: Vec<u32>,
-    /// Where the shape descriptors are, one word each.
-    pub shape_offset: u32,
     /// Where the descriptor table is, one word an entry, filled when the
     /// interpreter entered the function.
     pub table_offset: u32,
@@ -150,10 +148,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         if let Some(v) = osr.materialized.borrow().get(&vid) {
             return Ok(*v);
         }
-        if self.ref_descs.contains_key(&vid) {
-            return Err(CraneliftError::Unsupported(format!(
-                "entering a loop that needs reference {:?}, whose descriptor is worked out where it is made", vid)));
-        }
         use cranelift_codegen::cursor::{Cursor, FuncCursor};
         let ty = &self.func.value_types[vid.0 as usize];
         let offset = self.layout.value_offset(vid.0) as i32;
@@ -196,14 +190,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             let ptr = builder.ins().load(PTR_TYPE, flags, frame, offset as i32);
             self.param_values.insert(ParamId(i as u32), ptr);
         }
-        for &param in &self.func_ctx.descriptor_params {
-            let offset = spec.param_offsets[param.0 as usize] as i32 + word;
-            let tydesc = builder.ins().load(PTR_TYPE, flags, frame, offset);
-            self.descriptor_values.insert(param, tydesc);
-        }
-        self.shape_descriptor_values = (0..self.func_ctx.descriptor_shapes.len())
-            .map(|k| builder.ins().load(PTR_TYPE, flags, frame, spec.shape_offset as i32 + k as i32 * word))
-            .collect();
 
         // A generic's table, and where its dynamic values and slots are,
         // as the interpreter set them up on entry. The shadow stack space is

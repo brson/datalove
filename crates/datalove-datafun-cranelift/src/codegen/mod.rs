@@ -135,20 +135,6 @@ pub struct FunctionCompiler<'a, M: Module> {
     blocks: HashMap<BlockId, cl_ir::Block>,
     /// Mapping from IR ParamId to Cranelift Value (user params, not rt_handle).
     param_values: HashMap<ParamId, cl_ir::Value>,
-    /// Descriptors the caller supplied, for parameters whose own type does not
-    /// describe what arrives. See `FunctionContext::descriptor_params`.
-    descriptor_values: HashMap<ParamId, cl_ir::Value>,
-    /// Descriptors handed over for this function's declared shapes, in order.
-    shape_descriptor_values: Vec<cl_ir::Value>,
-    /// What each reference points at, where its static type does not say.
-    ///
-    /// Derived from the unit rather than stored on it, so that specialization
-    /// and inlining renumbering values cannot leave it stale. See
-    /// `datalove_datafun_ir::RefDesc`.
-    ref_descs: std::collections::BTreeMap<ValueId, datalove_datafun_ir::RefDesc>,
-    /// The descriptor materialized for each such reference, once the projection
-    /// that made it has run.
-    ref_desc_values: HashMap<ValueId, cl_ir::Value>,
     /// Functions compiled beside this one, by their IR id.
     local_funcs: HashMap<datalove_datafun_ir::CodeUnitId, LocalCallee>,
     /// Functions in a script unit that finished before this one.
@@ -266,10 +252,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             values: HashMap::new(),
             blocks: HashMap::new(),
             param_values: HashMap::new(),
-            descriptor_values: HashMap::new(),
-            shape_descriptor_values: Vec::new(),
-            ref_descs: datalove_datafun_ir::resolve_ref_descriptors(func),
-            ref_desc_values: HashMap::new(),
             local_funcs: HashMap::new(),
             external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),

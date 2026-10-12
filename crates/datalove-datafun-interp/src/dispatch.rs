@@ -50,7 +50,7 @@ pub const MAX_ENTRY_WORDS: usize = 10;
 ///
 /// Those are the runtime handle; the result's address if `uses_sret`; a
 /// pointer to each argument; then a descriptor for each of the function's
-/// `descriptor_params`, and one for each shape it declares.
+/// type parameters.
 ///
 /// Or, at a loop header (`at_loop`): the runtime handle, the result's address
 /// if `uses_sret`, and the interpreter's frame for the call, in which the code
@@ -104,14 +104,9 @@ pub struct DispatchCallContext<'a, 'b> {
     pub frames: &'a mut FrameStore,
     /// Interpreter for executing non-compiled functions.
     pub interp: &'b mut IrInterpreter,
-    /// A descriptor for each shape the callee declared, worked out by the call
-    /// site, in the order the callee declared them.
-    ///
-    /// A shape has no value to travel with, so unlike an argument's descriptor
-    /// it has to be handed over on its own. Empty for a callee that builds no
-    /// collection of a type it was not told, which is every one outside a
-    /// generic.
-    pub shape_descriptors: &'a [*const datalove_rtdt::TyDesc],
+    /// A descriptor for each of the callee's type parameters, for what the
+    /// call bound it to. Empty for a callee that is not generic.
+    pub type_params: &'a [*const datalove_rtdt::TyDesc],
     /// How many calls this one stands for: more than one when a planned call
     /// site counted calls it did not offer (`SitePolicy::Count`).
     pub weight: u32,

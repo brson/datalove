@@ -82,11 +82,6 @@ pub use dispatch::{
 pub use ctfe::InterpCtfeEvaluator;
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
 
-/// Room to unpack borrowed values that have no address of their own.
-///
-/// One box per borrow, kept by whoever prepared the call so that the borrows
-/// outlive it. See `borrow_through_wrapper`.
-pub(crate) type BorrowScratch = Vec<Box<u64>>;
 pub use datalove_rt::c::DebugOutputMode;
 
 use std::cell::RefCell;
@@ -223,41 +218,6 @@ impl Drop for IrInterpreter {
                     self.runtime.handle(), storage.as_mut_ptr() as *mut u8, tydesc);
             }
         }
-    }
-}
-
-/// The types a code unit gives its values and slots.
-///
-/// Carried alongside the blocks so that an instruction can ask whether what it
-/// is about to consume is a copy. Borrowed rather than cloned: a frame is made
-/// for every call, and the types do not change.
-pub(crate) struct UnitTypes<'a> {
-    value_types: &'a [IrType],
-    slot_types: &'a [IrType],
-    param_types: &'a [IrType],
-}
-
-impl<'a> UnitTypes<'a> {
-    fn of(unit: &'a IrCodeUnit) -> Self {
-        UnitTypes {
-            value_types: &unit.value_types,
-            slot_types: &unit.slot_types,
-            param_types: unit.function_context()
-                .map(|c| c.param_types.as_slice())
-                .unwrap_or(&[]),
-        }
-    }
-
-    /// Whether an operand names something a read leaves behind.
-    fn is_copy(&self, operand: &Operand) -> bool {
-        let ty = match operand {
-            Operand::Value(id) | Operand::ValueRef(id) => self.value_types.get(id.0 as usize),
-            Operand::Slot(id) => self.slot_types.get(id.0 as usize),
-            Operand::Param(id) => self.param_types.get(id.0 as usize),
-            // Something another unit owns is never this unit's to keep.
-            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
-        };
-        ty.is_some_and(|t| t.is_copy())
     }
 }
 

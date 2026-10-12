@@ -37,13 +37,11 @@ pub fn emit_static_lifecycle(
         symbols: Default::default(),
         context: datalove_datafun_ir::CodeUnitContext::Function(
             datalove_datafun_ir::FunctionContext {
-                descriptor_params: Vec::new(),
                 params: Vec::new(),
                 param_modes: Vec::new(),
                 param_types: Vec::new(),
                 return_type: IrType::Unit,
                 tracked_params: Vec::new(),
-                descriptor_shapes: Vec::new(),
                 type_param_count: 0,
                 descriptor_table: Vec::new(),
             },
@@ -59,7 +57,6 @@ pub fn emit_static_lifecycle(
         registry,
         uses_sret: false,
         const_scratch: 0,
-        ref_descs: Default::default(),
         table: Vec::new(),
         takes_shadow: false,
     };
@@ -110,15 +107,7 @@ pub fn emit_function(
     for (i, _) in func_ctx.param_types.iter().enumerate() {
         write!(&mut params, ", void* p{}", i).unwrap();
     }
-    for (i, _) in func_ctx.descriptor_params.iter().enumerate() {
-        write!(&mut params, ", const dtlv_tydesc_t* d{}", i).unwrap();
-    }
-    // Then one for each shape the body builds a collection of, which no value
-    // carries.
-    for (i, _) in func_ctx.descriptor_shapes.iter().enumerate() {
-        write!(&mut params, ", const dtlv_tydesc_t* s{}", i).unwrap();
-    }
-    // Under generics by reference, one per type parameter, last.
+    // Then one descriptor per type parameter, last.
     for i in 0..func_ctx.type_param_count {
         write!(&mut params, ", const dtlv_tydesc_t* tp{}", i).unwrap();
     }
@@ -145,15 +134,6 @@ pub fn emit_function(
         writeln!(out, "    memset(__frame + {}, TRACK_UNINIT, {});", layout.tracking_offset, layout.tracking_count).unwrap();
     }
 
-    // A reference whose static type does not describe what it points at carries
-    // a descriptor beside the pointer. Declared here rather than where it is
-    // assigned, so that a `goto` between blocks never jumps over a declaration.
-    // Empty outside a generic.
-    let ref_descs = datalove_datafun_ir::resolve_ref_descriptors(unit);
-    for vid in ref_descs.keys() {
-        writeln!(out, "    const dtlv_tydesc_t* __rd{};", vid.0).unwrap();
-    }
-
     check_dynamic_support(unit)?;
     let takes_shadow = emit_dynamic_prologue(out, unit, &layout, compiler);
 
@@ -166,7 +146,6 @@ pub fn emit_function(
         registry,
         uses_sret,
         const_scratch: 0,
-        ref_descs,
         table: func_ctx.descriptor_table.clone(),
         takes_shadow,
     };
@@ -355,9 +334,9 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::EnumDiscriminant { .. }
         | Instruction::EnumPayload { .. }
         | Instruction::DropField { .. }
-        | Instruction::ListNew { descriptor: None, .. }
-        | Instruction::SetNew { descriptor: None, .. }
-        | Instruction::MapNew { descriptor: None, .. }
+        | Instruction::ListNew { .. }
+        | Instruction::SetNew { .. }
+        | Instruction::MapNew { .. }
         | Instruction::ListBoundsCheck { .. }
         | Instruction::ListGet { .. }
         | Instruction::ListSet { .. }
@@ -419,7 +398,6 @@ pub fn emit_script_body(
         registry,
         uses_sret: false,
         const_scratch: 0,
-        ref_descs: Default::default(),
         table: Vec::new(),
         takes_shadow: false,
     };
@@ -453,11 +431,6 @@ struct FunctionCodegenContext<'a> {
     /// into the list being built, and came out empty. The count makes each
     /// name its own.
     const_scratch: u32,
-    /// What each reference points at, where its static type does not say.
-    ///
-    /// Carried in a `__rd{n}` declared in the prologue. See
-    /// `datalove_datafun_ir::RefDesc`.
-    ref_descs: std::collections::BTreeMap<ValueId, datalove_datafun_ir::RefDesc>,
     /// Under generics by reference, the descriptor table: entry `i` is in the
     /// local `__t{i}`, filled in the prologue.
     table: Vec<IrType>,
@@ -610,9 +583,6 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 self.emit_get_field_ref(out, *dest, src, *field_index)?;
             }
-            Instruction::DataBorrow { dest, src } => {
-                self.emit_data_borrow(out, *dest, src)?;
-            }
             Instruction::SetField { slot, field_path, value } => {
                 self.emit_set_field(out, slot, field_path, value, false)?;
             }
@@ -652,32 +622,14 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::DataFrom { dest, inner } => {
                 self.emit_data_from(out, *dest, inner)?;
             }
-            Instruction::Erase { dest, src } => {
-                self.emit_erasure(out, *dest, src, true)?;
+            Instruction::ListNew { dest, elements } => {
+                self.emit_list_new(out, *dest, elements)?;
             }
-            Instruction::EraseTracked { dest, src } => {
-                self.emit_erasure_tracked(out, *dest, src)?;
+            Instruction::SetNew { dest, elements } => {
+                self.emit_set_new(out, *dest, elements)?;
             }
-            Instruction::Reify { dest, src } => {
-                self.emit_erasure(out, *dest, src, false)?;
-            }
-            Instruction::ListNew { dest, elements, descriptor } => {
-                match descriptor {
-                    Some(i) => self.emit_list_new_erased(out, *dest, elements, *i)?,
-                    None => self.emit_list_new(out, *dest, elements)?,
-                }
-            }
-            Instruction::SetNew { dest, elements, descriptor } => {
-                match descriptor {
-                    Some(i) => self.emit_set_new_erased(out, *dest, elements, *i)?,
-                    None => self.emit_set_new(out, *dest, elements)?,
-                }
-            }
-            Instruction::MapNew { dest, entries, descriptor } => {
-                match descriptor {
-                    Some(i) => self.emit_map_new_erased(out, *dest, entries, *i)?,
-                    None => self.emit_map_new(out, *dest, entries)?,
-                }
+            Instruction::MapNew { dest, entries } => {
+                self.emit_map_new(out, *dest, entries)?;
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 self.emit_tensor_new(out, *dest, shape, elements)?;
@@ -685,11 +637,11 @@ impl<'a> FunctionCodegenContext<'a> {
             Instruction::TableNew { dest, rows } => {
                 self.emit_table_new(out, *dest, rows)?;
             }
-            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. } => {
-                self.emit_call(out, *dest, func, args, shape_descriptors, bindings)?;
+            Instruction::Call { dest, func, args, bindings, .. } => {
+                self.emit_call(out, *dest, func, args, bindings)?;
             }
-            Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
-                self.emit_call(out, *dest, func, args, shape_descriptors, bindings)?;
+            Instruction::ComptimeCall { dest, func, args, bindings, .. } => {
+                self.emit_call(out, *dest, func, args, bindings)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.emit_slot_store(out, dest, value, true, false)?;
@@ -1893,18 +1845,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let src_ty = self.operand_type(src);
         let dest_addr = self.value_addr(dest);
 
-        // A base whose static type does not describe it has the field's offset
-        // and the field's own type read from the descriptor of what arrived.
-        // The runtime does both, and decides there whether the value wants
-        // packing on the way out; see `dtlv_rti_field_read_local`.
-        if let Some(base_desc) = self.operand_ref_desc(src) {
-            let dest_ty = self.value_type(dest).clone();
-            let dest_tydesc = self.tydesc_name(&dest_ty);
-            writeln!(out, "    dtlv_rti_field_read_local(rt, {}, &{}, {}, {}, {});",
-                dest_addr, dest_tydesc, src_addr, base_desc, field_index).unwrap();
-            return Ok(());
-        }
-
         let field_types: Vec<IrType> = match src_ty {
             IrType::Tuple(tys) => tys.clone(),
             IrType::Struct(fs) => fs.iter().map(|(_, ty)| ty.clone()).collect(),
@@ -1928,41 +1868,11 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// Emit a data borrow: point at the container a `data` holds, and carry
-    /// the descriptor it holds it under.
-    ///
-    /// A container is never packed into the two words -- `can_inline` admits
-    /// none -- so the wrapper always has something to point at and the scratch
-    /// `data_borrow` wants for an inline value goes unused.
-    fn emit_data_borrow(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
-        let dest_addr = self.value_addr(dest);
-        let src_addr = self.operand_addr(src);
-        let name = format!("__db{}", dest.0);
-        writeln!(out, "    {{ const void* {name}_v; uint64_t {name}_s;").unwrap();
-        writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &__rd{});",
-            src_addr, dest.0).unwrap();
-        writeln!(out, "    *(void**){} = (void*){name}_v; }}", dest_addr).unwrap();
-        Ok(())
-    }
-
     /// Emit get field ref (get pointer to field).
     fn emit_get_field_ref(&mut self, out: &mut String, dest: ValueId, src: &Operand, field_index: u32) -> Result<(), CAotError> {
         let src_addr = self.operand_addr(src);
         let src_ty = self.operand_type(src);
         let dest_addr = self.value_addr(dest);
-
-        // A reference whose static type says `data` where a type parameter
-        // stood lies about the layout, so the offset comes from the descriptor
-        // of what really arrived, and the field's own descriptor goes on to
-        // describe this reference. Both are in there already: building a
-        // descriptor is what settled the offsets.
-        if let Some(base_desc) = self.operand_ref_desc(src) {
-            writeln!(out, "    __rd{} = dtlv_rti_field_tydesc({}, {});",
-                dest.0, base_desc, field_index).unwrap();
-            writeln!(out, "    *(void**){} = (uint8_t*){} + dtlv_rti_field_offset({}, {});",
-                dest_addr, src_addr, base_desc, field_index).unwrap();
-            return Ok(());
-        }
 
         let field_types: Vec<IrType> = match src_ty {
             IrType::Tuple(tys) => tys.clone(),
@@ -2311,59 +2221,6 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// Emit an erasure conversion, in either direction.
-    ///
-    /// The two tydescs differ only where the erased shape has a data, and the
-    /// runtime walks them together. The source is zeroed after, the way the
-    /// wrap zeroes what it consumed, since the value now belongs to the
-    /// destination.
-    fn emit_erasure(&mut self, out: &mut String, dest: ValueId, src: &Operand, erasing: bool) -> Result<(), CAotError> {
-        let dest_addr = self.value_addr(dest);
-        let src_addr = self.operand_addr(src);
-        let dest_ty = self.value_type(dest).clone();
-        let src_ty = self.operand_type(src).clone();
-        let dest_tydesc = self.tydesc_name(&dest_ty);
-        let src_tydesc = self.tydesc_name(&src_ty);
-        let func = if erasing { "dtlv_rti_erase_local" } else { "dtlv_rti_reify_local" };
-
-        // The source is left as it stands. Zeroing it here would say the value
-        // has gone, which is the drop schedule's to decide and not true of a
-        // copy type: a `u32` erased into two calls is read twice from the same
-        // place, and the second read would find the zero the first wrote.
-        writeln!(out, "    {}(rt, {}, &{}, {}, &{});", func, src_addr, src_tydesc, dest_addr, dest_tydesc).unwrap();
-        Ok(())
-    }
-
-    /// Emit an erasure of a source that may be holding nothing.
-    ///
-    /// The source is the destination of an erased `out` parameter, and one that
-    /// has never been written holds whatever the C stack left in `__frame`.
-    /// Its tracking byte says which, and with nothing there the destination
-    /// gets two zero words instead: an empty `data`, which the call destroys as
-    /// a no-op and the callee overwrites.
-    fn emit_erasure_tracked(&mut self, out: &mut String, dest: ValueId, src: &Operand) -> Result<(), CAotError> {
-        let guard = match src {
-            Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
-            Operand::Value(id) | Operand::ValueRef(id) => self.layout.value_tracking_byte(id.0),
-            Operand::Param(id) => self.layout.param_tracking_byte(id.0),
-            Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
-        };
-        let Some(offset) = guard else {
-            return self.emit_erasure(out, dest, src, true);
-        };
-
-        let dest_addr = self.value_addr(dest);
-        let dest_ty = self.value_type(dest).clone();
-        let dest_size = types::ir_type_to_crepr(&dest_ty).layout().size;
-
-        writeln!(out, "    if (__frame[{}] == TRACK_LIVE) {{", offset).unwrap();
-        self.emit_erasure(out, dest, src, true)?;
-        writeln!(out, "    }} else {{").unwrap();
-        writeln!(out, "    memset({}, 0, {});", dest_addr, dest_size).unwrap();
-        writeln!(out, "    }}").unwrap();
-        Ok(())
-    }
-
     /// Emit list new.
     fn emit_list_new(&mut self, out: &mut String, dest: ValueId, elements: &[Operand]) -> Result<(), CAotError> {
         let dest_addr = self.value_addr(dest);
@@ -2575,7 +2432,6 @@ impl<'a> FunctionCodegenContext<'a> {
         dest: ValueId,
         func: &CodeRef,
         args: &[Operand],
-        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
         bindings: &[IrType],
     ) -> Result<(), CAotError> {
         // A rider function is reached through the runtime C ABI rather than
@@ -2584,54 +2440,17 @@ impl<'a> FunctionCodegenContext<'a> {
             if let Some(unit) = self.registry.get_module_function_as_unit(*module, *id) {
                 if let Some(native) = unit.native_context() {
                     let symbol = native.symbol().to_string();
-                    let param_modes = native.param_modes.clone();
-                    // Under generics by reference, a descriptor for each type
-                    // parameter no argument determines, for what this call
-                    // bound it to.
-                    let undetermined: Vec<IrType> = if bindings.is_empty() {
-                        Vec::new()
-                    } else {
-                        native.descriptor_shapes.iter()
-                            .map(|s| s.to_ir_type().substitute(bindings))
-                            .collect()
-                    };
-                    return self.emit_native_call(
-                        out, dest, &symbol, args, &param_modes, shape_descriptors, &undetermined);
+                    // A descriptor for each type parameter no argument
+                    // determines, for what this call bound it to.
+                    let undetermined: Vec<IrType> = native.descriptor_shapes.iter()
+                        .map(|s| s.to_ir_type().substitute(bindings))
+                        .collect();
+                    return self.emit_native_call(out, dest, &symbol, args, &undetermined);
                 }
             }
         }
 
         self.destroy_out_destinations(out, func, args)?;
-
-        // An argument that arrives wrapped where the callee wants it borrowed
-        // is read through first, and the descriptor that comes with it is used
-        // for that parameter below. Both come out of the wrapper together.
-        let modes = self.callee_param_modes(func);
-        let mut borrowed: Vec<Option<String>> = vec![None; args.len()];
-        for (i, arg) in args.iter().enumerate() {
-            let wants_borrow = matches!(
-                modes.get(i),
-                Some(datalove_datafun_ir::ParamMode::Ref) | Some(datalove_datafun_ir::ParamMode::Mut));
-            if !wants_borrow || *self.operand_type(arg) != IrType::Data {
-                continue;
-            }
-            // Anything that carries its own descriptor is already a pointer at
-            // the value, never a wrapper around it, even though its type reads
-            // `data`. That is one of our own borrowed parameters, and any
-            // reference projected or indexed out of one. Reading through it
-            // would take the first bytes of the value for a wrapper's two
-            // pointers.
-            if self.operand_ref_desc(arg).is_some() {
-                continue;
-            }
-            // Named for the call's destination as well as the argument, since
-            // two calls in one block would otherwise declare the same locals.
-            let name = format!("__bw{}_{}", dest.0, i);
-            writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t; uint64_t {name}_s;").unwrap();
-            writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &{name}_t);",
-                self.operand_addr(arg)).unwrap();
-            borrowed[i] = Some(name);
-        }
 
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
@@ -2644,46 +2463,12 @@ impl<'a> FunctionCodegenContext<'a> {
         if uses_sret {
             write!(&mut call_args, ", {}", self.value_addr(dest)).unwrap();
         }
-        for (i, arg) in args.iter().enumerate() {
-            match &borrowed[i] {
-                Some(name) => write!(&mut call_args, ", (void*){name}_v").unwrap(),
-                None => write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap(),
-            }
+        for arg in args {
+            write!(&mut call_args, ", {}", self.operand_addr(arg)).unwrap();
         }
 
-        // Then a descriptor for each parameter whose own type does not say what
-        // arrives at it. This is the place that knows: the argument here either
-        // has a concrete type, was read out of a wrapper just above, or is a
-        // parameter our own caller described.
-        for param_id in self.callee_descriptor_params(func) {
-            let index = param_id.0 as usize;
-            let arg = args.get(index).ok_or_else(|| CAotError::Codegen(format!(
-                "callee wants a descriptor for parameter {} but got {} arguments",
-                param_id.0, args.len(),
-            )))?;
-            match borrowed.get(index).and_then(|b| b.as_ref()) {
-                Some(name) => write!(&mut call_args, ", {name}_t").unwrap(),
-                None => write!(&mut call_args, ", {}", self.operand_tydesc(arg)).unwrap(),
-            }
-        }
-
-        // Then one for each shape the callee builds a collection of, as worked
-        // out when the shape sets settled. Read rather than derived, so this
-        // side and the callee's signature cannot disagree.
-        for r in shape_descriptors {
-            match r {
-                datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                    let name = self.tydesc_name(ty);
-                    write!(&mut call_args, ", &{}", name).unwrap()
-                }
-                datalove_datafun_ir::DescriptorRef::Own(i) => {
-                    write!(&mut call_args, ", s{}", i).unwrap()
-                }
-            }
-        }
-
-        // Then, under generics by reference, one for each of the callee's type
-        // parameters, for what this call bound it to.
+        // Then one descriptor for each of the callee's type parameters, for
+        // what this call bound it to.
         for binding in bindings {
             let name = self.tydesc_name(binding);
             write!(&mut call_args, ", &{}", name).unwrap();
@@ -2748,98 +2533,6 @@ impl<'a> FunctionCodegenContext<'a> {
                 self.mark_tracking_live(out, arg);
             }
         }
-    }
-
-    /// Build a set described by a handed-over descriptor, then wrap it.
-    fn emit_set_new_erased(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        elements: &[Operand],
-        shape: u32,
-    ) -> Result<(), CAotError> {
-        let name = format!("__ns{}", dest.0);
-        writeln!(out, "    dtlv_set_t {name}; bool_t {name}_added;").unwrap();
-        writeln!(out, "    dtlv_rti_btreeset_create_local(rt, &{name}, s{shape});").unwrap();
-        for elem in elements {
-            let elem_addr = self.operand_addr(elem);
-            let elem_td = self.operand_tydesc(elem);
-            writeln!(out, "    dtlv_rti_btreeset_insert_erased_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td}, &{name}_added);").unwrap();
-        }
-        let dest_addr = self.value_addr(dest);
-        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
-        Ok(())
-    }
-
-    /// Build a map described by a handed-over descriptor, then wrap it.
-    fn emit_map_new_erased(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        entries: &[(Operand, Operand)],
-        shape: u32,
-    ) -> Result<(), CAotError> {
-        let name = format!("__nm{}", dest.0);
-        writeln!(out, "    dtlv_map_t {name};").unwrap();
-        writeln!(out, "    dtlv_rti_btreemap_create_local(rt, &{name}, s{shape});").unwrap();
-        for (key, val) in entries {
-            let key_addr = self.operand_addr(key);
-            let key_td = self.operand_tydesc(key);
-            let val_addr = self.operand_addr(val);
-            let val_td = self.operand_tydesc(val);
-            writeln!(out, "    dtlv_rti_btreemap_insert_erased_local(rt, &{name}, s{shape}, {key_addr}, {key_td}, {val_addr}, {val_td});").unwrap();
-        }
-        let dest_addr = self.value_addr(dest);
-        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
-        Ok(())
-    }
-
-    /// Build a list described by a handed-over descriptor, then wrap it.
-    ///
-    /// The destination is a `data`, because a list built over a type parameter
-    /// erases to one. The elements are `data` too, which is what a `T` is
-    /// anywhere.
-    fn emit_list_new_erased(
-        &mut self,
-        out: &mut String,
-        dest: ValueId,
-        elements: &[Operand],
-        shape: u32,
-    ) -> Result<(), CAotError> {
-        let name = format!("__nl{}", dest.0);
-        writeln!(out, "    dtlv_list_t {name};").unwrap();
-        writeln!(out, "    dtlv_rti_list_create_local(rt, &{name}, s{shape});").unwrap();
-        // Described as what it really is: an element here is in the erased
-        // shape, and the list holds its elements as what they really are, so
-        // the push converts.
-        for elem in elements {
-            let elem_addr = self.operand_addr(elem);
-            let elem_td = self.operand_tydesc(elem);
-            writeln!(out, "    dtlv_rti_list_push_erased_local(rt, &{name}, s{shape}, {elem_addr}, {elem_td});").unwrap();
-        }
-        let dest_addr = self.value_addr(dest);
-        writeln!(out, "    dtlv_rti_data_from_local(rt, &{name}, s{shape}, {dest_addr});").unwrap();
-        Ok(())
-    }
-
-    /// The parameters of `func` whose descriptor this call site supplies.
-    ///
-    /// Has to agree with what `build_signature` put in the callee's signature,
-    /// so both read the same `descriptor_params`.
-    fn callee_descriptor_params(&self, func: &CodeRef) -> Vec<ParamId> {
-        let unit = match func {
-            CodeRef::Module { module, id } => {
-                self.registry.get_module_function_as_unit(*module, *id)
-            }
-            CodeRef::Local(id) => {
-                let lookup_unit = self.parent_unit.unwrap_or(self.unit);
-                lookup_unit.nested_units.iter().find(|nested| nested.id == *id)
-            }
-            CodeRef::External { .. } => None,
-        };
-        unit.and_then(|u| u.function_context())
-            .map(|ctx| ctx.descriptor_params.clone())
-            .unwrap_or_default()
     }
 
     /// How `func` takes each of its parameters.
@@ -2925,77 +2618,11 @@ impl<'a> FunctionCodegenContext<'a> {
         Ok(())
     }
 
-    /// The descriptor for an operand, as a C expression of pointer type.
-    ///
-    /// A parameter our own caller described uses that descriptor: this
-    /// function's static type for it says `data` where a type parameter stood,
-    /// so one built from that type would misdescribe the value. Everything
-    /// else is described by its own type, which is a static descriptor.
+    /// The descriptor for an operand, as a C expression of pointer type: its
+    /// own type's, a static descriptor or a descriptor table entry.
     fn operand_tydesc(&mut self, operand: &Operand) -> String {
-        if let Some(desc) = self.operand_ref_desc(operand) {
-            return desc;
-        }
         let ty = self.operand_type(operand).clone();
         format!("&{}", self.tydesc_name(&ty))
-    }
-
-    /// Walk a field path from a base whose layout only its descriptor says.
-    ///
-    /// Returns the address of the field and the static type the erased
-    /// signature gives it. The offsets are read from the descriptor at each
-    /// step, and the descriptor is narrowed alongside, because a path reaches
-    /// further in one field at a time and each step's offsets live in the
-    /// previous step's descriptor.
-    ///
-    /// The static type comes back too, so the caller can tell a copy type --
-    /// which is a shallow store -- from one that owns what it holds.
-    fn walk_dynamic_field_path(
-        &self,
-        base_addr: String,
-        base_desc: String,
-        base_ty: &IrType,
-        field_path: &[u32],
-    ) -> Result<(String, String, IrType), CAotError> {
-        let mut addr = base_addr;
-        let mut desc = base_desc;
-        let mut ty = base_ty.clone();
-        for &idx in field_path {
-            let field_types: Vec<IrType> = match &ty {
-                IrType::Tuple(tys) => tys.clone(),
-                IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
-                other => return Err(CAotError::Codegen(format!(
-                    "field path steps through a {:?}, which has no fields", other))),
-            };
-            addr = format!("((uint8_t*){} + dtlv_rti_field_offset({}, {}))", addr, desc, idx);
-            desc = format!("dtlv_rti_field_tydesc({}, {})", desc, idx);
-            ty = field_types[idx as usize].clone();
-        }
-        Ok((addr, desc, ty))
-    }
-
-    /// The descriptor for what an operand names, where its static type does not
-    /// describe it, as a C expression of pointer type.
-    ///
-    /// That is a borrowed parameter our own caller described, and any reference
-    /// projected out of one. `None` everywhere else, meaning the static type is
-    /// the truth and a constant offset is right.
-    fn operand_ref_desc(&self, operand: &Operand) -> Option<String> {
-        match operand {
-            Operand::Param(param_id) => self.func_descriptor_index(*param_id)
-                .map(|i| format!("d{}", i)),
-            Operand::Value(vid) | Operand::ValueRef(vid) => self.ref_descs.contains_key(vid)
-                .then(|| format!("__rd{}", vid.0)),
-            _ => None,
-        }
-    }
-
-    /// Where this function's own supplied descriptor for `param` arrives, if
-    /// its signature asks for one.
-    fn func_descriptor_index(&self, param: ParamId) -> Option<usize> {
-        self.unit.function_context()?
-            .descriptor_params
-            .iter()
-            .position(|p| *p == param)
     }
 
     /// Emit a call to a native rider function.
@@ -3007,46 +2634,17 @@ impl<'a> FunctionCodegenContext<'a> {
     /// whether it wrote one.
     ///
     /// A type parameter no argument determines has its descriptor handed over
-    /// after the out parameter, in the order the native declared its shapes.
+    /// after the out parameter, in the order the native declared them.
     fn emit_native_call(
         &mut self,
         out: &mut String,
         dest: ValueId,
         symbol: &str,
         args: &[Operand],
-        native_param_modes: &[datalove_datafun_ir::ParamMode],
-        shape_descriptors: &[datalove_datafun_ir::DescriptorRef],
         undetermined: &[IrType],
     ) -> Result<(), CAotError> {
         let mut call_args = String::from("rt");
-        // A collection of a type parameter is wrapped once it is owned, and a
-        // rider works on the collection itself with a descriptor beside it.
-        // An argument that arrives wrapped where the native wants the thing
-        // itself is read through first; see the same step in the cranelift
-        // backend.
-        for (i, arg) in args.iter().enumerate() {
-            // Decided by the mode, not by the native's own parameter type: a
-            // generic native's types are erased too, so `mut self: [T]` reads
-            // `data` there just as the argument does. What tells them apart is
-            // that the native borrows its collection and takes its element, and
-            // only a borrow is passed through a wrapper.
-            // Anything carrying its own descriptor is already a pointer at the
-            // value, never a wrapper around it, even though its type reads
-            // `data`. Same as at a call to a module function.
-            let forwarded = self.operand_ref_desc(arg).is_some();
-            let wrapped = !forwarded
-                && *self.operand_type(arg) == IrType::Data
-                && matches!(native_param_modes.get(i),
-                    Some(datalove_datafun_ir::ParamMode::Ref)
-                    | Some(datalove_datafun_ir::ParamMode::Mut));
-            if wrapped {
-                let name = format!("__nb{}_{}", dest.0, i);
-                writeln!(out, "    const void* {name}_v; const dtlv_tydesc_t* {name}_t; uint64_t {name}_s;").unwrap();
-                writeln!(out, "    dtlv_rti_data_borrow({}, &{name}_s, &{name}_v, &{name}_t);",
-                    self.operand_addr(arg)).unwrap();
-                write!(&mut call_args, ", (void*){name}_v, {name}_t").unwrap();
-                continue;
-            }
+        for arg in args {
             let addr = self.operand_addr(arg);
             let tydesc = self.operand_tydesc(arg);
             write!(&mut call_args, ", {}, {}", addr, tydesc).unwrap();
@@ -3060,17 +2658,6 @@ impl<'a> FunctionCodegenContext<'a> {
         for ty in undetermined {
             let name = self.tydesc_name(ty);
             write!(&mut call_args, ", &{}", name).unwrap();
-        }
-        for r in shape_descriptors {
-            match r {
-                datalove_datafun_ir::DescriptorRef::Static(ty) => {
-                    let name = self.tydesc_name(ty);
-                    write!(&mut call_args, ", &{}", name).unwrap()
-                }
-                datalove_datafun_ir::DescriptorRef::Own(i) => {
-                    write!(&mut call_args, ", s{}", i).unwrap()
-                }
-            }
         }
 
         writeln!(out, "    {}({});", symbol, call_args).unwrap();
@@ -3169,32 +2756,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let func_ctx = self.unit.function_context().unwrap();
         let mut current_ty = func_ctx.param_types[param.0 as usize].clone();
         let mut current_addr = param_addr;
-
-        // A parameter our caller described is one whose static type says `data`
-        // where a type parameter stood, so the offsets it gives are wrong by
-        // whatever the difference in width is. Writing at one of those is the
-        // severe half of this: it puts the value past the end of what the
-        // caller owns.
-        if let Some(base_desc) = self.operand_ref_desc(&Operand::Param(param)) {
-            let (addr, field_desc, _) = self.walk_dynamic_field_path(
-                current_addr, base_desc, &current_ty, field_path)?;
-            let src_addr = self.operand_addr(value);
-            let src_tydesc = self.operand_tydesc(value);
-
-            // What this function holds is in the erased shape and the field is
-            // in the real one, so the value is moved back out of its wrapping
-            // on the way in. `reify_local` walks the two descriptors and
-            // converts wherever one of them says `data`, which for a field that
-            // was never erased is a copy of the same width.
-            writeln!(out, "    dtlv_rti_reify_local(rt, {}, {}, {}, {});",
-                src_addr, src_tydesc, addr, field_desc).unwrap();
-            if tracked {
-                if let Some(track_offset) = self.layout.param_tracking_byte(param.0) {
-                    writeln!(out, "    __frame[{}] = TRACK_LIVE;", track_offset).unwrap();
-                }
-            }
-            return Ok(());
-        }
 
         for &idx in field_path {
             let field_types: Vec<IrType> = match &current_ty {
@@ -3325,11 +2886,7 @@ impl<'a> FunctionCodegenContext<'a> {
         if ty.is_copy() {
             return Ok(());
         }
-        // A param our caller described is described by it.
-        let tydesc = match self.operand_ref_desc(operand) {
-            Some(desc) => desc,
-            None => format!("&{}", self.tydesc_name(&ty)),
-        };
+        let tydesc = format!("&{}", self.tydesc_name(&ty));
 
         if tracked {
             // Check tracking byte before dropping.
@@ -3360,28 +2917,21 @@ impl<'a> FunctionCodegenContext<'a> {
             IrType::Ref(inner) => (format!("(*(void**){})", self.operand_addr(base)), inner.as_ref().clone()),
             ty => (self.operand_addr(base), ty.clone()),
         };
-        let (addr, desc, ty) = match self.operand_ref_desc(base) {
-            Some(base_desc) => self.walk_dynamic_field_path(addr, base_desc, &base_ty, field_path)?,
-            None => {
-                let mut addr = addr;
-                let mut ty = base_ty;
-                for &idx in field_path {
-                    let field_types: Vec<IrType> = match &ty {
-                        IrType::Tuple(tys) => tys.clone(),
-                        IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
-                        other => return Err(CAotError::Codegen(format!(
-                            "field path steps through a {:?}, which has no fields", other))),
-                    };
-                    let offsets = self.field_offsets(&ty, field_types.len());
-                    addr = format!("({} + {})", addr, offsets[idx as usize]);
-                    ty = field_types[idx as usize].clone();
-                }
-                let desc = format!("&{}", self.tydesc_name(&ty));
-                (addr, desc, ty)
-            }
-        };
+        let mut addr = addr;
+        let mut ty = base_ty;
+        for &idx in field_path {
+            let field_types: Vec<IrType> = match &ty {
+                IrType::Tuple(tys) => tys.clone(),
+                IrType::Struct(fs) => fs.iter().map(|(_, t)| t.clone()).collect(),
+                other => return Err(CAotError::Codegen(format!(
+                    "field path steps through a {:?}, which has no fields", other))),
+            };
+            let offsets = self.field_offsets(&ty, field_types.len());
+            addr = format!("({} + {})", addr, offsets[idx as usize]);
+            ty = field_types[idx as usize].clone();
+        }
         if !ty.is_copy() {
-            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, desc).unwrap();
+            writeln!(out, "    dtlv_rti_any_destroy_local(rt, {}, &{});", addr, self.tydesc_name(&ty)).unwrap();
         }
         Ok(())
     }
@@ -3542,7 +3092,7 @@ impl<'a> FunctionCodegenContext<'a> {
         };
         // An element type known here that owns nothing is a bounds check and
         // a store: nothing to destroy, in bounds or out.
-        if self.operand_ref_desc(list).is_none() && elem_ty.is_copy() {
+        if elem_ty.is_copy() {
             let is_valid_addr = self.value_addr(is_valid);
             let size_offset = std::mem::offset_of!(datalove_rtdt::List, size);
             writeln!(out, "    *(bool_t*){} = (*(index_t*){} < *(index_t*)({} + {}));",
@@ -3596,19 +3146,6 @@ impl<'a> FunctionCodegenContext<'a> {
                 "ListElementRef on non-list type: {:?}", list_ty
             ))),
         };
-
-        // Inside a generic the static element type is a `data`, and a `data` is
-        // a different width from whatever the caller's list really holds, so a
-        // stride taken from it lands between elements. The list's own
-        // descriptor says, and the element's descriptor goes on to describe
-        // this reference.
-        if let Some(list_desc) = self.operand_ref_desc(list) {
-            writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});",
-                dest.0, list_desc).unwrap();
-            writeln!(out, "    *(void**){} = *(void**){} + (size_t)*(index_t*){} * __rd{}->size;",
-                dest_addr, list_addr, index_addr, dest.0).unwrap();
-            return Ok(());
-        }
 
         let elem_size = self.size_expr(&elem_ty);
 
@@ -3678,7 +3215,6 @@ impl<'a> FunctionCodegenContext<'a> {
         let map_tydesc = self.operand_tydesc(map);
         let key_tydesc = self.tydesc_name(&key_ty);
         let value_tydesc = self.tydesc_name(&value_ty);
-        let erased = self.operand_ref_desc(map).is_some();
 
         // Get pointer to value (returns null on miss).
         writeln!(out, "    {{").unwrap();
@@ -3691,23 +3227,14 @@ impl<'a> FunctionCodegenContext<'a> {
         writeln!(out, "        if (__vptr != NULL) {{").unwrap();
 
         // Clone value to dest.
-        if erased {
-            // What is in the map is the real value type and the destination is
-            // whatever this function's static type says, so the clone may want
-            // wrapping on the way -- the same decision `list_get_erased` makes,
-            // and the runtime's for the same reason.
-            writeln!(out, "            dtlv_rti_clone_erased_local(rt, __vptr, dtlv_rti_element_tydesc({}), {}, &{});",
-                map_tydesc, dest_addr, value_tydesc).unwrap();
-        } else {
-            match &value_repr {
-                CRepr::Scalar(c_ty) => {
-                    writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
-                }
-                CRepr::Aggregate(layout) => {
-                    if layout.size > 0 {
-                        writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
-                            value_tydesc, dest_addr, value_tydesc).unwrap();
-                    }
+        match &value_repr {
+            CRepr::Scalar(c_ty) => {
+                writeln!(out, "            *({c_ty}*){dest_addr} = *({c_ty}*)__vptr;").unwrap();
+            }
+            CRepr::Aggregate(layout) => {
+                if layout.size > 0 {
+                    writeln!(out, "            dtlv_rti_clone_local(rt, __vptr, &{}, {}, &{});",
+                        value_tydesc, dest_addr, value_tydesc).unwrap();
                 }
             }
         }
@@ -3820,9 +3347,6 @@ impl<'a> FunctionCodegenContext<'a> {
 
         writeln!(out, "    dtlv_rti_btreemap_get_value_ref_erased_local(rt, {}, {}, {}, &{}, (void**){});",
             map_addr, map_tydesc, key_addr, key_tydesc, dest_addr).unwrap();
-        if self.ref_descs.contains_key(&dest) {
-            writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});", dest.0, map_tydesc).unwrap();
-        }
         Ok(())
     }
 
@@ -4574,34 +4098,18 @@ impl<'a> FunctionCodegenContext<'a> {
             let offset_elems_offset = std::mem::offset_of!(datalove_rtdt::Tensor, offset_elems);
             let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
 
-            // Inside a generic the static element type is a `data`, whose width
-            // is not the width of what the caller's tensor really holds, so the
-            // stride comes from the tensor's own descriptor.
-            let erased_desc = self.operand_ref_desc(tensor)
-                .map(|d| format!("dtlv_rti_element_tydesc({})", d));
-            let elem_size = match &erased_desc {
-                Some(elem) => format!("{}->size", elem),
-                None => self.size_expr(&elem_ty),
-            };
+            let elem_size = self.size_expr(&elem_ty);
 
             // elem_addr = ptr_base + (offset + index * strides[0]) * elem_size
             writeln!(out, "        void* __elem = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",
                 t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
                 idx = index_addr, st = strides_offset, es = elem_size).unwrap();
 
-            match (&erased_desc, &elem_repr) {
-                // What is in the tensor is the real element type and the
-                // destination is whatever this function's static type says, so
-                // the clone may want wrapping on the way.
-                (Some(elem), _) => {
-                    let dest_tydesc = self.tydesc_name(&elem_ty);
-                    writeln!(out, "        dtlv_rti_clone_erased_local(rt, __elem, {}, {}, &{});",
-                        elem, dest_addr, dest_tydesc).unwrap();
-                }
-                (None, CRepr::Scalar(c_ty)) => {
+            match &elem_repr {
+                CRepr::Scalar(c_ty) => {
                     writeln!(out, "        *({c_ty}*){dest_addr} = *({c_ty}*)__elem;").unwrap();
                 }
-                (None, CRepr::Aggregate(layout)) => {
+                CRepr::Aggregate(layout) => {
                     if layout.size > 0 {
                         let tydesc = self.tydesc_name(&elem_ty);
                         writeln!(out, "        dtlv_rti_clone_local(rt, __elem, &{}, {}, &{});",
@@ -4675,16 +4183,7 @@ impl<'a> FunctionCodegenContext<'a> {
         let strides_offset = std::mem::offset_of!(datalove_rtdt::Tensor, strides);
 
         if rank == 1 {
-            // As at TensorGet: inside a generic the stride comes from the
-            // tensor's own descriptor, and the element's descriptor goes on to
-            // describe this reference.
-            let elem_size = match self.operand_ref_desc(tensor) {
-                Some(desc) => {
-                    writeln!(out, "    __rd{} = dtlv_rti_element_tydesc({});", dest.0, desc).unwrap();
-                    format!("__rd{}->size", dest.0)
-                }
-                None => self.size_expr(&elem_ty),
-            };
+            let elem_size = self.size_expr(&elem_ty);
 
             // Element pointer.
             writeln!(out, "    *(void**){} = *(void**)({t} + {pb}) + (size_t)(*(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st})) * {es};",

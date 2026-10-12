@@ -455,9 +455,6 @@ impl fmt::Display for Instruction {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 write!(f, "{} = getfieldref {}.{}", dest, src, field_index)
             }
-            Instruction::DataBorrow { dest, src } => {
-                write!(f, "{} = databorrow {}", dest, src)
-            }
             Instruction::WrapSome { dest, inner } => {
                 write!(f, "{} = some {}", dest, inner)
             }
@@ -494,15 +491,6 @@ impl fmt::Display for Instruction {
             }
             Instruction::DataFrom { dest, inner } => {
                 write!(f, "{} = data_from {}", dest, inner)
-            }
-            Instruction::Erase { dest, src } => {
-                write!(f, "{} = erase {}", dest, src)
-            }
-            Instruction::EraseTracked { dest, src } => {
-                write!(f, "{} = erase.tracked {}", dest, src)
-            }
-            Instruction::Reify { dest, src } => {
-                write!(f, "{} = reify {}", dest, src)
             }
             Instruction::ListNew { dest, elements, .. } => {
                 write!(f, "{} = list [", dest)?;

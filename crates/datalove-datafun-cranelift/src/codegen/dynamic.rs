@@ -484,9 +484,9 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::EnumVariant { .. }
         | Instruction::EnumDiscriminant { .. }
         | Instruction::EnumPayload { .. }
-        | Instruction::ListNew { descriptor: None, .. }
-        | Instruction::SetNew { descriptor: None, .. }
-        | Instruction::MapNew { descriptor: None, .. }
+        | Instruction::ListNew { .. }
+        | Instruction::SetNew { .. }
+        | Instruction::MapNew { .. }
         | Instruction::ListBoundsCheck { .. }
         | Instruction::ListGet { .. }
         | Instruction::ListSet { .. }

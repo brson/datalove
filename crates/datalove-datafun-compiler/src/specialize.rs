@@ -269,8 +269,6 @@ pub fn monomorphize_function(
             param_types: new_param_types,
             return_type: func_ctx.return_type.clone(),
             tracked_params: remap_params(&func_ctx.tracked_params, &param_remap),
-            descriptor_shapes: func_ctx.descriptor_shapes.clone(),
-            descriptor_params: remap_params(&func_ctx.descriptor_params, &param_remap),
             // Const parameters are not type parameters, and the values this
             // adds are consts, so neither the hidden descriptors nor the
             // types the body uses change. The descriptors come after the
@@ -300,7 +298,7 @@ pub fn rewrite_comptime_calls(
 
         for instr in &block.instructions {
             let Instruction::ComptimeCall {
-                dest, func, args, comptime_param_indices, type_args, shape_descriptors, bindings,
+                dest, func, args, comptime_param_indices, bindings,
             } = instr
             else {
                 instructions.push(instr.clone());
@@ -329,13 +327,8 @@ pub fn rewrite_comptime_calls(
                 dest: *dest,
                 func: copy_ref,
                 args: kept_args,
-                // The copy is as generic as the original: `monomorphize_function`
-                // clones `descriptor_shapes` unchanged, so what this site was
-                // going to hand the original is what the copy wants. Worked out
-                // before specialization ran, and carried across rather than
-                // recomputed, because the shape sets settled then.
-                type_args: type_args.clone(),
-                shape_descriptors: shape_descriptors.clone(),
+                // The copy is as generic as the original, so what this site
+                // was going to hand the original is what the copy wants.
                 bindings: bindings.clone(),
             });
         }

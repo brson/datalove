@@ -422,8 +422,8 @@ impl IrInterpreter {
                         copy_bytes(src.at(base), dst.at(base), len as usize);
                         *base.add(track as usize) = tracking::MOVED;
                     }
-                    Op::ConstString { .. } | Op::ListElementRefRt { .. } | Op::EraseRt { .. }
-                    | Op::ReifyRt { .. } | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
+                    Op::ConstString { .. } | Op::ListElementRefRt { .. }
+                    | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
                     | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. } | Op::MapGetRt { .. } => {
                         self.run_routine_op(*ops.add(pc), bc, &mut regs.frame, base)
                     }
@@ -576,7 +576,7 @@ impl IrInterpreter {
         }
         let frames = &mut *regs.frames;
         if !self.execute_hot(instr, &mut regs.frame, frames)
-            && !self.execute_warm(instr, &UnitTypes::of(regs.func), &mut regs.frame, frames)
+            && !self.execute_warm(instr, &mut regs.frame, frames)
         {
             self.execute_instruction(instr, &mut regs.frame, &regs.ctx, regs.registry, frames)?;
         }
@@ -590,16 +590,16 @@ impl IrInterpreter {
         if self.bc_stats.counting {
             self.bc_stats.count(|| "(general call)".into());
         }
-        let (func_ref, args, shapes, bindings, dest) =
+        let (func_ref, args, bindings, dest) =
             match &regs.func.blocks[block as usize].instructions[index as usize] {
-                Instruction::Call { dest, func: f, args, shape_descriptors, bindings, .. }
-                | Instruction::ComptimeCall { dest, func: f, args, shape_descriptors, bindings, .. } => {
-                    (f, args, shape_descriptors, bindings, *dest)
+                Instruction::Call { dest, func: f, args, bindings, .. }
+                | Instruction::ComptimeCall { dest, func: f, args, bindings, .. } => {
+                    (f, args, bindings, *dest)
                 }
                 i => unreachable!("Call op on {:?}", i),
             };
         let frames = &mut *regs.frames;
-        self.execute_call(func_ref, args, shapes, bindings, dest, &mut regs.frame, &regs.ctx, regs.registry, frames)
+        self.execute_call(func_ref, args, bindings, dest, &mut regs.frame, &regs.ctx, regs.registry, frames)
     }
 
     /// Make a fast call without a plan: a native, a forwarder, a bytecode
@@ -687,14 +687,6 @@ impl IrInterpreter {
                     let i = rd::<rtdt::IndexRepr>(base, index) as usize;
                     wr(base, dst, (list.data as *mut u8).add(i * size));
                     frame.set_value_tydesc(ValueId(dest), element_tydesc);
-                }
-                Op::EraseRt { at } => {
-                    let [d, s, _] = bc.rt[at as usize];
-                    self.execute_erase(&rt_value(frame, base, s), rt_dest(frame, base, d));
-                }
-                Op::ReifyRt { at } => {
-                    let [d, s, _] = bc.rt[at as usize];
-                    self.execute_reify(&rt_value(frame, base, s), rt_dest(frame, base, d));
                 }
                 Op::CloneRt { at } => {
                     let [d, s, _] = bc.rt[at as usize];

@@ -331,13 +331,11 @@ impl AotCompiler {
             symbols: unit.symbols.clone(),
             context: datalove_datafun_ir::CodeUnitContext::Function(
                 datalove_datafun_ir::FunctionContext {
-                    descriptor_params: Vec::new(),
                     params: vec![],
                     param_modes: vec![],
                     param_types: vec![],
                     return_type: datalove_datafun_ir::IrType::Unit,
                     tracked_params: vec![],
-                    descriptor_shapes: Vec::new(),
                     type_param_count: 0,
                     descriptor_table: Vec::new(),
                 }

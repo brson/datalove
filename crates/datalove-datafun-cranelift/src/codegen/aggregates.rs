@@ -1,12 +1,12 @@
 //! Aggregate type instruction compilation (Pack, Unpack, Copy).
 
-use cranelift_codegen::ir::{self as cl_ir, types as cl_types, InstBuilder, MemFlagsData};
+use cranelift_codegen::ir::{InstBuilder, MemFlagsData};
 use cranelift_frontend::FunctionBuilder;
 use cranelift_module::Module;
 
 use datalove_datafun_ir::{IrType, Operand, ParamId, ValueId};
 
-use crate::types::{self, CraneliftRepr, PTR_TYPE};
+use crate::types::{self, CraneliftRepr};
 use crate::CraneliftError;
 
 use super::FunctionCompiler;
@@ -166,14 +166,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
 
-        // A base whose static type does not describe it has the field's offset
-        // and the field's own type read from the descriptor of what arrived.
-        // The runtime does both, and decides there whether the value wants
-        // packing on the way out; see `dtlv_rti_field_read_local`.
-        if let Some(base_desc) = self.operand_ref_desc(src) {
-            return self.compile_get_field_dynamic(builder, dest, src, base_desc, field_index);
-        }
-
         match repr {
             CraneliftRepr::Scalar(_) => {
                 // Single-element tuple that fits in a register.
@@ -227,80 +219,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Read a field of a base whose layout only its descriptor says.
-    ///
-    /// A scalar destination is one whose static type is the truth -- `data` is
-    /// two words and never a register -- so only the offset was in doubt and a
-    /// load off the dynamic address is the whole of it. Anything else goes
-    /// through the runtime, which is where the decision between copying the
-    /// field and packing it belongs.
-    fn compile_get_field_dynamic(
-        &mut self,
-        builder: &mut FunctionBuilder,
-        dest: ValueId,
-        src: &Operand,
-        base_desc: cl_ir::Value,
-        field_index: u32,
-    ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime;
-        let base = self.get_operand_value(builder, src)?;
-        let dest_ty = self.func.value_types[dest.0 as usize].clone();
-        let index = builder.ins().iconst(cl_types::I32, field_index as i64);
-
-        if let CraneliftRepr::Scalar(dest_cl_ty) = types::ir_type_to_cranelift(&dest_ty) {
-            let offset_fn = self.module.declare_func_in_func(runtime.field_offset, builder.func);
-            let call = builder.ins().call(offset_fn, &[base_desc, index]);
-            let offset = builder.inst_results(call)[0];
-            let offset = builder.ins().uextend(PTR_TYPE, offset);
-            let addr = builder.ins().iadd(base, offset);
-            let val = builder.ins().load(dest_cl_ty, MemFlagsData::new(), addr, 0);
-            self.values.insert(dest, val);
-            return Ok(());
-        }
-
-        let rt_handle = self.rt_handle_param.ok_or_else(|| {
-            CraneliftError::Codegen("a generic field read requires a runtime handle".into())
-        })?;
-        let dest_tydesc = self.static_tydesc(builder, &dest_ty)?;
-        let dest_addr = self.dest_addr(builder, dest)?;
-
-        let read_fn = self.module.declare_func_in_func(runtime.field_read, builder.func);
-        builder.ins().call(read_fn, &[rt_handle, dest_addr, dest_tydesc, base, base_desc, index]);
-        self.record_runtime_result(builder, dest, dest_addr);
-        Ok(())
-    }
-
-    /// Compile a data_borrow instruction: point at the container a `data`
-    /// holds, and carry the descriptor it holds it under.
-    ///
-    /// A container is never packed into the two words -- `can_inline` admits
-    /// none -- so the wrapper always has something to point at and the scratch
-    /// `data_borrow` wants for an inline value goes unused.
-    pub(super) fn compile_data_borrow(
-        &mut self,
-        builder: &mut FunctionBuilder,
-        dest: ValueId,
-        src: &Operand,
-    ) -> Result<(), CraneliftError> {
-        let runtime = self.runtime;
-        let slot = builder.create_sized_stack_slot(cl_ir::StackSlotData::new(
-            cl_ir::StackSlotKind::ExplicitSlot, 3 * types::PTR_SIZE,
-            types::align_shift(types::PTR_ALIGN)));
-        let value_out = builder.ins().stack_addr(PTR_TYPE, slot, 0);
-        let tydesc_out = builder.ins().stack_addr(PTR_TYPE, slot, 8);
-        let scratch = builder.ins().stack_addr(PTR_TYPE, slot, 16);
-
-        let data_ptr = self.get_operand_ptr(builder, src)?;
-        let borrow_ref = self.module.declare_func_in_func(runtime.data_borrow, builder.func);
-        builder.ins().call(borrow_ref, &[data_ptr, scratch, value_out, tydesc_out]);
-
-        let value = builder.ins().load(PTR_TYPE, MemFlagsData::new(), value_out, 0);
-        let tydesc = builder.ins().load(PTR_TYPE, MemFlagsData::new(), tydesc_out, 0);
-        self.values.insert(dest, value);
-        self.ref_desc_values.insert(dest, tydesc);
-        Ok(())
-    }
-
     /// Compile a get_field_ref instruction (get pointer to field).
     ///
     /// Unlike get_field which copies the field value, this returns a pointer
@@ -314,31 +232,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let src_ty = self.get_operand_type(src)?;
         let repr = types::ir_type_to_cranelift(&src_ty);
-
-        // A reference whose static type says `data` where a type parameter
-        // stood lies about the layout, so the offset comes from the descriptor
-        // of what really arrived, and the field's own descriptor goes on to
-        // describe this reference. Both are in there already: building a
-        // descriptor is what settled the offsets.
-        if let Some(base_desc) = self.operand_ref_desc(src) {
-            let runtime = self.runtime;
-            let base = self.get_operand_value(builder, src)?;
-            let index = builder.ins().iconst(cl_types::I32, field_index as i64);
-
-            let offset_fn = self.module.declare_func_in_func(runtime.field_offset, builder.func);
-            let call = builder.ins().call(offset_fn, &[base_desc, index]);
-            let offset = builder.inst_results(call)[0];
-            let offset = builder.ins().uextend(PTR_TYPE, offset);
-            let field_addr = builder.ins().iadd(base, offset);
-
-            let tydesc_fn = self.module.declare_func_in_func(runtime.field_tydesc, builder.func);
-            let call = builder.ins().call(tydesc_fn, &[base_desc, index]);
-            let field_desc = builder.inst_results(call)[0];
-
-            self.values.insert(dest, field_addr);
-            self.ref_desc_values.insert(dest, field_desc);
-            return Ok(());
-        }
 
         match repr {
             CraneliftRepr::Scalar(_) => {
@@ -451,25 +344,19 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// The address of the field `field_path` names within `base`, its static
-    /// type, and its descriptor where the static type does not describe it.
-    ///
-    /// A base our caller described is one whose static type says `data` where
-    /// a type parameter stood, so its offsets are wrong by whatever the
-    /// difference in width is; there the offsets and descriptors are the
-    /// runtime's to work out, down the path.
+    /// The address of the field `field_path` names within `base`, and its
+    /// type.
     pub(super) fn field_place(
         &mut self,
         builder: &mut FunctionBuilder,
         base: &Operand,
         field_path: &[u32],
-    ) -> Result<(cranelift_codegen::ir::Value, IrType, Option<cranelift_codegen::ir::Value>), CraneliftError> {
+    ) -> Result<(cranelift_codegen::ir::Value, IrType), CraneliftError> {
         let mut current_addr = self.get_operand_ptr(builder, base)?;
         let mut current_ty = match self.get_operand_type(base)? {
             IrType::Ref(inner) => *inner,
             ty => ty,
         };
-        let mut current_desc = self.operand_ref_desc(base);
 
         for &field_idx in field_path.iter() {
             let field_types: Vec<_> = match &current_ty {
@@ -490,29 +377,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 )));
             }
 
-            match current_desc {
-                Some(desc) => {
-                    let runtime = self.runtime;
-                    let index = builder.ins().iconst(cl_types::I32, field_idx as i64);
-                    let offset_fn = self.module
-                        .declare_func_in_func(runtime.field_offset, builder.func);
-                    let call = builder.ins().call(offset_fn, &[desc, index]);
-                    let offset = builder.inst_results(call)[0];
-                    let offset = builder.ins().uextend(PTR_TYPE, offset);
-                    current_addr = builder.ins().iadd(current_addr, offset);
-
-                    let tydesc_fn = self.module
-                        .declare_func_in_func(runtime.field_tydesc, builder.func);
-                    let call = builder.ins().call(tydesc_fn, &[desc, index]);
-                    current_desc = Some(builder.inst_results(call)[0]);
-                }
-                None => {
-                    current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
-                }
-            }
+            current_addr = self.field_addr(builder, current_addr, &current_ty, field_idx)?;
             current_ty = field_types[field_idx as usize].clone();
         }
-        Ok((current_addr, current_ty, current_desc))
+        Ok((current_addr, current_ty))
     }
 
     /// Compile a DropField instruction: destroy a field in place, where its
@@ -523,8 +391,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         base: &Operand,
         field_path: &[u32],
     ) -> Result<(), CraneliftError> {
-        let (addr, ty, desc) = self.field_place(builder, base, field_path)?;
-        self.destroy_value(builder, addr, &ty, desc, None)
+        let (addr, ty) = self.field_place(builder, base, field_path)?;
+        self.destroy_value(builder, addr, &ty, None, None)
     }
 
     /// Compile a ParamSetField instruction.
@@ -535,7 +403,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         field_path: &[u32],
         value: &Operand,
     ) -> Result<(), CraneliftError> {
-        let (current_addr, current_ty, current_desc) =
+        let (current_addr, current_ty) =
             self.field_place(builder, &Operand::Param(*param), field_path)?;
 
         let runtime = self.runtime;
@@ -543,28 +411,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("ParamSetField requires runtime handle parameter".into())
         })?;
 
-        // The descriptor that says what is really at the target. Inside a
-        // generic that is the one narrowed down the path above; elsewhere the
-        // static type is the truth.
-        let tydesc_ptr = match current_desc {
-            Some(desc) => desc,
-            None => self.tydesc_value(builder, &current_ty)?,
-        };
+        let tydesc_ptr = self.tydesc_value(builder, &current_ty)?;
 
 
         let val = self.get_operand_value(builder, value)?;
-
-        // Inside a generic what this function holds is in the erased shape and
-        // the field is in the real one, so the value is moved back out of its
-        // wrapping on the way in. `reify_local` walks the two descriptors and
-        // converts wherever one says `data`.
-        if current_desc.is_some() {
-            let src_tydesc = self.operand_tydesc(builder, value)?;
-            let src_ptr = self.get_operand_ptr(builder, value)?;
-            let reify_ref = self.module.declare_func_in_func(runtime.reify, builder.func);
-            builder.ins().call(reify_ref, &[rt_handle, src_ptr, src_tydesc, current_addr, tydesc_ptr]);
-            return Ok(());
-        }
 
         // Store new value at target address.
         match types::ir_type_to_cranelift(&current_ty) {

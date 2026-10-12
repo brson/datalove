@@ -216,7 +216,6 @@ impl JitEngine {
         let spec = datalove_datafun_cranelift::codegen::OsrSpec {
             header,
             param_offsets: layout.param_offsets.clone(),
-            shape_offset: layout.shape_offset,
             table_offset: layout.table_offset,
         };
         let start = Instant::now();
@@ -440,10 +439,7 @@ impl JitEngine {
                     self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight - 1);
                 }
                 self.note_call(key, func, CallFrom::Interpreter, true, 1);
-                let descriptor_params = &func.function_context()
-                    .expect("a compiled function is a function")
-                    .descriptor_params;
-                let shape_descriptors = call_ctx.shape_descriptors;
+                let type_params = call_ctx.type_params;
                 // What the code's stubs call back into the interpreter with,
                 // for the length of the call.
                 let mut dispatch_ctx = DispatchContext {
@@ -460,8 +456,7 @@ impl JitEngine {
                 // these are.
                 unsafe {
                     bridge::call_jit(
-                        entry.code_ptr, entry.uses_sret, rt_handle, args, ret_dest,
-                        descriptor_params, shape_descriptors,
+                        entry.code_ptr, entry.uses_sret, rt_handle, args, ret_dest, type_params,
                     )
                 };
                 restore_dispatch_context(previous);
@@ -524,13 +519,11 @@ mod tests {
             const_values: vec![],
             symbols: SymbolTable::default(),
             context: CodeUnitContext::Function(FunctionContext {
-            descriptor_params: Vec::new(),
                 params,
                 param_modes: vec![],
                 param_types,
                 return_type,
                 tracked_params: vec![],
-            descriptor_shapes: Vec::new(),
             type_param_count: 0,
             descriptor_table: Vec::new(),
             }),
@@ -675,7 +668,7 @@ mod tests {
 
         // Call the JIT code. Result written to ret_dest via sret.
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[], &[]);
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[]);
         }
 
         // Extract i32 from the buffer.
@@ -729,8 +722,6 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                 ],
@@ -820,8 +811,6 @@ mod tests {
                         args: vec![
                             Operand::Value(ValueId(0)),
                         ],
-                        type_args: Vec::new(),
-                        shape_descriptors: Vec::new(),
                         bindings: Vec::new(),
                     },
                 ],
@@ -889,7 +878,7 @@ mod tests {
         // 6. Result flows back through the chain
         // SAFETY: code_ptr is valid JIT code.
         unsafe {
-            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[], &[]);
+            bridge::call_jit(code_ptr, uses_sret, rt_handle, &[], ret_dest, &[]);
         }
 
         // Clear dispatch context.

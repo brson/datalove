@@ -4,7 +4,7 @@
 //! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
 use datalove_datafun_interp::{Destination, Value};
-use datalove_datafun_ir::{IrCodeUnit, ParamId};
+use datalove_datafun_ir::IrCodeUnit;
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
 
@@ -14,15 +14,11 @@ const MAX_DIRECT_ARGS: usize = datalove_datafun_interp::MAX_ENTRY_WORDS - 2;
 
 /// How many words entering `func` takes, beside the runtime handle and `sret`.
 ///
-/// One per parameter, then one descriptor per parameter whose own type does not
-/// describe what arrives at it, then one per shape the callee declared. This is
+/// One per parameter, then one descriptor per type parameter. This is
 /// `build_signature`'s layout, counted.
 fn entry_width(func: &IrCodeUnit) -> usize {
     match func.function_context() {
-        Some(ctx) => {
-            ctx.param_types.len() + ctx.descriptor_params.len() + ctx.descriptor_shapes.len()
-                + ctx.type_param_count as usize
-        }
+        Some(ctx) => ctx.param_types.len() + ctx.type_param_count as usize,
         None => 0,
     }
 }
@@ -45,13 +41,10 @@ pub fn enterable(func: &IrCodeUnit) -> bool {
 /// - First param: rt_handle (pointer to runtime)
 /// - Second param (non-Unit returns): sret pointer for return value
 /// - Next params: pointers to argument values
-/// - Then one descriptor per `descriptor_params` entry, then one per
-///   `descriptor_shapes` entry
+/// - Then one descriptor per type parameter
 ///
-/// The two descriptor groups and their order are `build_signature`'s, in the
-/// cranelift codegen the jit shares with the AOT backend. Leaving the second
-/// group off does not merely lose a descriptor, it hands the callee a shorter
-/// argument list than it was compiled for.
+/// That is `build_signature`'s layout, in the cranelift codegen the jit
+/// shares with the AOT backend.
 ///
 /// All returns are written via sret pointer. No register returns.
 pub unsafe fn call_jit(
@@ -60,14 +53,13 @@ pub unsafe fn call_jit(
     rt_handle: LocalRtHandle,
     args: &[Value],
     ret_dest: Destination,
-    descriptor_params: &[ParamId],
-    shape_descriptors: &[*const rtdt::TyDesc],
+    type_params: &[*const rtdt::TyDesc],
 ) {
     assert!(
-        args.len() + descriptor_params.len() + shape_descriptors.len() <= MAX_DIRECT_ARGS,
+        args.len() + type_params.len() <= MAX_DIRECT_ARGS,
         "entering a function of {} words, which `enterable` should have refused before \
          it was compiled",
-        args.len() + descriptor_params.len() + shape_descriptors.len(),
+        args.len() + type_params.len(),
     );
 
     // Build argument array: [rt_handle, sret?, arg_ptrs...]
@@ -90,25 +82,11 @@ pub unsafe fn call_jit(
         arg_idx += 1;
     }
 
-    // Then the descriptors a generic callee cannot work out for itself. Here
-    // they are simply the ones the argument values carry.
-    for param_id in descriptor_params {
-        let arg = args.get(param_id.0 as usize).unwrap_or_else(|| panic!(
-            "callee wants a descriptor for parameter {} but got {} arguments; the \
-             signature and the call site disagree",
-            param_id.0,
-            args.len(),
-        ));
-        raw_args[arg_idx] = arg.tydesc as usize;
-        arg_idx += 1;
-    }
-
-    // Then one for each shape the callee builds a collection of, or under
-    // generics by reference one per type parameter. No argument carries these,
-    // so they arrive already worked out: from the call site when the
-    // interpreter is calling, or forwarded out of the caller's own trailing
-    // arguments when jit code is.
-    for tydesc in shape_descriptors {
+    // Then one descriptor per type parameter. No argument carries these, so
+    // they arrive already worked out: from the call site when the interpreter
+    // is calling, or forwarded out of the caller's own trailing arguments when
+    // jit code is.
+    for tydesc in type_params {
         raw_args[arg_idx] = *tydesc as usize;
         arg_idx += 1;
     }

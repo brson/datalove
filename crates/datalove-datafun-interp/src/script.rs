@@ -74,7 +74,6 @@ impl IrInterpreter {
         // Execute blocks with registry for function lookups and frames for slot access.
         let result = self.execute_blocks(
             &unit.blocks,
-            &UnitTypes::of(unit),
             &mut frame,
             ret_dest,
             expr_dest,

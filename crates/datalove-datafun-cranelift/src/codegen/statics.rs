@@ -42,13 +42,11 @@ pub fn empty_function_unit(name: &str) -> IrCodeUnit {
         symbols: Default::default(),
         context: datalove_datafun_ir::CodeUnitContext::Function(
             datalove_datafun_ir::FunctionContext {
-                descriptor_params: Vec::new(),
                 params: Vec::new(),
                 param_modes: Vec::new(),
                 param_types: Vec::new(),
                 return_type: IrType::Unit,
                 tracked_params: Vec::new(),
-                descriptor_shapes: Vec::new(),
                 type_param_count: 0,
                 descriptor_table: Vec::new(),
             },

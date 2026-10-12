@@ -125,25 +125,15 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 1
             };
 
-            // User params start after implicit params, and the descriptors the
-            // caller supplied follow them.
+            // User params start after implicit params, and the type parameter
+            // descriptors the caller supplied follow them.
             let user_param_count = self.func_ctx.param_types.len();
             for (i, &val) in param_values[user_param_start..].iter().take(user_param_count).enumerate() {
                 let param_id = ParamId(i as u32);
                 // Track param values for get_operand_value.
                 self.param_values.insert(param_id, val);
             }
-            let descriptor_start = user_param_start + user_param_count;
-            for (&param_id, &val) in self.func_ctx.descriptor_params.iter()
-                .zip(param_values[descriptor_start..].iter())
-            {
-                self.descriptor_values.insert(param_id, val);
-            }
-            let shape_start = descriptor_start + self.func_ctx.descriptor_params.len();
-            self.shape_descriptor_values = param_values[shape_start..].iter().copied()
-                .take(self.func_ctx.descriptor_shapes.len())
-                .collect();
-            let type_param_start = shape_start + self.func_ctx.descriptor_shapes.len();
+            let type_param_start = user_param_start + user_param_count;
             self.type_param_values = param_values[type_param_start..].iter().copied()
                 .take(self.func_ctx.type_param_count as usize)
                 .collect();
@@ -360,9 +350,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::GetFieldRef { dest, src, field_index } => {
                 self.compile_get_field_ref(builder, *dest, src, *field_index)?;
             }
-            Instruction::DataBorrow { dest, src } => {
-                self.compile_data_borrow(builder, *dest, src)?;
-            }
             Instruction::SetField { slot, field_path, value } => {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
@@ -409,14 +396,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::DebugLog { operand } => {
                 self.compile_debuglog(builder, operand)?;
             }
-            Instruction::Call { dest, func, args, shape_descriptors, bindings, .. } => {
-                self.compile_call(builder, *dest, func, args, shape_descriptors, bindings)?;
+            Instruction::Call { dest, func, args, bindings, .. } => {
+                self.compile_call(builder, *dest, func, args, bindings)?;
             }
             // ComptimeCall behaves exactly like Call - the specialization metadata is
             // only used by the specialization pass. Without specialization, this calls
             // the original function with original args.
-            Instruction::ComptimeCall { dest, func, args, shape_descriptors, bindings, .. } => {
-                self.compile_call(builder, *dest, func, args, shape_descriptors, bindings)?;
+            Instruction::ComptimeCall { dest, func, args, bindings, .. } => {
+                self.compile_call(builder, *dest, func, args, bindings)?;
             }
             Instruction::SlotStoreCopy { dest, value } => {
                 self.compile_slot_store(builder, dest, value, true)?;
@@ -480,23 +467,14 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 // Tracked binding: conditional drop (checks tracking byte).
                 self.compile_drop_tracked(builder, operand)?;
             }
-            Instruction::ListNew { dest, elements, descriptor } => {
-                match descriptor {
-                    Some(i) => self.compile_list_new_erased(builder, *dest, elements, *i)?,
-                    None => self.compile_list_new(builder, *dest, elements)?,
-                }
+            Instruction::ListNew { dest, elements } => {
+                self.compile_list_new(builder, *dest, elements)?;
             }
-            Instruction::SetNew { dest, elements, descriptor } => {
-                match descriptor {
-                    Some(i) => self.compile_set_new_erased(builder, *dest, elements, *i)?,
-                    None => self.compile_set_new(builder, *dest, elements)?,
-                }
+            Instruction::SetNew { dest, elements } => {
+                self.compile_set_new(builder, *dest, elements)?;
             }
-            Instruction::MapNew { dest, entries, descriptor } => {
-                match descriptor {
-                    Some(i) => self.compile_map_new_erased(builder, *dest, entries, *i)?,
-                    None => self.compile_map_new(builder, *dest, entries)?,
-                }
+            Instruction::MapNew { dest, entries } => {
+                self.compile_map_new(builder, *dest, entries)?;
             }
             Instruction::TensorNew { dest, shape, elements } => {
                 self.compile_tensor_new(builder, *dest, shape, elements)?;
@@ -538,15 +516,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
             Instruction::DataFrom { dest, inner } => {
                 self.compile_data_from(builder, *dest, inner)?;
-            }
-            Instruction::Erase { dest, src } => {
-                self.compile_erasure(builder, *dest, src, true)?;
-            }
-            Instruction::EraseTracked { dest, src } => {
-                self.compile_erasure_tracked(builder, *dest, src)?;
-            }
-            Instruction::Reify { dest, src } => {
-                self.compile_erasure(builder, *dest, src, false)?;
             }
             Instruction::Intrinsic { dest, intrinsic, args } => {
                 self.compile_intrinsic(builder, *dest, *intrinsic, args)?;

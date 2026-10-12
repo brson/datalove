@@ -13,41 +13,6 @@ use crate::IrInterpreter;
 
 impl IrInterpreter {
     /// Execute ListNew: create a list from operands.
-    /// Build a list described by `list_tydesc`, then move it into the wrapper.
-    pub(crate) fn execute_list_new_erased(
-        &mut self,
-        elements: &[Operand],
-        dest: Destination,
-        list_tydesc: *const rtdt::TyDesc,
-        frame: &Frame,
-        frames: &FrameStore,
-    ) {
-        let rt_handle = self.runtime.handle();
-        let mut temp = std::mem::MaybeUninit::<rtdt::List>::uninit();
-        let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        unsafe {
-            datalove_rt::c::dtlv_rti_list_create_local(rt_handle, temp_ptr, list_tydesc);
-        }
-        // Pushed rather than copied in. The list holds its elements as what
-        // they really are, and an element here is in the erased shape -- a
-        // `data` for a bare type parameter, a tuple of them for a tuple of
-        // parameters -- so it has to be converted on the way in. The copy the
-        // concrete path does would put a wrapper where a value belongs.
-        for elem_op in elements {
-            let elem = self.read_operand(elem_op, frame, frames);
-            unsafe {
-                datalove_rt::c::dtlv_rti_list_push_erased_local(
-                    rt_handle, temp_ptr, list_tydesc, elem.ptr, elem.tydesc);
-            }
-        }
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_from_local(
-                self.runtime.handle(), temp_ptr, list_tydesc, dest.ptr)
-        };
-        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
-            "wrapping a freshly built list");
-    }
-
     pub(crate) fn execute_list_new(
         &mut self,
         elements: &[Operand],
@@ -105,43 +70,6 @@ impl IrInterpreter {
     }
 
     /// Execute SetNew: create a set from operands.
-    /// Build a set described by `set_tydesc`, then move it into the wrapper.
-    ///
-    /// The same two steps as the list: a set built over a type parameter has a
-    /// `data` for its destination, so it is made in a temporary the descriptor
-    /// describes and moved in.
-    pub(crate) fn execute_set_new_erased(
-        &mut self,
-        elements: &[Operand],
-        dest: Destination,
-        set_tydesc: *const rtdt::TyDesc,
-        frame: &Frame,
-        frames: &FrameStore,
-    ) {
-        let rt_handle = self.runtime.handle();
-        let mut temp = std::mem::MaybeUninit::<rtdt::Set>::uninit();
-        let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        unsafe {
-            datalove_rt::c::dtlv_rti_btreeset_create_local(rt_handle, temp_ptr, set_tydesc);
-        }
-        // Inserted rather than copied in; see `execute_list_new_erased`.
-        for elem_op in elements {
-            let elem = self.read_operand(elem_op, frame, frames);
-            let mut added = false;
-            unsafe {
-                datalove_rt::c::dtlv_rti_btreeset_insert_erased_local(
-                    rt_handle, temp_ptr, set_tydesc, elem.ptr, elem.tydesc,
-                    &mut added as *mut bool as *mut u8);
-            }
-        }
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_from_local(
-                self.runtime.handle(), temp_ptr, set_tydesc, dest.ptr)
-        };
-        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
-            "wrapping a freshly built set");
-    }
-
     pub(crate) fn execute_set_new(
         &mut self,
         elements: &[Operand],
@@ -173,39 +101,6 @@ impl IrInterpreter {
     }
 
     /// Execute MapNew: create a map from key-value pairs.
-    /// Build a map described by `map_tydesc`, then move it into the wrapper.
-    pub(crate) fn execute_map_new_erased(
-        &mut self,
-        entries: &[(Operand, Operand)],
-        dest: Destination,
-        map_tydesc: *const rtdt::TyDesc,
-        frame: &Frame,
-        frames: &FrameStore,
-    ) {
-        let rt_handle = self.runtime.handle();
-        let mut temp = std::mem::MaybeUninit::<rtdt::Map>::uninit();
-        let temp_ptr = temp.as_mut_ptr() as *mut u8;
-        unsafe {
-            datalove_rt::c::dtlv_rti_btreemap_create_local(rt_handle, temp_ptr, map_tydesc);
-        }
-        // Inserted rather than copied in; see `execute_list_new_erased`.
-        for (key_op, val_op) in entries {
-            let key = self.read_operand(key_op, frame, frames);
-            let val = self.read_operand(val_op, frame, frames);
-            unsafe {
-                datalove_rt::c::dtlv_rti_btreemap_insert_erased_local(
-                    rt_handle, temp_ptr, map_tydesc,
-                    key.ptr, key.tydesc, val.ptr, val.tydesc);
-            }
-        }
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_data_from_local(
-                self.runtime.handle(), temp_ptr, map_tydesc, dest.ptr)
-        };
-        assert_eq!(status, datalove_rt::c::RtStatus::Ok,
-            "wrapping a freshly built map");
-    }
-
     pub(crate) fn execute_map_new(
         &mut self,
         entries: &[(Operand, Operand)],

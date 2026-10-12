@@ -43,33 +43,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// How wide a tensor's elements are, and the descriptor that said so.
-    ///
-    /// Inside a generic the static element type is a `data`, whose width is not
-    /// the width of what the caller's tensor really holds, so a stride taken
-    /// from it lands between elements. `None` for the descriptor means the
-    /// static type is the truth and the width is a compile-time constant.
+    /// How wide a tensor's elements are: a compile-time constant, or for a
+    /// dynamic element type, read from its descriptor table entry.
     fn tensor_elem_width(
         &mut self,
         builder: &mut FunctionBuilder,
-        tensor: &Operand,
         elem_ty: &IrType,
-    ) -> Result<(cl_ir::Value, Option<cl_ir::Value>), CraneliftError> {
-        let elem_desc = match self.operand_ref_desc(tensor) {
-            Some(desc) => {
-                let runtime = self.runtime;
-                let elem_fn = self.module.declare_func_in_func(runtime.element_tydesc, builder.func);
-                let call = builder.ins().call(elem_fn, &[desc]);
-                builder.inst_results(call)[0]
-            }
-            // Under generics by reference the element's descriptor is its
-            // table entry.
-            None if elem_ty.is_dynamic() => self.table_entry(elem_ty)?,
-            None => {
-                let size = types::ir_type_to_cranelift(elem_ty).layout().size;
-                return Ok((builder.ins().iconst(INDEX_TYPE, size as i64), None));
-            }
-        };
+    ) -> Result<cl_ir::Value, CraneliftError> {
+        if !elem_ty.is_dynamic() {
+            let size = types::ir_type_to_cranelift(elem_ty).layout().size;
+            return Ok(builder.ins().iconst(INDEX_TYPE, size as i64));
+        }
+        let elem_desc = self.table_entry(elem_ty)?;
         let size_offset = std::mem::offset_of!(datalove_rtdt::TyDesc, size) as i32;
         let size = builder.ins().load(
             cl_types::I32, MemFlagsData::new(), elem_desc, size_offset);
@@ -78,7 +63,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         } else {
             builder.ins().uextend(INDEX_TYPE, size)
         };
-        Ok((size, Some(elem_desc)))
+        Ok(size)
     }
 
     /// Compute element address in a tensor for rank-1 access.
@@ -161,7 +146,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 
         if rank == 1 {
             let elem_repr = types::ir_type_to_cranelift(&elem_ty);
-            let (elem_size, elem_desc) = self.tensor_elem_width(builder, tensor, &elem_ty)?;
+            let elem_size = self.tensor_elem_width(builder, &elem_ty)?;
 
             match &elem_repr {
                 CraneliftRepr::Scalar(cl_ty) => {
@@ -201,26 +186,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                     })?;
                     let tydesc_ptr = self.tydesc_value(builder, &elem_ty)?;
 
-                    // What is in the tensor is the real element type and the
-                    // destination is whatever this function's static type says,
-                    // so inside a generic the clone may want wrapping on the
-                    // way -- the runtime's decision, as for a list.
-                    match elem_desc {
-                        Some(desc) => {
-                            let clone_ref = self.module
-                                .declare_func_in_func(runtime.clone_erased, builder.func);
-                            builder.ins().call(clone_ref, &[
-                                rt_handle, elem_addr, desc, dest_addr, tydesc_ptr,
-                            ]);
-                        }
-                        None => {
-                            let clone_ref = self.module
-                                .declare_func_in_func(runtime.clone_local, builder.func);
-                            builder.ins().call(clone_ref, &[
-                                rt_handle, elem_addr, tydesc_ptr, dest_addr, tydesc_ptr,
-                            ]);
-                        }
-                    }
+                    let clone_ref = self.module
+                        .declare_func_in_func(runtime.clone_local, builder.func);
+                    builder.ins().call(clone_ref, &[
+                        rt_handle, elem_addr, tydesc_ptr, dest_addr, tydesc_ptr,
+                    ]);
                     builder.ins().jump(merge_block, &[]);
 
                     builder.switch_to_block(skip_block);
@@ -312,14 +282,10 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let idx = self.get_operand_value(builder, index)?;
 
         if rank == 1 {
-            // Rank 1: element pointer, and the element's descriptor goes on to
-            // describe this reference.
-            let (elem_size, elem_desc) = self.tensor_elem_width(builder, tensor, &elem_ty)?;
+            // Rank 1: element pointer.
+            let elem_size = self.tensor_elem_width(builder, &elem_ty)?;
             let elem_addr = self.compute_tensor_element_addr(builder, tensor_ptr, idx, elem_size);
             self.values.insert(dest, elem_addr);
-            if let Some(desc) = elem_desc {
-                self.ref_desc_values.insert(dest, desc);
-            }
         } else {
             // Rank > 1: construct view Tensor on stack.
             // Allocate a stack slot for the Tensor struct.

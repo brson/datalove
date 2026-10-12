@@ -272,47 +272,4 @@ impl IrInterpreter {
             "failed to build a data value",
         );
     }
-
-    /// Move the value back out of a data, as the destination's type.
-    ///
-    /// The destination's tydesc says what went in. Getting that wrong is a
-    /// lowering bug, not something to check here: this is the reverse of a wrap
-    /// the compiler emitted, at a site where it knows the type.
-    pub(crate) fn execute_reify(&self, src: &Value, dest: Destination) {
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_reify_local(
-                self.runtime.handle(),
-                src.ptr,
-                src.tydesc,
-                dest.ptr,
-                dest.tydesc,
-            )
-        };
-        assert_eq!(
-            status,
-            datalove_rt::c::RtStatus::Ok,
-            "failed to move a value out of its erased shape",
-        );
-    }
-
-    /// Move a value into the erased shape a generic callee expects.
-    ///
-    /// The destination's tydesc is that shape. What differs between the two is
-    /// where the callee has `data`, and the runtime walks them together.
-    pub(crate) fn execute_erase(&self, src: &Value, dest: Destination) {
-        let status = unsafe {
-            datalove_rt::c::dtlv_rti_erase_local(
-                self.runtime.handle(),
-                src.ptr,
-                src.tydesc,
-                dest.ptr,
-                dest.tydesc,
-            )
-        };
-        assert_eq!(
-            status,
-            datalove_rt::c::RtStatus::Ok,
-            "failed to move a value into its erased shape",
-        );
-    }
 }

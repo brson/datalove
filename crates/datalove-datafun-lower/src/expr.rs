@@ -617,9 +617,9 @@ pub fn lower_expression<'db>(
                 .unwrap_or_default();
 
             if !comptime_param_indices.is_empty() {
-                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, Vec::new(), bindings);
+                ctx.emit_comptime_call(dest, func_ref, args, comptime_param_indices, bindings);
             } else {
-                ctx.emit_call_with_type_args(dest, func_ref, args, Vec::new(), bindings);
+                ctx.emit_call_with_bindings(dest, func_ref, args, bindings);
             }
 
             // Args consumed by Call/ComptimeCall; pop scope.
