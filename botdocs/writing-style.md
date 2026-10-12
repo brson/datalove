@@ -141,8 +141,40 @@ Posts live in `mandocs/posts/` and Brian writes them. Bots do not draft posts;
 they review and edit them when asked. The job is to make the post more itself,
 not to make it sound like a bot wrote it.
 
+### Audience
+
+Nobody uses Datalove, so the reader is not a Datalove user. The primary reader
+is a practitioner who has the same problem the post is about: language
+implementers, people building interpreters, JITs, and runtimes in Rust, and PL
+enthusiasts. Potential employers read the same posts and judge them the same
+way, by whether peers find them worth reading; do not write at them.
+
+Make the problem general and Datalove the worked example. "How I made drops
+precise in Datalove" is a devlog; "Static drops for linear types, and where
+dynamic tracking still wins" is a post someone building a different language
+will keep.
+
+The test: would someone who will never run Datalove learn something they can
+use? If yes, it is a `dev` post. If no, it is a `news` post -- a short devlog,
+which is fine, but should not be dressed up as more.
+
+Two other audiences, served differently:
+
+- **The future Datalove user** is served by the docs, not the blog. A post's
+  reasoning feeds the explanation docs once the feature lands.
+- **Users of a future product** built on Datalove (visual, spreadsheet-like
+  data transformation) care about their data problems, not compiler
+  internals. Occasional vision posts are written for them; do not mix the two
+  audiences in one post.
+
+Posts are often started before the feature is built: the problem and the
+design options first, then the dead ends, then results. A draft in that state
+is expected; review it for the parts that exist.
+
 When reviewing, look for:
 
+- **Audience.** Is the problem framed so a non-user cares? Is there Datalove
+  jargon or context a practitioner from outside the project would not have?
 - **Spine.** Does the middle hold together with *but* and *therefore*, or does
   it wander? Point out sections that do not advance the argument. The usual
   shape of a `dev` post -- problem, exploration, results, lessons, future work

@@ -1,5 +1,7 @@
 ## Blog topic pipeline
 
+- Why I continue to love braced-matched lexing and token trees
+- Testing every backend against the IR reference
 - generic representation details
 - for loops for collections
 - repl experience week
