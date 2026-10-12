@@ -798,6 +798,9 @@ impl fmt::Display for IrCodeUnit {
                     write!(f, "{}", param)?;
                 }
                 writeln!(f, "):")?;
+                for (i, ty) in ctx.descriptor_table.iter().enumerate() {
+                    writeln!(f, "  desc{i} = {ty}")?;
+                }
                 for block in &self.blocks {
                     write!(f, "{}", block)?;
                 }

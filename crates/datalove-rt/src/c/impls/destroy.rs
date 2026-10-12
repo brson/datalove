@@ -323,6 +323,7 @@ pub unsafe fn any_destroy_local(
                 }
             }
 
+            rtdt::TyTag::Param => panic!("a template is not the type of any value"),
             rtdt::TyTag::Error => {
                 // Error uses same encoding as Data.
                 let error_ptr = value_in as *const rtdt::Error;

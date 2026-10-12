@@ -841,6 +841,7 @@ fn is_plain(td: &TyDesc) -> bool {
         | TyTag::F32 | TyTag::F64 | TyTag::Atom => true,
         TyTag::Int | TyTag::List | TyTag::String | TyTag::Map | TyTag::Set
         | TyTag::Tensor | TyTag::Table | TyTag::Data | TyTag::Error => false,
+        TyTag::Param => panic!("a template has no flags until it is instantiated"),
         // The error side of a result is an `error`, which is boxed.
         TyTag::Result => false,
         TyTag::Option => component(unsafe { td.type_info.option.inner_tydesc }),
@@ -1096,6 +1097,9 @@ pub enum TyTag {
 
     Data = 0x70,
     Error = 0x71,
+
+    /// A type parameter, in a template; see [`TyInfoParam`].
+    Param = 0x80,
 }
 
 impl TyTag {
@@ -1143,6 +1147,8 @@ impl TyTag {
             0x70 => TyTag::Data,
             0x71 => TyTag::Error,
 
+            0x80 => TyTag::Param,
+
             _ => return core::option::Option::None,
         };
         core::option::Option::Some(tag)
@@ -1166,6 +1172,7 @@ pub union TyInfo {
     pub result: TyInfoResult,
     pub atom: TyInfoAtom,
     pub term: TyInfoTerm,
+    pub param: TyInfoParam,
 }
 
 /// The arm for a type that describes itself: a scalar, or a string.
@@ -1345,4 +1352,25 @@ pub struct TyInfoTerm {
     pub name: *const u8,
     pub name_len: u32,
     pub payload: *const TyDesc,
+}
+
+/// Type information for a type parameter, standing in a template.
+///
+/// A generic is compiled once whatever its type parameters are bound to, so
+/// the descriptor of a type it writes in terms of them, like `(T, u32)`, is
+/// not known until a call. The compiler emits a template instead: the static
+/// descriptor of that type with one of these wherever a parameter stood, and
+/// the runtime instantiates it against the descriptors the call was handed
+/// (`dtlv_rti_tydesc_instantiate`). Everything else the descriptor holds --
+/// field and variant names, and the shape around the parameters -- comes from
+/// the template as written.
+///
+/// A template is never the descriptor of a value. Its `size` and `align` are
+/// meaningless wherever a parameter is inside it, and nothing but
+/// instantiation reads one.
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct TyInfoParam {
+    /// The parameter's position in the generic's declaration.
+    pub index: u32,
 }

@@ -650,6 +650,7 @@ unsafe fn clone_impl(
 
         // Error - deep clone the wrapped value.
         // Error uses same encoding as Data, so interpret as Data.
+        TyTag::Param => panic!("a template is not the type of any value"),
         TyTag::Error => {
             let data_in = unsafe { &*(value_in as *const rtdt::Data) };
             let data_out = unsafe { &mut *(value_out as *mut rtdt::Data) };

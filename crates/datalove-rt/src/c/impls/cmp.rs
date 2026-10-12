@@ -246,6 +246,11 @@ pub(crate) fn cmp_tydesc(
         rtdt::TyTag::Int | rtdt::TyTag::String | rtdt::TyTag::Data |
         rtdt::TyTag::Error => Ordering::Equal,
 
+        // In a template, a type parameter is its position.
+        rtdt::TyTag::Param => unsafe {
+            td_a.as_ref().type_info.param.index.cmp(&td_b.as_ref().type_info.param.index)
+        },
+
         // An atom's name is the whole of its identity. `atom Red` and
         // `atom Blue` are two types and nothing else in their descriptors
         // tells them apart, both being zero-sized and carrying nothing.
@@ -417,6 +422,9 @@ pub(crate) fn eq_tydesc(
             rtdt::TyTag::Error => {
                 true
             }
+            rtdt::TyTag::Param => unsafe {
+                td_a.as_ref().type_info.param.index == td_b.as_ref().type_info.param.index
+            },
             // See `cmp_tydesc`: the name is the identity.
             rtdt::TyTag::Atom => {
                 td_a.atom_info().0 == td_b.atom_info().0
@@ -956,6 +964,7 @@ unsafe fn eq_value(
                 }
                 true
             }
+            rtdt::TyTag::Param => panic!("a template is not the type of any value"),
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 eq_packed(value_a as *const rtdt::Data,
                     value_b as *const rtdt::Data, float_policy)
@@ -1507,6 +1516,7 @@ unsafe fn cmp_value(
                     std::cmp::Ordering::Equal => crate::c::RtOrdering::Equal,
                 }
             }
+            rtdt::TyTag::Param => panic!("a template is not the type of any value"),
             rtdt::TyTag::Data | rtdt::TyTag::Error => {
                 cmp_packed(value_a as *const rtdt::Data, value_b as *const rtdt::Data)
             }

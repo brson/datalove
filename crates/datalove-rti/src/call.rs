@@ -17,6 +17,8 @@
 //! - `dtlv_rti_data_borrow`
 //! - `dtlv_rti_field_offset`
 //! - `dtlv_rti_field_tydesc`
+//! - `dtlv_rti_payload_offset`
+//! - `dtlv_rti_payload_tydesc`
 //! - `dtlv_rti_element_tydesc`
 
 use datalove_rtdt as rtdt;
@@ -1462,6 +1464,28 @@ pub unsafe fn dtlv_rti_get_debug_buffer(rt: LocalRtHandle, out_ptr: *mut *const 
 #[inline]
 pub unsafe fn dtlv_rti_clear_debug_buffer(rt: LocalRtHandle) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_clear_debug_buffer)(rt) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_tydesc_instantiate`](crate::table::RtiTable::dtlv_rti_tydesc_instantiate).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_tydesc_instantiate(rt: LocalRtHandle, template: *const rtdt::TyDesc, params: *const *const rtdt::TyDesc, num_params: u32) -> *const rtdt::TyDesc {
+    unsafe { (crate::table(rt).dtlv_rti_tydesc_instantiate)(rt, template, params, num_params) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_shadow_alloc`](crate::table::RtiTable::dtlv_rti_shadow_alloc).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_shadow_alloc(rt: LocalRtHandle, size: u32, align: u32) -> *mut u8 {
+    unsafe { (crate::table(rt).dtlv_rti_shadow_alloc)(rt, size, align) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_field_read_local`](crate::table::RtiTable::dtlv_rti_field_read_local).

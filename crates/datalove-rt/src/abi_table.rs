@@ -154,6 +154,10 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_clear_debug_buffer: c::dtlv_rti_clear_debug_buffer,
     dtlv_rti_field_offset: c::dtlv_rti_field_offset,
     dtlv_rti_field_tydesc: c::dtlv_rti_field_tydesc,
+    dtlv_rti_payload_offset: c::dtlv_rti_payload_offset,
+    dtlv_rti_payload_tydesc: c::dtlv_rti_payload_tydesc,
+    dtlv_rti_tydesc_instantiate: c::dtlv_rti_tydesc_instantiate,
+    dtlv_rti_shadow_alloc: c::dtlv_rti_shadow_alloc,
     dtlv_rti_field_read_local: c::dtlv_rti_field_read_local,
     dtlv_rti_element_tydesc: c::dtlv_rti_element_tydesc,
     dtlv_rti_btreemap_contains_key_erased_local: c::dtlv_rti_btreemap_contains_key_erased_local,
@@ -164,6 +168,6 @@ pub static TABLE: RtiTable = RtiTable {
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 140,
+    datalove_rti::table::EXPORTED == 144,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

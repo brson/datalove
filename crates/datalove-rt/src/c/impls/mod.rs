@@ -20,3 +20,5 @@ pub(crate) mod debuglog;
 pub(crate) mod boxing;
 pub(crate) mod dyn_ops;
 pub(crate) mod table;
+pub(crate) mod instantiate;
+pub(crate) mod shadow;

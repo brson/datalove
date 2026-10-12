@@ -43,9 +43,31 @@ fn error_layout() -> TypeLayout {
     }
 }
 
+/// The layout of a fat pointer: a value's address and its descriptor.
+///
+/// What a dynamic type is laid out as, and a reference to one.
+pub fn fat_pointer_layout() -> TypeLayout {
+    TypeLayout {
+        size: 2 * std::mem::size_of::<*const u8>() as u32,
+        align: std::mem::align_of::<*const u8>() as u32,
+    }
+}
+
 /// The layout of an IR type.
+///
+/// A dynamic type -- one that mentions a type parameter -- is laid out as a
+/// fat pointer, whatever its form: its own layout is not known until a call,
+/// so a frame holds where the value is and what describes it. The value's
+/// own layout is the descriptor's to say, and the helpers below that give an
+/// offset within a type refuse a dynamic one rather than give an answer for
+/// the fat pointer.
 pub fn layout_of(ty: &IrType) -> TypeLayout {
+    if ty.is_dynamic() {
+        return fat_pointer_layout();
+    }
     match ty {
+        IrType::Param(_) => unreachable!("a type parameter is dynamic"),
+
         // Zero-sized types.
         IrType::Unit => TypeLayout { size: 0, align: 1 },
         IrType::Atom(_) => TypeLayout { size: 0, align: 1 },
@@ -91,6 +113,16 @@ pub fn layout_of(ty: &IrType) -> TypeLayout {
     }
 }
 
+/// Refuse a part whose layout is not known until a call.
+///
+/// Only the descriptor can say where things are in a dynamic type; an answer
+/// worked out from its fat pointer's layout would be wrong without saying so.
+fn assert_static<'a>(mut parts: impl Iterator<Item = &'a IrType>, what: &str) {
+    if let Some(part) = parts.find(|p| p.is_dynamic()) {
+        panic!("the layout of {what} holding {part}, which is dynamic, was asked of its static type");
+    }
+}
+
 fn struct_layout<T>() -> TypeLayout {
     TypeLayout {
         size: std::mem::size_of::<T>() as u32,
@@ -100,6 +132,7 @@ fn struct_layout<T>() -> TypeLayout {
 
 /// Layout of a tuple or struct: fields in order, each at its own alignment.
 pub fn aggregate_layout(fields: &[IrType]) -> TypeLayout {
+    assert_static(fields.iter(), "a tuple or struct");
     let mut offset = 0u32;
     let mut max_align = 1u32;
 
@@ -118,6 +151,7 @@ pub fn aggregate_layout(fields: &[IrType]) -> TypeLayout {
 
 /// Byte offset of each field of a tuple or struct.
 pub fn aggregate_field_offsets(fields: &[IrType]) -> Vec<u32> {
+    assert_static(fields.iter(), "a tuple or struct");
     let mut offsets = Vec::with_capacity(fields.len());
     let mut offset = 0u32;
 
@@ -133,6 +167,7 @@ pub fn aggregate_field_offsets(fields: &[IrType]) -> Vec<u32> {
 
 /// Layout of an enum: a u32 discriminant followed by the largest payload.
 pub fn enum_layout(variants: &[(String, Option<IrType>)]) -> TypeLayout {
+    assert_static(variants.iter().filter_map(|(_, p)| p.as_ref()), "an enum");
     let mut max_payload_size = 0u32;
     let mut max_payload_align = ENUM_DISCRIMINANT_ALIGN;
 
@@ -157,6 +192,7 @@ pub fn enum_layout(variants: &[(String, Option<IrType>)]) -> TypeLayout {
 /// that variant's own alignment, so variants of differing alignment have
 /// differing offsets. Variants without a payload get 0.
 pub fn enum_variant_offsets(variants: &[(String, Option<IrType>)]) -> Vec<u32> {
+    assert_static(variants.iter().filter_map(|(_, p)| p.as_ref()), "an enum");
     variants.iter().map(|(_, payload)| {
         match payload {
             Some(payload_ty) => enum_payload_offset(payload_ty),
@@ -167,16 +203,19 @@ pub fn enum_variant_offsets(variants: &[(String, Option<IrType>)]) -> Vec<u32> {
 
 /// Byte offset of an enum variant's payload, given its payload type.
 pub fn enum_payload_offset(payload_ty: &IrType) -> u32 {
+    assert_static(std::iter::once(payload_ty), "an enum payload");
     align_up(ENUM_DISCRIMINANT_SIZE, layout_of(payload_ty).align)
 }
 
 /// Byte offset of the payload of a `?T`.
 pub fn option_payload_offset(inner: &IrType) -> u32 {
+    assert_static(std::iter::once(inner), "an option");
     align_up(OPTION_TAG_SIZE, layout_of(inner).align)
 }
 
 /// Layout of a `?T`: a tag byte followed by the payload.
 pub fn option_layout(inner: &IrType) -> TypeLayout {
+    assert_static(std::iter::once(inner), "an option");
     let inner_layout = layout_of(inner);
     let payload_offset = align_up(OPTION_TAG_SIZE, inner_layout.align);
     let align = inner_layout.align.max(1);
@@ -191,12 +230,14 @@ pub fn option_layout(inner: &IrType) -> TypeLayout {
 /// Both arms share the offset, so it accounts for the error payload as well
 /// as the ok payload.
 pub fn result_payload_offset(ok_ty: &IrType) -> u32 {
+    assert_static(std::iter::once(ok_ty), "a result");
     let align = layout_of(ok_ty).align.max(error_layout().align);
     align_up(RESULT_TAG_SIZE, align)
 }
 
 /// Layout of a `!T`: a tag byte followed by the larger of ok and error.
 pub fn result_layout(ok_ty: &IrType) -> TypeLayout {
+    assert_static(std::iter::once(ok_ty), "a result");
     let ok_layout = layout_of(ok_ty);
     let err_layout = error_layout();
 

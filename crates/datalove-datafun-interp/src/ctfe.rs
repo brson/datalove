@@ -598,6 +598,7 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
         TyTag::String => Ok(IrType::String),
         TyTag::Data => Ok(IrType::Data),
         TyTag::Error => Ok(IrType::Error),
+        TyTag::Param => Ok(IrType::Param(unsafe { tydesc.as_ref().type_info.param.index })),
 
         // A descriptor carries the whole of a type, so a structured one is
         // read back by walking it. This used to stop at the scalars, under a

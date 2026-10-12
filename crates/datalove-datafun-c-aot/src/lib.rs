@@ -393,6 +393,7 @@ impl CAotCompiler {
         writeln!(out, "    struct {{ const dtlv_tydesc_t* ok_tydesc; uint32_t payload_offset; }} result;").unwrap();
         writeln!(out, "    struct {{ const char* name; uint32_t name_len; }} atom;").unwrap();
         writeln!(out, "    struct {{ const char* name; uint32_t name_len; const dtlv_tydesc_t* payload; }} term;").unwrap();
+        writeln!(out, "    struct {{ uint32_t index; }} param;").unwrap();
         writeln!(out, "}} dtlv_tyinfo_t;").unwrap();
         writeln!(out).unwrap();
 
@@ -415,7 +416,7 @@ impl CAotCompiler {
         // What a handle points at starts with this, `datalove_rti::RtHeader`.
         // Each function compares where its frame is with the limit in it, and
         // past it stops with a message rather than overflow the stack.
-        writeln!(out, "typedef struct {{ const void* table; uint8_t abandoning; uintptr_t stack_limit; }} dtlv_rt_header_t;").unwrap();
+        writeln!(out, "typedef struct {{ const void* table; uint8_t abandoning; uintptr_t stack_limit; uintptr_t shadow_top; uintptr_t shadow_limit; }} dtlv_rt_header_t;").unwrap();
         writeln!(out, "#define DTLV_CHECK_STACK(rt) do {{ \\").unwrap();
         writeln!(out, "    if ((uintptr_t)__builtin_frame_address(0) < ((dtlv_rt_header_t*)(rt))->stack_limit) \\").unwrap();
         writeln!(out, "        dtlv_rti_stack_overflow(rt); \\").unwrap();

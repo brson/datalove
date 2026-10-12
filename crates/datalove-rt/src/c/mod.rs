@@ -222,9 +222,9 @@ pub unsafe extern "C-unwind" fn dtlv_rti_clone_local(
     debug_assert!(!tydesc_out.is_null(), "tydesc_out is null");
     debug_assert_aligned(value_in, tydesc_in, "clone_local:value_in");
     debug_assert_aligned(value_out, tydesc_out, "clone_local:value_out");
-    debug_assert_eq!(
-        tydesc_in, tydesc_out,
-        "clone: tydesc_in and tydesc_out must be identical"
+    debug_assert!(
+        same_tydesc(tydesc_in, tydesc_out),
+        "clone: tydesc_in and tydesc_out must describe the same type"
     );
     unsafe {
         crate::c::impls::clone::clone_value(rt, value_in, tydesc_in, value_out)
@@ -3585,6 +3585,85 @@ pub unsafe extern "C-unwind" fn dtlv_rti_field_tydesc(
 ) -> *const rtdt::TyDesc {
     debug_assert!(!tydesc.is_null(), "tydesc is null");
     unsafe { crate::c::impls::dyn_ops::field_tydesc(tydesc, index) }
+}
+
+/// The offset of the payload of an option, a result, a term, or variant
+/// `index` of an enum, taken from its descriptor.
+///
+/// The counterpart of `dtlv_rti_field_offset` for the types with a tag. They
+/// do not share one rule -- a result's payload is aligned for the error it
+/// might hold as well as for its value, and each variant of an enum has its
+/// own offset -- so the rules are kept here, beside the layouts that decide
+/// them. `index` is ignored but for an enum.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_payload_offset(
+    tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> u32 {
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    unsafe { crate::c::impls::dyn_ops::payload_offset(tydesc, index) }
+}
+
+/// The descriptor of the payload of an option, a result's value, a term, or
+/// variant `index` of an enum; null for a variant with none.
+///
+/// The other half of `dtlv_rti_payload_offset`, as `dtlv_rti_field_tydesc` is
+/// of `dtlv_rti_field_offset`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_payload_tydesc(
+    tydesc: *const rtdt::TyDesc,
+    index: u32,
+) -> *const rtdt::TyDesc {
+    debug_assert!(!tydesc.is_null(), "tydesc is null");
+    unsafe { crate::c::impls::dyn_ops::payload_tydesc(tydesc, index) }
+}
+
+/// The descriptor a template describes, with its type parameters bound to
+/// `params`.
+///
+/// A generic is handed one descriptor per type parameter; the descriptor of a
+/// type it writes in terms of them is built from those, here, from the
+/// template the compiler emitted for it. Built descriptors are cached on the
+/// runtime handle and live until it shuts down, so asking again at the same
+/// binding is a lookup. See `impls::instantiate`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_tydesc_instantiate(
+    rt: LocalRtHandle,
+    template: *const rtdt::TyDesc,
+    params: *const *const rtdt::TyDesc,
+    num_params: u32,
+) -> *const rtdt::TyDesc {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!template.is_null(), "template is null");
+    debug_assert!(num_params == 0 || !params.is_null(), "params is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        let params = if num_params == 0 {
+            &[][..]
+        } else {
+            std::slice::from_raw_parts(params, num_params as usize)
+        };
+        rt_ref.tydesc_cache.instantiate(template, params)
+    }
+}
+
+/// Take `size` bytes aligned to `align` from the shadow stack.
+///
+/// Compiled code bumps `RtHeader::shadow_top` itself when what it wants fits
+/// below `RtHeader::shadow_limit`, and calls this when it does not; this does
+/// either. The space is given back by writing the top and limit saved on entry
+/// back to the header. See `impls::shadow`.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_shadow_alloc(
+    rt: LocalRtHandle,
+    size: u32,
+    align: u32,
+) -> *mut u8 {
+    debug_assert!(!rt.is_null(), "rt is null");
+    unsafe {
+        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
+        rt_ref.shadow.alloc(&mut rt_ref.header, size as usize, align as usize)
+    }
 }
 
 /// Read a field out of an aggregate whose layout only its descriptor says.

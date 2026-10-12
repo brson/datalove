@@ -6,6 +6,8 @@
 use datalove_rti::RtHeader;
 
 use crate::c::impls::alloc::AllocLocal;
+use crate::c::impls::instantiate::TyDescCache;
+use crate::c::impls::shadow::ShadowStack;
 
 // Crosses the ABI as an argument to `dtlv_rti_set_debug_mode`, so it is
 // declared with the rest of the interface.
@@ -30,33 +32,47 @@ pub struct RtLocal {
     ///
     /// Each debuglog entry is appended with a newline.
     pub debug_buffer: String,
+    /// Descriptors built from templates; see `instantiate`.
+    pub tydesc_cache: TyDescCache,
+    /// The chunks behind the shadow stack; its top and limit are in `header`.
+    pub shadow: ShadowStack,
 }
 
 impl RtLocal {
     /// Create a new local runtime.
     pub fn new() -> Box<RtLocal> {
+        let mut header = RtHeader {
+            table: &crate::abi_table::TABLE,
+            abandoning: 0,
+            stack_limit: native_stack_limit(),
+            shadow_top: 0,
+            shadow_limit: 0,
+        };
+        let shadow = ShadowStack::new(&mut header);
         Box::new(RtLocal {
-            header: RtHeader {
-                table: &crate::abi_table::TABLE,
-                abandoning: 0,
-                stack_limit: native_stack_limit(),
-            },
+            header,
             alloc: AllocLocal::new_raw(),
             debug_output_mode: DebugOutputMode::default(),
             debug_buffer: String::new(),
+            tydesc_cache: TyDescCache::new(),
+            shadow,
         })
     }
 
     /// Free everything allocated, live or not, and start again: what a
     /// datalove error unwinds through is not destroyed a value at a time, so
-    /// this is how it is freed. Everything but the memory -- the table, the
-    /// debug mode and buffer, the stack limit -- is kept.
+    /// this is how it is freed. The shadow stack is emptied with it, since
+    /// what unwound did not give its space back. Everything but the memory --
+    /// the table, the debug mode and buffer, the stack limit -- is kept, and
+    /// so are the descriptors built at run time, which describe types rather
+    /// than values.
     ///
     /// # Safety
     ///
     /// Nothing may use a value this runtime allocated again.
     pub unsafe fn reset(&mut self) {
         unsafe { self.alloc.discard_all() };
+        self.shadow.reset(&mut self.header);
         self.header.abandoning = 0;
     }
 

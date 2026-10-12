@@ -271,6 +271,13 @@ pub fn monomorphize_function(
             tracked_params: remap_params(&func_ctx.tracked_params, &param_remap),
             descriptor_shapes: func_ctx.descriptor_shapes.clone(),
             descriptor_params: remap_params(&func_ctx.descriptor_params, &param_remap),
+            // Const parameters are not type parameters, and the values this
+            // adds are consts, so neither the hidden descriptors nor the
+            // types the body uses change. The descriptors come after the
+            // ordinary parameters, so they move up as const ones go, with
+            // nothing to rewrite.
+            type_param_count: func_ctx.type_param_count,
+            descriptor_table: func_ctx.descriptor_table.clone(),
         }),
         nested_units: original.nested_units.clone(),
     }

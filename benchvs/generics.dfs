@@ -1,0 +1,36 @@
+// Generics benchmark - small generic functions called in a hot loop.
+//
+// Not one of the cross-language benches: it measures datalove against itself,
+// for the generics-by-reference plan (botdocs/plan-fat-generics.md). `tag`
+// builds a compound of its type parameter, so under that plan every call fills
+// a descriptor table entry for `(T, u32)`; `first_of` reads a part back out of
+// one; `pass` touches only a bare `T`.
+//
+// Prints the sum, so a wrong answer is visible.
+
+const ITERATIONS: u32 = 20000000
+
+fun pass<T>(x: T): T
+  ret x
+end fun
+
+fun tag<T>(x: T, n: u32): (T, u32)
+  ret (x, n)
+end fun
+
+fun first_of<T>(ref pair: (T, u32)): u32
+  ret pair.1@
+end fun
+
+fun run(): u32
+  var total: u32 = 0
+  var n: u32 = 0
+  loop while n .< ITERATIONS
+    let tagged = tag(pass(n), n)
+    set total = icall add_wrapping_u32(total, first_of(ref tagged))
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret total
+end fun
+
+debuglog(run())

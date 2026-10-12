@@ -156,9 +156,102 @@ pub enum IrType {
     Ref(Box<IrType>),
     /// Table with named columns, in the order they were written.
     Table(Vec<(String, Box<IrType>)>),
+    /// A type parameter of the function the type is written in, by its
+    /// position in the declaration.
+    ///
+    /// A type that mentions one is *dynamic*: its layout is not known until a
+    /// call binds the parameter, so a value of it is held in a frame as a fat
+    /// pointer -- the value's address and its descriptor -- and the value
+    /// itself lives where the pointer says. See `layout::layout_of` and
+    /// `botdocs/plan-fat-generics.md`.
+    Param(u32),
 }
 
 impl IrType {
+    /// Whether a type parameter appears anywhere in this type, which is what
+    /// makes its layout unknown until a call.
+    pub fn is_dynamic(&self) -> bool {
+        match self {
+            IrType::Param(_) => true,
+            IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+            | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
+            | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
+            | IrType::Error | IrType::Atom(_) => false,
+            IrType::Tuple(fields) => fields.iter().any(IrType::is_dynamic),
+            IrType::Struct(fields) => fields.iter().any(|(_, t)| t.is_dynamic()),
+            IrType::Enum(variants) => variants.iter().any(|(_, p)| p.as_ref().is_some_and(IrType::is_dynamic)),
+            IrType::Table(columns) => columns.iter().any(|(_, t)| t.is_dynamic()),
+            IrType::Term(_, inner) | IrType::List(inner) | IrType::Set(inner) | IrType::Option(inner)
+            | IrType::Result(inner) | IrType::Tensor(inner, _) | IrType::Ref(inner) => inner.is_dynamic(),
+            IrType::Map(k, v) => k.is_dynamic() || v.is_dynamic(),
+        }
+    }
+
+    /// This type with each type parameter `i` replaced by `args[i]`.
+    ///
+    /// How a call site's binding is read: a callee's type written over its
+    /// own parameters, substituted with what the caller bound them to, is
+    /// that type written over the caller's.
+    pub fn substitute(&self, args: &[IrType]) -> IrType {
+        let sub = |t: &IrType| t.substitute(args);
+        let boxed = |t: &IrType| Box::new(t.substitute(args));
+        match self {
+            IrType::Param(i) => match args.get(*i as usize) {
+                Some(arg) => arg.clone(),
+                None => panic!("type parameter {i} substituted from {} arguments", args.len()),
+            },
+            IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
+            | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
+            | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
+            | IrType::Error | IrType::Atom(_) => self.clone(),
+            IrType::Tuple(fields) => IrType::Tuple(fields.iter().map(sub).collect()),
+            IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.clone(), sub(t))).collect()),
+            IrType::Enum(variants) => IrType::Enum(
+                variants.iter().map(|(n, p)| (n.clone(), p.as_ref().map(sub))).collect(),
+            ),
+            IrType::Table(columns) => IrType::Table(columns.iter().map(|(n, t)| (n.clone(), boxed(t))).collect()),
+            IrType::Term(name, inner) => IrType::Term(name.clone(), boxed(inner)),
+            IrType::List(inner) => IrType::List(boxed(inner)),
+            IrType::Set(inner) => IrType::Set(boxed(inner)),
+            IrType::Option(inner) => IrType::Option(boxed(inner)),
+            IrType::Result(inner) => IrType::Result(boxed(inner)),
+            IrType::Tensor(inner, rank) => IrType::Tensor(boxed(inner), *rank),
+            IrType::Ref(inner) => IrType::Ref(boxed(inner)),
+            IrType::Map(k, v) => IrType::Map(boxed(k), boxed(v)),
+        }
+    }
+
+    /// Every dynamic type within this one, itself included, parts before
+    /// what holds them.
+    ///
+    /// A `Ref` is left out: a reference to a dynamic type is the fat pointer
+    /// to it, and has no descriptor of its own. What it points at is in.
+    pub fn dynamic_parts(&self, out: &mut Vec<IrType>) {
+        if !self.is_dynamic() {
+            return;
+        }
+        match self {
+            IrType::Tuple(fields) => fields.iter().for_each(|t| t.dynamic_parts(out)),
+            IrType::Struct(fields) => fields.iter().for_each(|(_, t)| t.dynamic_parts(out)),
+            IrType::Enum(variants) => variants.iter().filter_map(|(_, p)| p.as_ref()).for_each(|t| t.dynamic_parts(out)),
+            IrType::Table(columns) => columns.iter().for_each(|(_, t)| t.dynamic_parts(out)),
+            IrType::Term(_, inner) | IrType::List(inner) | IrType::Set(inner) | IrType::Option(inner)
+            | IrType::Result(inner) | IrType::Tensor(inner, _) => inner.dynamic_parts(out),
+            IrType::Map(k, v) => {
+                k.dynamic_parts(out);
+                v.dynamic_parts(out);
+            }
+            IrType::Ref(inner) => {
+                inner.dynamic_parts(out);
+                return;
+            }
+            _ => {}
+        }
+        if !out.contains(self) {
+            out.push(self.clone());
+        }
+    }
+
     /// Returns enum variants for Enum types only.
     pub fn enum_variants(&self) -> Option<&Vec<(String, Option<IrType>)>> {
         match self {
@@ -226,6 +319,7 @@ impl std::fmt::Display for IrType {
             IrType::Result(ok) => write!(f, "result<{}>", ok),
             IrType::Tensor(elem, rank) => write!(f, "[|{}, {}|]", elem, rank),
             IrType::Ref(inner) => write!(f, "ref<{}>", inner),
+            IrType::Param(i) => write!(f, "T{}", i),
             IrType::Table(cols) => {
                 write!(f, "{{| ")?;
                 for (i, (name, ty)) in cols.iter().enumerate() {
@@ -725,6 +819,9 @@ impl IrType {
 
             // Ref is always copy (it's just a pointer, doesn't own the data).
             IrType::Ref(_) => true,
+
+            // A type parameter is always linear, whatever it is bound to.
+            IrType::Param(_) => false,
         }
     }
 }
@@ -2511,6 +2608,20 @@ impl std::fmt::Display for DescriptorShape {
 }
 
 impl DescriptorShape {
+    /// The shape as an IR type, its type parameters as `IrType::Param`.
+    pub fn to_ir_type(&self) -> IrType {
+        match self {
+            DescriptorShape::Param(i) => IrType::Param(*i),
+            DescriptorShape::Concrete(t) => t.clone(),
+            DescriptorShape::List(i) => IrType::List(Box::new(i.to_ir_type())),
+            DescriptorShape::Set(i) => IrType::Set(Box::new(i.to_ir_type())),
+            DescriptorShape::Option(i) => IrType::Option(Box::new(i.to_ir_type())),
+            DescriptorShape::Result(i) => IrType::Result(Box::new(i.to_ir_type())),
+            DescriptorShape::Map(k, v) => IrType::Map(Box::new(k.to_ir_type()), Box::new(v.to_ir_type())),
+            DescriptorShape::Tuple(fields) => IrType::Tuple(fields.iter().map(|f| f.to_ir_type()).collect()),
+        }
+    }
+
     /// Whether a type parameter appears anywhere in this shape.
     pub fn mentions_param(&self) -> bool {
         match self {
@@ -3077,6 +3188,107 @@ pub struct FunctionContext {
     /// the ordinary parameters and in this order.
     #[serde(default)]
     pub descriptor_params: Vec<ParamId>,
+    /// How many type parameters the function was declared with.
+    ///
+    /// Under generics by reference, a generic is handed one descriptor per
+    /// type parameter, after its ordinary parameters and in this order. The
+    /// count comes from the signature, never the body, so a callee's calling
+    /// convention does not depend on what its body does.
+    #[serde(default)]
+    pub type_param_count: u32,
+    /// Every dynamic type the body uses, written over this function's type
+    /// parameters: the descriptor table.
+    ///
+    /// A function fills a table of their descriptors on entry -- a bare
+    /// `Param(i)` from the descriptor it was handed for it, anything else by
+    /// instantiating a template of the type against those -- and any
+    /// instruction that needs the descriptor of a dynamic type reads the
+    /// entry for it. Built by `descriptor_table`, so that every backend and
+    /// every rewrite agrees on the order. Parts come before what holds them.
+    #[serde(default)]
+    pub descriptor_table: Vec<IrType>,
+}
+
+impl FunctionContext {
+    /// The index of a dynamic type's entry in the descriptor table.
+    pub fn descriptor_index(&self, ty: &IrType) -> usize {
+        match self.descriptor_table.iter().position(|t| t == ty) {
+            Some(index) => index,
+            None => panic!("{ty} is not in the descriptor table"),
+        }
+    }
+}
+
+/// The descriptor table of a function: every dynamic type it uses.
+///
+/// Read off the function's parameters, return type, values and slots, and the
+/// bindings of the calls it makes -- a callee is handed a descriptor for each
+/// of its type parameters, and one bound to a type over this function's is an
+/// entry here -- with each type's dynamic parts before it. A projection's
+/// result is a value with a type of its own, so the parts the body reaches
+/// into are in already.
+pub fn descriptor_table(unit: &IrCodeUnit) -> Vec<IrType> {
+    let mut table = Vec::new();
+    if let CodeUnitContext::Function(ctx) = &unit.context {
+        for ty in ctx.param_types.iter().chain(std::iter::once(&ctx.return_type)) {
+            ty.dynamic_parts(&mut table);
+        }
+    }
+    for ty in unit.value_types.iter().chain(&unit.slot_types) {
+        ty.dynamic_parts(&mut table);
+    }
+    for block in &unit.blocks {
+        for instr in &block.instructions {
+            if let Instruction::Call { type_args, .. } | Instruction::ComptimeCall { type_args, .. } = instr {
+                for arg in type_args {
+                    arg.to_ir_type().dynamic_parts(&mut table);
+                }
+            }
+        }
+    }
+    table
+}
+
+/// The first jump in `unit` that passes a block's own parameters back to it
+/// in another order, as `(from, to)`.
+///
+/// Block arguments are a parallel move, and a backend that copies them one at
+/// a time reads an argument after it has already written over it if one
+/// argument is another position's parameter: in `goto head(b, a)` from `head`
+/// with parameters `(a, b)`, copying `b` into `a` loses `a`. The interpreter
+/// reads every argument before writing any; cranelift copies an aggregate
+/// argument straight into its parameter, which is only right if this never
+/// happens, and a dynamic value is always copied that way. Lowering does not
+/// emit such a jump, and this is what says so.
+pub fn permuted_block_args(unit: &IrCodeUnit) -> Option<(BlockId, BlockId)> {
+    let permutes = |target: BlockId, args: &[Operand]| {
+        let Some(params) = unit.blocks.iter().find(|b| b.id == target).map(|b| &b.params) else {
+            return false;
+        };
+        args.iter().enumerate().any(|(j, arg)| match arg {
+            Operand::Value(v) | Operand::ValueRef(v) => {
+                params.iter().enumerate().any(|(i, p)| p == v && i != j)
+            }
+            _ => false,
+        })
+    };
+    for block in &unit.blocks {
+        match &block.terminator {
+            Terminator::Goto { target, args } if permutes(*target, args) => {
+                return Some((block.id, *target));
+            }
+            Terminator::Branch { then_block, then_args, else_block, else_args, .. } => {
+                if permutes(*then_block, then_args) {
+                    return Some((block.id, *then_block));
+                }
+                if permutes(*else_block, else_args) {
+                    return Some((block.id, *else_block));
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// Context for script unit execution.
@@ -3632,5 +3844,144 @@ mod const_value_tests {
         // did not change when the relation did.
         let json = rmx::serde_json::to_string(&f64c(1.5)).unwrap();
         assert_eq!(json, r#"{"F64":1.5}"#);
+    }
+}
+
+#[cfg(test)]
+mod dynamic_type_tests {
+    use super::*;
+    use crate::layout::{fat_pointer_layout, layout_of};
+
+    fn t(i: u32) -> IrType {
+        IrType::Param(i)
+    }
+
+    fn list(t: IrType) -> IrType {
+        IrType::List(Box::new(t))
+    }
+
+    fn option(t: IrType) -> IrType {
+        IrType::Option(Box::new(t))
+    }
+
+    fn function(param_types: Vec<IrType>, value_types: Vec<IrType>, blocks: Vec<IrBlock>) -> IrCodeUnit {
+        IrCodeUnit {
+            id: CodeUnitId(0),
+            name: "f".to_string(),
+            blocks,
+            value_count: value_types.len() as u32,
+            slot_count: 0,
+            value_types,
+            slot_types: Vec::new(),
+            tracked_slots: Vec::new(),
+            const_values: Vec::new(),
+            symbols: SymbolTable::new(),
+            context: CodeUnitContext::Function(FunctionContext {
+                params: (0..param_types.len() as u32).map(ParamId).collect(),
+                param_modes: vec![ParamMode::In; param_types.len()],
+                param_types,
+                return_type: IrType::Unit,
+                tracked_params: Vec::new(),
+                descriptor_shapes: Vec::new(),
+                descriptor_params: Vec::new(),
+                type_param_count: 1,
+                descriptor_table: Vec::new(),
+            }),
+            nested_units: Vec::new(),
+        }
+    }
+
+    fn block(id: u32, params: Vec<u32>, terminator: Terminator) -> IrBlock {
+        IrBlock {
+            id: BlockId(id),
+            params: params.into_iter().map(ValueId).collect(),
+            instructions: Vec::new(),
+            terminator,
+        }
+    }
+
+    #[test]
+    fn a_type_is_dynamic_when_a_parameter_is_anywhere_in_it() {
+        assert!(t(0).is_dynamic());
+        assert!(IrType::Tuple(vec![IrType::U32, list(option(t(1)))]).is_dynamic());
+        assert!(IrType::Enum(vec![("a".into(), None), ("b".into(), Some(t(0)))]).is_dynamic());
+        assert!(IrType::Ref(Box::new(t(0))).is_dynamic());
+        assert!(!IrType::Tuple(vec![IrType::U32, list(IrType::String)]).is_dynamic());
+        assert!(!IrType::Enum(vec![("a".into(), None)]).is_dynamic());
+    }
+
+    #[test]
+    fn substituting_binds_each_parameter() {
+        let ty = IrType::Map(Box::new(t(0)), Box::new(IrType::Tuple(vec![t(1), t(0)])));
+        let bound = ty.substitute(&[IrType::String, list(t(0))]);
+        assert_eq!(bound, IrType::Map(
+            Box::new(IrType::String),
+            Box::new(IrType::Tuple(vec![list(t(0)), IrType::String])),
+        ));
+    }
+
+    #[test]
+    fn a_dynamic_type_is_laid_out_as_a_fat_pointer() {
+        let fat = fat_pointer_layout();
+        assert_eq!(fat.size, 2 * std::mem::size_of::<usize>() as u32);
+        for ty in [
+            t(0),
+            IrType::Tuple(vec![t(0), IrType::U32]),
+            option(t(0)),
+            list(t(0)),
+            IrType::Ref(Box::new(t(0))),
+        ] {
+            assert_eq!(layout_of(&ty), fat, "{ty}");
+        }
+        // A reference to a concrete type is still a thin pointer.
+        assert_eq!(layout_of(&IrType::Ref(Box::new(IrType::U64))).size, std::mem::size_of::<usize>() as u32);
+    }
+
+    #[test]
+    #[should_panic(expected = "dynamic")]
+    fn an_offset_inside_a_dynamic_type_is_refused() {
+        let _ = crate::layout::aggregate_field_offsets(&[t(0), IrType::U32]);
+    }
+
+    #[test]
+    #[should_panic(expected = "dynamic")]
+    fn a_payload_offset_of_a_dynamic_type_is_refused() {
+        let _ = crate::layout::option_payload_offset(&t(0));
+    }
+
+    #[test]
+    fn the_table_holds_every_dynamic_type_parts_first() {
+        let pair = IrType::Tuple(vec![t(0), IrType::U32]);
+        let unit = function(
+            vec![list(pair.clone())],
+            vec![IrType::U32, IrType::Ref(Box::new(t(0))), option(pair.clone())],
+            vec![block(0, vec![], Terminator::Return { value: None })],
+        );
+        let table = descriptor_table(&unit);
+        assert_eq!(table, vec![t(0), pair.clone(), list(pair.clone()), option(pair)]);
+    }
+
+    #[test]
+    fn a_swapping_jump_is_found() {
+        // Block 1 has parameters (v0, v1) and jumps back to itself with them
+        // swapped.
+        let swapped = function(vec![], vec![IrType::U32, IrType::U32], vec![
+            block(0, vec![], Terminator::Return { value: None }),
+            block(1, vec![0, 1], Terminator::Goto {
+                target: BlockId(1),
+                args: vec![Operand::Value(ValueId(1)), Operand::Value(ValueId(0))],
+            }),
+        ]);
+        assert_eq!(permuted_block_args(&swapped), Some((BlockId(1), BlockId(1))));
+
+        // In order, each goes where it already is.
+        let in_order = function(vec![], vec![IrType::U32, IrType::U32], vec![
+            block(0, vec![], Terminator::Return { value: None }),
+            block(1, vec![0, 1], Terminator::Goto {
+                target: BlockId(1),
+                args: vec![Operand::Value(ValueId(0)), Operand::Value(ValueId(1))],
+            }),
+        ]);
+        assert_eq!(permuted_block_args(&in_order), None);
     }
 }

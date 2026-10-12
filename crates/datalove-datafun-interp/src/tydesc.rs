@@ -194,6 +194,15 @@ impl IrTyDescTable {
                 align: std::mem::align_of::<rtdt::Error>() as u32,
                 type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
             }),
+            // In a template. Its size and alignment are meaningless; see
+            // `rtdt::TyInfoParam`.
+            IrType::Param(index) => Box::new(TyDesc {
+                type_tag: rtdt::TyTag::Param,
+                flags: 0,
+                size: 0,
+                align: 1,
+                type_info: rtdt::TyInfo { param: rtdt::TyInfoParam { index: *index } },
+            }),
             IrType::Tuple(fields) => self.create_tuple_tydesc(fields),
             IrType::Struct(fields) => self.create_struct_tydesc(fields),
             IrType::Enum(variants) => self.create_enum_tydesc(variants),

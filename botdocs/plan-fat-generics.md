@@ -115,10 +115,12 @@ runtime to build each from the type-parameter descriptors. Every instruction
 that needs the descriptor of a dynamic type reads its entry. A body that only
 touches `T` itself has nothing to build; `T`'s entry is the hidden parameter.
 
-**Building.** The runtime builds a descriptor from a type form and the
-descriptors of its parts -- a list of this, a tuple of these, an option of
-that -- and caches it, so a table fill is a lookup per entry after the first
-call at a given binding. See [The runtime](#user-content-the-runtime).
+**Building.** Each entry has a **template**: the static descriptor of its type
+expression, with a `TyTag::Param` descriptor wherever a type parameter stands.
+At entry the function asks the runtime to instantiate each template against
+its type-parameter descriptors (`dtlv_rti_tydesc_instantiate`), and the
+runtime caches what it builds, so a table fill is a lookup per entry after the
+first call at a given binding. See [The runtime](#user-content-the-runtime).
 
 A lookup per entry per call is still a cost on every call, and a small `sys/std`
 generic called in a loop pays it every time. The expected fix is a one-entry
@@ -280,34 +282,49 @@ rider ABI change and a separate step.
 
 ## The runtime
 
-**Descriptor construction.** One entry per type form -- list, set, map,
-tensor, table, option, result, tuple, struct, term, enum -- taking the part
-descriptors and returning a descriptor. Tables are on the list because the
-spec allows a type parameter inside one.
+**Descriptor construction** is one entry, `dtlv_rti_tydesc_instantiate(rt,
+template, params, num_params)`, in `impls/instantiate.rs`. A template is a
+static descriptor like any other, emitted by the compiler for a type
+expression over a generic's type parameters, except that a parameter is a
+descriptor tagged `TyTag::Param` holding its position (`TyInfoParam`). The
+runtime walks the template, putting the bound descriptor in for each
+parameter and building each form around one anew: tuples, structs, enums,
+options, results, terms, lists, sets, maps, tensors and tables. A part with no
+parameter in it is the template's own part, unchanged, and a template with
+none at all is its own instance.
 
-The parts are not the whole of a descriptor. Struct field names, enum variant
-names, term names and table column names are in it too, and `eq_tydesc`
-compares them; typing is structural, but the names are part of the structure.
-So each entry also takes a **template**: a static descriptor the compiler
-emits for the form with its parts left open, carrying the names. The template
-is part of the cache key.
+One entry rather than one per type form, because everything a built
+descriptor holds besides its parts comes from its template: struct field
+names, enum variant names, term names, table column names, a tensor's rank.
+Typing is structural, but the names are part of the structure, and
+`eq_tydesc` compares them. So the template is what has to be handed over in
+any case, and handed over whole it settles the nesting too: `[(?T, u32)]` is
+one call, not three that compiled code would have to chain.
 
 Layouts come from `rtdt::layout`, which `ir::layout` agrees with. Its
 functions take the composite's own descriptor rather than a list of parts, so
-building is: fill in a `TyDesc` from the template with the part pointers, then
-compute offsets and size from it, then flags from `TyDesc::computed_flags`.
-Map and set node layouts come from `TyInfoMap::new` and `TyInfoSet::new`.
-`datalove-datalit/src/tydesc_table.rs` already caches descriptors built at run
-time for options, results, lists, maps and sets, keyed by part addresses, and
-is the pattern to follow.
+building a form is: fill in a `TyDesc` with the built parts, compute offsets
+and size from it, then flags from `TyDesc::computed_flags`. A container's
+header size is its `rtdt` struct's, whatever it holds; map and set node
+layouts come from `TyInfoMap::new` and `TyInfoSet::new`.
 
-Built descriptors are interned in a cache keyed by the form, the template and
-the part descriptors' addresses. A miss for a type that already has a static
-descriptor elsewhere builds a duplicate, which is harmless: descriptors are
-compared structurally (`same_tydesc`), with address equality only as a fast
-path. The one place that compares by address alone is a debug assertion in
-`dtlv_rti_clone_local` (`td_in == td_out`), which a static descriptor meeting a
-built one for the same type will trip; it becomes `same_tydesc` in phase 1.
+Built descriptors are cached by the template's address and the parameters'
+addresses; only what is asked for is cached, not the parts built on the way.
+A miss for a type that already has a static descriptor elsewhere builds a
+duplicate, which is harmless: descriptors are compared structurally
+(`same_tydesc`), with address equality only as a fast path. The one place that
+compared by address alone was a debug assertion in `dtlv_rti_clone_local`,
+which is now `same_tydesc`.
+
+A template is never the descriptor of a value. Its `size` and `align` are
+meaningless wherever a parameter is inside it, and the runtime's value
+operations panic on a `Param`. Descriptor comparison treats a parameter as
+its position, so two templates compare as their type expressions do.
+
+**Payload queries.** `dtlv_rti_payload_offset(tydesc, index)` and
+`dtlv_rti_payload_tydesc(tydesc, index)` answer for an option, a result, a
+term, or variant `index` of an enum, beside `dtlv_rti_field_offset` and
+`dtlv_rti_field_tydesc` for tuples and structs.
 
 **Where the cache lives** is per runtime handle (`RtLocal`), and outside its
 allocator. Inside `AllocLocal` it would not survive: `reset` calls
@@ -320,9 +337,10 @@ when the REPL rebuilds its executor after an error, or when a test drops its
 interpreter. Per handle, the cache dies first -- `IrInterpreter` declares its
 runtime before its descriptor table -- so no key outlives what it names.
 
-**The shadow stack.** Its top and limit go in `RtHeader`, beside
-`stack_limit`, so compiled code bumps and restores it inline and calls the
-runtime only to grow it. It grows by chunks, never by moving, so a pointer
+**The shadow stack.** Its top and limit are `RtHeader::shadow_top` and
+`shadow_limit`, beside `stack_limit`, so compiled code bumps and restores it
+inline and calls the runtime (`dtlv_rti_shadow_alloc`) only when a request
+does not fit. It is in `impls/shadow.rs`. It grows by chunks, never by moving, so a pointer
 into it stays good; see [Release](#user-content-storage) for what restoring
 across a chunk boundary has to restore. It is per `RtLocal`, which is per
 runtime handle, and a handle is used by one thread at a time, so it is
@@ -413,7 +431,28 @@ Measured before starting and after finishing, recorded here: jit and
 interpreted Sieve and the other benchvs benches, the `ord` benchmark from the
 `for` work, the store demo, the compile time of `sys/std`, and a small
 generic over a compound type -- one that needs a built descriptor -- called in
-a loop, which is where the table fill shows.
+a loop, which is where the table fill shows. That last is
+`benchvs/generics.dfs`, which is not one of the cross-language benches.
+
+**Baseline** (October 2026, before any of this; release build, hyperfine, at
+least three runs, mean seconds, on a 4-CPU sandbox):
+
+| Bench | interp | jit-t1 | jit | aot |
+|---|---:|---:|---:|---:|
+| fib | 3.455 | 0.463 | 0.477 | 0.357 |
+| sum | 3.302 | 0.338 | 0.338 | 0.328 |
+| primes | 2.937 | 0.194 | 0.198 | 0.161 |
+| wordfreq | 0.960 | 0.598 | 0.605 | 0.524 |
+| sieve | 4.126 | 1.228 | 1.210 | 0.949 |
+| mandelbrot | 2.870 | 0.555 | 0.547 | 0.544 |
+| nbody | 0.794 | 0.423 | 0.415 | 0.299 |
+| generics | 2.849 | 0.996 | 0.973 | 0.774 |
+
+The store demo at 20,000 orders: 0.769 interpreted, 0.512 jit. A script
+requiring every `sys/std` module and doing nothing else: 15.5 ms, which says
+more about how little of `sys/std` a script compiles than about compile time.
+The `ord` benchmark from the `for` work does not exist in the repository, so
+there is no baseline for it.
 
 ## Phases
 
@@ -442,18 +481,21 @@ three hand-coded entry layouts (`bridge::call_jit`, the bytecode's
 `call_planned_jit`, and the `__jit_dispatch_call` trampoline), so a compiled
 caller of an interpreted generic has to pass what the new convention expects.
 
-0. **Baseline.** The measurements in [Cost](#user-content-cost).
-1. **Runtime.** Descriptor construction from templates, and its cache outside
-   the allocator; the payload-offset entry for options, results and enums;
+0. **Baseline** (done). The measurements in [Cost](#user-content-cost).
+1. **Runtime** (done). Descriptor construction from templates, and its cache
+   outside the allocator; the payload-offset entry for options, results and enums;
    `clone_local`'s address assertion made structural; the shadow stack in
    `RtHeader`, with a restore that covers chunk boundaries and a `reset` that
    empties it; their tests.
-2. **IR.** `IrType::Param`; the fat-pointer layout rule, with `Ref` of a
-   dynamic type as the fat pointer itself; the static offset helpers asserting
-   they are never handed a dynamic type; the descriptor table on
-   `FunctionContext`, carried through `specialize.rs`; the verifier rejecting a
-   jump that passes a block's own parameters back to it permuted; display,
-   serialization. No lowering produces them yet.
+2. **IR** (done). `IrType::Param`; the fat-pointer layout rule, with `Ref` of
+   a dynamic type as the fat pointer itself; the static offset helpers
+   asserting they are never handed a dynamic type; the descriptor table on
+   `FunctionContext`, carried through `specialize.rs`; display, serialization.
+   There is no IR verifier to put the block-argument rule in, so it is
+   `permuted_block_args`, checked as each function is lowered; script units
+   are not checked, since no value in one is dynamic. The `fat-generics`
+   feature exists on `datalove-datafun-lower`, and so far only fills the
+   descriptor table. No lowering produces a `Param` yet.
 3. **Lowering**, under the feature: written types kept, the table built,
    type-parameter descriptors at call sites, no `Erase` or `Reify`. Ownership
    analysis is unchanged, the language being unchanged.

@@ -212,7 +212,7 @@ pub fn lower_function_body<'db>(
     ctx.return_type = saved_return_type;
     ctx.is_script_unit = saved_is_script_unit;
 
-    Ok(IrCodeUnit {
+    let mut unit = IrCodeUnit {
         id: CodeUnitId(func_id.0),
         name,
         blocks: std::mem::take(&mut ctx.body.blocks),
@@ -231,8 +231,20 @@ pub fn lower_function_body<'db>(
             tracked_params: ctx.compute_tracked_params(),
             descriptor_params,
             descriptor_shapes,
+            type_param_count: type_params.len() as u32,
+            descriptor_table: Vec::new(),
         }),
         nested_units: Vec::new(),
-    })
+    };
+    if cfg!(feature = "fat-generics") {
+        let table = datalove_datafun_ir::descriptor_table(&unit);
+        if let CodeUnitContext::Function(fctx) = &mut unit.context {
+            fctx.descriptor_table = table;
+        }
+    }
+    if let Some((from, to)) = datalove_datafun_ir::permuted_block_args(&unit) {
+        panic!("{}: block {from:?} passes block {to:?}'s parameters back to it permuted", unit.name);
+    }
+    Ok(unit)
 }
 

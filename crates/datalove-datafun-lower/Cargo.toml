@@ -8,6 +8,10 @@ edition.workspace = true
 repository.workspace = true
 
 [features]
+# Generics by reference (botdocs/plan-fat-generics.md): a generic's values
+# keep their written types, with type parameters in them, rather than being
+# erased to `data`. Its own test configuration until it is the only one.
+fat-generics = []
 index-64 = [
     "datalove-rtdt/index-64",
     "datalove-datafun-ir/index-64",

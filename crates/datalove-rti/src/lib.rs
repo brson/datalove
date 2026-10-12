@@ -139,6 +139,17 @@ pub struct RtHeader {
     /// process. `dtlv_rti_init` sets it for the thread that calls it, and the
     /// JIT again for the thread entering its code.
     pub stack_limit: usize,
+    /// The first free byte of the shadow stack, where a value whose size is
+    /// known only at run time is kept.
+    ///
+    /// Compiled code takes space by bumping this, if what it wants fits below
+    /// `shadow_limit`, and calls `dtlv_rti_shadow_alloc` if not. It saves this
+    /// and `shadow_limit` on entry to a function that takes any, and writes
+    /// both back on exit: the stack grows by moving to another chunk, so the
+    /// limit is part of where it stood.
+    pub shadow_top: usize,
+    /// The end of the shadow stack's current chunk.
+    pub shadow_limit: usize,
 }
 
 /// An interpreted callee of compiled code failed.

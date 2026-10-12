@@ -49,6 +49,8 @@ pub fn empty_function_unit(name: &str) -> IrCodeUnit {
                 return_type: IrType::Unit,
                 tracked_params: Vec::new(),
                 descriptor_shapes: Vec::new(),
+                type_param_count: 0,
+                descriptor_table: Vec::new(),
             },
         ),
         nested_units: Vec::new(),

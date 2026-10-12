@@ -52,6 +52,8 @@ fn make_func_unit(
             return_type,
             tracked_params: vec![],
         descriptor_shapes: Vec::new(),
+        type_param_count: 0,
+        descriptor_table: Vec::new(),
         }),
         nested_units: vec![],
     }
@@ -240,6 +242,8 @@ fn test_compile_branch() {
             return_type: IrType::I32,
             tracked_params: vec![],
         descriptor_shapes: Vec::new(),
+        type_param_count: 0,
+        descriptor_table: Vec::new(),
         }),
         nested_units: vec![],
     };

@@ -629,6 +629,44 @@ pub unsafe fn field_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rt
     }
 }
 
+/// The offset of the payload of an option, result or term, or of variant
+/// `index` of an enum, from its descriptor.
+pub unsafe fn payload_offset(tydesc: *const rtdt::TyDesc, index: u32) -> u32 {
+    unsafe {
+        let td = &*tydesc;
+        match td.type_tag {
+            TyTag::Option => rtdt::layout::option_payload_offset((*td.type_info.option.inner_tydesc).align),
+            TyTag::Result => rtdt::layout::result_payload_offset((*td.type_info.result.ok_tydesc).align),
+            TyTag::Term => 0,
+            TyTag::Enum => {
+                let info = td.type_info.enum_;
+                assert!(index < info.num_variants, "enum variant index out of range");
+                (*info.variants.add(index as usize)).offset
+            }
+            other => panic!("payload offset wanted from a {:?}", other),
+        }
+    }
+}
+
+/// The descriptor of the payload of an option, result or term, or of variant
+/// `index` of an enum, from its descriptor; null for a variant with none.
+pub unsafe fn payload_tydesc(tydesc: *const rtdt::TyDesc, index: u32) -> *const rtdt::TyDesc {
+    unsafe {
+        let td = &*tydesc;
+        match td.type_tag {
+            TyTag::Option => td.type_info.option.inner_tydesc,
+            TyTag::Result => td.type_info.result.ok_tydesc,
+            TyTag::Term => td.type_info.term.payload,
+            TyTag::Enum => {
+                let info = td.type_info.enum_;
+                assert!(index < info.num_variants, "enum variant index out of range");
+                (*info.variants.add(index as usize)).payload
+            }
+            other => panic!("payload descriptor wanted from a {:?}", other),
+        }
+    }
+}
+
 /// Read field `index` out of an aggregate whose layout only its descriptor
 /// says, into a destination laid out as `dest_tydesc`.
 ///

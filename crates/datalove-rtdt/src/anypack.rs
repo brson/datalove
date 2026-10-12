@@ -740,6 +740,7 @@ mod tests {
                 TyTag::Result => 0x61,
                 TyTag::Data => 0x70,
                 TyTag::Error => 0x71,
+                TyTag::Param => 0x80,
             }
         }
 
@@ -755,6 +756,7 @@ mod tests {
             TyTag::Tensor, TyTag::Table,
             TyTag::Option, TyTag::Result,
             TyTag::Data, TyTag::Error,
+            TyTag::Param,
         ];
         for tag in &tags {
             assert_eq!(discriminant(*tag), *tag as u8);

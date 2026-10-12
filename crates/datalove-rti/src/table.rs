@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 140;
+pub const EXPORTED: usize = 144;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 140;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x9b88d9f4ed75822c;
+pub const TABLE_SHAPE: u64 = 0x8a07d4428f373676;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -165,6 +165,10 @@ pub struct RtiTable {
     pub dtlv_rti_clear_debug_buffer: unsafe extern "C-unwind" fn(LocalRtHandle) -> RtStatus,
     pub dtlv_rti_field_offset: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> u32,
     pub dtlv_rti_field_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
+    pub dtlv_rti_payload_offset: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> u32,
+    pub dtlv_rti_payload_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
+    pub dtlv_rti_tydesc_instantiate: unsafe extern "C-unwind" fn(LocalRtHandle, *const rtdt::TyDesc, *const *const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
+    pub dtlv_rti_shadow_alloc: unsafe extern "C-unwind" fn(LocalRtHandle, u32, u32) -> *mut u8,
     pub dtlv_rti_field_read_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, u32) -> RtStatus,
     pub dtlv_rti_element_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc) -> *const rtdt::TyDesc,
     pub dtlv_rti_btreemap_contains_key_erased_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *const u8, *const rtdt::TyDesc, *mut bool) -> RtStatus,

@@ -100,6 +100,7 @@ pub fn type_depth(ty: &IrType) -> u32 {
             1 + columns.iter().map(|(_, ty)| type_depth(ty)).max().unwrap_or(0)
         }
         IrType::Ref(inner) => 1 + type_depth(inner),
+        IrType::Param(_) => 0,
     }
 }
 
@@ -137,6 +138,7 @@ fn type_tag(ty: &IrType) -> u8 {
         IrType::Data => 0x70,
         IrType::Error => 0x71,
         IrType::Ref(_) => 0x10, // Treat as pointer (U8 tag, but size is 8)
+        IrType::Param(_) => 0x80,
     }
 }
 
@@ -165,6 +167,12 @@ pub fn emit_tydesc(
         IrType::Int | IrType::String | IrType::Data | IrType::Error => {
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x{:02x}, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};",
                 name, tag, layout.size, layout.align).unwrap();
+        }
+
+        // In a template; see `rtdt::TyInfoParam`.
+        IrType::Param(index) => {
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x80, .flags = 0, .size = 0, .align = 1, .type_info = {{ .param = {{ .index = {} }} }} }};",
+                name, index).unwrap();
         }
 
         IrType::List(elem) => {
