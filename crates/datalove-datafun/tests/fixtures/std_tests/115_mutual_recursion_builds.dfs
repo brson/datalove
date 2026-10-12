@@ -3,14 +3,14 @@ require module sys/std/list
 import list.push
 import list.len
 
-// Which shapes a function is handed is its own body's, closed over its calls.
-// Mutual recursion is no different from a chain there: the step only ever adds,
-// and where a cycle passes its type parameter along unchanged the substitution
-// is a renaming and cannot make a shape bigger, so it settles.
+// Generics calling each other where only one of them builds.
 //
-// `make_b` builds nothing. It carries a descriptor anyway, because it hands its
-// type parameter to `make_a`, which does, and `make_a` needs one back from
-// `make_b` in turn.
+// Each takes one descriptor per type parameter, whatever its body builds, and
+// passes its own on. Descriptors were once worked out per function by closing
+// what each body built over its calls, which a cycle had to settle.
+//
+// `make_b` builds nothing and hands its type parameter to `make_a`, which
+// does, and `make_a` calls back into `make_b`.
 
 fun make_a<T>(x: T, n: u32): [T]
   if n == (: u32 / 0)

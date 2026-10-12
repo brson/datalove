@@ -8,11 +8,10 @@ import set.len
 
 // One: a deeply nested shape that does not grow.
 //
-// Whether a shape set settles is a question about the substitution a cycle
-// composes, not about how big a shape is. `carry` hands its type parameter to
-// `deep` unchanged, so nothing grows however deep the type is written. This was
-// refused while the check was a limit on nesting depth, with a message claiming
-// the shape grew without end. There is no cycle here at all.
+// `carry` hands its type parameter to `deep` unchanged, and `deep` builds a
+// type nested twelve deep. This was once refused by a limit on nesting depth,
+// with a message claiming the type grew without end. There is no cycle here at
+// all.
 fun deep<T>(x: T): index with { T is ord, }
   var built: [[[[[[[[[[[[T]]]]]]]]]]]] = []
   ret : index / 0
@@ -25,9 +24,9 @@ end fun
 // Two: a shape whose concrete type is named nowhere else.
 //
 // `count_one` builds a `#{T}` and returns an index, so with `T` bound to
-// `string` the descriptor handed over describes a `#{string}` that appears in
-// no value type, no parameter and no return. The compiled backends emit
-// descriptors for the types they can see, and saw none for this one.
+// `string` its descriptor describes a `#{string}` that appears in no value
+// type, no parameter and no return. The compiled backends once emitted
+// descriptors only for the types they could see, and saw none for this one.
 fun count_one<T>(x: T): index with { T is ord, }
   var seen: #{T} = #{}
   let added = insert(mut seen, x)

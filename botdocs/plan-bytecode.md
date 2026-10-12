@@ -1,5 +1,10 @@
 # A Register Bytecode for the Interpreter
 
+> **Written under erasure.** Generics have since moved to fat pointers and
+> descriptor tables ([Generics: how it works](generics.md)). What this says
+> about erased values, `data` wrappers, `erase`/`reify` or descriptor shapes
+> describes the old implementation.
+
 A plan for a second execution engine inside the interpreter: function bodies
 lowered once from IR into a flat, fully specialized register bytecode over the
 frame bytes, run by a tight dispatch loop, with the IR walker kept as the

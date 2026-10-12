@@ -1,5 +1,12 @@
 # Monomorphizing Generics
 
+> **Written under erasure.** Generics are now compiled by reference -- fat
+> pointers and a descriptor table per function ([Generics: how it
+> works](generics.md)) -- so "erased" below means that one compiled body. The
+> conversions at the boundary this plan sets out to avoid are already gone;
+> what monomorphizing still saves is reading a `T` through a pointer, copying
+> `desc.size` bytes per move, and the runtime calls a bounded operation makes.
+
 A plan to let any generic function be translated two ways: erased, as every one
 is today, or monomorphized -- lowered again for one set of concrete type
 arguments, into ordinary concrete IR -- with the call sites that reach it

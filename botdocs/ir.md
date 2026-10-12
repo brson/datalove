@@ -15,7 +15,7 @@ that lowering produces and that every backend consumes.
 - [8. Terminators](#user-content-8-terminators)
 - [9. Ownership and Tracking](#user-content-9-ownership-and-tracking)
 - [10. Constants](#user-content-10-constants)
-- [11. Erasure and Descriptors](#user-content-11-erasure-and-descriptors)
+- [11. Generics and Descriptors](#user-content-11-generics-and-descriptors)
 - [12. Registries](#user-content-12-registries)
 - [13. Passes](#user-content-13-passes)
 - [14. Consumers](#user-content-14-consumers)
@@ -111,7 +111,7 @@ descriptors are computed from.
 | `Int` | Arbitrary-precision integer |
 | `F32` `F64` | |
 | `String` | |
-| `Data` | Dynamic value carrying its own descriptor |
+| `Data` | The language's `data`: a value carrying its own descriptor |
 | `Error` | Error value |
 | `Tuple(Vec<IrType>)` | Fields in order |
 | `Struct(Vec<(String, IrType)>)` | Fields sorted by name |
@@ -126,6 +126,7 @@ descriptors are computed from.
 | `Tensor(Box<IrType>, u32)` | Element type and rank |
 | `Table(Vec<(String, Box<IrType>)>)` | Columns in the order they were written |
 | `Ref(Box<IrType>)` | A pointer to a value of the inner type |
+| `Param(u32)` | A type parameter of the enclosing function, by position |
 
 Two ordering rules matter and differ.
 
@@ -147,10 +148,11 @@ projection instructions (`GetFieldRef`, `ListElementRef`, `MapValueRef`,
 ### Conversions into `IrType`
 
 - `IrType::from_type_hint` converts a written type.
-- `IrType::from_type_hint_erasing` does the same while erasing named type
-  parameters (Section 11).
-- `IrType::from_datalit` converts a typechecker type, and is where erasure
-  happens for a type variable.
+- `IrType::from_type_hint_generic` does the same inside a generic, keeping
+  its type parameters as `Param` (Section 11).
+- `IrType::from_datalit` converts a typechecker type. A type variable outside
+  a generic body is in a native's signature, and becomes `Data`: the rider ABI
+  takes it as a pointer and a descriptor.
 
 ### `TypeRef`
 
@@ -212,11 +214,13 @@ Also exported: `align_up`, `aggregate_layout`, `aggregate_field_offsets`,
 `enum_layout`, `enum_variant_offsets`, `option_layout`, `result_layout`.
 
 **A container's layout does not depend on what it holds.** A `[u32]` and a
-`[data]` occupy the same slot, and so do the set, map and table cases. That is
-what lets a borrowed collection cross a generic boundary without conversion. A
-tuple is the opposite case: `(u32, u32)` and `(data, data)` are different
-shapes, so an owned one has to be walked field by field. Both facts are pinned
-by unit tests in `layout.rs` rather than left to be read off the match.
+`[string]` occupy the same slot, and so do the set, map and table cases. A
+tuple is the opposite case: `(u32, u32)` and `(u8, u32)` are different shapes.
+Both facts are pinned by unit tests in `layout.rs`.
+
+**A dynamic type is laid out as a fat pointer**, two words, whatever it is:
+`layout_of` checks `is_dynamic` before its match. The offset helpers above are
+never asked about a dynamic type; its layout is its descriptor's (Section 11).
 
 ## 5. Code Units
 
@@ -266,14 +270,14 @@ pub struct FunctionContext {
     pub param_types: Vec<IrType>,
     pub return_type: IrType,
     pub tracked_params: Vec<ParamId>,
-    pub descriptor_shapes: Vec<DescriptorShape>,
-    pub descriptor_params: Vec<ParamId>,
+    pub type_param_count: u32,
+    pub descriptor_table: Vec<IrType>,
 }
 ```
 
 `tracked_params` are the `out` parameters, which need a runtime tracking byte
-because they start uninitialized. The two descriptor fields belong to generics
-and are described in Section 11.
+because they start uninitialized. `type_param_count` and `descriptor_table`
+belong to generics and are described in Section 11.
 
 ### ScriptContext
 
@@ -315,15 +319,15 @@ pub struct NativeContext {
     pub param_types: Vec<IrType>,
     pub return_type: IrType,
     symbol: String,                   // e.g. "dlr_std__list_push", read by symbol()
-    pub descriptor_shapes: Vec<DescriptorShape>,
+    pub undetermined_type_params: Vec<u32>,
 }
 ```
 
 A native function has a signature and a linker symbol and no blocks. It is
 built with `NativeContext::new(rider, function, ...)`, which spells the symbol
-by `native_symbol`, so nothing outside the IR crate knows the format. Its
-`descriptor_shapes` never grows in the shape closure, since a native makes no
-calls: it is what the signature says and nothing more. See
+by `native_symbol`, so nothing outside the IR crate knows the format.
+`undetermined_type_params` are the type parameters no argument determines, by
+position; a call hands over a descriptor for each, after the result. See
 [the native ABI](native-abi.md).
 
 ### Parameter Modes
@@ -449,7 +453,7 @@ a slot, parameter or reference as for `RefStore`, is updated where it is. An
 `int` place is updated by the runtime, which reuses its buffer when it has room
 (`dtlv_rti_int_add_assign` and its siblings), and `rhs` may be the place itself.
 A checked update that fails leaves the place as it was. Their types are `f32`,
-`f64`, `int` and the fixed-width integers; an erased place's arithmetic goes
+`f64`, `int` and the fixed-width integers; a dynamic place's arithmetic goes
 through a `BinOp` and a store, since the runtime picks it by descriptor.
 
 `WidenFixed` zero-extends an unsigned source and sign-extends a signed one.
@@ -458,17 +462,17 @@ through a `BinOp` and a store, since the runtime picks it by descriptor.
 
 | Instruction | Printed |
 |---|---|
-| `Call { dest, func, args, type_args, shape_descriptors }` | `v0 = call m1.u2(v1, v2)` |
-| `ComptimeCall { dest, func, args, discriminant, comptime_param_indices }` | `v0 = comptime_call u1(v1) [disc=2, comptime_params=[0]]` |
+| `Call { dest, func, args, bindings }` | `v0 = call m1.u2(v1, v2)` |
+| `ComptimeCall { dest, func, args, comptime_param_indices, bindings }` | `v0 = comptime_call u1(v1) [disc=2, comptime_params=[0]]` |
 
 Arguments are consumed or borrowed according to the callee's parameter modes.
-`type_args` and `shape_descriptors` are the generics machinery (Section 11) and
-are empty for a call to a non-generic callee.
+`bindings` is what the site bound each of the callee's type parameters to
+(Section 11), and is empty for a call to a non-generic callee.
 
 `ComptimeCall` is emitted where the callee has const parameters. Left alone it
-behaves exactly like `Call`. The specialization pass rewrites it into a `Const`
-for the discriminant followed by a `Call` with the const arguments removed and
-the discriminant added as the first one.
+behaves exactly like `Call`. The specialization pass points it at the copy
+built for its const arguments' values, as a `Call` without the const
+arguments.
 
 ### Aggregates
 
@@ -503,44 +507,25 @@ The two unwrap instructions produce their payload together with a flag. The
 payload is valid only on the arm the flag selects, and the backend must not read
 it otherwise.
 
-### Boxing and Erasure
+### Boxing
 
 | Instruction | Printed | Ownership |
 |---|---|---|
 | `ErrorFrom { dest, inner }` | `v0 = error_from v1` | Consumes `inner` |
 | `DataFrom { dest, inner }` | `v0 = data_from v1` | Consumes `inner` |
-| `Erase { dest, src }` | `v0 = erase v1` | Consumes `src` |
-| `EraseTracked { dest, src }` | `v0 = erase.tracked v1` | Consumes `src` if it holds anything |
-| `Reify { dest, src }` | `v0 = reify v1` | Consumes `src` |
-
-`Erase` moves a value into the shape a generic callee was compiled for, which is
-the source's type with the erased positions replaced by `data`. It is emitted at
-the call site, that being where the concrete type is known.
-
-`EraseTracked` is the `out` case. An erased `out` parameter is handed the
-destination's current value, so that the call destroys it once as it does for
-any `out` parameter; a destination that has never been written has nothing to
-give, and reading it would read whatever the frame was left with, so `dest` is
-zeroed instead -- an empty `data`, which destroys as a no-op and which the
-callee overwrites.
-
-`Reify` is the inverse of `DataFrom`, moving the value back out as the type of
-`dest`. It is a move rather than a checked downcast, because it is only emitted
-where the compiler knows what went in.
 
 ### Collection Construction
 
 | Instruction | Printed | Ownership |
 |---|---|---|
-| `ListNew { dest, elements, descriptor }` | `v0 = list [v1, v2]` | Consumes all elements |
-| `SetNew { dest, elements, descriptor }` | `v0 = #{v1, v2}` | Consumes all elements |
-| `MapNew { dest, entries, descriptor }` | `v0 = %{v1: v2}` | Consumes all keys and values |
+| `ListNew { dest, elements }` | `v0 = list [v1, v2]` | Consumes all elements |
+| `SetNew { dest, elements }` | `v0 = #{v1, v2}` | Consumes all elements |
+| `MapNew { dest, entries }` | `v0 = %{v1: v2}` | Consumes all keys and values |
 | `TensorNew { dest, shape, elements }` | `v0 = [\| v1 v2, v3 v4 \|]` | Consumes all elements |
 | `TableNew { dest, rows }` | `v0 = table [v1, v2]` | Consumes all rows |
 
-The `descriptor` field is `None` for every collection whose element type is
-concrete, which is every one outside a generic. Inside one it indexes the
-function's own `descriptor_shapes` (Section 11).
+A collection of a dynamic type takes its descriptor from the function's
+descriptor table, as the type of `dest` (Section 11).
 
 A tensor's elements are given in row-major order, and the shape is what says how
 to group them. The printed form reproduces the source's multi-comma layout, with
@@ -783,137 +768,47 @@ Two error types: `CtfeError` for interpreter-level failures, and
 `ConstEvalError` for the phase above -- gas expiry, a failed dependency, a
 lowering failure, an early return, an unsupported type.
 
-## 11. Erasure and Descriptors
+## 11. Generics and Descriptors
 
-A generic function is compiled **once**, with `data` standing where a type
-parameter was written. That has two consequences the IR has to carry.
+A generic function is compiled **once**. Its types are as written, with
+`IrType::Param(i)` for its `i`th type parameter, and a value of a type that
+mentions one -- a *dynamic* type, `IrType::is_dynamic` -- is a fat pointer:
+the value in its real layout, and its descriptor. [Generics: how it
+works](generics.md) is the whole story; this is what the IR carries for it.
 
-### What gets erased
+### In the function
 
-Erasure happens in `IrType::from_datalit` for a type variable, and in
-`from_type_hint_erasing` for a named parameter. The rule depends on where the
-parameter sits.
+- `FunctionContext::type_param_count` is how many type parameters the
+  function was declared with. It takes one descriptor per type parameter after
+  its ordinary parameters. The count is the signature's, never the body's.
+- `FunctionContext::descriptor_table` is every dynamic type the body uses,
+  each written over the function's own parameters, parts before what holds
+  them. The function fills a table of their descriptors at entry, and any
+  instruction that needs a dynamic type's descriptor reads its entry.
+  `descriptor_table(unit)` computes it, from the parameters, return type,
+  values, slots and the calls' bindings, so every backend and every rewrite
+  agrees on the order.
 
-**Standing alone, or under `?` or `!`, erasure is structural.** `T` becomes
-`data` and `?T` becomes `?data`, and a conversion walks the two shapes together
-writing each payload where the other side keeps it -- a walk over as many parts
-as the type has, and no more.
+`uses_descriptors(unit)` is whether a unit is generic or calls one.
 
-**Under a container, the whole thing becomes `data`.** Erasing `[T]` to
-`[data]` would mean rebuilding the list element by element into a different
-stride; wrapping the list itself is one allocation and a copy of a pointer and
-two indices, and leaves a value that carries its own descriptor. This applies
-wherever the container appears, not only at the top, because a tuple is
-converted field by field and a container field is converted too. Leaving it
-alone would hand the callee a stride that does not match what it was given --
-silently, the two being the same size.
+### At a call
 
-`erased_param_type`, `erased_owned_type` and `erased_return_type` are the entry
-points, and `type_hint_is_container_of_param` and `type_hint_mentions_param` the
-predicates. A return is treated as an owned parameter, because it is one.
+`Call::bindings` and `ComptimeCall::bindings` say what the site bound each of
+the callee's type parameters to, in the callee's declaration order and written
+over the caller's own type parameters. Each becomes a descriptor handed over:
+a static one when the binding is concrete, the caller's table entry when it
+mentions the caller's parameters. A native call hands over only the bindings
+at its `undetermined_type_params`.
 
-**A borrowed parameter is not converted at all.** Its value crosses as it
-stands and the call site supplies a descriptor, so the type recorded for it
-describes the shape but not the contents.
+Nothing about a callee's descriptors comes from its body, so a call at a
+growing type -- `f<T>` calling `f<[T]>` -- needs nothing ahead of time; it
+builds one more descriptor per level at run time.
 
-Three places ask "is this a container of a type parameter" --
-`type_hint_is_container_of_param` of a hint, `datalit_is_container_of_var` of a
-typechecker type, and `generics::is_container_of_type_param` when deciding
-whether a signature is allowed. All three have to agree.
+### Block arguments
 
-### Descriptor shapes
-
-`IrType` cannot say what a generic builds, because `[T]` and `[data]` are the
-same there. A function that *builds* a collection has to know what its elements
-are, and nothing in the frame says. So it declares the shape, and the call site
--- the only place that knows what the parameter was bound to -- hands over a
-descriptor.
-
-```rust
-pub enum DescriptorShape {
-    Param(u32),          // One of this function's type parameters
-    Concrete(IrType),    // A subtree with no parameter in it
-    List(Box<DescriptorShape>),
-    Set(Box<DescriptorShape>),
-    Map(Box<DescriptorShape>, Box<DescriptorShape>),
-    Option(Box<DescriptorShape>),
-    Result(Box<DescriptorShape>),
-    Tuple(Vec<DescriptorShape>),
-}
-```
-
-Nothing is put together at run time. Substituting `[T0]` with `T0 = string`
-gives `[string]`, and that has a descriptor already. The printed form follows
-the source -- `T0`, `[T0]`, `#{T0}`, `?T0`, `!T0`, `%{T0 = T1}` -- so that an
-error naming a shape names something the reader typed.
-
-The operations on one: `mentions_param`, `params`, `depth`, `substitute` and
-`as_concrete`.
-
-### Where they are carried
-
-- `FunctionContext::descriptor_params` lists the parameters whose descriptor
-  the caller supplies. These describe a value that *arrived*, which is enough to
-  work on one.
-- `FunctionContext::descriptor_shapes` lists the shapes the function needs a
-  descriptor for because it *builds* something and has no value to read one off.
-- `Instruction::Call::type_args` says what the call site bound each of the
-  callee's type parameters to, in the callee's declaration order, written over
-  the *caller's* own type parameters.
-- `Instruction::Call::shape_descriptors` says what this call actually hands
-  over, one per shape the callee declared.
-
-```rust
-pub enum DescriptorRef {
-    Static(IrType),  // A type this call site knows outright
-    Own(u32),        // Forwarded from what this function was handed
-}
-```
-
-How the trailing arguments are carried is up to the backend. The interpreter
-needs nothing, its values being a pointer and a descriptor already. The compiled
-backends take one extra pointer parameter per entry, after the ordinary
-parameters: `descriptor_params` first, then `descriptor_shapes`.
-
-### Closing the set
-
-Lowering knows what a function's own body builds, and that is not the whole set:
-a function handing its type parameter to one that builds a collection of it has
-to be handed a descriptor too, and pass it on. `close_shapes` applies one rule
-until nothing changes:
-
-> For every call, substitute the callee's shapes with what the call site bound
-> the callee's type parameters to. Whatever still mentions this function's own
-> parameters is a shape this function needs as well.
-
-Each round only adds. Where a cycle of calls passes its type parameters along
-unchanged the substitution is a renaming, which cannot enlarge a shape, so the
-set is drawn from what the cycle's bodies already wrote and the iteration
-settles. Mutual recursion is no different from a chain.
-
-What does not settle is a cycle whose substitution *grows* a shape.
-`growing_parameters` decides that before the iteration runs, so the loop is only
-ever entered on something known to terminate. It builds a graph whose nodes are
-a function and one of its type parameters: a call from `f` to `g` binding `g`'s
-parameter `i` to a shape holding `f`'s parameter `j` draws an edge from `(g, i)`
-to `(f, j)`, which is the direction shapes travel, and the edge is *strict* when
-the binding is not simply `j` itself. A cycle of plain edges is a renaming; a
-cycle holding one strict edge adds a level every lap. That is the occurs check,
-read across the call graph rather than within one term. The failure is reported
-as `GrowingShape`, which carries the call responsible so the message can name
-what the reader wrote rather than the deeply nested type it would have produced.
-
-Once the shapes have settled, `resolve_call_descriptors` runs over a unit and
-fills in every `Call`'s `shape_descriptors` via `shape_descriptors_for`. It is
-stored rather than recomputed so that everything downstream reads one answer:
-the backends emit these, and the descriptor emitter makes a static descriptor
-for each `Static` one. A type named only at such a call -- a `#{string}` built
-inside a generic whose caller never mentions one -- would otherwise have no
-descriptor made for it.
-
-There is one implementation of this because a call site and a callee signature
-disagreeing about the trailing arguments is the failure this area keeps
-producing.
+A jump that passes a block's own parameters back to it permuted would make a
+byte-by-byte copy of dynamic block arguments read storage it already wrote.
+Lowering never emits one, and checks it (`permuted_block_args`).
 
 ### Dynamic operators
 
@@ -965,15 +860,17 @@ on purpose -- a variant falling through unsubstituted leaves a reference to a
 parameter the transformed function may no longer have, and nothing downstream
 reports that.
 
-**Shape closure** (`close_shapes`, `resolve_call_descriptors`) is described in
-Section 11.
+**Specialization and generics.** A specialized copy keeps its type
+parameters, its `type_param_count` and its descriptor table; it drops only the
+const parameters, which come before the descriptors.
 
 ## 14. Consumers
 
 All four agree with `ir::layout`.
 
 - **Interpreter** (`datalove-datafun-interp`) walks the IR directly. Its values
-  are a pointer and a descriptor, so it needs no descriptor arguments.
+  are a pointer and a descriptor already; a generic's frame holds its
+  descriptor table and the fat pointers of its dynamic values.
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) emits an object file.
 - **C backend** (`datalove-datafun-c-aot`) emits C and compiles it. The same
   program by a different route, which is why the `dual` fixtures run both.
@@ -987,8 +884,8 @@ There are two, and they are not interchangeable.
 
 **The printed form** comes from the `Display` impls in `display.rs`. It is what
 the `ir_lower` fixtures compare, and what `datalove script-ir` prints. It is
-lossy on purpose: value types, tracked sets, descriptor shapes and a call's
-`type_args` are not shown, because a fixture that reprinted all of them would
+lossy on purpose: value types, tracked sets, descriptor tables and a call's
+`bindings` are not shown, because a fixture that reprinted all of them would
 change whenever any of them did.
 
 The conventions: `v0` for a value, `s0` for a slot, `p0` for a parameter,
@@ -1020,8 +917,8 @@ check that both the interpreter and the AOT backend produce the same output from
 the deserialized copy as from the original.
 
 Several fields carry `#[serde(default)]` -- `tracked_slots`,
-`const_values`, `nested_units`, `tracked_params`, the descriptor fields, a
-collection's `descriptor`, and a script context's `unit_end_values`,
+`const_values`, `nested_units`, `tracked_params`, a call's `bindings`, and a
+script context's `unit_end_values`,
 `unit_end_slots`, `result_name` and `exports` -- so that an older serialization
 still reads.
 
@@ -1049,16 +946,14 @@ assume.
 8. An access instruction that assumes a check -- `MapValueRef` and the
    element-reference forms -- is dominated by the matching check instruction
    and by the branch that acted on it.
-9. A `Reify` reads a `data` that a matching `DataFrom` or `Erase` wrote. It is
-    a move, and nothing verifies the type at run time.
+9. No jump passes a block's own parameters back to it permuted.
 10. An enum's `variant_index` indexes the type's variants **sorted by name**.
 11. A `Table`'s columns are in written order, everywhere, in the type and in the
     value alike.
-12. A collection instruction's `descriptor` is `Some` exactly when the
-    collection's element type is not concrete, and then indexes the enclosing
-    function's `descriptor_shapes`.
-13. A `Call`'s `shape_descriptors` has one entry per shape the callee declared,
-    and is empty when the callee declared none.
+12. Every dynamic type an instruction needs the descriptor of is in the
+    enclosing function's `descriptor_table`.
+13. A `Call`'s `bindings` has one entry per type parameter of the callee, and
+    is empty when the callee has none.
 
 ## 17. Tests
 
@@ -1083,7 +978,7 @@ Bless expected output with `BLESS=1 cargo test`.
 - [Compiler Guide](compiler-guide.md) -- the pipeline this sits in the middle of
 - [Language Specification](botspec.md) -- what the source means
 - [The Native Rider ABI](native-abi.md) -- how a native call is made
-- [Generics and Specialization](plan-generics.md) -- where erasure is going
+- [Generics: how it works](generics.md) -- fat pointers and descriptor tables
 - [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
   -- monomorphization
 - [IrCodeUnit](compiler-guide.md#user-content-ircodeunit) -- one type for all

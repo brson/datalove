@@ -61,10 +61,10 @@ backend reads it back with `NativeContext::symbol`.
 
 Every pointer travels with a descriptor, and the descriptor says what the value
 is. In a non-generic caller it is a static one: a `u32` argument arrives as a
-pointer at four bytes with the `u32` descriptor beside it. A generic caller is
-compiled by reference and hands over its descriptor-table entry for the type
-it has, so the descriptor is just as truthful there; a native never sees a
-`data` standing in for a type parameter.
+pointer at four bytes with the `u32` descriptor beside it. A generic caller
+hands over its descriptor-table entry for the type it has, so the descriptor
+is just as truthful there; a native never sees a `data` standing in for a type
+parameter. See [Generics: how it works](generics.md).
 
 A native's own signature says `data` where it was written over a type
 parameter (`NativeContext::param_types`), because one compiled native takes any
@@ -88,14 +88,14 @@ descriptor is structural and `[T]` names its element type just as `?T` names
 its payload; one mentioned nowhere in the arguments is not.
 
 The answer is recorded on `RiderInterface::generic_functions` when the `.dli` is
-parsed, and again on `NativeContext::descriptor_shapes` when the code unit is
-built --- the same computation from the same signature, so the two agree about
-how many trailing arguments there are.
+parsed, and again on `NativeContext::undetermined_type_params` when the code
+unit is built --- the same computation from the same signature, so the two
+agree about how many trailing arguments there are.
 
-The call site substitutes what it bound the native's type parameters to into
-each of those types and hands over the descriptor of the result: a static one
-where the binding is concrete, and the caller's own descriptor-table entry
-where it was written over the caller's type parameters. So
+The call site hands over the descriptor of what it bound each of those type
+parameters to (`NativeContext::undetermined_bindings`): a static one where the
+binding is concrete, and the caller's own descriptor-table entry where it was
+written over the caller's type parameters. So
 
 ```
 fun zero<T>(): T with { T is fixedint, }

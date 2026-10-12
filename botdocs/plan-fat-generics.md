@@ -4,8 +4,10 @@ A plan to replace erasure with one representation: inside a generic, every
 value whose type mentions a type parameter is a pointer at the value in its
 real layout together with that value's descriptor, and the descriptors a body
 needs are built at run time from one descriptor per type parameter. Written
-October 2026. Phases 0 to 7 are done, and a review's findings are fixed; see
-[After the review](#user-content-after-the-review). Phase 8 is next.
+October 2026; done. A review's findings are fixed (see [After the
+review](#user-content-after-the-review)) and the measurements are in
+[Cost](#user-content-cost). [Generics: how it works](generics.md) is the
+reference now.
 
 This supersedes the erasure half of [Generics and
 Specialization](plan-generics.md) and, once done, most of [Generics: how it
@@ -462,6 +464,34 @@ more about how little of `sys/std` a script compiles than about compile time.
 The `ord` benchmark from the `for` work does not exist in the repository, so
 there is no baseline for it.
 
+**After** (phase 8, the same machine and method; baseline in parentheses):
+
+| Bench | interp | jit-t1 | jit | aot |
+|---|---:|---:|---:|---:|
+| fib | 3.623 (3.455) | 0.459 (0.463) | 0.460 (0.477) | 0.356 (0.357) |
+| sum | 0.779 (0.794) | 0.418 (0.423) | 0.405 (0.415) | 0.299 (0.299) |
+| primes | 3.348 (3.302) | 0.339 (0.338) | 0.342 (0.338) | 0.332 (0.328) |
+| wordfreq | 0.948 (0.960) | 0.579 (0.598) | 0.577 (0.605) | 0.512 (0.524) |
+| sieve | 3.850 (4.126) | 0.986 (1.228) | 0.963 (1.210) | 0.721 (0.949) |
+| mandelbrot | 3.013 (2.870) | 0.558 (0.555) | 0.554 (0.547) | 0.547 (0.544) |
+| nbody | 2.902 (2.937) | 0.199 (0.194) | 0.196 (0.198) | 0.158 (0.161) |
+| generics | 2.303 (2.849) | 0.487 (0.996) | 0.504 (0.973) | 0.318 (0.774) |
+
+What uses generics got faster on every engine: `generics` takes half the time
+compiled and a fifth less interpreted, and `sieve`, whose hot loop goes
+through `sys/std/list`, a fifth less compiled. The rest moved within a few
+percent either way, which is the noise of this machine; `fib` interpreted is
+the largest at 5% and calls no generic.
+
+The store demo at 20,000 orders: 0.766 interpreted (0.769), 0.484 jit
+(0.512).
+
+The `sys/std` script measured 32.8 ms, not the baseline's 15.5. That is not
+this work: a binary from before the flip, still erasing, takes 36 ms on the
+same script, so the baseline was taken over something other than what was
+measured here, and is not reproducible. On the same script, by reference is
+no slower than erasure.
+
 ## Phases
 
 The representation is decided in lowering and every backend reads it, so the
@@ -528,7 +558,7 @@ caller of an interpreted generic has to pass what the new convention expects.
 7. **Flip and delete** (done). The feature is gone, nothing erases, and a
    call at a growing type has a fixture. See [Where phase 7
    stands](#user-content-where-phase-7-stands).
-8. **Docs and measurement.** `generics.md` rewritten, `plan-generics.md`
+8. **Docs and measurement** (done). `generics.md` rewritten, `plan-generics.md`
    marked superseded where it is, `native-abi.md` and `ir.md` updated, and the
    measurements recorded.
 

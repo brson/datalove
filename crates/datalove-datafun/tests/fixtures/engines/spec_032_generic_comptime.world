@@ -13,10 +13,9 @@ module local/test/genct
 // specialization off the call stays a `ComptimeCall` naming the original, and
 // that has to carry the descriptors too.
 
-// Building a `[T]` is what makes the callee declare a shape it has to be
-// handed a descriptor for. That is the one the rewrite used to drop, and
-// dropping it brings the interpreter down on "a shape built with is one this
-// function declared".
+// Building a `[T]` once made the callee declare a shape it had to be handed a
+// descriptor for. The rewrite used to drop that one, which brought the
+// interpreter down on "a shape built with is one this function declared".
 fun wrap<T>(const n: int, x: T): [T]
     var out: [T] = [x]
     ret out

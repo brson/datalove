@@ -4,13 +4,11 @@ import set.insert
 import set.contains
 import set.len
 
-// A set built over a type parameter, the same way a list is: the destination is
-// a `data`, so the set is made against the descriptor the call site handed over
-// and moved into the wrapper.
+// A set built over a type parameter, the same way a list is: its descriptor is
+// built from the descriptor of `T` the call site hands over.
 //
-// Inserting twice shows the elements are compared as what they really are
-// rather than as the `data` they are carried in: two equal strings collapse to
-// one entry.
+// Inserting twice shows the elements are compared as what they really are:
+// two equal strings collapse to one entry.
 
 fun singleton<T>(x: T): #{T} with { T is ord, }
   var out: #{T} = #{}

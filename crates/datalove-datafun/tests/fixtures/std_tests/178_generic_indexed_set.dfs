@@ -1,6 +1,6 @@
-// Setting an element of a collection a generic owns. Inside the generic the
-// collection is wrapped, so the set has to open it as the container its type
-// says, as a read of one does; it used to be handed the wrapper.
+// Setting an element of a collection a generic owns, whose element layout only
+// its descriptor knows. When a generic's collection was wrapped, the set was
+// once handed the wrapper rather than the container.
 
 fun set_at<T>(xs: [T], i: index, v: T): ?[T]
     var ys = xs

@@ -492,10 +492,11 @@ impl IrInterpreter {
             .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames))
             .collect();
         for (i, op) in args.iter().enumerate() {
-            // A generic native's signature names its type parameters, which
-            // are never copy, while what is bound to one may be; whether the
-            // argument is given up is its own descriptor's to say, which
-            // agrees with its type's wherever there is no type parameter.
+            // A generic native's signature says `data` wherever it was
+            // written over a type parameter, which is not copy, while what is
+            // bound there may be; whether the argument is given up is its own
+            // descriptor's to say, which agrees with its type's wherever there
+            // is no type parameter.
             let moves = if bindings.is_empty() {
                 !native_ctx.param_types[i].is_copy()
             } else {

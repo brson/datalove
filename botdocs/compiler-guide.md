@@ -284,23 +284,19 @@ around a tenth of an unchanged recompile.
 
 ```
 lower_module_functions [tracked]  ->  ModuleLowered per module
-module_shape_inputs [tracked]     ->  one module's part of the call graph
-close_shapes_over_calls [tracked] ->  ModuleLowered per module, + shape errors
 merge_module_strata [tracked]     ->  one ModuleLowered from the two strata
 specialized_module [tracked]      ->  ModuleLowered for phase 5c's rewrite
 lower_module [tracked]            ->  takes the handle, not the IR
 ```
 
 **A handle is passed through, not re-minted, when its module did not change.**
-A tracked struct's identity map belongs to the query instance that created it.
-`close_shapes_over_calls` is keyed on the graph, so adding a module anywhere
-gives it a new key, and every handle it minted there would get a new id --
-which phase 5d is keyed on, so every module in the world would assemble again.
-It therefore hands a module back under the handle it came in under whenever the
-closure did not write to it, which `Arc::ptr_eq` answers exactly, since the
-write-back reaches for `make_mut` only when it has something to write. The
-`module_memo` fixtures are what catch this; they failed on precisely that
-regression while it was being built.
+A tracked struct's identity map belongs to the query instance that created it,
+so a graph-wide pass minting handles would give every module a new id whenever
+any module was added -- and phase 5d is keyed on the handles, so every module
+in the world would assemble again. Nothing between 5a and 5d is graph-wide
+now: `merge_module_strata` is keyed on a module's two handles, and a module
+only one stratum reached keeps that stratum's handle. The `module_memo`
+fixtures are what catch a regression here.
 
 **Phase 5c is gated on a memoized question.** `module_has_comptime_calls` is a
 tracked query per handle, and a program where no module makes one skips
@@ -378,44 +374,15 @@ so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
 memoizing it, so a program that does specialize re-specializes on every
 compile.
 
-#### What the shape closure costs, and why it is shaped as it is
+#### Why nothing between 5a and 5d is graph-wide
 
-It is a fixpoint over the call graph -- see `close_shapes` for the rule and why
-it settles -- so it cannot be split per module and it is keyed on every module
-at once. That means the thing deciding whether an edit re-runs it is not its key
-but **what it depends on**, and the work is in what surrounds the fixpoint
-rather than in the fixpoint, which measured at a twenty-fifth of the pass.
-
-Three things, and the order they were found in is the order of how much they
-were worth:
-
-- **It does not read the IR.** `module_shape_inputs` is tracked per handle and
-  carries everything the graph-wide pass needs -- each function's declared
-  shapes, its calls that bind type parameters, its callees, and its name for the
-  error message. Reading one module's IR in the graph pass would make the
-  fixpoint depend on all of them, which is what it used to do, and then a body
-  edit anywhere re-ran the closure though no shape had moved. Memoizing the
-  extraction alone did nothing while that dependency was still taken first.
-- **The write-back asks before it writes, and is per module.**
-  `shape_closed_module` is keyed on the handle plus that module's own settled
-  shapes and the settled shapes of the functions it calls. Restricted rather
-  than given the global map, which is the trick: the global map moves whenever
-  any module's shapes do. Empty sets are dropped from both, so a module with no
-  generic near it is passed through without its IR being read.
-  `resolve_call_descriptors` returns what each call should hand over instead of
-  writing it, so `Arc::make_mut` is reached for only when the answer moved --
-  it used to copy every function in the program on any compile where a shape
-  existed anywhere, which is also why the handle pass-through never fired for
-  a program with a generic in it. `set_call_descriptors` keeps the
-  write-through behaviour for the script paths, which own their units.
-- **The three maps** -- placement, shapes, calls -- are keyed on
-  `(IrModuleId, FuncId)` and rebuilt whenever the pass runs. They are
-  `FxHashMap`s. This is the one place in the tree where the hasher was worth
-  changing; sweeping all of them was tried once and backed out at about 1%.
-
-`close_shapes_over_calls` no longer appears in a profile of an edit, or in
-`query_census`. On the system library, editing a module of your own went from
-3.1ms to 2.0ms across these.
+A generic's calling convention is one descriptor per type parameter, read off
+its signature, so nothing about a callee's descriptors comes from its body and
+nothing is closed over the call graph. Erasure needed such a closure, a
+fixpoint keyed on every module at once (`close_shapes_over_calls`), and most of
+the work of making edits cheap went into keeping it from re-running; with
+generics by reference it is gone. Each function's descriptor table is
+computed from its own unit when it is lowered (`descriptor_table`).
 
 The `skip_const_inlining` flag skips phase 5b and the inlining phase 5d does after it,
 lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
@@ -463,14 +430,13 @@ the call is compiled. A const parameter counts, being a const binding within the
 which is what lets one comptime function pass its parameter to another.
 
 **Const parameters and type parameters combine**, independently: specialization deletes
-the const parameters, erasure replaces the type parameters, and a copy is as generic as
-its original. One copy per const instantiation serves every type instantiation, the call
-site handing over the descriptors it would have anyway. `ComptimeCall` carries
-`type_args` and `shape_descriptors` exactly as `Call` does, and the rewrite carries both
-across. The one refused case is a const parameter whose own type is a type parameter,
-`const x: T` (`ComptimeParamOfGenericType`): the const argument would be all that says
-what `T` is, and a copy is built by substituting into cloned blocks, so it cannot change
-its signature or the erasure decisions in its body.
+the const parameters, and a copy keeps its type parameters, its `type_param_count` and its
+descriptor table, so it is as generic as its original. One copy per const instantiation
+serves every type instantiation, the call site handing over the descriptors it would have
+anyway. `ComptimeCall` carries `bindings` exactly as `Call` does, and the rewrite carries
+them across. The one refused case is a const parameter whose own type is a type parameter,
+`const x: T` (`ComptimeParamOfGenericType`, F077): specialization makes one copy per const
+value, and the copy is still generic, so the const has nowhere to go.
 
 **Where instantiations come from.** They are read out of the IR. A const argument is
 passed by reference, as a const parameter is lowered, and the operand at a call site is
@@ -587,10 +553,10 @@ assignment (`interp/950_index_write_forms`).
 
 In an operand position a non-copy index is borrowed like a field, so `a[i]?@`
 clones once rather than cloning through `ListGet` and then cloning that. It
-holds for an erased element too: the reference carries the element's descriptor,
-narrowed from the container's, so reading through it reads the bytes as what
-they are. See
-[Generics](generics.md#user-content-getting-further-in).
+holds for an element of a type parameter too: the reference is a fat pointer
+carrying the element's descriptor, so reading through it reads the bytes as
+what they are. See
+[Generics](generics.md#user-content-operations-on-a-dynamic-value).
 
 A copy element keeps the direct read: there is nothing to move out and nothing
 to free, so a borrow would buy nothing.
@@ -621,66 +587,46 @@ enclosing module's or script's consts in scope.
 
 ## Generics
 
-A generic function is compiled once, over shapes that fit whatever the call site
-supplies, with type descriptors saying what is really in those shapes.
-**[Generics: how it works](generics.md)** is the full description: erasure,
-where descriptors come from, how a projection keeps one, and what each backend
-carries. What follows is the orientation.
+A generic function is compiled once. Inside it, a value whose type mentions a
+type parameter is a fat pointer -- the value in its real layout, and its type
+descriptor -- and the descriptors the body needs are built at run time from
+one per type parameter, which the caller hands over.
+**[Generics: how it works](generics.md)** is the full description: storage,
+calls, operations on a dynamic value, the runtime entries, and what each
+engine does. What follows is the orientation.
 
-`erased_param_type` in datafun-ir is the one place that decides what a position
-becomes, read by the caller and the callee both, because a call site converting
-into a shape the callee was not compiled for is not a mismatch anything reports
--- it is two sizes disagreeing about the same bytes. It forks on whether the
-position is borrowed.
+Nothing is converted at a boundary. A `u32` passed for a `T` is a pointer at
+the `u32`, a `(u8, u32)` passed for a `(T, u32)` a pointer at the
+`(u8, u32)`, and code outside generics is laid out and passed as it always
+was.
 
-**Owned** -- `in`, `out`, the return -- is converted at the boundary:
+**Types.** A generic's parameter and return types are as written
+(`IrType::from_type_hint_generic`), with `IrType::Param(i)` for its `i`th type
+parameter, and so is every value and slot type in its body. A type mentioning
+one is *dynamic* (`IrType::is_dynamic`) and laid out as a fat pointer, two
+words; its real layout is its descriptor's.
 
-| Written | Becomes | Cost |
-|---------|---------|------|
-| `T` | `data` | wraps; a narrow scalar rides in the two words |
-| `?T`, `!T`, `(T, u32)`, `{ a: T }`, `term W T`, an enum payload | the same shape with the parts converted | a walk over as many parts as the type has |
-| `[T]`, `#{T}`, `%{K = V}`, a tensor, a table | `data`, wrapped whole | one small allocation, elements untouched |
+**Descriptors.** A generic takes one descriptor per type parameter after its
+ordinary parameters (`FunctionContext::type_param_count`), a count read off the
+signature and never the body. `FunctionContext::descriptor_table` lists every
+dynamic type the body uses; the function fills a table of their descriptors at
+entry, instantiating a template per entry (`dtlv_rti_tydesc_instantiate`)
+behind a one-entry cache keyed on the incoming descriptors. A call carries
+`bindings`, what it bound each of the callee's type parameters to, and hands
+over a static descriptor or its own table entry for each.
 
-The third is the one worth explaining. A list is a pointer, a length and a
-capacity whatever its elements are -- `IrType::List(_)` computes its layout as
-`struct_layout::<rtdt::List>()`, and the `_` is the point -- so it is already
-the right size and there is nothing to convert it into. What it lacks is the
-element type, and wrapping is what gives it somewhere to keep one. Converting
-`[u32]` into a list of `data` would mean rebuilding it element by element; that
-is the O(n) the design avoids, and it is avoided by not doing it rather than by
-refusing the signature.
-
-**Borrowed** -- `ref`, `mut` -- is not converted at all. The callee's static
-type for the parameter is therefore the erased one, which is a lie about the
-layout, and the descriptor for what really arrived comes from the call site,
-recorded in `FunctionContext::descriptor_params`.
-
-That lie is what most of the machinery exists to handle. A projection of such a
-parameter narrows the descriptor alongside the pointer: `resolve_ref_descriptors`
-says what each reference points at, and field offsets, element strides and
-read-through widths come from there rather than from the static type. A value
-absent from that map is the ordinary case -- the offset folds at compile time
-and the emitted code is what it always was, so this costs nothing outside a
-generic. An owned container is opened with `DataBorrow` first, which turns it
-into the borrowed case.
-
-Converting between two shapes is `convert` in the runtime, walking two
-descriptor pointers and converting at each position one of them calls `data`.
-`erase_local`, `reify_local` and `clone_erased_local` are its three entry
-points. Whether anything was erased is a *structural* question rather than a
-size one: a `data` is two words and so is a `string`.
+**Storage.** Each dynamic value and slot owns space on a shadow stack the
+runtime keeps, bumped once at entry and given back on return, and a move
+copies `desc.size` bytes into it. Whether an `in` argument is moved or copied
+is the argument's own descriptor's to say (`TyDesc::PLAIN`), since a copy value
+bound to a `T` is copied though `T` is not copy.
 
 The pieces: `Var` in `datalit::tycheck::Type`, built only by datafun-resolve
-seeding the alias map; `IrType::from_datalit` mapping it to `data`, which is
-the whole of erasure; `bind_type_params` and `substitute_type_params` in
-`datafun-common::generics`; `Erase` and `Reify` at call boundaries.
-
-A generic function calling another passes its own type parameter along, and the
-value is already in the erased shape when it does. `Erase` and `Reify` are
-skipped in that case -- the argument's `IrType` already equals the parameter's
-erased shape, and the result type already equals the erased return shape.
-Erasing an erased value boxes the box, and the callee finds a `data` where the
-value should be.
+seeding the alias map; `type_hint_mentions_param` and `from_type_hint_generic`
+in lowering; `bind_type_params` and `substitute_type_params` in
+`datafun-common::generics`; `descriptor_table` in datafun-ir; and in each
+engine, a dynamic path per instruction, behind a gate in the compiled backends
+(`check_dynamic_support`) that refuses, by name, any it does not handle.
 
 What it does not do -- bounds beyond `float`, `fixedint` and `ord`, so nothing
 can be done to a bare `T` but move it, drop it, clone it, print it and hand it
@@ -1007,7 +953,7 @@ reads that binding where it lives instead of copying it to print it.
 
 What follows is the part of the IR a reader of this guide needs in order to
 follow the pipeline. The complete reference -- every instruction and
-terminator, the layout rules, erasure and descriptors, the passes and the
+terminator, the layout rules, generics and descriptors, the passes and the
 invariants -- is [The Datafun IR](ir.md).
 
 ### IDs
@@ -1103,7 +1049,8 @@ pub struct FunctionContext {
     pub param_types: Vec<IrType>,
     pub return_type: IrType,
     pub tracked_params: Vec<ParamId>,    // Out params needing runtime tracking
-    pub descriptor_params: Vec<ParamId>, // Descriptors the caller supplies
+    pub type_param_count: u32,           // One descriptor each, after the parameters
+    pub descriptor_table: Vec<IrType>,   // Dynamic types the body uses
 }
 
 pub struct ScriptContext {
@@ -1547,8 +1494,8 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   executable in a single step and there is no unlinked halfway point;
   `pipeline::c_aot` drives it and `aot-compile --c` reaches it.
 
-  Its function ABI is its own: `RET f(rt, [sret,] p0..pn, d0..dk)`, where the
-  descriptors are the ones `descriptor_params` names. It differs from
+  Its function ABI is its own: `RET f(rt, [sret,] p0..pn, tp0..tpk)`, one
+  descriptor per type parameter of a generic. It differs from
   cranelift's in returning small scalars by value where cranelift always uses
   sret, which is allowed because no program mixes the two -- the one ABI they
   must agree on is the runtime's, and that one is fixed. A rider is called
@@ -1686,9 +1633,10 @@ offsets from `ir::frame_layout::FrameLayout`, tracking bytes included, so a valu
 slot or tracking byte is where compiled code for the same body keeps it -- the
 precondition for entering compiled code from the middle of an interpreted loop.
 What only the interpreter keeps comes after that layout's bytes, in an
-extension compiled code never sees: the parameters as a `[Value]`, the shape
-descriptors, a descriptor word for each reference `resolve_ref_descriptors`
-names, and the liveness bytes where they are kept. A frame is its bytes, and
+extension compiled code never sees: the parameters as a `[Value]`, a generic's
+type-parameter descriptors and descriptor table, a descriptor word for each
+reference to a dynamic type (`ref_desc_offsets`), and the liveness bytes where
+they are kept. A frame is its bytes, and
 `Frame` is a pointer to them and the layout.
 Liveness works as it does in compiled code: a tracked slot or `out` parameter
 says from its tracking byte, and everything else is taken to hold something --
@@ -1707,8 +1655,8 @@ replaced: fewer instructions, lower IPC.
 
 **Three tiers of instruction.** `execute_hot` (inlined into the block loop: the
 dozen instructions arithmetic spends its time in), `execute_warm` (not inlined
-but small: the instructions generic and library code is full of -- erase and
-reify, parameter stores, list bounds and element references, drops, clones)
+but small: the instructions generic and library code is full of -- parameter
+stores, list bounds and element references, drops, clones)
 and `execute_instruction` (everything else, calls included). Entering
 `execute_instruction` costs a frame sized for its biggest arm, so an
 instruction that runs often belongs in one of the other two.

@@ -722,7 +722,7 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 ### Declaration Errors
 - **F059**: A name imported twice
 - **F060**: Retired. A type parameter under a collection in a signature, which
-  erasure could not reach; generics by reference can.
+  the old erasure could not reach. Every engine handles one now.
 - **F061**: A type parameter used as a set element or map key without
   `is ord`
 - **F062**: A native function declared where no rider implements it

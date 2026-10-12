@@ -133,8 +133,10 @@ Two things to know before reaching for the same trick:
   it.** Two calls of the same query with different arguments that each mint a
   handle for module `m` mint two different handles. So a graph-keyed query that
   re-mints everything invalidates every consumer as soon as a module is added
-  anywhere. `close_shapes_over_calls` hands a module back under the handle it
-  came in under when it did not change it, for exactly this reason.
+  anywhere. The shape closure erasure needed, `close_shapes_over_calls`, handed
+  a module back under the handle it came in under when it did not change it,
+  for exactly this reason; it is gone now, and nothing between lowering and
+  assembly is graph-keyed.
 
   **This bit a second time, and the second one is the more instructive.**
   `resolve_module_imports` minted a synthetic `StmtFun` per rider import, and

@@ -1,5 +1,10 @@
 # Immutable Cursors for the Collections
 
+> **Written under erasure.** Generics have since moved to fat pointers and
+> descriptor tables ([Generics: how it works](generics.md)). What this says
+> about erased values, `data` wrappers, `erase`/`reify` or descriptor shapes
+> describes the old implementation.
+
 A design for the runtime half of `for` loops: one cursor shape that walks a
 list, a set, a map or a tensor in order, borrowing what it visits. Written
 October 2026 alongside the `for` draft in `mandocs/drafts/`; not implemented.

@@ -1,8 +1,12 @@
 # Generics and Specialization
 
-> **Being replaced.** [Generics by Reference](plan-fat-generics.md) plans to
-> replace erasure with fat pointers and descriptors built at run time. The
-> erasure sections here describe what is being replaced.
+> **Superseded in part.** Erasure -- Layer 1 of [The
+> design](#user-content-the-design), and everything from [What a first attempt
+> found](#user-content-what-a-first-attempt-found) through [Where this
+> stands](#user-content-where-this-stands) -- was replaced by [Generics by
+> Reference](plan-fat-generics.md): fat pointers, and descriptors built at run
+> time from one per type parameter. Those sections are history. Layer 2,
+> monomorphizing what is hot, and the const parameter sections still stand.
 
 How datalove should implement type parameters, and what to do about const parameter
 specialization now that it has been built and measured.
@@ -109,6 +113,8 @@ come much later or never.
 
 ### Layer 1: erasure with type descriptors
 
+> Superseded: see [Generics by Reference](plan-fat-generics.md).
+
 A generic function is compiled once. Values of a type parameter are held in the uniform
 representation and accompanied by a type descriptor, which the function passes to the
 runtime for anything type-directed.
@@ -206,6 +212,8 @@ Independent of generics, and worth doing regardless:
   A const parameter whose own *type* is a type parameter is still refused.
 
 ## What a first attempt found
+
+> Superseded: see [Generics by Reference](plan-fat-generics.md).
 
 Written after building the front end far enough to hit the real boundary, then
 reverting it. Measurements, not estimates.
@@ -604,6 +612,8 @@ this area has had.
 > arrives wrapped, and the index was emitted straight at the wrapper.
 
 ## Where this stands
+
+> Superseded: see [Generics by Reference](plan-fat-generics.md).
 
 Type parameters nest to any depth inside options, results, tuples, structs,
 terms and enums, and a collection of one can be passed and returned in any

@@ -12,11 +12,11 @@ import set.len
 //
 // That took a freed block with the right byte non-zero to show, which is why
 // it stood for so long: a set built early in a run gets fresh pages, and fresh
-// pages are zero. The way in was a tensor handed to a generic, which boxes it
-// on the heap and frees the box once it is unpacked again -- a forty-byte
-// block holding, among other things, the tensor's element count of one. The
-// next set's leaf was cut from it, read its `next` as the address `0x1`, and
-// took the printer down with it.
+// pages are zero. The way in was a tensor handed to a generic, which was then
+// boxed on the heap and the box freed once it was unpacked again -- a
+// forty-byte block holding, among other things, the tensor's element count of
+// one. The next set's leaf was cut from it, read its `next` as the address
+// `0x1`, and took the printer down with it.
 //
 // So each of these builds a set after something else has been freed. What they
 // hold does not matter; that they are read in order does.
@@ -25,15 +25,15 @@ fun through_a_generic<T>(x: T): T
   ret x
 end fun
 
-// The way it was found. The tensor is boxed to be handed over and the box is
-// freed on the way back, which is the block the set below is cut from.
+// The way it was found. The tensor was boxed to be handed over and the box
+// freed on the way back, which was the block the set below was cut from.
 fun after_a_tensor(): #{u32}
   let a: [|u32, 1|] = [| : u32 / 1 |]
   let b: [|u32, 1|] = through_a_generic(a)
   ret #{: u32 / 119, : u32 / 54}
 end fun
 
-// The same shape with a list and a map, which box and free the same way.
+// The same shape with a list and a map, which were boxed the same way.
 fun after_a_list(): #{u32}
   let a: [u32] = [: u32 / 7, : u32 / 8]
   let b: [u32] = through_a_generic(a)

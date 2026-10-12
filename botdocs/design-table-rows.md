@@ -1,5 +1,10 @@
 # Tables: what the type system is missing, and four ways out
 
+> **Written under erasure.** Generics have since moved to fat pointers and
+> descriptor tables ([Generics: how it works](generics.md)). What this says
+> about erased values, `data` wrappers, `erase`/`reify` or descriptor shapes
+> describes the old implementation.
+
 A table is a first-class opaque value: it can be built, moved, cloned, compared,
 sorted, keyed on and held inside anything, and nothing can look inside one. This
 is why, and what could be done about it.

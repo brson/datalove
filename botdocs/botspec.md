@@ -1295,8 +1295,8 @@ let x = repeat(COUNT, ref s)  // COUNT is a const binding
 - A const parameter's type cannot be a type parameter (`const n: T` in a
   generic function is an error). A const parameter of a concrete type in a
   generic function is fine: specialization removes const parameters and
-  erasure replaces type parameters, so one copy per const instantiation
-  serves every type instantiation
+  leaves the type parameters, so one copy per const instantiation serves
+  every type instantiation
 - Nothing else is accepted, not a literal and not an expression: `repeat(3, ref s)`
   is refused as surely as `repeat(2 + 1, ref s)`. The value a const parameter takes
   has to be one the compiler already holds, and a `const` binding is the one
@@ -1374,32 +1374,13 @@ fun swap<T>(x: (T, T)): (T, T)
 fun tagged<T>(x: enum { term Some T, atom None }): bool
 ```
 
-**Representation.** A generic function is compiled once, not once per type, so
-a type parameter has no fixed size and the shapes it stands in have to be made
-to fit one. The mode decides whether a value is converted at all, and the shape
-decides how:
-
-A type parameter standing alone is carried as a `data`, which holds a value of
-any type along with what is needed to clone and drop it. An option, a result, a
-tuple, a struct, a term and an enum payload hold what they hold inline, so
-converting one means converting each part and writing it where the other side
-keeps it -- a walk over as many parts as the type has, and no more.
-
-A collection is a different case. A list is a pointer, a length and a capacity
-whatever its elements are, so it is already the right size; what it lacks is the
-element type. An owned one is wrapped whole into a `data`, which costs one small
-allocation and leaves the elements untouched.
-
-That is all for a value the callee owns -- an `in` or `out` parameter, or the
-return. A `ref` or `mut` parameter is not converted at all: the value is passed
-as it stands, and the descriptor saying what it really is comes from the call
-site.
-
-None of this is visible in a program except in what it costs. The call site
-converts on the way in and moves the value back out on the way back, because it
-is the place that knows the type. An `out` parameter goes both ways: whatever
-the destination held is dropped at the call, and what the callee writes is moved
-back out into whatever the caller keeps there.
+**Representation.** A generic function is compiled once, not once per type.
+Inside it, a value whose type mentions a type parameter is a pointer at the
+value in its real layout together with a descriptor saying what it is, and the
+caller hands over one descriptor per type parameter, from which the function
+builds any other it needs. Nothing is converted at a call: a `u32` passed for a
+`T` is the caller's `u32`, and a `[u32]` passed for a `[T]` is the caller's
+list. None of this is visible in a program except in what it costs.
 
 **Copy and linearity.** A type parameter is never a copy type, because the
 caller may supply a linear one. A value taken out of an option by
@@ -1467,7 +1448,7 @@ There are three bounds:
   arithmetic, and the constants. Comparing and sorting are not there, because
   they ask nothing of a fixed-width integer that another type cannot answer.
 
-Erasure still compiles one body, so the machine code cannot hold the
+A generic still compiles to one body, so the machine code cannot hold the
 instruction for every type the bound admits. The operands arrive with their
 descriptors and the runtime reads which type it is, the same way a collection
 of a type parameter has its elements walked by a size read off a descriptor. A
@@ -1515,25 +1496,10 @@ that takes it by reference.
 A collection over a type parameter can be built as well as taken, stored,
 handed on and returned. `var out: [T] = []` works, and so does a collection
 whose element is a *composite* of type parameters -- `[(A, B)]`, `[?T]` --
-which is what `list.zip` and `map.entries` are. An element crossing into such a
-collection is converted position by position against the collection's own
-descriptor, the same way an owned parameter crossing a call is. A collection that arrives
-carries a descriptor saying what its elements are; one written here has no value
-to read one off, so the call site hands one over — it is the only place that
-knows what the parameter was bound to. Nothing is worked out at run time,
-because `[T]` with `T` bound to a concrete type is a concrete type, and that
-has a descriptor already.
-
-Which descriptors a function is handed is what its own body builds, closed over
-its calls: a generic that passes its type parameter to one that builds a
-collection of it carries a descriptor too, and forwards it. A generic that
-builds nothing carries none.
-
-One program is refused. A generic that builds a collection of its type
-parameter and calls a generic at a strictly larger type needs a description one
-level deeper at every call, so the set never settles. Erasure means such a
-function compiles to one body and would simply recurse for ever at run time;
-what cannot be written down is the descriptors, not the code.
+which is what `list.zip` and `map.entries` are. Its descriptor is built when
+the function is entered, from the descriptors of its type parameters. A generic
+may call another, or itself, at a larger type -- `f<T>` calling `f<[T]>` --
+which builds one more descriptor at each level.
 
 How this is implemented is in [Generics: how it works](generics.md); what is
 refused and why is

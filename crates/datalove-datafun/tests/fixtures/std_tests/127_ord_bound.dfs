@@ -59,8 +59,8 @@ let on_shapes = (less(ref lists.1, ref lists.0), greater(ref tuples.0, ref tuple
 let picking = (min("b", "a"), max("b", "a"), clamp("z", "a", "m"),
                clamp("a", "b", "y"), sorted_pair("b", "a"))
 
-// A signed element is where reading the wrapper's own words rather than what
-// it holds went wrong: two's complement read as a magnitude puts every
+// A signed element is where reading a wrapper's own words rather than what it
+// held once went wrong: two's complement read as a magnitude puts every
 // negative above every positive.
 let signed: [i32] = [: i32 / 5, : i32 / -2, : i32 / 9, : i32 / -2]
 let floats: [f64] = [: f64 / 2.5, : f64 / -1.5, : f64 / 0.0]
@@ -97,9 +97,9 @@ fun gather<T>(a: T, b: T, c: T): [T] with { T is ord, }
   ret to_list(ref held)
 end fun
 
-// Borrowing a type parameter from one generic into another, which for a value
-// the wrapper packs into its own words means unpacking it first: there is no
-// address to lend and, for the narrowest, no descriptor either.
+// Borrowing a type parameter from one generic into another, which once meant
+// unpacking a narrow value from its wrapper first, there being no address to
+// lend.
 fun smallest_of<T>(a: T, b: T): T with { T is ord, }
   ret min(a, b)
 end fun

@@ -27,8 +27,7 @@ let past_two = skip(ref words, : index / 2)
 let all_of_it = take(ref words, : index / 99)
 let past_the_end = skip(ref words, : index / 99)
 
-// A list of lists is fine: an inner list is carried as one `data`, the same as
-// any other collection of a type parameter.
+// A list of lists is fine: the inner list is a `T` like any other.
 let nested: [[string]] = [["a", "b"], [], ["c"]]
 let flat = flattened(ref nested)
 let flat_numbers = flattened(ref (: [[u32]] / [[1, 2], [3]]))

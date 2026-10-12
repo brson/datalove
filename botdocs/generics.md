@@ -1,385 +1,323 @@
 # Generics: how it works
 
-> **Being replaced.** [Generics by Reference](plan-fat-generics.md) plans to
-> replace what this describes. Until it lands, this is still how it works.
-
-A generic function is compiled once, whatever it is called with. A type
-parameter has no fixed size, so the positions it stands in are shaped to fit any
-type, and a *type descriptor* -- the runtime's `TyDesc` -- says what is really
-there whenever that matters.
+A generic function is compiled once, whatever it is called with. Inside it, a
+value whose type mentions a type parameter is a pointer at the value in its
+real layout together with that value's *type descriptor* -- the runtime's
+`TyDesc` -- and the descriptors the body needs are built at run time from one
+descriptor per type parameter, which the caller hands over.
 
 This describes the implementation as it stands. The language-level rules are
-[Section 8.5 of the spec](botspec.md#user-content-85-generic-functions); the
-reasoning that led here, and what was considered instead, is in
-[Generics and Specialization](plan-generics.md).
+[Section 8.5 of the spec](botspec.md#user-content-85-generic-functions). How it
+got here is [Generics by Reference](plan-fat-generics.md), which replaced the
+erasure that [Generics and Specialization](plan-generics.md) describes.
 
 ## Contents
 
-- [The two halves](#user-content-the-two-halves)
-- [Erasure: what a position becomes](#user-content-erasure-what-a-position-becomes)
-- [Where descriptors come from](#user-content-where-descriptors-come-from)
-- [Getting further in](#user-content-getting-further-in)
-- [Opening a wrapped container](#user-content-opening-a-wrapped-container)
-- [Converting between shapes](#user-content-converting-between-shapes)
+- [The shape](#user-content-the-shape)
+- [Types in the IR](#user-content-types-in-the-ir)
+- [Descriptors](#user-content-descriptors)
+- [Storage](#user-content-storage)
+- [Calls](#user-content-calls)
+- [Operations on a dynamic value](#user-content-operations-on-a-dynamic-value)
+- [Natives](#user-content-natives)
 - [What the runtime provides](#user-content-what-the-runtime-provides)
-- [What each backend carries](#user-content-what-each-backend-carries)
+- [What each engine does](#user-content-what-each-engine-does)
 - [What is refused](#user-content-what-is-refused)
 - [Why not monomorphization](#user-content-why-not-monomorphization)
 - [Where the tests are](#user-content-where-the-tests-are)
 
-## The two halves
+## The shape
 
-**Erasure** decides the shape a value has inside the generic. **Descriptors**
-say what is actually in that shape. Neither is enough alone: a shape that fits
-any type cannot say which type, and a descriptor with nothing to describe is a
-pointer to nowhere.
+- A **dynamic type** is an IR type that mentions a type parameter: `T`,
+  `(T, u32)`, `?T`, `[T]`, `%{K = V}` (`IrType::is_dynamic`).
+- A **dynamic value** is a value of a dynamic type. In a frame it is a **fat
+  pointer**, `{ptr, tydesc}`, two words whatever the type. `ptr` is the value
+  in its real layout; `tydesc` describes that layout.
+- The value a fat pointer points at lives on a **shadow stack** owned by the
+  runtime, or in the caller's frame for an argument.
+- A **reference to a dynamic type** *is* a fat pointer, at storage someone else
+  owns. It gets no storage of its own, and moving it copies its two words.
+- A generic takes **one descriptor per type parameter**, after its ordinary
+  arguments. Anything compound the body needs is built from those.
+
+Nothing is converted at a boundary. A `u32` passed for a `T` is a pointer at
+the `u32`; a `(u8, u32)` passed for a `(T, u32)` is a pointer at the
+`(u8, u32)`. Code outside generics is untouched: a type that mentions no type
+parameter is laid out and passed as it always was.
 
 The invariant the whole thing rests on:
 
-> A value's static type describes its layout -- except where a descriptor says
-> otherwise, and then the descriptor is reachable from wherever the layout is
-> needed.
+> A value's descriptor is always beside it. A static type describes a layout
+> only where it mentions no type parameter.
 
-Every fault this area has had was that second clause not holding: something
-computed an address, a width or a stride from a static type that had been
-erased, with no descriptor to hand.
+## Types in the IR
 
-## Erasure: what a position becomes
+`IrType::Param(u32)` is a type parameter by position, kept inside the types
+around it: `(T, u32)` is `Tuple([Param(0), U32])`. A function's parameter and
+return types are as written (`IrType::from_type_hint_generic`), and so is every
+value and slot type in its body.
 
-`erased_param_type` in `datafun-ir` is the single place that decides. The caller
-and the callee both read it, because a call site converting into a shape the
-callee was not compiled for is not a mismatch anything reports -- it is two
-sizes disagreeing about the same bytes.
+Layout has one rule for them: a dynamic type is laid out as a fat pointer. The
+static offset helpers (`aggregate_field_offsets`, `option_payload_offset` and
+the rest) are never asked about a dynamic type; every site that would ask
+takes the descriptor path instead.
 
-It forks on whether the position is **borrowed**.
+`IrType::Data` is the language's own `data` type and nothing else. `T` bound to
+`data` is a fat pointer at a `data`, like any other binding.
 
-### Owned: `in`, `out`, and the return
+## Descriptors
 
-Converted at the boundary, by `erased_owned_type`:
+**The table.** `FunctionContext::descriptor_table` lists the dynamic types the
+body uses, each a type expression over the function's own parameters
+(`ir::descriptor_table`, computed when the unit is lowered). At entry the
+function fills a table of their descriptors. Every instruction that needs the
+descriptor of a dynamic type reads its entry. A type parameter's own entry is
+the descriptor handed over for it.
 
-| Written | Becomes | Cost |
+**Building.** Each entry has a **template**: the static descriptor of its type
+expression, with a `TyTag::Param` descriptor wherever a type parameter stands.
+Filling the table asks the runtime to instantiate each template against the
+type-parameter descriptors (`dtlv_rti_tydesc_instantiate`), and the runtime
+caches what it builds per runtime handle.
+
+**The one-entry cache.** Each function also keeps the last call's
+type-parameter descriptors and the table they built. A call repeating the
+binding costs a compare per type parameter and skips the fill. Every engine
+has one: a writable data object in Cranelift, a `static` in C, and
+`IrLayout::table_cache` in the interpreter. A call site alternating between
+two bindings refills every time; see `botdocs/issues.md`.
+
+**Call sites.** A `Call` carries `bindings`, what the site binds each of the
+callee's type parameters to, written over the caller's own. Each becomes a
+descriptor: a static one when the binding is concrete, or the caller's own
+table entry when it mentions the caller's parameters, forwarding included. The
+interpreter resolves that once per site, as a `BindingRef` (`Static` or
+`Table`).
+
+Nothing about a callee's descriptors comes from its body, so a callee's
+calling convention depends on its signature alone, and a call at a growing
+type -- `f<T>` calling `f<[T]>` -- builds one more descriptor per level of
+recursion. Every type parameter still has to be determined at a call site;
+that is now plainly the rule that the caller has to have a descriptor to pass.
+
+## Storage
+
+**Each dynamic value and slot owns its storage.** A move copies `desc.size`
+bytes into the destination's storage rather than handing over the pointer,
+since a value defined in a loop reuses its storage every iteration.
+
+**The dynamic frame.** After filling the table, a function with dynamic values
+bumps the shadow stack once for all of them, each sized and aligned from its
+descriptor, and points each fat pointer there. The shadow stack grows with the
+number of IR values, never with the iteration count.
+
+**Release.** The function records the shadow stack's top and limit at entry
+and restores both on every return; the stack grows by chunks, so restoring
+only the top would leave the limit in a newer chunk. Unwinding the interpreter
+gives back each popped frame's space. A datalove error or a panic that skips
+compiled epilogues is covered by the runtime's `reset`, which resets the
+shadow stack to its base.
+
+**Values that leave** are copied out: a return into the caller's storage, a
+push into a collection, a store into an aggregate. Nothing keeps a pointer
+into a frame's shadow space after it returns.
+
+**Block arguments are a parallel move.** Copying bytes one argument at a time
+breaks if a jump passes a block's own parameters back to it permuted, so
+lowering never emits one, and checks (`ir::permuted_block_args`).
+
+## Calls
+
+Per dynamic parameter, by mode:
+
+| Mode | Passed | Who owns what |
 |---|---|---|
-| `T` | `data` | wraps; a narrow scalar rides in the two words, anything else is boxed |
-| `?T`, `!T`, `(T, u32)`, `{a: T}`, `term W T`, an enum payload | the same shape with the parts converted | a walk over as many parts as the type has |
-| `[T]`, `#{T}`, `%{K = V}`, a tensor, a table | `data`, wrapped whole | one small allocation, elements untouched |
+| `ref` | a pointer at the caller's value | the caller, throughout |
+| `mut` | a pointer at the caller's value | the caller; the callee writes in place |
+| `in` | a pointer at the caller's storage | the callee owns the value; the caller frees the storage |
+| `out` | a pointer at storage for the result | the callee writes; the caller destroys what was there first |
+| return | a pointer at storage for the result | as `out` |
 
-The third row is the one worth explaining. A list is a pointer, a length and a
-capacity whatever its elements are, so it is already the right size and there is
-nothing to convert it *into*. What it lacks is the element type, and wrapping is
-what gives it somewhere to keep one. Converting `[u32]` into a list of `data`
-would mean rebuilding it element by element -- an O(n) the design avoids by not
-doing it.
+The callee does not take a descriptor per argument: its table entry for the
+parameter's type describes it. Then come the type-parameter descriptors, in
+declaration order.
 
-The rule reaches inside a composite, so `([T], u32)` becomes `(data, u32)`: a
-tuple converts field by field, so a container field is converted too, and
-wrapping is the only conversion a container has.
+**Which side gives an `in` argument up.** A type parameter is never a copy
+type, but a copy value bound to one is copied, not moved. So for a dynamic
+argument the caller asks the argument's own descriptor (`TyDesc::PLAIN`), not
+the callee's type, and every engine marks a moved argument dead after the call
+on that answer -- at run time in compiled code, natives included.
 
-A return is an owned parameter going the other way -- nobody keeps a copy -- so
-`erased_return_type` is `erased_param_type` with `borrowed: false`. That is why
-nothing is smuggled on the return path: what comes back is a `data`, which
-describes itself.
+## Operations on a dynamic value
 
-### Borrowed: `ref` and `mut`
+The instruction set has no generic-specific instructions; a backend
+implements an instruction whose operand is dynamic from the descriptor.
 
-**Nothing is converted.** The value is passed as it stands, so the callee's
-static type for it is the erased one -- `{a: data, b: u32}` where the caller
-holds `{a: u8, b: u32}` -- and that type is a *lie about the layout*. The
-descriptor for what really arrived comes from the call site.
-
-This is the case everything in the rest of this document exists to serve.
-
-## Where descriptors come from
-
-Three channels, and which one applies is decided by where the value came from.
-
-### 1. The value itself
-
-A `data` carries its own descriptor. That covers every owned position: an owned
-container, an owned bare `T`, and every return. Nothing is passed alongside.
-
-### 2. `descriptor_params` -- for a borrowed value
-
-`FunctionContext::descriptor_params` lists the parameters whose own type does
-not describe what arrives. It is built in `datafun-lower/src/func.rs` under
-exactly the condition that makes the type a lie:
-
-```rust
-if borrowed && type_hint_mentions_param(&p.type_hint, &type_params) {
-    descriptor_params.push(id);
-}
-```
-
-The call site fills each one with the argument's concrete descriptor. It is the
-only place that knows.
-
-### 3. `descriptor_shapes` -- for a value being built
-
-A value that *arrives* can be described by something that arrived with it.
-A collection written in the body has no such value: `var out: [T] = []` has
-nothing to read a descriptor off. So the body declares the shape it needs and
-the call site hands one over as a trailing argument.
-
-`FunctionContext::descriptor_shapes` holds those, in the order they arrive.
-Nothing is constructed at run time: `[T]` with `T` bound to a concrete type is a
-concrete type, and that has a static descriptor already.
-
-Which shapes a function needs is what its own body builds, **closed over its
-calls**: a generic passing its type parameter to one that builds a collection of
-it carries a descriptor too, and forwards it. `close_shapes` settles that, and
-`resolve_call_descriptors` then records what each call site hands over, as a
-`DescriptorRef`:
-
-- `Static(IrType)` -- a type this call site knows outright, so a static symbol.
-- `Own(i)` -- one this function was itself handed, forwarded whole.
-
-Both are worked out once and stored on the `Call`, rather than re-derived per
-backend.
-
-## Getting further in
-
-A borrowed value's descriptor arrives at the *parameter*. Reading a part of it
-needs the descriptor of that part, and a projection that dropped the descriptor
-would leave the next step with nothing but the lie.
-
-`RefDesc` says what a reference points at, where its static type does not.
-`resolve_ref_descriptors` derives the whole map for a unit:
-
-| variant | means |
+| Operation | On a dynamic value |
 |---|---|
-| `ParamField { param, index }` | field `index` of a borrowed parameter's descriptor |
-| `RefField { base, index }` | field `index` of the descriptor worked out for `base` |
-| `ParamElement { param }` | what a borrowed parameter's container holds |
-| `RefElement { base }` | what the container described for `base` holds |
-| `Unwrapped` | the descriptor a `DataBorrow` read out of a wrapper |
+| move, store, load, block argument | copy `desc.size` bytes into the destination's storage |
+| move of a reference | copy the two words |
+| read through a reference | copy or clone `desc.size` bytes into the destination's storage |
+| clone | `dtlv_rti_clone_local` into the destination's storage |
+| drop | `dtlv_rti_any_destroy_local`; the storage goes with the frame |
+| field, element, payload reference | a fat pointer: `ptr` plus the part's offset, and the part's descriptor |
+| tuple, struct, option, term, enum, result construction | each part stored at its offset from the destination's descriptor |
+| option and result tests | the tag, at offset 0 whatever the payload |
+| list, set, map, tensor, table literals | built by the runtime from the table entry's descriptor |
+| bounded operations (`ord`, `fixedint`, `float`) | `dyn_ops` on `(ptr, tydesc)` pairs |
+| `debuglog` | the runtime's printer on the pair |
 
-A value **absent** from the map is the ordinary case: its static type describes
-it, the offset folds at compile time, and the emitted code is what it always
-was. So "every reference carries a descriptor" is true as a rule and costs
-nothing outside a generic.
+A projection off a fat pointer is a fat pointer, so what a reference points at
+is worked out where it is made and travels with it.
 
-The map is **derived, not stored**. Each backend calls
-`resolve_ref_descriptors` once for the unit it is about to compile. A field on
-`IrCodeUnit` would have to survive specialization renumbering values; deriving on demand cannot go stale.
+## Natives
 
-Roots are `descriptor_params` and `DataBorrow`. Nothing else roots one: a local
-holding an erased value holds a `data` for real, so its static type is honest.
+The rider ABI is `(ptr, tydesc)` per argument, the result through an out pair,
+and then a descriptor for each type parameter no argument determines -- one
+appearing only in the return, like `fixedint_zero<T>(): T`.
+`NativeContext::undetermined_type_params` lists those positions, and a call's
+bindings at them are the descriptors (`NativeContext::undetermined_bindings`).
+A generic calling a native passes its fat pointers through, and the trailing
+descriptors come from its table.
 
-Consumers take their layout from the descriptor when the reference is fat and
-are untouched when it is not: field offsets, read-through widths, element
-strides, the descriptor handed to a callee, and `DropViaRef`.
-
-## Opening a wrapped container
-
-An owned container arrives wrapped, so a generic holding `xs: [T]` by value
-holds a `data` and cannot index it directly.
-
-`Instruction::DataBorrow` opens it: the pointer and the descriptor come out
-together (`dtlv_rti_data_borrow`), and the reference it produces carries the
-descriptor as `RefDesc::Unwrapped`. Everything downstream is the borrowed case,
-which already works -- so nothing needed a new way of *indexing*, only a way of
-getting at the container.
-
-Knowing there *is* a container to open is the awkward half.
-`IrType::from_datalit` collapses a container of a type parameter to `data`
-everywhere -- parameter, local and call result alike -- so the IR type says
-nothing about being a list. An index expression can ask the typechecker for the
-unerased type (`container_shape`), but a *place* like `xs[0]` has no expression
-node for its root. So the shape is recorded where the binding is made, in
-`LowerBody::wrapped_shapes`, at the two places that bind a wrapper: a parameter,
-from its type hint, and a `let` or `var`, from its initializer.
-
-That table is the one piece of this that is bookkeeping rather than descriptors.
-It would go away if an owned container erased structurally to `[data]` and took
-a descriptor the way a borrowed one does -- the header is the same three words
-either way, so nothing would be rebuilt.
-
-## Converting between shapes
-
-`convert` in `datalove-rt/src/c/impls/boxing.rs` walks two descriptors and
-converts at every position one of them calls `data`. It handles options,
-results, terms, enums, tuples and structs, recursing structurally, and it is
-driven entirely by the descriptor pointers -- so one found at run time does as
-well as a static one.
-
-Two directions and one variant:
-
-- `erase_local` -- into the erased shape. Moves.
-- `reify_local` -- back out of it. Moves.
-- `clone_erased_local` -- into the erased shape, cloning. A value read out of
-  something borrowed has to be left where it is, so this clones in the real
-  shape first and moves the clone (`clone_into_erased_shape`).
-
-**Whether anything was erased is a structural question, not a size one.** A
-`data` is two words and so is a `string`, so `{a: string, b: u32}` and
-`{a: data, b: u32}` are the same tag *and* the same width while being different
-layouts. `needs_erasure` walks the two descriptors looking for a position where
-one says `data` and the other does not. Comparing widths instead writes a string
-where a wrapper belongs.
-
-The same three-way decision appears wherever a value crosses between shapes, and
-is always the runtime's rather than each backend's: a destination that is a
-`data` holding something that is not one wants packing, a destination that
-really is a `data` wants a plain clone, and from a call site the two look alike.
-`dtlv_rti_list_get_erased_local` makes it for an element, `field_read` for a
-field, `clone_erased_local` for a clone.
-
-`needs_erasure` is **directional**, and both directions get asked. An element
-pushed into a collection built inside a generic is in the shape the generic
-holds it in -- a `(A, B)` is a tuple of two `data` -- while the slot is the real
-`(string, u32)` the collection's descriptor names, so that one reifies. A value
-coming back out of a `data` is usually the other way round. `data_into_local`
-asks both and picks, which is what lets a collection hold an element that is a
-composite of type parameters rather than only a bare one.
+A rider is never handed a `data` standing in for something else: a result slot
+is in the real layout, and an argument is what the caller has. See
+[native-abi.md](native-abi.md).
 
 ## What the runtime provides
 
 | Function | Answers |
 |---|---|
-| `dtlv_rti_field_offset` / `dtlv_rti_field_tydesc` | where a field is, and what it is |
-| `dtlv_rti_element_tydesc` | what a container holds (a map's *value*) |
-| `dtlv_rti_field_read_local` | read a field out, packing it if the destination wants that |
-| `dtlv_rti_data_borrow` | the pointer and descriptor inside a wrapper |
-| `dtlv_rti_erase_local` / `dtlv_rti_reify_local` / `dtlv_rti_clone_erased_local` | convert between two shapes |
-| `dtlv_rti_list_get_erased_local` | read an element, packing it if the destination wants that |
-| `dtlv_rti_btreemap_contains_key_erased_local` / `..._get_value_ref_erased_local` | look up a key that may have arrived packed |
+| `dtlv_rti_tydesc_instantiate` | a template's descriptor for a binding, cached per handle |
+| `dtlv_rti_field_offset` / `dtlv_rti_field_tydesc` | where a tuple or struct field is, and what it is |
+| `dtlv_rti_payload_offset` / `dtlv_rti_payload_tydesc` | the same for an option's, a result's, a term's, or an enum variant's payload |
+| `dtlv_rti_shadow_alloc` | shadow stack space when the current chunk has no room |
+| `dtlv_rti_mem_alloc_raw_local` / `dtlv_rti_mem_free_raw_local` | scratch for a tensor literal of a dynamic element type |
 
-These are in the runtime rather than open-coded per backend for one reason: four
-derivations of one question is where the bugs come from. Two concrete traps make
-it more than a principle. `TyInfoTuple` is `{num_fields, fields}` and
-`TyInfoStruct` is `{fields, num_fields}` -- pointer and count swapped -- so a
-hand-written descriptor walk gets one of them wrong. And whether a key arrived
-packed is a comparison between two descriptors (`unwraps_the_element`,
-`borrow_lookup_key`) that a call site cannot make from its static type alone.
+The shadow stack's top and limit are in `RtHeader` (`shadow_top`,
+`shadow_limit`), so compiled code bumps and restores inline and calls the
+runtime only when a chunk is full. It is per runtime handle, so reentrant.
 
-## What each backend carries
+These are the runtime's rather than open-coded per backend for one reason:
+four derivations of one layout rule is where the bugs come from.
+`TyInfoTuple` is `{num_fields, fields}` and `TyInfoStruct` is
+`{fields, num_fields}`, and an option's payload, a result's and an enum
+variant's are each placed by a different rule.
 
-The **interpreter** needs the least: its values are already a pointer and a
-descriptor, and a parameter's is per-frame, beside its pointer in the frame's
-parameter region. A reference `resolve_ref_descriptors` names gets a
-descriptor word in the frame (`IrLayout::ref_desc_offsets`), written by its
-projection and read by `value_deref`; any other reference is described by its
-static type, as in the compiled backends.
+Built descriptors are cached by the template's address and the parameters'
+addresses, outside the handle's allocator so `reset` does not free them. A
+miss for a type that has a static descriptor elsewhere builds a duplicate,
+which is harmless: descriptors compare structurally (`same_tydesc`).
 
-The **compiled backends** take one extra pointer parameter per entry in
-`descriptor_params`, then one per entry in `descriptor_shapes`, after the
-ordinary parameters and in that order. Cranelift keeps materialized descriptors
-in `ref_desc_values`; the C backend declares a `__rd{n}` per fat reference in the
-function prologue, so a `goto` between blocks never jumps over a declaration.
+## What each engine does
 
-The **jit** compiles through the same cranelift codegen, so jit code passes both
-groups the same way. What it adds is two boundaries of its own, and both have to
-know that there are two groups and not one:
+**The interpreter.** A dynamic value or slot has a null static descriptor in
+`IrLayout`, and the frame accessors (`Frame::value`, `value_dest`, `slot`,
+`slot_dest`) read the fat pointer when they see one, so the walker's
+instructions, already driven by the descriptor in hand, mostly needed nothing.
+A reference to a dynamic type stores its descriptor in a word of the frame
+(`ref_desc_offsets`). `enter_dynamic` fills the table and takes shadow space
+after `Frame::enter`; `leave_dynamic` gives it back.
 
-- `bridge::call_jit` builds the argument list when the interpreter enters jit
-  code. It takes the `descriptor_params` and the shape descriptors separately
-  and appends them in that order.
-- `__jit_dispatch_call` is the trampoline out of jit code. It reads the
-  parameter descriptors off the front of the array it was handed and the shape
-  descriptors off the back, then either forwards both to `call_jit` or hands
-  them to `call_in_context_with_shapes`.
+**The bytecode** runs a generic's body: an instruction on a dynamic value runs
+on the walker (`Op::Ir`), except a move and a return (`CopyFat`,
+`ReturnFat`). A call with bindings is planned like any other, and a generic
+wrapper around a native is forwarded straight to the native.
 
-This paragraph used to say that a dropped descriptor was closed by construction,
-because `LocalCallee` pairs a declared function with the `descriptor_params` its
-signature asks for and the stub forwards what it was handed. That covers the
-first group and not the second: the trampoline consumed only the parameter
-prefix and called `call_in_context`, so a jit-compiled function calling
-`sys/std/list.reversed` built its result from whatever was in the register, and
-every other backend was right. `backend/23_descriptors_across_jit.dfs` is
-the case the other fixtures missed -- a plain function calling a generic that
-builds, which is ungated and therefore compiled, where every generic fixture
-before it called from the script unit body or from another generic that
-forwards.
+**Cranelift**, AOT and JIT (`codegen/dynamic.rs`). A dynamic value is an
+aggregate whose Cranelift value is the address of its shadow storage. Its
+descriptor is its table entry (`tydesc_value`); asking for a static descriptor
+of a dynamic type is an error, so a site that wanted a symbol fails to
+compile rather than compiles wrong. Sizes come from the descriptor
+(`value_size`, `copy_value_bytes`), offsets from the runtime.
 
-A `CallDispatcher` gets them too: the shape descriptors travel on
-`DispatchCallContext::shape_descriptors`, so the interpreter offers a
-shape-taking call to the dispatcher like any other. What the jit still refuses
-is width rather than shape: `bridge::enterable` turns away a function whose
-parameters and descriptors together exceed `MAX_DIRECT_ARGS` words, since
-`call_jit` has no function pointer type to enter it through.
+**The JIT** compiles through the same codegen. The bridge into JIT code and
+the trampoline out of it carry the type-parameter descriptors after the
+arguments, and so does a planned call from the bytecode into JIT code. A
+function whose arguments and descriptors together exceed `MAX_DIRECT_ARGS`
+words is left to the interpreter. OSR reads the table and the fat pointers
+from the interpreter's frame (`OsrSpec::table_offset`).
 
-A runtime function a generic needs is added in two places: declared in
-`RuntimeImports`, and given its address in the jit's `runtime_addresses`. One
-missing from the second panics as the jit starts, which every jit test does.
+**C AOT** follows Cranelift's choices in C. The signature ends with one
+`const dtlv_tydesc_t* tp{i}` per type parameter; the prologue declares the
+table as locals `__t{i}`, fills it through a `static` one-entry cache, and
+bumps shadow space inline (`dtlv_shadow_bump`). A dynamic place is a pointer
+in the frame, and a dynamic type's descriptor is `(*__t{i})` wherever a static
+symbol's name would go.
 
-One rule at a call site is easy to get backwards. An argument whose static type
-reads `data` may be a *wrapper* to unwrap, or a *pointer at the value* that
-merely reads as `data` because it was erased. Anything carrying its own
-descriptor is the second: `operand_ref_desc(arg).is_some()` is the test. Read
-the wrong way, a string's first two words are taken for a wrapper's pointers.
-
-And one about ownership. A call consumes its `in` arguments, and the call is
-what ownership analysis sees taking them -- but an erased parameter puts a
-conversion in between, so the call takes the *erased value* and the binding it
-came from is never seen going. A non-copy binding has to be moved out before
-the conversion, or it is destroyed at the end of its scope as well as by the
-callee. A copy binding is left where it stands, which is what lets one be
-erased into two calls.
+Both compiled backends have a gate, `check_dynamic_support`, refusing a
+function that uses an instruction on a dynamic value their codegen does not
+handle, by name. It admits everything `sys/std` and the fixtures use. Under
+the JIT a refusal leaves the function to the interpreter (`--jit-stats` lists
+it, `ENGINE_TESTS_JIT_REFUSALS=1` makes the engine suite print them); under
+AOT it fails the build.
 
 ## What is refused
 
 **No bounds, so no operations on a `T`.** A value of a bare type parameter can
 be moved, dropped, cloned, printed, stored, returned and handed on. `x + y` and
-`x == y` are errors whatever the call site supplied. Printing is the exception
-because the descriptor travelling with the value is enough to format it.
+`x == y` are errors whatever the call site binds. Printing works because the
+descriptor travelling with the value is enough to format it.
 
-`float`, `fixedint` and `ord` bounds do exist and dispatch through the runtime
-on descriptors (`dyn_ops`), which is how `sys/std` writes arithmetic over a type
-parameter and how a set or map over one gets its ordering.
+`float`, `fixedint` and `ord` bounds dispatch through the runtime on
+descriptors (`dyn_ops`), which is how `sys/std` writes arithmetic over a type
+parameter and how a set or map over one gets its order. A set or map over a
+`T` with no `ord` bound is F061.
 
-**A generic that builds a collection and recurses at a strictly larger type.**
-Building `[T]` and calling a generic at `[[T]]` needs a descriptor one level
-deeper at every call, so the set never settles. `close_shapes` decides this from
-the call graph rather than from how big a shape gets: each call draws an edge
-from the callee's type parameter to the caller's, *strict* when the binding puts
-a type constructor around it. A cycle of plain edges is a renaming and cannot
-enlarge anything; a cycle holding one strict edge adds a level every lap. That
-is the occurs check read across the call graph, which is what keeps a merely
-deep type from being mistaken for a growing one.
+**A const parameter whose type mentions a type parameter** is F077:
+specialization makes one copy per const value, and that copy is still generic.
 
-**A generic `out` parameter has to be a whole binding or a field.** Both work,
-and so does passing one straight on; anything else is refused rather than
-written wrong.
+**A type parameter no argument or expectation determines** cannot be called,
+since the caller has no descriptor to pass.
 
 ## Why not monomorphization
 
-Erasure costs at run time: a local of type `T` is two words rather than a
-register, type-directed operations are indirect calls into the runtime, and call
-sites convert at the boundary.
+A dynamic value costs at run time: a `T` is read through a pointer, a move is
+a copy of `desc.size` bytes, a call fills a descriptor table (or compares
+against its cache), and type-directed operations are calls into the runtime.
 
 What it buys is what a language with a REPL needs. Compile time is O(1) in the
 number of instantiations -- a new one appearing in the REPL compiles nothing.
 There is nothing to invalidate, because a generic function is one salsa-tracked
-entity rather than a family whose membership depends on the whole program. And
-the whole-program assumption goes away: monomorphization needs to see every call
-site before it can emit the callee, which is exactly what a REPL cannot give,
-since call sites arrive one at a time.
+entity, and a generic's body never contributes to its callers' calling
+convention. Monomorphization needs to see every call site before it can emit
+the callee, which is exactly what a REPL cannot give.
 
-Monomorphizing what is *hot* remains open, and would reuse the counters
-`optimizing.rs` already keeps for jit compilation. It is an
-optimization over a complete implementation rather than a different design.
+Monomorphizing what is *hot* is [Monomorphizing
+Generics](plan-monomorphization.md): an optimization over a complete
+implementation, not a different design.
 
 ## Where the tests are
 
-`crates/datalove-cli/tests/fixtures/backend/` runs the interpreter, the jit and
+`crates/datalove-cli/tests/fixtures/backend/` runs the interpreter, the JIT and
 both AOT backends and compares them, so a recorded output is what all four
-agree on rather than a blessed difference:
+agree on. The generic ones:
 
 | Fixture | Covers |
 |---|---|
+| `06_out_params` | `out` through a generic |
+| `07`-`09` | owned containers, tuples, terms and enums through a generic |
 | `10_generic_indexing` | reading an element whose type a generic cannot name |
-| `15_borrowed_generic_aggregate` | field offsets under `ref` and `mut` |
-| `16_generic_element_borrow` | a borrow taken out of a borrowed list |
-| `17_generic_map_tensor_index` | map lookups with a packed key, and tensor strides |
-| `18_generic_composite_part` | a part whose erased type holds a `data` |
-| `19_owned_generic_container_index` | indexing a container the generic owns |
+| `15_borrowed_generic_aggregate` | field offsets from the descriptor under `ref` and `mut` |
+| `16`-`19`, `21` | element and part borrows and writes, map and tensor indexes |
+| `20_generic_argument_from_a_var` | moving a var into a generic |
+| `22_comptime_and_generic` | const and type parameters together |
+| `23_descriptors_across_jit` | a JIT-compiled caller handing over descriptors |
+| `28`, `29`, `34` | which side drops an `in` argument, in and out of loops |
+| `30_generic_return_bound_to_unit` | a dynamic return bound to `()` |
+| `31_generic_enum_payload` | enum payloads sized from the descriptor |
+| `32_tensors_and_tables_over_a_type_parameter` | tensor and table literals over a `T` |
+| `33_growing_types` | calls at a growing type |
+| `35_alternating_bindings` | the one-entry cache missing every call |
 
 `crates/datalove-datafun/tests/fixtures/std_tests/` has the language-level
-coverage: `102_generic_forwarding`, `105_borrowed_param_forwarding`,
-`113_return_position_inference`, `114_build_generic_collections`,
-`115_shape_closure_recursion`, `116_build_generic_sets_and_maps`,
-`119_deep_but_not_growing`, and the bound tests `124`-`127`.
+coverage: `102`-`105` (forwarding), `113` (return-position inference),
+`114`-`120` (building collections, recursion, deep types), and the bound
+tests `124`-`127`. Engine fixture `module_068_growing_type` is a growing type on
+every engine, and `deep_recursion_tests.rs` checks that generic recursion
+under the JIT is not bounded by the Rust stack.
 
-Four backends agreeing is load-bearing here. Several of these faults were
-*silent* -- a wrong answer, not a crash -- and two were identical in all four,
-which is the case comparing them does not catch. Those needed a fixture that
-says what the answer should be.
+Four engines agreeing is load-bearing here. Most faults in this area have
+been silent -- a wrong answer, not a crash -- and some were identical in all
+four, which comparing them does not catch. Those need a fixture that says what
+the answer should be.

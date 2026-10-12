@@ -7,18 +7,16 @@ import list.pop
 // Building a collection whose element type is a type parameter.
 //
 // A `[T]` that arrives carries a descriptor saying what its elements are; one
-// written here has no value to read a descriptor off. So the call site, which
-// is the only place that knows what `T` was bound to, hands one over. Nothing
-// is put together at run time: `[T0]` with `T0 = string` is `[string]`, and
-// that has a static descriptor already.
+// written here has no value to read a descriptor off. Its descriptor is built
+// at entry from the descriptor of `T` the call site hands over, which is the
+// only place that knows what `T` was bound to.
 //
-// Which shapes a function needs is what its own body builds, plus what its
-// callees need of it. `two_of` builds nothing itself and still carries a
-// descriptor, because it hands its `T` to `singleton`, which does.
+// `two_of` builds nothing itself and hands its `T` to `singleton`, which does,
+// forwarding the descriptor it was given.
 //
 // `nothing_at_all` has a type parameter appearing solely in its return type.
-// It needs both halves: return-position inference to be callable at all, and a
-// handed-over descriptor to be buildable.
+// It needs return-position inference to be callable at all, and the
+// descriptor of `T` from the call site to be buildable.
 
 fun singleton<T>(x: T): [T]
   var out: [T] = []

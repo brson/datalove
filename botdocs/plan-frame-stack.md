@@ -1,5 +1,10 @@
 # A Frame Stack for the Interpreter
 
+> **Written under erasure.** Generics have since moved to fat pointers and
+> descriptor tables ([Generics: how it works](generics.md)). What this says
+> about erased values, `data` wrappers, `erase`/`reify` or descriptor shapes
+> describes the old implementation.
+
 A plan for making interpreter calls cheap: frames that are only bytes, on one
 stack of their own, and bytecode calls that do not recurse on the Rust stack.
 These are items 1 and 2 of "Calls" in [plan-bytecode.md](plan-bytecode.md),

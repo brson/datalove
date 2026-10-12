@@ -120,8 +120,7 @@ look at each module; they must not look at each function.
 | query | memos | why more than one |
 |---|---|---|
 | `typecheck_module_graph`, `analyze_module_graph` | 2 | the module path and the script path key differently |
-| `close_shapes_over_calls` | 4 | twice per compile, once per lowering stratum |
-| `ctfe_module_registry` | 4 | likewise, one per stratum |
+| `ctfe_module_registry` | 4 | twice per compile, once per lowering stratum |
 | `create_module_graph_lowering_result`, `module_function_registry` | 4 | one per distinct lowering result; `module_function_registry` is capped at `lru = 4` because its key moves on every edit |
 | `resolve_module_exports`, `module_function_asts` | 4 | keyed per module, but only asked of a module something imports from -- four on the system library, where most modules are required by nobody |
 
