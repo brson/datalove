@@ -21,14 +21,17 @@ import index.shift_right_wrapping
 // Predicates.
 
 fun is_zero(self: int): bool
+  inline
   ret self == 0
 end fun
 
 fun is_positive(self: int): bool
+  inline
   ret self .> 0
 end fun
 
 fun is_negative(self: int): bool
+  inline
   ret self .< 0
 end fun
 
@@ -99,11 +102,13 @@ end fun
 
 // Quotient, truncated toward zero. None if other is zero.
 fun div_checked(self: int, other: int): ?int
+  inline
   ret some (self /? other)
 end fun
 
 // Remainder, taking the sign of self. None if other is zero.
 fun rem_checked(self: int, other: int): ?int
+  inline
   let quotient: int = self@ /? other@
   ret some (self - quotient * other)
 end fun
@@ -216,10 +221,12 @@ end fun
 // across. The value is truncated toward zero; a nan or an infinity has no
 // integer to name and gives none.
 fun from_f64(x: f64): ?int
+  inline
   ret int_from_f64(x)
 end fun
 
 fun from_f32(x: f32): ?int
+  inline
   ret int_from_f32(x)
 end fun
 

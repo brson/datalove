@@ -5,14 +5,17 @@ import std.int_low_bits_i64
 // Constants.
 
 fun min_value(): i8
+  inline
   ret (: i8 / -128)
 end fun
 
 fun max_value(): i8
+  inline
   ret : i8 / 127
 end fun
 
 fun bits(): u32
+  inline
   ret (: u32 / 8)
 end fun
 
@@ -32,10 +35,12 @@ fun signum(self: i8): i8
 end fun
 
 fun is_positive(self: i8): bool
+  inline
   ret self .> (: i8 / 0)
 end fun
 
 fun is_negative(self: i8): bool
+  inline
   ret self .< (: i8 / 0)
 end fun
 
@@ -103,6 +108,7 @@ fun count_ones(self: i8): u32
 end fun
 
 fun count_zeros(self: i8): u32
+  inline
   ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
@@ -117,16 +123,19 @@ fun trailing_zeros(self: i8): u32
 end fun
 
 fun leading_ones(self: i8): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: i8): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
 // Type conversion.
 
 fun cast_unsigned(self: i8): u8
+  inline
   ret icall i8_to_u8(self)
 end fun
 
@@ -144,6 +153,7 @@ fun from_i16(x: i16): ?i8
 end fun
 
 fun from_i16_wrapping(x: i16): i8
+  inline
   ret icall i16_to_i8(x)
 end fun
 
@@ -156,6 +166,7 @@ fun from_i32(x: i32): ?i8
 end fun
 
 fun from_i32_wrapping(x: i32): i8
+  inline
   ret icall i32_to_i8(x)
 end fun
 
@@ -168,6 +179,7 @@ fun from_i64(x: i64): ?i8
 end fun
 
 fun from_i64_wrapping(x: i64): i8
+  inline
   ret icall i64_to_i8(x)
 end fun
 
@@ -185,6 +197,7 @@ fun from_int(ref n: int): ?i8
 end fun
 
 fun from_int_wrapping(ref n: int): i8
+  inline
   ret from_i64_wrapping(int_low_bits_i64(ref n))
 end fun
 
@@ -199,24 +212,29 @@ fun neg_checked(self: i8): ?i8
 end fun
 
 fun add_checked(self: i8, other: i8): ?i8
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: i8, other: i8): ?i8
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: i8, other: i8): ?i8
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: i8, other: i8): ?i8
+  inline
   ret some (self /? other)
 end fun
 
 // Signed remainder with overflow check.
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i8, other: i8): ?i8
+  inline
   let zero = (: i8 / 0)
   if other == zero
     ret none
@@ -286,6 +304,7 @@ end fun
 // Wrapping arithmetic.
 
 fun neg_wrapping(self: i8): i8
+  inline
   ret icall neg_wrapping_i8(self)
 end fun
 
@@ -314,6 +333,7 @@ end fun
 
 // Checked left shift. Returns none if n >= 8.
 fun shift_left(self: i8, n: u32): ?i8
+  inline
   if n >= bits()
     ret none
   else
@@ -325,6 +345,7 @@ end fun
 
 // Checked arithmetic right shift. Returns none if n >= 8.
 fun shift_right(self: i8, n: u32): ?i8
+  inline
   if n >= bits()
     ret none
   else
@@ -333,6 +354,7 @@ fun shift_right(self: i8, n: u32): ?i8
 end fun
 
 fun shift_left_wrapping(self: i8, n: u32): i8
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 7)
   if shift_left(self, n_mod) |value|
     ret value
@@ -342,6 +364,7 @@ fun shift_left_wrapping(self: i8, n: u32): i8
 end fun
 
 fun shift_right_wrapping(self: i8, n: u32): i8
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 7)
   if shift_right(self, n_mod) |value|
     ret value
@@ -424,6 +447,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: i8): bool
+  inline
   ret self == (: i8 / 0)
 end fun
 

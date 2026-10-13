@@ -21,21 +21,25 @@ import std.list_pop
 
 // The number of entries.
 fun len<K, V>(ref self: %{K = V}): index with { K is ord, }
+  inline
   ret map_len(ref self)
 end fun
 
 // True if there are no entries.
 fun is_empty<K, V>(ref self: %{K = V}): bool with { K is ord, }
+  inline
   ret map_len(ref self) == (: index / 0)
 end fun
 
 // True if the key is present.
 fun contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
+  inline
   ret map_contains_key(ref self, ref key)
 end fun
 
 // The value for a key, or none.
 fun get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
+  inline
   ret map_get(ref self, ref key)
 end fun
 
@@ -106,11 +110,13 @@ end fun
 // The key and the value are reached separately because a position is what the
 // tree walk gives; `entries` puts them back together.
 fun key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
+  inline
   ret map_key_at(ref self, i)
 end fun
 
 // The value of the entry at a position in sort order.
 fun value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
+  inline
   ret map_value_at(ref self, i)
 end fun
 

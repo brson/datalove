@@ -26,6 +26,7 @@ import std.tensor_rank
 
 // The number of elements along axis 0.
 fun len<T>(ref self: [|T, 1|]): index
+  inline
   ret tensor_len(ref self)
 end fun
 
@@ -33,27 +34,32 @@ end fun
 // and here because a caller holding one of another rank has nothing else to
 // ask.
 fun rank<T>(ref self: [|T, 1|]): index
+  inline
   ret tensor_rank(ref self)
 end fun
 
 // True if there are no elements.
 fun is_empty<T>(ref self: [|T, 1|]): bool
+  inline
   ret tensor_len(ref self) == (: index / 0)
 end fun
 
 // The element at an index, or none if the index is past the end.
 fun get<T>(ref self: [|T, 1|], i: index): ?T
+  inline
   ret some (self[i]?@)
 end fun
 
 // The first element, or none if there are none.
 fun first<T>(ref self: [|T, 1|]): ?T
+  inline
   ret get(ref self, : index / 0)
 end fun
 
 // The last element, or none if there are none. The subtraction carries the
 // empty case: `-?` gives up on underflow, which returns none from here.
 fun last<T>(ref self: [|T, 1|]): ?T
+  inline
   ret get(ref self, tensor_len(ref self) -? (: index / 1))
 end fun
 

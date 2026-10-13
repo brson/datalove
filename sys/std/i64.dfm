@@ -5,14 +5,17 @@ import std.int_low_bits_i64
 // Constants.
 
 fun min_value(): i64
+  inline
   ret (: i64 / -9223372036854775808)
 end fun
 
 fun max_value(): i64
+  inline
   ret : i64 / 9223372036854775807
 end fun
 
 fun bits(): u32
+  inline
   ret (: u32 / 64)
 end fun
 
@@ -32,10 +35,12 @@ fun signum(self: i64): i64
 end fun
 
 fun is_positive(self: i64): bool
+  inline
   ret self .> (: i64 / 0)
 end fun
 
 fun is_negative(self: i64): bool
+  inline
   ret self .< (: i64 / 0)
 end fun
 
@@ -103,6 +108,7 @@ fun count_ones(self: i64): u32
 end fun
 
 fun count_zeros(self: i64): u32
+  inline
   ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
@@ -117,16 +123,19 @@ fun trailing_zeros(self: i64): u32
 end fun
 
 fun leading_ones(self: i64): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: i64): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
 // Type conversion.
 
 fun cast_unsigned(self: i64): u64
+  inline
   ret icall i64_to_u64(self)
 end fun
 
@@ -136,16 +145,19 @@ end fun
 // as two's complement for a negative value.
 
 fun from_int(ref n: int): ?i64
+  inline
   ret int_to_i64(ref n)
 end fun
 
 fun from_int_wrapping(ref n: int): i64
+  inline
   ret int_low_bits_i64(ref n)
 end fun
 
 // Conversion from offset, which is at most 64 bits and so always fits.
 
 fun from_offset(x: offset): i64
+  inline
   ret icall offset_to_i64(x)
 end fun
 
@@ -160,24 +172,29 @@ fun neg_checked(self: i64): ?i64
 end fun
 
 fun add_checked(self: i64, other: i64): ?i64
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: i64, other: i64): ?i64
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: i64, other: i64): ?i64
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: i64, other: i64): ?i64
+  inline
   ret some (self /? other)
 end fun
 
 // Signed remainder with overflow check.
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i64, other: i64): ?i64
+  inline
   let zero = (: i64 / 0)
   if other == zero
     ret none
@@ -247,6 +264,7 @@ end fun
 // Wrapping arithmetic.
 
 fun neg_wrapping(self: i64): i64
+  inline
   ret icall neg_wrapping_i64(self)
 end fun
 
@@ -275,6 +293,7 @@ end fun
 
 // Checked left shift. Returns none if n >= 64.
 fun shift_left(self: i64, n: u32): ?i64
+  inline
   if n >= bits()
     ret none
   else
@@ -286,6 +305,7 @@ end fun
 
 // Checked arithmetic right shift. Returns none if n >= 64.
 fun shift_right(self: i64, n: u32): ?i64
+  inline
   if n >= bits()
     ret none
   else
@@ -294,6 +314,7 @@ fun shift_right(self: i64, n: u32): ?i64
 end fun
 
 fun shift_left_wrapping(self: i64, n: u32): i64
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 63)
   if shift_left(self, n_mod) |value|
     ret value
@@ -303,6 +324,7 @@ fun shift_left_wrapping(self: i64, n: u32): i64
 end fun
 
 fun shift_right_wrapping(self: i64, n: u32): i64
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 63)
   if shift_right(self, n_mod) |value|
     ret value
@@ -429,6 +451,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: i64): bool
+  inline
   ret self == (: i64 / 0)
 end fun
 

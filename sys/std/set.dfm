@@ -15,26 +15,31 @@ import std.list_pop
 
 // The number of elements.
 fun len<T>(ref self: #{T}): index with { T is ord, }
+  inline
   ret set_len(ref self)
 end fun
 
 // True if there are no elements.
 fun is_empty<T>(ref self: #{T}): bool with { T is ord, }
+  inline
   ret set_len(ref self) == (: index / 0)
 end fun
 
 // True if the element is present.
 fun contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
+  inline
   ret set_contains(ref self, ref elem)
 end fun
 
 // Add an element. False if it was already present.
 fun insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
+  inline
   ret set_insert(mut self, elem)
 end fun
 
 // Remove an element. False if it was not present.
 fun remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
+  inline
   ret set_remove(mut self, ref elem)
 end fun
 
@@ -50,6 +55,7 @@ end fun
 // so that anything written as a loop over `len` and an index -- which is how
 // everything over a collection is written -- can be written over a set too.
 fun get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
+  inline
   ret set_get(ref self, i)
 end fun
 

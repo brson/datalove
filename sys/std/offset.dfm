@@ -24,14 +24,17 @@ const MIN: offset = icall index_to_offset(icall shl_index(: index / 1, SHIFT_MAS
 const MAX: offset = icall index_to_offset(icall shr_index(icall bitnot_index(: index / 0), : u32 / 1))
 
 fun min_value(): offset
+  inline
   ret MIN
 end fun
 
 fun max_value(): offset
+  inline
   ret MAX
 end fun
 
 fun bits(): u32
+  inline
   ret BITS
 end fun
 
@@ -53,10 +56,12 @@ fun signum(self: offset): offset
 end fun
 
 fun is_positive(self: offset): bool
+  inline
   ret self .> (: offset / 0)
 end fun
 
 fun is_negative(self: offset): bool
+  inline
   ret self .< (: offset / 0)
 end fun
 
@@ -140,16 +145,19 @@ fun trailing_zeros(self: offset): u32
 end fun
 
 fun leading_ones(self: offset): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: offset): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
 // Type conversion.
 
 fun cast_unsigned(self: offset): index
+  inline
   ret icall offset_to_index(self)
 end fun
 
@@ -190,24 +198,29 @@ fun neg_checked(self: offset): ?offset
 end fun
 
 fun add_checked(self: offset, other: offset): ?offset
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: offset, other: offset): ?offset
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: offset, other: offset): ?offset
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: offset, other: offset): ?offset
+  inline
   ret some (self /? other)
 end fun
 
 // Signed remainder with overflow check.
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: offset, other: offset): ?offset
+  inline
   let zero = (: offset / 0)
   let neg_one = (: offset / -1)
   if other == zero
@@ -280,6 +293,7 @@ end fun
 // Wrapping arithmetic.
 
 fun neg_wrapping(self: offset): offset
+  inline
   ret icall neg_wrapping_offset(self)
 end fun
 
@@ -308,6 +322,7 @@ end fun
 
 // Checked left shift. Returns none if n >= bits().
 fun shift_left(self: offset, n: u32): ?offset
+  inline
   if n >= BITS
     ret none
   else
@@ -319,6 +334,7 @@ end fun
 
 // Checked arithmetic right shift. Returns none if n >= bits().
 fun shift_right(self: offset, n: u32): ?offset
+  inline
   if n >= BITS
     ret none
   else
@@ -327,6 +343,7 @@ fun shift_right(self: offset, n: u32): ?offset
 end fun
 
 fun shift_left_wrapping(self: offset, n: u32): offset
+  inline
   let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_left(self, n_mod) |value|
     ret value
@@ -336,6 +353,7 @@ fun shift_left_wrapping(self: offset, n: u32): offset
 end fun
 
 fun shift_right_wrapping(self: offset, n: u32): offset
+  inline
   let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_right(self, n_mod) |value|
     ret value
@@ -464,6 +482,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: offset): bool
+  inline
   ret self == (: offset / 0)
 end fun
 

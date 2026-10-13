@@ -24,40 +24,49 @@ import std.f32_from_int
 // Constants.
 
 fun nan(): f32
+  inline
   ret (: f32 / 0x7FC00000)
 end fun
 
 fun infinity(): f32
+  inline
   ret (: f32 / 0x7F800000)
 end fun
 
 fun neg_infinity(): f32
+  inline
   ret (: f32 / 0xFF800000)
 end fun
 
 fun max_value(): f32
+  inline
   ret (: f32 / 0x7F7FFFFF)
 end fun
 
 fun min_value(): f32
+  inline
   ret (: f32 / 0x00800000)
 end fun
 
 fun min_positive(): f32
+  inline
   ret (: f32 / 0x00000001)
 end fun
 
 fun epsilon(): f32
+  inline
   ret (: f32 / 0x34000000)
 end fun
 
 // Classification.
 
 fun is_nan(self: f32): bool
+  inline
   ret icall is_nan_f32(self)
 end fun
 
 fun is_infinite(self: f32): bool
+  inline
   ret icall is_infinite_f32(self)
 end fun
 
@@ -119,6 +128,7 @@ end fun
 // Sign and absolute value.
 
 fun abs(self: f32): f32
+  inline
   ret icall abs_f32(self)
 end fun
 
@@ -135,66 +145,80 @@ fun signum(self: f32): f32
 end fun
 
 fun copysign(self: f32, sign: f32): f32
+  inline
   ret icall copysign_f32(self, sign)
 end fun
 
 // Rounding.
 
 fun floor(self: f32): f32
+  inline
   ret icall floor_f32(self)
 end fun
 
 fun ceil(self: f32): f32
+  inline
   ret icall ceil_f32(self)
 end fun
 
 fun round(self: f32): f32
+  inline
   ret icall round_f32(self)
 end fun
 
 fun trunc(self: f32): f32
+  inline
   ret icall trunc_f32(self)
 end fun
 
 fun fract(self: f32): f32
+  inline
   ret self - trunc(self)
 end fun
 
 // Arithmetic.
 
 fun recip(self: f32): f32
+  inline
   ret 1.0 / self
 end fun
 
 fun sqrt(self: f32): f32
+  inline
   ret icall sqrt_f32(self)
 end fun
 
 fun min(self: f32, other: f32): f32
+  inline
   ret icall min_f32(self, other)
 end fun
 
 fun max(self: f32, other: f32): f32
+  inline
   ret icall max_f32(self, other)
 end fun
 
 fun clamp(self: f32, min_val: f32, max_val: f32): f32
+  inline
   ret min(max(self, min_val), max_val)
 end fun
 
 // Bit manipulation.
 
 fun to_bits(self: f32): u32
+  inline
   ret icall f32_to_bits(self)
 end fun
 
 fun from_bits(bits: u32): f32
+  inline
   ret icall bits_to_f32(bits)
 end fun
 
 // Comparison utilities.
 
 fun is_zero(self: f32): bool
+  inline
   ret self == 0.0
 end fun
 
@@ -242,101 +266,121 @@ end fun
 
 // Sine of an angle in radians.
 fun sin(self: f32): f32
+  inline
   ret f32_sin(self)
 end fun
 
 // Cosine of an angle in radians.
 fun cos(self: f32): f32
+  inline
   ret f32_cos(self)
 end fun
 
 // Tangent of an angle in radians.
 fun tan(self: f32): f32
+  inline
   ret f32_tan(self)
 end fun
 
 // Arcsine in radians, in [-pi/2, pi/2]. Nan outside [-1, 1].
 fun asin(self: f32): f32
+  inline
   ret f32_asin(self)
 end fun
 
 // Arccosine in radians, in [0, pi]. Nan outside [-1, 1].
 fun acos(self: f32): f32
+  inline
   ret f32_acos(self)
 end fun
 
 // Arctangent in radians, in [-pi/2, pi/2].
 fun atan(self: f32): f32
+  inline
   ret f32_atan(self)
 end fun
 
 // Hyperbolic sine.
 fun sinh(self: f32): f32
+  inline
   ret f32_sinh(self)
 end fun
 
 // Hyperbolic cosine.
 fun cosh(self: f32): f32
+  inline
   ret f32_cosh(self)
 end fun
 
 // Hyperbolic tangent.
 fun tanh(self: f32): f32
+  inline
   ret f32_tanh(self)
 end fun
 
 // e raised to the power of self.
 fun exp(self: f32): f32
+  inline
   ret f32_exp(self)
 end fun
 
 // 2 raised to the power of self.
 fun exp2(self: f32): f32
+  inline
   ret f32_exp2(self)
 end fun
 
 // Natural logarithm. Nan for a negative self, -inf for zero.
 fun ln(self: f32): f32
+  inline
   ret f32_ln(self)
 end fun
 
 // Base 2 logarithm.
 fun log2(self: f32): f32
+  inline
   ret f32_log2(self)
 end fun
 
 // Base 10 logarithm.
 fun log10(self: f32): f32
+  inline
   ret f32_log10(self)
 end fun
 
 // Cube root, defined for negative values as well.
 fun cbrt(self: f32): f32
+  inline
   ret f32_cbrt(self)
 end fun
 
 // Arctangent of self/other in radians, using the signs of both to place the result in the right quadrant.
 fun atan2(self: f32, other: f32): f32
+  inline
   ret f32_atan2(self, other)
 end fun
 
 // Logarithm of self in the given base.
 fun log(self: f32, base: f32): f32
+  inline
   ret f32_log(self, base)
 end fun
 
 // self raised to the power of exp.
 fun pow(self: f32, exp: f32): f32
+  inline
   ret f32_pow(self, exp)
 end fun
 
 // The length of the hypotenuse, without the overflow that squaring both sides invites.
 fun hypot(self: f32, other: f32): f32
+  inline
   ret f32_hypot(self, other)
 end fun
 
 // The remainder of self/other, taking the sign of self. This is what fmod computes, not a modulo.
 fun rem(self: f32, other: f32): f32
+  inline
   ret f32_rem(self, other)
 end fun
 
@@ -344,26 +388,31 @@ end fun
 
 // The ratio of a circle's circumference to its diameter.
 fun pi(): f32
+  inline
   ret 3.1415927410125732421875
 end fun
 
 // The base of the natural logarithm.
 fun e(): f32
+  inline
   ret 2.71828174591064453125
 end fun
 
 // Two pi: one full turn in radians.
 fun tau(): f32
+  inline
   ret 6.283185482025146484375
 end fun
 
 // Angle conversion.
 
 fun to_degrees(self: f32): f32
+  inline
   ret self * (180.0 / pi())
 end fun
 
 fun to_radians(self: f32): f32
+  inline
   ret self * (pi() / 180.0)
 end fun
 
@@ -373,6 +422,7 @@ end fun
 // way across. None when the value is too large for a f32 to hold; a value
 // that fits but has more digits than the format carries is rounded.
 fun from_int(ref n: int): ?f32
+  inline
   ret f32_from_int(ref n)
 end fun
 
@@ -399,6 +449,7 @@ fun from_u32(x: u32): f32
 end fun
 
 fun from_u64(x: u64): f32
+  inline
   ret icall u64_to_f32(x)
 end fun
 
@@ -418,6 +469,7 @@ fun from_i32(x: i32): f32
 end fun
 
 fun from_i64(x: i64): f32
+  inline
   ret icall i64_to_f32(x)
 end fun
 

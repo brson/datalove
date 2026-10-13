@@ -5,14 +5,17 @@ import std.int_low_bits_i64
 // Constants.
 
 fun min_value(): i32
+  inline
   ret (: i32 / -2147483648)
 end fun
 
 fun max_value(): i32
+  inline
   ret : i32 / 2147483647
 end fun
 
 fun bits(): u32
+  inline
   ret : u32 / 32
 end fun
 
@@ -32,10 +35,12 @@ fun signum(self: i32): i32
 end fun
 
 fun is_positive(self: i32): bool
+  inline
   ret self .> (: i32 / 0)
 end fun
 
 fun is_negative(self: i32): bool
+  inline
   ret self .< (: i32 / 0)
 end fun
 
@@ -119,16 +124,19 @@ fun trailing_zeros(self: i32): u32
 end fun
 
 fun leading_ones(self: i32): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: i32): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
 // Type conversion.
 
 fun cast_unsigned(self: i32): u32
+  inline
   ret icall i32_to_u32(self)
 end fun
 
@@ -146,6 +154,7 @@ fun from_i64(x: i64): ?i32
 end fun
 
 fun from_i64_wrapping(x: i64): i32
+  inline
   ret icall i64_to_i32(x)
 end fun
 
@@ -163,6 +172,7 @@ fun from_int(ref n: int): ?i32
 end fun
 
 fun from_int_wrapping(ref n: int): i32
+  inline
   ret from_i64_wrapping(int_low_bits_i64(ref n))
 end fun
 
@@ -170,6 +180,7 @@ end fun
 // only happen when the build makes an offset 64 bits.
 
 fun from_offset(x: offset): ?i32
+  inline
   ret from_i64(icall offset_to_i64(x))
 end fun
 
@@ -184,24 +195,29 @@ fun neg_checked(self: i32): ?i32
 end fun
 
 fun add_checked(self: i32, other: i32): ?i32
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: i32, other: i32): ?i32
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: i32, other: i32): ?i32
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: i32, other: i32): ?i32
+  inline
   ret some (self /? other)
 end fun
 
 // Signed remainder with overflow check.
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i32, other: i32): ?i32
+  inline
   let zero = (: i32 / 0)
   if other == zero
     ret none
@@ -271,6 +287,7 @@ end fun
 // Wrapping arithmetic.
 
 fun neg_wrapping(self: i32): i32
+  inline
   ret icall neg_wrapping_i32(self)
 end fun
 
@@ -299,6 +316,7 @@ end fun
 
 // Checked left shift. Returns none if n >= 32.
 fun shift_left(self: i32, n: u32): ?i32
+  inline
   if n >= (: u32 / 32)
     ret none
   else
@@ -310,6 +328,7 @@ end fun
 
 // Checked arithmetic right shift. Returns none if n >= 32.
 fun shift_right(self: i32, n: u32): ?i32
+  inline
   if n >= (: u32 / 32)
     ret none
   else
@@ -318,6 +337,7 @@ fun shift_right(self: i32, n: u32): ?i32
 end fun
 
 fun shift_left_wrapping(self: i32, n: u32): i32
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_left(self, n_mod) |value|
     ret value
@@ -327,6 +347,7 @@ fun shift_left_wrapping(self: i32, n: u32): i32
 end fun
 
 fun shift_right_wrapping(self: i32, n: u32): i32
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 31)
   if shift_right(self, n_mod) |value|
     ret value
@@ -453,6 +474,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: i32): bool
+  inline
   ret self == (: i32 / 0)
 end fun
 

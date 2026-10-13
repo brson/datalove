@@ -5,58 +5,71 @@ import std.int_low_bits_u64
 // Constants.
 
 fun min_value(): u16
+  inline
   ret (: u16 / 0)
 end fun
 
 fun max_value(): u16
+  inline
   ret (: u16 / 65535)
 end fun
 
 fun bits(): u32
+  inline
   ret (: u32 / 16)
 end fun
 
 // Bitwise primitives.
 
 fun bitnot(self: u16): u16
+  inline
   ret icall bitnot_u16(self)
 end fun
 
 fun bitand(self: u16, n: u16): u16
+  inline
   ret icall bitand_u16(self, n)
 end fun
 
 fun bitor(self: u16, n: u16): u16
+  inline
   ret icall bitor_u16(self, n)
 end fun
 
 fun bitxor(self: u16, n: u16): u16
+  inline
   ret icall bitxor_u16(self, n)
 end fun
 
 // Bit counting.
 
 fun count_ones(self: u16): u32
+  inline
   ret icall popcount_u16(self)
 end fun
 
 fun count_zeros(self: u16): u32
+  inline
   ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
 fun leading_zeros(self: u16): u32
+  inline
   ret icall clz_u16(self)
 end fun
 
 fun trailing_zeros(self: u16): u32
+  inline
   ret icall ctz_u16(self)
 end fun
 
 fun leading_ones(self: u16): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: u16): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
@@ -178,10 +191,12 @@ end fun
 // Byte manipulation.
 
 fun swap_bytes(self: u16): u16
+  inline
   ret icall swap_bytes_u16(self)
 end fun
 
 fun reverse_bits(self: u16): u16
+  inline
   ret icall reverse_bits_u16(self)
 end fun
 
@@ -226,6 +241,7 @@ end fun
 // Type conversion.
 
 fun cast_signed(self: u16): i16
+  inline
   ret icall u16_to_i16(self)
 end fun
 
@@ -243,6 +259,7 @@ fun from_u32(x: u32): ?u16
 end fun
 
 fun from_u32_wrapping(x: u32): u16
+  inline
   ret icall u32_to_u16(x)
 end fun
 
@@ -255,6 +272,7 @@ fun from_u64(x: u64): ?u16
 end fun
 
 fun from_u64_wrapping(x: u64): u16
+  inline
   ret icall u64_to_u16(x)
 end fun
 
@@ -272,6 +290,7 @@ fun from_int(ref n: int): ?u16
 end fun
 
 fun from_int_wrapping(ref n: int): u16
+  inline
   ret from_u64_wrapping(int_low_bits_u64(ref n))
 end fun
 
@@ -286,22 +305,27 @@ fun neg_checked(self: u16): ?u16
 end fun
 
 fun add_checked(self: u16, other: u16): ?u16
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: u16, other: u16): ?u16
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: u16, other: u16): ?u16
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: u16, other: u16): ?u16
+  inline
   ret some (self /? other)
 end fun
 
 fun rem_checked(self: u16, other: u16): ?u16
+  inline
   if other == (: u16 / 0)
     ret none
   else
@@ -363,6 +387,7 @@ end fun
 
 // For u16, division cannot overflow (result <= dividend), so this is same as div_checked.
 fun div_saturating(self: u16, other: u16): ?u16
+  inline
   ret div_checked(self, other)
 end fun
 
@@ -391,19 +416,23 @@ end fun
 // Wrapping arithmetic.
 
 fun add_wrapping(self: u16, other: u16): u16
+  inline
   ret icall add_wrapping_u16(self, other)
 end fun
 
 fun sub_wrapping(self: u16, other: u16): u16
+  inline
   ret icall sub_wrapping_u16(self, other)
 end fun
 
 fun mul_wrapping(self: u16, other: u16): u16
+  inline
   ret icall mul_wrapping_u16(self, other)
 end fun
 
 // u16 division cannot overflow.
 fun div_wrapping(self: u16, other: u16): ?u16
+  inline
   ret div_checked(self, other)
 end fun
 
@@ -433,6 +462,7 @@ end fun
 
 // Returns none if shift >= 16.
 fun shift_left(self: u16, n: u32): ?u16
+  inline
   if n >= bits()
     ret none
   else
@@ -442,6 +472,7 @@ end fun
 
 // Returns none if shift >= 16.
 fun shift_right(self: u16, n: u32): ?u16
+  inline
   if n >= bits()
     ret none
   else
@@ -474,6 +505,7 @@ fun shift_right_saturating(self: u16, n: u32): u16
 end fun
 
 fun shift_left_wrapping(self: u16, n: u32): u16
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 15)
   if shift_left(self, n_mod) |value|
     ret value
@@ -483,6 +515,7 @@ fun shift_left_wrapping(self: u16, n: u32): u16
 end fun
 
 fun shift_right_wrapping(self: u16, n: u32): u16
+  inline
   let n_mod = icall bitand_u32(n, : u32 / 15)
   if shift_right(self, n_mod) |value|
     ret value
@@ -512,6 +545,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: u16): bool
+  inline
   ret self == (: u16 / 0)
 end fun
 

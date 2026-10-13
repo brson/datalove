@@ -19,58 +19,71 @@ const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, : u32 / 1)
 const MAX: index = icall bitnot_index(: index / 0)
 
 fun min_value(): index
+  inline
   ret (: index / 0)
 end fun
 
 fun max_value(): index
+  inline
   ret MAX
 end fun
 
 fun bits(): u32
+  inline
   ret BITS
 end fun
 
 // Bitwise primitives.
 
 fun bitnot(self: index): index
+  inline
   ret icall bitnot_index(self)
 end fun
 
 fun bitand(self: index, n: index): index
+  inline
   ret icall bitand_index(self, n)
 end fun
 
 fun bitor(self: index, n: index): index
+  inline
   ret icall bitor_index(self, n)
 end fun
 
 fun bitxor(self: index, n: index): index
+  inline
   ret icall bitxor_index(self, n)
 end fun
 
 // Bit counting.
 
 fun count_ones(self: index): u32
+  inline
   ret icall popcount_index(self)
 end fun
 
 fun count_zeros(self: index): u32
+  inline
   ret icall sub_wrapping_u32(bits(), count_ones(self))
 end fun
 
 fun leading_zeros(self: index): u32
+  inline
   ret icall clz_index(self)
 end fun
 
 fun trailing_zeros(self: index): u32
+  inline
   ret icall ctz_index(self)
 end fun
 
 fun leading_ones(self: index): u32
+  inline
   ret leading_zeros(bitnot(self))
 end fun
 
 fun trailing_ones(self: index): u32
+  inline
   ret trailing_zeros(bitnot(self))
 end fun
 
@@ -192,10 +205,12 @@ end fun
 // Byte manipulation.
 
 fun swap_bytes(self: index): index
+  inline
   ret icall swap_bytes_index(self)
 end fun
 
 fun reverse_bits(self: index): index
+  inline
   ret icall reverse_bits_index(self)
 end fun
 
@@ -240,6 +255,7 @@ end fun
 // Type conversion.
 
 fun cast_signed(self: index): offset
+  inline
   ret icall index_to_offset(self)
 end fun
 
@@ -281,22 +297,27 @@ fun neg_checked(self: index): ?index
 end fun
 
 fun add_checked(self: index, other: index): ?index
+  inline
   ret some (self +? other)
 end fun
 
 fun sub_checked(self: index, other: index): ?index
+  inline
   ret some (self -? other)
 end fun
 
 fun mul_checked(self: index, other: index): ?index
+  inline
   ret some (self *? other)
 end fun
 
 fun div_checked(self: index, other: index): ?index
+  inline
   ret some (self /? other)
 end fun
 
 fun rem_checked(self: index, other: index): ?index
+  inline
   let zero = (: index / 0)
   if other == zero
     ret none
@@ -357,6 +378,7 @@ end fun
 
 // For index, division cannot overflow (result <= dividend), so this is same as div_checked.
 fun div_saturating(self: index, other: index): ?index
+  inline
   ret div_checked(self, other)
 end fun
 
@@ -385,19 +407,23 @@ end fun
 // Wrapping arithmetic.
 
 fun add_wrapping(self: index, other: index): index
+  inline
   ret icall add_wrapping_index(self, other)
 end fun
 
 fun sub_wrapping(self: index, other: index): index
+  inline
   ret icall sub_wrapping_index(self, other)
 end fun
 
 fun mul_wrapping(self: index, other: index): index
+  inline
   ret icall mul_wrapping_index(self, other)
 end fun
 
 // index division cannot overflow.
 fun div_wrapping(self: index, other: index): ?index
+  inline
   ret div_checked(self, other)
 end fun
 
@@ -427,6 +453,7 @@ end fun
 
 // Returns none if shift >= bits().
 fun shift_left(self: index, n: u32): ?index
+  inline
   if n >= bits()
     ret none
   else
@@ -436,6 +463,7 @@ end fun
 
 // Returns none if shift >= bits().
 fun shift_right(self: index, n: u32): ?index
+  inline
   if n >= bits()
     ret none
   else
@@ -468,6 +496,7 @@ fun shift_right_saturating(self: index, n: u32): index
 end fun
 
 fun shift_left_wrapping(self: index, n: u32): index
+  inline
   let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_left(self, n_mod) |value|
     ret value
@@ -477,6 +506,7 @@ fun shift_left_wrapping(self: index, n: u32): index
 end fun
 
 fun shift_right_wrapping(self: index, n: u32): index
+  inline
   let n_mod = icall bitand_u32(n, SHIFT_MASK)
   if shift_right(self, n_mod) |value|
     ret value
@@ -518,6 +548,7 @@ end fun
 // Comparisons and utilities.
 
 fun is_zero(self: index): bool
+  inline
   ret self == (: index / 0)
 end fun
 

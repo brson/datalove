@@ -36,21 +36,25 @@ import std.fixedint_max_value
 // what nobody has picked yet. So the constants come from the rider, which is
 // handed a descriptor by the call site and makes the value from that.
 fun zero<T>(): T with { T is fixedint, }
+  inline
   ret fixedint_zero()
 end fun
 
 // One.
 fun one<T>(): T with { T is fixedint, }
+  inline
   ret fixedint_one()
 end fun
 
 // The smallest value the type can hold, which is zero when it is unsigned.
 fun min_value<T>(): T with { T is fixedint, }
+  inline
   ret fixedint_min_value()
 end fun
 
 // The largest value the type can hold.
 fun max_value<T>(): T with { T is fixedint, }
+  inline
   ret fixedint_max_value()
 end fun
 
@@ -91,21 +95,25 @@ end fun
 // The bare operators early-return, which is what makes them worth having; a
 // caller that wants the answer as a value rather than as a return asks here.
 fun add_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  inline
   ret some (self +? other)
 end fun
 
 // The difference, or none when it runs past the width.
 fun sub_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  inline
   ret some (self -? other)
 end fun
 
 // The product, or none when it runs past the width.
 fun mul_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  inline
   ret some (self *? other)
 end fun
 
 // The quotient, or none when the divisor is zero or the answer will not fit.
 fun div_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+  inline
   ret some (self /? other)
 end fun
 
@@ -114,6 +122,7 @@ end fun
 // A result rather than an option because `-?` is refused for unsigned
 // operands, and a bounded parameter may turn out to be one.
 fun neg_checked<T>(self: T): !T with { T is fixedint, }
+  inline
   ret ok (-! self)
 end fun
 

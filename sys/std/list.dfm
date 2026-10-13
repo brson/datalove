@@ -23,16 +23,19 @@ import std.list_reserve
 
 // The number of elements.
 fun len<T>(ref self: [T]): index
+  inline
   ret list_len(ref self)
 end fun
 
 // True if there are no elements.
 fun is_empty<T>(ref self: [T]): bool
+  inline
   ret list_len(ref self) == (: index / 0)
 end fun
 
 // The element at an index, or none if the index is past the end.
 fun get<T>(ref self: [T], i: index): ?T
+  inline
   ret list_get(ref self, i)
 end fun
 
@@ -43,34 +46,40 @@ end fun
 
 // The first element, or none if there are none.
 fun first<T>(ref self: [T]): ?T
+  inline
   ret list_get(ref self, : index / 0)
 end fun
 
 // The last element, or none if there are none. The subtraction carries the
 // empty case: `-?` gives up on underflow, which returns none from here.
 fun last<T>(ref self: [T]): ?T
+  inline
   ret list_get(ref self, list_len(ref self) -? (: index / 1))
 end fun
 
 // Replace the element at an index. False if the index is past the end.
 fun replace<T>(mut self: [T], i: index, elem: T): bool
+  inline
   ret list_set(mut self, i, elem)
 end fun
 
 // Insert an element, shifting the rest right. The index may be the length,
 // which appends. False if it is past that.
 fun insert<T>(mut self: [T], i: index, elem: T): bool
+  inline
   ret list_insert(mut self, i, elem)
 end fun
 
 // Take the element at an index out, shifting the rest down.
 fun remove<T>(mut self: [T], i: index): ?T
+  inline
   ret list_remove(mut self, i)
 end fun
 
 // Exchange the elements at two indices where they are. False if either is
 // past the end, which leaves the list as it was.
 fun swap<T>(mut self: [T], i: index, j: index): bool
+  inline
   ret list_swap(mut self, i, j)
 end fun
 
@@ -237,5 +246,6 @@ end fun
 
 // Take the last element off, or none if there are none.
 fun pop<T>(mut self: [T]): ?T
+  inline
   ret list_pop(mut self)
 end fun
