@@ -7,8 +7,6 @@ I started hacking on Datalove because expressing a struct in Python sucks.
 I need to write a lot of structs.
 In Datalove you write structs with a straightforward and typical syntax,
 and it is laid out in flat memory.
-Like one expects in a modern language.
-That's so easy.
 
 Datalove is built on a small and restrictive core language.
 Dependencies are explicit,
