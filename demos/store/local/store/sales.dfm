@@ -62,16 +62,11 @@ fun by_category(): ![(u64, string, u64, u64)]
 
     // Sorted on revenue, with the category to break ties.
     var rows: [(u64, string, u64, u64)] = []
-    let categories = map.keys(ref revenue)
-    var i: index = 0
-    loop while i .< list.len(ref categories)
-        let category = categories[i]!@
-        let r = map.get_or(ref revenue, ref category, 0)
+    for category, r in ref revenue
         let c = map.get_or(ref cost, ref category, 0)
         let u = map.get_or(ref units, ref category, 0)
-        call list.push(mut rows, (r, category, c, u))
-        set i +!= 1
-    end loop
+        call list.push(mut rows, (r, category@, c, u))
+    end for
     ret ok list.reversed(ref ord.sorted(ref rows))
 end fun
 
@@ -90,13 +85,9 @@ fun by_month(): ![(u32, u64, u64)]
     end loop
 
     var rows: [(u32, u64, u64)] = []
-    let months = map.keys(ref revenue)
-    var i: index = 0
-    loop while i .< list.len(ref months)
-        let month = months[i]!
-        call list.push(mut rows, (month, map.get_or(ref revenue, ref month, 0), map.get_or(ref sales, ref month, 0)))
-        set i +!= 1
-    end loop
+    for month, r in ref revenue
+        call list.push(mut rows, (month, r, map.get_or(ref sales, ref month, 0)))
+    end for
     ret ok rows
 end fun
 
@@ -120,13 +111,9 @@ fun top_products(n: index): ![(u64, u32, u64)]
     end loop
 
     var rows: [(u64, u32, u64)] = []
-    let products = map.keys(ref units)
-    var i: index = 0
-    loop while i .< list.len(ref products)
-        let product = products[i]!
-        call list.push(mut rows, (map.get_or(ref units, ref product, 0), product, map.get_or(ref revenue, ref product, 0)))
-        set i +!= 1
-    end loop
+    for product, u in ref units
+        call list.push(mut rows, (u, product, map.get_or(ref revenue, ref product, 0)))
+    end for
     ret ok list.take(ref list.reversed(ref ord.sorted(ref rows)), n)
 end fun
 
@@ -153,15 +140,10 @@ fun returns_by_category(): ![(string, u64, u64)]
     end loop
 
     var rows: [(string, u64, u64)] = []
-    let categories = map.keys(ref shipped)
-    var i: index = 0
-    loop while i .< list.len(ref categories)
-        let category = categories[i]!@
+    for category, s in ref shipped
         let r = map.get_or(ref returned, ref category, 0)
-        let s = map.get_or(ref shipped, ref category, 0)
-        call list.push(mut rows, (category, r, s))
-        set i +!= 1
-    end loop
+        call list.push(mut rows, (category@, r, s))
+    end for
     ret ok rows
 end fun
 

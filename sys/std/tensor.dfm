@@ -74,15 +74,8 @@ end fun
 // The elements as a list, in order.
 fun to_list<T>(ref self: [|T, 1|]): [T]
   var built: [T] = []
-  let n = tensor_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      call push(mut built, elem)
-    else
-      break
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  for elem in ref self
+    call push(mut built, elem@)
+  end for
   ret built
 end fun

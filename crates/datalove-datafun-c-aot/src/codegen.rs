@@ -1,6 +1,8 @@
 //! C code generation for IR instructions and terminators.
 
 use std::fmt::Write;
+use std::mem::offset_of;
+use datalove_rtdt as rtdt;
 
 use datalove_datafun_ir::layout as ir_layout;
 use datalove_datafun_ir::{
@@ -766,18 +768,18 @@ impl<'a> FunctionCodegenContext<'a> {
             }
             Instruction::CursorDone { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
-                let call = self.cursor_call(*cursor, "done");
-                writeln!(out, "    *(bool_t*){dest_addr} = {call};").unwrap();
+                let done = self.cursor_done(*cursor);
+                writeln!(out, "    *(bool_t*){dest_addr} = {done};").unwrap();
             }
             Instruction::CursorElem { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
-                let call = self.cursor_call(*cursor, "elem");
-                writeln!(out, "    *(const void**){dest_addr} = {call};").unwrap();
+                let elem = self.cursor_elem(*cursor);
+                writeln!(out, "    *(const void**){dest_addr} = {elem};").unwrap();
             }
             Instruction::CursorValue { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
-                let cursor_addr = self.slot_addr(*cursor);
-                writeln!(out, "    *(const void**){dest_addr} = dtlv_rti_tree_cursor_value({cursor_addr});").unwrap();
+                let value = self.cursor_value(*cursor);
+                writeln!(out, "    *(const void**){dest_addr} = {value};").unwrap();
             }
             Instruction::CursorAdvance { cursor, coll } => {
                 self.emit_cursor_advance(out, *cursor, coll);
@@ -3315,49 +3317,112 @@ impl<'a> FunctionCodegenContext<'a> {
         }
     }
 
-    /// A call of the protocol that takes the cursor alone: done or elem.
-    ///
-    /// Every operation is a call, as in the interpreter; open-coding them is
-    /// an optimization that has to keep the runtime's layout and meaning.
-    fn cursor_call(&self, cursor: SlotId, op: &str) -> String {
-        let kind = match self.cursor_kind(cursor) {
-            CursorKind::Stride => "stride",
-            CursorKind::Row => "row",
-            CursorKind::Tree => "tree",
-        };
-        format!("dtlv_rti_{kind}_cursor_{op}({})", self.slot_addr(cursor))
+    // A cursor's operations are the runtime's protocol, `dtlv_rti_*_cursor_*`.
+    // Most are open-coded on the runtime's layouts, read off the `rtdt`
+    // structs, and keep the runtime's meanings field for field. What stays a
+    // call is starting a walk over a tensor or a tree, once a walk, and a
+    // tree's advance from one leaf to the next.
+
+    /// Whether a walk is over: no elements remaining, or no leaf.
+    fn cursor_done(&self, cursor: SlotId) -> String {
+        let at = self.slot_addr(cursor);
+        match self.cursor_kind(cursor) {
+            CursorKind::Stride => format!("(*(index_t*)({at} + {}) == 0)", offset_of!(rtdt::StrideCursor, remaining)),
+            CursorKind::Row => format!("(*(index_t*)({at} + {}) == 0)", offset_of!(rtdt::RowCursor, remaining)),
+            CursorKind::Tree => format!("(*(void**)({at} + {}) == NULL)", offset_of!(rtdt::TreeCursor, leaf)),
+        }
     }
 
-    /// Start a walk.
+    /// The current element: the cursor's pointer, or for a row, the view
+    /// inside the cursor.
+    fn cursor_elem(&self, cursor: SlotId) -> String {
+        let at = self.slot_addr(cursor);
+        match self.cursor_kind(cursor) {
+            CursorKind::Stride => format!("*(const void**)({at} + {})", offset_of!(rtdt::StrideCursor, elem)),
+            CursorKind::Row => format!("(const void*)({at} + {})", offset_of!(rtdt::RowCursor, view)),
+            CursorKind::Tree => format!("*(const void**)({at} + {})", offset_of!(rtdt::TreeCursor, elem)),
+        }
+    }
+
+    /// A map's current value.
+    fn cursor_value(&self, cursor: SlotId) -> String {
+        format!("*(const void**)({} + {})", self.slot_addr(cursor), offset_of!(rtdt::TreeCursor, value))
+    }
+
+    /// Start a walk. A list's is open-coded, being three loads.
     fn emit_cursor_begin(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
-        let func = match (self.cursor_kind(cursor), self.operand_type(coll)) {
-            (CursorKind::Stride, IrType::List(_)) => "dtlv_rti_list_cursor_begin_local",
+        let coll_addr = self.operand_addr(coll);
+        let cursor_addr = self.slot_addr(cursor);
+        let func = match (self.cursor_kind(cursor), self.operand_type(coll).clone()) {
+            (CursorKind::Stride, IrType::List(elem)) => {
+                let stride = self.size_expr(&elem);
+                writeln!(out, "    {{ uint8_t* __l = (uint8_t*){coll_addr}; uint8_t* __c = (uint8_t*){cursor_addr};").unwrap();
+                writeln!(out, "      *(void**)(__c + {}) = *(void**)(__l + {});",
+                    offset_of!(rtdt::StrideCursor, elem), offset_of!(rtdt::List, data)).unwrap();
+                writeln!(out, "      *(uintptr_t*)(__c + {}) = (uintptr_t){stride};",
+                    offset_of!(rtdt::StrideCursor, stride)).unwrap();
+                writeln!(out, "      *(index_t*)(__c + {}) = *(index_t*)(__l + {}); }}",
+                    offset_of!(rtdt::StrideCursor, remaining), offset_of!(rtdt::List, size)).unwrap();
+                return;
+            }
             (CursorKind::Stride, IrType::Tensor(..)) => "dtlv_rti_tensor_cursor_begin_local",
             (CursorKind::Row, IrType::Tensor(..)) => "dtlv_rti_tensor_row_cursor_begin_local",
             (CursorKind::Tree, IrType::Set(_)) => "dtlv_rti_btreeset_cursor_begin_local",
             (CursorKind::Tree, IrType::Map(..)) => "dtlv_rti_btreemap_cursor_begin_local",
             (kind, ty) => panic!("a {kind:?} cursor over a {ty}"),
         };
-        let coll_addr = self.operand_addr(coll);
         let coll_tydesc = self.operand_tydesc(coll);
-        let cursor_addr = self.slot_addr(cursor);
         writeln!(out, "    {func}(rt, {coll_addr}, {coll_tydesc}, {cursor_addr});").unwrap();
     }
 
-    /// Move a walk on.
+    /// Move a walk on. A list's or a tensor's is a pointer or an offset and a
+    /// count; a tree's moves along its leaf inline and calls the runtime only
+    /// to cross to the next one.
     fn emit_cursor_advance(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
-        let cursor_addr = self.slot_addr(cursor);
+        let at = self.slot_addr(cursor);
         match self.cursor_kind(cursor) {
-            CursorKind::Stride => writeln!(out, "    dtlv_rti_stride_cursor_advance({cursor_addr});").unwrap(),
-            CursorKind::Row => writeln!(out, "    dtlv_rti_row_cursor_advance({cursor_addr});").unwrap(),
+            CursorKind::Stride => {
+                let (elem, stride, remaining) = (
+                    offset_of!(rtdt::StrideCursor, elem),
+                    offset_of!(rtdt::StrideCursor, stride),
+                    offset_of!(rtdt::StrideCursor, remaining),
+                );
+                writeln!(out, "    *(uint8_t**)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").unwrap();
+                writeln!(out, "    *(index_t*)({at} + {remaining}) -= 1;").unwrap();
+            }
+            CursorKind::Row => {
+                let offset = offset_of!(rtdt::RowCursor, view) + offset_of!(rtdt::Tensor, offset_elems);
+                let (stride, remaining) = (offset_of!(rtdt::RowCursor, stride), offset_of!(rtdt::RowCursor, remaining));
+                writeln!(out, "    *(index_t*)({at} + {offset}) += *(index_t*)({at} + {stride});").unwrap();
+                writeln!(out, "    *(index_t*)({at} + {remaining}) -= 1;").unwrap();
+            }
             CursorKind::Tree => {
-                let func = match self.operand_type(coll) {
-                    IrType::Set(_) => "dtlv_rti_btreeset_cursor_advance_local",
-                    IrType::Map(..) => "dtlv_rti_btreemap_cursor_advance_local",
+                let coll_ty = self.operand_type(coll).clone();
+                let (func, key_ty, value_ty) = match &coll_ty {
+                    IrType::Set(elem) => ("dtlv_rti_btreeset_cursor_advance_local", (**elem).clone(), None),
+                    IrType::Map(key, value) => ("dtlv_rti_btreemap_cursor_advance_local", (**key).clone(), Some((**value).clone())),
                     ty => panic!("a tree cursor over a {ty}"),
                 };
+                let (leaf, elem, value, slot) = (
+                    offset_of!(rtdt::TreeCursor, leaf),
+                    offset_of!(rtdt::TreeCursor, elem),
+                    offset_of!(rtdt::TreeCursor, value),
+                    offset_of!(rtdt::TreeCursor, slot),
+                );
+                let len = offset_of!(rtdt::SetNode, len);
+                let key_size = self.size_expr(&key_ty);
+                writeln!(out, "    {{ uint8_t* __c = (uint8_t*){at}; uint32_t __next = *(uint32_t*)(__c + {slot}) + 1;").unwrap();
+                writeln!(out, "      if (__next < *(uint32_t*)(*(uint8_t**)(__c + {leaf}) + {len})) {{").unwrap();
+                writeln!(out, "        *(uint32_t*)(__c + {slot}) = __next;").unwrap();
+                writeln!(out, "        *(uint8_t**)(__c + {elem}) += {key_size};").unwrap();
+                if let Some(value_ty) = value_ty {
+                    let value_size = self.size_expr(&value_ty);
+                    writeln!(out, "        *(uint8_t**)(__c + {value}) += {value_size};").unwrap();
+                }
                 let coll_tydesc = self.operand_tydesc(coll);
-                writeln!(out, "    {func}(rt, {cursor_addr}, {coll_tydesc});").unwrap();
+                writeln!(out, "      }} else {{").unwrap();
+                writeln!(out, "        {func}(rt, __c, {coll_tydesc});").unwrap();
+                writeln!(out, "      }} }}").unwrap();
             }
         }
     }

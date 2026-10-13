@@ -1,0 +1,254 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn set_sum(p0):
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        cursorbegin s2, p0
+                        goto block1
+                    block1:
+                        v2 = cursordone s2
+                        branch v2, block4, block2
+                    block2:
+                        v3 = cursorelem s2
+                        v4 = const 1index
+                        v5 = intrinsic AddWrappingIndex(s0, v4)
+                        store.copy s0, v5
+                        v6 = add s1, *v3
+                        drop.tracked s1
+                        store.move.tracked s1, v6
+                        goto block3
+                    block3:
+                        cursoradvance s2, p0
+                        goto block1
+                    block4:
+                        v7 = load.copy s0
+                        v8 = load.move.tracked s1
+                        v9 = pack Tuple2 {v7, v8}
+                        return v9
+                    
+                    fn map_sum(p0):
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        v2 = none
+                        store.move.tracked s2, v2
+                        cursorbegin s3, p0
+                        goto block1
+                    block1:
+                        v3 = cursordone s3
+                        branch v3, block4, block2
+                    block2:
+                        v4 = cursorelem s3
+                        v5 = cursorvalue s3
+                        v6 = const 1index
+                        v7 = intrinsic AddWrappingIndex(s0, v6)
+                        store.copy s0, v7
+                        v8 = add s1, *v5
+                        drop.tracked s1
+                        store.move.tracked s1, v8
+                        v9 = clone *v4
+                        v10 = some v9
+                        drop.tracked s2
+                        store.move.tracked s2, v10
+                        goto block3
+                    block3:
+                        cursoradvance s3, p0
+                        goto block1
+                    block4:
+                        v11 = load.copy s0
+                        v12 = load.move.tracked s1
+                        v13 = load.move.tracked s2
+                        v14 = pack Tuple3 {v11, v12, v13}
+                        return v14
+                    
+                    fn count_entries(p0):
+                      desc0 = T0
+                      desc1 = T1
+                      desc2 = map<T0, T1>
+                      desc3 = option<T0>
+                      desc4 = option<T1>
+                      desc5 = (index, option<T0>, option<T1>)
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        v1 = none
+                        store.move.tracked s1, v1
+                        v2 = none
+                        store.move.tracked s2, v2
+                        cursorbegin s3, p0
+                        goto block1
+                    block1:
+                        v3 = cursordone s3
+                        branch v3, block4, block2
+                    block2:
+                        v4 = cursorelem s3
+                        v5 = cursorvalue s3
+                        v6 = const 1index
+                        v7 = intrinsic AddWrappingIndex(s0, v6)
+                        store.copy s0, v7
+                        v8 = clone *v4
+                        v9 = some v8
+                        drop.tracked s1
+                        store.move.tracked s1, v9
+                        v10 = clone *v5
+                        v11 = some v10
+                        drop.tracked s2
+                        store.move.tracked s2, v11
+                        goto block3
+                    block3:
+                        cursoradvance s3, p0
+                        goto block1
+                    block4:
+                        v12 = load.copy s0
+                        v13 = load.move.tracked s1
+                        v14 = load.move.tracked s2
+                        v15 = pack Tuple3 {v12, v13, v14}
+                        return v15
+                    
+                    fn main():
+                    block0:
+                        v0 = const 1int
+                        v1 = const 2int
+                        v2 = const 3int
+                        v3 = const 4int
+                        v4 = const 5int
+                        v5 = const 6int
+                        v6 = const 7int
+                        v7 = const 8int
+                        v8 = const 9int
+                        v9 = const 10int
+                        v10 = const 11int
+                        v11 = const 12int
+                        v12 = const 13int
+                        v13 = const 14int
+                        v14 = const 15int
+                        v15 = const 16int
+                        v16 = const 17int
+                        v17 = const 18int
+                        v18 = const 19int
+                        v19 = const 20int
+                        v20 = const 21int
+                        v21 = const 22int
+                        v22 = const 23int
+                        v23 = const 24int
+                        v24 = const 25int
+                        v25 = const 26int
+                        v26 = const 27int
+                        v27 = const 28int
+                        v28 = const 29int
+                        v29 = const 30int
+                        v30 = #{v0, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, v20, v21, v22, v23, v24, v25, v26, v27, v28, v29}
+                        v31 = const "k01"
+                        v32 = const 1int
+                        v33 = const "k02"
+                        v34 = const 2int
+                        v35 = const "k03"
+                        v36 = const 3int
+                        v37 = const "k04"
+                        v38 = const 4int
+                        v39 = const "k05"
+                        v40 = const 5int
+                        v41 = const "k06"
+                        v42 = const 6int
+                        v43 = const "k07"
+                        v44 = const 7int
+                        v45 = const "k08"
+                        v46 = const 8int
+                        v47 = const "k09"
+                        v48 = const 9int
+                        v49 = const "k10"
+                        v50 = const 10int
+                        v51 = const "k11"
+                        v52 = const 11int
+                        v53 = const "k12"
+                        v54 = const 12int
+                        v55 = const "k13"
+                        v56 = const 13int
+                        v57 = const "k14"
+                        v58 = const 14int
+                        v59 = const "k15"
+                        v60 = const 15int
+                        v61 = const "k16"
+                        v62 = const 16int
+                        v63 = const "k17"
+                        v64 = const 17int
+                        v65 = const "k18"
+                        v66 = const 18int
+                        v67 = const "k19"
+                        v68 = const 19int
+                        v69 = const "k20"
+                        v70 = const 20int
+                        v71 = const "k21"
+                        v72 = const 21int
+                        v73 = const "k22"
+                        v74 = const 22int
+                        v75 = const "k23"
+                        v76 = const 23int
+                        v77 = const "k24"
+                        v78 = const 24int
+                        v79 = const "k25"
+                        v80 = const 25int
+                        v81 = const "k26"
+                        v82 = const 26int
+                        v83 = const "k27"
+                        v84 = const 27int
+                        v85 = const "k28"
+                        v86 = const 28int
+                        v87 = const "k29"
+                        v88 = const 29int
+                        v89 = const "k30"
+                        v90 = const 30int
+                        v91 = %{v31: v32, v33: v34, v35: v36, v37: v38, v39: v40, v41: v42, v43: v44, v45: v46, v47: v48, v49: v50, v51: v52, v53: v54, v55: v56, v57: v58, v59: v60, v61: v62, v63: v64, v65: v66, v67: v68, v69: v70, v71: v72, v73: v74, v75: v76, v77: v78, v79: v80, v81: v82, v83: v84, v85: v86, v87: v88, v89: v90}
+                        v92 = call m0.u0(v30)
+                        v93 = call m0.u1(v91)
+                        v94 = call m0.u2(v91) <string, int>
+                        v95 = pack Tuple3 {v92, v93, v94}
+                        drop v30
+                        drop v91
+                        return v95
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u3()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("((30, 465), (30, 465, some \"k30\"), (30, some \"k30\", some 30))\n"),
+        ),
+    ],
+)

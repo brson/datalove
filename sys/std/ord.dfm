@@ -115,49 +115,32 @@ end fun
 
 // Whether the list holds an element that sorts together with this one.
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord, }
-  var found = false
-  let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if equal_to_at(ref self, i, ref elem) |same|
-      if same
-        set found = true
-        break
-      end if
+  for item in ref self
+    if equal(ref item, ref elem)
+      ret true
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret found
+  end for
+  ret false
 end fun
 
 // Where the first such element is, or none when there is none.
 fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
-  var at: ?index = none
-  let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if equal(ref self[i]?, ref elem)
-      set at = some i
-      break
+  for i, item in ref self
+    if equal(ref item, ref elem)
+      ret some i
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret at
+  end for
+  ret none
 end fun
 
 // How many elements sort together with this one.
 fun count_of<T>(ref self: [T], ref elem: T): index with { T is ord, }
   var seen: index = : index / 0
-  let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if equal_to_at(ref self, i, ref elem) |same|
-      if same
-        set seen = icall add_wrapping_index(seen, : index / 1)
-      end if
+  for item in ref self
+    if equal(ref item, ref elem)
+      set seen = icall add_wrapping_index(seen, : index / 1)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret seen
 end fun
 
@@ -166,15 +149,12 @@ end fun
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
 fun least<T>(ref self: [T]): ?T with { T is ord, }
-  let n = list_len(ref self)
   var best: index = : index / 0
-  var i: index = : index / 1
-  loop while i .< n
-    if less(ref self[i]?, ref self[best]?)
+  for i, item in ref self
+    if less(ref item, ref self[best]?)
       set best = i
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret some self[best]?@
 end fun
 
@@ -183,15 +163,12 @@ end fun
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
 fun greatest<T>(ref self: [T]): ?T with { T is ord, }
-  let n = list_len(ref self)
   var best: index = : index / 0
-  var i: index = : index / 1
-  loop while i .< n
-    if greater(ref self[i]?, ref self[best]?)
+  for i, item in ref self
+    if greater(ref item, ref self[best]?)
       set best = i
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret some self[best]?@
 end fun
 
@@ -279,12 +256,6 @@ end fun
 fun equal_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
   inline
   ret some equal(ref self[i]?, ref self[j]?)
-end fun
-
-// Whether `self[i]` sorts together with elem; none when i is out of bounds.
-fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool with { T is ord, }
-  inline
-  ret some equal(ref self[i]?, ref elem)
 end fun
 
 // Where an element that sorts together with this one is, or none.

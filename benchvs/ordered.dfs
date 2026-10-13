@@ -143,20 +143,17 @@ end fun
 fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 with { T is ord, }
   var total: u32 = 0
   let n = list.len(ref xs)
-  var i: index = : index / 0
-  let m = list.len(ref probes)
-  loop while i .< m
-    let at = lower_bound(ref xs, ref probes[i]!)!
+  for probe in ref probes
+    let at = lower_bound(ref xs, ref probe)!
     if u32.from_index(at) |position|
       set total = u32.add_wrapping(total, position)
     end if
     if at .< n
-      if ord.equal(ref xs[at]!, ref probes[i]!)
+      if ord.equal(ref xs[at]!, ref probe)
         set total = u32.add_wrapping(total, : u32 / 1)
       end if
     end if
-    set i = index.add_wrapping(i, : index / 1)
-  end loop
+  end for
   ret ok total
 end fun
 

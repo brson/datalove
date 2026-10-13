@@ -455,9 +455,21 @@ pub fn lower_expression<'db>(
             }
 
             match operand {
-                Operand::Value(v) | Operand::ValueRef(v) => {
+                Operand::Value(v) => {
                     // For SSA values, just return the existing ValueId.
                     Ok(v)
+                }
+                // A name bound to a reference, as a `for` binds its element:
+                // a copy is read through it, where returning the reference
+                // would hand over the pointer for the value.
+                Operand::ValueRef(r) => {
+                    let ty = ctx.expr_type(expr);
+                    if !ty.is_copy() {
+                        return Ok(r);
+                    }
+                    let dest = ctx.fresh_value(ty);
+                    ctx.emit(Instruction::Copy { dest, src: operand });
+                    Ok(dest)
                 }
                 Operand::Slot(s) => {
                     // For slots, emit a load.

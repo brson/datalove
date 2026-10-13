@@ -85,28 +85,22 @@ end fun
 fun count(ref text: string): !%{string = u32}
   let words = string.split_whitespace(ref text)
   var counts: %{string = u32} = %{}
-  var i: index = 0
-  loop while i .< list.len(ref words)
-    let lower = string.to_ascii_lowercase(ref words[i]!)
+  for word in ref words
+    let lower = string.to_ascii_lowercase(ref word)
     let _ = map.add(mut counts, ref lower, : u32 / 1)!
-    set i +!= 1
-  end loop
+  end for
   ret ok counts
 end fun
 
 // Fold the top entries, by count and then by word, into one number: each
 // count and then each byte of its word, in rank order.
 fun top_checksum(ref counts: %{string = u32}): !u32
-  let words = map.keys(ref counts)
-  let seen = map.values(ref counts)
   // Sorting ascending on the count's complement puts the largest first, with
   // ties in the order of the words.
   var ranked: [(u32, string)] = []
-  var i: index = 0
-  loop while i .< list.len(ref words)
-    call list.push(mut ranked, (u32.max_value() -! seen[i]!, words[i]!@))
-    set i +!= 1
-  end loop
+  for word, seen in ref counts
+    call list.push(mut ranked, (u32.max_value() -! seen, word@))
+  end for
   let sorted = ord.sorted(ref ranked)
 
   var sum: u32 = 0

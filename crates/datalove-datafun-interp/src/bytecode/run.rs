@@ -355,6 +355,36 @@ impl IrInterpreter {
                         }
                         wr(base, valid, in_bounds);
                     }
+                    Op::CursorDone { dst, cursor, kind } => {
+                        let at = cursor.at(base);
+                        let done = match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done(at as *const rtdt::StrideCursor),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done(at as *const rtdt::RowCursor),
+                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done(at as *const rtdt::TreeCursor),
+                        };
+                        wr(base, dst, done);
+                    }
+                    Op::CursorElem { dst, cursor, kind } => {
+                        let at = cursor.at(base);
+                        let elem = match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem(at as *const rtdt::StrideCursor),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem(at as *const rtdt::RowCursor),
+                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem(at as *const rtdt::TreeCursor),
+                        };
+                        wr(base, dst, elem);
+                    }
+                    Op::CursorValue { dst, cursor } => {
+                        let at = cursor.at(base);
+                        wr(base, dst, datalove_rt::c::dtlv_rti_tree_cursor_value(at as *const rtdt::TreeCursor));
+                    }
+                    Op::CursorAdvance { cursor, kind } => {
+                        let at = cursor.at(base);
+                        match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance(at as *mut rtdt::StrideCursor),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance(at as *mut rtdt::RowCursor),
+                            CursorKind::Tree => unreachable!("a tree's advance runs on the walker"),
+                        }
+                    }
                     Op::ListElementRef { dst, list, index, size } => {
                         let list = &*(list.at(base) as *const rtdt::List);
                         let i = rd::<rtdt::IndexRepr>(base, index) as usize;

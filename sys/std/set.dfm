@@ -51,9 +51,8 @@ end fun
 // The element at a position in sort order, or none past the end.
 //
 // A set is a tree, so this walks to the position rather than jumping to it, and
-// reaching every element in turn costs more than it does for a list. It is here
-// so that anything written as a loop over `len` and an index -- which is how
-// everything over a collection is written -- can be written over a set too.
+// reaching every element in turn this way costs the square of the length. A
+// `for` reaches each element once.
 fun get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
   inline
   ret set_get(ref self, i)
@@ -69,85 +68,45 @@ end fun
 // Every element of either.
 fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      let added = insert(mut built, elem)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  let m = len(ref other)
-  var j: index = : index / 0
-  loop while j .< m
-    if get(ref other, j) |elem|
-      let added = insert(mut built, elem)
-    end if
-    set j = icall add_wrapping_index(j, : index / 1)
-  end loop
+  for elem in ref self
+    let added = insert(mut built, elem@)
+  end for
+  for elem in ref other
+    let added = insert(mut built, elem@)
+  end for
   ret built
 end fun
 
 // Every element of both.
-//
-// The element is disposed of on both paths, because a value moved on one path
-// has to be moved on every one: drop points here are static, so the checker
-// will not take a value whose fate depends on the branch. The element that is
-// not wanted goes into a binding that ends with the branch.
 fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      if contains(ref other, ref elem)
-        let added = insert(mut built, elem)
-      else
-        let unwanted = elem
-      end if
+  for elem in ref self
+    if contains(ref other, ref elem)
+      let added = insert(mut built, elem@)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret built
 end fun
 
 // Every element of self that other does not have.
 fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
   var built: #{T} = #{}
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      if contains(ref other, ref elem)
-        let unwanted = elem
-      else
-        let added = insert(mut built, elem)
-      end if
+  for elem in ref self
+    if not contains(ref other, ref elem)
+      let added = insert(mut built, elem@)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret built
 end fun
 
 // True if every element of self is in other.
-//
-// The answer is accumulated rather than returned as soon as it is known,
-// because returning out of `if get(...) |elem|` disposes of `elem` on that path
-// and not the other, and a value's fate has to be the same on every one.
 fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
-  var all_present: bool = true
-  let n = len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref self, i) |elem|
-      if contains(ref other, ref elem)
-      else
-        set all_present = false
-      end if
+  for elem in ref self
+    if not contains(ref other, ref elem)
+      ret false
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret all_present
+  end for
+  ret true
 end fun
 
 // A set of the given elements, in sort order and without repeats.

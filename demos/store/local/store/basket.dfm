@@ -33,13 +33,9 @@ fun top_pairs(n: index): ![(u64, u32, u32)]
     end loop
 
     var rows: [(u64, u32, u32)] = []
-    let pairs = map.keys(ref together)
-    var i: index = 0
-    loop while i .< list.len(ref pairs)
-        let pair = pairs[i]!
-        call list.push(mut rows, (map.get_or(ref together, ref pair, 0), pair.0, pair.1))
-        set i +!= 1
-    end loop
+    for pair, count in ref together
+        call list.push(mut rows, (count, pair.0, pair.1))
+    end for
     ret ok list.take(ref list.reversed(ref ord.sorted(ref rows)), n)
 end fun
 

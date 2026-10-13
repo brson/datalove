@@ -160,21 +160,15 @@ end fun
 fun sum<T>(ref self: [T]): ?T with { T is fixedint, }
   let start: T = zero()
   var total: ?T = some start
-  let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if list_get(ref self, i) |elem|
-      if total |running|
-        let combined = running +? elem
-        let unwanted_running = running
-        let unwanted_elem = elem
-        set total = some combined
-      else
-        set total = some elem
-      end if
+  for elem in ref self
+    if total |running|
+      let combined = running +? elem
+      let unwanted_running = running
+      set total = some combined
+    else
+      set total = some elem@
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret total
 end fun
 
@@ -184,21 +178,15 @@ end fun
 fun product<T>(ref self: [T]): ?T with { T is fixedint, }
   let start: T = one()
   var running: ?T = some start
-  let n = list_len(ref self)
-  var i: index = : index / 0
-  loop while i .< n
-    if list_get(ref self, i) |elem|
-      if running |so_far|
-        let combined = so_far *? elem
-        let unwanted_so_far = so_far
-        let unwanted_elem = elem
-        set running = some combined
-      else
-        set running = some elem
-      end if
+  for elem in ref self
+    if running |so_far|
+      let combined = so_far *? elem
+      let unwanted_so_far = so_far
+      set running = some combined
+    else
+      set running = some elem@
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  end for
   ret running
 end fun
 

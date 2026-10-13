@@ -70,6 +70,15 @@ impl<'a> Lowering<'a> {
         self.typed_any(op).filter(|ty| !ty.is_dynamic())
     }
 
+    /// Where a cursor slot is, and which cursor it holds.
+    fn cursor(&self, cursor: datalove_datafun_ir::SlotId) -> (Loc, CursorKind) {
+        let kind = match &self.func.slot_types[cursor.0 as usize] {
+            IrType::Cursor(kind) => *kind,
+            other => panic!("a cursor instruction on a slot of {other}"),
+        };
+        (self.loc(&Operand::Slot(cursor)).expect("a cursor is a slot in the frame"), kind)
+    }
+
     fn typed_any(&self, op: &Operand) -> Option<&'a IrType> {
         let func = self.func;
         match op {
@@ -263,8 +272,12 @@ impl<'a> Lowering<'a> {
                 // read the list's header, the same whatever it holds, and
                 // its descriptor.
                 let call = matches!(instr, Instruction::Call { .. });
+                // A cursor's operations touch only the cursor, and write a
+                // pointer or a flag.
                 let through = call || matches!(instr,
-                    Instruction::ListBoundsCheck { .. } | Instruction::ListElementRef { .. });
+                    Instruction::ListBoundsCheck { .. } | Instruction::ListElementRef { .. }
+                    | Instruction::CursorDone { .. } | Instruction::CursorElem { .. }
+                    | Instruction::CursorValue { .. } | Instruction::CursorAdvance { .. });
                 if let Some(op) = self.lower_dynamic_move(instr) {
                     self.emit(op);
                 } else if (!through && self.touches_dynamic(instr)) || !self.lower_instruction(instr) {
@@ -518,6 +531,31 @@ impl<'a> Lowering<'a> {
                 }
                 let size = layout_of(elem).size;
                 self.emit(Op::ListSetCopy { valid: self.value_loc(*is_valid), list: l, index: i, value: v, size });
+                true
+            }
+            Instruction::CursorDone { dest, cursor } => {
+                let (c, kind) = self.cursor(*cursor);
+                self.emit(Op::CursorDone { dst: self.value_loc(*dest), cursor: c, kind });
+                true
+            }
+            Instruction::CursorElem { dest, cursor } => {
+                let (c, kind) = self.cursor(*cursor);
+                self.emit(Op::CursorElem { dst: self.value_loc(*dest), cursor: c, kind });
+                true
+            }
+            Instruction::CursorValue { dest, cursor } => {
+                let (c, _) = self.cursor(*cursor);
+                self.emit(Op::CursorValue { dst: self.value_loc(*dest), cursor: c });
+                true
+            }
+            // A tree's advance reads its layout off the collection's
+            // descriptor, which the walker has.
+            Instruction::CursorAdvance { cursor, .. } => {
+                let (c, kind) = self.cursor(*cursor);
+                if kind == CursorKind::Tree {
+                    return false;
+                }
+                self.emit(Op::CursorAdvance { cursor: c, kind });
                 true
             }
             Instruction::ListElementRef { dest, list, index } => {

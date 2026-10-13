@@ -1,0 +1,59 @@
+----------
+module local/test/main
+----------
+
+// An element of a copy type is read for its value wherever a value goes:
+// into a tuple, a list or a struct, a `let`, a `ret`, an argument. Each of
+// those once took the reference itself and wrote the pointer.
+
+fun echo(x: u64): u64
+  ret x
+end fun
+
+fun first_over(ref xs: [u64], limit: u64): ?u64
+  for x in ref xs
+    if x .> limit
+      ret some x
+    end if
+  end for
+  ret none
+end fun
+
+fun shapes(ref xs: [u64]): ([(u64, u64)], [u64], { a: u64 }, u64)
+  var pairs: [(u64, u64)] = []
+  var list: [u64] = []
+  var record = { a = : u64 / 0 }
+  var last: u64 = 0
+  for x in ref xs
+    let y = x
+    set pairs = [(x, y)]
+    set list = [x, echo(x)]
+    set record = { a = x }
+    set last = x
+  end for
+  ret (pairs, list, record, last)
+end fun
+
+// A map's copy value beside a key that is cloned.
+fun rows(ref m: %{string = u64}): [(u64, string)]
+  var out: [(u64, string)] = []
+  for k, v in ref m
+    set out = [(v, k@)]
+  end for
+  ret out
+end fun
+
+fun main(): (?u64, ?u64, ([(u64, u64)], [u64], { a: u64 }, u64), [(u64, string)])
+  let xs = [: u64 / 3, : u64 / 8, : u64 / 21]
+  ret (first_over(ref xs, : u64 / 5), first_over(ref xs, : u64 / 99), shapes(ref xs),
+       rows(ref %{"a" = : u64 / 1, "b" = : u64 / 2}))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

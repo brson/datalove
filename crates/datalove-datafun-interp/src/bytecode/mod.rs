@@ -66,7 +66,7 @@
 
 use datalove_datafun_ir::layout::{layout_of, option_payload_offset, result_payload_offset};
 use datalove_datafun_ir::{
-    BinOp, BlockId, UnaryOp, CodeRef, CodeUnitContext, ConstValue, Instruction, IrCodeUnit, IrType, Operand,
+    BinOp, BlockId, UnaryOp, CodeRef, CodeUnitContext, ConstValue, CursorKind, Instruction, IrCodeUnit, IrType, Operand,
     ParamMode, SlotDest, Terminator, ValueId,
 };
 use datalove_datafun_intrinsics::IntrinsicId;
@@ -364,6 +364,15 @@ pub(crate) enum Op {
     /// which value `dest` records what it points at by: `rt[at]` holds the
     /// destination, the list and the index.
     ListElementRefRt { dest: u32, at: u32 },
+    /// A walk's protocol, `dtlv_rti_*_cursor_*`, each function called as it is:
+    /// whether the walk at `cursor` is over, a reference to its current element
+    /// and to a map's current value, and moving a list's, a tensor's or a
+    /// row walk on. Starting a walk, and moving a tree's, take a descriptor and
+    /// run on the walker.
+    CursorDone { dst: Loc, cursor: Loc, kind: CursorKind },
+    CursorElem { dst: Loc, cursor: Loc, kind: CursorKind },
+    CursorValue { dst: Loc, cursor: Loc },
+    CursorAdvance { cursor: Loc, kind: CursorKind },
     /// IR walker routines on resolved operands: `rt[at]` holds the
     /// destination and the source.
     CloneRt { at: u32 },

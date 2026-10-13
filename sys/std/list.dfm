@@ -162,14 +162,9 @@ end fun
 // One list holding every element of every inner list, in order.
 fun flattened<T>(ref self: [[T]]): [T]
   var built: [T] = []
-  var i: index = : index / 0
-  let n = len(ref self)
-  loop while i .< n
-    if get(ref self, i) |inner|
-      call extend(mut built, inner)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  for inner in ref self
+    call extend(mut built, inner@)
+  end for
   ret built
 end fun
 
@@ -223,14 +218,9 @@ end fun
 // A new list with other's elements after self's. Neither is disturbed.
 fun concat<T>(ref self: [T], ref other: [T]): [T]
   var out: [T] = self@
-  let n = len(ref other)
-  var i: index = : index / 0
-  loop while i .< n
-    if get(ref other, i) |elem|
-      call push(mut out, elem)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
+  for elem in ref other
+    call push(mut out, elem@)
+  end for
   ret out
 end fun
 

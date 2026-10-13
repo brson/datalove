@@ -4,9 +4,9 @@ A plan for `for` over lists, tensors, sets and maps, from the parser to the
 backends. Every collection is walked through a cursor whose whole protocol is
 runtime functions; a backend that open-codes them is optimizing, not defining
 them. It replaces "Immutable Cursors for the Collections", which predated fat
-generics. Refreshed October 2026 against the compiler as it stands; not
-implemented. The language side is in
-`mandocs/drafts/for-loops-for-collections.md`.
+generics. Written and implemented October 2026, all five phases; what was
+built differs from the plan where [What was built](#user-content-what-was-built)
+says. The language side is in `mandocs/drafts/for-loops-for-collections.md`.
 
 ## Contents
 
@@ -23,7 +23,8 @@ implemented. The language side is in
 - [Ownership](#user-content-ownership)
 - [Backends](#user-content-backends)
 - [Bugs found on the way](#user-content-bugs-found-on-the-way)
-- [What exists and what is missing](#user-content-what-exists-and-what-is-missing)
+- [What was built](#user-content-what-was-built)
+- [Measurements](#user-content-measurements)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
 
@@ -365,21 +366,26 @@ panics for a slot with no binding.
 
 ## Backends
 
-| | Protocol | Open-coded later |
+| | Calls the protocol | Open-coded |
 |---|---|---|
-| Interpreter | calls `datalove_rt::c` for every operation | never |
-| Bytecode | `Op::Ir`, so the walker's calls | fused ops, if measurement says so |
-| Cranelift | `RuntimeImports` calls for every operation | strided and row cursors entirely; tree done, elem, value, and advance within a leaf |
-| C AOT | calls, with prototypes in `emit_header` | as Cranelift |
+| IR walker | every operation | nothing |
+| Bytecode | every operation: done, elem, value and a strided or row advance as their own ops (`Op::Cursor*`), begin and a tree's advance on the walker | nothing |
+| Cranelift | begin over a tensor or tree; a tree's advance across leaves | a list's begin; every done, elem and value; a strided or row advance; a tree's advance within a leaf |
+| C AOT | as Cranelift | as Cranelift |
+
+The bytecode's ops call the runtime's functions, which thin LTO inlines into
+the bytecode loop, so the interpreter runs the protocol as written and still
+beats the index loop it replaces. The compiled backends read every field
+offset with `offset_of!` on the `rtdt` structs, so there is no second
+description of a cursor's layout to drift from the runtime's.
 
 - **A new entry point** goes in `rt/src/c/mod.rs`, then `just gen-rti`, then
   `RuntimeImports` (the field, `declare`, `all_mut`), the JIT's
   `runtime_addresses`, and a C prototype.
 - **`ABI_VERSION`** picks up the new table entries by itself. No cursor is
   passed to a rider, so the structs need no `mix` lines unless that changes.
-  A backend that open-codes a cursor depends on its layout, which
-  `layout_conformance_tests` should cover alongside the other runtime
-  structs.
+  A backend that open-codes a cursor reads its layout from the `rtdt`
+  structs themselves.
 - **The cursor slot** needs a descriptor in the interpreter, which checks each
   slot's descriptor against `layout_of` (`interp/src/layout.rs`). A
   plain-data stand-in like `dynamic_reference`'s does. Cranelift and C keep
@@ -389,8 +395,8 @@ panics for a slot with no binding.
   using `for` falls back to the interpreter under the JIT and fails to build
   under AOT.
 - **DCE**: `CursorBegin` and `CursorAdvance` write a slot and have no dest, so
-  they go in `has_side_effects`. The others read a copy slot and are removable
-  as they are.
+  they are in `has_side_effects`. The others read a copy slot and are
+  removable as they are.
 - **OSR** works without anything new: the cursor and counter are slots in the
   interpreter's frame, which compiled code continues from.
 
@@ -401,11 +407,18 @@ panics for a slot with no binding.
   (`c-aot/src/codegen.rs`), one per instruction. A recursive call that
   reaches the same instruction overwrites the caller's live view. `for` no
   longer goes through it; `t[i]?` still does. The view belongs in `__frame`.
-- **DCE can drop a borrowed collection.** `consumed_owned` treats
-  `ListElementRef` and `TensorIndexRef` as consuming. Removing an unused one
-  whose collection is an owned `Value` inserts a `Drop` of the collection.
-  Every element reference has a use today, so it has never fired. They
-  belong in the non-consuming list beside `GetFieldRef`.
+- **Fixed: DCE could drop a borrowed collection.** `consumed_owned` treated
+  `ListElementRef`, `MapValueRef` and `TensorIndexRef` as consuming, so
+  removing an unused one whose collection was an owned `Value` inserted a
+  `Drop` of the collection. Every element reference had a use, so it never
+  fired. They are in the non-consuming list beside `GetFieldRef` now.
+- **Fixed: a reference binding read for its value handed over the pointer.**
+  `lower_expression` returned a name bound to `Operand::ValueRef` as the
+  reference itself, which only promoted consts had been, and those are never
+  copy. A `for`'s copy element put in a tuple, a list, a `let` or an argument
+  was the address. It now copies through the reference. Fixture
+  `engines/for_006_copy_elements_by_value`; the store demo found it, by
+  crashing.
 - **Fixed: set removal never rebalanced**, leaving empty leaves in the
   chain. It now borrows and merges as the map's does.
 - **Fixed: bulk-built trees had wrong separators.**
@@ -421,21 +434,63 @@ panics for a slot with no binding.
   `dtlv_rti_tensor_hyperplane_clone_local` with no `extern` prototype, so it
   compiles as an implicit declaration.
 
-## What exists and what is missing
+## What was built
 
-| Piece | Status |
-|---|---|
-| Leaf chaining and `leftmost_leaf`, for sets and maps | exists |
-| The row view, in `TensorIndexRef` | exists |
-| Descriptors for elements, keys and values in a generic | exist, as table entries |
-| `ref` binding allocation (`alloc_const_param`) | exists |
-| The three cursor structs and sixteen functions | missing |
-| `IrType::Cursor` and five instructions | missing |
-| `for` in the parser, AST, tycheck, ownership and lowering | missing |
-| Freezing the iteratee | missing |
-| A continue target separate from the header | missing |
+What the plan says, with these differences:
+
+- **The bytecode has its own cursor ops** rather than running every cursor
+  instruction on the walker. They call the protocol, so the interpreter still
+  open-codes nothing.
+- **Begin over a tensor or a tree stays a call** in the compiled backends; it
+  runs once a walk.
+- **Errors.** P078 (a `for` header that does not parse), P079 (no `ref`),
+  F087 (a temporary, a value that is not a collection, or the wrong number of
+  names for it), D015 (changing the collection being walked).
+- **Worldgen writes `for`** over a collection in scope, at its own
+  probability (`for_probability`), since the roll for a statement rarely
+  found one: one world in eighty had a `for` before, fifteen after.
+- **Not done:** the C AOT `static` view and the missing prototype, below in
+  [Bugs](#user-content-bugs-found-on-the-way), which `for` no longer reaches.
+
+Fixtures: `engines/for_001` to `for_006`, `std_tests/179_for_over_a_shrunk_set`,
+`error/96` to `103`, and `datalove-rt-tests/tests/cursor_tests.rs` for the
+protocol alone, transposed and sliced tensors included, which no program can
+build yet.
+
+## Measurements
+
+Release build, one machine, `hyperfine` means. A list of 100,000 `u32`s
+summed 200 times, and a set of 5,000 summed 20 times:
+
+| | interp | JIT | AOT |
+|---|---:|---:|---:|
+| list, index loop | 230 ms | 38 ms | 18.1 ms |
+| list, `for`, every operation a call | 487 ms | 155 ms | 52 ms |
+| list, `for`, as built | 193 ms | 34 ms | 16.4 ms |
+| set, `set.get` by position | 58 ms | 61 ms | 53 ms |
+| set, `for` | 7.2 ms | 7.5 ms | 1.4 ms |
+
+Calls for every operation cost the list two to four times the index loop,
+which is why open-coding came before porting `sys/std`. As built, a list's
+`for` is faster than its index loop on every engine, and a set's is linear
+rather than quadratic.
+
+`benchvs`, before phase 4 and after phase 5:
+
+| | interp | JIT | AOT |
+|---|---:|---:|---:|
+| `wordfreq` before | 851 ms | 521 ms | 470 ms |
+| `wordfreq` after | 831 ms | 509 ms | 445 ms |
+| `ordered` before | 2.87 s | 674 ms | 505 ms |
+| `ordered` after | 2.83 s | 670 ms | 504 ms |
+
+`wordfreq` stops building a map's keys and values as lists to walk them.
+`ordered` spends its time in binary searches, and its one converted walk is
+in the noise.
 
 ## Phases
+
+All five are done.
 
 1. **The runtime protocol**, all three cursors, with `datalove-rt-tests`
    walking each kind against the positional reads: empty, one element, a

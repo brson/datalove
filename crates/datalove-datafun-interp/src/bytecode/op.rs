@@ -36,6 +36,7 @@ impl Op {
             | Op::MulCkU32I { .. } | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. }
             | Op::ListSetCopy { .. } | Op::ListStoreAt { .. } | Op::ListElementRef { .. }
             | Op::ListElementRefRt { .. } | Op::CloneRt { .. }
+            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
             | Op::WidenFixedRt { .. } | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. } | Op::Drop { .. } | Op::DropTracked { .. }
             | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. } | Op::Widen { .. } | Op::BinOpRt { .. }
@@ -135,6 +136,10 @@ impl Op {
             Op::ListElementRef { dst, list, index, .. } => {
                 f(dst, 8); f(list, std::mem::size_of::<rtdt::List>() as u32); f(index, I)
             }
+            Op::CursorDone { dst, cursor, kind } => { f(dst, 1); f(cursor, cursor_size(kind)) }
+            Op::CursorElem { dst, cursor, kind } => { f(dst, 8); f(cursor, cursor_size(kind)) }
+            Op::CursorValue { dst, cursor } => { f(dst, 8); f(cursor, cursor_size(CursorKind::Tree)) }
+            Op::CursorAdvance { cursor, kind } => f(cursor, cursor_size(kind)),
             Op::WrapSome { dst, src, at, len } | Op::WrapOk { dst, src, at, len } => { f(dst, at + len); f(src, len) }
             Op::WrapNone { dst } => f(dst, 1),
             Op::UnwrapOption { dst, flag, src, at, len } => { f(dst, len); f(flag, 1); f(src, at + len) }
@@ -201,6 +206,7 @@ impl Op {
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListCopyAt { .. } | Op::ListStoreAt { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
+            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. }
@@ -227,4 +233,9 @@ impl BcFunction {
             _ => format!("  {i:3}: {op:?}\n"),
         }).collect()
     }
+}
+
+/// How many bytes a cursor of this kind takes in the frame.
+fn cursor_size(kind: CursorKind) -> u32 {
+    layout_of(&IrType::Cursor(kind)).size
 }

@@ -24,13 +24,9 @@ fun top_customers(n: index): ![(u64, u32, u64)]
     end loop
 
     var rows: [(u64, u32, u64)] = []
-    let customers = map.keys(ref spent)
-    var i: index = 0
-    loop while i .< list.len(ref customers)
-        let customer = customers[i]!
-        call list.push(mut rows, (map.get_or(ref spent, ref customer, 0), customer, map.get_or(ref orders, ref customer, 0)))
-        set i +!= 1
-    end loop
+    for customer, total in ref spent
+        call list.push(mut rows, (total, customer, map.get_or(ref orders, ref customer, 0)))
+    end for
     ret ok list.take(ref list.reversed(ref ord.sorted(ref rows)), n)
 end fun
 
@@ -55,15 +51,10 @@ fun by_country(): ![(u64, string, u64)]
     end loop
 
     var rows: [(u64, string, u64)] = []
-    let countries = map.keys(ref revenue)
-    var i: index = 0
-    loop while i .< list.len(ref countries)
-        let country = countries[i]!@
-        let r = map.get_or(ref revenue, ref country, 0)
+    for country, r in ref revenue
         let b = set.len(ref buyers[country]!)
-        call list.push(mut rows, (r, country, u64.from_index(b)))
-        set i +!= 1
-    end loop
+        call list.push(mut rows, (r, country@, u64.from_index(b)))
+    end for
     ret ok list.reversed(ref ord.sorted(ref rows))
 end fun
 

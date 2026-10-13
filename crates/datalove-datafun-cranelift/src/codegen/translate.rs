@@ -357,16 +357,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 self.compile_cursor_begin(builder, *cursor, coll)?;
             }
             Instruction::CursorDone { dest, cursor } => {
-                let func = self.cursor_done_func(*cursor);
-                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+                self.compile_cursor_done(builder, *dest, *cursor)?;
             }
             Instruction::CursorElem { dest, cursor } => {
-                let func = self.cursor_elem_func(*cursor);
-                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+                self.compile_cursor_elem(builder, *dest, *cursor)?;
             }
             Instruction::CursorValue { dest, cursor } => {
-                let func = self.runtime.tree_cursor_value;
-                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+                self.compile_cursor_value(builder, *dest, *cursor)?;
             }
             Instruction::CursorAdvance { cursor, coll } => {
                 self.compile_cursor_advance(builder, *cursor, coll)?;
