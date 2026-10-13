@@ -162,6 +162,7 @@ fn fuse_branches(block: &mut Vec<Op>, b: usize, facts: &Facts) {
                 && facts.next[b] == Some(els) =>
             Op::UnwrapOkBr { ok, err, src, at, ok_len, then },
         Op::CmpU8 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU8 { cmp, a, b, then, els },
+        Op::CmpI8 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI8 { cmp, a, b, then, els },
         Op::CmpU32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpU32 { cmp, a, b, then, els },
         Op::CmpU32I { cmp, dst, a, imm } if dst.0 == want => Op::BrCmpU32I { cmp, a, imm, then, els },
         Op::CmpI32 { cmp, dst, a, b } if dst.0 == want => Op::BrCmpI32 { cmp, a, b, then, els },
@@ -362,12 +363,12 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
     Some(match op {
         Op::Const1 { dst, .. } | Op::Const4 { dst, .. } | Op::ConstPool { dst, .. }
         | Op::Copy1 { dst, .. } | Op::Copy4 { dst, .. } | Op::Copy8 { dst, .. }
-        | Op::CopyN { dst, .. } | Op::CmpU32I { dst, .. } | Op::CmpU8 { dst, .. }
+        | Op::CopyN { dst, .. } | Op::CmpU32I { dst, .. } | Op::CmpU8 { dst, .. } | Op::CmpI8 { dst, .. }
         | Op::CmpU32 { dst, .. } | Op::CmpI32 { dst, .. } | Op::CmpU64 { dst, .. }
         | Op::CmpI64 { dst, .. } | Op::AddWrapU32 { dst, .. } | Op::SubWrapU32 { dst, .. }
         | Op::MulWrapU32 { dst, .. } | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. }
         | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. } | Op::AddWrapIndex { dst, .. }
-        | Op::SubWrapIndex { dst, .. } | Op::U64ToIndex { dst, .. } | Op::ZextU8U32 { dst, .. }
+        | Op::SubWrapIndex { dst, .. } | Op::MulWrapIndex { dst, .. } | Op::ShrIndex { dst, .. } | Op::U64ToIndex { dst, .. } | Op::ZextU8U32 { dst, .. }
         | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. } | Op::NotBool { dst, .. }
         | Op::ListCopyAt { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. }
         | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. }

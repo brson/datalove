@@ -252,6 +252,7 @@ impl IrInterpreter {
                     Op::MulCkI64 { dst, ovf, a, b } => checked::<i64>(base, dst, ovf, a, b, i64::overflowing_mul_impl),
 
                     Op::CmpU8 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<u8>(base, a), rd::<u8>(base, b))),
+                    Op::CmpI8 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<i8>(base, a), rd::<i8>(base, b))),
                     Op::CmpU32 { cmp, dst, a, b } => wr(base, dst, cmp.apply(rd::<u32>(base, a), rd::<u32>(base, b))),
                     Op::CmpU32I { cmp, dst, a, imm } => wr(base, dst, cmp.apply(rd::<u32>(base, a), imm)),
                     Op::AddCkU32I { dst, ovf, a, imm } => {
@@ -285,6 +286,12 @@ impl IrInterpreter {
                     }
                     Op::SubWrapIndex { dst, a, b } => {
                         wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_sub(rd(base, b)))
+                    }
+                    Op::MulWrapIndex { dst, a, b } => {
+                        wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_mul(rd(base, b)))
+                    }
+                    Op::ShrIndex { dst, a, b } => {
+                        wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_shr(rd::<u32>(base, b)))
                     }
                     Op::U64ToIndex { dst, src } => wr(base, dst, rd::<u64>(base, src) as rtdt::IndexRepr),
                     Op::ZextU8U32 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u32),
@@ -455,6 +462,10 @@ impl IrInterpreter {
                     }
                     Op::BrCmpU8 { cmp, a, b, then, els } => {
                         pc = if cmp.apply(rd::<u8>(base, a), rd::<u8>(base, b)) { then } else { els } as usize;
+                        continue;
+                    }
+                    Op::BrCmpI8 { cmp, a, b, then, els } => {
+                        pc = if cmp.apply(rd::<i8>(base, a), rd::<i8>(base, b)) { then } else { els } as usize;
                         continue;
                     }
                     Op::BrCmpU32I { cmp, a, imm, then, els } => {

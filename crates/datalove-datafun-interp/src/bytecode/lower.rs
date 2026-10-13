@@ -86,19 +86,29 @@ impl<'a> Lowering<'a> {
 
     /// Where an operand's descriptor comes from: the layout where its static
     /// type says, otherwise the descriptor table, at run time: a dynamic
-    /// parameter's, or what a reference to a dynamic type points at.
+    /// value's, slot's or parameter's, or what a reference to a dynamic type
+    /// points at. A reference to a dynamic type is itself a pointer, which
+    /// its static descriptor describes.
     fn desc(&self, op: &Operand) -> Option<Desc> {
         if self.typed(op).is_some() {
             return Some(Desc::Static(self.desc_of(op)?));
         }
+        let layout = self.layout;
+        let dynamic = |tydesc: *const rtdt::TyDesc, entry: Option<u32>| Some(if tydesc.is_null() {
+            Desc::Table(entry.expect("a dynamic place has a table entry"))
+        } else {
+            Desc::Static(tydesc)
+        });
         match op {
+            Operand::Value(id) => dynamic(layout.value_tydescs[id.0 as usize], layout.value_entries[id.0 as usize]),
+            Operand::Slot(id) => dynamic(layout.slot_tydescs[id.0 as usize], layout.slot_entries[id.0 as usize]),
             Operand::Param(id) => Some(Desc::Table(
-                self.layout.param_entries[id.0 as usize].expect("a dynamic parameter has a table entry"))),
-            Operand::ValueRef(id) => match self.layout.value_entries[id.0 as usize] {
+                layout.param_entries[id.0 as usize].expect("a dynamic parameter has a table entry"))),
+            Operand::ValueRef(id) => match layout.value_entries[id.0 as usize] {
                 Some(entry) => Some(Desc::Table(entry)),
                 None => Some(Desc::Static(self.desc_of(op)?)),
             },
-            _ => None,
+            Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => None,
         }
     }
 
@@ -116,11 +126,18 @@ impl<'a> Lowering<'a> {
         (self.rt.len() - 1) as u32
     }
 
+    /// Where an operand is: in the frame, or where a pointer in the frame
+    /// says -- a parameter's, a reference's, or a dynamic value's or slot's,
+    /// whose frame bytes are a pointer at its storage.
     fn loc(&self, op: &Operand) -> Option<Loc> {
         let layout = self.layout;
+        let place = |offset: u32, tydesc: *const rtdt::TyDesc| match tydesc.is_null() {
+            true => Loc::indirect(offset),
+            false => Loc::direct(offset),
+        };
         Some(match op {
-            Operand::Value(id) => Loc::direct(layout.value_offsets[id.0 as usize]),
-            Operand::Slot(id) => Loc::direct(layout.slot_offsets[id.0 as usize]),
+            Operand::Value(id) => place(layout.value_offsets[id.0 as usize], layout.value_tydescs[id.0 as usize]),
+            Operand::Slot(id) => place(layout.slot_offsets[id.0 as usize], layout.slot_tydescs[id.0 as usize]),
             Operand::Param(id) => match layout.param_copies[id.0 as usize] {
                 Some((at, _)) => Loc::direct(at),
                 None => Loc::indirect(layout.param_offsets[id.0 as usize]),
@@ -242,10 +259,15 @@ impl<'a> Lowering<'a> {
                 // walker, which reads it through its pointer.
                 // A call is the exception: its arguments are read through the
                 // frame, and its result written so, wherever it is dynamic.
+                // So are a list's bounds check and an element reference, which
+                // read the list's header, the same whatever it holds, and
+                // its descriptor.
                 let call = matches!(instr, Instruction::Call { .. });
+                let through = call || matches!(instr,
+                    Instruction::ListBoundsCheck { .. } | Instruction::ListElementRef { .. });
                 if let Some(op) = self.lower_dynamic_move(instr) {
                     self.emit(op);
-                } else if (!call && self.touches_dynamic(instr)) || !self.lower_instruction(instr) {
+                } else if (!through && self.touches_dynamic(instr)) || !self.lower_instruction(instr) {
                     self.escape(b, i);
                 }
             }
@@ -895,6 +917,7 @@ impl<'a> Lowering<'a> {
         let dst = self.value_loc(dest);
         let op = match lt {
             IrType::U8 | IrType::Bool => Op::CmpU8 { cmp, dst, a, b },
+            IrType::I8 => Op::CmpI8 { cmp, dst, a, b },
             IrType::U32 => Op::CmpU32 { cmp, dst, a, b },
             IrType::I32 => Op::CmpI32 { cmp, dst, a, b },
             IrType::U64 => Op::CmpU64 { cmp, dst, a, b },
@@ -1048,6 +1071,8 @@ impl<'a> Lowering<'a> {
             IntrinsicId::BitorU32 => Op::OrU32 { dst, a, b },
             IntrinsicId::AddWrappingIndex => Op::AddWrapIndex { dst, a, b },
             IntrinsicId::SubWrappingIndex => Op::SubWrapIndex { dst, a, b },
+            IntrinsicId::MulWrappingIndex => Op::MulWrapIndex { dst, a, b },
+            IntrinsicId::ShrIndex => Op::ShrIndex { dst, a, b },
             _ => return false,
         };
         self.emit(op);

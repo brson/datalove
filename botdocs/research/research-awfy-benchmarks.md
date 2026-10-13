@@ -196,6 +196,38 @@ through one virtual or inline-cached call. Comparing a scalar `T` without
 leaving compiled code, and not re-checking descriptors a generic's table
 already guarantees agree, are where the next factor of two is.
 
+### Why the interpreter is slow on it
+
+At 4.15 s against CPython's 1.6, interpreted `ordered` was investigated
+(October 2026). Three things were the bytecode's own gaps, now closed:
+
+- **Generic bodies ran half on the IR walker.** Lowering sent every
+  instruction touching a dynamic value to the walker, so a `[T]`'s bounds
+  check and element reference -- every `h[i]!` -- ran there, 80 million times
+  a run, though a list's header is the same whatever it holds. `loc` now
+  reaches a dynamic value or slot through its pointer, `desc` gives its table
+  entry, and the two instructions are lowered (`ListBoundsCheck`,
+  `ListElementRefRt`).
+- **`mul_wrapping_index` and `shr_index` had no ops**, so the heap's child
+  and parent arithmetic and the binary search's midpoint ran on the walker;
+  they are `MulWrapIndex` and `ShrIndex` now.
+- **An `i8` comparison had no op.** `ord.less` and the rest compare
+  `ord_compare`'s `i8` with zero, which went through the generic binop
+  routine at about 120 instructions; it is `CmpI8` and `BrCmpI8` now.
+
+Together, 4.15 s to 3.27. What is left is calls. Per comparison, Python
+evaluates `h[i] < h[j]` inline; datalove makes two bytecode calls,
+`less_at` and then `ord.less`, at about 270 instructions for a call and its
+return, and a native call to `ord_compare`, at about 300 more: a third of
+that the native boundary and the rest the runtime's comparison by
+descriptor. A loop that calls a one-op function costs about 300
+instructions more an iteration than the same loop with the comparison
+inline. Being generic adds little on top: about 160 instructions a call,
+the table cache check and shadow stack space. So the interpreter's next
+gains on code like this are in the planned call itself, and in making
+`ord.less` a forwarder straight to a native, which would save one of the
+two calls.
+
 ## Additions that would open the rest
 
 Modest, in the order they unlock the most:

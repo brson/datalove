@@ -294,6 +294,7 @@ pub(crate) enum Op {
     MulCkU32I { dst: Loc, ovf: Loc, a: Loc, imm: u32 },
 
     CmpU8 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
+    CmpI8 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
     CmpU32 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
     CmpI32 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
     CmpU64 { cmp: Cmp, dst: Loc, a: Loc, b: Loc },
@@ -308,6 +309,10 @@ pub(crate) enum Op {
     AndU32 { dst: Loc, a: Loc, b: Loc },
     AddWrapIndex { dst: Loc, a: Loc, b: Loc },
     SubWrapIndex { dst: Loc, a: Loc, b: Loc },
+    MulWrapIndex { dst: Loc, a: Loc, b: Loc },
+    /// `a` shifted right by the `u32` at `b`, the count masked to the
+    /// index's width as the other engines do.
+    ShrIndex { dst: Loc, a: Loc, b: Loc },
     U64ToIndex { dst: Loc, src: Loc },
     ZextU8U32 { dst: Loc, src: Loc },
     ZextU8U64 { dst: Loc, src: Loc },
@@ -398,6 +403,7 @@ pub(crate) enum Op {
     BrIf { cond: Loc, then: u32, els: u32 },
     /// A comparison whose only use is the branch on it.
     BrCmpU8 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
+    BrCmpI8 { cmp: Cmp, a: Loc, b: Loc, then: u32, els: u32 },
     BrCmpU32I { cmp: Cmp, a: Loc, imm: u32, then: u32, els: u32 },
     /// Checked `u32` arithmetic whose overflow flag only a branch reads:
     /// on to `ovf` if it overflowed, `ok` if not.

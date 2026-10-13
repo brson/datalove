@@ -9,10 +9,10 @@ impl Op {
     pub(super) fn shape(&self) -> Shape {
         match self {
             Op::Const1 { .. } | Op::Const4 { .. } | Op::ConstPool { .. } | Op::Copy1 { .. } | Op::Copy4 { .. }
-            | Op::Copy8 { .. } | Op::CopyN { .. } | Op::CmpU32I { .. } | Op::CmpU8 { .. } | Op::CmpU32 { .. }
+            | Op::Copy8 { .. } | Op::CopyN { .. } | Op::CmpU32I { .. } | Op::CmpU8 { .. } | Op::CmpI8 { .. } | Op::CmpU32 { .. }
             | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. } | Op::AddWrapU32 { .. }
             | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. } | Op::ShrU32 { .. }
-            | Op::ShlU32 { .. } | Op::AndU32 { .. } | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. }
+            | Op::ShlU32 { .. } | Op::AndU32 { .. } | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::MulWrapIndex { .. } | Op::ShrIndex { .. }
             | Op::U64ToIndex { .. } | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. }
             | Op::NotBool { .. } | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. }
             | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. }
@@ -20,7 +20,7 @@ impl Op {
             | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. }
             | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. }
             | Op::F64ToF32 { .. } | Op::ListCopyAt { .. } => Shape::ONE_RESULT,
-            Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
+            Op::BrIf { .. } | Op::BrCmpU8 { .. } | Op::BrCmpI8 { .. } | Op::BrCmpU32I { .. } | Op::BrCmpU32 { .. }
             | Op::BrCmpI32 { .. } | Op::BrCmpU64 { .. } | Op::BrCmpI64 { .. } | Op::BrCmpF32 { .. }
             | Op::BrCmpF64 { .. } | Op::BrListBounds { .. } | Op::CkU32Br { .. } | Op::CkU32IBr { .. }
             | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. } => Shape::TWO_WAY,
@@ -87,13 +87,16 @@ impl Op {
             Op::CmpU32I { dst, a, .. } => { f(dst, 1); f(a, 4) }
             Op::AddCkU32I { dst, ovf, a, .. } | Op::SubCkU32I { dst, ovf, a, .. }
             | Op::MulCkU32I { dst, ovf, a, .. } => { f(dst, 4); f(ovf, 1); f(a, 4) }
-            Op::CmpU8 { dst, a, b, .. } => { f(dst, 1); f(a, 1); f(b, 1) }
+            Op::CmpU8 { dst, a, b, .. } | Op::CmpI8 { dst, a, b, .. } => { f(dst, 1); f(a, 1); f(b, 1) }
             Op::CmpU32 { dst, a, b, .. } | Op::CmpI32 { dst, a, b, .. } => { f(dst, 1); f(a, 4); f(b, 4) }
             Op::CmpU64 { dst, a, b, .. } | Op::CmpI64 { dst, a, b, .. } => { f(dst, 1); f(a, 8); f(b, 8) }
             Op::AddWrapU32 { dst, a, b } | Op::SubWrapU32 { dst, a, b } | Op::MulWrapU32 { dst, a, b }
             | Op::RemU32 { dst, a, b } | Op::ShrU32 { dst, a, b } | Op::ShlU32 { dst, a, b }
             | Op::AndU32 { dst, a, b } => { f(dst, 4); f(a, 4); f(b, 4) }
-            Op::AddWrapIndex { dst, a, b } | Op::SubWrapIndex { dst, a, b } => { f(dst, I); f(a, I); f(b, I) }
+            Op::AddWrapIndex { dst, a, b } | Op::SubWrapIndex { dst, a, b } | Op::MulWrapIndex { dst, a, b } => {
+                f(dst, I); f(a, I); f(b, I)
+            }
+            Op::ShrIndex { dst, a, b } => { f(dst, I); f(a, I); f(b, 4) }
             Op::U64ToIndex { dst, src } => { f(dst, I); f(src, 8) }
             Op::ZextU8U32 { dst, src } => { f(dst, 4); f(src, 1) }
             Op::ZextU8U64 { dst, src } => { f(dst, 8); f(src, 1) }
@@ -149,7 +152,7 @@ impl Op {
             }
             Op::Widen { dst, src, .. } => { f(dst, std::mem::size_of::<rtdt::Int>() as u32); f(src, 1) }
             Op::BrIf { cond, .. } => f(cond, 1),
-            Op::BrCmpU8 { a, b, .. } => { f(a, 1); f(b, 1) }
+            Op::BrCmpU8 { a, b, .. } | Op::BrCmpI8 { a, b, .. } => { f(a, 1); f(b, 1) }
             Op::BrCmpU32I { a, .. } => f(a, 4),
             Op::CkU32Br { dst, a, b, .. } => { f(dst, 4); f(a, 4); f(b, 4) }
             Op::CkU32IBr { dst, a, .. } => { f(dst, 4); f(a, 4) }
@@ -172,7 +175,7 @@ impl Op {
         match self {
             Op::Jump { to } | Op::EdgeIr { to, .. } => f(to),
             Op::UnwrapOkBr { then, .. } => f(then),
-            Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
+            Op::BrIf { then, els, .. } | Op::BrCmpU8 { then, els, .. } | Op::BrCmpI8 { then, els, .. } | Op::BrCmpU32I { then, els, .. }
             | Op::BrCmpU32 { then, els, .. } | Op::BrCmpI32 { then, els, .. }
             | Op::BrCmpU64 { then, els, .. } | Op::BrCmpI64 { then, els, .. }
             | Op::BrCmpF32 { then, els, .. } | Op::BrCmpF64 { then, els, .. }
@@ -189,10 +192,10 @@ impl Op {
             | Op::AddCkU64 { .. } | Op::SubCkU64 { .. } | Op::MulCkU64 { .. }
             | Op::AddCkI64 { .. } | Op::SubCkI64 { .. } | Op::MulCkI64 { .. }
             | Op::CmpU32I { .. } | Op::AddCkU32I { .. } | Op::SubCkU32I { .. } | Op::MulCkU32I { .. }
-            | Op::CmpU8 { .. } | Op::CmpU32 { .. } | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. }
+            | Op::CmpU8 { .. } | Op::CmpI8 { .. } | Op::CmpU32 { .. } | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. }
             | Op::AddWrapU32 { .. } | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. }
             | Op::ShrU32 { .. } | Op::ShlU32 { .. } | Op::AndU32 { .. }
-            | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::U64ToIndex { .. }
+            | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::MulWrapIndex { .. } | Op::ShrIndex { .. } | Op::U64ToIndex { .. }
             | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
             | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. } | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. } | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. } | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. } | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. } | Op::F64ToF32 { .. }
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
