@@ -3174,3 +3174,73 @@ fn test_btreemap_full_index_refuses_insert() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     Ok(())
 }
+
+/// A fixed shuffle of `0..n`, so a failure reproduces.
+fn shuffled(n: u32, seed: u64) -> Vec<u32> {
+    let mut xs: Vec<u32> = (0..n).collect();
+    let mut state = seed;
+    for i in (1..xs.len()).rev() {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let j = (state >> 33) as usize % (i + 1);
+        xs.swap(i, j);
+    }
+    xs
+}
+
+/// A map built in bulk from sorted slices finds every key, including those
+/// under an internal node that is not the root's first child, and keeps
+/// finding the rest as they are removed in any order.
+#[test]
+fn test_btreemap_built_map_finds_every_key() -> AnyResult<()> {
+    for n in [1u32, 11, 12, 133, 144, 145, 300, 1000, 2000] {
+        let rt = datalove_rt::c::dtlv_rti_init();
+        let arena = TyDescArena::new();
+        let (map_td, key_td, value_td) = create_map_u32_u32_tydesc(&arena);
+
+        let mut map = rtdt::Map { root: ptr::null(), len: rtdt::Index::ZERO };
+        let map_ptr = &mut map as *mut rtdt::Map as *mut u8;
+        let mut keys: Vec<u32> = (0..n).collect();
+        let mut values: Vec<u32> = (0..n).map(|k| k * 10).collect();
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreemap_build_from_sorted_slices_local(
+                rt, map_ptr, key_td, value_td,
+                keys.as_mut_ptr() as *mut u8, values.as_mut_ptr() as *mut u8, n.into(),
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+        let contains = |k: u32| unsafe {
+            let mut found = false;
+            let status = datalove_rt::c::dtlv_rti_btreemap_contains_key_local(
+                rt, map_ptr, map_td, &k as *const u32 as *const u8, key_td, &mut found,
+            );
+            assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+            found
+        };
+
+        let mut present: std::collections::BTreeSet<u32> = (0..n).collect();
+        for k in 0..n {
+            assert!(contains(k), "n = {n}: {k} is missing from a built map");
+        }
+        for k in shuffled(n, n as u64) {
+            let status = unsafe {
+                datalove_rt::c::dtlv_rti_btreemap_remove_local(
+                    rt, map_ptr, map_td, &k as *const u32 as *const u8, key_td,
+                )
+            };
+            assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+            present.remove(&k);
+            assert_eq!(map.len, rtdt::Index(present.len() as rtdt::IndexRepr));
+            for &j in &present {
+                assert!(contains(j), "n = {n}: {j} went missing after removing {k}");
+            }
+        }
+        assert!(map.root.is_null());
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_btreemap_destroy_local(rt, map_ptr, map_td);
+            datalove_rt::c::dtlv_rti_shutdown(rt);
+        }
+    }
+    Ok(())
+}

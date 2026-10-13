@@ -1,7 +1,7 @@
 //! Set operations for the Datalove runtime.
 
 use datalove_rtdt as rtdt;
-use datalove_rtdt::{TyDesc, Set, SetNode, SetNodeTag, SET_NODE_CAPACITY};
+use datalove_rtdt::{TyDesc, Set, SetNode, SetNodeTag, SET_NODE_B, SET_NODE_CAPACITY};
 use crate::c::impls::rt_local::RtLocal;
 use crate::c::RtStatus;
 use crate::rust::AlignedBuffer;
@@ -132,6 +132,14 @@ unsafe fn leaf_keys_ptr(node: *mut SetNode, ty: SetTy) -> *mut u8 {
     unsafe {
         let layout = *ty.leaf;
         (node as *mut u8).add(layout.keys_offset as usize)
+    }
+}
+
+/// Gets pointer to the link to the next leaf in a leaf node.
+unsafe fn leaf_next_ptr_mut(node: *mut SetNode, ty: SetTy) -> *mut *mut SetNode {
+    unsafe {
+        let layout = *ty.leaf;
+        (node as *mut u8).add(layout.next_leaf_offset as usize) as *mut *mut SetNode
     }
 }
 
@@ -502,17 +510,14 @@ pub unsafe fn btreeset_build_from_sorted_slice(
                     *child_ptrs_array.add(i) = current_level[child_idx + i];
                 }
 
-                // Extract separator keys (first key from each child except the first).
+                // The separator before each child but the first is the least
+                // element of that child's subtree: the first of its leftmost
+                // leaf. An internal child's own first key is the least of its
+                // second subtree only, and separating by it sent lookups for
+                // everything in its first subtree to the wrong child.
                 let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                 for i in 1..num_children {
-                    let child_node = current_level[child_idx + i];
-                    let child_is_leaf = *(child_node as *const u8) == SetNodeTag::Leaf as u8;
-
-                    let first_key_src = if child_is_leaf {
-                        (child_node as *const u8).add(leaf_layout.keys_offset as usize)
-                    } else {
-                        (child_node as *const u8).add(internal_layout.keys_offset as usize)
-                    };
+                    let first_key_src = leaf_keys_ptr(leftmost_leaf(current_level[child_idx + i], ty), ty);
 
                     let key_dest = keys_array.add((i - 1) * element_size);
                     // Clone the key for the internal node.
@@ -1299,7 +1304,374 @@ pub unsafe fn btreeset_clone_from_slice_impl(
     }
 }
 
+/// The fewest elements a node other than the root holds after a removal.
+const MIN_KEYS: u32 = SET_NODE_B - 1;
+
+/// What removing from a subtree did.
+#[derive(Debug, PartialEq, Eq)]
+enum RemoveResult {
+    /// The element was removed and the node still holds enough.
+    Removed,
+    /// The element was not there.
+    NotFound,
+    /// The element was removed and the node now holds too few.
+    Underflow,
+}
+
+/// Removes an element from a leaf.
+unsafe fn leaf_remove(
+    rt: &mut RtLocal,
+    leaf: *mut SetNode,
+    element: *const u8,
+    ty: SetTy,
+) -> RemoveResult {
+    unsafe {
+        let len = read_node_len(leaf);
+        let keys_ptr = leaf_keys_ptr(leaf, ty);
+        let size = ty.elem.size() as usize;
+
+        let Ok(i) = search_elements(keys_ptr, len as usize, element, ty) else {
+            return RemoveResult::NotFound;
+        };
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, keys_ptr.add(i * size), ty.elem.as_ptr());
+
+        if i < (len - 1) as usize {
+            let shift_count = (len - 1) as usize - i;
+            std::ptr::copy(keys_ptr.add((i + 1) * size), keys_ptr.add(i * size), shift_count * size);
+        }
+
+        write_node_len(leaf, len - 1);
+
+        if len - 1 < MIN_KEYS {
+            RemoveResult::Underflow
+        } else {
+            RemoveResult::Removed
+        }
+    }
+}
+
+/// Moves the last element of a leaf's left sibling to the front of the leaf,
+/// and makes the leaf's new first element the separator between them.
+unsafe fn borrow_from_left_leaf(
+    rt: &mut RtLocal,
+    parent: *mut SetNode,
+    parent_key_idx: usize,
+    left: *mut SetNode,
+    node: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let size = ty.elem.size() as usize;
+
+        let left_keys_ptr = leaf_keys_ptr(left, ty);
+        let node_keys_ptr = leaf_keys_ptr(node, ty);
+
+        if node_len > 0 {
+            std::ptr::copy(node_keys_ptr, node_keys_ptr.add(size), node_len as usize * size);
+        }
+        std::ptr::copy_nonoverlapping(left_keys_ptr.add((left_len - 1) as usize * size), node_keys_ptr, size);
+
+        write_node_len(left, left_len - 1);
+        write_node_len(node, node_len + 1);
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.elem.as_ptr());
+        let _ = crate::c::impls::clone::clone_value(rt_handle, node_keys_ptr, ty.elem.as_ptr(), parent_key);
+    }
+}
+
+/// Moves the first element of a leaf's right sibling to the end of the leaf,
+/// and makes the sibling's new first element the separator between them.
+unsafe fn borrow_from_right_leaf(
+    rt: &mut RtLocal,
+    parent: *mut SetNode,
+    parent_key_idx: usize,
+    node: *mut SetNode,
+    right: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let node_len = read_node_len(node);
+        let right_len = read_node_len(right);
+        let size = ty.elem.size() as usize;
+
+        let node_keys_ptr = leaf_keys_ptr(node, ty);
+        let right_keys_ptr = leaf_keys_ptr(right, ty);
+
+        std::ptr::copy_nonoverlapping(right_keys_ptr, node_keys_ptr.add(node_len as usize * size), size);
+        if right_len > 1 {
+            std::ptr::copy(right_keys_ptr.add(size), right_keys_ptr, (right_len - 1) as usize * size);
+        }
+
+        write_node_len(node, node_len + 1);
+        write_node_len(right, right_len - 1);
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, parent_key, ty.elem.as_ptr());
+        let _ = crate::c::impls::clone::clone_value(rt_handle, right_keys_ptr, ty.elem.as_ptr(), parent_key);
+    }
+}
+
+/// Rotates the last child of an internal node's left sibling through the
+/// parent into the front of the node.
+unsafe fn borrow_from_left_internal(
+    parent: *mut SetNode,
+    parent_key_idx: usize,
+    left: *mut SetNode,
+    node: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let size = ty.elem.size() as usize;
+
+        let left_keys_ptr = internal_keys_ptr(left, ty);
+        let left_children_ptr = internal_child_ptrs_ptr(left, ty);
+        let node_keys_ptr = internal_keys_ptr(node, ty);
+        let node_children_ptr = internal_child_ptrs_ptr(node, ty);
+
+        if node_len > 0 {
+            std::ptr::copy(node_keys_ptr, node_keys_ptr.add(size), node_len as usize * size);
+        }
+        std::ptr::copy(node_children_ptr, node_children_ptr.add(1), node_len as usize + 1);
+
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        std::ptr::copy_nonoverlapping(parent_key, node_keys_ptr, size);
+        std::ptr::copy_nonoverlapping(left_keys_ptr.add((left_len - 1) as usize * size), parent_key, size);
+        *node_children_ptr = *left_children_ptr.add(left_len as usize);
+
+        write_node_len(left, left_len - 1);
+        write_node_len(node, node_len + 1);
+    }
+}
+
+/// Rotates the first child of an internal node's right sibling through the
+/// parent onto the end of the node.
+unsafe fn borrow_from_right_internal(
+    parent: *mut SetNode,
+    parent_key_idx: usize,
+    node: *mut SetNode,
+    right: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let node_len = read_node_len(node);
+        let right_len = read_node_len(right);
+        let size = ty.elem.size() as usize;
+
+        let node_keys_ptr = internal_keys_ptr(node, ty);
+        let node_children_ptr = internal_child_ptrs_ptr(node, ty);
+        let right_keys_ptr = internal_keys_ptr(right, ty);
+        let right_children_ptr = internal_child_ptrs_ptr(right, ty);
+
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        std::ptr::copy_nonoverlapping(parent_key, node_keys_ptr.add(node_len as usize * size), size);
+        *node_children_ptr.add(node_len as usize + 1) = *right_children_ptr;
+        std::ptr::copy_nonoverlapping(right_keys_ptr, parent_key, size);
+
+        if right_len > 1 {
+            std::ptr::copy(right_keys_ptr.add(size), right_keys_ptr, (right_len - 1) as usize * size);
+        }
+        std::ptr::copy(right_children_ptr.add(1), right_children_ptr, right_len as usize);
+
+        write_node_len(node, node_len + 1);
+        write_node_len(right, right_len - 1);
+    }
+}
+
+/// Appends an internal node and the parent's separator before it onto its
+/// left sibling, and frees the node.
+///
+/// The separator is cloned down; the caller removes the parent's copy.
+unsafe fn merge_with_left_internal(
+    rt: &mut RtLocal,
+    parent: *mut SetNode,
+    parent_key_idx: usize,
+    left: *mut SetNode,
+    node: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let size = ty.elem.size() as usize;
+
+        let left_keys_ptr = internal_keys_ptr(left, ty);
+        let left_children_ptr = internal_child_ptrs_ptr(left, ty);
+        let node_keys_ptr = internal_keys_ptr(node, ty);
+        let node_children_ptr = internal_child_ptrs_ptr(node, ty);
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let parent_key = internal_keys_ptr(parent, ty).add(parent_key_idx * size);
+        let _ = crate::c::impls::clone::clone_value(
+            rt_handle,
+            parent_key,
+            ty.elem.as_ptr(),
+            left_keys_ptr.add(left_len as usize * size),
+        );
+
+        if node_len > 0 {
+            std::ptr::copy_nonoverlapping(
+                node_keys_ptr,
+                left_keys_ptr.add((left_len + 1) as usize * size),
+                node_len as usize * size,
+            );
+        }
+        std::ptr::copy_nonoverlapping(
+            node_children_ptr,
+            left_children_ptr.add((left_len + 1) as usize),
+            (node_len + 1) as usize,
+        );
+
+        write_node_len(left, left_len + 1 + node_len);
+        free_node(rt, node, ty);
+    }
+}
+
+/// Appends a leaf onto its left sibling, unlinks it from the chain, and frees
+/// it.
+unsafe fn merge_with_left_leaf(
+    rt: &mut RtLocal,
+    left: *mut SetNode,
+    node: *mut SetNode,
+    ty: SetTy,
+) {
+    unsafe {
+        let left_len = read_node_len(left);
+        let node_len = read_node_len(node);
+        let size = ty.elem.size() as usize;
+
+        std::ptr::copy_nonoverlapping(
+            leaf_keys_ptr(node, ty),
+            leaf_keys_ptr(left, ty).add(left_len as usize * size),
+            node_len as usize * size,
+        );
+        write_node_len(left, left_len + node_len);
+
+        *leaf_next_ptr_mut(left, ty) = *leaf_next_ptr_mut(node, ty);
+        free_node(rt, node, ty);
+    }
+}
+
+/// Removes a separator and the child to its right from an internal node.
+unsafe fn internal_remove_key(
+    rt: &mut RtLocal,
+    node: *mut SetNode,
+    key_idx: usize,
+    ty: SetTy,
+) {
+    unsafe {
+        let len = read_node_len(node);
+        let keys_ptr = internal_keys_ptr(node, ty);
+        let children_ptr = internal_child_ptrs_ptr(node, ty);
+        let size = ty.elem.size() as usize;
+
+        let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
+        let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, keys_ptr.add(key_idx * size), ty.elem.as_ptr());
+
+        let after = (len - 1) as usize - key_idx;
+        if after > 0 {
+            std::ptr::copy(keys_ptr.add((key_idx + 1) * size), keys_ptr.add(key_idx * size), after * size);
+            std::ptr::copy(children_ptr.add(key_idx + 2), children_ptr.add(key_idx + 1), after);
+        }
+
+        write_node_len(node, len - 1);
+    }
+}
+
+/// Refills an internal node's child that holds too few, by borrowing from a
+/// sibling or merging with one.
+unsafe fn fix_underflow(
+    rt: &mut RtLocal,
+    parent: *mut SetNode,
+    child_idx: usize,
+    ty: SetTy,
+) -> RemoveResult {
+    unsafe {
+        let parent_len = read_node_len(parent);
+        let children_ptr = internal_child_ptrs_ptr(parent, ty);
+        let child = *children_ptr.add(child_idx);
+        let child_tag = read_node_tag(child);
+
+        if child_idx > 0 {
+            let left = *children_ptr.add(child_idx - 1);
+            if read_node_len(left) > MIN_KEYS {
+                match child_tag {
+                    SetNodeTag::Leaf => borrow_from_left_leaf(rt, parent, child_idx - 1, left, child, ty),
+                    SetNodeTag::Internal => borrow_from_left_internal(parent, child_idx - 1, left, child, ty),
+                }
+                return RemoveResult::Removed;
+            }
+        }
+
+        if child_idx < parent_len as usize {
+            let right = *children_ptr.add(child_idx + 1);
+            if read_node_len(right) > MIN_KEYS {
+                match child_tag {
+                    SetNodeTag::Leaf => borrow_from_right_leaf(rt, parent, child_idx, child, right, ty),
+                    SetNodeTag::Internal => borrow_from_right_internal(parent, child_idx, child, right, ty),
+                }
+                return RemoveResult::Removed;
+            }
+        }
+
+        // Neither sibling can spare one, so merge the pair, the right into
+        // the left, and drop the separator between them from the parent.
+        let (left_idx, left, right) = if child_idx > 0 {
+            (child_idx - 1, *children_ptr.add(child_idx - 1), child)
+        } else {
+            (child_idx, child, *children_ptr.add(child_idx + 1))
+        };
+        match child_tag {
+            SetNodeTag::Leaf => merge_with_left_leaf(rt, left, right, ty),
+            SetNodeTag::Internal => merge_with_left_internal(rt, parent, left_idx, left, right, ty),
+        }
+        internal_remove_key(rt, parent, left_idx, ty);
+
+        if read_node_len(parent) < MIN_KEYS {
+            RemoveResult::Underflow
+        } else {
+            RemoveResult::Removed
+        }
+    }
+}
+
+/// Removes an element from the subtree rooted at `node`, rebalancing on the
+/// way back up.
+unsafe fn remove_recursive(
+    rt: &mut RtLocal,
+    node: *mut SetNode,
+    element: *const u8,
+    ty: SetTy,
+) -> RemoveResult {
+    unsafe {
+        match read_node_tag(node) {
+            SetNodeTag::Leaf => leaf_remove(rt, node, element, ty),
+            SetNodeTag::Internal => {
+                let len = read_node_len(node);
+                let child_idx = child_index(internal_keys_ptr(node, ty), len as usize, element, ty);
+                let child = *internal_child_ptrs_ptr(node, ty).add(child_idx);
+                match remove_recursive(rt, child, element, ty) {
+                    RemoveResult::Underflow => fix_underflow(rt, node, child_idx, ty),
+                    other => other,
+                }
+            }
+        }
+    }
+}
+
 /// Removes an element from a set.
+///
+/// A node left with too few elements borrows from a sibling or merges with
+/// one, as the map's removal does, so no leaf but the root is ever empty and
+/// a walk along the leaf chain visits only leaves that hold something.
 pub unsafe fn btreeset_remove_impl(
     rt: &mut RtLocal,
     btreeset_value_mut: *mut u8,
@@ -1314,64 +1686,38 @@ pub unsafe fn btreeset_remove_impl(
         }
 
         let ty = SetTy::of(rtdt::TyDescRef::from_ptr(btreeset_tydesc));
-        let set_element_ty = ty.elem;
-        let set_element_tydesc = set_element_ty.as_ptr();
-        let set_element_tydesc_ref = rtdt::TyDescRef::from_ptr(set_element_tydesc);
-
         let set_ptr = btreeset_value_mut as *mut Set;
         let root = (*set_ptr).root as *mut SetNode;
 
-        // If set is empty, nothing to remove.
         if root.is_null() {
             *bool_out = 0;
             return RtStatus::Ok;
         }
 
-        // Find the leaf containing the element.
-        let leaf = find_leaf_for_element(root, element_ref, ty);
-
-        let len = read_node_len(leaf);
-        let keys_ptr = leaf_keys_ptr(leaf, ty);
-        let element_size = set_element_tydesc_ref.size() as usize;
-
-        // Find and remove the element from the leaf.
-        for i in 0..len as usize {
-            let node_key = keys_ptr.add(i * element_size);
-            let cmp_result = ty.ord.cmp(element_ref, node_key);
-
-            match cmp_result {
-                crate::c::RtOrdering::Equal => {
-                    // Found the element, destroy it.
-                    let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
-                    let _ = crate::c::impls::destroy::any_destroy_local(rt_handle, node_key as *mut u8, set_element_tydesc);
-
-                    // Shift remaining elements left.
-                    if i < (len - 1) as usize {
-                        let shift_count = (len - 1) as usize - i;
-                        let src_key = keys_ptr.add((i + 1) * element_size);
-                        let dst_key = keys_ptr.add(i * element_size);
-                        std::ptr::copy(src_key, dst_key, shift_count * element_size);
-                    }
-
-                    write_node_len(leaf, len - 1);
-                    (*set_ptr).len -= rtdt::Index::ONE;
-
-                    // Handle empty root case.
-                    if (*set_ptr).len == rtdt::Index::ZERO {
-                        destroy_tree_recursive(rt, root, ty);
-                        (*set_ptr).root = std::ptr::null();
-                    }
-
-                    *bool_out = 1;
-                    return RtStatus::Ok;
-                }
-                crate::c::RtOrdering::Greater => continue,
-                crate::c::RtOrdering::Less | crate::c::RtOrdering::Error => break,
-            }
+        let result = remove_recursive(rt, root, element_ref, ty);
+        if result == RemoveResult::NotFound {
+            *bool_out = 0;
+            return RtStatus::Ok;
         }
 
-        // Element not found.
-        *bool_out = 0;
+        (*set_ptr).len -= rtdt::Index::ONE;
+        *bool_out = 1;
+
+        // The root may hold as few as it likes, but not nothing: an internal
+        // root left with one child hands the tree to it, and an empty leaf
+        // root means an empty set.
+        if result == RemoveResult::Underflow && read_node_len(root) == 0 {
+            match read_node_tag(root) {
+                SetNodeTag::Internal => {
+                    (*set_ptr).root = *internal_child_ptrs_ptr(root, ty);
+                }
+                SetNodeTag::Leaf => {
+                    (*set_ptr).root = std::ptr::null();
+                }
+            }
+            free_node(rt, root, ty);
+        }
+
         RtStatus::Ok
     }
 }

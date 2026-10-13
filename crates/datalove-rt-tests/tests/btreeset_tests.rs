@@ -3575,3 +3575,306 @@ fn test_btreeset_full_index_refuses_insert() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     Ok(())
 }
+
+// ==================== Shape After Removal ====================
+
+/// The fewest elements a non-root node holds once inserts and removals have
+/// had their way with it, as the runtime keeps it.
+const SET_MIN_KEYS: u32 = rtdt::SET_NODE_B - 1;
+
+/// A set's node layouts, for walking its tree from outside the runtime.
+struct SetShape {
+    leaf: rtdt::SetNodeLeafLayout,
+    internal: rtdt::SetNodeInternalLayout,
+    size: usize,
+    min: u32,
+}
+
+impl SetShape {
+    unsafe fn of(set_tydesc: *const rtdt::TyDesc, min: u32) -> SetShape {
+        unsafe {
+            let td = rtdt::TyDescRef::from_ptr(set_tydesc);
+            SetShape {
+                leaf: *td.set_leaf_layout(),
+                internal: *td.set_internal_layout(),
+                size: td.set_element_ty().size() as usize,
+                min,
+            }
+        }
+    }
+
+    unsafe fn next_leaf(&self, leaf: *const rtdt::SetNode) -> *const rtdt::SetNode {
+        unsafe { *((leaf as *const u8).add(self.leaf.next_leaf_offset as usize) as *const *const rtdt::SetNode) }
+    }
+
+    /// Checks the subtree at `node` against the bounds its ancestors put on
+    /// it, and collects its leaves in order.
+    unsafe fn walk<K: Ord + std::fmt::Debug>(
+        &self,
+        node: *const rtdt::SetNode,
+        depth: usize,
+        lo: Option<&K>,
+        hi: Option<&K>,
+        is_root: bool,
+        read: &dyn Fn(*const u8) -> K,
+        leaves: &mut Vec<*const rtdt::SetNode>,
+        leaf_depth: &mut Option<usize>,
+    ) {
+        unsafe {
+            let len = (*node).len;
+            let in_bounds = |k: &K| lo.is_none_or(|lo| lo <= k) && hi.is_none_or(|hi| k < hi);
+            match (*node).tag {
+                rtdt::SetNodeTag::Leaf => {
+                    assert!(is_root || len >= self.min.max(1), "a non-root leaf holds {len}");
+                    assert_eq!(*leaf_depth.get_or_insert(depth), depth, "leaves at different depths");
+                    let keys = (node as *const u8).add(self.leaf.keys_offset as usize);
+                    for i in 0..len as usize {
+                        let k = read(keys.add(i * self.size));
+                        assert!(in_bounds(&k), "leaf element {k:?} outside {lo:?}..{hi:?}");
+                    }
+                    leaves.push(node);
+                }
+                rtdt::SetNodeTag::Internal => {
+                    assert!(is_root || len >= self.min, "a non-root internal node holds {len}");
+                    assert!(len >= 1, "an internal node with no separator");
+                    let keys = (node as *const u8).add(self.internal.keys_offset as usize);
+                    let children = (node as *const u8).add(self.internal.child_ptrs_offset as usize)
+                        as *const *const rtdt::SetNode;
+                    let seps: Vec<K> = (0..len as usize).map(|i| read(keys.add(i * self.size))).collect();
+                    for (i, sep) in seps.iter().enumerate() {
+                        assert!(in_bounds(sep), "separator {sep:?} outside {lo:?}..{hi:?}");
+                        if i > 0 {
+                            assert!(seps[i - 1] < *sep, "separators out of order");
+                        }
+                    }
+                    for i in 0..=len as usize {
+                        let child_lo = if i == 0 { lo } else { Some(&seps[i - 1]) };
+                        let child_hi = if i == len as usize { hi } else { Some(&seps[i]) };
+                        self.walk(*children.add(i), depth + 1, child_lo, child_hi, false, read, leaves, leaf_depth);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Checks a set's tree: leaves all at one depth, every non-root node holding
+/// at least `min` and every non-root leaf something, separators bounding
+/// their subtrees, and the leaf chain linking exactly the tree's leaves, in
+/// order. Returns the elements as the chain visits them.
+unsafe fn check_set_shape<K: Ord + std::fmt::Debug>(
+    set: &rtdt::Set,
+    set_tydesc: *const rtdt::TyDesc,
+    min: u32,
+    read: &dyn Fn(*const u8) -> K,
+) -> Vec<K> {
+    unsafe {
+        if set.root.is_null() {
+            assert_eq!(set.len, rtdt::Index::ZERO);
+            return Vec::new();
+        }
+        let shape = SetShape::of(set_tydesc, min);
+
+        let mut leaves = Vec::new();
+        shape.walk(set.root, 0, None, None, true, read, &mut leaves, &mut None);
+
+        let mut chain = Vec::new();
+        let mut leaf = leaves[0];
+        while !leaf.is_null() {
+            chain.push(leaf);
+            leaf = shape.next_leaf(leaf);
+        }
+        assert_eq!(chain, leaves, "the leaf chain is not the tree's leaves in order");
+
+        let mut elements = Vec::new();
+        for leaf in chain {
+            assert!((*leaf).len > 0 || leaf == set.root, "an empty leaf in the chain");
+            let keys = (leaf as *const u8).add(shape.leaf.keys_offset as usize);
+            for i in 0..(*leaf).len as usize {
+                elements.push(read(keys.add(i * shape.size)));
+            }
+        }
+        assert!(elements.is_sorted_by(|a, b| a < b), "the chain is out of order");
+        assert_eq!(rtdt::Index(elements.len() as rtdt::IndexRepr), set.len);
+        elements
+    }
+}
+
+/// A fixed shuffle of `0..n`, so a failure reproduces.
+fn shuffled(n: u32, seed: u64) -> Vec<u32> {
+    let mut xs: Vec<u32> = (0..n).collect();
+    let mut state = seed;
+    for i in (1..xs.len()).rev() {
+        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        let j = (state >> 33) as usize % (i + 1);
+        xs.swap(i, j);
+    }
+    xs
+}
+
+unsafe fn insert_u32(rt: datalove_rt::c::LocalRtHandle, set: &mut rtdt::Set, set_td: *const rtdt::TyDesc, elem_td: *const rtdt::TyDesc, x: u32) -> u8 {
+    unsafe {
+        let mut x = x;
+        let mut inserted = 0u8;
+        let status = datalove_rt::c::dtlv_rti_btreeset_insert_local(
+            rt, set as *mut rtdt::Set as *mut u8, set_td, &mut x as *mut u32 as *mut u8, elem_td, &mut inserted,
+        );
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        inserted
+    }
+}
+
+unsafe fn remove_u32(rt: datalove_rt::c::LocalRtHandle, set: &mut rtdt::Set, set_td: *const rtdt::TyDesc, elem_td: *const rtdt::TyDesc, x: u32) -> u8 {
+    unsafe {
+        let mut removed = 0u8;
+        let status = datalove_rt::c::dtlv_rti_btreeset_remove_local(
+            rt, set as *mut rtdt::Set as *mut u8, set_td, &x as *const u32 as *const u8, elem_td, &mut removed,
+        );
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        removed
+    }
+}
+
+/// Removal keeps the tree balanced: after every removal from a set built by
+/// inserting, no non-root node holds fewer than the minimum, so the leaf
+/// chain never holds an empty leaf, and the set still holds what it should.
+#[test]
+fn test_btreeset_remove_rebalances() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (set_td, elem_td) = create_set_u32_tydesc(&arena);
+    let read = |p: *const u8| unsafe { *(p as *const u32) };
+
+    let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
+    unsafe { datalove_rt::c::dtlv_rti_btreeset_create_local(rt, &mut set as *mut rtdt::Set as *mut u8, set_td) };
+
+    let mut expected = std::collections::BTreeSet::new();
+    for x in shuffled(2000, 1) {
+        assert_eq!(unsafe { insert_u32(rt, &mut set, set_td, elem_td, x) }, 1);
+        expected.insert(x);
+    }
+    unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
+
+    // Remove three quarters, then put some back, then remove everything.
+    for x in shuffled(2000, 2).into_iter().filter(|x| x % 4 != 0) {
+        assert_eq!(unsafe { remove_u32(rt, &mut set, set_td, elem_td, x) }, 1);
+        expected.remove(&x);
+        let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
+        assert!(got.iter().eq(expected.iter()));
+    }
+    for x in shuffled(2000, 3).into_iter().filter(|x| x % 3 == 0) {
+        let inserted = unsafe { insert_u32(rt, &mut set, set_td, elem_td, x) };
+        assert_eq!(inserted == 1, expected.insert(x));
+    }
+    unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
+    for x in shuffled(2000, 4) {
+        let removed = unsafe { remove_u32(rt, &mut set, set_td, elem_td, x) };
+        assert_eq!(removed == 1, expected.remove(&x));
+        let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
+        assert!(got.iter().eq(expected.iter()));
+    }
+    assert!(set.root.is_null());
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_destroy_local(rt, &mut set as *mut rtdt::Set as *mut u8, set_td);
+        datalove_rt::c::dtlv_rti_shutdown(rt);
+    }
+    Ok(())
+}
+
+/// A set built in bulk from a sorted slice may start with nodes below the
+/// minimum; removal still never leaves an empty leaf in the chain or loses an
+/// element.
+#[test]
+fn test_btreeset_remove_from_built_set() -> AnyResult<()> {
+    for n in [1u32, 11, 12, 13, 50, 133, 144, 145, 300, 1000, 2000] {
+        let rt = datalove_rt::c::dtlv_rti_init();
+        let arena = TyDescArena::new();
+        let (set_td, elem_td) = create_set_u32_tydesc(&arena);
+        let read = |p: *const u8| unsafe { *(p as *const u32) };
+
+        let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
+        let mut slice: Vec<u32> = (0..n).collect();
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_build_from_sorted_slice_local(
+                rt, &mut set as *mut rtdt::Set as *mut u8, elem_td, slice.as_mut_ptr() as *mut u8, n.into(),
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        for &x in &slice {
+            let mut contains = 0u8;
+            unsafe {
+                datalove_rt::c::dtlv_rti_btreeset_contains_local(
+                    rt, &mut set as *mut rtdt::Set as *mut u8, set_td, &x as *const u32 as *const u8, elem_td, &mut contains,
+                );
+            }
+            assert_eq!(contains, 1, "n = {n}: {x} is missing from a built set");
+        }
+        unsafe { check_set_shape(&set, set_td, 0, &read) };
+
+        let mut expected: std::collections::BTreeSet<u32> = slice.iter().copied().collect();
+        for x in shuffled(n, n as u64) {
+            assert_eq!(unsafe { remove_u32(rt, &mut set, set_td, elem_td, x) }, 1);
+            expected.remove(&x);
+            let got = unsafe { check_set_shape(&set, set_td, 0, &read) };
+            assert!(got.iter().eq(expected.iter()), "n = {n}");
+        }
+        assert!(set.root.is_null());
+
+        unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_destroy_local(rt, &mut set as *mut rtdt::Set as *mut u8, set_td);
+            datalove_rt::c::dtlv_rti_shutdown(rt);
+        }
+    }
+    Ok(())
+}
+
+/// Rebalancing clones and destroys separators; with strings, a separator
+/// freed twice or never shows up under the leak checker.
+#[test]
+fn test_btreeset_string_remove_rebalances() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    let (set_td, elem_td) = create_set_string_tydesc(&arena);
+    let read = |p: *const u8| unsafe {
+        let s = &*(p as *const rtdt::String);
+        std::slice::from_raw_parts(s.data, s.size.0 as usize).to_vec()
+    };
+
+    let mut set = rtdt::Set { root: ptr::null(), len: rtdt::Index::ZERO };
+    let set_ptr = &mut set as *mut rtdt::Set as *mut u8;
+    unsafe { datalove_rt::c::dtlv_rti_btreeset_create_local(rt, set_ptr, set_td) };
+
+    for x in shuffled(600, 5) {
+        let mut s = unsafe { create_runtime_string(rt, &format!("element-{x:05}"), elem_td) };
+        let mut inserted = 0u8;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_insert_local(
+                rt, set_ptr, set_td, &mut s as *mut rtdt::String as *mut u8, elem_td, &mut inserted,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+
+    for (k, x) in shuffled(600, 6).into_iter().enumerate() {
+        let mut s = unsafe { create_runtime_string(rt, &format!("element-{x:05}"), elem_td) };
+        let mut removed = 0u8;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_btreeset_remove_local(
+                rt, set_ptr, set_td, &s as *const rtdt::String as *const u8, elem_td, &mut removed,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+        assert_eq!(removed, 1);
+        unsafe { datalove_rt::c::dtlv_rti_string_destroy_local(rt, &mut s as *mut rtdt::String as *mut u8, elem_td) };
+        let got = unsafe { check_set_shape(&set, set_td, SET_MIN_KEYS, &read) };
+        assert_eq!(got.len(), 600 - k - 1);
+    }
+    assert!(set.root.is_null());
+
+    unsafe {
+        datalove_rt::c::dtlv_rti_btreeset_destroy_local(rt, set_ptr, set_td);
+        datalove_rt::c::dtlv_rti_shutdown(rt);
+    }
+    Ok(())
+}

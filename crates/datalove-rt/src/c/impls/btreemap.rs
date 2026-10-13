@@ -1720,19 +1720,20 @@ unsafe fn borrow_from_left_internal(
         let node_children_ptr = internal_child_ptrs_ptr(node, ty);
         let parent_keys_ptr = internal_keys_ptr(parent, ty);
 
-        // Shift node's keys and children right to make room.
+        // Shift node's keys and children right to make room. A node with no
+        // keys left still has a child, which has to move too.
         if node_len > 0 {
             std::ptr::copy(
                 node_keys_ptr,
                 node_keys_ptr.add(key_size),
                 node_len as usize * key_size,
             );
-            std::ptr::copy(
-                node_children_ptr,
-                node_children_ptr.add(1),
-                node_len as usize + 1,
-            );
         }
+        std::ptr::copy(
+            node_children_ptr,
+            node_children_ptr.add(1),
+            node_len as usize + 1,
+        );
 
         // Move parent separator down to node.
         let parent_key = parent_keys_ptr.add(parent_key_idx * key_size);
@@ -2496,17 +2497,14 @@ pub unsafe fn btreemap_build_from_sorted_slices(
                     *child_ptrs_array.add(i) = current_level[child_idx + i];
                 }
 
-                // Extract separator keys (first key from each child except the first).
+                // The separator before each child but the first is the least
+                // key of that child's subtree: the first of its leftmost leaf.
+                // An internal child's own first key is the least of its second
+                // subtree only, and separating by it sent lookups for
+                // everything in its first subtree to the wrong child.
                 let rt_handle = rt as *mut RtLocal as crate::c::LocalRtHandle;
                 for i in 1..num_children {
-                    let child_node = current_level[child_idx + i];
-                    let child_is_leaf = *(child_node as *const u8) == MapNodeTag::Leaf as u8;
-
-                    let first_key_src = if child_is_leaf {
-                        (child_node as *const u8).add(leaf_layout.keys_offset as usize)
-                    } else {
-                        (child_node as *const u8).add(internal_layout.keys_offset as usize)
-                    };
+                    let first_key_src = leaf_keys_ptr(leftmost_leaf(current_level[child_idx + i], ty), ty);
 
                     let key_dest = keys_array.add((i - 1) * key_size);
                     // Clone the key for the internal node.
