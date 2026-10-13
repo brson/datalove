@@ -1192,6 +1192,8 @@ impl DocsCommand {
                 posts: Some(PostsConfig {
                     site_title: "Datalove",
                     site_description: "Updates from Datalove",
+                    author: "Brian Anderson",
+                    language: "en",
                     base_url: "https://datalove-language.net",
                     categories: &["design", "devlog", "milestone"],
                     excerpt_bytes: 600,
