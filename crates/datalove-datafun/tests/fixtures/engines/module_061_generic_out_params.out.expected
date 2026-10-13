@@ -54,14 +54,17 @@ Analysis(
                         v3 = const "before"
                         store.move.tracked s1, v3
                         v4 = const "after"
+                        drop.tracked s1
                         v5 = call m0.u0(v4, s1) <string>
                         v6 = const 1int
                         store.move.tracked s2, v6
                         v7 = const 99999999999999999999int
+                        drop.tracked s2
                         v8 = call m0.u0(v7, s2) <int>
                         v9 = none
                         store.move.tracked s3, v9
                         v10 = const "wrapped"
+                        drop.tracked s3
                         v11 = call m0.u1(v10, s3) <string>
                         v12 = const 0u32
                         store.copy s4, v12
@@ -69,6 +72,7 @@ Analysis(
                         store.move.tracked s5, v13
                         v14 = const 7u32
                         v15 = const "second"
+                        drop.tracked s5
                         v16 = call m0.u2(v14, v15, s4, s5) <u32, string>
                         v17 = const 1u32
                         v18 = const "replaced"

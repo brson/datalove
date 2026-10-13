@@ -240,14 +240,16 @@ fn try_lower_arg_index_as_ref<'db>(
         _ => return Ok(None),
     };
 
-    // For out params, destroy existing element value before call.
-    if mode == ParamMode::Out {
-        if let Operand::Value(ref_value) = operand {
-            if let Some(ty) = arg_type {
-                if !ty.is_copy() {
-                    ctx.emit(Instruction::DropViaRef { ref_value });
-                }
-            }
+    // For an out param, destroy what the destination holds before the call:
+    // through the reference for an element or field, and as the binding is
+    // tracked for a whole binding, which may hold nothing.
+    if mode == ParamMode::Out
+        && let Some(ty) = arg_type
+        && !ty.is_copy()
+    {
+        match operand {
+            Operand::Value(ref_value) => ctx.emit(Instruction::DropViaRef { ref_value }),
+            ref place => ctx.emit_drop_for_operand(place, ty),
         }
     }
 

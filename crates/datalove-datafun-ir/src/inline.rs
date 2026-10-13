@@ -17,9 +17,8 @@
 //!   drop before it a drop of the place.
 //! - `out`: a fresh tracked slot, which the body writes as it would the
 //!   parameter, and whose value is moved into the argument's place where the
-//!   call returns. What the place held is destroyed first, as the call would
-//!   have done; lowering has already, for a place reached through a
-//!   reference.
+//!   call returns. What the place held the caller has destroyed before the
+//!   call, as lowering emits for every `out` argument.
 //!
 //! A generic callee's types are written over its type parameters; the call's
 //! bindings are substituted into them, and the caller's descriptor table is
@@ -272,21 +271,6 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
             }
             ParamMode::Out => {
                 let copy = ty.is_copy();
-                // A call destroys what its `out` destination holds; lowering
-                // has done so already only for a place reached through a
-                // reference.
-                if !copy {
-                    match &arg {
-                        Operand::Slot(t) if caller_tracked.contains(t) => {
-                            bind.push(Instruction::DropTracked { operand: arg.clone() })
-                        }
-                        Operand::Param(q) if caller_modes[q.0 as usize] == ParamMode::Out => {
-                            bind.push(Instruction::DropTracked { operand: arg.clone() })
-                        }
-                        Operand::Slot(_) | Operand::Param(_) => bind.push(Instruction::Drop { operand: arg.clone() }),
-                        _ => {}
-                    }
-                }
                 let s = SlotId(slots.len() as u32);
                 slots.push(ty.clone());
                 tracked.push(s);

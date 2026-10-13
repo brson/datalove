@@ -147,8 +147,8 @@ Analysis(
                     block2:
                         v6 = const "old"
                         store.move.tracked s2, v6
-                        v7 = const "new"
                         drop.tracked s2
+                        v7 = const "new"
                         goto block3
                     block3:
                         v20 = clone v7
@@ -224,8 +224,8 @@ Analysis(
                     block0:
                         v0 = clone p1
                         store.move.tracked s0, v0
-                        v9 = move p2
                         drop.tracked s0
+                        v9 = move p2
                         goto block1
                     block1:
                         v8 = move v9

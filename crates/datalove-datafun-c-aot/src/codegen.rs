@@ -2480,7 +2480,6 @@ impl<'a> FunctionCodegenContext<'a> {
             }
         }
 
-        self.destroy_out_destinations(out, func, args)?;
 
         // For local function lookup, use parent_unit if available (for nested functions).
         let lookup_unit = self.parent_unit.unwrap_or(self.unit);
@@ -2594,58 +2593,6 @@ impl<'a> FunctionCodegenContext<'a> {
         unit.and_then(|u| u.function_context())
             .map(|ctx| ctx.param_modes.clone())
             .unwrap_or_default()
-    }
-
-    /// Destroy whatever an `out` argument's destination holds now.
-    ///
-    /// The callee writes a fresh value there and its tracking byte starts
-    /// uninitialized, so its first store destroys nothing. Something has to,
-    /// or the old value is dropped on the floor.
-    fn destroy_out_destinations(
-        &mut self,
-        out: &mut String,
-        func: &CodeRef,
-        args: &[Operand],
-    ) -> Result<(), CAotError> {
-        use datalove_datafun_ir::ParamMode;
-        let modes = self.callee_param_modes(func);
-        for (i, arg) in args.iter().enumerate() {
-            if modes.get(i) != Some(&ParamMode::Out) {
-                continue;
-            }
-            // A copy type owns nothing to destroy; through a reference, what
-            // is destroyed is what it points at.
-            let pointee = match self.operand_type(arg) {
-                datalove_datafun_ir::IrType::Ref(inner) => inner.as_ref(),
-                other => other,
-            };
-            if pointee.is_copy() {
-                continue;
-            }
-            let addr = self.operand_addr(arg);
-            let tydesc = self.operand_tydesc(arg);
-
-            // A destination that is tracked says for itself whether it holds
-            // anything. This function's own out parameter, passed straight on,
-            // was cleared by whoever called this one; an uninitialized `var`
-            // has never held anything at all, and `__frame` is whatever the C
-            // stack left there, so clearing it would free that. Freeing what
-            // was never allocated is worse than leaking.
-            let guard = match arg {
-                Operand::Param(param) => self.layout.param_tracking_byte(param.0),
-                Operand::Slot(id) => self.layout.slot_tracking_byte(id.0),
-                Operand::Value(id) | Operand::ValueRef(id) => self.layout.value_tracking_byte(id.0),
-                Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => None,
-            };
-            match guard {
-                Some(offset) => writeln!(out,
-                    "    if (__frame[{}] == TRACK_LIVE) dtlv_rti_any_destroy_local(rt, {}, {});",
-                    offset, addr, tydesc).unwrap(),
-                None => writeln!(out,
-                    "    dtlv_rti_any_destroy_local(rt, {}, {});", addr, tydesc).unwrap(),
-            }
-        }
-        Ok(())
     }
 
     /// The descriptor for an operand, as a C expression of pointer type: its

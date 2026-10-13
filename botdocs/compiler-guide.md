@@ -1133,7 +1133,10 @@ four forms:
 
 `RefStore` and `RefSetField` generalize these to any reference-like operand.
 
-For `out` params, the **caller** destroys the existing value before the call via `DropViaRef`.
+For `out` params, the **caller** destroys the existing value before the call,
+an instruction of its own: `DropViaRef` through a reference, `DropTracked` for
+a tracked binding or `out` param, `Drop` otherwise. The call itself does
+nothing to the destination.
 
 Stores never destroy. Where the stored type owns something, lowering emits the
 destroy in front of the store (`emit_drop_before_store` in `context.rs`):

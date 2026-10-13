@@ -102,53 +102,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
     }
 
-    /// Destroy whatever an `out` argument's destination holds now.
-    ///
-    /// The callee writes a fresh value there and its tracking byte starts
-    /// uninitialized, so its first store destroys nothing. Something has to,
-    /// or the old value is simply dropped on the floor: this is the same step
-    /// the interpreter takes before it binds an out parameter.
-    fn destroy_out_destinations(
-        &mut self,
-        builder: &mut FunctionBuilder,
-        code_ref: &CodeRef,
-        args: &[Operand],
-    ) -> Result<(), CraneliftError> {
-        let modes = self.callee_param_modes(code_ref);
-        if !modes.iter().any(|m| *m == ParamMode::Out) {
-            return Ok(());
-        }
-
-        for (i, arg) in args.iter().enumerate() {
-            if modes.get(i) != Some(&ParamMode::Out) {
-                continue;
-            }
-            // A destination that is tracked says for itself whether it holds
-            // anything. This function's own out parameter, passed straight on,
-            // was cleared by whoever called this one; an uninitialized `var`
-            // has never held anything at all, and its slot is 0xFF poison, so
-            // clearing it would call `free` on the poison. Freeing what was
-            // never allocated is worse than leaking.
-            // What is destroyed is the destination: through a reference, what
-            // it points at, as `operand_tydesc` describes it.
-            let ty = match self.get_operand_type(arg)? {
-                IrType::Ref(inner) => *inner,
-                other => other,
-            };
-            if ty.is_copy() {
-                continue;
-            }
-            let ptr = self.get_operand_ptr(builder, arg)?;
-            let tydesc = self.operand_tydesc(builder, arg)?;
-            let tracked = match arg {
-                Operand::Param(param) => self.param_tracking_byte_offset(*param),
-                other => self.tracking_byte_offset(other),
-            };
-            self.destroy_value(builder, ptr, &ty, Some(tydesc), tracked)?;
-        }
-        Ok(())
-    }
-
     /// The descriptor for an operand, as a runtime pointer: its type's static
     /// symbol, or for a dynamic type its table entry.
     pub(super) fn operand_tydesc(
@@ -255,7 +208,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             }
         }
 
-        self.destroy_out_destinations(builder, code_ref, args)?;
 
         // Add user arguments, passed by pointer.
         for arg in args {

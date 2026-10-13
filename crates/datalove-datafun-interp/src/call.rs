@@ -191,40 +191,11 @@ impl IrInterpreter {
         bc
     }
 
-    /// Whether an `out` argument's destination currently holds a value to free.
-    ///
-    /// A `ValueRef` is a reference into somewhere else, which the referent's own
-    /// bookkeeping covers and this frame cannot see; those are left as they were.
-    fn out_dest_holds_value(op: &Operand, frame: &Frame, frames: &FrameStore) -> bool {
-        match op {
-            Operand::Value(id) => frame.value_is_live(*id),
-            Operand::Slot(id) => frame.slot_is_live(*id),
-            Operand::Param(id) => frame.param_is_live(*id),
-            Operand::ExternalValue { unit, value } => {
-                frames.external_value(*unit, *value).is_some()
-            }
-            Operand::ExternalSlot { unit, slot } => {
-                frames.is_external_slot_initialized(*unit, *slot)
-            }
-            Operand::ValueRef(_) => true,
-        }
-    }
-
-    /// Note that an `out` destination has been emptied, so that nothing frees
-    /// it twice before the callee writes it.
-    fn mark_out_dest_cleared(op: &Operand, frame: &mut Frame) {
-        match op {
-            Operand::Value(id) => frame.mark_value_dropped(*id),
-            Operand::Slot(id) => frame.mark_slot_dropped(*id),
-            Operand::Param(id) => frame.mark_param_dropped(*id),
-            Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
-        }
-    }
-
     /// Resolve one argument for a parameter passed in `mode`.
     ///
-    /// An `out` argument is the place the callee will write, emptied first if
-    /// it holds anything. Any other is the value as the caller has it.
+    /// An `out` argument is the place the callee will write, which the caller
+    /// has already emptied (lowering emits the destroy before the call). Any
+    /// other is the value as the caller has it.
     fn resolve_arg(
         &self,
         mode: ParamMode,
@@ -233,30 +204,7 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) -> Value {
         if mode == ParamMode::Out {
-            // Out param: the callee writes over whatever is there, so what
-            // is there has to be destroyed first -- unless nothing is. A
-            // destination that has never been written holds no value to
-            // free, and one already passed on as an out parameter was
-            // cleared by whoever called this function.
-            //
-            // This used to ask the memory rather than the frame, and rested
-            // on the frame being zeroed so that destroying a place that had
-            // never been written read a null pointer and did nothing. That
-            // made "uninitialized" and "empty" indistinguishable, which is
-            // the invariant the compiled backends carry a tracking byte for
-            // rather than assume.
-            let val = self.get_operand_dest(op, frame);
-            if Self::out_dest_holds_value(op, frame, frames) {
-                unsafe {
-                    datalove_rt::c::dtlv_rti_any_destroy_local(
-                        self.runtime.handle(),
-                        val.ptr,
-                        val.tydesc,
-                    );
-                }
-                Self::mark_out_dest_cleared(op, frame);
-            }
-            val
+            self.get_operand_dest(op, frame)
         } else {
             self.read_operand(op, frame, frames)
         }

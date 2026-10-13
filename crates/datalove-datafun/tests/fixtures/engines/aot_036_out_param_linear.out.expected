@@ -31,6 +31,7 @@ Analysis(
                     block0:
                         v0 = const 0int
                         store.move.tracked s0, v0
+                        drop.tracked s0
                         v1 = call u0(s0)
                         v2 = load.move.tracked s0
                         return v2

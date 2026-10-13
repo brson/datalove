@@ -352,7 +352,11 @@ empty): `ParamStore`, `ParamStoreTracked`, `ParamSetField`,
 reference-like operand.
 
 For an `out` parameter the **caller** destroys the existing value before the
-call, with `DropViaRef`.
+call, as an instruction of its own: `drop.ref` through a reference to an
+element or field, `drop.tracked` for a tracked binding or the caller's own
+`out` parameter, which may hold nothing, and `drop` otherwise. A call does
+nothing to its `out` destinations itself, so every engine, and anything that
+moves or removes a call, sees the whole rule in the IR.
 
 No store destroys what its destination held. Lowering emits the destroy as its
 own instruction in front of the store, and only where the stored type owns

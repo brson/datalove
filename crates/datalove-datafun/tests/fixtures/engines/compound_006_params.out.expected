@@ -31,6 +31,7 @@ Analysis(
                         debuglog s2
                         v9 = const 0int
                         store.move.tracked s3, v9
+                        drop.tracked s3
                         v10 = call u3(s3)
                         debuglog s3
                         unit_end_drop v1
