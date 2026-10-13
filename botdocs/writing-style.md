@@ -11,6 +11,8 @@ is silent, they are the tiebreaker.
 - [Know which kind of document you are writing](#user-content-know-which-kind-of-document-you-are-writing)
 - [Give it a spine](#user-content-give-it-a-spine)
 - [Openings](#user-content-openings)
+- [Endings](#user-content-endings)
+- [Write the bookends first](#user-content-write-the-bookends-first)
 - [Sentences](#user-content-sentences)
 - [Cutting](#user-content-cutting)
 - [Botdocs conventions](#user-content-botdocs-conventions)
@@ -81,6 +83,51 @@ Mysteries are for fiction.
 Do not open with throat-clearing ("This document describes...", "In this post
 I will..."), background the reader already has, or the history of how the
 document came to be.
+
+## Endings
+
+The opening makes a promise and the ending shows it was kept. A reader who got
+the answer in the first paragraph does not need it again. They need to see
+what it amounts to now that they have the evidence.
+
+- **Answer the opening's complication.** The last *therefore* resolves the
+  first *but*. If the ending is about something the opening never raised,
+  one of the two is wrong, and it is usually the opening.
+- **Say what is different for the reader.** Name what they can now do, or
+  see, that they could not before. What was done, or how hard it was, does
+  not belong here.
+- **Restate the point, then go one step past it.** Williams puts a
+  document's main point in two places: the end of the introduction and the
+  conclusion. The conclusion's copy should add something the opening could
+  not: a consequence, a cost, or what the point changes.
+- **Name what is still open.** A fix almost always exposes the next problem.
+  Ending on it is honest, and it is the opening of the next document.
+- **Echo the opening.** Come back to the opening's example, code or
+  question, changed by everything in between. Zinsser's test for an ending
+  is that it takes the reader slightly by surprise and yet seems exactly
+  right. Coming full circle is the most reliable way to pass it.
+- **Then stop.** No summary of a short document, no "in conclusion", no call
+  to action. Zinsser again: when you are ready to stop, stop.
+
+The ending is the document's stress position, by analogy with Gopen and
+Swan's rule for sentences: what is there is what the reader leaves with.
+Do not end on a hedge, an acknowledgment, or a list of minor future work.
+
+## Write the bookends first
+
+Before the middle, draft the opening and the ending: the problem and the
+answer you expect, and where that answer leaves the reader. The middle is
+then the spine from one to the other. A section that does not move the
+reader from the first toward the second is a digression.
+
+Expect the ending to move. Drafting is how you find out what you think, so
+the claim that surfaces at the end of a first draft is often the real thesis.
+McEnerney and Williams both make this point. When that happens, move it to
+the opening, and write a new ending to go with it.
+
+A post started before the work is done gets the same treatment: bookends
+holding the expected answer. When the results come in, check them against
+the bookends. If they disagree, the disagreement is usually the better post.
 
 ## Sentences
 
@@ -181,6 +228,10 @@ When reviewing, look for:
   -- is fine if the exploration has a spine.
 - **Buried takeaway.** If the main point first appears in the lessons at the
   end, suggest moving it up.
+- **Bookends.** Read the opening and the ending together, skipping the
+  middle. Does the ending answer the question the opening raised? If the
+  post was started before the work was done, do the results still agree with
+  the opening?
 - **Unbacked claims.** Opinions should rest on code, numbers, or a specific
   experience. Flag claims that need a receipt and places where a snippet,
   benchmark, or link to a commit would help.
@@ -198,7 +249,8 @@ When editing, preserve the voice:
 - Line-per-clause formatting: lines break at clause boundaries, not at a
   column. This is distinct from botdocs.
 - Direct first sentence, understated ending. Do not add an introduction, a
-  conclusion, or a call to action.
+  conclusion, or a call to action. Understated does not mean absent: the
+  ending still pays off the opening, quietly.
 - Rough edges, fragments, and casual phrasing are the voice, not mistakes.
 - Prefer suggesting changes over rewriting. Make direct edits only to
   mechanics and clear errors unless asked for more.
@@ -209,6 +261,8 @@ Before calling a document done:
 
 - Can you state the reader, their problem, and your answer in three sentences?
 - Is the answer in the first paragraph or two?
+- Does the ending resolve the opening's complication, add a consequence, and
+  name what is still open?
 - Does every section follow from a *but* or *therefore* in the one before it?
 - Is it one kind of document?
 - Read the first sentence of each paragraph alone. Do they tell the story?
