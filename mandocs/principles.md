@@ -3,26 +3,6 @@
 Datalove is a strongly-typed scripting language
 for data modeling and transformation.
 
-Most languages start from code
-and treat data as whatever their objects serialize to.
-The data itself ends up in a second language like JSON,
-with weaker types than the program that reads it.
-
-Datalove starts from the data.
-Its literal syntax is a typed language of its own,
-written the same way in a data file as in a script,
-and its structs and their fields are laid out inline in flat memory.
-Getting plain data right informs the rest of the language.
-
-Datalove is built on a small and restrictive core language.
-Dependencies are explicit,
-functions are pure, values are uniquely owned,
-and nothing happens that was not written.
-Those restrictions make modern features possible:
-fast compilation, compile-time evaluation,
-incremental recompilation,
-and scripts that reevaluate incrementally as code and data change.
-
 
 ## The Principles
 
@@ -60,7 +40,11 @@ and understanding that core data model comes before understanding Datalove.
 
 ## Power through restricted language design
 
-Datalove's restrictions give up flexibility,
+Datalove functions are pure,
+with no side effects and no exceptional control flow.
+Values are uniquely owned,
+with no shared mutable state.
+These restrictions give up flexibility,
 and in exchange Datalove can do things
 that are impractical in other languages.
 
