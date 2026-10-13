@@ -76,7 +76,7 @@ so I'll go ahead and do it now!
 
 Two properties of the language that are going
 to impact our design are that Datalove has a linear type system,
-and that [Datalove does not have first-class references](../principles.md#user-content-power-through-restricted-language-design).
+and that [Datalove does not have first-class references](../datafun.md#user-content-borrows-are-second-class).
 The latter is going to heavily limit our expressivity.
 
 

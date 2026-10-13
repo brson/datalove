@@ -436,8 +436,14 @@ let d = concat_borrow(ref a, ref b, ref c)
 debuglog (a, b, c, d)
 ```
 
-Borrowed values in Datalove are not first class types
-and cannot be e.g. named as fields of structs.
+
+### Borrows are second-class
+
+Borrowed values in Datalove are not first-class types.
+A borrow can be passed to a function,
+but it cannot be stored in a struct field,
+put into a collection,
+or returned from a function.
 Values can not be moved out of borrowed locations;
 they must be cloned to obtain a movable instance.
 

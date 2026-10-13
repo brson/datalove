@@ -103,19 +103,31 @@ by language features to whatever extent is reasonable.
 
 ## Power through restricted language design
 
-Datalove has a strong linear type system.
-Datalove functions are pure and nearly total,
-with no side effects and no exceptional control flow,
-and have other restrictive properties.
-Strong restrictions lead to simple
-compiler analysis where the code you see lowers
-directly to the code you expect,
-requiring little reconstruction to regain performance.
+Datalove functions are pure,
+with no side effects and no exceptional control flow.
+Values are uniquely owned,
+with no shared mutable state.
+These restrictions give up flexibility,
+and in exchange Datalove can do things
+that are impractical in other languages.
 
-Datalove has a linear type system,
-but it does not have first-class reference types.
-Safe first-class references without GC are the most
-difficult feature to reason about in Rust, and they add great language and compiler complexity.
+Any function can run at compile time,
+so constants and const parameters are computed
+with the same code that runs at runtime.
+Loops and integer arithmetic are constrained enough
+that many functions can be proven to terminate (in theory...),
+proving that compile-time evaluation finishes.
+Any statement in a script can be edited and reevaluated,
+and its history rolled back and replayed,
+because nothing it did escaped into hidden state.
+Datalove's current restrictions leave open
+many possibilites for future design directions.
+
+The same restrictions keep the compiler simple.
+The code you see lowers directly to the code you expect,
+with little analysis needed to recover performance,
+and users see that simplicity as fast compilation
+and predictable performance.
 
 
 
