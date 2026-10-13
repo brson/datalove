@@ -3,10 +3,14 @@
 Datalove is a strongly-typed scripting language
 for data modeling and transformation.
 
+<!--
 I started hacking on Datalove because expressing a struct in Python sucks.
-I need to write a lot of structs.
+Why?
 In Datalove you write structs with a straightforward and typical syntax,
-and it is laid out in flat memory.
+and they and their fields are laid out inline in flat memory.
+-->
+
+Getting plain data right informs the rest of the language.
 
 Datalove is built on a small and restrictive core language.
 Dependencies are explicit,
@@ -15,7 +19,7 @@ and nothing happens that was not written.
 Those restrictions make modern features possible:
 fast compilation, compile-time evaluation,
 incremental recompilation,
-and scripts whose history can be edited, rolled back and replayed.
+and scripts that reevaluate incrementally as code and data change.
 
 
 ## The Principles
@@ -40,6 +44,13 @@ and most data should be plain old data, not objects.
 Datalove designs its data structures first,
 their capabilities, memory layout and literal syntax,
 and derives everything else from them.
+
+```datalove
+type Point: { x: f32, y: f32 }
+
+let points: [Point] = [{ x = 1.0, y = 2.0 }, { x = 3.0, y = 4.0 }]
+```
+
 The declarative language of Datalove literals
 is distinct from the imperative languages built on top of it,
 and understanding that core data model comes before understanding Datalove.
@@ -60,10 +71,11 @@ so compile-time evaluation is known to finish.
 
 Any code in a module or script can be edited
 and only its dependent code recompiled and reevaluated,
-because nothing it did escaped into hidden state.
+because dependencies are explicit
+and nothing it did escaped into hidden state.
 With the eventual addition of virtualized I/O at
 the edges of the pure-functional language
-we extend this capability to the world of real data,
+we will extend this capability to files and other data sources,
 where any change in either code or input data triggers
 a deterministic partial reevaluation.
 That is the environment Datalove is for:
@@ -92,13 +104,13 @@ What you see is what runs.
 It is no longer acceptable to silently overflow and get wrong results.
 
 Numbers are never implicitly widened or truncated.
-Fixed-sized integers have no bare arithmetic.
+Fixed-size integers have no bare arithmetic.
 If you aren't going to think hard about your integer math,
-use bigints and don't sweat it.
-If you do fixed-sized integer math,
+use the arbitrary-precision `int` and don't sweat it.
+If you do fixed-size integer math,
 we're going to make you confront those overflows directly in the syntax
 with checked operations
-(also you can wrap or saturate, but you better think doubly-hard).
+(also you can wrap or saturate, but you better think doubly hard).
 
 
 ## Strict baseline first; controlled ergonomics later
