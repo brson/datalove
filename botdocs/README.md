@@ -45,7 +45,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Consts Built Once](plan-static-consts.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
-- [Immutable Cursors for the Collections](plan-cursors.md)
+- [`for` Loops over the Collections](plan-for-loops.md)
 - [Generics by Reference](plan-fat-generics.md)
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)

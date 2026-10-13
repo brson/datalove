@@ -31,7 +31,7 @@
 - [A Frame Stack for the Interpreter](plan-frame-stack.md)
 - [Testing the Engines Against One Reference](plan-engine-tests.md)
 - [Tuning the JIT](plan-jit-tuning.md)
-- [Immutable Cursors for the Collections](plan-cursors.md)
+- [`for` Loops over the Collections](plan-for-loops.md)
 - [Generics by Reference](plan-fat-generics.md)
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)

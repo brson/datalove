@@ -408,7 +408,7 @@ across chunk boundaries, reset, and restore across a boundary.
 
 **`for` loops.** A fat reference carries its own descriptor, so it can sit in
 a slot or block parameter; that was the first of the reasons a reference held
-across a loop was a problem. The [cursor plan](plan-cursors.md) does not need
+across a loop was a problem. The [`for` plan](plan-for-loops.md) does not need
 it and does not wait for it, but its element descriptor becomes the
 descriptor table's entry rather than a hoisted `element_tydesc`.
 
