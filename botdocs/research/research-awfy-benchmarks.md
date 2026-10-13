@@ -249,14 +249,33 @@ Before (intrinsics) and after (`sys/std`, inlined), seconds, mean of five:
 | ordered | 3.27 / 3.19 | 0.77 / 0.68 | 0.59 / 0.59 |
 
 Compiled, the calls cost nothing but in `primes`, whose inner loop is a
-remainder: the inlined `rem_checked` still tests for zero, builds `some r`,
-passes it through a block parameter -- an aggregate Cranelift copies through
-memory -- and unwraps it, where the intrinsic was one instruction. The
-interpreter pays for what a splice leaves: a copy per `in` argument, two
-jumps and a block argument, about five ops where an intrinsic was one, and
-still far less than a call. Both want a cleanup after inlining: forwarding
-the copies, merging straight-line blocks, substituting a block parameter with
-one predecessor, and folding `some` into the `unwrap_option` it meets.
+remainder: the inlined `rem_checked` tested for zero, built `some r`, passed
+it through a block parameter -- an aggregate Cranelift copies through memory
+-- and unwrapped it. The interpreter paid for what a splice leaves: a copy per
+`in` argument, two jumps and a block argument, about five ops where an
+intrinsic was one.
+
+A cleanup after inlining (`ir::simplify`) now forwards those copies,
+substitutes a block parameter with one way in, bypasses an option built only
+to be unwrapped, merges straight-line blocks and skips empty ones. Seconds,
+mean of five, intrinsics / inlined / inlined and cleaned up:
+
+| Bench | interp | JIT | AOT |
+|---|---|---|---|
+| fib | 3.90 / 3.63 / 3.69 | 0.46 / 0.46 / 0.46 | 0.35 / 0.35 / 0.35 |
+| sum | 0.79 / 0.79 / 0.77 | 0.40 / 0.40 / 0.39 | 0.30 / 0.30 / 0.30 |
+| primes | 3.40 / 9.44 / 5.64 | 0.34 / 1.57 / 0.35 | 0.33 / 1.56 / 0.34 |
+| wordfreq | 0.96 / 1.31 / 1.08 | 0.59 / 0.63 / 0.58 | 0.53 / 0.62 / 0.53 |
+| sieve | 4.04 / 5.22 / 4.70 | 1.01 / 1.00 / 0.99 | 0.71 / 0.73 / 0.72 |
+| mandelbrot | 3.13 / 3.62 / 3.29 | 0.56 / 0.56 / 0.56 | 0.55 / 0.55 / 0.55 |
+| nbody | 3.03 / 3.25 / 3.10 | 0.20 / 0.20 / 0.17 | 0.16 / 0.16 / 0.17 |
+| ordered | 3.24 / 3.14 / 2.64 | 0.77 / 0.68 / 0.63 | 0.58 / 0.59 / 0.51 |
+
+Compiled, writing through `sys/std` now costs nothing, and `ordered`, whose
+comparisons and swaps were calls already, is faster than before. Interpreted,
+what is left is mostly `rem_checked`'s test for a zero divisor, two ops more
+an iteration in `primes`' inner loop, which only folding the constant
+divisor would remove.
 
 ## Additions that would open the rest
 

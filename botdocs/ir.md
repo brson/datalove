@@ -863,9 +863,19 @@ return a jump to a continuation holding what followed the call, with the
 result as its parameter. An `in` parameter is moved or copied into a value of
 its own, a `ref` or `mut` one is the argument, and an `out` one is a tracked
 slot moved into the argument's place at the continuation. A generic callee's
-types take the call's bindings. The blocks are then put in reverse postorder,
-which the compiled backends need to meet a definition before its uses. A
-cycle of inline functions is an error.
+types take the call's bindings. The result is simplified, which also puts the
+blocks in reverse postorder, the order the compiled backends need to meet a
+definition before its uses. A cycle of inline functions is an error.
+
+**Simplification** (`ir::simplify`) runs after inlining, on each function it
+changed, and removes what splices leave: a `Copy` of a value that cannot
+change is replaced by its source; a block reached by one edge takes that
+edge's arguments in place of its parameters; a block that only unwraps its
+parameter and branches on the flag is bypassed by edges passing a `some` or
+`none` built for it; a jump to a block with one way in merges the two; a jump
+to a block that only jumps on goes straight on. It then puts the blocks in
+reverse postorder and drops those nothing reaches. Dead instructions are left
+to dead code elimination.
 
 **Const parameter specialization** monomorphizes: the original function stays
 and a copy is added beside it per instantiation, with the const parameter

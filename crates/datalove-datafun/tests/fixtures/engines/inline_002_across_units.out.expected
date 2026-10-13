@@ -25,14 +25,9 @@ Analysis(
                     fn bump(p0):
                     block0:
                         v0 = const 0u32
-                        v5 = copy v0
-                        goto block1
-                    block1:
                         v3 = const 1u32
-                        v4 = intrinsic AddWrappingU32(v5, v3)
-                        goto block2(v4)
-                    block2(v1):
-                        v2 = call u2(p0, v1)
+                        v4 = intrinsic AddWrappingU32(v0, v3)
+                        v2 = call u2(p0, v4)
                         return
                     
                     fn replace_all(p0, p1):
@@ -70,40 +65,20 @@ Analysis(
                     
                     fn twice(p0):
                     block0:
-                        v4 = copy p0
-                        goto block1
-                    block1:
                         v2 = const 1u32
-                        v3 = intrinsic AddWrappingU32(v4, v2)
-                        goto block2(v3)
-                    block2(v0):
-                        v7 = copy v0
-                        goto block3
-                    block3:
+                        v3 = intrinsic AddWrappingU32(p0, v2)
                         v5 = const 1u32
-                        v6 = intrinsic AddWrappingU32(v7, v5)
-                        goto block4(v6)
-                    block4(v1):
-                        return v1
+                        v6 = intrinsic AddWrappingU32(v3, v5)
+                        return v6
                     
                     fn fresh():
                     block0:
                         v0 = list []
                         store.move.tracked s0, v0
-                        goto block1
-                    block1:
                         v3 = const 0u32
-                        v8 = copy v3
-                        goto block2
-                    block2:
                         v6 = const 1u32
-                        v7 = intrinsic AddWrappingU32(v8, v6)
-                        goto block3(v7)
-                    block3(v4):
-                        v5 = call unit0.u2(s0, v4)
-                        goto block4
-                    block4:
-                        v1 = const ()
+                        v7 = intrinsic AddWrappingU32(v3, v6)
+                        v5 = call unit0.u2(s0, v7)
                         v2 = load.move.tracked s0
                         return v2
                 """,

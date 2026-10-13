@@ -1733,11 +1733,15 @@ impl<'db> ScriptCompiler<'db> {
 
         let mut errors = Vec::new();
         for func in &mut ir_unit.nested_units {
-            if calls_inline(func, &resolve)
-                && let Err(e) = inline_calls(func, &resolve)
-                && !errors.contains(&e.to_string())
-            {
-                errors.push(e.to_string());
+            if !calls_inline(func, &resolve) {
+                continue;
+            }
+            match inline_calls(func, &resolve) {
+                // What the splices left unread goes, as phase 4's dead code
+                // elimination did for everything before them.
+                Ok(()) => datalove_datafun_const::eliminate_dead_code_unit(func),
+                Err(e) if !errors.contains(&e.to_string()) => errors.push(e.to_string()),
+                Err(_) => {}
             }
         }
         if !errors.is_empty() {

@@ -49,21 +49,12 @@ Analysis(
                     block3:
                         v8 = copy s0
                         v9 = copy s1
-                        goto block4
-                    block4:
                         v7 = intrinsic AddWrappingU32(v8, v9)
-                        goto block5(v7)
-                    block5(v3):
-                        store.copy s0, v3
+                        store.copy s0, v7
                         v4 = const 1u32
                         v11 = copy s1
-                        v12 = copy v4
-                        goto block6
-                    block6:
-                        v10 = intrinsic AddWrappingU32(v11, v12)
-                        goto block7(v10)
-                    block7(v5):
-                        store.copy s1, v5
+                        v10 = intrinsic AddWrappingU32(v11, v4)
+                        store.copy s1, v10
                         goto block1
                 """,
             ),
@@ -94,35 +85,23 @@ Analysis(
                         v2 = const true
                         v3 = const "yes"
                         v4 = const "no"
-                        v11 = copy v2
                         v12 = move v3
                         v13 = move v4
-                        goto block1
+                        branch v2, block2, block1
                     block1:
-                        v8 = copy v11
-                        branch v8, block4, block2
-                    block2:
-                        goto block3
-                    block3:
                         v10 = move v13
                         drop v12
-                        goto block5(v10)
-                    block4:
+                        goto block3(v10)
+                    block2:
                         v9 = move v12
                         drop v13
-                        goto block5(v9)
-                    block5(v5):
+                        goto block3(v9)
+                    block3(v5):
                         debuglog v5
                         v6 = const 5u32
-                        v15 = copy v1
-                        v16 = copy v6
-                        goto block6
-                    block6:
-                        v14 = intrinsic AddWrappingU32(v15, v16)
-                        goto block7(v14)
-                    block7(v7):
+                        v14 = intrinsic AddWrappingU32(v1, v6)
                         drop v5
-                        return v7
+                        return v14
                 """,
             ),
             output: "(fragment executed)",

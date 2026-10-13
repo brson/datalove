@@ -23,6 +23,11 @@
 //! A generic callee's types are written over its type parameters; the call's
 //! bindings are substituted into them, and the caller's descriptor table is
 //! worked out again over what it now holds.
+//!
+//! What a splice leaves -- copies of arguments, jumps, a continuation's block
+//! parameter, an option built to be unwrapped -- is cleaned up after
+//! (`simplify`), which also puts the blocks back in an order the compiled
+//! backends can translate.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -82,56 +87,13 @@ pub fn inline_calls(
 ) -> Result<(), InlineError> {
     let mut inliner = Inliner { resolve, callees: HashMap::new(), stack: Vec::new() };
     if inliner.expand(unit)? {
-        in_dominance_order(unit);
+        crate::simplify::simplify(unit);
         let table = descriptor_table(unit);
         if let CodeUnitContext::Function(ctx) = &mut unit.context {
             ctx.descriptor_table = table;
         }
     }
     Ok(())
-}
-
-/// Put `unit`'s blocks in reverse postorder from the entry, renumbered.
-///
-/// A splice puts the callee and the code after the call at the end, so a
-/// block the call's block went on to before can now come before the
-/// definitions it uses. In reverse postorder every block comes after the
-/// blocks that dominate it, and so after every definition it can see, which
-/// is the order lowering produces and the compiled backends translate in.
-fn in_dominance_order(unit: &mut IrCodeUnit) {
-    let n = unit.blocks.len();
-    let mut seen = vec![false; n];
-    let mut postorder = Vec::with_capacity(n);
-    // Each block with how many of its successors have been gone into.
-    let mut stack: Vec<(usize, usize)> = vec![(0, 0)];
-    seen[0] = true;
-    while let Some(&mut (b, ref mut next)) = stack.last_mut() {
-        let successors = unit.blocks[b].terminator.successors();
-        if let Some(s) = successors.get(*next) {
-            *next += 1;
-            let s = s.0 as usize;
-            if !seen[s] {
-                seen[s] = true;
-                stack.push((s, 0));
-            }
-        } else {
-            postorder.push(b);
-            stack.pop();
-        }
-    }
-    // Blocks nothing reaches keep their order, after the rest.
-    let order: Vec<usize> = postorder.into_iter().rev().chain((0..n).filter(|&b| !seen[b])).collect();
-    let mut new_id = vec![BlockId(0); n];
-    for (at, &b) in order.iter().enumerate() {
-        new_id[b] = BlockId(at as u32);
-    }
-    let mut old: Vec<Option<IrBlock>> = std::mem::take(&mut unit.blocks).into_iter().map(Some).collect();
-    unit.blocks = order.iter().map(|&b| {
-        let mut block = old[b].take().expect("each block once");
-        block.id = new_id[b];
-        block.terminator = retarget(&block.terminator, |t| new_id[t.0 as usize]);
-        block
-    }).collect();
 }
 
 /// Whether `unit` has a call to an inline function, as `resolve` finds them:
@@ -465,7 +427,7 @@ fn through_arguments(
 }
 
 /// A terminator with its targets renumbered.
-fn retarget(term: &Terminator, block: impl Fn(BlockId) -> BlockId) -> Terminator {
+pub(crate) fn retarget(term: &Terminator, block: impl Fn(BlockId) -> BlockId) -> Terminator {
     match term {
         Terminator::Goto { target, args } => Terminator::Goto { target: block(*target), args: args.clone() },
         Terminator::Branch { cond, then_block, then_args, else_block, else_args } => Terminator::Branch {

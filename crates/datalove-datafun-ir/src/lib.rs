@@ -14,6 +14,7 @@ pub mod inline;
 pub mod layout;
 pub mod params;
 pub mod registry;
+pub mod simplify;
 
 pub use display::expand_ir_strings;
 pub use params::{
