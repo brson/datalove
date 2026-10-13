@@ -18,6 +18,15 @@
 //! - `dtlv_rti_field_tydesc`
 //! - `dtlv_rti_payload_offset`
 //! - `dtlv_rti_payload_tydesc`
+//! - `dtlv_rti_stride_cursor_done`
+//! - `dtlv_rti_stride_cursor_elem`
+//! - `dtlv_rti_stride_cursor_advance`
+//! - `dtlv_rti_row_cursor_done`
+//! - `dtlv_rti_row_cursor_elem`
+//! - `dtlv_rti_row_cursor_advance`
+//! - `dtlv_rti_tree_cursor_done`
+//! - `dtlv_rti_tree_cursor_elem`
+//! - `dtlv_rti_tree_cursor_value`
 
 use datalove_rtdt as rtdt;
 
@@ -1242,4 +1251,81 @@ pub unsafe fn dtlv_rti_tydesc_instantiate(rt: LocalRtHandle, template: *const rt
 #[inline]
 pub unsafe fn dtlv_rti_shadow_alloc(rt: LocalRtHandle, size: u32, align: u32) -> *mut u8 {
     unsafe { (crate::table(rt).dtlv_rti_shadow_alloc)(rt, size, align) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_list_cursor_begin_local`](crate::table::RtiTable::dtlv_rti_list_cursor_begin_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_list_cursor_begin_local(rt: LocalRtHandle, list_ref: *const u8, list_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_list_cursor_begin_local)(rt, list_ref, list_tydesc, cursor_out) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_tensor_cursor_begin_local`](crate::table::RtiTable::dtlv_rti_tensor_cursor_begin_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_tensor_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::StrideCursor) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_tensor_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_tensor_row_cursor_begin_local`](crate::table::RtiTable::dtlv_rti_tensor_row_cursor_begin_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_tensor_row_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::RowCursor) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_tensor_row_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreeset_cursor_begin_local`](crate::table::RtiTable::dtlv_rti_btreeset_cursor_begin_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreeset_cursor_begin_local(rt: LocalRtHandle, set_ref: *const u8, set_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreeset_cursor_begin_local)(rt, set_ref, set_tydesc, cursor_out) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreemap_cursor_begin_local`](crate::table::RtiTable::dtlv_rti_btreemap_cursor_begin_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_cursor_begin_local(rt: LocalRtHandle, map_ref: *const u8, map_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::TreeCursor) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_cursor_begin_local)(rt, map_ref, map_tydesc, cursor_out) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreeset_cursor_advance_local`](crate::table::RtiTable::dtlv_rti_btreeset_cursor_advance_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreeset_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut rtdt::TreeCursor, set_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreeset_cursor_advance_local)(rt, cursor_mut, set_tydesc) }
+}
+
+/// Calls [`RtiTable::dtlv_rti_btreemap_cursor_advance_local`](crate::table::RtiTable::dtlv_rti_btreemap_cursor_advance_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_btreemap_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut rtdt::TreeCursor, map_tydesc: *const rtdt::TyDesc) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_btreemap_cursor_advance_local)(rt, cursor_mut, map_tydesc) }
 }

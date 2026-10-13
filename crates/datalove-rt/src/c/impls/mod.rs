@@ -22,3 +22,4 @@ pub(crate) mod dyn_ops;
 pub(crate) mod table;
 pub(crate) mod instantiate;
 pub(crate) mod shadow;
+pub(crate) mod cursor;

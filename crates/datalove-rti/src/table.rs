@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 117;
+pub const EXPORTED: usize = 133;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 117;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0x7e183f5ab1155c05;
+pub const TABLE_SHAPE: u64 = 0xbb0cc037dc298cc0;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -146,4 +146,20 @@ pub struct RtiTable {
     pub dtlv_rti_payload_tydesc: unsafe extern "C-unwind" fn(*const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_tydesc_instantiate: unsafe extern "C-unwind" fn(LocalRtHandle, *const rtdt::TyDesc, *const *const rtdt::TyDesc, u32) -> *const rtdt::TyDesc,
     pub dtlv_rti_shadow_alloc: unsafe extern "C-unwind" fn(LocalRtHandle, u32, u32) -> *mut u8,
+    pub dtlv_rti_list_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::StrideCursor) -> RtStatus,
+    pub dtlv_rti_tensor_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::StrideCursor) -> RtStatus,
+    pub dtlv_rti_stride_cursor_done: unsafe extern "C-unwind" fn(*const rtdt::StrideCursor) -> bool,
+    pub dtlv_rti_stride_cursor_elem: unsafe extern "C-unwind" fn(*const rtdt::StrideCursor) -> *const u8,
+    pub dtlv_rti_stride_cursor_advance: unsafe extern "C-unwind" fn(*mut rtdt::StrideCursor),
+    pub dtlv_rti_tensor_row_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::RowCursor) -> RtStatus,
+    pub dtlv_rti_row_cursor_done: unsafe extern "C-unwind" fn(*const rtdt::RowCursor) -> bool,
+    pub dtlv_rti_row_cursor_elem: unsafe extern "C-unwind" fn(*const rtdt::RowCursor) -> *const u8,
+    pub dtlv_rti_row_cursor_advance: unsafe extern "C-unwind" fn(*mut rtdt::RowCursor),
+    pub dtlv_rti_btreeset_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::TreeCursor) -> RtStatus,
+    pub dtlv_rti_btreemap_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::TreeCursor) -> RtStatus,
+    pub dtlv_rti_btreeset_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::TreeCursor, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_btreemap_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::TreeCursor, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_tree_cursor_done: unsafe extern "C-unwind" fn(*const rtdt::TreeCursor) -> bool,
+    pub dtlv_rti_tree_cursor_elem: unsafe extern "C-unwind" fn(*const rtdt::TreeCursor) -> *const u8,
+    pub dtlv_rti_tree_cursor_value: unsafe extern "C-unwind" fn(*const rtdt::TreeCursor) -> *const u8,
 }

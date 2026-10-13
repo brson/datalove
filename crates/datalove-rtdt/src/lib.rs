@@ -722,6 +722,66 @@ pub struct SliceRange {
 
 
 
+// ## Cursors
+//
+// A `for` loop walks a collection with a cursor: begin, then done, elem and
+// advance until done. Each is plain data owning nothing, and holds pointers
+// into the collection's storage, which the language keeps frozen for the walk.
+// The runtime's `*_cursor_*` functions are the whole protocol; compiled code
+// may open-code them, but only on these layouts and with these meanings, since
+// a cursor the interpreter built can be continued by compiled code.
+
+/// A walk over a list or a rank-1 tensor.
+///
+/// It counts the elements left rather than comparing against an end pointer:
+/// a zero-sized element has its end pointer equal to its start.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct StrideCursor {
+    /// The current element.
+    pub elem: *const u8,
+    /// Bytes from one element to the next. A tensor's stride may stand for a
+    /// negative one, so it is added with wrapping.
+    pub stride: usize,
+    /// Elements from the current one to the end; zero is done.
+    pub remaining: Index,
+}
+
+/// A walk over the rows of a tensor of rank above 1.
+///
+/// The current row is a view held in the cursor, the same view a borrowed
+/// `t[i]?` builds: capacity zero, aliasing the parent's buffer, its shape
+/// and strides one past the parent's.
+#[repr(C)]
+pub struct RowCursor {
+    /// The current row.
+    pub view: Tensor,
+    /// Elements from one row to the next: the parent's first stride.
+    pub stride: Index,
+    /// Rows from the current one to the end; zero is done.
+    pub remaining: Index,
+}
+
+/// A walk over a set's elements or a map's entries, in order.
+///
+/// It follows the chain through the leaves, and is done when the chain
+/// ends; an empty collection has no root and is done from the start.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct TreeCursor {
+    /// The current leaf; null is done.
+    pub leaf: *const u8,
+    /// The current key; a set's element.
+    pub elem: *const u8,
+    /// A map's current value; null for a set.
+    pub value: *const u8,
+    /// The current key's slot within the leaf.
+    pub slot: u32,
+}
+
+
+
+
 // ## Special generic containers
 
 // Option<T> has a tag (u8) followed by optional payload.

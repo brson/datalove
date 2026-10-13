@@ -2663,3 +2663,63 @@ pub unsafe fn btreemap_clone_from_slice_impl(
         RtStatus::Ok
     }
 }
+
+/// Starts a walk over a map at its least key; an empty map's walk is done
+/// from the start.
+pub unsafe fn btreemap_cursor_begin_impl(
+    map_ref: *const u8,
+    map_tydesc: rtdt::TyDescRef,
+    cursor_out: *mut rtdt::TreeCursor,
+) {
+    unsafe {
+        let ty = MapTy::of(map_tydesc);
+        let root = (*(map_ref as *const Map)).root as *mut MapNode;
+        let (leaf, elem, value) = if root.is_null() {
+            (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())
+        } else {
+            let leaf = leftmost_leaf(root, ty);
+            (leaf, leaf_keys_ptr(leaf, ty), leaf_values_ptr(leaf, ty))
+        };
+        cursor_out.write(rtdt::TreeCursor {
+            leaf: leaf as *const u8,
+            elem,
+            value,
+            slot: 0,
+        });
+    }
+}
+
+/// Moves a walk over a map to the next entry, or to done after the last.
+///
+/// Every leaf in the chain holds an entry, removal rebalancing as it does,
+/// so the next leaf's first slot is always the next entry.
+pub unsafe fn btreemap_cursor_advance_impl(
+    cursor_mut: *mut rtdt::TreeCursor,
+    map_tydesc: rtdt::TyDescRef,
+) {
+    unsafe {
+        let cursor = &mut *cursor_mut;
+        debug_assert!(!cursor.leaf.is_null(), "advancing a map cursor that is done");
+        let layout = map_tydesc.map_leaf_layout();
+        let leaf = cursor.leaf as *mut MapNode;
+
+        cursor.slot += 1;
+        if cursor.slot < read_node_len(leaf) {
+            cursor.elem = cursor.elem.add(map_tydesc.map_key_ty().size() as usize);
+            cursor.value = cursor.value.add(map_tydesc.map_value_ty().size() as usize);
+            return;
+        }
+
+        let next = *((leaf as *const u8).add(layout.next_leaf_offset as usize) as *const *const u8);
+        cursor.leaf = next;
+        cursor.slot = 0;
+        if next.is_null() {
+            cursor.elem = std::ptr::null();
+            cursor.value = std::ptr::null();
+        } else {
+            debug_assert!(read_node_len(next as *const MapNode) > 0, "an empty leaf in a map's chain");
+            cursor.elem = next.add(layout.keys_offset as usize);
+            cursor.value = next.add(layout.values_offset as usize);
+        }
+    }
+}

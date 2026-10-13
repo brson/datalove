@@ -135,12 +135,28 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_payload_tydesc: c::dtlv_rti_payload_tydesc,
     dtlv_rti_tydesc_instantiate: c::dtlv_rti_tydesc_instantiate,
     dtlv_rti_shadow_alloc: c::dtlv_rti_shadow_alloc,
+    dtlv_rti_list_cursor_begin_local: c::dtlv_rti_list_cursor_begin_local,
+    dtlv_rti_tensor_cursor_begin_local: c::dtlv_rti_tensor_cursor_begin_local,
+    dtlv_rti_stride_cursor_done: c::dtlv_rti_stride_cursor_done,
+    dtlv_rti_stride_cursor_elem: c::dtlv_rti_stride_cursor_elem,
+    dtlv_rti_stride_cursor_advance: c::dtlv_rti_stride_cursor_advance,
+    dtlv_rti_tensor_row_cursor_begin_local: c::dtlv_rti_tensor_row_cursor_begin_local,
+    dtlv_rti_row_cursor_done: c::dtlv_rti_row_cursor_done,
+    dtlv_rti_row_cursor_elem: c::dtlv_rti_row_cursor_elem,
+    dtlv_rti_row_cursor_advance: c::dtlv_rti_row_cursor_advance,
+    dtlv_rti_btreeset_cursor_begin_local: c::dtlv_rti_btreeset_cursor_begin_local,
+    dtlv_rti_btreemap_cursor_begin_local: c::dtlv_rti_btreemap_cursor_begin_local,
+    dtlv_rti_btreeset_cursor_advance_local: c::dtlv_rti_btreeset_cursor_advance_local,
+    dtlv_rti_btreemap_cursor_advance_local: c::dtlv_rti_btreemap_cursor_advance_local,
+    dtlv_rti_tree_cursor_done: c::dtlv_rti_tree_cursor_done,
+    dtlv_rti_tree_cursor_elem: c::dtlv_rti_tree_cursor_elem,
+    dtlv_rti_tree_cursor_value: c::dtlv_rti_tree_cursor_value,
 };
 
 /// The declarations must cover every export, not merely agree with the ones
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 117,
+    datalove_rti::table::EXPORTED == 133,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );
