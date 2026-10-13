@@ -3,10 +3,12 @@
 Datalove is a strongly-typed scripting language
 for data modeling and transformation.
 
-<!--
-What's wrong with scripting languages?
-I started datalove because expressing a struct in Python sucks.
--->
+I started hacking on Datalove because expressing a struct in Python sucks.
+I need to write a lot of structs.
+In Datalove you write structs with a straightforward and typical syntax,
+and it is laid out in flat memory.
+Like one expects in a modern language.
+That's so easy.
 
 Datalove is built on a small and restrictive core language.
 Dependencies are explicit,
@@ -92,12 +94,12 @@ What you see is what runs.
 It is no longer acceptable to silently overflow and get wrong results.
 
 Numbers are never implicitly widened or truncated.
-Fixed-size integers have no bare arithmetic.
-If you aren't going think hard about your integer math,
+Fixed-sized integers have no bare arithmetic.
+If you aren't going to think hard about your integer math,
 use bigints and don't sweat it.
 If you do fixed-sized integer math,
 we're going to make you confront those overflows directly in the syntax
-with checked operations.
+with checked operations
 (also you can wrap or saturate, but you better think doubly-hard).
 
 
