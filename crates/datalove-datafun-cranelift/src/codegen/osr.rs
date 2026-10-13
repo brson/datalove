@@ -91,7 +91,7 @@ pub(super) fn carried_into(
 pub struct OsrSpec {
     /// The block entered, a loop header.
     pub header: BlockId,
-    /// Where each parameter's `Value` is: its pointer, then its descriptor.
+    /// Where each parameter's pointer is.
     pub param_offsets: Vec<u32>,
     /// Where the descriptor table is, one word an entry, filled when the
     /// interpreter entered the function.

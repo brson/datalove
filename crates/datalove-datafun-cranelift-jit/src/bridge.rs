@@ -3,7 +3,7 @@
 //! Converts between interpreter's Value/Destination and JIT's raw pointer convention.
 //! All function returns use sret (pointer-based), so the bridge only needs void dispatch.
 
-use datalove_datafun_interp::{Destination, Value};
+use datalove_datafun_interp::Destination;
 use datalove_datafun_ir::IrCodeUnit;
 use datalove_rt::c::LocalRtHandle;
 use datalove_rtdt as rtdt;
@@ -51,7 +51,7 @@ pub unsafe fn call_jit(
     code_ptr: *const u8,
     uses_sret: bool,
     rt_handle: LocalRtHandle,
-    args: &[Value],
+    args: &[*mut u8],
     ret_dest: Destination,
     type_params: &[*const rtdt::TyDesc],
 ) {
@@ -78,7 +78,7 @@ pub unsafe fn call_jit(
 
     // User arguments (all passed by pointer).
     for arg in args {
-        raw_args[arg_idx] = arg.ptr as usize;
+        raw_args[arg_idx] = *arg as usize;
         arg_idx += 1;
     }
 

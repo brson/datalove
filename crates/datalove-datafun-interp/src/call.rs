@@ -11,7 +11,7 @@ impl IrInterpreter {
     pub fn call_with_env(
         &mut self,
         func: &IrCodeUnit,
-        args: Vec<Value>,
+        args: Vec<*mut u8>,
         ret_dest: Destination,
         env: &ScriptEnvironment,
     ) -> Result<(), InterpError> {
@@ -30,7 +30,7 @@ impl IrInterpreter {
         &mut self,
         func: &IrCodeUnit,
         code_ref: Option<CodeRef>,
-        args: Vec<Value>,
+        args: Vec<*mut u8>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
         registry: &FunctionRegistry,
@@ -47,7 +47,7 @@ impl IrInterpreter {
         &mut self,
         func: &IrCodeUnit,
         code_ref: Option<CodeRef>,
-        args: Vec<Value>,
+        args: Vec<*mut u8>,
         type_params: Vec<*const rtdt::TyDesc>,
         ret_dest: Destination,
         ctx: &ExecutionContext,
@@ -270,7 +270,7 @@ impl IrInterpreter {
         &mut self,
         func: &CodeRef,
         callee: &IrCodeUnit,
-        arg_vals: &[Value],
+        args: &[*mut u8],
         type_params: &[*const rtdt::TyDesc],
         dest: Destination,
         ctx: &ExecutionContext,
@@ -280,7 +280,7 @@ impl IrInterpreter {
         let rt_handle = self.runtime.handle();
         let weight = std::mem::replace(&mut self.call_weight, 1);
         let result = self.with_dispatcher(ctx, registry, frames, type_params, weight,
-            |dispatcher, call_ctx| dispatcher.dispatch_call(func, callee, arg_vals, dest, rt_handle, call_ctx))?;
+            |dispatcher, call_ctx| dispatcher.dispatch_call(func, callee, args, dest, rt_handle, call_ctx))?;
         match result {
             dispatch::DispatchResult::Handled(result) => Some(result),
             dispatch::DispatchResult::NotHandled => None,
@@ -390,8 +390,8 @@ impl IrInterpreter {
     /// from its template for a dynamic one.
     ///
     /// For a caller that has a generic's type parameter descriptors and not
-    /// its frame, which the jit's trampoline is: compiled code passes a
-    /// dynamic argument as a pointer, and the interpreter wants it described.
+    /// its frame, which the jit's trampoline is: a dynamic return's
+    /// destination has to be described before the callee's table is filled.
     pub fn describe(&mut self, ty: &IrType, type_params: &[*const rtdt::TyDesc]) -> *const rtdt::TyDesc {
         let template = self.tydesc_table.get_or_create(ty);
         if !ty.is_dynamic() {
@@ -559,7 +559,7 @@ impl IrInterpreter {
         for (i, op) in args.iter().enumerate() {
             let mode = callee_frame.layout().param_modes[i];
             let val = self.resolve_arg(mode, op, frame, frames);
-            callee_frame.set_param(i, val);
+            callee_frame.set_param(i, val.ptr);
         }
         // After every argument is read, in case one place is passed twice.
         //
@@ -570,7 +570,7 @@ impl IrInterpreter {
         for (i, op) in args.iter().enumerate() {
             let layout = callee_frame.layout();
             let moves = if layout.param_tydescs[i].is_null() {
-                layout.param_modes[i] == ParamMode::In && !is_plain(&callee_frame.params()[i])
+                layout.param_modes[i] == ParamMode::In && !is_plain(&self.read_operand(op, frame, frames))
             } else {
                 layout.param_moves[i]
             };

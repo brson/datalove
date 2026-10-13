@@ -330,12 +330,12 @@ impl Frame {
         layout.value_offsets.len() + layout.slot_offsets.len() + id.0 as usize
     }
 
-    /// Hand over argument `index`, as the caller has it.
+    /// Hand over argument `index`: a pointer at it, where the caller has it.
     #[inline(always)]
-    pub fn set_param(&self, index: usize, value: Value) {
+    pub fn set_param(&self, index: usize, ptr: *mut u8) {
         let offset = self.layout().param_offsets[index];
         // SAFETY: a parameter's place is inside the frame and word-aligned.
-        unsafe { (self.at_offset(offset) as *mut Value).write(value) };
+        unsafe { (self.at_offset(offset) as *mut *mut u8).write(ptr) };
     }
 
     /// Hand over the descriptor for type parameter `index`.
@@ -394,17 +394,14 @@ impl Frame {
         self.at_offset(offset) as *mut [usize; 2]
     }
 
-    /// The arguments, once every one has been set.
-    ///
-    /// As the caller handed them over until `enter`, which gives the owned
-    /// ones the callee's own descriptors.
-    pub fn params(&self) -> &[Value] {
+    /// The pointers at the arguments, once every one has been set.
+    pub fn params(&self) -> &[*mut u8] {
         let layout = self.layout();
         match layout.param_offsets.first() {
-            // SAFETY: the parameters are consecutive `Value`s in the frame,
+            // SAFETY: the parameters are consecutive pointers in the frame,
             // all set.
             Some(&first) => unsafe {
-                std::slice::from_raw_parts(self.at_offset(first) as *const Value, layout.param_offsets.len())
+                std::slice::from_raw_parts(self.at_offset(first) as *const *mut u8, layout.param_offsets.len())
             },
             None => &[],
         }
@@ -413,22 +410,12 @@ impl Frame {
     /// Make a function frame ready to run its body, once every argument has
     /// been set.
     ///
-    /// A parameter the callee owns gets the callee's own descriptor, which is
-    /// the one the caller's agrees with; a borrowed one keeps the descriptor
-    /// it came with. An `out` parameter starts uninitialized, since the callee
-    /// writes it first.
-    ///
-    /// A parameter of a dynamic type keeps the descriptor it came with,
-    /// whatever its mode: it is the only one that says what is there.
+    /// An `out` parameter starts uninitialized, since the callee writes it
+    /// first.
     #[inline]
     pub fn enter(&self) {
         let layout = self.layout();
-        for (i, mode) in layout.param_modes.iter().enumerate() {
-            if matches!(mode, ParamMode::In | ParamMode::Out) && !layout.param_tydescs[i].is_null() {
-                let offset = layout.param_offsets[i] + std::mem::size_of::<usize>() as u32;
-                // SAFETY: the descriptor half of a parameter's place.
-                unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(layout.param_tydescs[i]) };
-            }
+        for i in 0..layout.param_offsets.len() {
             if let Some((at, size)) = layout.param_copies[i] {
                 // SAFETY: the parameter's place holds the caller's pointer to
                 // `size` bytes, and its copy's place is inside the frame.
@@ -666,19 +653,32 @@ impl Frame {
     #[inline(always)]
     pub fn param(&self, id: ParamId) -> Value {
         debug_assert!(self.kept_live(self.param_index(id)) != Some(false), "read of an absent param {:?}", id);
-        let offset = self.layout().param_offsets[id.0 as usize];
-        // SAFETY: a parameter's place, set before the frame was entered.
-        unsafe { (self.at_offset(offset) as *const Value).read() }
+        let (ptr, tydesc) = self.param_place(id);
+        Value { ptr, tydesc }
     }
 
     /// Get mutable destination for Mut/Out params.
     ///
     /// Panics if param ID is out of bounds (compiler bug).
     pub fn param_dest(&self, id: ParamId) -> Destination {
-        let offset = self.layout().param_offsets[id.0 as usize];
-        // SAFETY: a parameter's place, set before the frame was entered.
-        let param = unsafe { (self.at_offset(offset) as *const Value).read() };
-        Destination { ptr: param.ptr, tydesc: param.tydesc }
+        let (ptr, tydesc) = self.param_place(id);
+        Destination { ptr, tydesc }
+    }
+
+    /// Where a parameter is, and what describes it: its signature's type, or
+    /// for a dynamic one, its table entry.
+    #[inline(always)]
+    fn param_place(&self, id: ParamId) -> (*mut u8, *const TyDesc) {
+        let (offset, desc) = self.layout().param_places[id.0 as usize];
+        // SAFETY: a parameter's place, set before the frame was entered, and
+        // a table entry, filled on entry.
+        unsafe {
+            let ptr = (self.at_offset(offset) as *const *mut u8).read();
+            match desc {
+                crate::layout::ParamDesc::Static(tydesc) => (ptr, tydesc),
+                crate::layout::ParamDesc::Table(at) => (ptr, (self.at_offset(at) as *const *const TyDesc).read()),
+            }
+        }
     }
 
     /// Whether a parameter holds something.

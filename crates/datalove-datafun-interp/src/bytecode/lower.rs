@@ -85,15 +85,15 @@ impl<'a> Lowering<'a> {
     }
 
     /// Where an operand's descriptor comes from: the layout where its static
-    /// type says, otherwise the frame, at run time -- a dynamic parameter's
-    /// from the caller, a reference to a dynamic type's from the descriptor
-    /// table.
+    /// type says, otherwise the descriptor table, at run time: a dynamic
+    /// parameter's, or what a reference to a dynamic type points at.
     fn desc(&self, op: &Operand) -> Option<Desc> {
         if self.typed(op).is_some() {
             return Some(Desc::Static(self.desc_of(op)?));
         }
         match op {
-            Operand::Param(id) => Some(Desc::Param(id.0)),
+            Operand::Param(id) => Some(Desc::Table(
+                self.layout.param_entries[id.0 as usize].expect("a dynamic parameter has a table entry"))),
             Operand::ValueRef(id) => match self.layout.value_entries[id.0 as usize] {
                 Some(entry) => Some(Desc::Table(entry)),
                 None => Some(Desc::Static(self.desc_of(op)?)),
@@ -328,10 +328,9 @@ impl<'a> Lowering<'a> {
         }, escapes)
     }
 
-    /// Where an operand of a dynamic type keeps its pointer, and where its
-    /// descriptor is, if it is one the frame records nothing else about: a
-    /// value's or an untracked slot's pointer and its table entry, or a
-    /// parameter's `Value`.
+    /// Where an operand of a dynamic type keeps its pointer, and its table
+    /// entry, if it is one the frame records nothing else about: a value, an
+    /// untracked slot or a parameter.
     fn dynamic_loc(&self, op: &Operand) -> Option<(Loc, Loc)> {
         let ty = self.typed_any(op)?;
         if !ty.is_dynamic() || matches!(ty, IrType::Ref(_)) {
@@ -351,10 +350,10 @@ impl<'a> Lowering<'a> {
                 Loc::direct(layout.slot_offsets[s.0 as usize]),
                 entry(layout.slot_entries[s.0 as usize]),
             )),
-            Operand::Param(p) => {
-                let at = layout.param_offsets[p.0 as usize];
-                Some((Loc::direct(at), Loc::direct(at + std::mem::size_of::<usize>() as u32)))
-            }
+            Operand::Param(p) => Some((
+                Loc::direct(layout.param_offsets[p.0 as usize]),
+                entry(layout.param_entries[p.0 as usize]),
+            )),
             _ => None,
         }
     }

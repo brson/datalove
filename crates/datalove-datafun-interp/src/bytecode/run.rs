@@ -33,7 +33,6 @@ unsafe fn div_checked<T: Copy + CheckedIntOps>(base: *mut u8, dst: Loc, ovf: Loc
 unsafe fn rt_value(frame: &Frame, base: *mut u8, (loc, desc): (Loc, Desc)) -> crate::value::Value {
     let tydesc = match desc {
         Desc::Static(tydesc) => tydesc,
-        Desc::Param(n) => frame.param(datalove_datafun_ir::ParamId(n)).tydesc,
         Desc::Table(n) => frame.table_entry(n as usize),
     };
     crate::value::Value { ptr: unsafe { loc.at(base) }, tydesc }

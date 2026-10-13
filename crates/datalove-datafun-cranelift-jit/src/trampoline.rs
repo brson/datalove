@@ -23,7 +23,7 @@ use datalove_datafun_ir::{BlockId, CodeRef, CodeUnitId, IrCodeUnit, IrModuleId};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, Destination, DispatchCallContext, DispatchResult,
     ExecutionContext, FrameStore, FuncIdentity, FunctionRegistry, InterpError, IrInterpreter,
-    SitePolicy, Value,
+    SitePolicy,
 };
 use datalove_rt::c::{self, LocalRtHandle};
 use datalove_rtdt as rtdt;
@@ -226,27 +226,17 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // compiled code to a function not yet compiled arrives here.
     let layout = ctx.interp.layout_for(key, ir_unit);
 
-    // Build argument Values, each described by its parameter's type.
-    let mut arg_vals = Vec::with_capacity(arg_count as usize);
-    for i in 0..arg_count as usize {
-        let arg_ptr = unsafe { *args.add(i) };
-        arg_vals.push(Value {
-            ptr: arg_ptr as *mut u8,
-            tydesc: layout.param_tydescs[i],
-        });
-    }
+    // The arguments are pointers, as the interpreter takes them: the callee
+    // knows what each is.
+    let arg_ptrs: Vec<*mut u8> = (0..arg_count as usize)
+        .map(|i| unsafe { *args.add(i) } as *mut u8)
+        .collect();
 
     // A descriptor per type parameter comes after the arguments. A dynamic
-    // argument arrives as a pointer alone, and what it is follows from them;
-    // so does a dynamic return.
+    // return is described by them.
     let type_params: Vec<*const rtdt::TyDesc> = (0..func_ctx.type_param_count as usize)
         .map(|k| unsafe { *descriptors.add(k) })
         .collect();
-    for (i, value) in arg_vals.iter_mut().enumerate() {
-        if value.tydesc.is_null() {
-            value.tydesc = ctx.interp.describe(&func_ctx.param_types[i], &type_params);
-        }
-    }
     let mut return_tydesc = layout.return_tydesc.expect("a jit callee is a function");
     if return_tydesc.is_null() {
         return_tydesc = ctx.interp.describe(&func_ctx.return_type, &type_params);
@@ -264,7 +254,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
-                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_vals, dest, &type_params,
+                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_ptrs, dest, &type_params,
                 )
             }
         }
@@ -280,7 +270,7 @@ pub unsafe extern "C" fn __jit_dispatch_call(
             let result = ctx.interp.call_in_context_with_type_params(
                 ir_unit,
                 Some(code_ref.clone()),
-                arg_vals,
+                arg_ptrs,
                 type_params,
                 dest,
                 &callee_ctx,
@@ -317,7 +307,7 @@ impl CallDispatcher for LentEngine {
         &mut self,
         code_ref: &CodeRef,
         func: &IrCodeUnit,
-        args: &[Value],
+        args: &[*mut u8],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,

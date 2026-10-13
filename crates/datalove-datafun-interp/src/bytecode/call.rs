@@ -138,8 +138,7 @@ impl IrInterpreter {
                         copy_bytes(ptr, copy, size as usize);
                         ptr = copy;
                     }
-                    (callee_base.add(param.value as usize) as *mut crate::value::Value)
-                        .write(crate::value::Value { ptr, tydesc: param.tydesc });
+                    (callee_base.add(param.value as usize) as *mut *mut u8).write(ptr);
                 }
             },
             PlannedParams::Recipes(params) => for param in params.iter() {
@@ -147,13 +146,13 @@ impl IrInterpreter {
                 // which `base` is, and `value` and `copy` are places in the
                 // callee's.
                 unsafe {
-                    let mut arg = self.arg_value(&param.arg, base, &regs.frame, regs.frames);
+                    let mut ptr = self.arg_value(&param.arg, base, &regs.frame, regs.frames).ptr;
                     if let Some((at, size)) = param.copy {
                         let copy = callee_base.add(at as usize);
-                        copy_bytes(arg.ptr, copy, size as usize);
-                        arg.ptr = copy;
+                        copy_bytes(ptr, copy, size as usize);
+                        ptr = copy;
                     }
-                    (callee_base.add(param.value as usize) as *mut crate::value::Value).write(arg);
+                    (callee_base.add(param.value as usize) as *mut *mut u8).write(ptr);
                 }
             },
         }
@@ -555,9 +554,8 @@ impl IrInterpreter {
                 let args = (0..call.args.len()).map(read).collect();
                 native_plan(self, native, args, call.dest_tydesc)
             }
-            // A forwarder: each argument as its frame would hold it -- an owned
-            // one with its own descriptor -- then as its call reads that.
-            (Some(layout), Some(wrapper)) => {
+            // A forwarder: each argument as its call to the native reads it.
+            (Some(_), Some(wrapper)) => {
                 let inner = &wrapper.calls[0];
                 let Instruction::Call { func: inner_ref, .. } = &callee.blocks[0].instructions[0] else {
                     unreachable!("a forwarder is a call")
@@ -568,12 +566,6 @@ impl IrInterpreter {
                 };
                 let args = (0..call.args.len()).map(|i| {
                     let mut recipe = read(i);
-                    // A dynamic parameter keeps the descriptor it came with.
-                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
-                        && !layout.param_tydescs[i].is_null()
-                    {
-                        recipe.retype = Some(layout.param_tydescs[i]);
-                    }
                     if let Some(resolved) = &inner.resolved {
                         recipe.retype = Some(resolved[i].1);
                     }
@@ -597,8 +589,7 @@ impl IrInterpreter {
                         descriptors: std::rc::Rc::clone(descriptors),
                     }))
             }
-            // A body, whose frame holds an owned argument with its own
-            // descriptor and a borrowed one with the argument's.
+            // A body, whose frame holds a pointer at each argument.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
                 descriptors: std::rc::Rc::clone(descriptors),
                 countdown: match policy {
@@ -610,22 +601,15 @@ impl IrInterpreter {
                 func: callee,
                 code_ref,
                 params: match &call.resolved {
-                    Some(resolved) => PlannedParams::At(layout.param_modes.iter().enumerate().map(|(i, mode)| AtParam {
+                    Some(resolved) => PlannedParams::At((0..layout.param_offsets.len()).map(|i| AtParam {
                         src: resolved[i].0,
                         value: layout.param_offsets[i],
-                        // A dynamic parameter keeps the argument's.
-                        tydesc: match mode {
-                            ParamMode::In | ParamMode::Out if !layout.param_tydescs[i].is_null() => layout.param_tydescs[i],
-                            _ => resolved[i].1,
-                        },
                         copy: layout.param_copies[i],
                     }).collect()),
-                    None => PlannedParams::Recipes(layout.param_modes.iter().enumerate().map(|(i, mode)| {
-                        let mut arg = read(i);
-                        if matches!(mode, ParamMode::In | ParamMode::Out) && !layout.param_tydescs[i].is_null() {
-                            arg.retype = Some(layout.param_tydescs[i]);
-                        }
-                        PlannedParam { arg, value: layout.param_offsets[i], copy: layout.param_copies[i] }
+                    None => PlannedParams::Recipes((0..layout.param_offsets.len()).map(|i| PlannedParam {
+                        arg: read(i),
+                        value: layout.param_offsets[i],
+                        copy: layout.param_copies[i],
                     }).collect()),
                 },
             })),
@@ -757,7 +741,7 @@ impl IrInterpreter {
             this.read_operand(&ir_args[i], frame, frames)
         };
 
-        if let (Some(wrapper), Some(layout)) = (&forward, &layout) {
+        if let (Some(wrapper), Some(_)) = (&forward, &layout) {
             // The forwarder's own call, made from here: each argument as the
             // forwarder's frame would hold it -- an owned one with the
             // forwarder's descriptor, a borrowed one with the one it came
@@ -784,13 +768,7 @@ impl IrInterpreter {
             unsafe { self.call_native(
                 inner, native_body as *const IrCodeUnit as usize, native, inner_dest, &supplied,
                 |this, i, _| {
-                    let mut val = read(this, i, frame);
-                    // A dynamic parameter keeps the descriptor it came with.
-                    if matches!(layout.param_modes[i], ParamMode::In | ParamMode::Out)
-                        && !layout.param_tydescs[i].is_null()
-                    {
-                        val.tydesc = layout.param_tydescs[i];
-                    }
+                    let val = read(this, i, frame);
                     match &inner.resolved {
                         Some(resolved) => crate::value::Value { ptr: val.ptr, tydesc: resolved[i].1 },
                         None => val,
@@ -815,7 +793,7 @@ impl IrInterpreter {
 
         let mut callee_frame = self.frame_stack.push(std::rc::Rc::clone(&layout))?;
         for i in 0..call.args.len() {
-            callee_frame.set_param(i, read(self, i, frame));
+            callee_frame.set_param(i, read(self, i, frame).ptr);
         }
         for (i, &r) in descriptors.iter().enumerate() {
             callee_frame.set_type_param(i, Self::resolve_binding(r, frame));

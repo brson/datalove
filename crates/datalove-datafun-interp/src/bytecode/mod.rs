@@ -428,8 +428,8 @@ pub(crate) enum Op {
     Return { src: Loc, len: u32 },
     /// In a generic: copy the value the pointer at `src` points at to where
     /// the pointer at `dst` says, as many bytes as the descriptor at `desc`
-    /// says. Each names a word of the frame: a dynamic place's pointer, a
-    /// parameter's `Value`, and a table entry or that `Value`'s descriptor.
+    /// says. Each names a word of the frame: a dynamic place's or a
+    /// parameter's pointer, and a table entry.
     CopyDyn { dst: Loc, src: Loc, desc: Loc },
     /// Return the value the pointer at `src` points at, described by the
     /// descriptor at `desc`.
@@ -446,8 +446,6 @@ pub(crate) enum Op {
 enum Desc {
     /// In the layout, which the lowering read.
     Static(*const rtdt::TyDesc),
-    /// With parameter `n`, which the caller supplied.
-    Param(u32),
     /// Descriptor table entry `n`.
     Table(u32),
 }
@@ -651,10 +649,8 @@ enum PlannedParams {
 struct AtParam {
     /// Where the argument is in the caller's frame.
     src: Loc,
-    /// Where its `Value` goes in the callee's.
+    /// Where its pointer goes in the callee's.
     value: u32,
-    /// Its descriptor as the callee's frame holds it once entered.
-    tydesc: *const rtdt::TyDesc,
     /// Where the callee's frame keeps a copy of it, and its size, if it does;
     /// see `IrLayout::param_copies`.
     copy: Option<(u32, u32)>,
@@ -662,11 +658,9 @@ struct AtParam {
 
 /// One argument of a planned call to a body, by its recipe.
 struct PlannedParam {
-    /// How to read it, and with what descriptor the callee's frame holds it
-    /// once entered: the callee's own for an owned parameter, the argument's
-    /// for a borrowed one.
+    /// How to read it.
     arg: ArgRecipe,
-    /// Where its `Value` goes in the callee's frame.
+    /// Where its pointer goes in the callee's frame.
     value: u32,
     /// Where the callee's frame keeps a copy of it, and its size, if it does;
     /// see `IrLayout::param_copies`.

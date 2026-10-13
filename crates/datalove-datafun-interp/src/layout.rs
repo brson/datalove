@@ -29,15 +29,25 @@ use crate::tydesc::IrTyDescTable;
 /// beside them. After that layout's bytes comes an extension that is the
 /// interpreter's alone, which compiled code neither has nor sees:
 ///
-/// - the parameters, a `Value` each: a pointer to the caller's data and its
-///   descriptor, so that the arguments are a slice of the frame;
-/// - a copy of each small owned parameter of a copied type, which its `Value`
+/// - the parameters, a pointer each at the caller's data, so that the
+///   arguments are a slice of the frame; what describes each is its type's
+///   descriptor, or for a dynamic one its table entry;
+/// - a copy of each small owned parameter of a copied type, which its pointer
 ///   points at, so that reading it is one load;
 /// - the descriptor handed over for each type parameter, the descriptor
 ///   table, and the shadow stack's position on entry;
 /// - where liveness is kept, a byte per value, slot and parameter.
 ///
 /// So a frame is its bytes, and nothing about one lives anywhere else.
+/// What describes a parameter.
+#[derive(Clone, Copy)]
+pub enum ParamDesc {
+    /// The callee's own descriptor for its type.
+    Static(*const TyDesc),
+    /// The descriptor table entry at this frame offset, for a dynamic type.
+    Table(u32),
+}
+
 pub struct IrLayout {
     /// Offset for each ValueId.
     pub value_offsets: Vec<u32>,
@@ -48,8 +58,14 @@ pub struct IrLayout {
     /// TyDesc for each SlotId.
     pub slot_tydescs: Vec<*const TyDesc>,
     /// TyDesc for each parameter, as the callee's own signature describes it,
-    /// or null for a dynamic one, which keeps the descriptor it arrived with.
+    /// or null for a dynamic one, which its table entry describes.
     pub param_tydescs: Vec<*const TyDesc>,
+    /// For each parameter of a dynamic type, the descriptor table entry that
+    /// describes it.
+    pub param_entries: Vec<Option<u32>>,
+    /// For each parameter, where its pointer is and what describes it, as one
+    /// lookup for the frame's accessors.
+    pub param_places: Vec<(u32, ParamDesc)>,
     /// TyDesc for what the function returns. `None` for a script unit.
     pub return_tydesc: Option<*const TyDesc>,
     /// How each parameter is passed. Empty for a script unit.
@@ -70,11 +86,11 @@ pub struct IrLayout {
     pub slot_is_copy: Vec<bool>,
     /// The tracking byte of each `out` parameter.
     pub param_tracking: Vec<Option<u32>>,
-    /// Where each parameter's `Value` is: its pointer, then its descriptor.
-    /// Consecutive, so that the parameters are a `[Value]` from the first.
+    /// Where each parameter's pointer is, at the argument. Consecutive, so
+    /// that the parameters are a `[*mut u8]` from the first.
     pub param_offsets: Vec<u32>,
     /// For each parameter the frame keeps a copy of, where the copy goes and
-    /// its size: an owned parameter of a small copied type, whose `Value`
+    /// its size: an owned parameter of a small copied type, whose pointer
     /// points at the copy rather than into the caller's frame, so that a read
     /// of it is one load rather than two. Nothing can tell: the callee owns
     /// the argument, and the caller's original, being a copied type, is
@@ -202,12 +218,12 @@ impl IrLayout {
         let value_tydescs = described(value_types, &frame.values);
         let slot_tydescs = described(slot_types, &frame.slots);
 
-        // A dynamic parameter keeps the descriptor the caller handed over with
-        // it, which is the only one that says what it is; null says so.
+        // A dynamic parameter or return is described at run time, by its table
+        // entry or the caller's destination; null says so.
         let static_tydesc = |table: &mut IrTyDescTable, ty: &IrType| {
             if ty.is_dynamic() { std::ptr::null() } else { table.get_or_create(ty) }
         };
-        let param_tydescs = param_types.iter()
+        let param_tydescs: Vec<*const TyDesc> = param_types.iter()
             .map(|ty| static_tydesc(tydesc_table, ty))
             .collect();
         let return_tydesc = return_type.map(|ty| static_tydesc(tydesc_table, ty));
@@ -218,6 +234,7 @@ impl IrLayout {
                 None => panic!("{ty} is not in the descriptor table"),
             }
         };
+        let param_entries: Vec<Option<u32>> = param_types.iter().map(|ty| ty.is_dynamic().then(|| entry_of(ty))).collect();
         let dynamic_places: Vec<(u32, u32)> = value_types.iter().zip(&frame.values)
             .chain(slot_types.iter().zip(&frame.slots))
             .filter(|(ty, _)| ty.is_dynamic() && !matches!(ty, IrType::Ref(_)))
@@ -233,10 +250,9 @@ impl IrLayout {
         // The extension, after the shared layout: the words first, then the
         // liveness bytes.
         const WORD: u32 = std::mem::size_of::<usize>() as u32;
-        const VALUE: u32 = std::mem::size_of::<crate::value::Value>() as u32;
         let mut offset = align_up(frame.frame_size, WORD);
-        let param_offsets: Vec<u32> = (0..param_types.len() as u32).map(|i| offset + i * VALUE).collect();
-        offset += param_types.len() as u32 * VALUE;
+        let param_offsets: Vec<u32> = (0..param_types.len() as u32).map(|i| offset + i * WORD).collect();
+        offset += param_types.len() as u32 * WORD;
         let param_copies: Vec<Option<(u32, u32)>> = param_types.iter().enumerate().map(|(i, ty)| {
             let size = datalove_datafun_ir::layout::layout_of(ty).size;
             let copied = extras.param_modes.get(i) == Some(&ParamMode::In) && ty.is_copy()
@@ -281,7 +297,14 @@ impl IrLayout {
             value_tydescs,
             slot_offsets: frame.slots.iter().map(|s| s.offset).collect(),
             slot_tydescs,
+            param_places: param_offsets.iter().zip(&param_tydescs).zip(&param_entries)
+                .map(|((&offset, &tydesc), entry)| (offset, match entry {
+                    Some(e) => ParamDesc::Table(table_offset + e * WORD),
+                    None => ParamDesc::Static(tydesc),
+                }))
+                .collect(),
             param_tydescs,
+            param_entries,
             return_tydesc,
             param_modes: Vec::new(),
             param_moves: Vec::new(),

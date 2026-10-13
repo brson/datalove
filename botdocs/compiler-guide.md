@@ -1633,7 +1633,7 @@ offsets from `ir::frame_layout::FrameLayout`, tracking bytes included, so a valu
 slot or tracking byte is where compiled code for the same body keeps it -- the
 precondition for entering compiled code from the middle of an interpreted loop.
 What only the interpreter keeps comes after that layout's bytes, in an
-extension compiled code never sees: the parameters as a `[Value]`, a generic's
+extension compiled code never sees: a pointer per parameter, a generic's
 type-parameter descriptors and descriptor table, and the liveness bytes where
 they are kept. A dynamic value, slot or reference is described by its table
 entry (`IrLayout::value_entries`, `slot_entries`). A frame is its bytes, and

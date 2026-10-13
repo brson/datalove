@@ -133,26 +133,26 @@ fn test_layout_computation() {
 
     // The frame layout compiled code uses: i64 at 0, bool at 8, i64 at 16,
     // slot i64 at 24, and the slot's tracking byte at 32. Then the
-    // interpreter's own: a pointer and a descriptor per parameter, from 40.
+    // interpreter's own: a pointer per parameter, from 40.
     assert_eq!(layout.value_offsets[0], 0);
     assert_eq!(layout.value_offsets[1], 8);
     assert_eq!(layout.value_offsets[2], 16);
     assert_eq!(layout.slot_offsets[0], 24);
     assert_eq!(layout.slot_tracking[0], Some(32));
     assert_eq!(layout.tracking_count, 1);
-    assert_eq!(layout.param_offsets, vec![40, 56]);
+    assert_eq!(layout.param_offsets, vec![40, 48]);
     assert_eq!(layout.liveness_offset, None);
-    assert_eq!(layout.frame_size, 72);
+    assert_eq!(layout.frame_size, 56);
 
     // Liveness bytes, where they are kept, come last: three values, a slot,
     // two parameters.
     let kept = IrLayout::compute(
         &value_types, &slot_types, &param_types, &[SlotId(0)], &[], Some(&IrType::Bool),
         extras(true), &mut table);
-    assert_eq!(kept.liveness_offset, Some(72));
-    assert_eq!(kept.frame_size, 80);
+    assert_eq!(kept.liveness_offset, Some(56));
+    assert_eq!(kept.frame_size, 64);
 
-    // A parameter's descriptor is the callee's own for it.
+    // A parameter is described by the callee's own descriptor for it.
     assert_eq!(layout.param_tydescs.len(), 2);
     assert_eq!(layout.param_tydescs[0], table.get_or_create(&IrType::Bool));
     assert_eq!(layout.param_tydescs[1], table.get_or_create(&IrType::I64));
@@ -314,14 +314,10 @@ fn test_nested_function_calls() {
     let functions: Vec<IrCodeUnit> = vec![passthrough_fn, nested_code_unit.clone()];
     let ctx = ExecutionContext::new(0, &functions);
 
-    // Create argument value: 42.
+    // Create argument: 42.
     let mut interp = IrInterpreter::new();
     let mut arg_storage = 42i64;
-    let arg_tydesc = interp.tydesc_table.get_or_create(&IrType::I64);
-    let arg = Value {
-        ptr: &mut arg_storage as *mut i64 as *mut u8,
-        tydesc: arg_tydesc,
-    };
+    let arg = &mut arg_storage as *mut i64 as *mut u8;
 
     // Create destination for result.
     let mut result_storage: i64 = 0;

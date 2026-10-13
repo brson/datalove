@@ -847,14 +847,30 @@ Two leftovers, cleared after phase 8:
   engine (`ir::layout::dynamic_layout`), and the interpreter reads its
   descriptor from the table (`IrLayout::value_entries`, `slot_entries`). The
   bytecode's `CopyDyn` and `ReturnDyn` name the frame word holding the
-  descriptor. Parameters stay `(ptr, tydesc)` pairs, which is how the
-  interpreter passes every argument.
+  descriptor.
 
 Measured against the build before the second (release, hyperfine, at least
 five runs, seconds): interpreted `generics` 2.269 (2.348), `sieve` 3.953
 (3.956), `wordfreq` 0.948 (0.964), the store demo 0.759 (0.757); `generics`
 under the JIT 0.483 (0.490). Within noise, `generics` slightly faster: the
 point was the one representation, not speed.
+
+Then the parameters, for the same reason. Each was a `(ptr, tydesc)` pair in
+the interpreter's frame, its descriptor always the callee's own for a
+concrete type -- an owned one rewritten to it on entry, a borrowed one left
+as the caller's, a distinction erasure needed -- or the table entry for a
+dynamic one. A parameter is now one word, its descriptor found through
+`IrLayout::param_places`; the interpreter's entry points and the dispatcher
+take argument pointers, and the trampoline no longer makes descriptors up
+for the arguments compiled code hands it.
+
+Against the build before: `fib` 3.551 (3.553), `sieve` 4.057 (3.943),
+`generics` 2.303 (2.246), interpreted. What is lost is not the change's own
+work. The bytecode's dispatch head went from 25.4% to 28.2% of `sieve`'s
+instructions with the same ops run: register allocation moved the op
+array's base from `r12` to `r13`, which costs the indexed load an extra
+instruction on every op. `run_body` is one large function, and an edit to
+anything inlined into it can move that either way.
 
 ## Open questions
 

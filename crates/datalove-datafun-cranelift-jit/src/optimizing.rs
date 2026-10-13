@@ -12,7 +12,7 @@ use std::hash::{Hash, Hasher};
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, Destination, FuncIdentity,
-    InterpError, SitePolicy, Value,
+    InterpError, SitePolicy,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -266,7 +266,7 @@ impl CallDispatcher for OptimizingDispatcher {
         &mut self,
         code_ref: &CodeRef,
         func: &IrCodeUnit,
-        args: &[Value],
+        args: &[*mut u8],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,

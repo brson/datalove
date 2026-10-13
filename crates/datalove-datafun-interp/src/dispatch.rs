@@ -10,7 +10,7 @@ use datalove_rt::c::LocalRtHandle;
 use crate::error::InterpError;
 use crate::env::{ExecutionContext, FunctionRegistry};
 use crate::frame::FrameStore;
-use crate::value::{Destination, Value};
+use crate::value::Destination;
 use crate::IrInterpreter;
 
 /// A function, named so that two units cannot mean the same thing by it.
@@ -125,7 +125,7 @@ pub trait CallDispatcher {
     ///
     /// * `code_ref` - The code reference being called
     /// * `func` - The resolved function as IrCodeUnit
-    /// * `args` - Arguments as Value pointers
+    /// * `args` - Pointers at the arguments
     /// * `ret_dest` - Destination for return value
     /// * `rt_handle` - Runtime handle
     /// * `call_ctx` - Context for mixed-mode execution (JIT calling interpreter)
@@ -133,7 +133,7 @@ pub trait CallDispatcher {
         &mut self,
         code_ref: &CodeRef,
         func: &IrCodeUnit,
-        args: &[Value],
+        args: &[*mut u8],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,

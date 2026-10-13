@@ -39,7 +39,7 @@ use std::time::Instant;
 use datalove_datafun_ir::{BlockId, CodeRef, IrCodeUnit};
 use datalove_datafun_interp::{
     CallDispatcher, CompiledEntry, DispatchCallContext, Destination, DispatchResult, ExecutionContext,
-    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, SitePolicy, Value,
+    FuncIdentity, FunctionRegistry, InterpError, IrInterpreter, SitePolicy,
 };
 use datalove_rt::c::LocalRtHandle;
 
@@ -413,7 +413,7 @@ impl JitEngine {
         &mut self,
         code_ref: &CodeRef,
         func: &IrCodeUnit,
-        args: &[Value],
+        args: &[*mut u8],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,
@@ -894,7 +894,7 @@ impl CallDispatcher for JitEngine {
         &mut self,
         code_ref: &CodeRef,
         func: &IrCodeUnit,
-        args: &[Value],
+        args: &[*mut u8],
         ret_dest: Destination,
         rt_handle: LocalRtHandle,
         call_ctx: DispatchCallContext<'_, '_>,

@@ -222,9 +222,10 @@ which is harmless: descriptors compare structurally (`same_tydesc`).
 pair, so its instructions, already driven by the descriptor in hand, mostly
 needed nothing. A reference to a dynamic type is described by the entry for
 what it points at. `enter_dynamic` fills the table and takes shadow space
-after `Frame::enter`; `leave_dynamic` gives it back. A parameter is a
-`(ptr, tydesc)` pair in the frame, as the interpreter's calls pass every
-argument.
+after `Frame::enter`; `leave_dynamic` gives it back. A parameter is one
+word too, a pointer at the argument, described by the callee's own
+descriptor or its table entry (`IrLayout::param_places`): the interpreter's
+calls hand over pointers, as compiled code's do.
 
 **The bytecode** runs a generic's body: an instruction on a dynamic value runs
 on the walker (`Op::Ir`), except a move and a return (`CopyDyn`,
