@@ -151,7 +151,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let offset = self.layout.value_offset(vid.0) as i32;
         let mut pos = FuncCursor::new(builder.func).at_inst(osr.entry_jump);
         let remade = osr.consts.get(&vid).and_then(|c| constants::scalar_const(pos.ins(), c));
-        // A dynamic value is where its fat pointer says.
+        // A dynamic value is where its pointer in the frame says.
         if let Some(&ptr) = self.dyn_storage.get(&vid) {
             osr.materialized.borrow_mut().insert(vid, ptr);
             return Ok(ptr);

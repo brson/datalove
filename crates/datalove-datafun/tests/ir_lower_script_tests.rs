@@ -19,16 +19,6 @@ use datalove_datafun_interp::InterpCtfeEvaluator;
 use bct::input::Source;
 use datalove_datafun_ast::ast::Statement;
 
-/// Convert tycheck expression types to IR types.
-fn convert_expr_types<'db>(
-    db: &'db dyn salsa::Database,
-    types: &datalove_datafun_tycheck::ExprTypes<'db>,
-) -> datalove_datafun_tycheck::ExprIrTypes<'db> {
-    types.iter()
-        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
-        .collect()
-}
-
 /// Build a simple const binding graph from statements and expr_types.
 /// This is a non-tracked version of collect_const_graph for tests.
 fn build_const_graph<'db>(
@@ -103,26 +93,20 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let expr_types_raw = tycheck_result.expr_types(&db);
                 let call_targets_raw = tycheck_result.call_targets(&db);
 
-                // Convert to IR types for ownership analysis.
-                let expr_types_ir = convert_expr_types(&db, expr_types_raw);
-
                 output.push_str(&format!("--- script unit {} (fragment) ---\n", unit_index));
 
                 // Build map of function name -> resolved param/return types for type alias support.
-                let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-                let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+                let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'_>>> = HashMap::new();
+                let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'_>> = HashMap::new();
                 for (name, func_type) in tycheck_result.function_types(&db) {
-                    let param_types: Vec<IrType> = func_type.param_types(&db)
-                        .iter()
-                        .map(|ty| IrType::from_tycheck(&db, ty))
-                        .collect();
+                    let param_types = func_type.param_types(&db).clone();
                     func_param_types.insert(name.text(&db).S(), param_types);
-                    let return_type = IrType::from_tycheck(&db, &func_type.return_type(&db));
+                    let return_type = func_type.return_type(&db);
                     func_return_types.insert(name.text(&db).S(), return_type);
                 }
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, &expr_types_ir, call_targets_raw, &stmts, Some(&func_param_types)) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types_raw, call_targets_raw, &stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -138,7 +122,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, &expr_types_ir, call_targets_raw, &stmts);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types_raw, call_targets_raw, &stmts);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {

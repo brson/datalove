@@ -150,9 +150,10 @@ projection instructions (`GetFieldRef`, `ListElementRef`, `MapValueRef`,
 - `IrType::from_type_hint` converts a written type.
 - `IrType::from_type_hint_generic` does the same inside a generic, keeping
   its type parameters as `Param` (Section 11).
-- `IrType::from_datalit` converts a typechecker type. A type variable outside
-  a generic body is in a native's signature, and becomes `Data`: the rider ABI
-  takes it as a pointer and a descriptor.
+- `IrType::from_datalit` converts a typechecker type outside any generic, and
+  `from_datalit_generic` inside one, keeping its type parameters as `Param`.
+  A type variable that is not a parameter in scope is a compiler bug, and
+  panics.
 
 ### `TypeRef`
 
@@ -218,7 +219,7 @@ Also exported: `align_up`, `aggregate_layout`, `aggregate_field_offsets`,
 tuple is the opposite case: `(u32, u32)` and `(u8, u32)` are different shapes.
 Both facts are pinned by unit tests in `layout.rs`.
 
-**A dynamic type is laid out as a fat pointer**, two words, whatever it is:
+**A dynamic type is laid out as a pointer**, one word, whatever it is:
 `layout_of` checks `is_dynamic` before its match. The offset helpers above are
 never asked about a dynamic type; its layout is its descriptor's (Section 11).
 
@@ -772,8 +773,9 @@ lowering failure, an early return, an unsupported type.
 
 A generic function is compiled **once**. Its types are as written, with
 `IrType::Param(i)` for its `i`th type parameter, and a value of a type that
-mentions one -- a *dynamic* type, `IrType::is_dynamic` -- is a fat pointer:
-the value in its real layout, and its descriptor. [Generics: how it
+mentions one -- a *dynamic* type, `IrType::is_dynamic` -- is a pointer at
+the value in its real layout, described by the function's descriptor table
+entry for its type. [Generics: how it
 works](generics.md) is the whole story; this is what the IR carries for it.
 
 ### In the function
@@ -870,7 +872,7 @@ All four agree with `ir::layout`.
 
 - **Interpreter** (`datalove-datafun-interp`) walks the IR directly. Its values
   are a pointer and a descriptor already; a generic's frame holds its
-  descriptor table and the fat pointers of its dynamic values.
+  descriptor table and the pointers of its dynamic values.
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) emits an object file.
 - **C backend** (`datalove-datafun-c-aot`) emits C and compiles it. The same
   program by a different route, which is why the `dual` fixtures run both.
@@ -978,7 +980,7 @@ Bless expected output with `BLESS=1 cargo test`.
 - [Compiler Guide](compiler-guide.md) -- the pipeline this sits in the middle of
 - [Language Specification](botspec.md) -- what the source means
 - [The Native Rider ABI](native-abi.md) -- how a native call is made
-- [Generics: how it works](generics.md) -- fat pointers and descriptor tables
+- [Generics: how it works](generics.md) -- dynamic values and descriptor tables
 - [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
   -- monomorphization
 - [IrCodeUnit](compiler-guide.md#user-content-ircodeunit) -- one type for all

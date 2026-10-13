@@ -12,7 +12,7 @@ use salsa::Database as Db;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::spans::DatafunSpans;
 
-pub use datalove_datafun_sema::{CallTargets, ExprIrTypes, ExprTypes};
+pub use datalove_datafun_sema::{CallTargets, ExprTypes};
 
 // Re-export shared types from common crate.
 pub use datalove_datafun_common::{

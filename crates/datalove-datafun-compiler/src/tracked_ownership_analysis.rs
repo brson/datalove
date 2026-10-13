@@ -15,10 +15,8 @@ use datalove_datafun_tycheck::{
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
 };
-use datalove_datafun_ir::IrType;
 use datalove_datafun_ownership::{self as ownership_analysis, FunctionAnalysis, AutoAdaptMode};
 
-use crate::IrTypeExt;
 
 /// Result of ownership analysis for a single function.
 #[salsa::tracked]
@@ -83,16 +81,6 @@ impl<'db> ModuleGraphAnalysis<'db> {
 // Type Conversion Helpers
 // ============================================================================
 
-/// Convert tycheck expression types to IR types.
-fn convert_expr_types<'db>(
-    db: &'db dyn salsa::Database,
-    types: &datalove_datafun_tycheck::ExprTypes<'db>,
-) -> datalove_datafun_sema::ExprIrTypes<'db> {
-    types.iter()
-        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
-        .collect()
-}
-
 /// Analyze a single module for ownership errors.
 #[salsa::tracked(returns(copy))]
 pub fn analyze_module<'db>(
@@ -107,18 +95,13 @@ pub fn analyze_module<'db>(
 
     log_query("ownership_analysis", module_path, QueryPhase::Start);
 
-    // Convert tycheck types to IR types.
-    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let expr_types = typecheck_result.expr_types(db);
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
     for (name, func_type) in typecheck_result.exports(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
-        func_param_types.insert(name.text(db).S(), param_types);
+        func_param_types.insert(name.text(db).S(), func_type.param_types(db).C());
     }
 
     let mut function_analyses = BTreeMap::new();
@@ -133,7 +116,7 @@ pub fn analyze_module<'db>(
 
             // Run ownership analysis with auto-adapt mode.
             let analysis = ownership_analysis::analyze_function_with_mode(
-                db, *func, &expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
+                db, *func, expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
             );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {

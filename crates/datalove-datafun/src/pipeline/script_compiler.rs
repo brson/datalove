@@ -52,7 +52,6 @@ use datalove_datafun_tycheck::{
     UnitTypecheckResultTracked,
     AutoAdaptMode,
 };
-use datalove_datafun_compiler::IrTypeExt;
 
 use super::compiled_modules::{CompiledModules, SharedModuleContext};
 use super::result::{TypecheckResult, OwnershipResult, LoweringResult, ScriptCompilationResult};
@@ -1168,16 +1167,13 @@ impl<'db> ScriptCompiler<'db> {
         // Get module function ID map for resolving module function calls.
 
         // Build func_param_types and func_return_types for type alias support.
-        let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-        let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+        let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
+        let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
         for (name, func_type) in typecheck.result.function_types(self.db) {
-            let param_types: Vec<IrType> = func_type.param_types(self.db)
-                .iter()
-                .map(|ty| IrType::from_tycheck(self.db, ty))
-                .collect();
+            let param_types = func_type.param_types(self.db).clone();
             func_param_types.insert(name.text(self.db).S(), param_types);
 
-            let return_type = IrType::from_tycheck(self.db, &func_type.return_type(self.db));
+            let return_type = func_type.return_type(self.db);
             func_return_types.insert(name.text(self.db).S(), return_type);
         }
 
@@ -1469,16 +1465,13 @@ impl<'db> ScriptCompiler<'db> {
         match unit {
             ParsedUnit::Fragment { stmts, .. } => {
                 // Build func_param_types and func_return_types for type alias support.
-                let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-                let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+                let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
+                let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
                 for (name, func_type) in typecheck.result.function_types(self.db) {
-                    let param_types: Vec<IrType> = func_type.param_types(self.db)
-                        .iter()
-                        .map(|ty| IrType::from_tycheck(self.db, ty))
-                        .collect();
+                    let param_types = func_type.param_types(self.db).clone();
                     func_param_types.insert(name.text(self.db).S(), param_types);
 
-                    let return_type = IrType::from_tycheck(self.db, &func_type.return_type(self.db));
+                    let return_type = func_type.return_type(self.db);
                     func_return_types.insert(name.text(self.db).S(), return_type);
                 }
 

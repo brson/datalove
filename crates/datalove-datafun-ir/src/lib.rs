@@ -224,8 +224,8 @@ impl IrType {
     /// Every dynamic type within this one, itself included, parts before
     /// what holds them.
     ///
-    /// A `Ref` is left out: a reference to a dynamic type is the fat pointer
-    /// to it, and has no descriptor of its own. What it points at is in.
+    /// A `Ref` is left out: a reference to a dynamic type is described by what
+    /// it points at, which is in.
     pub fn dynamic_parts(&self, out: &mut Vec<IrType>) {
         if !self.is_dynamic() {
             return;
@@ -329,43 +329,6 @@ impl std::fmt::Display for IrType {
                 write!(f, " |}}")
             }
         }
-    }
-}
-
-/// Whether a type hint names one of the given type parameters anywhere in it.
-///
-/// A parameter whose type mentions one is written over the callee's type
-/// parameters, and at a call site the bindings are substituted into it.
-pub fn type_hint_mentions_param<'db>(
-    ty: &datalove_datalit::ast::TypeHint<'db>,
-    type_params: &[bct::text::InternedText<'db>],
-) -> bool {
-    use datalove_datalit::ast::TypeHint;
-
-    let mentions = |t: &TypeHint<'db>| type_hint_mentions_param(t, type_params);
-
-    match ty {
-        TypeHint::Alias(alias) => type_params.contains(&alias.name),
-
-        TypeHint::List(t) => mentions(&t.element_type),
-        TypeHint::Set(t) => mentions(&t.element_type),
-        TypeHint::Option(t) => mentions(&t.inner_type),
-        TypeHint::Result(t) => mentions(&t.inner_type),
-        TypeHint::Tensor(t) => mentions(&t.element_type),
-        TypeHint::Term(t) => mentions(&t.payload),
-        TypeHint::Map(t) => mentions(&t.key_type) || mentions(&t.value_type),
-
-        TypeHint::AnonTuple(t) => t.fields.iter().any(mentions),
-        TypeHint::AnonStruct(t) => t.fields.iter().any(|f| mentions(&f.type_hint)),
-        TypeHint::Table(t) => t.columns.iter().any(|c| mentions(&c.type_hint)),
-        TypeHint::Enum(t) => t.variants.iter()
-            .any(|v| v.payload.as_ref().is_some_and(|p| mentions(p))),
-
-        TypeHint::Bool | TypeHint::U8 | TypeHint::I8 | TypeHint::U16 | TypeHint::I16
-        | TypeHint::U32 | TypeHint::I32 | TypeHint::U64 | TypeHint::I64
-        | TypeHint::Index | TypeHint::Offset | TypeHint::F32 | TypeHint::F64
-        | TypeHint::Int | TypeHint::String | TypeHint::Data | TypeHint::Error
-        | TypeHint::Atom(_) | TypeHint::ParseError(_) => false,
     }
 }
 
@@ -511,9 +474,9 @@ impl IrType {
         }
     }
 
-    /// Convert from datalit typechecker type to IR type.
+    /// Convert from datalit typechecker type to IR type, outside any generic.
     pub fn from_datalit<'db>(db: &'db dyn salsa::Database, ty: &datalove_datalit::tycheck::Type<'db>) -> Self {
-        Self::from_datalit_inner(db, ty, None)
+        Self::from_datalit_generic(db, ty, &[])
     }
 
     /// Convert from datalit typechecker type to IR type, keeping the given
@@ -524,29 +487,21 @@ impl IrType {
         ty: &datalove_datalit::tycheck::Type<'db>,
         type_params: &[bct::text::InternedText<'db>],
     ) -> Self {
-        Self::from_datalit_inner(db, ty, Some(type_params))
+        Self::from_datalit_inner(db, ty, type_params)
     }
 
-    /// `keep` is the type parameters in scope, or `None` outside a generic
-    /// body.
     fn from_datalit_inner<'db>(
         db: &'db dyn salsa::Database,
         ty: &datalove_datalit::tycheck::Type<'db>,
-        keep: Option<&[bct::text::InternedText<'db>]>,
+        keep: &[bct::text::InternedText<'db>],
     ) -> Self {
         use datalove_datalit::tycheck::Type as DlType;
 
         match ty {
-            DlType::Var(name) => match keep {
-                Some(params) => match params.iter().position(|p| p == name) {
-                    Some(i) => IrType::Param(i as u32),
-                    None => panic!("type variable {} is not a parameter of the function it is in",
-                        name.as_str(db)),
-                },
-                // Outside a generic body a type variable is in a native's
-                // signature, where the rider ABI takes it as a `data`: a
-                // pointer and a descriptor, whatever it was bound to.
-                None => IrType::Data,
+            DlType::Var(name) => match keep.iter().position(|p| p == name) {
+                Some(i) => IrType::Param(i as u32),
+                None => panic!("type variable {} is not a parameter of the function it is in",
+                    name.as_str(db)),
             },
             DlType::Bool => IrType::Bool,
             DlType::U8 => IrType::U8,
@@ -2980,7 +2935,7 @@ mod const_value_tests {
 #[cfg(test)]
 mod dynamic_type_tests {
     use super::*;
-    use crate::layout::{fat_pointer_layout, layout_of};
+    use crate::layout::{dynamic_layout, layout_of};
 
     fn t(i: u32) -> IrType {
         IrType::Param(i)
@@ -3049,9 +3004,9 @@ mod dynamic_type_tests {
     }
 
     #[test]
-    fn a_dynamic_type_is_laid_out_as_a_fat_pointer() {
-        let fat = fat_pointer_layout();
-        assert_eq!(fat.size, 2 * std::mem::size_of::<usize>() as u32);
+    fn a_dynamic_type_is_laid_out_as_a_pointer() {
+        let dynamic = dynamic_layout();
+        assert_eq!(dynamic.size, std::mem::size_of::<usize>() as u32);
         for ty in [
             t(0),
             IrType::Tuple(vec![t(0), IrType::U32]),
@@ -3059,10 +3014,8 @@ mod dynamic_type_tests {
             list(t(0)),
             IrType::Ref(Box::new(t(0))),
         ] {
-            assert_eq!(layout_of(&ty), fat, "{ty}");
+            assert_eq!(layout_of(&ty), dynamic, "{ty}");
         }
-        // A reference to a concrete type is still a thin pointer.
-        assert_eq!(layout_of(&IrType::Ref(Box::new(IrType::U64))).size, std::mem::size_of::<usize>() as u32);
     }
 
     #[test]

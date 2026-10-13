@@ -26,7 +26,7 @@ impl Op {
             | Op::CkAssignBr { .. } | Op::CkAssignU32IBr { .. } => Shape::TWO_WAY,
             Op::Ir { .. } | Op::Call { .. } | Op::CallFast { .. } | Op::EdgeIr { .. } | Op::UnwrapOkBr { .. }
             | Op::Switch { .. } | Op::Jump { .. } | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit
-            | Op::ReturnIr { .. } | Op::CopyFat { .. } | Op::ReturnFat { .. } => Shape::FIXED,
+            | Op::ReturnIr { .. } | Op::CopyDyn { .. } | Op::ReturnDyn { .. } => Shape::FIXED,
             Op::LoopHead { .. } | Op::ConstString { .. } | Op::CopyAt { .. } | Op::FieldRef { .. }
             | Op::StaticRef { .. } | Op::MapGetRt { .. } | Op::AddCkU32 { .. } | Op::SubCkU32 { .. }
             | Op::MulCkU32 { .. } | Op::AddCkI32 { .. } | Op::SubCkI32 { .. } | Op::MulCkI32 { .. }
@@ -58,8 +58,8 @@ impl Op {
             | Op::OpAssignRt { .. } => {}
             Op::CkAssign { ty, place, b, ovf, .. } => { f(place, ty.size()); f(b, ty.size()); f(ovf, 1) }
             Op::CkAssignU32I { place, ovf, .. } => { f(place, 4); f(ovf, 1) }
-            Op::CopyFat { dst, src } => { f(dst, 16); f(src, 16) }
-            Op::ReturnFat { src } => f(src, 16),
+            Op::CopyDyn { dst, src, desc } => { f(dst, 8); f(src, 8); f(desc, 8) }
+            Op::ReturnDyn { src, desc } => { f(src, 8); f(desc, 8) }
             Op::CkAssignBr { ty, place, b, .. } => { f(place, ty.size()); f(b, ty.size()) }
             Op::CkAssignU32IBr { place, .. } => f(place, 4),
             Op::CopyAt { dst, src, offset, len } => { f(dst, len); f(src, offset + len) }
@@ -205,7 +205,7 @@ impl Op {
             | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. }
             | Op::CkAssign { .. } | Op::CkAssignU32I { .. } | Op::Switch { .. }
             | Op::Return { .. } | Op::ReturnOk { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
-            | Op::CopyFat { .. } | Op::ReturnFat { .. }
+            | Op::CopyDyn { .. } | Op::ReturnDyn { .. }
             | Op::LoopHead { .. } => {}
         }
     }

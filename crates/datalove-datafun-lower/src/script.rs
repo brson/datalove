@@ -26,6 +26,7 @@ use super::func::lower_function_body;
 use super::stmt::{collect_field_path_from_place, lower_destructure, lower_numbered_statement, lower_var};
 use super::LowerError;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
+use datalove_datafun_common::Type;
 
 /// Check if a set statement is a self-assignment (set v0 = v0) for script context.
 ///
@@ -84,8 +85,8 @@ pub fn lower_script_fragment_raw<'db>(
     stmts: Vec<Statement<'db>>,
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
-    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    func_return_types: Option<&HashMap<String, IrType>>,
+    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&HashMap<String, Type<'db>>>,
     lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
@@ -208,8 +209,8 @@ pub fn lower_script_functions<'db>(
     call_targets: &'db CallTargets<'db>,
     stmts: &[Statement<'db>],
     func_analyses: &ScriptFunctionAnalyses<'db>,
-    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    func_return_types: Option<&HashMap<String, IrType>>,
+    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&HashMap<String, Type<'db>>>,
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
@@ -375,8 +376,8 @@ fn lower_statement_for_script<'db>(
     stmt: &Statement<'db>,
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
-    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
-    func_return_types: Option<&HashMap<String, IrType>>,
+    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
+    func_return_types: Option<&HashMap<String, Type<'db>>>,
     already_lowered_funcs: &HashSet<String>,
 ) -> Result<(), LowerError> {
     // Allocate a globally-unique statement ID that matches ownership analysis.

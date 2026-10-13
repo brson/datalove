@@ -380,15 +380,11 @@ impl Frame {
         unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) };
     }
 
-    /// Point the fat pointer at `offset` at `ptr`, described by `tydesc`.
+    /// Point the dynamic place at `offset` at `ptr`.
     #[inline]
-    pub fn set_fat_pointer(&self, offset: u32, ptr: *mut u8, tydesc: *const TyDesc) {
-        let at = self.at_offset(offset) as *mut usize;
-        // SAFETY: a dynamic place: two words in the frame.
-        unsafe {
-            at.write(ptr as usize);
-            at.add(1).write(tydesc as usize);
-        }
+    pub fn set_dynamic_place(&self, offset: u32, ptr: *mut u8) {
+        // SAFETY: a dynamic place: a word in the frame.
+        unsafe { (self.at_offset(offset) as *mut *mut u8).write(ptr) }
     }
 
     /// The word pair at `offset`, which the shadow stack's position on entry
@@ -517,22 +513,23 @@ impl Frame {
     pub fn value_dest(&self, id: ValueId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
-        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx]);
+        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx], layout.value_entries[idx]);
         Destination { ptr, tydesc }
     }
 
     /// Where a value or slot at `offset` is, and what describes it.
     ///
-    /// One of a dynamic type, whose static descriptor is null, is a fat
-    /// pointer in the frame: the value is where that says, and its descriptor
-    /// is beside it. Everything that reads or writes a value goes through
+    /// One of a dynamic type, whose static descriptor is null, is a pointer
+    /// in the frame: the value is where that says, and its descriptor is its
+    /// table `entry`. Everything that reads or writes a value goes through
     /// here, so nothing else has to know.
     #[inline(always)]
-    fn place(&self, offset: u32, tydesc: *const TyDesc) -> (*mut u8, *const TyDesc) {
+    fn place(&self, offset: u32, tydesc: *const TyDesc, entry: Option<u32>) -> (*mut u8, *const TyDesc) {
         let at = self.at_offset(offset);
         if tydesc.is_null() {
-            // SAFETY: a dynamic place's bytes are a fat pointer, set on entry.
-            unsafe { ((at as *const *mut u8).read(), (at as *const *const TyDesc).add(1).read()) }
+            let entry = entry.expect("a dynamic place has a table entry");
+            // SAFETY: a dynamic place's bytes are a pointer, set on entry.
+            unsafe { ((at as *const *mut u8).read(), self.table_entry(entry as usize)) }
         } else {
             (at, tydesc)
         }
@@ -548,14 +545,14 @@ impl Frame {
     pub fn value(&self, id: ValueId) -> Value {
         let idx = id.0 as usize;
         let layout = self.layout();
-        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx]);
+        let (ptr, tydesc) = self.place(layout.value_offsets[idx], layout.value_tydescs[idx], layout.value_entries[idx]);
         Value { ptr, tydesc }
     }
 
     /// Dereference a ref value to get the pointed-to data.
     ///
-    /// What it points at is described by the reference's descriptor word,
-    /// where it has one, and otherwise by its static type, which wraps the
+    /// What it points at is described by its table entry, for a reference to
+    /// a dynamic type, and otherwise by its static type, which wraps the
     /// referent's as a one-field tuple.
     ///
     /// Panics if value ID is out of bounds (compiler bug).
@@ -565,31 +562,22 @@ impl Frame {
         let layout = self.layout();
         // SAFETY: a reference value holds a pointer.
         let ptr = unsafe { *(self.at_offset(layout.value_offsets[idx]) as *const *mut u8) };
-        let tydesc = match layout.ref_desc_offsets[idx] {
-            // SAFETY: written by the projection that made the reference.
-            Some(offset) => unsafe { *(self.at_offset(offset) as *const *const TyDesc) },
+        let tydesc = match layout.value_entries[idx] {
+            Some(entry) => self.table_entry(entry as usize),
             None => static_referent(layout.value_tydescs[idx]),
         };
         Value { ptr, tydesc }
     }
 
-    /// Record what a reference points at, as a projection found it.
-    ///
-    /// Only a reference to a dynamic type has a word for it; any other is
-    /// described by its static type, which the projection's finding has to
-    /// agree with.
+    /// Check, in a debug build, that what a projection found a reference to
+    /// is what the reference is described as: by its table entry, or by its
+    /// static type.
     #[inline]
-    pub fn set_value_tydesc(&self, id: ValueId, tydesc: *const TyDesc) {
-        let idx = id.0 as usize;
-        let layout = self.layout();
-        match layout.ref_desc_offsets[idx] {
-            // SAFETY: the reference's descriptor word.
-            Some(offset) => unsafe { (self.at_offset(offset) as *mut *const TyDesc).write(tydesc) },
-            None => debug_assert_eq!(
-                unsafe { (*tydesc).size },
-                unsafe { (*static_referent(layout.value_tydescs[idx])).size },
-                "reference {:?} has no descriptor word, and its static type is not what it found", id),
-        }
+    pub fn check_referent(&self, id: ValueId, found: *const TyDesc) {
+        debug_assert_eq!(
+            unsafe { (*found).size },
+            unsafe { (*self.value_deref(id).tydesc).size },
+            "reference {:?} is not described as what it was found to point at", id);
     }
 
     /// Get destination for a slot.
@@ -599,7 +587,7 @@ impl Frame {
     pub fn slot_dest(&self, id: SlotId) -> Destination {
         let idx = id.0 as usize;
         let layout = self.layout();
-        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx]);
+        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx], layout.slot_entries[idx]);
         Destination { ptr, tydesc }
     }
 
@@ -612,7 +600,7 @@ impl Frame {
         let idx = id.0 as usize;
         debug_assert!(self.kept_live(self.slot_index(id)) != Some(false), "read of an empty slot {:?}", id);
         let layout = self.layout();
-        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx]);
+        let (ptr, tydesc) = self.place(layout.slot_offsets[idx], layout.slot_tydescs[idx], layout.slot_entries[idx]);
         Value { ptr, tydesc }
     }
 

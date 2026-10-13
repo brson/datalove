@@ -763,9 +763,9 @@ Kept, and why:
 - `NativeContext::descriptor_shapes`, as planned. After the review it is
   `undetermined_type_params`, the positions alone, and `DescriptorShape` is
   gone; a call's bindings at those positions are the descriptors.
-- `from_datalit` maps a type variable outside a generic body to `data`: that
-  is a native's signature, which the rider ABI takes as a pointer and a
-  descriptor.
+- `from_datalit` mapped a type variable outside a generic body to `data`,
+  for natives' signatures and the ownership analysis. Both now convert with
+  the function's type parameters in scope, and a stray type variable panics.
 - `codegen/boxing.rs`, which also compiles `ErrorFrom` and `DataFrom`; only
   its erasure functions went.
 
@@ -826,6 +826,35 @@ Filed in `botdocs/issues.md` rather than fixed: a binding moved into a call
 inside an intrinsic's arguments is dropped again, and an owned argument leaks
 when a sibling's `?` returns early. Both predate this work. The one-binding
 descriptor-table cache, and the static caches' thread-safety, are filed too.
+
+## Afterwards
+
+Two leftovers, cleared after phase 8:
+
+- **Natives' IR signatures said `data` for a type parameter**, from
+  `from_datalit` mapping any type variable outside a generic body to `Data`.
+  The ownership analysis leaned on the same fallback, converting every
+  expression's type with no type parameters in scope, and lowering converted
+  a generic's resolved signature to `data` and then threw that away for one
+  rebuilt from the type hint. All three now convert with the function's type
+  parameters in scope (`from_tycheck_generic`, and the ownership analysis
+  converting as it asks), and a stray type variable panics. A native's move
+  rule asks whether its parameter is dynamic rather than whether the call
+  bound anything.
+- **The interpreter kept a fat pointer per dynamic value**, its second word a
+  copy of the table entry for its type, and a descriptor word per dynamic
+  reference that projections wrote. A dynamic place is now one word in every
+  engine (`ir::layout::dynamic_layout`), and the interpreter reads its
+  descriptor from the table (`IrLayout::value_entries`, `slot_entries`). The
+  bytecode's `CopyDyn` and `ReturnDyn` name the frame word holding the
+  descriptor. Parameters stay `(ptr, tydesc)` pairs, which is how the
+  interpreter passes every argument.
+
+Measured against the build before the second (release, hyperfine, at least
+five runs, seconds): interpreted `generics` 2.269 (2.348), `sieve` 3.953
+(3.956), `wordfreq` 0.948 (0.964), the store demo 0.759 (0.757); `generics`
+under the JIT 0.483 (0.490). Within noise, `generics` slightly faster: the
+point was the one representation, not speed.
 
 ## Open questions
 

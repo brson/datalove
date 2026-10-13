@@ -454,7 +454,7 @@ impl IrInterpreter {
                         datalove_rt::c::dtlv_rti_shadow_alloc(rt, size, align)
                     }
                 };
-                frame.set_fat_pointer(offset, ptr, tydesc);
+                frame.set_dynamic_place(offset, ptr);
             }
         }
     }
@@ -492,16 +492,11 @@ impl IrInterpreter {
             .map(|(i, op)| self.resolve_arg(mode(i), op, frame, frames))
             .collect();
         for (i, op) in args.iter().enumerate() {
-            // A generic native's signature says `data` wherever it was
-            // written over a type parameter, which is not copy, while what is
-            // bound there may be; whether the argument is given up is its own
-            // descriptor's to say, which agrees with its type's wherever there
-            // is no type parameter.
-            let moves = if bindings.is_empty() {
-                !native_ctx.param_types[i].is_copy()
-            } else {
-                !is_plain(&arg_vals[i])
-            };
+            // A type parameter is never copy, while what is bound to one may
+            // be, so whether a dynamic argument is given up is its own
+            // descriptor's to say.
+            let ty = &native_ctx.param_types[i];
+            let moves = if ty.is_dynamic() { !is_plain(&arg_vals[i]) } else { !ty.is_copy() };
             if mode(i) == ParamMode::In && moves {
                 Self::mark_source_dropped_local(op, frame);
             }

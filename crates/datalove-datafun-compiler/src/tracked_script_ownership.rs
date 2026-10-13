@@ -9,11 +9,9 @@ use std::collections::HashMap;
 use bct::text::TextSpan;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ast::spans::DatafunSpans;
-use datalove_datafun_ir::IrType;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
 use datalove_diagnostic::DiagnosticBuilderExt;
 
-use crate::IrTypeExt;
 use crate::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ownership::{
     self as ownership_analysis, DropSchedule, BindingInfo, FunctionAnalysis,
@@ -114,16 +112,6 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 // Type Conversion Helpers
 // ============================================================================
 
-/// Convert tycheck expression types to IR types.
-fn convert_expr_types<'db>(
-    db: &'db dyn salsa::Database,
-    types: &datalove_datafun_tycheck::ExprTypes<'db>,
-) -> datalove_datafun_sema::ExprIrTypes<'db> {
-    types.iter()
-        .map(|(key, ty)| (*key, IrType::from_tycheck(db, ty)))
-        .collect()
-}
-
 /// Analyze ownership for a script fragment unit.
 ///
 /// Memoized: if typecheck_result, statements, and auto_adapt_mode match a previous call,
@@ -137,22 +125,17 @@ pub fn analyze_script_fragment_tracked<'db>(
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    // Convert tycheck types to IR types.
-    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let expr_types = typecheck_result.expr_types(db);
 
     // Build map of function name -> resolved param types for type alias support.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
+    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
     for (name, func_type) in typecheck_result.function_types(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
-        func_param_types.insert(name.text(db).S(), param_types);
+        func_param_types.insert(name.text(db).S(), func_type.param_types(db).C());
     }
 
     // Analyze functions in this unit for ownership.
     let func_analyses_result = ownership_analysis::analyze_script_functions_with_mode(
-        db, &expr_types, typecheck_result.call_targets(db), &statements, Some(&func_param_types),
+        db, expr_types, typecheck_result.call_targets(db), &statements, Some(&func_param_types),
         auto_adapt_mode,
     );
 
@@ -179,7 +162,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, &expr_types, typecheck_result.call_targets(db), &statements, auto_adapt_mode,
+        db, expr_types, typecheck_result.call_targets(db), &statements, auto_adapt_mode,
         dead_externals, external_consts,
     );
 
@@ -246,11 +229,10 @@ pub fn analyze_script_expr_tracked<'db>(
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
-    // Convert tycheck types to IR types.
-    let expr_types = convert_expr_types(db, typecheck_result.expr_types(db));
+    let expr_types = typecheck_result.expr_types(db);
 
     let analysis = ownership_analysis::analyze_expr_with_mode(
-        db, expr, &expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
+        db, expr, expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
         dead_externals, external_consts,
     );
 

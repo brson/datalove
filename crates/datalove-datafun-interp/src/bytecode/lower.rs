@@ -65,8 +65,7 @@ struct Lowering<'a> {
 impl<'a> Lowering<'a> {
     /// The static type of an operand, where its layout and descriptor are the
     /// truth about what is there: anything in this unit but a dynamic type,
-    /// whose frame bytes are a fat pointer that only the IR walker reads
-    /// through.
+    /// whose frame bytes are a pointer that only the IR walker reads through.
     fn typed(&self, op: &Operand) -> Option<&'a IrType> {
         self.typed_any(op).filter(|ty| !ty.is_dynamic())
     }
@@ -87,16 +86,16 @@ impl<'a> Lowering<'a> {
 
     /// Where an operand's descriptor comes from: the layout where its static
     /// type says, otherwise the frame, at run time -- a dynamic parameter's
-    /// from the caller, a reference's from its descriptor word, which only a
-    /// reference to a dynamic type has.
+    /// from the caller, a reference to a dynamic type's from the descriptor
+    /// table.
     fn desc(&self, op: &Operand) -> Option<Desc> {
         if self.typed(op).is_some() {
             return Some(Desc::Static(self.desc_of(op)?));
         }
         match op {
             Operand::Param(id) => Some(Desc::Param(id.0)),
-            Operand::ValueRef(id) => match self.layout.ref_desc_offsets[id.0 as usize] {
-                Some(_) => Some(Desc::Ref(id.0)),
+            Operand::ValueRef(id) => match self.layout.value_entries[id.0 as usize] {
+                Some(entry) => Some(Desc::Table(entry)),
                 None => Some(Desc::Static(self.desc_of(op)?)),
             },
             _ => None,
@@ -239,9 +238,8 @@ impl<'a> Lowering<'a> {
             }
             for (i, instr) in block.instructions.iter().enumerate() {
                 self.index = i;
-                // An instruction on a value of a
-                // dynamic type runs on the walker, which reads it through its
-                // fat pointer.
+                // An instruction on a value of a dynamic type runs on the
+                // walker, which reads it through its pointer.
                 // A call is the exception: its arguments are read through the
                 // frame, and its result written so, wherever it is dynamic.
                 let call = matches!(instr, Instruction::Call { .. });
@@ -330,20 +328,33 @@ impl<'a> Lowering<'a> {
         }, escapes)
     }
 
-    /// Where an operand of a dynamic type keeps its pointer and descriptor,
-    /// if it is one the frame records nothing else about: a value's fat
-    /// pointer, a parameter's `Value`, or an untracked slot's fat pointer.
-    fn fat_loc(&self, op: &Operand) -> Option<Loc> {
+    /// Where an operand of a dynamic type keeps its pointer, and where its
+    /// descriptor is, if it is one the frame records nothing else about: a
+    /// value's or an untracked slot's pointer and its table entry, or a
+    /// parameter's `Value`.
+    fn dynamic_loc(&self, op: &Operand) -> Option<(Loc, Loc)> {
         let ty = self.typed_any(op)?;
         if !ty.is_dynamic() || matches!(ty, IrType::Ref(_)) {
             return None;
         }
+        let layout = self.layout;
+        let entry = |e: Option<u32>| {
+            let e = e.expect("a dynamic place has a table entry");
+            Loc::direct(layout.table_offset + e * std::mem::size_of::<usize>() as u32)
+        };
         match op {
-            Operand::Value(v) => Some(Loc::direct(self.layout.value_offsets[v.0 as usize])),
-            Operand::Slot(s) if self.layout.slot_tracking[s.0 as usize].is_none() => {
-                Some(Loc::direct(self.layout.slot_offsets[s.0 as usize]))
+            Operand::Value(v) => Some((
+                Loc::direct(layout.value_offsets[v.0 as usize]),
+                entry(layout.value_entries[v.0 as usize]),
+            )),
+            Operand::Slot(s) if layout.slot_tracking[s.0 as usize].is_none() => Some((
+                Loc::direct(layout.slot_offsets[s.0 as usize]),
+                entry(layout.slot_entries[s.0 as usize]),
+            )),
+            Operand::Param(p) => {
+                let at = layout.param_offsets[p.0 as usize];
+                Some((Loc::direct(at), Loc::direct(at + std::mem::size_of::<usize>() as u32)))
             }
-            Operand::Param(p) => Some(Loc::direct(self.layout.param_offsets[p.0 as usize])),
             _ => None,
         }
     }
@@ -353,16 +364,17 @@ impl<'a> Lowering<'a> {
     fn lower_dynamic_move(&self, instr: &Instruction) -> Option<Op> {
         use datalove_datafun_ir::SlotDest;
         let (dst, src) = match instr {
-            Instruction::Move { dest, src } => (self.fat_loc(&Operand::Value(*dest))?, self.fat_loc(src)?),
+            Instruction::Move { dest, src } => (self.dynamic_loc(&Operand::Value(*dest))?, self.dynamic_loc(src)?),
             Instruction::SlotLoadMove { dest, slot } => {
-                (self.fat_loc(&Operand::Value(*dest))?, self.fat_loc(&Operand::Slot(*slot))?)
+                (self.dynamic_loc(&Operand::Value(*dest))?, self.dynamic_loc(&Operand::Slot(*slot))?)
             }
             Instruction::SlotStoreMove { dest: SlotDest::Local(slot), value } => {
-                (self.fat_loc(&Operand::Slot(*slot))?, self.fat_loc(value)?)
+                (self.dynamic_loc(&Operand::Slot(*slot))?, self.dynamic_loc(value)?)
             }
             _ => return None,
         };
-        Some(Op::CopyFat { dst, src })
+        // Both sides are of the one type, and so share a descriptor.
+        Some(Op::CopyDyn { dst: dst.0, src: src.0, desc: src.1 })
     }
 
     /// Whether an instruction reads, makes or writes into a value of a
@@ -489,9 +501,8 @@ impl<'a> Lowering<'a> {
             }
             Instruction::ListElementRef { dest, list, index } => {
                 let Some(i) = self.loc(index) else { return false };
-                // Static only where the reference has no descriptor word to
-                // write.
-                let static_ref = self.layout.ref_desc_offsets[dest.0 as usize].is_none();
+                // Static only where the reference is not to a dynamic type.
+                let static_ref = self.layout.value_entries[dest.0 as usize].is_none();
                 if let (true, Some(IrType::List(elem)), Some(l)) = (static_ref, self.typed(list), self.loc(list)) {
                     let size = layout_of(elem).size;
                     self.emit(Op::ListElementRef { dst: self.value_loc(*dest), list: l, index: i, size });
@@ -586,10 +597,10 @@ impl<'a> Lowering<'a> {
             Instruction::OpAssignChecked { overflow, place, op, rhs } => {
                 self.lower_checked_assign(*overflow, *op, place, rhs)
             }
-            // A reference to a const, where the reference has no descriptor
-            // word to write.
+            // A reference to a const, where the reference is not to a dynamic
+            // type.
             Instruction::StaticRef { dest, value } => {
-                if self.layout.ref_desc_offsets[dest.0 as usize].is_some() {
+                if self.layout.value_entries[dest.0 as usize].is_some() {
                     return false;
                 }
                 // A reference's descriptor holds what it points at as its one field.
@@ -604,7 +615,7 @@ impl<'a> Lowering<'a> {
                 true
             }
             Instruction::GetFieldRef { dest, src, field_index } => {
-                if self.layout.ref_desc_offsets[dest.0 as usize].is_some() {
+                if self.layout.value_entries[dest.0 as usize].is_some() {
                     return false;
                 }
                 let (Some(ty), Some(src)) = (self.typed(src), self.loc(src)) else { return false };
@@ -1115,9 +1126,9 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::Switch { disc, table: t as u32 });
             }
             Terminator::Return { value: None } => self.emit(Op::ReturnUnit),
-            Terminator::Return { value: Some(op) } if self.fat_loc(op).is_some() => {
-                let src = self.fat_loc(op).expect("just checked");
-                self.emit(Op::ReturnFat { src });
+            Terminator::Return { value: Some(op) } if self.dynamic_loc(op).is_some() => {
+                let (src, desc) = self.dynamic_loc(op).expect("just checked");
+                self.emit(Op::ReturnDyn { src, desc });
             }
             Terminator::Return { value: Some(op) } => {
                 match (self.typed(op), self.consumed(op)) {

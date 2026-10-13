@@ -47,13 +47,14 @@ use datalove_datafun_ast::ast::{
 use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ast::ast::Binding;
 use datalove_datafun_ir::IrType;
+use datalove_datafun_common::Type;
 use datalove_datafun_sema::Destructure;
 
 // Re-export types from sema for backward compatibility.
 pub use datalove_datafun_sema::{
     StmtKey, BindingId, TrackingCategory, BindingInfo, AnalysisError,
     OwnershipRecoveryHint, format_analysis_errors, DropSchedule, FunctionAnalysis,
-    AdaptSites, ExprIrTypes, CallTargets,
+    AdaptSites, ExprTypes, CallTargets,
 };
 
 // Re-export AutoAdaptMode for callers.
@@ -95,8 +96,12 @@ enum OutParamInitState {
 /// Context for ownership and liveness analysis.
 struct AnalysisCtx<'a, 'db> {
     db: &'db dyn salsa::Database,
-    /// Pre-converted expression types (IrType).
-    expr_types: &'a ExprIrTypes<'db>,
+    /// The typechecker's expression types, converted to IR types as they
+    /// are asked for.
+    expr_types: &'a ExprTypes<'db>,
+    /// The type parameters of the function being analyzed, which its
+    /// expression types are written over.
+    type_params: &'db [bct::text::InternedText<'db>],
     /// Next binding ID to allocate.
     next_binding: u32,
     /// Next global statement ID for drop schedule keys.
@@ -216,7 +221,7 @@ enum ScopeKind {
 impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn new(
         db: &'db dyn salsa::Database,
-        expr_types: &'a ExprIrTypes<'db>,
+        expr_types: &'a ExprTypes<'db>,
         auto_adapt_mode: AutoAdaptMode,
         dead_externals: Vec<String>,
         outer_consts: OuterConsts,
@@ -225,6 +230,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         Self {
             db,
             expr_types,
+            type_params: &[],
             next_binding: 0,
             next_stmt_id: 0,
             bindings: Vec::new(),
@@ -658,7 +664,17 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Get the type of an expression.
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        self.expr_types.get(&ExprKey::of(self.db, expr)).cloned().unwrap_or(IrType::Unit)
+        self.expr_types.get(&ExprKey::of(self.db, expr))
+            .map(|ty| self.ir_type(ty))
+            .unwrap_or(IrType::Unit)
+    }
+
+    /// The IR type of a typechecker type in the function being analyzed.
+    fn ir_type(&self, ty: &Type<'db>) -> IrType {
+        match ty {
+            Type::Datalit(ty) => IrType::from_datalit_generic(self.db, ty, self.type_params),
+            Type::Function(_) => todo!("function types in IR"),
+        }
     }
 
     /// If the expression is a simple name, return its binding ID.
@@ -1157,9 +1173,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    resolved_param_types: Option<&[IrType]>,
+    resolved_param_types: Option<&[Type<'db>]>,
 ) -> FunctionAnalysis<'db> {
     analyze_function_with_mode(db, func, expr_types, call_targets, resolved_param_types, AutoAdaptMode::Disabled)
 }
@@ -1168,15 +1184,16 @@ pub fn analyze_function<'db>(
 pub fn analyze_function_with_mode<'db>(
     db: &'db dyn salsa::Database,
     func: StmtFun<'db>,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    resolved_param_types: Option<&[IrType]>,
+    resolved_param_types: Option<&[Type<'db>]>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> FunctionAnalysis<'db> {
     // A function body cannot name script-level bindings.
     let mut ctx = AnalysisCtx::new(
         db, expr_types, auto_adapt_mode, Vec::new(), OuterConsts::AllUnresolved, call_targets,
     );
+    ctx.type_params = func.type_params(db);
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
@@ -1187,8 +1204,8 @@ pub fn analyze_function_with_mode<'db>(
         let name = param.name.text(db).S();
         // Use resolved type if available, otherwise fall back to AST type hint.
         let ty = match resolved_param_types {
-            Some(types) => types[i].clone(),
-            None => IrType::from_type_hint(db, &param.type_hint),
+            Some(types) => ctx.ir_type(&types[i]),
+            None => IrType::from_type_hint_generic(db, &param.type_hint, ctx.type_params),
         };
         // A const parameter is a constant, and like any other const is
         // borrowed wherever it is named. It arrives by reference.
@@ -1238,10 +1255,10 @@ pub fn analyze_function_with_mode<'db>(
 /// This is needed when type aliases are used in function parameters.
 pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
-    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = HashMap::new();
     let mut errors = Vec::new();
@@ -1272,10 +1289,10 @@ pub fn analyze_script_functions<'db>(
 /// Analyze all functions in a list of statements with configurable auto-adapt mode.
 pub fn analyze_script_functions_with_mode<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
-    func_param_types: Option<&HashMap<String, Vec<IrType>>>,
+    func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = HashMap::new();
@@ -1345,7 +1362,7 @@ pub struct ScriptAnalysis<'db> {
 /// - AOT: conditional drop (checks tracking byte)
 pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
 ) -> ScriptAnalysis<'db> {
@@ -1357,7 +1374,7 @@ pub fn analyze_script_statements<'db>(
 /// Analyze script statements for ownership with configurable auto-adapt mode.
 pub fn analyze_script_statements_with_mode<'db>(
     db: &'db dyn salsa::Database,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     stmts: &[Statement<'db>],
     auto_adapt_mode: AutoAdaptMode,
@@ -1439,7 +1456,7 @@ pub struct ExprAnalysis<'db> {
 pub fn analyze_expr<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
 ) -> ExprAnalysis<'db> {
     analyze_expr_with_mode(db, expr, expr_types, call_targets, AutoAdaptMode::Disabled, Vec::new(), Vec::new())
@@ -1449,7 +1466,7 @@ pub fn analyze_expr<'db>(
 pub fn analyze_expr_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr: datalove_datafun_ast::ast::ExprFun<'db>,
-    expr_types: &ExprIrTypes<'db>,
+    expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,

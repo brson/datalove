@@ -226,8 +226,8 @@ impl IrInterpreter {
             words[1 + 2 * i] = arg.ptr as usize;
             words[2 + 2 * i] = arg.tydesc as usize;
         }
-        // A dynamic destination is where its fat pointer says, described by
-        // what is there; so is a forwarder's dynamic result.
+        // A dynamic destination is where its pointer says, described by its
+        // table entry; so is a forwarder's dynamic result.
         let dest = if call.dest_tydesc.is_null() {
             regs.frame.value_dest(call.dest_id)
         } else {

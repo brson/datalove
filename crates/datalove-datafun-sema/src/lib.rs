@@ -23,9 +23,6 @@ use datalove_datafun_ir::IrType;
 /// where the id counter happened to stand.
 pub type ExprTypes<'db> = BTreeMap<ExprKey<'db>, datalove_datafun_common::Type<'db>>;
 
-/// The same table after conversion to IR types.
-pub type ExprIrTypes<'db> = BTreeMap<ExprKey<'db>, IrType>;
-
 /// Resolved call targets, keyed by the call's identity.
 ///
 /// Calls are numbered separately from other expressions, so a key from one

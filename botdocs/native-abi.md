@@ -66,10 +66,10 @@ hands over its descriptor-table entry for the type it has, so the descriptor
 is just as truthful there; a native never sees a `data` standing in for a type
 parameter. See [Generics: how it works](generics.md).
 
-A native's own signature says `data` where it was written over a type
-parameter (`NativeContext::param_types`), because one compiled native takes any
-type there. That is the native's business only; what it is handed is described
-by the descriptor beside it.
+A native's IR signature (`NativeContext::param_types`) keeps its type
+parameters as `IrType::Param`, as a generic function's does. Whether an `in`
+argument at one is given up is then the argument's own descriptor's to say,
+since a copy value bound to a type parameter is copied rather than moved.
 
 ## Return-position type parameters
 

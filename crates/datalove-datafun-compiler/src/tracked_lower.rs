@@ -21,7 +21,6 @@ use datalove_datafun_tycheck::{
 use datalove_datafun_const::{
     inline_function_consts, inline_module_functions, promote_function_consts,
 };
-use crate::IrTypeExt;
 use crate::const_cache::ConstCache;
 use crate::const_eval::{
     const_type, evaluate_body_consts, evaluate_const, evaluate_instantiation_consts, ConstEvalEnv,
@@ -411,16 +410,13 @@ pub fn lower_module<'db>(
 
     // Build maps of function name -> resolved types from exports.
     // This is needed to resolve type aliases in function parameters and return types.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-    let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
+    let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
     for (name, func_type) in typecheck_result.exports(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
+        let param_types = func_type.param_types(db).clone();
         func_param_types.insert(name.text(db).S(), param_types);
 
-        let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+        let return_type = func_type.return_type(db);
         func_return_types.insert(name.text(db).S(), return_type);
     }
 
@@ -661,11 +657,18 @@ pub fn add_native_rider_units<'db>(
                     continue;
                 };
 
-                // Convert types from tycheck to IR.
-                let param_types: Vec<IrType> = func_type.param_types(db)
-                    .iter()
-                    .map(|ty| IrType::from_tycheck(db, ty))
-                    .collect();
+                // The rider interface worked out the type parameters, and
+                // which of them a call site has to hand descriptors for, from
+                // the signature.
+                let generics = rider.generic_functions.iter()
+                    .find(|(n, _)| *n == *func_name)
+                    .map(|(_, generics)| generics);
+                let type_params = generics.map(|g| g.type_params.as_slice()).unwrap_or_default();
+                let ir_type = |ty: &datalove_datafun_tycheck::Type<'_>| match ty {
+                    datalove_datafun_tycheck::Type::Datalit(ty) => IrType::from_datalit_generic(db, ty, type_params),
+                    datalove_datafun_tycheck::Type::Function(_) => todo!("function types in IR"),
+                };
+                let param_types: Vec<IrType> = func_type.param_types(db).iter().map(ir_type).collect();
                 // Convert AST ParamMode to IR ParamMode.
                 let param_modes: Vec<datalove_datafun_ir::ParamMode> = func_type.param_modes(db)
                     .iter()
@@ -676,14 +679,9 @@ pub fn add_native_rider_units<'db>(
                         datalove_datafun_ast::ast::ParamMode::Mut => datalove_datafun_ir::ParamMode::Mut,
                     })
                     .collect();
-                let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
-
-                // The type parameters a call site has to hand descriptors
-                // for, which the rider interface worked out from the
-                // signature.
-                let undetermined_type_params = rider.generic_functions.iter()
-                    .find(|(n, _)| *n == *func_name)
-                    .map(|(_, generics)| generics.undetermined.clone())
+                let return_type = ir_type(&func_type.return_type(db));
+                let undetermined_type_params = generics
+                    .map(|g| g.undetermined.clone())
                     .unwrap_or_default();
 
                 let native_ctx = NativeContext::new(
@@ -797,15 +795,12 @@ pub fn lower_module_functions<'db>(
     let function_analyses = single_ownership.function_analyses(db);
 
     // Build maps of function name -> resolved types from exports.
-    let mut func_param_types: HashMap<String, Vec<IrType>> = HashMap::new();
-    let mut func_return_types: HashMap<String, IrType> = HashMap::new();
+    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
+    let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
     for (name, func_type) in single_typecheck.exports(db) {
-        let param_types: Vec<IrType> = func_type.param_types(db)
-            .iter()
-            .map(|ty| IrType::from_tycheck(db, ty))
-            .collect();
+        let param_types = func_type.param_types(db).clone();
         func_param_types.insert(name.text(db).S(), param_types);
-        let return_type = IrType::from_tycheck(db, &func_type.return_type(db));
+        let return_type = func_type.return_type(db);
         func_return_types.insert(name.text(db).S(), return_type);
     }
 

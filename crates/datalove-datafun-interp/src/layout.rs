@@ -97,21 +97,21 @@ pub struct IrLayout {
     /// function that takes space on it.
     pub shadow_mark_offset: Option<u32>,
     /// Each value and slot of a dynamic type, as its frame offset and its
-    /// type's descriptor table entry. Its frame bytes are a fat pointer, set
-    /// on entry to space on the shadow stack its descriptor sizes.
+    /// type's descriptor table entry. Its frame bytes are a pointer, set on
+    /// entry to space on the shadow stack its descriptor sizes.
     pub dynamic_places: Vec<(u32, u32)>,
-    /// The descriptor word of each reference value that has one: a reference
-    /// to a dynamic type, whose second word it is. Any other reference points
-    /// at what its static type says.
-    pub ref_desc_offsets: Vec<Option<u32>>,
+    /// For each value of a dynamic type, the descriptor table entry that
+    /// describes it, and for each reference to one, the entry that describes
+    /// what it points at. Any other value is described by its static type.
+    pub value_entries: Vec<Option<u32>>,
+    /// For each slot of a dynamic type, the descriptor table entry that
+    /// describes it.
+    pub slot_entries: Vec<Option<u32>>,
     /// Where the view a `TensorIndexRef` makes of a rank 2 or higher tensor's
     /// row is built, for each value one is a reference to: in the frame, so it
     /// lasts as long as a reference can, which is the frame, and costs nothing
     /// to make again.
     pub tensor_view_offsets: Vec<Option<u32>>,
-    /// For each tensor view reference to a dynamic type, the descriptor table
-    /// entry of the view's type, which is what the reference describes.
-    pub tensor_view_entries: Vec<Option<u32>>,
     /// Where the liveness bytes start, if this frame keeps them: one per value,
     /// then one per slot, then one per parameter.
     pub liveness_offset: Option<u32>,
@@ -174,21 +174,21 @@ impl IrLayout {
         let frame = FrameLayout::compute(
             param_types, value_types, slot_types, tracked_slots, tracked_params);
 
-        // A reference to a dynamic type is a fat pointer, and is moved as one:
-        // two words, plainly copied. Its second word is its descriptor word.
-        let fat_reference = tydesc_table.get_or_create(&IrType::Tuple(vec![IrType::U64, IrType::U64]));
+        // A reference to a dynamic type is a pointer, and is moved as one: a
+        // word, plainly copied. What it points at is its table entry's to say.
+        let dynamic_reference = tydesc_table.get_or_create(&IrType::Tuple(vec![IrType::U64]));
 
         // The interpreter reads and writes a value by its descriptor's size, so
         // the descriptor has to agree with the layout the offsets came from.
         //
-        // A value of a dynamic type has none: its frame bytes are a fat
-        // pointer, and the descriptor is the one in it. Null says so to the
-        // frame's accessors.
+        // A value of a dynamic type has none: its frame bytes are a pointer,
+        // and its descriptor is its table entry. Null says so to the frame's
+        // accessors.
         let mut described = |types: &[IrType], places: &[SlotLayout]| -> Vec<*const TyDesc> {
             types.iter().zip(places).map(|(ty, place)| {
                 if ty.is_dynamic() {
                     return match ty {
-                        IrType::Ref(_) => fat_reference,
+                        IrType::Ref(_) => dynamic_reference,
                         _ => std::ptr::null(),
                     };
                 }
@@ -256,20 +256,16 @@ impl IrLayout {
             offset += 2 * WORD;
             at
         });
-        let mut ref_desc_offsets = vec![None; value_types.len()];
-        // A reference to a dynamic type carries its descriptor in its own
-        // second word.
-        for (i, ty) in value_types.iter().enumerate() {
-            if matches!(ty, IrType::Ref(_)) && ty.is_dynamic() {
-                ref_desc_offsets[i] = Some(frame.values[i].offset + WORD);
-            }
-        }
+        // A reference is described by what it points at.
+        let entry_describing = |ty: &IrType| match ty {
+            IrType::Ref(inner) if inner.is_dynamic() => Some(entry_of(inner)),
+            IrType::Ref(_) => None,
+            _ => ty.is_dynamic().then(|| entry_of(ty)),
+        };
+        let value_entries = value_types.iter().map(entry_describing).collect();
+        let slot_entries = slot_types.iter().map(entry_describing).collect();
         let mut tensor_view_offsets = vec![None; value_types.len()];
-        let mut tensor_view_entries = vec![None; value_types.len()];
         for id in extras.tensor_views {
-            if let IrType::Ref(view) = &value_types[id.0 as usize] && view.is_dynamic() {
-                tensor_view_entries[id.0 as usize] = Some(entry_of(view));
-            }
             tensor_view_offsets[id.0 as usize] = Some(offset);
             offset += align_up(std::mem::size_of::<datalove_rtdt::Tensor>() as u32, WORD);
         }
@@ -302,9 +298,9 @@ impl IrLayout {
             table_cache: Default::default(),
             shadow_mark_offset,
             dynamic_places,
-            ref_desc_offsets,
+            value_entries,
+            slot_entries,
             tensor_view_offsets,
-            tensor_view_entries,
             liveness_offset,
             is_script: extras.is_script,
             bytecode: std::cell::OnceCell::new(),

@@ -569,14 +569,8 @@ pub fn lower_expression<'db>(
                 .collect();
             let param_types: Vec<IrType> = target
                 .map(|t| t.func(ctx.db).params(ctx.db).iter()
-                    .map(|p| {
-                        if datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params) {
-                            IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
-                                .substitute(&bindings)
-                        } else {
-                            IrType::from_type_hint(ctx.db, &p.type_hint)
-                        }
-                    })
+                    .map(|p| IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
+                        .substitute(&bindings))
                     .collect())
                 .unwrap_or_default();
 

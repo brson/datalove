@@ -426,13 +426,14 @@ pub(crate) enum Op {
     /// Jump through the switch table `table`.
     Switch { disc: Loc, table: u32 },
     Return { src: Loc, len: u32 },
-    /// In a generic: copy the value the pointer and
-    /// descriptor at `src` name to where the pointer at `dst` says, as many
-    /// bytes as the descriptor says. A dynamic value's fat pointer and a
-    /// parameter's `Value` are both such a pair.
-    CopyFat { dst: Loc, src: Loc },
-    /// Return the value the pointer and descriptor at `src` name.
-    ReturnFat { src: Loc },
+    /// In a generic: copy the value the pointer at `src` points at to where
+    /// the pointer at `dst` says, as many bytes as the descriptor at `desc`
+    /// says. Each names a word of the frame: a dynamic place's pointer, a
+    /// parameter's `Value`, and a table entry or that `Value`'s descriptor.
+    CopyDyn { dst: Loc, src: Loc, desc: Loc },
+    /// Return the value the pointer at `src` points at, described by the
+    /// descriptor at `desc`.
+    ReturnDyn { src: Loc, desc: Loc },
     /// Return `Ok` of the `len` bytes at `src`, the payload at `at`.
     ReturnOk { src: Loc, at: u32, len: u32 },
     ReturnUnit,
@@ -447,8 +448,8 @@ enum Desc {
     Static(*const rtdt::TyDesc),
     /// With parameter `n`, which the caller supplied.
     Param(u32),
-    /// With what value `n`, a reference, points at.
-    Ref(u32),
+    /// Descriptor table entry `n`.
+    Table(u32),
 }
 
 /// A switch's cases and default, as op indices.

@@ -43,12 +43,11 @@ fn error_layout() -> TypeLayout {
     }
 }
 
-/// The layout of a fat pointer: a value's address and its descriptor.
-///
-/// What a dynamic type is laid out as, and a reference to one.
-pub fn fat_pointer_layout() -> TypeLayout {
+/// The layout of a pointer: what a dynamic type is laid out as, and a
+/// reference to one.
+pub fn dynamic_layout() -> TypeLayout {
     TypeLayout {
-        size: 2 * std::mem::size_of::<*const u8>() as u32,
+        size: std::mem::size_of::<*const u8>() as u32,
         align: std::mem::align_of::<*const u8>() as u32,
     }
 }
@@ -56,14 +55,14 @@ pub fn fat_pointer_layout() -> TypeLayout {
 /// The layout of an IR type.
 ///
 /// A dynamic type -- one that mentions a type parameter -- is laid out as a
-/// fat pointer, whatever its form: its own layout is not known until a call,
-/// so a frame holds where the value is and what describes it. The value's
-/// own layout is the descriptor's to say, and the helpers below that give an
-/// offset within a type refuse a dynamic one rather than give an answer for
-/// the fat pointer.
+/// pointer, whatever its form: its own layout is not known until a call, so a
+/// frame holds where the value is, and the function's descriptor table entry
+/// for the type says what it is. The value's own layout is the descriptor's
+/// to say, and the helpers below that give an offset within a type refuse a
+/// dynamic one rather than give an answer for the pointer.
 pub fn layout_of(ty: &IrType) -> TypeLayout {
     if ty.is_dynamic() {
-        return fat_pointer_layout();
+        return dynamic_layout();
     }
     match ty {
         IrType::Param(_) => unreachable!("a type parameter is dynamic"),
@@ -116,7 +115,7 @@ pub fn layout_of(ty: &IrType) -> TypeLayout {
 /// Refuse a part whose layout is not known until a call.
 ///
 /// Only the descriptor can say where things are in a dynamic type; an answer
-/// worked out from its fat pointer's layout would be wrong without saying so.
+/// worked out from its pointer's layout would be wrong without saying so.
 fn assert_static<'a>(mut parts: impl Iterator<Item = &'a IrType>, what: &str) {
     if let Some(part) = parts.find(|p| p.is_dynamic()) {
         panic!("the layout of {what} holding {part}, which is dynamic, was asked of its static type");
@@ -258,10 +257,10 @@ mod tests {
 
     /// A container's layout does not depend on its element type.
     ///
-    /// A container of a type parameter is held behind a fat pointer like any
+    /// A container of a type parameter is held behind a pointer like any
     /// dynamic type, but its header is the same few words whatever it holds;
-    /// this is what would let one live in the frame with only its descriptor
-    /// beside it (the plan's "inline containers").
+    /// this is what would let one live in the frame itself (the plan's
+    /// "inline containers").
     #[test]
     fn a_container_is_the_same_shape_whatever_it_holds() {
         let cases: Vec<(IrType, IrType)> = vec![

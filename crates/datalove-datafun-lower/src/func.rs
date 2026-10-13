@@ -18,6 +18,8 @@ use datalove_datafun_sema::FunctionAnalysis;
 use super::context::{DataFiles, LowerCtx};
 use super::stmt::lower_statement;
 use super::LowerError;
+use super::ir_ext::IrTypeExt;
+use datalove_datafun_common::Type;
 use datalove_datafun_sema::{ExprTypes, CallTargets};
 
 /// Lower a function to IR with available module functions in scope.
@@ -40,8 +42,8 @@ pub fn lower_function_for_module<'db>(
     func: ast::StmtFun<'db>,
     func_id: FuncId,
     analysis: FunctionAnalysis<'db>,
-    resolved_param_types: Option<&[IrType]>,
-    resolved_return_type: Option<IrType>,
+    resolved_param_types: Option<&[Type<'db>]>,
+    resolved_return_type: Option<Type<'db>>,
     module_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
@@ -68,8 +70,8 @@ pub fn lower_function_body<'db>(
     func_id: FuncId,
     func: ast::StmtFun<'db>,
     analysis: FunctionAnalysis<'db>,
-    resolved_param_types: Option<&[IrType]>,
-    resolved_return_type: Option<IrType>,
+    resolved_param_types: Option<&[Type<'db>]>,
+    resolved_return_type: Option<Type<'db>>,
 ) -> Result<IrCodeUnit, LowerError> {
     // Assert no analysis errors - caller should have checked.
     assert!(
@@ -100,16 +102,12 @@ pub fn lower_function_body<'db>(
 
     let type_params = func.type_params(ctx.db).clone();
 
-    // A return mentioning a type parameter keeps it as written, and the call
-    // site substitutes what it binds. Everything else keeps its resolved type.
-    ctx.return_type = match func.return_type(ctx.db) {
-        Some(hint) if datalove_datafun_ir::type_hint_mentions_param(&hint, &type_params) => {
-            Some(IrType::from_type_hint_generic(ctx.db, &hint, &type_params))
-        }
-        _ => match resolved_return_type {
-            Some(ty) => Some(ty),
-            None => func.return_type(ctx.db).map(|ty| IrType::from_type_hint(ctx.db, &ty)),
-        },
+    // The signature's types are written over the function's own type
+    // parameters, which the call site binds.
+    let ir_type = |ty: &Type<'db>| IrType::from_tycheck_generic(ctx.db, ty, &type_params);
+    ctx.return_type = match resolved_return_type {
+        Some(ty) => Some(ir_type(&ty)),
+        None => func.return_type(ctx.db).map(|hint| IrType::from_type_hint_generic(ctx.db, &hint, &type_params)),
     };
 
     // Allocate ParamIds for parameters with correct types and modes.
@@ -130,16 +128,9 @@ pub fn lower_function_body<'db>(
             ast::ParamMode::Ref => ParamMode::Ref,
             ast::ParamMode::Mut => ParamMode::Mut,
         };
-        // A parameter mentioning a type parameter keeps it as written, as the
-        // return does. Everything else keeps its resolved type.
-        let mentions_param = datalove_datafun_ir::type_hint_mentions_param(&p.type_hint, &type_params);
-        let param_type = if mentions_param {
-            IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
-        } else {
-            match resolved_param_types {
-                Some(types) => types[i].clone(),
-                None => IrType::from_type_hint(ctx.db, &p.type_hint),
-            }
+        let param_type = match resolved_param_types {
+            Some(types) => IrType::from_tycheck_generic(ctx.db, &types[i], &type_params),
+            None => IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params),
         };
         let id = ctx.fresh_param(param_type, mode);
         let operand = Operand::Param(id);

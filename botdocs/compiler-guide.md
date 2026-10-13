@@ -553,9 +553,9 @@ assignment (`interp/950_index_write_forms`).
 
 In an operand position a non-copy index is borrowed like a field, so `a[i]?@`
 clones once rather than cloning through `ListGet` and then cloning that. It
-holds for an element of a type parameter too: the reference is a fat pointer
-carrying the element's descriptor, so reading through it reads the bytes as
-what they are. See
+holds for an element of a type parameter too: the reference is described by
+the element type's descriptor table entry, so reading through it reads the
+bytes as what they are. See
 [Generics](generics.md#user-content-operations-on-a-dynamic-value).
 
 A copy element keeps the direct read: there is nothing to move out and nothing
@@ -588,9 +588,9 @@ enclosing module's or script's consts in scope.
 ## Generics
 
 A generic function is compiled once. Inside it, a value whose type mentions a
-type parameter is a fat pointer -- the value in its real layout, and its type
-descriptor -- and the descriptors the body needs are built at run time from
-one per type parameter, which the caller hands over.
+type parameter is a pointer at the value in its real layout, described by
+the function's descriptor table, which is built at run time from one
+descriptor per type parameter that the caller hands over.
 **[Generics: how it works](generics.md)** is the full description: storage,
 calls, operations on a dynamic value, the runtime entries, and what each
 engine does. What follows is the orientation.
@@ -603,8 +603,8 @@ was.
 **Types.** A generic's parameter and return types are as written
 (`IrType::from_type_hint_generic`), with `IrType::Param(i)` for its `i`th type
 parameter, and so is every value and slot type in its body. A type mentioning
-one is *dynamic* (`IrType::is_dynamic`) and laid out as a fat pointer, two
-words; its real layout is its descriptor's.
+one is *dynamic* (`IrType::is_dynamic`) and laid out as a pointer; its real
+layout is its descriptor's.
 
 **Descriptors.** A generic takes one descriptor per type parameter after its
 ordinary parameters (`FunctionContext::type_param_count`), a count read off the
@@ -1634,9 +1634,9 @@ slot or tracking byte is where compiled code for the same body keeps it -- the
 precondition for entering compiled code from the middle of an interpreted loop.
 What only the interpreter keeps comes after that layout's bytes, in an
 extension compiled code never sees: the parameters as a `[Value]`, a generic's
-type-parameter descriptors and descriptor table, a descriptor word for each
-reference to a dynamic type (`ref_desc_offsets`), and the liveness bytes where
-they are kept. A frame is its bytes, and
+type-parameter descriptors and descriptor table, and the liveness bytes where
+they are kept. A dynamic value, slot or reference is described by its table
+entry (`IrLayout::value_entries`, `slot_entries`). A frame is its bytes, and
 `Frame` is a pointer to them and the layout.
 Liveness works as it does in compiled code: a tracked slot or `out` parameter
 says from its tracking byte, and everything else is taken to hold something --

@@ -557,8 +557,7 @@ impl IrInterpreter {
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = element_ptr;
                 }
-                // And what it points at, which the list's descriptor says.
-                frame.set_value_tydesc(*dest, element_tydesc);
+                frame.check_referent(*dest, element_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::Widen { dest, src } => {
@@ -713,7 +712,7 @@ impl IrInterpreter {
                 let pointee = unsafe { (*(*dest_slot.tydesc).type_info.tuple.fields).tydesc };
                 let ptr = self.static_const_with_tydesc(value, pointee);
                 unsafe { *(dest_slot.ptr as *mut *const u8) = ptr; }
-                frame.set_value_tydesc(*dest, pointee);
+                frame.check_referent(*dest, pointee);
                 frame.mark_value_live(*dest);
             }
             Instruction::RefSetField { dest, field_path, value } => {
@@ -976,14 +975,12 @@ impl IrInterpreter {
                 };
                 assert_eq!(status, datalove_rt::c::RtStatus::Ok, "MapValueRef failed");
 
-                // Store pointer in dest, and what it points at: the map's real
-                // value type rather than the type parameter a generic's static
-                // type names.
+                // Store pointer in dest.
                 let dest_slot = frame.value_dest(*dest);
                 unsafe {
                     *(dest_slot.ptr as *mut *mut u8) = value_ptr;
                 }
-                frame.set_value_tydesc(*dest, value_tydesc);
+                frame.check_referent(*dest, value_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::MapUpsert { map, key, value } => {
@@ -1125,8 +1122,7 @@ impl IrInterpreter {
                     };
                     let dest_slot = frame.value_dest(*dest);
                     unsafe { *(dest_slot.ptr as *mut *mut u8) = element_ptr; }
-                    // And what it points at, which the tensor's descriptor says.
-                    frame.set_value_tydesc(*dest, element_tydesc);
+                    frame.check_referent(*dest, element_tydesc);
                 } else {
                     // Rank > 1: a view of the row, made where the frame keeps
                     // it for this reference.
@@ -1145,11 +1141,6 @@ impl IrInterpreter {
                     }
                     let dest_slot = frame.value_dest(*dest);
                     unsafe { *(dest_slot.ptr as *mut *mut u8) = view_ptr as *mut u8; }
-                    // A view of a tensor of a dynamic type is described by
-                    // its own table entry.
-                    if let Some(entry) = frame.layout().tensor_view_entries[dest.0 as usize] {
-                        frame.set_value_tydesc(*dest, frame.table_entry(entry as usize));
-                    }
                 }
                 frame.mark_value_live(*dest);
             }
@@ -1186,7 +1177,7 @@ impl IrInterpreter {
                 let field_tydesc = unsafe {
                     datalove_rt::c::dtlv_rti_field_tydesc(src_val.tydesc, *field_index)
                 };
-                frame.set_value_tydesc(*dest, field_tydesc);
+                frame.check_referent(*dest, field_tydesc);
                 frame.mark_value_live(*dest);
             }
             Instruction::SetField { slot, field_path, value } => {

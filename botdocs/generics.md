@@ -30,13 +30,15 @@ erasure that [Generics and Specialization](plan-generics.md) describes.
 
 - A **dynamic type** is an IR type that mentions a type parameter: `T`,
   `(T, u32)`, `?T`, `[T]`, `%{K = V}` (`IrType::is_dynamic`).
-- A **dynamic value** is a value of a dynamic type. In a frame it is a **fat
-  pointer**, `{ptr, tydesc}`, two words whatever the type. `ptr` is the value
-  in its real layout; `tydesc` describes that layout.
-- The value a fat pointer points at lives on a **shadow stack** owned by the
-  runtime, or in the caller's frame for an argument.
-- A **reference to a dynamic type** *is* a fat pointer, at storage someone else
-  owns. It gets no storage of its own, and moving it copies its two words.
+- A **dynamic value** is a value of a dynamic type. In a frame it is a
+  **pointer**, one word whatever the type, at the value in its real layout.
+  What describes it is the function's **descriptor table** entry for its
+  type, the same for every value of that type throughout a call.
+- The value lives on a **shadow stack** owned by the runtime, or in the
+  caller's frame for an argument.
+- A **reference to a dynamic type** is a pointer at storage someone else owns,
+  described by the table entry for what it points at. It gets no storage of
+  its own.
 - A generic takes **one descriptor per type parameter**, after its ordinary
   arguments. Anything compound the body needs is built from those.
 
@@ -47,7 +49,8 @@ parameter is laid out and passed as it always was.
 
 The invariant the whole thing rests on:
 
-> A value's descriptor is always beside it. A static type describes a layout
+> A value's descriptor is always to hand: its static type's, or its type's
+> entry in the function's descriptor table. A static type describes a layout
 > only where it mentions no type parameter.
 
 ## Types in the IR
@@ -57,13 +60,13 @@ around it: `(T, u32)` is `Tuple([Param(0), U32])`. A function's parameter and
 return types are as written (`IrType::from_type_hint_generic`), and so is every
 value and slot type in its body.
 
-Layout has one rule for them: a dynamic type is laid out as a fat pointer. The
+Layout has one rule for them: a dynamic type is laid out as a pointer. The
 static offset helpers (`aggregate_field_offsets`, `option_payload_offset` and
 the rest) are never asked about a dynamic type; every site that would ask
 takes the descriptor path instead.
 
 `IrType::Data` is the language's own `data` type and nothing else. `T` bound to
-`data` is a fat pointer at a `data`, like any other binding.
+`data` is a pointer at a `data`, like any other binding.
 
 ## Descriptors
 
@@ -108,7 +111,7 @@ since a value defined in a loop reuses its storage every iteration.
 
 **The dynamic frame.** After filling the table, a function with dynamic values
 bumps the shadow stack once for all of them, each sized and aligned from its
-descriptor, and points each fat pointer there. The shadow stack grows with the
+descriptor, and points each dynamic place there. The shadow stack grows with the
 number of IR values, never with the iteration count.
 
 **Release.** The function records the shadow stack's top and limit at entry
@@ -156,19 +159,19 @@ implements an instruction whose operand is dynamic from the descriptor.
 | Operation | On a dynamic value |
 |---|---|
 | move, store, load, block argument | copy `desc.size` bytes into the destination's storage |
-| move of a reference | copy the two words |
+| move of a reference | copy the pointer |
 | read through a reference | copy or clone `desc.size` bytes into the destination's storage |
 | clone | `dtlv_rti_clone_local` into the destination's storage |
 | drop | `dtlv_rti_any_destroy_local`; the storage goes with the frame |
-| field, element, payload reference | a fat pointer: `ptr` plus the part's offset, and the part's descriptor |
+| field, element, payload reference | `ptr` plus the part's offset, from the descriptor; the part's own table entry describes it |
 | tuple, struct, option, term, enum, result construction | each part stored at its offset from the destination's descriptor |
 | option and result tests | the tag, at offset 0 whatever the payload |
 | list, set, map, tensor, table literals | built by the runtime from the table entry's descriptor |
 | bounded operations (`ord`, `fixedint`, `float`) | `dyn_ops` on `(ptr, tydesc)` pairs |
 | `debuglog` | the runtime's printer on the pair |
 
-A projection off a fat pointer is a fat pointer, so what a reference points at
-is worked out where it is made and travels with it.
+What a reference to a dynamic type points at is the table entry for its
+pointee type, so a projection works out only where the part is.
 
 ## Natives
 
@@ -177,7 +180,8 @@ and then a descriptor for each type parameter no argument determines -- one
 appearing only in the return, like `fixedint_zero<T>(): T`.
 `NativeContext::undetermined_type_params` lists those positions, and a call's
 bindings at them are the descriptors (`NativeContext::undetermined_bindings`).
-A generic calling a native passes its fat pointers through, and the trailing
+A generic calling a native passes each dynamic argument's pointer with its
+table entry, and the trailing
 descriptors come from its table.
 
 A rider is never handed a `data` standing in for something else: a result slot
@@ -213,15 +217,19 @@ which is harmless: descriptors compare structurally (`same_tydesc`).
 
 **The interpreter.** A dynamic value or slot has a null static descriptor in
 `IrLayout`, and the frame accessors (`Frame::value`, `value_dest`, `slot`,
-`slot_dest`) read the fat pointer when they see one, so the walker's
-instructions, already driven by the descriptor in hand, mostly needed nothing.
-A reference to a dynamic type stores its descriptor in a word of the frame
-(`ref_desc_offsets`). `enter_dynamic` fills the table and takes shadow space
-after `Frame::enter`; `leave_dynamic` gives it back.
+`slot_dest`) read the pointer and the table entry (`value_entries`,
+`slot_entries`) when they see one, and hand the walker a `(ptr, tydesc)`
+pair, so its instructions, already driven by the descriptor in hand, mostly
+needed nothing. A reference to a dynamic type is described by the entry for
+what it points at. `enter_dynamic` fills the table and takes shadow space
+after `Frame::enter`; `leave_dynamic` gives it back. A parameter is a
+`(ptr, tydesc)` pair in the frame, as the interpreter's calls pass every
+argument.
 
 **The bytecode** runs a generic's body: an instruction on a dynamic value runs
-on the walker (`Op::Ir`), except a move and a return (`CopyFat`,
-`ReturnFat`). A call with bindings is planned like any other, and a generic
+on the walker (`Op::Ir`), except a move and a return (`CopyDyn`,
+`ReturnDyn`, which name the frame word holding the descriptor: a table entry
+or a parameter's). A call with bindings is planned like any other, and a generic
 wrapper around a native is forwarded straight to the native.
 
 **Cranelift**, AOT and JIT (`codegen/dynamic.rs`). A dynamic value is an
@@ -235,7 +243,7 @@ compile rather than compiles wrong. Sizes come from the descriptor
 the trampoline out of it carry the type-parameter descriptors after the
 arguments, and so does a planned call from the bytecode into JIT code. A
 function whose arguments and descriptors together exceed `MAX_DIRECT_ARGS`
-words is left to the interpreter. OSR reads the table and the fat pointers
+words is left to the interpreter. OSR reads the table and the dynamic places
 from the interpreter's frame (`OsrSpec::table_offset`).
 
 **C AOT** follows Cranelift's choices in C. The signature ends with one
