@@ -477,6 +477,32 @@ pub unsafe fn list_remove_impl(
     RtStatus::Ok
 }
 
+/// Exchange the elements at `i` and `j` where they are.
+///
+/// `Error` if either is past the end, which leaves the list as it was.
+pub unsafe fn list_swap_impl(
+    list_value_mut: *mut u8,
+    list_tydesc: rtdt::TyDescRef,
+    i: rtdt::IndexRepr,
+    j: rtdt::IndexRepr,
+) -> RtStatus {
+    let element_ty = list_tydesc.list_element_ty();
+    let list = unsafe { ListMut::new(list_value_mut as *mut List, element_ty) };
+    let size = list.size();
+    if i >= size || j >= size {
+        return RtStatus::Error;
+    }
+    if i != j {
+        let element_size = element_ty.size() as usize;
+        // SAFETY: two distinct elements of the list, each `element_size`
+        // bytes, so they do not overlap.
+        unsafe {
+            std::ptr::swap_nonoverlapping(list.element_ptr_mut(i), list.element_ptr_mut(j), element_size)
+        };
+    }
+    RtStatus::Ok
+}
+
 // ============================================================================
 // Capacity Management
 // ============================================================================

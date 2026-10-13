@@ -172,17 +172,29 @@ generic calls, and found two things on its first run:
   of garbage or crashed. It had been there since phase 5 of generics by
   reference; the fixtures enter compiled code with every function compiled at
   once, or from code that is not generic. Fixed, with a JIT path test.
-- **`sys/std/list.swap` is O(n).** It is written in datalove as two removes
-  and two inserts, there being no other way to exchange two elements of a
-  `[T]` without a placeholder, so each swap shifts the rest of the list. Under
-  AOT `memmove` is over half the profile: the heap's swaps make the heapsort
-  quadratic in data moved. A runtime swap would fix it.
+- **`sys/std/list.swap` was O(n).** It was written in datalove as two
+  removes and two inserts, there being no other way to exchange two elements
+  of a `[T]` without a placeholder, so each swap shifted the rest of the list.
+  Under AOT `memmove` was over half the profile: the heap's swaps made the
+  heapsort quadratic in data moved. It is now a native over a runtime entry,
+  `dtlv_rti_list_swap_local`, exchanging the two elements' bytes in place.
 
-First timings, 200 iterations, ms (mean of three):
+Timings, 200 iterations, ms (mean of three), with the swap as it was and as
+it is:
 
-| interp | JIT | AOT | Python | Julia | Java | V8 |
-|---|---|---|---|---|---|---|
-| 7132 | 2533 | 2291 | 1611 | 748 | 388 | 343 |
+| | interp | JIT | AOT | Python | Julia | Java | V8 |
+|---|---|---|---|---|---|---|---|
+| O(n) swap | 7132 | 2533 | 2291 | 1611 | 748 | 388 | 343 |
+| native swap | 4152 | 766 | 600 | 1605 | 677 | 373 | 347 |
+
+What is left is what generics cost. Under AOT the profile is comparisons:
+each `ord.less` calls the rider's `ord_compare`, which calls the runtime's
+`cmp_total`, which checks that the two descriptors agree (`eq_tydesc`, 5%)
+and then walks the values by descriptor (`cmp_value`, 13%); together with
+`less_at` and the `less` wrapper, over 40% of the run. Java and V8 compare
+through one virtual or inline-cached call. Comparing a scalar `T` without
+leaving compiled code, and not re-checking descriptors a generic's table
+already guarantees agree, are where the next factor of two is.
 
 ## Additions that would open the rest
 

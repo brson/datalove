@@ -1221,6 +1221,23 @@ pub extern "C-unwind" fn dlr_std__list_remove(
 }
 
 #[no_mangle]
+pub extern "C-unwind" fn dlr_std__list_swap(
+    rt: *mut u8,
+    list_ptr: *mut u8, list_td: *const u8,
+    i_ptr: *const u8, _i_td: *const u8,
+    j_ptr: *const u8, _j_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    let i = unsafe { *(i_ptr as *const rtdt::Index) };
+    let j = unsafe { *(j_ptr as *const rtdt::Index) };
+    let status = unsafe {
+        datalove_rti::call::dtlv_rti_list_swap_local(rt, list_ptr, list_td as *const rtdt::TyDesc, i.0, j.0)
+    };
+    unsafe { write_result(out, status == datalove_rti::RtStatus::Ok) };
+    OK
+}
+
+#[no_mangle]
 pub extern "C-unwind" fn dlr_std__list_reserve(
     rt: *mut u8,
     list_ptr: *mut u8, list_td: *const u8,

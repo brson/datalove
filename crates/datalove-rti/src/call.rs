@@ -892,6 +892,17 @@ pub unsafe fn dtlv_rti_list_remove_local(rt: LocalRtHandle, list_value_mut: *mut
     unsafe { (crate::table(rt).dtlv_rti_list_remove_local)(rt, list_value_mut, list_tydesc, index, option_value_out, option_tydesc) }
 }
 
+/// Calls [`RtiTable::dtlv_rti_list_swap_local`](crate::table::RtiTable::dtlv_rti_list_swap_local).
+///
+/// # Safety
+///
+/// `rt` must be a handle the runtime gave out, and the remaining
+/// arguments must be what that function requires.
+#[inline]
+pub unsafe fn dtlv_rti_list_swap_local(rt: LocalRtHandle, list_value_mut: *mut u8, list_tydesc: *const rtdt::TyDesc, i: rtdt::IndexRepr, j: rtdt::IndexRepr) -> RtStatus {
+    unsafe { (crate::table(rt).dtlv_rti_list_swap_local)(rt, list_value_mut, list_tydesc, i, j) }
+}
+
 /// Calls [`RtiTable::dtlv_rti_list_reserve_local`](crate::table::RtiTable::dtlv_rti_list_reserve_local).
 ///
 /// # Safety

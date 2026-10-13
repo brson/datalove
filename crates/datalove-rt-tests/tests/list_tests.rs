@@ -3318,3 +3318,56 @@ fn test_list_full_index_refuses_growth() -> AnyResult<()> {
     assert_eq!(status, datalove_rt::c::RtStatus::Ok);
     Ok(())
 }
+
+/// Swapping exchanges two elements where they are, and swapping out of bounds
+/// is an error that leaves the list as it was.
+#[test]
+fn test_list_swap() -> AnyResult<()> {
+    let rt = datalove_rt::c::dtlv_rti_init();
+    let arena = TyDescArena::new();
+    assert!(!rt.is_null());
+
+    let (list_tydesc, element_tydesc) = create_list_u32_tydesc(&arena);
+
+    let mut list = rtdt::List {
+        data: ptr::null(),
+        size: rtdt::Index::ZERO,
+        capacity: rtdt::Index::ZERO,
+    };
+    let list_ptr = &mut list as *mut rtdt::List as *mut u8;
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_create_local(rt, list_ptr, list_tydesc) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    // Push [0, 10, 20, 30, 40].
+    for i in 0u32..5 {
+        let mut value = i * 10;
+        let status = unsafe {
+            datalove_rt::c::dtlv_rti_list_push_local(
+                rt, list_ptr, list_tydesc, &mut value as *mut u32 as *mut u8, element_tydesc,
+            )
+        };
+        assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    }
+    let elements = |list: &rtdt::List| -> Vec<u32> {
+        unsafe { std::slice::from_raw_parts(list.data as *const u32, list.size.as_usize()).to_vec() }
+    };
+
+    let swap = |i, j| unsafe { datalove_rt::c::dtlv_rti_list_swap_local(rt, list_ptr, list_tydesc, i, j) };
+    assert_eq!(swap(1, 3), datalove_rt::c::RtStatus::Ok);
+    assert_eq!(elements(&list), vec![0, 30, 20, 10, 40]);
+    assert_eq!(swap(4, 0), datalove_rt::c::RtStatus::Ok);
+    assert_eq!(elements(&list), vec![40, 30, 20, 10, 0]);
+    assert_eq!(swap(2, 2), datalove_rt::c::RtStatus::Ok);
+    assert_eq!(elements(&list), vec![40, 30, 20, 10, 0]);
+    assert_eq!(swap(0, 5), datalove_rt::c::RtStatus::Error);
+    assert_eq!(swap(5, 5), datalove_rt::c::RtStatus::Error);
+    assert_eq!(elements(&list), vec![40, 30, 20, 10, 0]);
+
+    let status = unsafe { datalove_rt::c::dtlv_rti_list_destroy_local(rt, list_ptr, list_tydesc) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+    let status = unsafe { datalove_rt::c::dtlv_rti_shutdown(rt) };
+    assert_eq!(status, datalove_rt::c::RtStatus::Ok);
+
+    Ok(())
+}

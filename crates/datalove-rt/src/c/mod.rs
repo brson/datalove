@@ -2080,6 +2080,26 @@ pub unsafe extern "C-unwind" fn dtlv_rti_list_remove_local(
     }
 }
 
+/// Exchange the elements at `i` and `j` of a list where they are, which
+/// nothing written in datalove can do without taking one out and shifting the
+/// rest. `Error` if either is past the end, which leaves the list as it was.
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn dtlv_rti_list_swap_local(
+    rt: LocalRtHandle,
+    list_value_mut: *mut u8,
+    list_tydesc: *const rtdt::TyDesc,
+    i: rtdt::IndexRepr,
+    j: rtdt::IndexRepr,
+) -> RtStatus {
+    debug_assert!(!rt.is_null(), "rt is null");
+    debug_assert!(!list_value_mut.is_null(), "list_value_mut is null");
+    debug_assert!(!list_tydesc.is_null(), "list_tydesc is null");
+    debug_assert_aligned(list_value_mut, list_tydesc, "list_swap:list");
+    unsafe {
+        crate::c::impls::list::list_swap_impl(list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc), i, j)
+    }
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn dtlv_rti_list_reserve_local(
     rt: LocalRtHandle,
