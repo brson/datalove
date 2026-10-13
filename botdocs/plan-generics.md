@@ -588,7 +588,7 @@ this area has had.
 >
 > **Fixed for fields.** A reference now carries the descriptor of what it points
 > at, and offsets come from that; see
-> [What each backend carries](generics.md#user-content-what-each-backend-carries) and
+> (What each backend carries)(generics.md#user-content-what-each-backend-carries) and
 > `backend/15_borrowed_generic_aggregate.dfs`. Element references still do not,
 > which is the entry left in [Known issues](issues.md).
 >
@@ -603,7 +603,7 @@ this area has had.
 > their stride from `operand_type(list)`, so a borrowed index inside a generic
 > landed between elements and segfaulted. They take it from the container's
 > descriptor now, and the element's descriptor travels with the reference; see
-> [What each backend carries](generics.md#user-content-what-each-backend-carries).
+> (What each backend carries)(generics.md#user-content-what-each-backend-carries).
 >
 > The reading half was also less done than it said. A map lookup inside a
 > generic described the map by its static type, a `%{data = data}`, and returned
