@@ -1,6 +1,6 @@
 ---
 title: "Precise drops"
-category: news
+category: devlog
 summary: "Lowering now tracks most drops precisely"
 ---
 

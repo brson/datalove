@@ -1,6 +1,6 @@
 ---
 title: "Const parameter specialization"
-category: news
+category: devlog
 summary: "Functions can now have const parameters that trigger specialization"
 ---
 

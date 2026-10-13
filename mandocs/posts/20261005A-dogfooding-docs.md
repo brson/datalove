@@ -1,6 +1,6 @@
 ---
 title: "Dogfooding docs"
-category: dev
+category: devlog
 summary: "Writing docs makes project better"
 ---
 

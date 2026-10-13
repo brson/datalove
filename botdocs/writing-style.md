@@ -202,8 +202,10 @@ dynamic tracking still wins" is a post someone building a different language
 will keep.
 
 The test: would someone who will never run Datalove learn something they can
-use? If yes, it is a `dev` post. If no, it is a `news` post -- a short devlog,
-which is fine, but should not be dressed up as more.
+use? If yes, it is a `design` post. If no, it is a `devlog` post -- a short
+note on what landed, which is fine, but should not be dressed up as more.
+Checkpoints and releases are `milestone` posts. The builder rejects any other
+category; new ones are declared in `crates/datalove-cli/src/main.rs`.
 
 Two other audiences, served differently:
 
@@ -224,7 +226,7 @@ When reviewing, look for:
   jargon or context a practitioner from outside the project would not have?
 - **Spine.** Does the middle hold together with *but* and *therefore*, or does
   it wander? Point out sections that do not advance the argument. The usual
-  shape of a `dev` post -- problem, exploration, results, lessons, future work
+  shape of a `design` post -- problem, exploration, results, lessons, future work
   -- is fine if the exploration has a spine.
 - **Buried takeaway.** If the main point first appears in the lessons at the
   end, suggest moving it up.
@@ -239,8 +241,8 @@ When reviewing, look for:
   outside the project would not know.
 - **Factual errors.** Check claims about the code and the language against
   the code and the specs.
-- **Mechanics.** Frontmatter (`title`, `category` of `dev` or `news`,
-  `summary`), file name `YYYYMMDDX-slug.md`, broken relative links, typos.
+- **Mechanics.** Frontmatter (`title`, `category` of `design`, `devlog`,
+  or `milestone`, `summary`), file name `YYYYMMDDX-slug.md`, broken relative links, typos.
 
 When editing, preserve the voice:
 

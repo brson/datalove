@@ -1,6 +1,6 @@
 ---
 title: "Native riders"
-category: dev
+category: design
 summary: "Calling Rust from datalove through a universal package-level FFI"
 ---
 

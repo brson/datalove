@@ -598,15 +598,15 @@ th {
     color: var(--bg);
 }
 
-.category-news {
+.category-devlog {
     background: var(--accent-1);
 }
 
-.category-release {
-    background: var(--accent-2);
+.category-milestone {
+    background: var(--accent-3);
 }
 
-.category-dev {
+.category-design {
     background: var(--accent-4);
 }
 

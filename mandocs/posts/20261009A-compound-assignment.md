@@ -1,6 +1,6 @@
 ---
 title: "Compound assignment and bigints"
-category: dev
+category: design
 summary: "Compound assignment leads to bigint optimization"
 ---
 

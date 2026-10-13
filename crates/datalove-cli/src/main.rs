@@ -1193,7 +1193,7 @@ impl DocsCommand {
                     site_title: "Datalove",
                     site_description: "Updates from Datalove",
                     base_url: "https://datalove-language.net",
-                    categories: &["news", "release", "dev"],
+                    categories: &["design", "devlog", "milestone"],
                     excerpt_bytes: 600,
                 }),
             },
