@@ -30,7 +30,7 @@ DATALOVE = ROOT / "target/release/datalove"
 AOT_DIR = ROOT / "target/benchvs"
 HISTORY = AOT_DIR / "history"
 
-BENCHES = ["fib", "sum", "primes", "wordfreq", "sieve", "mandelbrot", "nbody"]
+BENCHES = ["fib", "sum", "primes", "wordfreq", "sieve", "mandelbrot", "nbody", "ordered"]
 ROUNDS = 3
 TIME_LINE = re.compile(r"^time: ([\d.]+) ms compiling, ([\d.]+) ms running$", re.M)
 

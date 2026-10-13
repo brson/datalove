@@ -138,6 +138,52 @@ And why, from a profile of each:
   one makes as a variable; tiered runs in 537 ms, the same as compiling
   everything first.)
 
+## A generics benchmark of our own
+
+AWFY has no benchmark that would push datalove's generics. Its generic code is
+its own collection library (`som/Vector`, `Dictionary`, `Set`) holding object
+references and taking closures (`forEach`, `sort(Comparator)`), used by CD,
+DeltaBlue, Havlak and Json. Ported, Havlak, the most portable of them, would
+run on the built-in lists, sets and maps of `u32` node numbers, through thin
+`sys/std` forwarders bound to `u32`: generics in name only.
+
+So `benchvs/ordered` (October 2026) is written for benchvs, in all five
+languages. Generic ordered-collection algorithms, each written out: a binary
+min-heap used as a heapsort (sift up, sift down, swaps), a check that the
+result is sorted, a lower-bound binary search for a stream of probes, and a
+count of distinct elements. Each runs at four element types in turn from one
+call site -- `u32`, `f64`, `string` and `(string, u32)` -- over 1000 values
+from AWFY's `Random`, narrowed so that about half repeat: plain scalars, a
+value that owns memory, and a compound that needs a built descriptor. The
+generic functions call each other, so descriptors are forwarded and the
+one-entry table caches see alternating bindings. Java is generic over
+`Comparable`, boxing its numbers as real Java generic code does; JavaScript
+passes a comparison function; Python compares by duck typing; Julia
+specializes on `isless`. All print 400769264 at the committed 200
+iterations.
+
+It replaced `benchvs/generics.dfs`, a datalove-only loop of three trivial
+generic calls, and found two things on its first run:
+
+- **A JIT bug.** A planned call from interpreted bytecode into compiled code
+  handed over, as the return pointer for a result of a dynamic type, the
+  frame word holding the value's pointer rather than the storage it points
+  at. The result's tag landed in the pointer, and the caller read an error out
+  of garbage or crashed. It had been there since phase 5 of generics by
+  reference; the fixtures enter compiled code with every function compiled at
+  once, or from code that is not generic. Fixed, with a JIT path test.
+- **`sys/std/list.swap` is O(n).** It is written in datalove as two removes
+  and two inserts, there being no other way to exchange two elements of a
+  `[T]` without a placeholder, so each swap shifts the rest of the list. Under
+  AOT `memmove` is over half the profile: the heap's swaps make the heapsort
+  quadratic in data moved. A runtime swap would fix it.
+
+First timings, 200 iterations, ms (mean of three):
+
+| interp | JIT | AOT | Python | Julia | Java | V8 |
+|---|---|---|---|---|---|---|
+| 7132 | 2533 | 2291 | 1611 | 748 | 388 | 343 |
+
 ## Additions that would open the rest
 
 Modest, in the order they unlock the most:

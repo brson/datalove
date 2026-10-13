@@ -1,0 +1,23 @@
+// A generic, called once, whose loop calls another generic thousands of times.
+// With OSR held off the loop stays interpreted, and once the callee is
+// compiled the loop's call site enters it as a planned call. The callee's
+// result is of a dynamic type, so it goes where the caller's pointer for it
+// says.
+
+fun wrap<T>(x: T): !(T, u32)
+  ret ok (x, 1)
+end fun
+
+fun count<T>(ref x: T, n: u32): !u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    let pair = wrap(x@)!
+    set total = icall add_wrapping_u32(total, pair.1)
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret ok total
+end fun
+
+debuglog(count(ref "word", 5000))
+debuglog(count(ref (: u8 / 7), 5000))

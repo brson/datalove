@@ -11,16 +11,25 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn fixture() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jit_paths/calls.dfs")
+    fixture_named("calls")
 }
 
-/// Run `script --no-sys` with `args` before the fixture, giving stderr.
+fn fixture_named(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/fixtures/jit_paths/{name}.dfs"))
+}
+
+/// Run `script --no-sys` with `args` before the calls fixture, giving stderr.
 fn run(args: &[&str]) -> String {
+    run_on(&fixture(), args)
+}
+
+/// Run `script --no-sys` with `args` before `fixture`, giving stderr.
+fn run_on(fixture: &Path, args: &[&str]) -> String {
     let output = Command::new(env!("CARGO_BIN_EXE_datalove"))
         .arg("script")
         .arg("--no-sys")
         .args(args)
-        .arg(fixture())
+        .arg(fixture)
         .output()
         .expect("the binary runs");
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
@@ -39,9 +48,14 @@ fn numbers(stats: &str, prefix: &str) -> Vec<u64> {
         .collect()
 }
 
-/// What the program prints, the same under the JIT as interpreted.
+/// What the calls fixture prints, the same under the JIT as interpreted.
 fn check_output(stats: &str) {
-    let want = run(&[]);
+    check_output_of(&fixture(), stats)
+}
+
+/// What `fixture` prints, the same under the JIT as interpreted.
+fn check_output_of(fixture: &Path, stats: &str) {
+    let want = run_on(fixture, &[]);
     let got: String = stats.lines()
         .filter(|l| !l.starts_with("jit:") && !l.starts_with("time:") && !l.trim().is_empty()
             && !l.starts_with(' ') && !l.starts_with("interpreted"))
@@ -65,6 +79,24 @@ fn calls_into_compiled_code_are_planned() {
     assert!(planned + 10 >= entered,
         "{planned} of {entered} entries were planned; the rest went through the dispatcher:\n{stats}");
     assert!(interpreted <= 200, "{interpreted} calls interpreted past the threshold:\n{stats}");
+}
+
+/// An interpreted generic's loop calls a compiled generic whose result is of a
+/// dynamic type. The planned call hands compiled code the storage the
+/// caller's frame points at for the result; it once handed over the frame
+/// word holding that pointer, so the result's tag landed in the pointer and
+/// the caller read an error out of garbage.
+#[test]
+fn a_planned_call_returns_a_dynamic_result_into_its_storage() {
+    let fixture = fixture_named("generic_results");
+    let stats = run_on(&fixture, &["--jit", "--jit-osr-threshold", "4000000000", "--jit-stats"]);
+    check_output_of(&fixture, &stats);
+    let [_interpreted, entered, planned, _exited] =
+        numbers(&stats, "jit: calls through the dispatcher:")[..] else {
+        panic!("unexpected calls line in:\n{stats}")
+    };
+    assert!(entered >= 9000 && planned + 10 >= entered,
+        "{planned} of {entered} calls were planned entries into compiled code:\n{stats}");
 }
 
 /// Under the defaults, `drive`'s loop runs 5000 times in its one call, which

@@ -258,8 +258,15 @@ impl IrInterpreter {
         };
         push(self.runtime.handle() as usize);
         if plan.entry.uses_sret {
-            // SAFETY: the destination was lowered against the caller's frame.
-            push(unsafe { call.dest.at(base) } as usize);
+            // A dynamic destination is where its pointer says, not the frame
+            // word that holds the pointer.
+            let dest = if call.dest_tydesc.is_null() {
+                regs.frame.value_dest(call.dest_id).ptr
+            } else {
+                // SAFETY: the destination was lowered against the caller's frame.
+                unsafe { call.dest.at(base) }
+            };
+            push(dest as usize);
         }
         let mut args = [crate::value::Value { ptr: std::ptr::null_mut(), tydesc: std::ptr::null() };
             crate::dispatch::MAX_ENTRY_WORDS];

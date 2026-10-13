@@ -1,0 +1,269 @@
+// Ordered benchmark - generic ordered-collection algorithms at four element
+// types: a binary heap used as a heapsort, a check that the result is sorted,
+// a lower-bound binary search for a stream of probes, and a count of distinct
+// elements.
+//
+// Not from Are We Fast Yet, whose generic code is its collection library over
+// object references; this is written for benchvs, to measure what a generic
+// costs where the work is inside it. Every algorithm is written out in each
+// implementation over a total order the element type provides, and is called
+// at u32, f64, string and (string, u32) in turn, so that one call site meets
+// four bindings: plain scalars, a value that owns memory, and a compound of
+// both. The values come from AWFY's Random, so every implementation sorts the
+// same ones.
+//
+// Prints the sum of the per-type checksums.
+
+require module sys/std/list
+require module sys/std/ord
+require module sys/std/string
+require module sys/std/f64
+require module sys/std/index
+require module sys/std/u32
+
+const ITERATIONS: u32 = 200
+const SIZE: u32 = 1000
+
+// AWFY's Random: a 16-bit linear congruential generator.
+fun next(mut seed: u32): u32
+  set seed = icall bitand_u32(
+    icall add_wrapping_u32(icall mul_wrapping_u32(seed, : u32 / 1309), : u32 / 13849),
+    : u32 / 65535)
+  ret seed
+end fun
+
+// Whether `h[i]` sorts before `h[j]`.
+fun less_at<T>(ref h: [T], i: index, j: index): !bool with { T is ord, }
+  ret ok ord.less(ref h[i]!, ref h[j]!)
+end fun
+
+// Add to a binary min-heap, sifting the new element up.
+fun heap_push<T>(mut h: [T], elem: T): !() with { T is ord, }
+  call list.push(mut h, elem)
+  var i = icall sub_wrapping_index(list.len(ref h), : index / 1)
+  loop while i .> 0
+    let parent = icall shr_index(icall sub_wrapping_index(i, : index / 1), : u32 / 1)
+    if not (less_at(ref h, i, parent)!)
+      break
+    end if
+    let swapped = list.swap(mut h, i, parent)
+    set i = parent
+  end loop
+  ret ok ()
+end fun
+
+// Take the least element out of a binary min-heap, sifting the last one down
+// into its place.
+fun heap_pop<T>(mut h: [T]): !?T with { T is ord, }
+  let n = list.len(ref h)
+  if n == 0
+    ret ok none
+  end if
+  let last = icall sub_wrapping_index(n, : index / 1)
+  let swapped = list.swap(mut h, : index / 0, last)
+  let least = list.pop(mut h)
+  var i: index = : index / 0
+  loop
+    let left = icall add_wrapping_index(icall mul_wrapping_index(i, : index / 2), : index / 1)
+    if left >= last
+      break
+    end if
+    var child = left
+    let right = icall add_wrapping_index(left, : index / 1)
+    if right .< last
+      if less_at(ref h, right, left)!
+        set child = right
+      end if
+    end if
+    if not (less_at(ref h, child, i)!)
+      break
+    end if
+    let swapped = list.swap(mut h, i, child)
+    set i = child
+  end loop
+  ret ok least
+end fun
+
+// The elements in order, by pushing every one onto a heap and popping them
+// all off.
+fun heapsort<T>(elems: [T]): ![T] with { T is ord, }
+  var heap: [T] = []
+  var rest = elems
+  loop
+    if list.pop(mut rest) |elem|
+      let pushed = heap_push(mut heap, elem)!
+    else
+      break
+    end if
+  end loop
+  var out: [T] = []
+  loop
+    if heap_pop(mut heap)! |elem|
+      call list.push(mut out, elem)
+    else
+      break
+    end if
+  end loop
+  ret ok out
+end fun
+
+// How many elements sort before the one in front of them: zero for a sorted
+// list.
+fun out_of_order<T>(ref xs: [T]): !u32 with { T is ord, }
+  var count: u32 = 0
+  var i: index = : index / 1
+  let n = list.len(ref xs)
+  loop while i .< n
+    if less_at(ref xs, i, icall sub_wrapping_index(i, : index / 1))!
+      set count = icall add_wrapping_u32(count, : u32 / 1)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok count
+end fun
+
+// The first position in a sorted list whose element does not sort before
+// `elem`.
+fun lower_bound<T>(ref xs: [T], ref elem: T): !index with { T is ord, }
+  var low: index = : index / 0
+  var high = list.len(ref xs)
+  loop while low .< high
+    let mid = icall add_wrapping_index(low, icall shr_index(icall sub_wrapping_index(high, low), : u32 / 1))
+    if ord.less(ref xs[mid]!, ref elem)
+      set low = icall add_wrapping_index(mid, : index / 1)
+    else
+      set high = mid
+    end if
+  end loop
+  ret ok low
+end fun
+
+// For each probe, its lower bound, plus one more where the element there sorts
+// together with it.
+fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 with { T is ord, }
+  var total: u32 = 0
+  let n = list.len(ref xs)
+  var i: index = : index / 0
+  let m = list.len(ref probes)
+  loop while i .< m
+    let at = lower_bound(ref xs, ref probes[i]!)!
+    if u32.from_index(at) |position|
+      set total = icall add_wrapping_u32(total, position)
+    end if
+    if at .< n
+      if ord.equal(ref xs[at]!, ref probes[i]!)
+        set total = icall add_wrapping_u32(total, : u32 / 1)
+      end if
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok total
+end fun
+
+// How many elements of a sorted list differ from the one before.
+fun distinct<T>(ref xs: [T]): !u32 with { T is ord, }
+  let n = list.len(ref xs)
+  if n == 0
+    ret ok 0
+  end if
+  var count: u32 = 1
+  var i: index = : index / 1
+  loop while i .< n
+    if less_at(ref xs, icall sub_wrapping_index(i, : index / 1), i)!
+      set count = icall add_wrapping_u32(count, : u32 / 1)
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ok count
+end fun
+
+// Sort `elems`, check the order, search it for `probes`, and count what is
+// distinct.
+fun checksum<T>(elems: [T], ref probes: [T]): !u32 with { T is ord, }
+  let sorted = heapsort(elems)!
+  let bad = out_of_order(ref sorted)!
+  let found = search_all(ref sorted, ref probes)!
+  let unique = distinct(ref sorted)!
+  ret ok icall add_wrapping_u32(icall add_wrapping_u32(bad, found), unique)
+end fun
+
+// Three letters from `a` to `h`, one for each three of the low nine bits.
+fun word(r: u32): string
+  var s = string.new()
+  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(r, : u32 / 7)))
+  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(icall shr_u32(r, : u32 / 3), : u32 / 7)))
+  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(icall shr_u32(r, : u32 / 6), : u32 / 7)))
+  ret s
+end fun
+
+fun ints(mut seed: u32): [u32]
+  var xs: [u32] = []
+  var i: u32 = 0
+  loop while i .< SIZE
+    call list.push(mut xs, icall rem_u32(next(mut seed), : u32 / 500))
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret xs
+end fun
+
+fun floats(mut seed: u32): [f64]
+  var xs: [f64] = []
+  var i: u32 = 0
+  loop while i .< SIZE
+    call list.push(mut xs, f64.from_u32(icall rem_u32(next(mut seed), : u32 / 500)) * 0.25)
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret xs
+end fun
+
+fun words(mut seed: u32): [string]
+  var xs: [string] = []
+  var i: u32 = 0
+  loop while i .< SIZE
+    call list.push(mut xs, word(next(mut seed)))
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret xs
+end fun
+
+fun pairs(mut seed: u32): [(string, u32)]
+  var xs: [(string, u32)] = []
+  var i: u32 = 0
+  loop while i .< SIZE
+    let r = next(mut seed)
+    call list.push(mut xs, (word(icall shr_u32(r, : u32 / 2)), icall bitand_u32(r, : u32 / 3)))
+    set i = icall add_wrapping_u32(i, : u32 / 1)
+  end loop
+  ret xs
+end fun
+
+fun benchmark(mut seed: u32): !u32
+  var total: u32 = 0
+  let int_probes = ints(mut seed)
+  set total = icall add_wrapping_u32(total, checksum(ints(mut seed), ref int_probes)!)
+  let float_probes = floats(mut seed)
+  set total = icall add_wrapping_u32(total, checksum(floats(mut seed), ref float_probes)!)
+  let word_probes = words(mut seed)
+  set total = icall add_wrapping_u32(total, checksum(words(mut seed), ref word_probes)!)
+  let pair_probes = pairs(mut seed)
+  set total = icall add_wrapping_u32(total, checksum(pairs(mut seed), ref pair_probes)!)
+  ret ok total
+end fun
+
+fun run(): !u32
+  var seed: u32 = 74755
+  var total: u32 = 0
+  var n: u32 = 0
+  loop while n .< ITERATIONS
+    set total = icall add_wrapping_u32(total, benchmark(mut seed)!)
+    set n = icall add_wrapping_u32(n, : u32 / 1)
+  end loop
+  ret ok total
+end fun
+
+let result = run()
+if result |value|
+  debuglog(value)
+else |err|
+  debuglog(false)
+end if

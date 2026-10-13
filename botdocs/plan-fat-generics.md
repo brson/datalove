@@ -442,7 +442,7 @@ interpreted Sieve and the other benchvs benches, the `ord` benchmark from the
 `for` work, the store demo, the compile time of `sys/std`, and a small
 generic over a compound type -- one that needs a built descriptor -- called in
 a loop, which is where the table fill shows. That last is
-`benchvs/generics.dfs`, which is not one of the cross-language benches.
+`benchvs/generics.dfs`, which is not one of the cross-language benches. (It has since been replaced by `benchvs/ordered`, which is, and which pushes generics far harder; see the research doc.)
 
 **Baseline** (October 2026, before any of this; release build, hyperfine, at
 least three runs, mean seconds, on a 4-CPU sandbox):
