@@ -2,6 +2,8 @@
 
 Internal documentation maintained by AI assistants working on the Datalove compiler.
 Specifications, research, design documents, implementation plans, and reports.
+Content here tends to drift, but is often quite useful.
+The [botspec](botspec.md) in particular is usually close to correct and current.
 
 ---
 
