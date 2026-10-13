@@ -1,0 +1,66 @@
+----------
+module local/test/main
+----------
+
+// Sets walk in order, maps by key with each value beside it, and a tensor
+// of rank above 1 by rows, each a view of one rank less.
+
+fun map_total(ref m: %{string = int}): (int, int)
+  var keys = 0
+  var total = 0
+  for k, v in ref m
+    set keys = keys + 1
+    set total = total + v
+  end for
+  ret (keys, total)
+end fun
+
+fun walk_order(ref s: #{u32}): int
+  var n = 0
+  for x in ref s
+    set n = n * 10 + x@
+  end for
+  ret n
+end fun
+
+fun grid_sum(ref g: [|int, 2|]): int
+  var total = 0
+  for row in ref g
+    for cell in ref row
+      set total = total + cell
+    end for
+  end for
+  ret total
+end fun
+
+fun cube_rows(ref c: [|int, 3|]): (index, int)
+  var rows: index = : index / 0
+  var total = 0
+  for i, plane in ref c
+    for row in ref plane
+      for cell in ref row
+        set total = total + cell
+      end for
+    end for
+    set rows = i
+  end for
+  ret (rows, total)
+end fun
+
+fun main(): (int, (int, int), int, (index, int), int)
+  let empty: #{u32} = #{}
+  ret (walk_order(ref #{: u32 / 3, : u32 / 1, : u32 / 2}),
+       map_total(ref %{"a" = 1, "b" = 20}),
+       grid_sum(ref [| 1 2 3, 4 5 6 |]),
+       cube_rows(ref [| 1 2, 3 4,, 5 6, 7 8 |]),
+       walk_order(ref empty))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

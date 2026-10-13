@@ -1,0 +1,47 @@
+require module sys/std/set
+require module sys/std/map
+
+// A `for` follows a set's or a map's chain of leaves. Removing from either
+// borrows between leaves and merges them, so the chain a walk follows after
+// many removals is not the one the inserts built, and every leaf on it has to
+// hold something.
+
+var s: #{u32} = #{}
+var m: %{u32 = u32} = %{}
+var i: u32 = : u32 / 0
+loop while i .< : u32 / 300
+  let inserted = set.insert(mut s, i)
+  call map.insert(mut m, i, i *! : u32 / 2)
+  set i = i +! : u32 / 1
+end loop
+
+// Leave every seventh.
+set i = : u32 / 0
+var j: u32 = : u32 / 0
+loop while i .< : u32 / 300
+  if j != : u32 / 0
+    let removed = set.remove(mut s, ref i)
+    let was = map.remove(mut m, ref i)
+  end if
+  set i = i +! : u32 / 1
+  set j = j +! : u32 / 1
+  if j == : u32 / 7
+    set j = : u32 / 0
+  end if
+end loop
+
+var walked: [u32] = []
+var total: u32 = : u32 / 0
+for x in ref s
+  set walked = [x@]
+  set total = total +! x
+end for
+
+var map_total: u32 = : u32 / 0
+var keys: u32 = : u32 / 0
+for k, v in ref m
+  set map_total = map_total +! v
+  set keys = keys +! : u32 / 1
+end for
+
+let output = (set.len(ref s), total, walked, keys, map_total)

@@ -1,0 +1,4 @@
+// A `for` walks a list, a set, a map or a tensor.
+let n = 3
+for x in ref n
+end for

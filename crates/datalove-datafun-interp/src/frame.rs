@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use datalove_rt::rust::AlignedBuffer;
 use datalove_rtdt::TyDesc;
-use datalove_datafun_ir::{CodeUnitContext, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
+use datalove_datafun_ir::{CodeUnitContext, CursorKind, IrCodeUnit, ParamMode, ValueId, SlotId, ParamId};
 use datalove_datafun_ir::frame_layout::tracking;
 
 use crate::error::InterpError;
@@ -565,6 +565,12 @@ impl Frame {
             unsafe { (*found).size },
             unsafe { (*self.value_deref(id).tydesc).size },
             "reference {:?} is not described as what it was found to point at", id);
+    }
+
+    /// Which cursor a slot of a cursor type holds.
+    #[inline(always)]
+    pub fn cursor_kind(&self, id: SlotId) -> CursorKind {
+        self.layout().slot_cursor_kinds[id.0 as usize].expect("a cursor instruction names a cursor slot")
     }
 
     /// Get destination for a slot.

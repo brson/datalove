@@ -709,6 +709,98 @@ pub fn gen_loop<'db, R: Rng>(
     result
 }
 
+
+/// Generate a `for` over a collection in scope, or `None` if there is none.
+///
+/// The walked variable is frozen for the body: made immutable, so nothing
+/// assigns to it or passes it `mut`, and loop-protected, so nothing moves it.
+/// Each binding is a reference into it, which may be borrowed and cloned but
+/// not moved, so it is loop-protected too.
+pub fn gen_for<'db, R: Rng>(
+    db: &'db dyn salsa::Database,
+    rng: &mut R,
+    config: &WorldGenConfig,
+    ctx: &mut GenContext<'db>,
+    var_counter: &mut usize,
+    indent: &str,
+) -> Option<String> {
+    let walkable: Vec<usize> = ctx.variables.iter().enumerate()
+        .filter(|(_, v)| !ctx.is_consumed(&v.name))
+        .filter(|(_, v)| matches!(v.type_hint,
+            TypeHint::List(_) | TypeHint::Set(_) | TypeHint::Map(_) | TypeHint::Tensor(_)))
+        .map(|(i, _)| i)
+        .collect();
+    if walkable.is_empty() {
+        return Option::None;
+    }
+    let walked = ctx.variables[walkable[rng.gen_range(0..walkable.len())]].clone();
+
+    let elem_type = |rank_one: TypeHint<'db>, t: &datalove_datalit::ast::TypeHintTensor<'db>| {
+        if t.rank == 1 {
+            rank_one
+        } else {
+            TypeHint::Tensor(datalove_datalit::ast::TypeHintTensor {
+                element_type: t.element_type.clone(),
+                rank: t.rank - 1,
+            })
+        }
+    };
+    let index_too = rng.gen_bool(0.4);
+    let bound: Vec<TypeHint<'db>> = match &walked.type_hint {
+        TypeHint::List(l) if index_too => vec![TypeHint::Index, (*l.element_type).clone()],
+        TypeHint::List(l) => vec![(*l.element_type).clone()],
+        TypeHint::Tensor(t) if index_too => vec![TypeHint::Index, elem_type((*t.element_type).clone(), t)],
+        TypeHint::Tensor(t) => vec![elem_type((*t.element_type).clone(), t)],
+        TypeHint::Set(s) => vec![(*s.element_type).clone()],
+        TypeHint::Map(m) => vec![(*m.key_type).clone(), (*m.value_type).clone()],
+        _ => unreachable!("only collections are walkable"),
+    };
+    let names: Vec<String> = bound.iter().map(|_| {
+        let name = format!("v{}", *var_counter);
+        *var_counter += 1;
+        name
+    }).collect();
+
+    let mut result = format!("{}for {} in ref {}\n", indent, names.join(", "), walked.name);
+    let inner_indent = format!("{}  ", indent);
+    ctx.control_flow_depth += 1;
+    ctx.loop_depth += 1;
+
+    let saved_variables = ctx.variables.clone();
+    let saved_consumed = ctx.consumed_variables.clone();
+    let saved_loop_protected = ctx.loop_protected_variables.clone();
+
+    let linear_vars: Vec<String> = ctx.variables.iter()
+        .filter(|v| is_linear_type(&v.type_hint))
+        .map(|v| v.name.clone())
+        .collect();
+    for name in linear_vars {
+        ctx.loop_protect_variable(&name);
+    }
+    ctx.loop_protect_variable(&walked.name);
+    for v in ctx.variables.iter_mut().filter(|v| v.name == walked.name) {
+        v.is_mutable = false;
+    }
+    for (name, type_hint) in names.iter().zip(bound) {
+        ctx.variables.push(Variable { name: name.clone(), type_hint, is_mutable: false });
+        ctx.loop_protect_variable(name);
+    }
+
+    for _ in 0..rng.gen_range(1..=3) {
+        let stmt = gen_loop_body_statement(db, rng, config, ctx, var_counter, &inner_indent);
+        result.push_str(&stmt);
+        result.push('\n');
+    }
+
+    ctx.variables = saved_variables;
+    ctx.consumed_variables = saved_consumed;
+    ctx.loop_protected_variables = saved_loop_protected;
+    ctx.loop_depth -= 1;
+    ctx.control_flow_depth -= 1;
+    result.push_str(&format!("{}end for", indent));
+    Some(result)
+}
+
 /// Generate a simple statement (let, var, set).
 pub(crate) fn gen_simple_statement<'db, R: Rng>(
     db: &'db dyn salsa::Database,
@@ -803,6 +895,15 @@ pub fn gen_body_statement<'db, R: Rng>(
         return gen_if(db, rng, config, ctx, var_counter, indent, true);
     }
 
+    // A `for` wants a collection in scope, which the roll in the table below
+    // rarely comes up with at the same time: left to it, one world in eighty
+    // had a `for`.
+    if !ctx.at_max_depth(config) && config.check_probability(rng, config.for_probability) {
+        if let Some(stmt) = gen_for(db, rng, config, ctx, var_counter, indent) {
+            return stmt;
+        }
+    }
+
     // A `match` is the only way to take an enum apart, and something has to
     // have made one first, so the two are reached for together.
     if !ctx.enums.is_empty() && config.check_probability(rng, config.match_probability) {
@@ -814,7 +915,7 @@ pub fn gen_body_statement<'db, R: Rng>(
         }
     }
 
-    let choice = rng.gen_range(0..12);
+    let choice = rng.gen_range(0..13);
     match choice {
         0..=3 => gen_let(db, rng, config, ctx, var_counter, indent),
         4..=5 => gen_var(db, rng, config, ctx, var_counter, indent),
@@ -822,6 +923,8 @@ pub fn gen_body_statement<'db, R: Rng>(
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         8 if can_if => gen_if(db, rng, config, ctx, var_counter, indent, false),
         9 if can_loop => gen_loop(db, rng, config, ctx, var_counter, indent),
+        12 if can_loop => gen_for(db, rng, config, ctx, var_counter, indent)
+            .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         10..=11 if can_debuglog => gen_debuglog(db, rng, ctx, indent)
             .unwrap_or_else(|| gen_let(db, rng, config, ctx, var_counter, indent)),
         _ => gen_let(db, rng, config, ctx, var_counter, indent),

@@ -84,7 +84,8 @@ statement and the statement words are reserved for nothing. A new statement
 keyword therefore never takes a name away from existing code.
 `and`, `or` and `xor` are read only after an operand, and the words
 inside constructs (`else`, `end`, `case`, `default`, `with`, `is`, `while`
-after `loop`, `module` and `rider` after `require`) only where a name cannot be,
+after `loop`, `in` and `ref` after a `for`'s names, `module` and `rider` after
+`require`) only where a name cannot be,
 so none of them is reserved.
 
 The lists are in `datalove-datalit/src/parser_util.rs`, which both parsers
@@ -1588,6 +1589,28 @@ loop while condition
 end loop
 ```
 
+**For** walks a list, a set, a map or a tensor:
+
+```datalove
+for item in ref xs          // a list's elements, a set's in order, a tensor's rows
+    // body
+end for
+
+for i, item in ref xs       // a list or tensor: i is the index, from 0
+end for
+
+for key, value in ref m     // a map, by key
+end for
+```
+
+The collection is written with `ref` (P079) and is a place: a name, a
+parameter, or a field or element of one (F087). Each element binding is a
+reference into the collection, as a `ref` parameter is: it cannot be moved,
+assigned, or passed `mut` or `out`, and `@` clones it. A tensor of rank above 1
+binds a view of each row, one rank less. An index binding is an `index`. A
+`for` binds one or two names (P078), two on a map and one on a set (F087).
+`break` and `continue` work as in `loop`; `continue` goes to the next element.
+
 `break` exits the innermost loop. `continue` jumps to the next iteration.
 
 **Match** destructures an enum value:
@@ -2024,6 +2047,22 @@ end loop
 ```
 
 Copy types and operator operands (which are borrowed) are exempt.
+
+### 11.4a The Collection a `for` Walks
+
+The collection a `for` walks is frozen for the loop's body, since its element
+bindings point into it. Moving it, assigning to it or through it, and passing
+it `mut` or `out` are errors (D015):
+
+```datalove
+var xs = [1, 2]
+for x in ref xs
+    set xs[0]! = 5     // error: cannot change `xs` while a `for` walks it
+end for
+```
+
+Freezing is by the binding the place is rooted at, as aliasing is, so
+`for x in ref p.items` freezes all of `p`.
 
 ### 11.5 Branch Consistency
 

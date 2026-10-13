@@ -578,6 +578,8 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.loop_depth -= 1;
         }
 
+        Statement::For(stmt) => check_for(ctx, stmt),
+
         Statement::Break(stmt) => {
             if ctx.loop_depth == 0 {
                 let err = ctx.error_break_outside_loop(stmt);
@@ -1059,4 +1061,95 @@ fn require_return_type_for<'db>(
 /// F011, as for the same index in an expression.
 fn report_unindexable<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtSet<'db>, msg: String) -> TypeError {
     ctx.report_set_error(stmt, "F011", msg, "this cannot be indexed", None)
+}
+
+/// Check a `for`: what it walks, what it binds, and its body.
+///
+/// The collection is a place, read as a `ref` argument is: by reference, and
+/// in a borrowing position, so a linear one is not moved. Its type gives the
+/// bindings theirs: an element, or an index and an element, of a list or a
+/// tensor, whose element is a row of one rank less above rank 1; an element
+/// of a set; a key and a value of a map.
+fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
+    use datalit::tycheck::Type as T;
+    let db = ctx.db;
+    let iteratee = stmt.iteratee;
+    let coded = |ctx: &mut TypeContext<'db>, message: String, label: &str| {
+        let site = crate::ErrorSite::Expr(crate::ExprKey::of(db, iteratee));
+        ctx.push_coded(site, "F087", message.C(), label.S(), None);
+        ctx.add_error(datalove_datafun_common::TypeError::ForWalk { message });
+    };
+
+    // A temporary would have to live to the loop's end and be dropped on
+    // every way out of it, `ret` and `?` included; nothing wants that yet.
+    if !matches!(iteratee.expr(db), ExprFunKind::Place(_) | ExprFunKind::FieldProj(_)) {
+        coded(ctx, S("a `for` walks a collection that is already somewhere"),
+            "name a variable, a parameter, or a field or element of one");
+        return;
+    }
+
+    let old_ref_context = ctx.ref_context;
+    ctx.ref_context = true;
+    let iteratee_ty = ctx.synthesize_expr(iteratee);
+    ctx.ref_context = old_ref_context;
+    let iteratee_ty = match iteratee_ty {
+        Ok(ty) => ty,
+        Err(e) => {
+            ctx.add_error(e);
+            return;
+        }
+    };
+
+    let index = Type::Datalit(T::Index);
+    let n = stmt.bindings.len();
+    let binding_types: Vec<Type<'db>> = match &iteratee_ty {
+        Type::Datalit(T::List(list)) => {
+            let elem = Type::Datalit((*list.element_type).clone());
+            if n == 2 { vec![index, elem] } else { vec![elem] }
+        }
+        Type::Datalit(T::Tensor(tensor)) => {
+            let elem = if tensor.rank == 1 {
+                Type::Datalit((*tensor.element_type).clone())
+            } else {
+                Type::Datalit(T::Tensor(datalit::tycheck::TypeTensor {
+                    element_type: tensor.element_type.clone(),
+                    rank: tensor.rank - 1,
+                }))
+            };
+            if n == 2 { vec![index, elem] } else { vec![elem] }
+        }
+        Type::Datalit(T::Set(set)) => {
+            if n == 2 {
+                coded(ctx, S("a `for` over a set binds one name"),
+                    "a set's elements have no index");
+                return;
+            }
+            vec![Type::Datalit((*set.element_type).clone())]
+        }
+        Type::Datalit(T::Map(map)) => {
+            if n == 1 {
+                coded(ctx, S("a `for` over a map binds two names"),
+                    "write `for key, value`");
+                return;
+            }
+            vec![Type::Datalit((*map.key_type).clone()), Type::Datalit((*map.value_type).clone())]
+        }
+        other => {
+            let actual = type_to_string(db, other);
+            coded(ctx, fmt!("a `for` cannot walk a value of type `{actual}`"),
+                "a `for` walks a list, a set, a map or a tensor");
+            return;
+        }
+    };
+
+    ctx.loop_depth += 1;
+    ctx.with_scope(|ctx| {
+        for (name, ty) in stmt.bindings.iter().zip(binding_types) {
+            ctx.add_variable(*name, ty, false);
+        }
+        for body_stmt in &stmt.body {
+            check_statement(ctx, body_stmt);
+        }
+    });
+    ctx.loop_depth -= 1;
 }

@@ -99,6 +99,7 @@ pub fn type_depth(ty: &IrType) -> u32 {
             1 + columns.iter().map(|(_, ty)| type_depth(ty)).max().unwrap_or(0)
         }
         IrType::Ref(inner) => 1 + type_depth(inner),
+        IrType::Cursor(_) => 0,
         IrType::Param(_) => 0,
     }
 }
@@ -137,6 +138,7 @@ fn type_tag(ty: &IrType) -> u8 {
         IrType::Data => 0x70,
         IrType::Error => 0x71,
         IrType::Ref(_) => 0x10, // Treat as pointer (U8 tag, but size is 8)
+        IrType::Cursor(_) => 0x40,
         IrType::Param(_) => 0x80,
     }
 }
@@ -347,6 +349,13 @@ pub fn emit_tydesc(
             // Ref is just a pointer - emit as a primitive.
             let _inner_tydesc = compiler.get_tydesc_name(inner);
             writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x10, .flags = {flags}, .size = 8, .align = 8, .type_info = {{ .nothing = {{ .unused = 0 }} }} }};", name).unwrap();
+        }
+
+        IrType::Cursor(_) => {
+            // Plain bytes to everything but the cursor instructions: a tuple of
+            // no fields at the cursor's size.
+            writeln!(out, "static const dtlv_tydesc_t {} = {{ .type_tag = 0x40, .flags = {flags}, .size = {}, .align = {}, .type_info = {{ .tuple = {{ .num_fields = 0, .fields = DANGLING(dtlv_tuple_field_t) }} }} }};",
+                name, layout.size, layout.align).unwrap();
         }
     }
 

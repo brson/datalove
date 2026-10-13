@@ -38,6 +38,8 @@ fn statement_completes<'db>(statement: &Statement<'db>) -> bool {
             // Otherwise the only way out is a `break` written for this loop.
             None => contains_break(&stmt.body),
         },
+        // A walk can always run out of elements.
+        Statement::For(_) => true,
         Statement::Match(stmt) => {
             // A match covers every variant or says `case default`, which the
             // typechecker sees to, so there is no falling out of one: an arm
@@ -56,7 +58,7 @@ fn statement_completes<'db>(statement: &Statement<'db>) -> bool {
 fn contains_break<'db>(statements: &[Statement<'db>]) -> bool {
     statements.iter().any(|statement| match statement {
         Statement::Break(_) => true,
-        Statement::Loop(_) => false,
+        Statement::Loop(_) | Statement::For(_) => false,
         Statement::If(stmt) => {
             contains_break(&stmt.then_body)
                 || stmt.else_body.as_ref().is_some_and(|body| contains_break(body))

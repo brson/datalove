@@ -158,6 +158,10 @@ pub enum IrType {
     Ref(Box<IrType>),
     /// Table with named columns, in the order they were written.
     Table(Vec<(String, Box<IrType>)>),
+    /// A cursor walking a collection for a `for` loop, laid out as the
+    /// runtime's cursor of that kind. Plain data owning nothing, so copy;
+    /// it lives in a slot for the length of the loop.
+    Cursor(CursorKind),
     /// A type parameter of the function the type is written in, by its
     /// position in the declaration.
     ///
@@ -169,6 +173,41 @@ pub enum IrType {
     Param(u32),
 }
 
+/// Which runtime cursor walks a collection, and so how a cursor is laid out.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+pub enum CursorKind {
+    /// A list or a rank-1 tensor: `rtdt::StrideCursor`.
+    Stride,
+    /// The rows of a tensor of rank above 1: `rtdt::RowCursor`.
+    Row,
+    /// A set or a map: `rtdt::TreeCursor`.
+    Tree,
+}
+
+impl CursorKind {
+    /// The cursor that walks a collection of this type, or `None` for a type
+    /// that is not walked.
+    pub fn of(coll: &IrType) -> Option<CursorKind> {
+        match coll {
+            IrType::List(_) | IrType::Tensor(_, 1) => Some(CursorKind::Stride),
+            IrType::Tensor(_, _) => Some(CursorKind::Row),
+            IrType::Set(_) | IrType::Map(_, _) => Some(CursorKind::Tree),
+            _ => None,
+        }
+    }
+
+    /// What a walk over a collection of this type visits: an element, a
+    /// map's key, or a tensor's row of one rank less.
+    pub fn elem_type(coll: &IrType) -> IrType {
+        match coll {
+            IrType::List(elem) | IrType::Set(elem) | IrType::Tensor(elem, 1) => (**elem).clone(),
+            IrType::Tensor(elem, rank) => IrType::Tensor(elem.clone(), rank - 1),
+            IrType::Map(key, _) => (**key).clone(),
+            other => panic!("a walk over a {other}"),
+        }
+    }
+}
+
 impl IrType {
     /// Whether a type parameter appears anywhere in this type, which is what
     /// makes its layout unknown until a call.
@@ -178,7 +217,7 @@ impl IrType {
             IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
             | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
             | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
-            | IrType::Error | IrType::Atom(_) => false,
+            | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) => false,
             IrType::Tuple(fields) => fields.iter().any(IrType::is_dynamic),
             IrType::Struct(fields) => fields.iter().any(|(_, t)| t.is_dynamic()),
             IrType::Enum(variants) => variants.iter().any(|(_, p)| p.as_ref().is_some_and(IrType::is_dynamic)),
@@ -205,7 +244,7 @@ impl IrType {
             IrType::Unit | IrType::Bool | IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64
             | IrType::I8 | IrType::I16 | IrType::I32 | IrType::I64 | IrType::Index | IrType::Offset
             | IrType::Int | IrType::F32 | IrType::F64 | IrType::String | IrType::Data
-            | IrType::Error | IrType::Atom(_) => self.clone(),
+            | IrType::Error | IrType::Atom(_) | IrType::Cursor(_) => self.clone(),
             IrType::Tuple(fields) => IrType::Tuple(fields.iter().map(sub).collect()),
             IrType::Struct(fields) => IrType::Struct(fields.iter().map(|(n, t)| (n.clone(), sub(t))).collect()),
             IrType::Enum(variants) => IrType::Enum(
@@ -321,6 +360,7 @@ impl std::fmt::Display for IrType {
             IrType::Result(ok) => write!(f, "result<{}>", ok),
             IrType::Tensor(elem, rank) => write!(f, "[|{}, {}|]", elem, rank),
             IrType::Ref(inner) => write!(f, "ref<{}>", inner),
+            IrType::Cursor(kind) => write!(f, "cursor<{:?}>", kind),
             IrType::Param(i) => write!(f, "T{}", i),
             IrType::Table(cols) => {
                 write!(f, "{{| ")?;
@@ -637,6 +677,8 @@ impl IrType {
 
             // Ref is always copy (it's just a pointer, doesn't own the data).
             IrType::Ref(_) => true,
+            // A cursor points into a collection and owns nothing.
+            IrType::Cursor(_) => true,
 
             // A type parameter is always linear, whatever it is bound to.
             IrType::Param(_) => false,
@@ -1856,6 +1898,43 @@ pub enum Instruction {
     },
 
     // ========================================================================
+    // Cursors
+    // ========================================================================
+
+    /// Start a walk over a collection: fill `cursor` at its first element, or
+    /// done if it has none.
+    ///
+    /// The cursor's kind is the slot's type, `IrType::Cursor`, and agrees
+    /// with `coll`'s. The collection is frozen until the walk ends.
+    ///
+    /// **Ownership:** Borrows `coll` for the walk; writes the cursor slot.
+    CursorBegin { cursor: SlotId, coll: Operand },
+
+    /// Whether a walk is over.
+    ///
+    /// **Ownership:** Reads the cursor slot, produces `dest` (Bool).
+    CursorDone { dest: ValueId, cursor: SlotId },
+
+    /// A reference to the current element of a walk: a set's element, a
+    /// map's key, a tensor's row. The walk is not done.
+    ///
+    /// **Ownership:** Reads the cursor slot, produces `dest` (Ref type).
+    CursorElem { dest: ValueId, cursor: SlotId },
+
+    /// A reference to the current value of a walk over a map. The walk is not
+    /// done.
+    ///
+    /// **Ownership:** Reads the cursor slot, produces `dest` (Ref type).
+    CursorValue { dest: ValueId, cursor: SlotId },
+
+    /// Move a walk to the next element, or to done after the last. The walk
+    /// is not done. `coll` is the collection begun on, which a tree's advance
+    /// reads its layout from.
+    ///
+    /// **Ownership:** Borrows `coll`; writes the cursor slot.
+    CursorAdvance { cursor: SlotId, coll: Operand },
+
+    // ========================================================================
     // Miscellaneous
     // ========================================================================
 
@@ -1958,6 +2037,12 @@ impl Instruction {
             Instruction::SlotStoreCopy { dest, .. } | Instruction::SlotStoreCopyTracked { dest, .. }
             | Instruction::SlotStoreMove { dest, .. } | Instruction::SlotStoreMoveTracked { dest, .. } => {
                 slot_dest(dest)
+            }
+            Instruction::CursorBegin { cursor, .. } | Instruction::CursorAdvance { cursor, .. } => slot(cursor),
+            Instruction::CursorDone { dest, cursor } | Instruction::CursorElem { dest, cursor }
+            | Instruction::CursorValue { dest, cursor } => {
+                value(dest);
+                slot(cursor);
             }
             Instruction::SetField { slot: dest, .. } | Instruction::SetFieldTracked { slot: dest, .. } => {
                 slot_dest(dest)
@@ -2087,6 +2172,13 @@ impl Instruction {
             Instruction::TensorSet { is_valid, .. } => vec![*is_valid],
             Instruction::TensorIndexRef { dest, .. } => vec![*dest],
 
+            // Cursors
+            Instruction::CursorBegin { .. } => vec![],
+            Instruction::CursorDone { dest, .. } => vec![*dest],
+            Instruction::CursorElem { dest, .. } => vec![*dest],
+            Instruction::CursorValue { dest, .. } => vec![*dest],
+            Instruction::CursorAdvance { .. } => vec![],
+
             // Misc
             Instruction::DebugLog { .. } => vec![],
             Instruction::Nop => vec![],
@@ -2192,6 +2284,13 @@ impl Instruction {
                 f(tensor);
                 f(index);
                 f(value);
+            }
+            I::CursorBegin { cursor, coll } | I::CursorAdvance { cursor, coll } => {
+                f(&Operand::Slot(*cursor));
+                f(coll);
+            }
+            I::CursorDone { cursor, .. } | I::CursorElem { cursor, .. } | I::CursorValue { cursor, .. } => {
+                f(&Operand::Slot(*cursor))
             }
         }
     }

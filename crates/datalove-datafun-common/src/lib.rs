@@ -432,6 +432,9 @@ pub enum TypeError {
     /// F085: Inline functions calling each other in a cycle, by name, from
     /// the first back to it again.
     InlineCycle { names: Vec<String> },
+    /// F087: a `for` that cannot walk what it names, or binds the wrong number
+    /// of names for it.
+    ForWalk { message: String },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

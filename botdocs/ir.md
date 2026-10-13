@@ -126,6 +126,7 @@ descriptors are computed from.
 | `Tensor(Box<IrType>, u32)` | Element type and rank |
 | `Table(Vec<(String, Box<IrType>)>)` | Columns in the order they were written |
 | `Ref(Box<IrType>)` | A pointer to a value of the inner type |
+| `Cursor(CursorKind)` | A `for` loop's walk: `Stride`, `Row` or `Tree`, laid out as the runtime's cursor of that kind |
 | `Param(u32)` | A type parameter of the enclosing function, by position |
 
 Two ordering rules matter and differ.
@@ -164,7 +165,7 @@ to say what shape is being built: the scalars, `Tuple(n)`, `AnonStruct(n)`,
 ### `is_copy`
 
 `IrType::is_copy` answers whether a value can be duplicated by a shallow
-bitwise copy. The scalars, `Unit`, `Atom` and `Ref` are copy. The heap types
+bitwise copy. The scalars, `Unit`, `Atom`, `Ref` and `Cursor` are copy. The heap types
 are not. A tuple, struct, enum, term or option is copy when everything it holds
 is. A `Result` is never copy, because its error arm holds an `Error`.
 
@@ -190,6 +191,8 @@ The rules:
 - `Int`, `String`, `Data`, `Error`, `List`, `Set`, `Map`, `Tensor` and `Table`
   have the size and alignment of the corresponding runtime struct.
 - `Ref` is a pointer.
+- `Cursor` has the size and alignment of `rtdt::StrideCursor`, `rtdt::RowCursor`
+  or `rtdt::TreeCursor`.
 - A tuple or struct lays its fields out in order, each at its own alignment,
   with the whole rounded up to the widest field's alignment.
 - A `Term` is transparent over its payload.
@@ -622,6 +625,28 @@ buffer -- on the stack and points at that.
 `MapUpsert` is the one collection write with no check before it: it inserts when
 the key is absent and overwrites when it is present, destroying the old value
 and the key it was handed. That is the source's bare `set m[key] = v`.
+
+### Cursors
+
+A `for` loop walks its collection with a cursor in a slot of type
+`IrType::Cursor`, whose kind agrees with the collection's: `Stride` for a list
+or a rank-1 tensor, `Row` for a tensor of higher rank, `Tree` for a set or a
+map (`CursorKind::of`).
+
+| Instruction | Printed | Ownership |
+|---|---|---|
+| `CursorBegin { cursor, coll }` | `cursorbegin s0, v1` | Borrows `coll` for the walk; writes the cursor |
+| `CursorDone { dest, cursor }` | `v0 = cursordone s0` | Reads the cursor; `dest` is `Bool` |
+| `CursorElem { dest, cursor }` | `v0 = cursorelem s0` | A `Ref` to the current element, a map's key, or a tensor's row; not done |
+| `CursorValue { dest, cursor }` | `v0 = cursorvalue s0` | A `Ref` to a map's current value; not done |
+| `CursorAdvance { cursor, coll }` | `cursoradvance s0, v1` | Moves to the next element or to done; not done; `coll` is the one begun on |
+
+Each is one function of the runtime's protocol (`dtlv_rti_*_cursor_*`). A
+backend may open-code them, but only on the runtime's layouts and with its
+meanings, since OSR continues a walk the interpreter began. A cursor's
+references are into a collection the language keeps frozen until the loop
+ends, so nothing between them checks anything. How `for` lowers onto these is
+[`for` Loops over the Collections](plan-for-loops.md).
 
 ### Miscellaneous
 

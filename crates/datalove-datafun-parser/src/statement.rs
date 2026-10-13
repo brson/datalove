@@ -33,6 +33,7 @@ impl<'db> Parser<'db> {
             Some("import") => self.parse_import(),
             Some("if") => self.parse_if(remaining_lines),
             Some("loop") => self.parse_loop(remaining_lines),
+            Some("for") => self.parse_for(remaining_lines),
             Some("break") => self.parse_break(),
             Some("continue") => self.parse_continue(),
             Some("debuglog") => self.parse_debuglog(),
@@ -54,7 +55,7 @@ impl<'db> Parser<'db> {
                 self.emit_stmt_error(ts,
                     "unexpected statement",
                     "P001",
-                    "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'break', 'continue', 'debuglog', 'type', or 'native'"
+                    "expected 'let', 'var', 'const', 'set', 'call', 'fun', 'ret', 'require', 'import', 'if', 'match', 'loop', 'for', 'break', 'continue', 'debuglog', 'type', or 'native'"
                 )
             }
         };
@@ -1229,6 +1230,85 @@ statements that run belong in a function or a script")
         }
 
         ast::Statement::Loop(ast::StmtLoop { condition, body })
+    }
+
+    /// `for item in ref coll`, or with two names, `for i, item` or
+    /// `for key, value`, then a body up to `end for`.
+    ///
+    /// A header that does not parse still takes its body with it, so that the
+    /// body and its `end for` are not read as statements of their own.
+    fn parse_for(
+        &mut self,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
+    ) -> ast::Statement<'db> {
+        self.eat_word("for");
+        let header = self.parse_for_header();
+
+        let mut body = vec![];
+        let mut found_end = false;
+        while let Some((_, line)) = remaining_lines.peek() {
+            if self.line_is_end_keyword(line, "for") {
+                self.eat_end_line(remaining_lines, "for");
+                found_end = true;
+                break;
+            }
+
+            let (_, line) = remaining_lines.next().X();
+            let stmt = self.parse_line_statement(line, remaining_lines);
+            body.push(stmt);
+        }
+
+        if !found_end {
+            return self.unterminated_block("for");
+        }
+
+        match header {
+            Ok((bindings, iteratee)) => ast::Statement::For(ast::StmtFor { bindings, iteratee, body }),
+            Err(error) => error,
+        }
+    }
+
+    /// The names a `for` binds and what it walks, after the `for`.
+    fn parse_for_header(&mut self) -> Result<(Vec<InternedText<'db>>, ast::ExprFun<'db>), ast::Statement<'db>> {
+        let mut bindings = vec![];
+        loop {
+            match self.eat_declared_name(NameKind::Value) {
+                Some(name) => bindings.push(name),
+                None => {
+                    let ts = self.peek_text_span();
+                    return Err(self.emit_stmt_error(ts,
+                        "expected a name for `for` to bind",
+                        "P078",
+                        "a `for` binds a name to each element"));
+                }
+            }
+            if !self.eat_sigil(Sigil::Comma) {
+                break;
+            }
+        }
+        if bindings.len() > 2 {
+            let ts = self.peek_text_span();
+            return Err(self.emit_stmt_error(ts,
+                "a `for` binds one or two names",
+                "P078",
+                "an element, an index and an element, or a key and a value"));
+        }
+
+        if !self.eat_word("in") {
+            let ts = self.peek_text_span();
+            return Err(self.emit_stmt_error(ts,
+                "expected `in` after the names a `for` binds",
+                "P078",
+                "expected `in`"));
+        }
+        if !self.eat_word("ref") {
+            let ts = self.peek_text_span();
+            return Err(self.emit_stmt_error(ts,
+                "a `for` walks its collection by reference",
+                "P079",
+                "write `in ref` before the collection"));
+        }
+        Ok((bindings, self.parse_expr_full()))
     }
 
     fn parse_break(&mut self) -> ast::Statement<'db> {

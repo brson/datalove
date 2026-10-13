@@ -652,6 +652,87 @@ impl IrInterpreter {
                     }
                 }
             }
+            // A cursor is walked through the runtime's protocol and nothing
+            // else: the interpreter is where that protocol is the whole story,
+            // with no part of it open-coded.
+            Instruction::CursorBegin { cursor, coll } => {
+                let coll_val = self.read_operand(coll, frame, frames);
+                let out = frame.slot_dest(*cursor).ptr;
+                let rt = self.runtime.handle();
+                let tag = unsafe { (*coll_val.tydesc).type_tag };
+                let status = unsafe {
+                    match (frame.cursor_kind(*cursor), tag) {
+                        (CursorKind::Stride, rtdt::TyTag::List) => datalove_rt::c::dtlv_rti_list_cursor_begin_local(
+                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::StrideCursor),
+                        (CursorKind::Stride, rtdt::TyTag::Tensor) => datalove_rt::c::dtlv_rti_tensor_cursor_begin_local(
+                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::StrideCursor),
+                        (CursorKind::Row, rtdt::TyTag::Tensor) => datalove_rt::c::dtlv_rti_tensor_row_cursor_begin_local(
+                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::RowCursor),
+                        (CursorKind::Tree, rtdt::TyTag::Set) => datalove_rt::c::dtlv_rti_btreeset_cursor_begin_local(
+                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::TreeCursor),
+                        (CursorKind::Tree, rtdt::TyTag::Map) => datalove_rt::c::dtlv_rti_btreemap_cursor_begin_local(
+                            rt, coll_val.ptr, coll_val.tydesc, out as *mut rtdt::TreeCursor),
+                        (kind, tag) => unreachable!("a {kind:?} cursor over a {tag:?}"),
+                    }
+                };
+                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "starting a cursor cannot fail");
+                frame.mark_slot_live(*cursor);
+            }
+            Instruction::CursorDone { dest, cursor } => {
+                let at = frame.slot(*cursor).ptr;
+                let done = unsafe {
+                    match frame.cursor_kind(*cursor) {
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done(at as *const rtdt::StrideCursor),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done(at as *const rtdt::RowCursor),
+                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done(at as *const rtdt::TreeCursor),
+                    }
+                };
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { *(dest_slot.ptr as *mut bool) = done; }
+                frame.mark_value_live(*dest);
+            }
+            Instruction::CursorElem { dest, cursor } => {
+                let at = frame.slot(*cursor).ptr;
+                let elem = unsafe {
+                    match frame.cursor_kind(*cursor) {
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem(at as *const rtdt::StrideCursor),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem(at as *const rtdt::RowCursor),
+                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem(at as *const rtdt::TreeCursor),
+                    }
+                };
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { *(dest_slot.ptr as *mut *const u8) = elem; }
+                frame.mark_value_live(*dest);
+            }
+            Instruction::CursorValue { dest, cursor } => {
+                debug_assert_eq!(frame.cursor_kind(*cursor), CursorKind::Tree, "only a map's cursor has values");
+                let at = frame.slot(*cursor).ptr;
+                let value = unsafe { datalove_rt::c::dtlv_rti_tree_cursor_value(at as *const rtdt::TreeCursor) };
+                let dest_slot = frame.value_dest(*dest);
+                unsafe { *(dest_slot.ptr as *mut *const u8) = value; }
+                frame.mark_value_live(*dest);
+            }
+            Instruction::CursorAdvance { cursor, coll } => {
+                let at = frame.slot_dest(*cursor).ptr;
+                unsafe {
+                    match frame.cursor_kind(*cursor) {
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance(at as *mut rtdt::StrideCursor),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance(at as *mut rtdt::RowCursor),
+                        CursorKind::Tree => {
+                            let coll_val = self.read_operand(coll, frame, frames);
+                            let rt = self.runtime.handle();
+                            let status = match (*coll_val.tydesc).type_tag {
+                                rtdt::TyTag::Set => datalove_rt::c::dtlv_rti_btreeset_cursor_advance_local(
+                                    rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
+                                rtdt::TyTag::Map => datalove_rt::c::dtlv_rti_btreemap_cursor_advance_local(
+                                    rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
+                                tag => unreachable!("a tree cursor over a {tag:?}"),
+                            };
+                            debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");
+                        }
+                    }
+                }
+            }
             _ => return false,
         }
         true
@@ -695,6 +776,11 @@ impl IrInterpreter {
             | Instruction::OpAssign { .. }
             | Instruction::OpAssignChecked { .. }
             | Instruction::DropViaRef { .. }
+            | Instruction::CursorBegin { .. }
+            | Instruction::CursorDone { .. }
+            | Instruction::CursorElem { .. }
+            | Instruction::CursorValue { .. }
+            | Instruction::CursorAdvance { .. }
             | Instruction::Nop => {
                 unreachable!("{:?} is executed by execute_warm", instr)
             }

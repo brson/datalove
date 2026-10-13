@@ -552,6 +552,9 @@ fn lower_statement_for_script<'db>(
         Statement::Loop(loop_stmt) => {
             super::stmt::lower_loop(ctx, loop_stmt, stmt_idx)
         }
+        Statement::For(for_stmt) => {
+            super::stmt::lower_for(ctx, for_stmt, stmt_idx)
+        }
         Statement::Break(_) => {
             // Typechecker validates break is inside a loop (F050).
             let loop_ctx = ctx.body.loop_stack.last()
@@ -571,7 +574,7 @@ fn lower_statement_for_script<'db>(
             // Typechecker validates continue is inside a loop (F051).
             let loop_ctx = ctx.body.loop_stack.last()
                 .unwrap_or_else(|| panic!("continue outside loop - typechecker should catch this"));
-            let continue_target = loop_ctx.header;
+            let continue_target = loop_ctx.next;
 
             // Emit drops for current loop iteration.
             ctx.emit_before_continue_drops(stmt_idx);

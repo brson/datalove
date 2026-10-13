@@ -52,7 +52,7 @@ macro_rules! kind_names {
 }
 
 kind_names!(statement_name, Statement, Statement<'_>, ALL_STATEMENTS, [
-    Let, Var, Const, Set, Fun, Ret, Require, Import, If, Loop, Break, Continue,
+    Let, Var, Const, Set, Fun, Ret, Require, Import, If, Loop, For, Break, Continue,
     DebugLog, TypeAlias, NativeFun, Match, ExprStatement, ParseError,
 ]);
 
@@ -422,6 +422,10 @@ fn walk_statements<'db>(
                 if let Some(condition) = s.condition {
                     walk_expr(db, condition, params, cov);
                 }
+                walk_statements(db, &s.body, params, cov);
+            }
+            Statement::For(s) => {
+                walk_expr(db, s.iteratee, params, cov);
                 walk_statements(db, &s.body, params, cov);
             }
             Statement::DebugLog(s) => walk_expr(db, s.value, params, cov),

@@ -1,0 +1,75 @@
+----------
+module local/test/main
+----------
+
+// `for` over a list: each element is a reference into the list, read in
+// place. An index binding before it counts from zero.
+
+fun sum(ref xs: [u32]): int
+  var total = 0
+  for x in ref xs
+    set total = total + x@
+  end for
+  ret total
+end fun
+
+// The index form, and a `ret` from inside the walk.
+fun index_of(ref xs: [string], ref target: string): ?index
+  for i, x in ref xs
+    if x == target
+      ret some i
+    end if
+  end for
+  ret none
+end fun
+
+// `continue` goes on to the next element and `break` leaves the walk.
+fun odd_sum_below(ref xs: [int], limit: int): int
+  var total = 0
+  for x in ref xs
+    if x >= limit
+      break
+    end if
+    if x == 2 or x == 4
+      continue
+    end if
+    set total = total + x
+  end for
+  ret total
+end fun
+
+// A body that never reads its binding still walks every element.
+fun count(ref xs: [string]): index
+  var n: index = : index / 0
+  for x in ref xs
+    set n = icall add_wrapping_index(n, : index / 1)
+  end for
+  ret n
+end fun
+
+// A linear element is cloned out with `@`; the list keeps its own.
+fun joined(ref xs: [string]): [string]
+  var out: [string] = []
+  for x in ref xs
+    set out = [x@, x@]
+  end for
+  ret out
+end fun
+
+fun main(): (int, ?index, ?index, int, index, index, [string])
+  let xs = [: u32 / 1, : u32 / 2, : u32 / 3]
+  let names = ["ann", "bob", "cy"]
+  let empty: [string] = []
+  ret (sum(ref xs), index_of(ref names, ref "bob"), index_of(ref names, ref "dee"),
+       odd_sum_below(ref [1, 2, 3, 4, 5, 6], 6), count(ref names), count(ref empty),
+       joined(ref names))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

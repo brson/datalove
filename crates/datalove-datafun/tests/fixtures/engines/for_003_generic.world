@@ -1,0 +1,44 @@
+----------
+module local/test/main
+----------
+
+// A walk inside a generic: the element is a reference described by the
+// descriptor table's entry for `T`.
+
+fun last<T>(ref xs: [T]): ?T
+  var found: ?T = none
+  for x in ref xs
+    set found = some x@
+  end for
+  ret found
+end fun
+
+fun keys<K, V>(ref m: %{K = V}): [K] with { K is ord }
+  var out: [K] = []
+  for k, v in ref m
+    set out = [k@]
+  end for
+  ret out
+end fun
+
+fun members<T>(ref s: #{T}): index with { T is ord }
+  var n: index = : index / 0
+  for x in ref s
+    set n = icall add_wrapping_index(n, : index / 1)
+  end for
+  ret n
+end fun
+
+fun main(): (?string, ?u32, [string], index)
+  ret (last(ref ["a", "b"]), last(ref [: u32 / 7]),
+       keys(ref %{"x" = 1, "y" = 2}), members(ref #{"p", "q", "r"}))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

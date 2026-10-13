@@ -155,6 +155,7 @@ pub enum Statement<'db> {
     Import(StmtImport<'db>),
     If(StmtIf<'db>),
     Loop(StmtLoop<'db>),
+    For(StmtFor<'db>),
     Break(StmtBreak),
     Continue(StmtContinue),
     DebugLog(StmtDebugLog<'db>),
@@ -464,6 +465,22 @@ pub struct StmtIf<'db> {
 pub struct StmtLoop<'db> {
     /// Optional while condition, checked at the start of each iteration.
     pub condition: Option<ExprFun<'db>>,
+    pub body: Vec<Statement<'db>>,
+}
+
+/// A walk over a collection: `for item in ref coll ... end for`.
+///
+/// Two names bind an index and the element of a list or tensor, or a key
+/// and its value of a map: `for i, item`, `for key, value`. Each is a
+/// reference into the collection, or the index, and the collection is frozen
+/// for the walk.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct StmtFor<'db> {
+    /// The names bound, as written: one or two.
+    pub bindings: Vec<InternedText<'db>>,
+    /// The collection walked, written after `in ref`.
+    pub iteratee: ExprFun<'db>,
     pub body: Vec<Statement<'db>>,
 }
 

@@ -1,0 +1,10 @@
+[31m[D003] Error:[0m cannot move borrowed value: `x`
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/103_for_moves_its_element.dfs:6:15 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m6 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mk[0m[38;5;249me[0m[38;5;249me[0m[38;5;249mp[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249m[[0m[38;5;201mx[0m[38;5;249m][0m
+ [38;5;240m  │[0m               [38;5;201m┬[0m  
+ [38;5;240m  │[0m               [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m cannot move borrowed value
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: borrowed parameters (ref, mut, out) cannot be moved
+[38;5;246m───╯[0m
+Error: Ownership error

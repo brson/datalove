@@ -1,0 +1,53 @@
+----------
+module local/test/main
+----------
+
+// What a `for` walks is a place: a parameter, a local, a field of one, an
+// element of one, or an element a walk outside it is on.
+
+fun field_sum(ref p: { name: string, items: [int] }): int
+  var total = 0
+  for x in ref p.items
+    set total = total + x
+  end for
+  ret total
+end fun
+
+// An element step can leave the function before the walk starts.
+fun row_sum(ref rows: [[int]], i: index): ?int
+  var total = 0
+  for x in ref rows[i]?
+    set total = total + x
+  end for
+  ret some total
+end fun
+
+// A walk over each element of a walk.
+fun nested_sum(ref rows: [[int]]): int
+  var total = 0
+  for row in ref rows
+    for x in ref row
+      if x == 0
+        break
+      end if
+      set total = total + x
+    end for
+  end for
+  ret total
+end fun
+
+fun main(): (int, ?int, ?int, int)
+  let p = { name = "p", items = [1, 2, 3] }
+  let rows = [[1, 2], [3, 0, 100], [4]]
+  ret (field_sum(ref p), row_sum(ref rows, : index / 1), row_sum(ref rows, : index / 7),
+       nested_sum(ref rows))
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

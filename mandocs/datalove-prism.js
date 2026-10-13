@@ -25,7 +25,7 @@ Prism.languages.datalove = {
     'keyword': /\b(?:let|var|const|set|call|ret|require|module|import|rider|with|is|and|or|xor|not|icall|debuglog)\b/,
     'binding-modifier': /\b(?:ref|mut|out)\b/,
     'item-keyword': /\b(?:type|native|fun|end\s+fun)\b/,
-    'control-flow': /\b(?:if|else|end\s+if|loop|while|break|continue|end\s+loop|match|case|default|end\s+match)\b/,
+    'control-flow': /\b(?:if|else|end\s+if|loop|while|for|in|break|continue|end\s+loop|end\s+for|match|case|default|end\s+match)\b/,
     'function': /\b[a-z_][a-z0-9_]*(?=\s*\()/,
     'op-cmp': /\.<|\.>|<=|>=|==|!=/,
     'op-result': /[+\-*\/]!|!/,

@@ -28,6 +28,7 @@
 //! - D005 ReadUninitialized: reading binding before initialization
 //! - D006 OutParamNotInitialized: returning without initializing out param
 //! - D007 MoveInLoop: moving outer-scoped value inside loop body
+//! - D015 WalkedCollectionChanged: changing a collection a `for` walks
 //!
 //! # Drop scheduling
 //!
@@ -40,13 +41,13 @@
 use rmx::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use datalove_datafun_ast::ast::{
-    Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtConst,
+    Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
 };
 use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ast::ast::Binding;
-use datalove_datafun_ir::IrType;
+use datalove_datafun_ir::{CursorKind, IrType};
 use datalove_datafun_common::Type;
 use datalove_datafun_sema::Destructure;
 
@@ -133,6 +134,10 @@ struct AnalysisCtx<'a, 'db> {
     /// `break` and `continue` carry no label, so both always belong to the
     /// innermost loop and this is a plain stack.
     loop_exits: Vec<LoopExits>,
+    /// The bindings whose collections the `for` loops being analyzed walk,
+    /// innermost last. Each is frozen for its loop's body: its cursor and its
+    /// element bindings point into it.
+    walked: Vec<BindingId>,
 }
 
 /// The states a loop's `break`s and `continue`s left behind.
@@ -245,6 +250,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             schedule: DropSchedule::default(),
             auto_adapt_mode,
             loop_exits: Vec::new(),
+            walked: Vec::new(),
         }
     }
 
@@ -542,8 +548,32 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.name_to_binding.get(name).copied()
     }
 
+    /// The binding a place is rooted in: a name, or the name a field or
+    /// element projection starts from.
+    fn place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+        match expr.expr(self.db) {
+            ExprFunKind::Place(place) => self.lookup(place.root.text(self.db)),
+            ExprFunKind::FieldProj(proj) => self.place_root(proj.base),
+            _ => None,
+        }
+    }
+
+    /// Refuse a change to a binding a `for` is walking, saying whether it was
+    /// one.
+    fn check_not_walked(&mut self, id: BindingId, expr_key: ExprKey<'db>) -> bool {
+        if !self.walked.contains(&id) {
+            return false;
+        }
+        let name = self.bindings[id.0 as usize].name.C();
+        self.errors.push(AnalysisError::WalkedCollectionChanged { expr_key, name });
+        true
+    }
+
     /// Mark a binding as moved at the given expression.
     fn mark_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) {
+        if self.check_not_walked(id, expr_key) {
+            return;
+        }
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
         if self.bindings[id.0 as usize].is_borrowed() {
             let name = self.bindings[id.0 as usize].name.C();
@@ -724,6 +754,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let Some(root) = self.expr_to_place_root(arg) else {
             return;
         };
+        if self.check_not_walked(root, expr_key) {
+            return;
+        }
         if self.binding_is_mutable(root) {
             return;
         }
@@ -1523,6 +1556,9 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             Statement::Loop(loop_stmt) => {
                 analyze_loop(ctx, loop_stmt, stmt_id);
             }
+            Statement::For(for_stmt) => {
+                analyze_for(ctx, for_stmt, stmt_id);
+            }
             Statement::Break(_) => {
                 // Drops before break: all live bindings in loop body.
                 let drops = ctx.live_bindings_in_scopes(ScopeKind::Loop);
@@ -1687,6 +1723,12 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     let place = &stmt.target;
     let expr = stmt.value;
     let compound = stmt.op.is_some();
+
+    // Assigning to a collection a `for` walks, or to any part of it, would
+    // free or move what the walk points at.
+    if let Some(id) = ctx.lookup(place.root.text(ctx.db)) {
+        ctx.check_not_walked(id, ExprKey::of(ctx.db, expr));
+    }
 
     // The value comes first. A plain `set` moves it into the place; a compound
     // one reads it as an operand, which borrows.
@@ -2234,63 +2276,139 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
     // where the subtraction goes under -- so what the function still owns has
     // to go with it. Nothing was dropped on that way out.
     if let Some(condition) = stmt.condition {
-        let condition_may_leave = ctx.expr_may_early_return(condition);
-        ctx.analyze_expr_moves(condition, false);
-        if condition_may_leave {
-            let drops = early_return_drops(ctx, stmt_idx);
-            if !drops.is_empty() {
-                ctx.schedule.before_try_return.insert(stmt_idx, drops);
-            }
-        }
+        analyze_read_before_loop(ctx, condition, stmt_idx);
     }
 
-    // The state the loop is entered with, which is also the state it is left
-    // with when the condition fails, since nothing that changed a binding here
-    // survives the repeat check below.
-    let state_before = ctx.scope_stack.last()
-        .map(|frame| frame.current_state.C())
-        .unwrap_or_default();
-
-    // Capture outer-scope non-copy bindings that are Live before entering the loop.
-    // If any of these become Moved during loop body analysis, that's an error
-    // because the loop could iterate multiple times.
-    let outer_live_bindings: Vec<BindingId> = ctx.scope_stack.last()
-        .map(|frame| {
-            frame.current_state.iter()
-                .filter(|(id, state)| {
-                    **state == BindingState::Live && !ctx.bindings[id.0 as usize].ty.is_copy()
-                })
-                .map(|(id, _)| *id)
-                .collect()
-        })
-        .unwrap_or_default();
-
+    let entry = LoopEntry::of(ctx);
     ctx.loop_exits.push(LoopExits::default());
     ctx.enter_scope(ScopeKind::Loop);
 
     analyze_statements(ctx, &stmt.body);
 
     let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
+    let adapted = check_loop_repeats(ctx, &stmt.body, &exits, &entry);
 
-    // Check for outer-scope bindings moved somewhere that gets back to the loop
-    // head, which is the only way a move repeats. The end of the body gets
-    // there, and so does every `continue`.
-    //
-    // The `continue` states have to be asked separately, because a branch that
-    // leaves is kept out of the merge after an `if`: a move followed by
-    // `continue` no longer shows in the state at the end of the body, and
-    // missing it would let one value be given away on every iteration.
-    //
-    // A `break` is deliberately not asked. It does not reach the head, so what
-    // it moved cannot be moved twice; it is settled at the loop's exit instead.
-    //
-    // The end of the body only counts when control can get there. A body that
-    // ends in `break` -- an inner loop followed by one, say -- leaves a state
-    // behind that nothing reads, and reading it anyway reported a repeat for a
-    // move that happens at most once.
-    let body_reaches_head = body_completes(&stmt.body);
+    // Drops at end of loop iteration.
+    let loop_drops = ctx.exit_scope();
+    if !loop_drops.is_empty() {
+        ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
+    }
+
+    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry.state_before, &adapted);
+}
+
+/// Analyze a `for`: a loop that binds references into a collection, and so
+/// freezes the collection while it runs.
+///
+/// The bindings are allocated as a `ref` parameter is, in the order written,
+/// which is the order lowering records them in: borrowed, so never moved and
+/// never dropped. An index binding is a plain copied value.
+fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_idx: usize) {
+    // The collection is read, as a `ref` argument is, and an element step on
+    // the way to it -- `for x in ref xss[i]?` -- can leave the function before
+    // the walk starts.
+    analyze_read_before_loop(ctx, stmt.iteratee, stmt_idx);
+
+    let entry = LoopEntry::of(ctx);
+    ctx.loop_exits.push(LoopExits::default());
+    ctx.enter_scope(ScopeKind::Loop);
+
+    let coll_ty = ctx.expr_type(stmt.iteratee);
+    let elem_ty = CursorKind::elem_type(&coll_ty);
+    let binding_types = match (&coll_ty, stmt.bindings.len()) {
+        (IrType::Map(_, value), 2) => vec![(elem_ty, true), ((**value).C(), true)],
+        (_, 2) => vec![(IrType::Index, false), (elem_ty, true)],
+        _ => vec![(elem_ty, true)],
+    };
+    for (name, (ty, by_ref)) in stmt.bindings.iter().zip(binding_types) {
+        ctx.alloc_binding(name.text(ctx.db).S(), ty, false, by_ref.then_some(ParamMode::Ref));
+    }
+
+    let walked = ctx.place_root(stmt.iteratee);
+    ctx.walked.extend(walked);
+    analyze_statements(ctx, &stmt.body);
+    if walked.is_some() {
+        ctx.walked.pop();
+    }
+
+    let exits = ctx.loop_exits.pop().expect("unbalanced loop exit records");
+    let adapted = check_loop_repeats(ctx, &stmt.body, &exits, &entry);
+
+    let loop_drops = ctx.exit_scope();
+    if !loop_drops.is_empty() {
+        ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
+    }
+
+    // A walk can always run out of elements, on the first look included.
+    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry.state_before, &adapted);
+}
+
+/// Analyze what a loop reads before its body: a `loop while` condition, or
+/// the collection a `for` walks. It is read rather than consumed, and if it
+/// can leave the function, what the function still owns goes with it.
+fn analyze_read_before_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, expr: ExprFun<'db>, stmt_idx: usize) {
+    let may_leave = ctx.expr_may_early_return(expr);
+    ctx.analyze_expr_moves(expr, false);
+    if may_leave {
+        let drops = early_return_drops(ctx, stmt_idx);
+        if !drops.is_empty() {
+            ctx.schedule.before_try_return.insert(stmt_idx, drops);
+        }
+    }
+}
+
+/// What is true as a loop is entered.
+struct LoopEntry {
+    /// The state the loop is entered with, which is also the state it is left
+    /// with when it ends before its body runs, since nothing that changed a
+    /// binding here survives the repeat check.
+    state_before: BTreeMap<BindingId, BindingState>,
+    /// Outer-scope non-copy bindings live on entry. If one is moved in the
+    /// body, that's an error, because the body can run more than once.
+    outer_live: Vec<BindingId>,
+}
+
+impl LoopEntry {
+    fn of(ctx: &AnalysisCtx<'_, '_>) -> LoopEntry {
+        let state_before = ctx.scope_stack.last()
+            .map(|frame| frame.current_state.C())
+            .unwrap_or_default();
+        let outer_live = state_before.iter()
+            .filter(|(id, state)| {
+                **state == BindingState::Live && !ctx.bindings[id.0 as usize].ty.is_copy()
+            })
+            .map(|(id, _)| *id)
+            .collect();
+        LoopEntry { state_before, outer_live }
+    }
+}
+
+/// Check for outer-scope bindings moved somewhere that gets back to the loop
+/// head, which is the only way a move repeats, and return the ones auto-adapt
+/// cloned instead. The end of the body gets there, and so does every
+/// `continue`.
+///
+/// The `continue` states have to be asked separately, because a branch that
+/// leaves is kept out of the merge after an `if`: a move followed by
+/// `continue` no longer shows in the state at the end of the body, and
+/// missing it would let one value be given away on every iteration.
+///
+/// A `break` is deliberately not asked. It does not reach the head, so what
+/// it moved cannot be moved twice; it is settled at the loop's exit instead.
+///
+/// The end of the body only counts when control can get there. A body that
+/// ends in `break` -- an inner loop followed by one, say -- leaves a state
+/// behind that nothing reads, and reading it anyway reported a repeat for a
+/// move that happens at most once.
+fn check_loop_repeats<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    body: &[Statement<'db>],
+    exits: &LoopExits,
+    entry: &LoopEntry,
+) -> Vec<BindingId> {
+    let body_reaches_head = body_completes(body);
     let mut adapted: Vec<BindingId> = Vec::new();
-    for id in &outer_live_bindings {
+    for id in &entry.outer_live {
         let moved_at_body_end = body_reaches_head
             && ctx.get_state(*id) == Some(BindingState::Moved);
         let moved_at_continue = exits.continues.iter()
@@ -2315,14 +2433,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
             }
         }
     }
-
-    // Drops at end of loop iteration.
-    let loop_drops = ctx.exit_scope();
-    if !loop_drops.is_empty() {
-        ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
-    }
-
-    merge_loop_exits(ctx, stmt, stmt_idx, &exits, &state_before, &adapted);
+    adapted
 }
 
 /// Settle what is true after a loop from the ways out of it.
@@ -2338,14 +2449,14 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
 /// which exit ran. Drop points here are static, so that is refused.
 fn merge_loop_exits<'db>(
     ctx: &mut AnalysisCtx<'_, 'db>,
-    stmt: &StmtLoop<'db>,
+    can_run_out: bool,
     stmt_idx: usize,
     exits: &LoopExits,
     state_before: &BTreeMap<BindingId, BindingState>,
     adapted: &[BindingId],
 ) {
     let mut exit_states: Vec<&BTreeMap<BindingId, BindingState>> = exits.breaks.iter().collect();
-    if stmt.condition.is_some() {
+    if can_run_out {
         exit_states.push(state_before);
     }
 

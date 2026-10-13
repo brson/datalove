@@ -1,0 +1,235 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn map_total(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        cursorbegin s2, p0
+                        goto block1
+                    block1:
+                        v2 = cursordone s2
+                        branch v2, block4, block2
+                    block2:
+                        v3 = cursorelem s2
+                        v4 = cursorvalue s2
+                        v5 = const 1int
+                        v6 = add s0, v5
+                        drop v5
+                        drop.tracked s0
+                        store.move.tracked s0, v6
+                        v7 = add s1, *v4
+                        drop.tracked s1
+                        store.move.tracked s1, v7
+                        goto block3
+                    block3:
+                        cursoradvance s2, p0
+                        goto block1
+                    block4:
+                        v8 = load.move.tracked s0
+                        v9 = load.move.tracked s1
+                        v10 = pack Tuple2 {v8, v9}
+                        return v10
+                    
+                    fn walk_order(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block4, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = const 10int
+                        v4 = mul s0, v3
+                        drop v3
+                        v5 = widen *v2
+                        v6 = add v4, v5
+                        drop v4
+                        drop v5
+                        drop.tracked s0
+                        store.move.tracked s0, v6
+                        goto block3
+                    block3:
+                        cursoradvance s1, p0
+                        goto block1
+                    block4:
+                        v7 = load.move.tracked s0
+                        return v7
+                    
+                    fn grid_sum(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block8, block2
+                    block2:
+                        v2 = cursorelem s1
+                        cursorbegin s2, *v2
+                        goto block3
+                    block3:
+                        v3 = cursordone s2
+                        branch v3, block6, block4
+                    block4:
+                        v4 = cursorelem s2
+                        v5 = add s0, *v4
+                        drop.tracked s0
+                        store.move.tracked s0, v5
+                        goto block5
+                    block5:
+                        cursoradvance s2, *v2
+                        goto block3
+                    block6:
+                        goto block7
+                    block7:
+                        cursoradvance s1, p0
+                        goto block1
+                    block8:
+                        v6 = load.move.tracked s0
+                        return v6
+                    
+                    fn cube_rows(p0):
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        v1 = const 0int
+                        store.move.tracked s1, v1
+                        cursorbegin s2, p0
+                        v2 = const 0index
+                        store.copy s3, v2
+                        goto block1
+                    block1:
+                        v3 = cursordone s2
+                        branch v3, block12, block2
+                    block2:
+                        v4 = cursorelem s2
+                        v5 = load.copy s3
+                        cursorbegin s4, *v4
+                        goto block3
+                    block3:
+                        v6 = cursordone s4
+                        branch v6, block10, block4
+                    block4:
+                        v7 = cursorelem s4
+                        cursorbegin s5, *v7
+                        goto block5
+                    block5:
+                        v8 = cursordone s5
+                        branch v8, block8, block6
+                    block6:
+                        v9 = cursorelem s5
+                        v10 = add s1, *v9
+                        drop.tracked s1
+                        store.move.tracked s1, v10
+                        goto block7
+                    block7:
+                        cursoradvance s5, *v7
+                        goto block5
+                    block8:
+                        goto block9
+                    block9:
+                        cursoradvance s4, *v4
+                        goto block3
+                    block10:
+                        store.copy s0, v5
+                        goto block11
+                    block11:
+                        cursoradvance s2, p0
+                        v11 = load.copy s3
+                        v12 = const 1index
+                        v13 = intrinsic AddWrappingIndex(v11, v12)
+                        store.copy s3, v13
+                        goto block1
+                    block12:
+                        v14 = load.copy s0
+                        v15 = load.move.tracked s1
+                        v16 = pack Tuple2 {v14, v15}
+                        return v16
+                    
+                    fn main():
+                    block0:
+                        v0 = #{}
+                        v1 = const 3u32
+                        v2 = const 1u32
+                        v3 = const 2u32
+                        v4 = #{v1, v2, v3}
+                        v5 = call m0.u1(v4)
+                        drop v4
+                        v6 = const "a"
+                        v7 = const 1int
+                        v8 = const "b"
+                        v9 = const 20int
+                        v10 = %{v6: v7, v8: v9}
+                        v11 = call m0.u0(v10)
+                        drop v10
+                        v12 = const 1int
+                        v13 = const 2int
+                        v14 = const 3int
+                        v15 = const 4int
+                        v16 = const 5int
+                        v17 = const 6int
+                        v18 = [| v12 v13 v14, v15 v16 v17 |]
+                        v19 = call m0.u2(v18)
+                        drop v18
+                        v20 = const 1int
+                        v21 = const 2int
+                        v22 = const 3int
+                        v23 = const 4int
+                        v24 = const 5int
+                        v25 = const 6int
+                        v26 = const 7int
+                        v27 = const 8int
+                        v28 = [| v20 v21, v22 v23,, v24 v25, v26 v27 |]
+                        v29 = call m0.u3(v28)
+                        drop v28
+                        v30 = call m0.u1(v0)
+                        v31 = pack Tuple5 {v5, v11, v19, v29, v30}
+                        drop v0
+                        return v31
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u4()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(123, (2, 21), 21, (1, 36), 0)\n"),
+        ),
+    ],
+)

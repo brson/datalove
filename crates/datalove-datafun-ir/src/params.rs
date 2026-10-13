@@ -411,6 +411,9 @@ pub fn map_operands_in_instruction(
         | Instruction::SlotLoadMove { .. }
         | Instruction::SlotLoadMoveTracked { .. }
         | Instruction::DropViaRef { .. }
+        | Instruction::CursorDone { .. }
+        | Instruction::CursorElem { .. }
+        | Instruction::CursorValue { .. }
         | Instruction::Nop => instr.clone(),
         Instruction::ListGet { dest, is_valid, list, index } => Instruction::ListGet {
             dest: *dest,
@@ -428,6 +431,14 @@ pub fn map_operands_in_instruction(
             list: replace_operand(list),
             index: replace_operand(index),
             value: replace_operand(value),
+        },
+        Instruction::CursorBegin { cursor, coll } => Instruction::CursorBegin {
+            cursor: *cursor,
+            coll: replace_operand(coll),
+        },
+        Instruction::CursorAdvance { cursor, coll } => Instruction::CursorAdvance {
+            cursor: *cursor,
+            coll: replace_operand(coll),
         },
         Instruction::ListElementRef { dest, list, index } => Instruction::ListElementRef {
             dest: *dest,

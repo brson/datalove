@@ -162,8 +162,8 @@ impl<'db> Default for FrameState<'db> {
 /// Context for a single loop during lowering.
 #[derive(Clone, Debug)]
 pub struct LoopLowerContext {
-    /// Header block (target for continue).
-    pub header: BlockId,
+    /// Where `continue` goes: a `loop`'s header, a `for`'s advance.
+    pub next: BlockId,
     /// Exit block (target for break).
     pub exit: BlockId,
 }

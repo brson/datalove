@@ -1,0 +1,4 @@
+// A set has no index to bind.
+let s = #{1}
+for i, x in ref s
+end for

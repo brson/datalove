@@ -1,0 +1,4 @@
+// A `for` binds one name, or an index or key and then one more.
+let xs = [1]
+for a, b, c in ref xs
+end for

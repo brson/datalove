@@ -56,6 +56,10 @@ pub struct WorldGenConfig {
     /// testing a condition, where there is one in scope to destructure.
     pub if_binding_probability: u32,
 
+    /// Probability that a statement is a `for` over a collection in scope,
+    /// where there is one.
+    pub for_probability: u32,
+
     /// Probability that a parameter is passed by something other than `in`
     /// (0-100 percent). Which of the other three is then chosen evenly.
     pub param_mode_probability: u32,
@@ -119,6 +123,7 @@ impl Default for WorldGenConfig {
             loop_probability: 20,
             continue_probability: 40,
             if_binding_probability: 40,
+            for_probability: 15,
             param_mode_probability: 35,
             projection_probability: 40,
             fallible_return_probability: 35,

@@ -25,6 +25,7 @@ pub enum Statement {
     Import(StmtImport),
     If(StmtIf),
     Loop(StmtLoop),
+    For(StmtFor),
     Break(StmtBreak),
     Continue(StmtContinue),
     DebugLog(StmtDebugLog),
@@ -206,6 +207,13 @@ pub struct StmtIf {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtLoop {
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct StmtFor {
+    pub bindings: Vec<String>,
+    pub iteratee: ExprFun,
     pub body: Vec<Statement>,
 }
 
@@ -603,6 +611,11 @@ impl Statement {
             crate::ast::Statement::Import(s) => Statement::Import(StmtImport::from_ast(db, s)),
             crate::ast::Statement::If(s) => Statement::If(StmtIf::from_ast(db, s)),
             crate::ast::Statement::Loop(s) => Statement::Loop(StmtLoop::from_ast(db, s)),
+            crate::ast::Statement::For(s) => Statement::For(StmtFor {
+                bindings: s.bindings.iter().map(|b| b.as_str(db).to_string()).collect(),
+                iteratee: ExprFun::from_ast(db, s.iteratee),
+                body: s.body.iter().map(|s| Statement::from_ast(db, s)).collect(),
+            }),
             crate::ast::Statement::Break(_) => Statement::Break(StmtBreak {}),
             crate::ast::Statement::Continue(_) => Statement::Continue(StmtContinue {}),
             crate::ast::Statement::DebugLog(s) => Statement::DebugLog(StmtDebugLog::from_ast(db, s)),

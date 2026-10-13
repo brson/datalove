@@ -1,0 +1,37 @@
+[31m[D015] Error:[0m cannot change `xs` while a `for` walks it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/102_for_changes_what_it_walks.dfs:6:22 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m6 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249ml[0m[38;5;249mi[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mp[0m[38;5;249mu[0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249m([0m[38;5;249mm[0m[38;5;249mu[0m[38;5;249mt[0m[38;5;249m [0m[38;5;201mx[0m[38;5;201ms[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249m3[0m[38;5;249m)[0m
+ [38;5;240m  │[0m                      [38;5;201m─[0m[38;5;201m┬[0m  
+ [38;5;240m  │[0m                       [38;5;201m╰[0m[38;5;201m─[0m[38;5;201m─[0m changes the collection being walked
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: a `for` holds references into its collection until it ends
+[38;5;246m───╯[0m
+[31m[D015] Error:[0m cannot change `xs` while a `for` walks it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/102_for_changes_what_it_walks.dfs:7:16 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m7 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mx[0m[38;5;249ms[0m[38;5;249m[[0m[38;5;249m0[0m[38;5;249m][0m[38;5;249m![0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;155m5[0m
+ [38;5;240m  │[0m                [38;5;155m┬[0m  
+ [38;5;240m  │[0m                [38;5;155m╰[0m[38;5;155m─[0m[38;5;155m─[0m changes the collection being walked
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: a `for` holds references into its collection until it ends
+[38;5;246m───╯[0m
+[31m[D015] Error:[0m cannot change `xs` while a `for` walks it
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/102_for_changes_what_it_walks.dfs:8:12 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m8 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ms[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mx[0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;187m[[0m[38;5;187m][0m
+ [38;5;240m  │[0m            [38;5;187m─[0m[38;5;187m┬[0m  
+ [38;5;240m  │[0m             [38;5;187m╰[0m[38;5;187m─[0m[38;5;187m─[0m changes the collection being walked
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mNote[0m: a `for` holds references into its collection until it ends
+[38;5;246m───╯[0m
+[31m[D015] Error:[0m cannot change `xs` while a `for` walks it
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m tests/fixtures/error/102_for_changes_what_it_walks.dfs:11:12 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m11 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249my[0m[38;5;249ms[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;218mx[0m[38;5;218ms[0m
+ [38;5;240m   │[0m            [38;5;218m─[0m[38;5;218m┬[0m  
+ [38;5;240m   │[0m             [38;5;218m╰[0m[38;5;218m─[0m[38;5;218m─[0m changes the collection being walked
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mNote[0m: a `for` holds references into its collection until it ends
+[38;5;246m────╯[0m
+Error: Ownership error

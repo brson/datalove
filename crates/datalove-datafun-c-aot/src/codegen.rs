@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 use datalove_datafun_ir::layout as ir_layout;
 use datalove_datafun_ir::{
-    BinOp, BlockId, CodeRef, ConstValue, FunctionRegistry, IrCodeUnit, IrModuleId,
+    BinOp, BlockId, CodeRef, ConstValue, CursorKind, FunctionRegistry, IrCodeUnit, IrModuleId,
     IrType, Instruction, Operand, ParamId, SlotDest, SlotId, Terminator, UnaryOp,
     ValueId,
 };
@@ -288,6 +288,11 @@ fn check_dynamic_support(unit: &IrCodeUnit) -> Result<(), CAotError> {
 fn supports_dynamic(instr: &Instruction) -> bool {
     matches!(instr,
         Instruction::Copy { .. }
+        | Instruction::CursorBegin { .. }
+        | Instruction::CursorDone { .. }
+        | Instruction::CursorElem { .. }
+        | Instruction::CursorValue { .. }
+        | Instruction::CursorAdvance { .. }
         | Instruction::Move { .. }
         | Instruction::Clone { .. }
         | Instruction::Call { .. }
@@ -755,6 +760,27 @@ impl<'a> FunctionCodegenContext<'a> {
             }
             Instruction::TensorIndexRef { dest, tensor, index } => {
                 self.emit_tensor_index_ref(out, *dest, tensor, index)?;
+            }
+            Instruction::CursorBegin { cursor, coll } => {
+                self.emit_cursor_begin(out, *cursor, coll);
+            }
+            Instruction::CursorDone { dest, cursor } => {
+                let dest_addr = self.value_addr(*dest);
+                let call = self.cursor_call(*cursor, "done");
+                writeln!(out, "    *(bool_t*){dest_addr} = {call};").unwrap();
+            }
+            Instruction::CursorElem { dest, cursor } => {
+                let dest_addr = self.value_addr(*dest);
+                let call = self.cursor_call(*cursor, "elem");
+                writeln!(out, "    *(const void**){dest_addr} = {call};").unwrap();
+            }
+            Instruction::CursorValue { dest, cursor } => {
+                let dest_addr = self.value_addr(*dest);
+                let cursor_addr = self.slot_addr(*cursor);
+                writeln!(out, "    *(const void**){dest_addr} = dtlv_rti_tree_cursor_value({cursor_addr});").unwrap();
+            }
+            Instruction::CursorAdvance { cursor, coll } => {
+                self.emit_cursor_advance(out, *cursor, coll);
             }
             Instruction::Nop => {}
         }
@@ -3279,6 +3305,61 @@ impl<'a> FunctionCodegenContext<'a> {
         writeln!(out, "    dtlv_rti_btreemap_insert_local(rt, {}, &{}, {}, &{}, {}, &{});",
             map_addr, map_tydesc, key_addr, key_tydesc, value_addr, value_tydesc).unwrap();
         Ok(())
+    }
+
+    /// Which cursor a slot holds.
+    fn cursor_kind(&self, cursor: SlotId) -> CursorKind {
+        match self.slot_type(cursor) {
+            IrType::Cursor(kind) => *kind,
+            other => panic!("a cursor instruction on a slot of {other}"),
+        }
+    }
+
+    /// A call of the protocol that takes the cursor alone: done or elem.
+    ///
+    /// Every operation is a call, as in the interpreter; open-coding them is
+    /// an optimization that has to keep the runtime's layout and meaning.
+    fn cursor_call(&self, cursor: SlotId, op: &str) -> String {
+        let kind = match self.cursor_kind(cursor) {
+            CursorKind::Stride => "stride",
+            CursorKind::Row => "row",
+            CursorKind::Tree => "tree",
+        };
+        format!("dtlv_rti_{kind}_cursor_{op}({})", self.slot_addr(cursor))
+    }
+
+    /// Start a walk.
+    fn emit_cursor_begin(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
+        let func = match (self.cursor_kind(cursor), self.operand_type(coll)) {
+            (CursorKind::Stride, IrType::List(_)) => "dtlv_rti_list_cursor_begin_local",
+            (CursorKind::Stride, IrType::Tensor(..)) => "dtlv_rti_tensor_cursor_begin_local",
+            (CursorKind::Row, IrType::Tensor(..)) => "dtlv_rti_tensor_row_cursor_begin_local",
+            (CursorKind::Tree, IrType::Set(_)) => "dtlv_rti_btreeset_cursor_begin_local",
+            (CursorKind::Tree, IrType::Map(..)) => "dtlv_rti_btreemap_cursor_begin_local",
+            (kind, ty) => panic!("a {kind:?} cursor over a {ty}"),
+        };
+        let coll_addr = self.operand_addr(coll);
+        let coll_tydesc = self.operand_tydesc(coll);
+        let cursor_addr = self.slot_addr(cursor);
+        writeln!(out, "    {func}(rt, {coll_addr}, {coll_tydesc}, {cursor_addr});").unwrap();
+    }
+
+    /// Move a walk on.
+    fn emit_cursor_advance(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
+        let cursor_addr = self.slot_addr(cursor);
+        match self.cursor_kind(cursor) {
+            CursorKind::Stride => writeln!(out, "    dtlv_rti_stride_cursor_advance({cursor_addr});").unwrap(),
+            CursorKind::Row => writeln!(out, "    dtlv_rti_row_cursor_advance({cursor_addr});").unwrap(),
+            CursorKind::Tree => {
+                let func = match self.operand_type(coll) {
+                    IrType::Set(_) => "dtlv_rti_btreeset_cursor_advance_local",
+                    IrType::Map(..) => "dtlv_rti_btreemap_cursor_advance_local",
+                    ty => panic!("a tree cursor over a {ty}"),
+                };
+                let coll_tydesc = self.operand_tydesc(coll);
+                writeln!(out, "    {func}(rt, {cursor_addr}, {coll_tydesc});").unwrap();
+            }
+        }
     }
 
     /// Emit a MapValueRef instruction.

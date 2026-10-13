@@ -91,7 +91,7 @@ use datalove_rtdt as rtdt;
 use datalove_datafun_ir::{
     IrBlock, IrType, Instruction, Terminator,
     BlockId, Operand, SlotDest, ConstValue, ParamMode, CodeRef,
-    IrCodeUnit,
+    IrCodeUnit, CursorKind,
 };
 
 /// Result of executing a script unit.

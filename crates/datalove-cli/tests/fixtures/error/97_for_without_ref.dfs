@@ -1,0 +1,5 @@
+// A `for` walks its collection by reference, and says so.
+let xs = [1]
+for x in xs
+  debuglog x
+end for

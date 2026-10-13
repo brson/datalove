@@ -215,6 +215,21 @@ impl IrTyDescTable {
             IrType::Result(inner) => self.create_result_tydesc(inner),
             IrType::Tensor(elem, rank) => self.create_tensor_tydesc(elem, *rank),
             IrType::Ref(inner) => self.create_ref_tydesc(inner),
+            IrType::Cursor(_) => {
+                // A cursor is plain bytes to everything but the cursor
+                // instructions, which know its layout: a tuple of no fields, at
+                // the cursor's size, copies as bytes and drops as nothing.
+                let layout = datalove_datafun_ir::layout::layout_of(ty);
+                Box::new(TyDesc {
+                    type_tag: rtdt::TyTag::Tuple,
+                    flags: 0,
+                    size: layout.size,
+                    align: layout.align,
+                    type_info: rtdt::TyInfo {
+                        tuple: rtdt::TyInfoTuple { num_fields: 0, fields: std::ptr::NonNull::dangling().as_ptr() },
+                    },
+                })
+            }
             IrType::Table(columns) => self.create_table_tydesc(columns),
         }
     }

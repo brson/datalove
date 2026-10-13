@@ -1,0 +1,169 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn field_sum(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        v1 = getfieldref p0.1
+                        cursorbegin s1, *v1
+                        goto block1
+                    block1:
+                        v2 = cursordone s1
+                        branch v2, block4, block2
+                    block2:
+                        v3 = cursorelem s1
+                        v4 = add s0, *v3
+                        drop.tracked s0
+                        store.move.tracked s0, v4
+                        goto block3
+                    block3:
+                        cursoradvance s1, *v1
+                        goto block1
+                    block4:
+                        v5 = load.move.tracked s0
+                        return v5
+                    
+                    fn row_sum(p0, p1):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        v1 = listboundscheck p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop.tracked s0
+                        return v2
+                    block2:
+                        v3 = listelementref p0[p1]
+                        cursorbegin s1, *v3
+                        goto block3
+                    block3:
+                        v4 = cursordone s1
+                        branch v4, block6, block4
+                    block4:
+                        v5 = cursorelem s1
+                        v6 = add s0, *v5
+                        drop.tracked s0
+                        store.move.tracked s0, v6
+                        goto block5
+                    block5:
+                        cursoradvance s1, *v3
+                        goto block3
+                    block6:
+                        v7 = load.move.tracked s0
+                        v8 = some v7
+                        return v8
+                    
+                    fn nested_sum(p0):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block11, block2
+                    block2:
+                        v2 = cursorelem s1
+                        cursorbegin s2, *v2
+                        goto block3
+                    block3:
+                        v3 = cursordone s2
+                        branch v3, block9, block4
+                    block4:
+                        v4 = cursorelem s2
+                        v5 = const 0int
+                        v6 = eq *v4, v5
+                        drop v5
+                        branch v6, block5, block6
+                    block5:
+                        drop *v4
+                        goto block9
+                    block6:
+                        goto block7
+                    block7:
+                        v7 = add s0, *v4
+                        drop.tracked s0
+                        store.move.tracked s0, v7
+                        goto block8
+                    block8:
+                        cursoradvance s2, *v2
+                        goto block3
+                    block9:
+                        goto block10
+                    block10:
+                        cursoradvance s1, p0
+                        goto block1
+                    block11:
+                        v8 = load.move.tracked s0
+                        return v8
+                    
+                    fn main():
+                    block0:
+                        v0 = const "p"
+                        v1 = const 1int
+                        v2 = const 2int
+                        v3 = const 3int
+                        v4 = list [v1, v2, v3]
+                        v5 = pack Struct0 {v0, v4}
+                        v6 = const 1int
+                        v7 = const 2int
+                        v8 = list [v6, v7]
+                        v9 = const 3int
+                        v10 = const 0int
+                        v11 = const 100int
+                        v12 = list [v9, v10, v11]
+                        v13 = const 4int
+                        v14 = list [v13]
+                        v15 = list [v8, v12, v14]
+                        v16 = call m0.u0(v5)
+                        v17 = const 1index
+                        v18 = call m0.u1(v15, v17)
+                        v19 = const 7index
+                        v20 = call m0.u1(v15, v19)
+                        v21 = call m0.u2(v15)
+                        v22 = pack Tuple4 {v16, v18, v20, v21}
+                        drop v5
+                        drop v15
+                        return v22
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u3()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(6, some 103, none, 10)\n"),
+        ),
+    ],
+)

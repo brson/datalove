@@ -1,0 +1,4 @@
+// A `for` over a map binds the key and the value.
+let m = %{"a" = 1}
+for k in ref m
+end for

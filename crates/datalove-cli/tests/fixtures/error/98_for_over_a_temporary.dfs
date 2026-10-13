@@ -1,0 +1,4 @@
+// A `for` walks a collection that is already somewhere, not a temporary.
+for x in ref [1, 2]
+  debuglog x
+end for

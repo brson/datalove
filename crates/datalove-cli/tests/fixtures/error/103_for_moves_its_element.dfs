@@ -1,0 +1,7 @@
+// The element a `for` binds is borrowed from the collection, so it cannot be
+// moved out or assigned.
+let xs = ["a"]
+var keep = [""]
+for x in ref xs
+  set keep = [x]
+end for

@@ -107,6 +107,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "message": message
             })
         }
+        TypeError::ForWalk { message } => {
+            json!({
+                "kind": "ForWalk",
+                "message": message
+            })
+        }
         TypeError::InvalidOperandType { op, ty } => {
             json!({
                 "kind": "InvalidOperandType",

@@ -12,7 +12,7 @@
 
 use datalove_rtdt as rtdt;
 
-use crate::IrType;
+use crate::{CursorKind, IrType};
 
 /// Size and alignment of a type, in bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +91,9 @@ pub fn layout_of(ty: &IrType) -> TypeLayout {
         IrType::Map(_, _) => struct_layout::<rtdt::Map>(),
         IrType::Tensor(_, _) => struct_layout::<rtdt::Tensor>(),
         IrType::Table(_) => struct_layout::<rtdt::Table>(),
+        IrType::Cursor(CursorKind::Stride) => struct_layout::<rtdt::StrideCursor>(),
+        IrType::Cursor(CursorKind::Row) => struct_layout::<rtdt::RowCursor>(),
+        IrType::Cursor(CursorKind::Tree) => struct_layout::<rtdt::TreeCursor>(),
 
         // A reference is a pointer to the referent.
         IrType::Ref(_) => TypeLayout {

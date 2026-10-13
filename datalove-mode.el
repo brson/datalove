@@ -37,7 +37,7 @@
     "fun" "ret" "native"
     "require" "module" "import" "rider"
     "if" "else" "end"
-    "loop" "while" "break" "continue"
+    "loop" "while" "for" "in" "break" "continue"
     "match" "case" "default"
     "type" "with" "is"
     "atom" "term" "enum" "tuple"
@@ -136,7 +136,7 @@ face in both positions.")
   "Font lock keywords for `datalove-mode'.")
 
 (defconst datalove-mode--block-open-re
-  "[ \t]*\\(?:fun\\|if\\|loop\\|match\\)\\_>"
+  "[ \t]*\\(?:fun\\|if\\|loop\\|for\\|match\\)\\_>"
   "Regexp matching a line that opens a block.
 
 A `native fun' declares a signature and has no body, so it is not here:

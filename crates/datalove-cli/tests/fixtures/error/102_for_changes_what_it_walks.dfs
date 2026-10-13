@@ -1,0 +1,12 @@
+// The collection a `for` walks is frozen while it does: its elements are
+// borrowed for the walk.
+require module sys/std/list
+var xs = [1, 2]
+for x in ref xs
+  call list.push(mut xs, 3)
+  set xs[0]! = 5
+  set xs = []
+end for
+for x in ref xs
+  let ys = xs
+end for

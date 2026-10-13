@@ -439,6 +439,20 @@ impl CAotCompiler {
         writeln!(out, "}}").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_contains_key_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, bool_t* result_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_get_value_ref_local(void* rt, const void* map_ref, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void** value_ptr_out);").unwrap();
+        // Cursors: the whole of a `for` loop's walk.
+        for kind in ["list", "tensor", "tensor_row", "btreeset", "btreemap"] {
+            writeln!(out, "extern uint8_t dtlv_rti_{kind}_cursor_begin_local(void* rt, const void* coll_ref, const dtlv_tydesc_t* coll_tydesc, void* cursor_out);").unwrap();
+        }
+        for kind in ["btreeset", "btreemap"] {
+            writeln!(out, "extern uint8_t dtlv_rti_{kind}_cursor_advance_local(void* rt, void* cursor_mut, const dtlv_tydesc_t* coll_tydesc);").unwrap();
+        }
+        for kind in ["stride", "row", "tree"] {
+            writeln!(out, "extern bool_t dtlv_rti_{kind}_cursor_done(const void* cursor_ref);").unwrap();
+            writeln!(out, "extern const void* dtlv_rti_{kind}_cursor_elem(const void* cursor_ref);").unwrap();
+        }
+        writeln!(out, "extern const void* dtlv_rti_tree_cursor_value(const void* cursor_ref);").unwrap();
+        writeln!(out, "extern void dtlv_rti_stride_cursor_advance(void* cursor_mut);").unwrap();
+        writeln!(out, "extern void dtlv_rti_row_cursor_advance(void* cursor_mut);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_list_set_local(void* rt, void* list_mut, const dtlv_tydesc_t* list_tydesc, index_t index, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_tensor_set_local(void* rt, void* tensor_mut, const dtlv_tydesc_t* tensor_tydesc, const index_t* indices, void* elem_in, const dtlv_tydesc_t* elem_tydesc);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_btreemap_set_value_local(void* rt, void* map_mut, const dtlv_tydesc_t* map_tydesc, const void* key_ref, const dtlv_tydesc_t* key_tydesc, void* value_in, const dtlv_tydesc_t* value_tydesc);").unwrap();

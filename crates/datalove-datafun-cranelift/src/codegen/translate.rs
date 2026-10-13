@@ -353,6 +353,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::SetField { slot, field_path, value } => {
                 self.compile_set_field(builder, slot, field_path, value)?;
             }
+            Instruction::CursorBegin { cursor, coll } => {
+                self.compile_cursor_begin(builder, *cursor, coll)?;
+            }
+            Instruction::CursorDone { dest, cursor } => {
+                let func = self.cursor_done_func(*cursor);
+                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+            }
+            Instruction::CursorElem { dest, cursor } => {
+                let func = self.cursor_elem_func(*cursor);
+                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+            }
+            Instruction::CursorValue { dest, cursor } => {
+                let func = self.runtime.tree_cursor_value;
+                self.compile_cursor_read(builder, *dest, *cursor, func)?;
+            }
+            Instruction::CursorAdvance { cursor, coll } => {
+                self.compile_cursor_advance(builder, *cursor, coll)?;
+            }
             Instruction::Nop => {}
             Instruction::ListGet { dest, is_valid, list, index } => {
                 self.compile_list_get(builder, *dest, *is_valid, list, index)?;

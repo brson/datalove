@@ -428,6 +428,10 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut FxHashSet<ValueI
             add_operand_value(tensor, used);
             add_operand_value(index, used);
         }
+        Instruction::CursorBegin { coll, .. } | Instruction::CursorAdvance { coll, .. } => {
+            add_operand_value(coll, used);
+        }
+        Instruction::CursorDone { .. } | Instruction::CursorElem { .. } | Instruction::CursorValue { .. } => {}
     }
 }
 
@@ -490,7 +494,8 @@ fn consumed_owned(
 ) -> Option<Vec<ValueId>> {
     if matches!(instr,
         Instruction::Clone { .. } | Instruction::Copy { .. }
-        | Instruction::GetFieldRef { .. }) {
+        | Instruction::GetFieldRef { .. } | Instruction::ListElementRef { .. }
+        | Instruction::MapValueRef { .. } | Instruction::TensorIndexRef { .. }) {
         return Some(Vec::new());
     }
     let owned = |ty: Option<&IrType>| !ty.is_some_and(|t| t.is_copy());
@@ -554,6 +559,8 @@ fn has_side_effects(instr: &Instruction) -> bool {
         Instruction::MapUpsert { .. } => true,
         // Tensor set has side effects (mutates tensor).
         Instruction::TensorSet { .. } => true,
+        // Starting and moving a cursor write its slot.
+        Instruction::CursorBegin { .. } | Instruction::CursorAdvance { .. } => true,
         // Everything else is pure.
         _ => false,
     }

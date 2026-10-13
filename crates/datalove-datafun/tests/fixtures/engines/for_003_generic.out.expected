@@ -1,0 +1,147 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn last(p0):
+                      desc0 = T0
+                      desc1 = list<T0>
+                      desc2 = option<T0>
+                    block0:
+                        v0 = none
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block4, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = clone *v2
+                        v4 = some v3
+                        drop.tracked s0
+                        store.move.tracked s0, v4
+                        goto block3
+                    block3:
+                        cursoradvance s1, p0
+                        goto block1
+                    block4:
+                        v5 = load.move.tracked s0
+                        return v5
+                    
+                    fn keys(p0):
+                      desc0 = T0
+                      desc1 = T1
+                      desc2 = map<T0, T1>
+                      desc3 = list<T0>
+                    block0:
+                        v0 = list []
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block4, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = cursorvalue s1
+                        v4 = clone *v2
+                        v5 = list [v4]
+                        drop.tracked s0
+                        store.move.tracked s0, v5
+                        goto block3
+                    block3:
+                        cursoradvance s1, p0
+                        goto block1
+                    block4:
+                        v6 = load.move.tracked s0
+                        return v6
+                    
+                    fn members(p0):
+                      desc0 = T0
+                      desc1 = set<T0>
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block4, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = const 1index
+                        v4 = intrinsic AddWrappingIndex(s0, v3)
+                        store.copy s0, v4
+                        goto block3
+                    block3:
+                        cursoradvance s1, p0
+                        goto block1
+                    block4:
+                        v5 = load.copy s0
+                        return v5
+                    
+                    fn main():
+                    block0:
+                        v0 = const "a"
+                        v1 = const "b"
+                        v2 = list [v0, v1]
+                        v3 = call m0.u0(v2) <string>
+                        drop v2
+                        v4 = const 7u32
+                        v5 = list [v4]
+                        v6 = call m0.u0(v5) <u32>
+                        drop v5
+                        v7 = const "x"
+                        v8 = const 1int
+                        v9 = const "y"
+                        v10 = const 2int
+                        v11 = %{v7: v8, v9: v10}
+                        v12 = call m0.u1(v11) <string, int>
+                        drop v11
+                        v13 = const "p"
+                        v14 = const "q"
+                        v15 = const "r"
+                        v16 = #{v13, v14, v15}
+                        v17 = call m0.u2(v16) <string>
+                        drop v16
+                        v18 = pack Tuple4 {v3, v6, v12, v17}
+                        return v18
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u3()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(some \"b\", some 7, [\"y\"], 3)\n"),
+        ),
+    ],
+)

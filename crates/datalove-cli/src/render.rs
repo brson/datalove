@@ -211,6 +211,16 @@ fn ownership_diagnostic<'db>(
             }
             Some(builder.build())
         }
+        AnalysisError::WalkedCollectionChanged { expr_key, name } => {
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
+            Some(
+                DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
+                    .code("D015")
+                    .primary_label(TextSpan::new(text, span), "changes the collection being walked")
+                    .note("a `for` holds references into its collection until it ends")
+                    .build(),
+            )
+        }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
             let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(

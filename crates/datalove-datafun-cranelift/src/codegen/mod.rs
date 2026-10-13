@@ -45,6 +45,8 @@ mod intrinsics;
 mod lists;
 /// Map indexing operations.
 mod maps;
+/// Cursors, a `for` loop's walk.
+mod cursors;
 /// Tensor indexing operations.
 mod tensors;
 /// Binary and unary operations.

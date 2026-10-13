@@ -154,6 +154,7 @@ impl StmtKey {
             Statement::Match(_) => (15, None),
             Statement::NativeFun(_) => (16, None),
             Statement::ExprStatement(_) => (17, None),
+            Statement::For(s) => (18, Some(s.iteratee.local_index(db))),
         };
         Self { kind, local_index }
     }
@@ -179,6 +180,7 @@ impl StmtKey {
             15 => "Match",
             16 => "NativeFun",
             17 => "ExprStatement",
+            18 => "For",
             _ => "Unknown",
         }
     }
@@ -307,6 +309,14 @@ pub enum AnalysisError<'db> {
         expr_key: ExprKey<'db>,
         name: String,
         recovery_hint: OwnershipRecoveryHint,
+    },
+    /// Changing a collection while a `for` walks it: moving it, assigning to
+    /// it or through it, or passing it `mut` or `out`. The walk holds
+    /// references into it.
+    /// D015
+    WalkedCollectionChanged {
+        expr_key: ExprKey<'db>,
+        name: String,
     },
     /// Attempting to pass a ref param to a mut param.
     /// D004
@@ -446,6 +456,9 @@ fn format_single_error(error: &AnalysisError) -> String {
         }
         AnalysisError::CannotMutFromRef { expr_key: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
+        }
+        AnalysisError::WalkedCollectionChanged { expr_key: _, name } => {
+            format!("error[D015]: cannot change `{}` while a `for` walks it", name)
         }
         AnalysisError::ReadUninitialized { expr_key: _, name } => {
             format!("error[D005]: read of uninitialized binding: `{}`", name)

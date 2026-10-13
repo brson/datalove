@@ -342,6 +342,16 @@ fn emit_single_ownership_diagnostic<'db>(
                 builder.emit_ownership();
             }
         }
+        AnalysisError::WalkedCollectionChanged { expr_key, name } => {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
+                let msg = format!("cannot change `{}` while a `for` walks it", name);
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("D015")
+                    .primary_label(ts, "changes the collection being walked")
+                    .note("a `for` holds references into its collection until it ends")
+                    .emit_ownership();
+            }
+        }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
             if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot get mutable reference from immutable: `{}`", name);

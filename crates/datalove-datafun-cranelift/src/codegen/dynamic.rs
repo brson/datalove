@@ -467,6 +467,11 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
 fn supports_dynamic(instr: &Instruction) -> bool {
     matches!(instr,
         Instruction::Copy { .. }
+        | Instruction::CursorBegin { .. }
+        | Instruction::CursorDone { .. }
+        | Instruction::CursorElem { .. }
+        | Instruction::CursorValue { .. }
+        | Instruction::CursorAdvance { .. }
         | Instruction::Move { .. }
         | Instruction::Clone { .. }
         | Instruction::Call { .. }

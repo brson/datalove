@@ -673,6 +673,21 @@ impl fmt::Display for Instruction {
             Instruction::TensorIndexRef { dest, tensor, index } => {
                 write!(f, "{} = tensorindexref {}[{}]", dest, tensor, index)
             }
+            Instruction::CursorBegin { cursor, coll } => {
+                write!(f, "cursorbegin {}, {}", cursor, coll)
+            }
+            Instruction::CursorDone { dest, cursor } => {
+                write!(f, "{} = cursordone {}", dest, cursor)
+            }
+            Instruction::CursorElem { dest, cursor } => {
+                write!(f, "{} = cursorelem {}", dest, cursor)
+            }
+            Instruction::CursorValue { dest, cursor } => {
+                write!(f, "{} = cursorvalue {}", dest, cursor)
+            }
+            Instruction::CursorAdvance { cursor, coll } => {
+                write!(f, "cursoradvance {}, {}", cursor, coll)
+            }
             Instruction::DebugLog { operand } => {
                 write!(f, "debuglog {}", operand)
             }

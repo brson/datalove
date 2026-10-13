@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_ir::{IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
+use datalove_datafun_ir::{ConstValue, CursorKind, IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
 use datalove_datafun_sema::Destructure;
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref, lower_operand, operand_type, field_type_from_base};
@@ -218,6 +218,9 @@ fn lower_statement_with_id<'db>(
         Statement::Loop(loop_stmt) => {
             lower_loop(ctx, loop_stmt, stmt_idx)
         }
+        Statement::For(for_stmt) => {
+            lower_for(ctx, for_stmt, stmt_idx)
+        }
         Statement::Break(_) => {
             // Typechecker validates break is inside a loop (F050).
             let loop_ctx = ctx.body.loop_stack.last()
@@ -237,7 +240,7 @@ fn lower_statement_with_id<'db>(
             // Typechecker validates continue is inside a loop (F051).
             let loop_ctx = ctx.body.loop_stack.last()
                 .unwrap_or_else(|| panic!("continue outside loop - typechecker should catch this"));
-            let continue_target = loop_ctx.header;
+            let continue_target = loop_ctx.next;
 
             // Emit drops for current loop iteration.
             ctx.emit_before_continue_drops(stmt_idx);
@@ -644,7 +647,7 @@ pub fn lower_loop<'db>(
 
     // Push loop context for break/continue.
     ctx.body.loop_stack.push(LoopLowerContext {
-        header: loop_header,
+        next: loop_header,
         exit: loop_exit,
     });
 
@@ -1326,3 +1329,136 @@ pub fn lower_match<'db>(
     Ok(())
 }
 
+
+/// Lower a `for`: a walk over a collection with a runtime cursor.
+///
+/// ```text
+///     cursorbegin s_c, coll
+///     slotstore.copy s_i, 0             // indexed form only
+///     goto head
+/// head:
+///     d = cursordone s_c
+///     brif d, exit, body
+/// body:
+///     r = cursorelem s_c                // the element, or a map's key
+///     v = cursorvalue s_c               // a map's value
+///     i = slotload.copy s_i             // indexed form only
+///     ...
+///     goto next
+/// next:                                 // `continue` goes here
+///     cursoradvance s_c, coll
+///     slotstore.copy s_i, i + 1         // indexed form only
+///     goto head
+/// exit:
+/// ```
+///
+/// Each element binding is a reference made once per iteration, which every
+/// use in the body reads through; an index binding is the counter's value
+/// for the iteration. Neither can be assigned. The counter never passes the
+/// collection's length, so its increment cannot overflow.
+pub fn lower_for<'db>(
+    ctx: &mut LowerCtx<'db>,
+    stmt: &ast::StmtFor<'db>,
+    stmt_idx: usize,
+) -> Result<(), LowerError> {
+    use super::context::LoopLowerContext;
+
+    // The collection is a place, borrowed as a `ref` argument is. A place
+    // leaves no temporary behind: a const built fresh is a copy type.
+    let mark = ctx.expr_temps_mark();
+    let coll = lower_expression_for_ref(ctx, stmt.iteratee)?;
+    assert_eq!(ctx.expr_temps_mark(), mark, "a place leaves no temporaries to drop");
+    let coll = ctx.deref_if_ref(coll);
+
+    let coll_ty = ctx.expr_type(stmt.iteratee);
+    let kind = CursorKind::of(&coll_ty).expect("the typechecker admits only collections to `for`");
+    let elem_ty = CursorKind::elem_type(&coll_ty);
+    let value_ty = match &coll_ty {
+        IrType::Map(_, value) => Some((**value).clone()),
+        _ => None,
+    };
+    let indexed = stmt.bindings.len() == 2 && value_ty.is_none();
+
+    let cursor = ctx.fresh_slot(IrType::Cursor(kind));
+    ctx.emit(Instruction::CursorBegin { cursor, coll });
+    let counter = indexed.then(|| {
+        let counter = ctx.fresh_slot(IrType::Index);
+        let zero = ctx.fresh_value(IrType::Index);
+        ctx.emit(Instruction::Const { dest: zero, value: ConstValue::Index(0) });
+        ctx.emit(Instruction::SlotStoreCopy { dest: SlotDest::Local(counter), value: Operand::Value(zero) });
+        counter
+    });
+
+    let head = ctx.fresh_block();
+    let body = ctx.fresh_block();
+    let next = ctx.fresh_block();
+    let exit = ctx.fresh_block();
+
+    ctx.finish_block(Terminator::Goto { target: head, args: Vec::new() });
+    ctx.start_block(head);
+    let done = ctx.fresh_value(IrType::Bool);
+    ctx.emit(Instruction::CursorDone { dest: done, cursor });
+    ctx.finish_block(Terminator::Branch {
+        cond: Operand::Value(done),
+        then_block: exit,
+        then_args: Vec::new(),
+        else_block: body,
+        else_args: Vec::new(),
+    });
+
+    ctx.start_block(body);
+    ctx.body.loop_stack.push(LoopLowerContext { next, exit });
+    ctx.enter_var_scope();
+
+    // The bindings, in the order written, which is the order ownership
+    // analysis allocated them in.
+    let elem = ctx.fresh_value(IrType::Ref(Box::new(elem_ty)));
+    ctx.emit(Instruction::CursorElem { dest: elem, cursor });
+    let mut operands = Vec::new();
+    if let Some(counter) = counter {
+        let index = ctx.fresh_value(IrType::Index);
+        ctx.emit(Instruction::SlotLoadCopy { dest: index, slot: counter });
+        operands.push(Operand::Value(index));
+    }
+    operands.push(Operand::ValueRef(elem));
+    if let Some(value_ty) = value_ty {
+        let value = ctx.fresh_value(IrType::Ref(Box::new(value_ty)));
+        ctx.emit(Instruction::CursorValue { dest: value, cursor });
+        operands.push(Operand::ValueRef(value));
+    }
+    for (name, operand) in stmt.bindings.iter().zip(operands) {
+        ctx.bind_var(name.text(ctx.db), operand);
+        ctx.record_binding_operand(operand);
+    }
+
+    for body_stmt in stmt.body.iter() {
+        lower_statement(ctx, body_stmt)?;
+    }
+    ctx.exit_var_scope();
+
+    if !ctx.is_unreachable() {
+        ctx.emit_loop_body_end_drops(stmt_idx);
+        ctx.finish_block(Terminator::Goto { target: next, args: Vec::new() });
+    }
+    ctx.body.loop_stack.pop();
+
+    ctx.start_block(next);
+    ctx.emit(Instruction::CursorAdvance { cursor, coll });
+    if let Some(counter) = counter {
+        let index = ctx.fresh_value(IrType::Index);
+        ctx.emit(Instruction::SlotLoadCopy { dest: index, slot: counter });
+        let one = ctx.fresh_value(IrType::Index);
+        ctx.emit(Instruction::Const { dest: one, value: ConstValue::Index(1) });
+        let following = ctx.fresh_value(IrType::Index);
+        ctx.emit(Instruction::Intrinsic {
+            dest: following,
+            intrinsic: datalove_datafun_intrinsics::IntrinsicId::AddWrappingIndex,
+            args: vec![Operand::Value(index), Operand::Value(one)],
+        });
+        ctx.emit(Instruction::SlotStoreCopy { dest: SlotDest::Local(counter), value: Operand::Value(following) });
+    }
+    ctx.finish_block(Terminator::Goto { target: head, args: Vec::new() });
+
+    ctx.start_block(exit);
+    Ok(())
+}
