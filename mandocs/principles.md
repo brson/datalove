@@ -12,10 +12,10 @@ Datalove is built on a small and restrictive core language.
 Dependencies are explicit,
 functions are pure, values are uniquely owned,
 and nothing happens that was not written.
-Those restrictions make modern features easy:
+Those restrictions make modern features possible:
 fast compilation, compile-time evaluation,
 incremental recompilation,
-and scripts whose history can be edited, rolled back and deterministically replayed.
+and scripts whose history can be edited, rolled back and replayed.
 
 
 ## The Principles
@@ -47,11 +47,7 @@ and understanding that core data model comes before understanding Datalove.
 
 ## Power through restricted language design
 
-Datalove functions are pure,
-with no side effects and no exceptional control flow.
-Values are uniquely owned,
-with no shared mutable state.
-These restrictions give up flexibility,
+Datalove's restrictions give up flexibility,
 and in exchange Datalove can do things
 that are impractical in other languages.
 
@@ -62,25 +58,26 @@ Loops and integer arithmetic are constrained enough
 that many functions can be proven to terminate (in theory...),
 so compile-time evaluation is known to finish.
 
-Any statement in a script can be edited and reevaluated,
-and its history rolled back and replayed,
+Any code in a module or script can be edited
+and only its dependent code recompiled and reevaluated,
 because nothing it did escaped into hidden state.
-Procedures, when they arrive, extend this to I/O
-by running it through a virtualized layer
-that can be recorded and replayed.
+With the eventual addition of virtualized I/O at
+the edges of the pure-functional language
+we extend this capability to the world of real data,
+where any change in either code or input data triggers
+a deterministic partial reevaluation.
 That is the environment Datalove is for:
-past REPLs and notebooks,
-where a data experiment can grow into a production pipeline
-without being rewritten.
+where an interactive experiment can grow into a reliable production pipeline.
 
 The same restrictions keep the compiler simple.
 It needs little analysis to recover performance,
-and users see that simplicity as fast compilation
+and users experience that simplicity as fast compilation
 and predictable performance.
 
 
 ## Nothing happens that was not written
 
+The module and dependency structure is explicit and straightforward to resolve.
 The surface syntax translates directly to what happens at execution,
 and memory layout is obvious from the types.
 Types are never implicitly coerced.
