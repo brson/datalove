@@ -74,10 +74,14 @@ like Python's `for x in xs` or Rust's `for x in &xs`.
 A simple design for this is obvious
 so I'll go ahead and do it now!
 
-Two properties of the language that are going
-to impact our design are that Datalove has a linear type system,
-and that [Datalove does not have first-class references](../datafun.md#user-content-borrows-are-second-class).
-The latter is going to heavily limit our expressivity.
+We have some constraints.
+Datalove has a linear type system where values are neither garbage-collected nor reference-counted,
+but inline value types.
+So copying can be expensive, but we want to iterate cheaply.
+Datalove also [does not have first-class references](../datafun.md#user-content-borrows-are-second-class),
+so in the surface language we can't take pointers directly into collections and treat them as first-class values
+that can be moved between bindings, returned from functions, etc.
+That's going to heavily limit our expressivity.
 
 
 
@@ -201,51 +205,13 @@ Sets and maps won't support this form since they don't index by number.
 
 
 
-<!-- is this the payoff? -->
+<!-- the payoff -->
 
-## An efficient collection cursor
+## How to implement iteration over collections
 
-Implementing this is a significant piece of work,
-but most of the compiler bits are relatively straightforward extensions to what already exists.
-The big missing piece to make this all work is
-collection cursors in the runtime.
-All the existing accessors are per-element.
-
-Our design needs to solve the performance problems we identified earlier:
-todo
-Also want to be able to short-circuit the runtime calls completely when
-iterating over lists.
-
-I ended up on one cursor shape for all collections.
-It's a small plain-data struct:
-a pointer to the current element,
-a position, and a count
-(plus additional fields for sets and maps).
-
-```rust
-todo
-```
-
-todo rewrite this to be the payoff
-
-The position doubles as the loop index, so the indexed form of `for` is free.
-Each collection gets a "begin" and an "advance" function with the same signature,
-and "done" is just comparing the position to the count,
-which every backend can do inline.
-
-```
-dtlv_rti_list_cursor_begin_local(rt, coll_ref, coll_tydesc, cursor_out, scratch) -> RtStatus
-dtlv_rti_list_cursor_advance_local(rt, cursor, coll_tydesc) -> RtStatus
-```
-
-For lists and tensors the fast backends don't call the runtime at all:
-advancing is a pointer bump.
-Sets and maps are B+trees whose leaves are already linked in order,
-so advancing steps along a leaf and hops to the next one,
-instead of descending from the root for every element like `key_at` does.
-
-The compiler knows the layout of `Cursor`,
-which provides a simple protocol for the compiler to codegen against.
+benefit: simple implementation
+induction variable special case in the syntax, but not underneath?
+cursor only needed for sets and maps.
 
 
 
@@ -259,5 +225,6 @@ maybe number of loop conversions that were able to remove the explicit variable.
 some perf numbers for the set walk
 cases where there's still wrapping addition related to loops or the for loop wasn't sufficient.
 maybe show whether cranelift can lift the bounds check without the for loop.
+open qs: reverse, zip, etc, by-value iters
 
 -->
