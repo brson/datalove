@@ -1,24 +1,27 @@
 # `for` Loops over the Collections
 
 A plan for `for` over lists, tensors, sets and maps, from the parser to the
-backends. It replaces "Immutable Cursors for the Collections", which proposed
-one runtime cursor for every collection and was written before generics moved
-to fat pointers. Refreshed October 2026 against the compiler as it stands;
-not implemented. The language side is in
+backends. Every collection is walked through a cursor whose whole protocol is
+runtime functions; a backend that open-codes them is optimizing, not defining
+them. It replaces "Immutable Cursors for the Collections", which predated fat
+generics. Refreshed October 2026 against the compiler as it stands; not
+implemented. The language side is in
 `mandocs/drafts/for-loops-for-collections.md`.
 
 ## Contents
 
 - [What it is for](#user-content-what-it-is-for)
 - [The language](#user-content-the-language)
-- [One loop shape](#user-content-one-loop-shape)
-- [Lists and tensors: no cursor](#user-content-lists-and-tensors-no-cursor)
-- [Sets and maps: a tree cursor](#user-content-sets-and-maps-a-tree-cursor)
+- [The protocol](#user-content-the-protocol)
+- [Strided cursors: lists and rank-1 tensors](#user-content-strided-cursors-lists-and-rank-1-tensors)
+- [Row cursors: tensors of rank above 1](#user-content-row-cursors-tensors-of-rank-above-1)
+- [Tree cursors: sets and maps](#user-content-tree-cursors-sets-and-maps)
+- [In the IR](#user-content-in-the-ir)
 - [The indexed form](#user-content-the-indexed-form)
+- [Tradeoffs](#user-content-tradeoffs)
 - [Front end](#user-content-front-end)
 - [Ownership](#user-content-ownership)
 - [Backends](#user-content-backends)
-- [What changed from the cursor plan](#user-content-what-changed-from-the-cursor-plan)
 - [Bugs found on the way](#user-content-bugs-found-on-the-way)
 - [What exists and what is missing](#user-content-what-exists-and-what-is-missing)
 - [Phases](#user-content-phases)
@@ -57,156 +60,211 @@ for key, value in ref m     // map
 - The bindings are `ref` bindings: they cannot be moved, assigned or passed
   `mut`/`out`. `@` clones. A copy element reads like any value.
 - The iteratee's root binding is **frozen** for the loop: no move, no `set` of
-  it or through it, no `mut`/`out` argument. That is what keeps the
-  references sound, and the runtime does not check it.
+  it or through it, no `mut`/`out` argument. That is what keeps the cursor's
+  pointers sound, and the runtime does not check it.
 - A tensor of rank above 1 binds a view of rank one less, as `t[i]?` does
   under a borrow.
 - Tables and strings are not iterable yet.
 - `break` and `continue` work as in `loop`; `continue` goes to the next
   element.
 
-## One loop shape
+## The protocol
 
-Every collection lowers to the same skeleton: a hidden counter `i` against a
-length `n` read once, which is sound because the iteratee is frozen. Only the
-per-element access differs by kind.
+Every collection kind has a cursor type and the same five operations. The
+kind is always known statically -- an erased `[T]` is still a list -- so
+nothing dispatches on a descriptor's tag.
+
+| Operation | Does | Precondition |
+|---|---|---|
+| **begin** | Fills a cursor at the first element, or done for an empty collection | The collection is frozen until the walk ends |
+| **done** | Whether the walk is over | -- |
+| **elem** | A pointer at the current element; a map's current key | Not done |
+| **value** | A pointer at a map's current value | Not done; maps only |
+| **advance** | Moves to the next element, or to done after the last | Not done |
+
+The loop tests at the top, so begin and done carry the empty case and no
+operation needs a non-empty collection.
+
+Three cursor types cover the four collections:
+
+| Collection | Cursor | Done when |
+|---|---|---|
+| list | `StrideCursor` | `remaining == 0` |
+| tensor, rank 1 | `StrideCursor` | `remaining == 0` |
+| tensor, rank above 1 | `RowCursor` | `remaining == 0` |
+| set, map | `TreeCursor` | `leaf` is null |
+
+Each is plain data in `datalove-rtdt`. It owns nothing, so it is copy: drops,
+tracking bytes and leak checking never see it. A cursor holds pointers into
+the collection's heap storage, which is sound only because the iteratee is
+frozen.
+
+Every function, by name:
 
 ```
-    n = len v_coll
-    slotstore.copy s_i, 0
-    brif (lt 0, n), begin, exit
-begin:
-    cursorbegin s_c, v_coll           // sets and maps only
-    goto body
-body:
-    i = slotload.copy s_i
-    r = <element ref>                 // listelementref v_coll[i], cursorkeyref s_c, ...
-    ...                               // item is *r
-    goto latch
-latch:                                // continue jumps here
-    i1 = add i, 1
-    slotstore.copy s_i, i1
-    brif (lt i1, n), step, exit
-step:
-    cursoradvance s_c, v_coll         // sets and maps only; empty otherwise
-    goto body
-exit:
+// Lists and rank-1 tensors.
+dtlv_rti_list_cursor_begin_local(rt, list_ref, list_tydesc, cursor_out) -> RtStatus
+dtlv_rti_tensor_cursor_begin_local(rt, tensor_ref, tensor_tydesc, cursor_out) -> RtStatus
+dtlv_rti_stride_cursor_done(cursor_ref) -> bool
+dtlv_rti_stride_cursor_elem(cursor_ref) -> *const u8
+dtlv_rti_stride_cursor_advance(cursor_mut)
+
+// Tensors of rank above 1.
+dtlv_rti_tensor_row_cursor_begin_local(rt, tensor_ref, tensor_tydesc, cursor_out) -> RtStatus
+dtlv_rti_row_cursor_done(cursor_ref) -> bool
+dtlv_rti_row_cursor_elem(cursor_ref) -> *const u8
+dtlv_rti_row_cursor_advance(cursor_mut)
+
+// Sets and maps.
+dtlv_rti_btreeset_cursor_begin_local(rt, set_ref, set_tydesc, cursor_out) -> RtStatus
+dtlv_rti_btreemap_cursor_begin_local(rt, map_ref, map_tydesc, cursor_out) -> RtStatus
+dtlv_rti_btreeset_cursor_advance_local(rt, cursor_mut, set_tydesc) -> RtStatus
+dtlv_rti_btreemap_cursor_advance_local(rt, cursor_mut, map_tydesc) -> RtStatus
+dtlv_rti_tree_cursor_done(cursor_ref) -> bool
+dtlv_rti_tree_cursor_elem(cursor_ref) -> *const u8
+dtlv_rti_tree_cursor_value(cursor_ref) -> *const u8
 ```
 
-The counter is never more than `n`, so its increment cannot overflow, and no
-source code has to write the wrapping add.
+Sixteen functions. Begin, and the tree's advance, read the collection's heap,
+take its descriptor, and follow the `_local` and `RtStatus` conventions. The
+rest only read or bump the cursor's own fields, need neither the handle nor a
+descriptor, cannot fail, and return their answer directly, as
+`dtlv_rti_field_offset` does.
 
-The loop is rotated -- the test is at the latch -- so the cursor's
-operations have simple contracts: `begin` runs only on a non-empty
-collection, and `advance` only when there is another element. Neither needs a
-"done" sentinel.
+## Strided cursors: lists and rank-1 tensors
 
-**The element reference is made once per iteration**, at the head of the
-body, and `item` is bound to `Operand::ValueRef(r)`. The cursor plan made one
-per *use*, so that no reference outlived an instruction; that rule came from
-erasure, where a reference held across a loop needed its descriptor tracked.
-Under fat generics a `Ref` is a plain pointer whose descriptor is the table
-entry for its pointee (`plan-fat-generics.md`, "What it does for other
-work"), and `r` lives only within one iteration, dominating every use. The
-precedent is promoted function consts, the one named `Ref` value today
-(`const/src/promote.rs`). An index binding is the loaded `i`, as
-`Operand::Value`, so it cannot be assigned either.
+```rust
+#[repr(C)]
+pub struct StrideCursor {
+    pub elem: *const u8,     // The current element.
+    pub stride: usize,       // Bytes from one element to the next.
+    pub remaining: Index,    // Elements from this one to the end; 0 is done.
+}
+```
 
-## Lists and tensors: no cursor
+- **List begin:** `elem = data`, `stride` the element size from the list's
+  descriptor (in a generic, the table entry for `[T]`), `remaining = size`.
+- **Rank-1 tensor begin:** `elem = ptr_base + offset_elems * size`,
+  `stride = strides[0] * size`, `remaining = shape[0]`.
+- **advance:** `elem += stride` (wrapping), `remaining -= 1`.
+- **done:** `remaining == 0`. **elem:** `elem`.
 
-A list or tensor needs nothing new beyond a length. The access is the
-existing `ListElementRef` or `TensorIndexRef` on the counter:
+The count, rather than an end pointer, is what makes zero-sized elements
+work. `Unit` and `Atom` are zero-sized, so a `[()]` of length 3 has its end
+pointer equal to its start, and an end-pointer loop would run no times. A
+count also survives a stride standing for a negative one, which the tensor's
+field comment allows and nothing creates today.
 
-- **Every backend already inlines them.** Cranelift computes
-  `data + i * size` (`codegen/lists.rs`, `compute_element_addr`), reading the
-  size off the table entry for a `[T]`. C AOT emits one line. The interpreter
-  computes it in the walker. The bytecode has `Op::ListElementRef`, and
-  `ListElementRefRt` for the generic case.
-- **A tensor of rank above 1** builds a view per iteration, as `t[i]?` does
-  today, in storage each backend already reserves per instruction. Nested
-  `for` over rows and cells works out of the box, since an inner loop's
-  iteratee is the outer one's view.
-- **No bounds check.** The latch's `i < n` on a frozen collection is the
-  check. IR invariant 8 says an element reference is dominated by its check
-  instruction; it gets a second clause for this.
+## Row cursors: tensors of rank above 1
 
-The pointer bump the cursor plan wanted -- `elem += step` instead of
-`data + i * size` -- is strength reduction, and can come later inside a
-backend, without the IR or the runtime knowing.
+```rust
+#[repr(C)]
+pub struct RowCursor {
+    pub view: Tensor,        // The current row: a view of rank one less.
+    pub stride: Index,       // Elements from one row to the next (strides[0]).
+    pub remaining: Index,    // Rows from this one to the end; 0 is done.
+}
+```
 
-`Len { dest, coll }` is the one new instruction: a list's `size`, a set's or
-map's `len`, a tensor's `shape[0]`. All four are a load from the header, so
-every backend inlines it. It reads the collection without consuming it.
+The view is the one `TensorIndexRef` builds today: capacity zero, aliasing
+the parent's buffer, `shape` and `strides` one past the parent's. It lives in
+the cursor, so there is no scratch for a backend to reserve.
 
-## Sets and maps: a tree cursor
+- **begin:** the view at row 0, `stride = strides[0]`, `remaining = shape[0]`.
+- **advance:** `view.offset_elems += stride` (wrapping), `remaining -= 1`.
+- **elem:** a pointer at `view`, inside the cursor. It is valid for the
+  iteration, since the cursor's slot lives for the whole loop and only
+  advance changes it. An inner `for` over the row begins its own cursor from
+  that view, as from any tensor.
 
-Sets and maps are B+trees with their entries in leaves chained by
-`next_leaf`, so an in-order walk is the leaves left to right
-(`btreemap_collect_impl`, `btreeset_to_list_impl`). A cursor remembers where
-it is in that chain:
+## Tree cursors: sets and maps
 
 ```rust
 #[repr(C)]
 pub struct TreeCursor {
-    pub leaf: *const u8,   // The current leaf.
-    pub key: *const u8,    // The current key; a set's element.
-    pub value: *const u8,  // A map's current value; null for a set.
-    pub slot: u32,         // The key's slot within the leaf.
+    pub leaf: *const u8,     // The current leaf; null is done.
+    pub elem: *const u8,     // The current key; a set's element.
+    pub value: *const u8,    // A map's current value; null for a set.
+    pub slot: u32,           // The current key's slot within the leaf.
 }
 ```
 
-It is plain data and owns nothing. It is copy, so drops and tracking never see
-it, and it lives in a slot of a new `IrType::TreeCursor` (layout
-`struct_layout::<rtdt::TreeCursor>()`). There is no position or count in it:
-the loop's counter does that job.
+There is no count. The end is the leaf chain's end: the last leaf's
+`next_leaf` is null, and an empty collection's root is null.
 
-Four runtime entry points:
-
-```
-dtlv_rti_btreeset_cursor_begin_local(rt, set_ref, set_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreeset_cursor_advance_local(rt, cursor_mut, set_tydesc) -> RtStatus
-dtlv_rti_btreemap_cursor_begin_local(rt, map_ref, map_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreemap_cursor_advance_local(rt, cursor_mut, map_tydesc) -> RtStatus
-```
-
-- **begin** descends the left spine (`leftmost_leaf`) to the first element.
-  The collection is non-empty.
-- **advance** moves to the next slot, or along `next_leaf` to the first slot
-  of the next leaf. There is a next element.
-- Both take the collection's descriptor for the leaf layout
-  (`set_leaf_layout`, `map_leaf_layout`) and the key and value sizes. In a
-  generic that is the table entry for `#{T}` or `%{K = V}`; nothing else is
-  needed for erased elements.
+- **begin:** a null root gives a null `leaf`. Otherwise it descends the left
+  spine (`leftmost_leaf`) and takes slot 0.
+- **advance:** `slot += 1`. If `slot == leaf.len`, it moves to `next_leaf`
+  and slot 0, and a null `next_leaf` leaves the cursor done. `elem` and
+  `value` are recomputed from the leaf's layout (`set_leaf_layout`,
+  `map_leaf_layout`) and the key and value sizes, which is why advance takes
+  the descriptor.
+- **done:** `leaf` is null. **elem**, **value:** the fields.
 
 **No leaf is empty.** Both trees rebalance on removal (`fix_underflow`,
-`MIN_KEYS`), and an empty set or map has a null root, so every leaf in a
-chain holds at least one element and advance never has to skip one. A debug
-assertion in advance says so. Until October 2026 a set's removal only shifted
-keys within the leaf, leaving empty leaves in the chain; that was fixed
-ahead of this plan, and `btreeset_tests` now checks the tree's shape after
-every removal.
+`MIN_KEYS`), so the leaf advance moves to always holds an element and nothing
+has to skip. A debug assertion in advance says so. Until October 2026 a set's
+removal only shifted keys within the leaf, leaving empty leaves in the chain;
+that was fixed ahead of this plan, and `btreeset_tests` checks the tree's
+shape after every removal.
 
-Three instructions besides `Len`:
+## In the IR
 
-| Instruction | Does |
-|---|---|
-| `CursorBegin { cursor, coll }` | Calls begin into the slot |
-| `CursorAdvance { cursor, coll }` | Calls advance on the slot |
-| `CursorKeyRef { dest, cursor }` / `CursorValueRef { dest, cursor }` | Load `key` or `value`; produce a `Ref` |
+One type and five instructions:
 
-The key and value references are loads, so they are inline everywhere. Begin
-and advance are calls everywhere at first. Advance within a leaf can later be
-inlined -- bump `slot`, `key` and `value` while `slot + 1 < leaf.len`, and call
-only to cross a leaf -- which is one call per up to eleven elements.
+```rust
+IrType::Cursor(CursorKind)          // CursorKind::{Stride, Row, Tree}
+
+CursorBegin   { cursor: SlotId, coll: Operand }
+CursorDone    { dest: ValueId, cursor: SlotId }            // dest: Bool
+CursorElem    { dest: ValueId, cursor: SlotId }            // dest: Ref(element or key)
+CursorValue   { dest: ValueId, cursor: SlotId }            // dest: Ref(value)
+CursorAdvance { cursor: SlotId, coll: Operand }
+```
+
+`CursorKind` picks the layout (`struct_layout::<rtdt::StrideCursor>()` and so
+on) and the functions. `CursorAdvance` names the collection for the tree's
+descriptor; the other kinds ignore it.
+
+A loop lowers to:
+
+```
+    cursorbegin s_c, v_coll
+    slotstore.copy s_i, 0             // indexed form only
+    goto head
+head:
+    d = cursordone s_c
+    brif d, exit, body
+body:
+    r = cursorelem s_c
+    v = cursorvalue s_c               // maps only
+    i = slotload.copy s_i             // indexed form only
+    ...                               // item is *r
+    goto latch
+latch:                                // continue jumps here
+    cursoradvance s_c, v_coll
+    slotstore.copy s_i, (add i, 1)    // indexed form only
+    goto head
+exit:
+```
+
+**The element reference is made once per iteration**, at the head of the
+body, and `item` is bound to `Operand::ValueRef(r)`. Under fat generics a
+`Ref` is a plain pointer described by the table entry for its pointee
+(`plan-fat-generics.md`, "What it does for other work"), and `r` lives only
+within one iteration, dominating every use. The precedent is promoted
+function consts, the one named `Ref` value today (`const/src/promote.rs`).
+An index binding is the loaded `i`, as `Operand::Value`, so it cannot be
+assigned either.
 
 ## The indexed form
 
-**With this shape the index costs nothing for any collection:** it is the
-loop's counter, which every kind has. So whether sets and maps get it is a
-language question only, and nothing in the implementation depends on the
-answer.
+The index is a counter the lowering keeps, and only when the loop asks for
+one. It is never more than the collection's length, so its increment cannot
+overflow, and no source code has to write the wrapping add. Lists and tensors
+have it.
 
-The answer here is not yet, for either:
+Sets and maps do not, for now:
 
 - **Nothing asks for it.** No loop in `sys/`, the demos or the benchmarks uses
   a set or map position for anything but walking in order. `map.key_at` and
@@ -219,10 +277,45 @@ The answer here is not yet, for either:
   and `for k, v` on a map would read alike and mean different things. For a
   `#{index}` turned into a `%{index = V}` the change would typecheck.
 
-What a counter is wanted for on a set -- "is this the first", "how many so
-far" -- is rare, and the user's own counter does it. If that becomes common,
-a form that names the position the same way on every collection fits
-better than reusing the two-binding form.
+Nothing in the protocol would change if they did: the counter is the
+lowering's, not the cursor's.
+
+## Tradeoffs
+
+**A protocol of runtime functions, open-coded later.** The full protocol is
+one place to read, and the interpreter runs exactly it. Open-coding is an
+optimization in Cranelift and C AOT, and it has to keep the cursor's layout
+and meaning, field for field: OSR enters compiled code with a cursor the
+interpreter built. The cost is speed until then. A list `for` is three calls
+per element in every engine; the bytecode's `loop while` it replaces is a
+fused bounds check and an inline element reference. Measure before and after
+open-coding.
+
+**Three cursor types, not one.** One struct for every kind needed fields
+some kinds ignored and a `step` meaning bytes, elements or a slot. Per-kind
+structs are each minimal, and the IR type names its kind, so a backend still
+knows the layout statically.
+
+**A count for strided cursors, a sentinel for trees.** An end pointer fails
+for zero-sized elements, as above. A tree has no such problem, since it moves
+by slot, and its chain already ends in null, so a count would be bookkeeping
+the walk does not need. Both done tests are one load and one compare.
+
+**Testing at the top.** The loop calls done once more than a rotated loop
+would, on entry. In exchange, begin and advance are total over the states a
+loop can reach, and no caller has to check emptiness first.
+
+**The row view inside the cursor.** The earlier plan built the view in
+caller-lent scratch. Inside the cursor it needs no scratch in any backend,
+and the C AOT `static` view (see [Bugs](#user-content-bugs-found-on-the-way))
+never comes into it. The cost is a cursor of 48 bytes (64 under
+`index-64`), and an element pointer pointing into the cursor rather than the
+collection.
+
+**The index in lowering, not in the cursor.** A loop without `i` pays
+nothing for it. A loop with it keeps a counter beside a cursor that, for a
+list, could have yielded it by subtraction and division. That is the case to
+revisit if open-coding makes the counter visible in profiles.
 
 ## Front end
 
@@ -249,7 +342,7 @@ Where the statement threads through:
 | `datalove-mode.el`, the four `datalove-prism.js` copies | keyword and indentation |
 
 The script lowering duplicates `break`/`continue`; both copies need the
-continue target. The counter and cursor slots are not bindings, so the
+continue target. The cursor and counter slots are not bindings, so the
 lowering stores and loads them with the `SlotStoreCopy` and `SlotLoadCopy`
 instructions directly. `emit_slot_store_copy` asks `is_slot_tracked`, which
 panics for a slot with no binding.
@@ -272,67 +365,47 @@ panics for a slot with no binding.
 
 ## Backends
 
-| | `Len` | Element refs | Cursor ops |
-|---|---|---|---|
-| Interpreter | header load | existing | calls `datalove_rt::c` directly |
-| Bytecode | a small `Op` (or `Op::Ir` at first) | existing `ListElementRef` ops | `Op::Ir` |
-| Cranelift | inline load | existing | `RuntimeImports` calls; key/value loads inline |
-| C AOT | inline load | existing | calls, with prototypes in `emit_header` |
+| | Protocol | Open-coded later |
+|---|---|---|
+| Interpreter | calls `datalove_rt::c` for every operation | never |
+| Bytecode | `Op::Ir`, so the walker's calls | fused ops, if measurement says so |
+| Cranelift | `RuntimeImports` calls for every operation | strided and row cursors entirely; tree done, elem, value, and advance within a leaf |
+| C AOT | calls, with prototypes in `emit_header` | as Cranelift |
 
 - **A new entry point** goes in `rt/src/c/mod.rs`, then `just gen-rti`, then
   `RuntimeImports` (the field, `declare`, `all_mut`), the JIT's
   `runtime_addresses`, and a C prototype.
-- **`ABI_VERSION`** picks up the new table entries by itself. `TreeCursor`
-  does not appear in the table, and nothing in the ABI passes one to a rider,
-  so it needs no `mix` line unless that changes.
+- **`ABI_VERSION`** picks up the new table entries by itself. No cursor is
+  passed to a rider, so the structs need no `mix` lines unless that changes.
+  A backend that open-codes a cursor depends on its layout, which
+  `layout_conformance_tests` should cover alongside the other runtime
+  structs.
 - **The cursor slot** needs a descriptor in the interpreter, which checks each
   slot's descriptor against `layout_of` (`interp/src/layout.rs`). A
   plain-data stand-in like `dynamic_reference`'s does. Cranelift and C keep
   it in the frame like any aggregate.
 - **The generics gates**: `supports_dynamic` in Cranelift and C AOT must
-  admit `Len` and the cursor instructions on a dynamic collection, or every
-  generic using `for` falls back to the interpreter under the JIT and fails to
-  build under AOT.
+  admit the cursor instructions on a dynamic collection, or every generic
+  using `for` falls back to the interpreter under the JIT and fails to build
+  under AOT.
 - **DCE**: `CursorBegin` and `CursorAdvance` write a slot and have no dest, so
-  they go in `has_side_effects`. `Len`, the cursor refs, `ListElementRef` and
-  `TensorIndexRef` go in `consumed_owned`'s non-consuming list. Otherwise, a
-  body that never reads `item` gets its unused element reference removed
-  *and a `Drop` of the collection inserted*, when the collection is an owned
-  `Value`. Today every element reference has a use, so this has never fired.
-- **OSR** works without anything new: the counter and cursor are slots in the
+  they go in `has_side_effects`. The others read a copy slot and are removable
+  as they are.
+- **OSR** works without anything new: the cursor and counter are slots in the
   interpreter's frame, which compiled code continues from.
-
-## What changed from the cursor plan
-
-| The cursor plan | Now |
-|---|---|
-| One `Cursor` for every kind, six instructions, eight entry points | Lists and tensors use the existing element refs; a cursor only for trees, three instructions and `Len`, four entry points |
-| `pos` and `end` in the cursor | The loop's own counter, shared by every kind |
-| A fresh `CursorElem` per use of `item` | One reference per iteration; `Ref` is a plain pointer under fat generics |
-| Erased elements via `dtlv_rti_element_tydesc`, and a map-key accessor to add | Removed with erasure; every descriptor is a table entry |
-| `get_at` and `key_at` descend from the root per element | They walk the leaf chain from the left per call: O(index), quadratic per walk |
-| "`next_leaf` is null exactly when `pos` reaches `end`" | A set's chain could hold empty leaves; set removal now rebalances, so it cannot |
-| A negative stride, wrapping "as the runtime's own offset arithmetic does" | The runtime saturates, and nothing makes a negative stride today |
-| Cursor fields in Cranelift `Variable`s | `Variable`s are used only for OSR; slots, as everything else |
-| `ABI_VERSION` changes on its own | True for table entries; a struct only via a hand-written `mix` |
-
-The first table row is the main change. A uniform cursor would have put a new
-IR type, a runtime call per element in the interpreter, and scratch for a
-view in every backend onto lists, which already have inline, tested,
-bytecode-accelerated access. Under the bytecode, cursor instructions would
-fall back to the walker, making a list `for` slower than the index loop it
-replaces.
 
 ## Bugs found on the way
 
 - **C AOT tensor views are static.** `TensorIndexRef` at rank above 1 writes
   its view into `static _Alignas(8) uint8_t __view[...]`
   (`c-aot/src/codegen.rs`), one per instruction. A recursive call that
-  reaches the same instruction overwrites the caller's live view. This
-  predates `for`, but nested `for` over a tensor will lean on it. The view
-  belongs in `__frame`, as the interpreter's frame extension and Cranelift's
-  stack slot have it.
-- **The DCE hazard** above.
+  reaches the same instruction overwrites the caller's live view. `for` no
+  longer goes through it; `t[i]?` still does. The view belongs in `__frame`.
+- **DCE can drop a borrowed collection.** `consumed_owned` treats
+  `ListElementRef` and `TensorIndexRef` as consuming. Removing an unused one
+  whose collection is an owned `Value` inserts a `Drop` of the collection.
+  Every element reference has a use today, so it has never fired. They
+  belong in the non-consuming list beside `GetFieldRef`.
 - **Fixed: set removal never rebalanced**, leaving empty leaves in the
   chain. It now borrows and merges as the map's does.
 - **Fixed: bulk-built trees had wrong separators.**
@@ -352,39 +425,39 @@ replaces.
 
 | Piece | Status |
 |---|---|
-| `ListElementRef`, `TensorIndexRef` in every backend, generic included | exists |
 | Leaf chaining and `leftmost_leaf`, for sets and maps | exists |
+| The row view, in `TensorIndexRef` | exists |
 | Descriptors for elements, keys and values in a generic | exist, as table entries |
 | `ref` binding allocation (`alloc_const_param`) | exists |
+| The three cursor structs and sixteen functions | missing |
+| `IrType::Cursor` and five instructions | missing |
 | `for` in the parser, AST, tycheck, ownership and lowering | missing |
 | Freezing the iteratee | missing |
 | A continue target separate from the header | missing |
-| `Len` | missing |
-| `rtdt::TreeCursor`, its four entry points, `IrType::TreeCursor` and three instructions | missing |
 
 ## Phases
 
-1. **Fix the DCE hazard and the C AOT static view** first. Both are small,
-   and both would otherwise show up as `for` bugs.
-2. **`for` over lists**, end to end: the front end, freezing, `Len`, the loop
-   shape, `ListElementRef`. Every engine runs it with no new runtime. Engine
-   fixtures for: empty, one element, `break` and `continue`, a body that never
-   reads `item`, linear and copy elements, a generic `[T]`, nested loops,
-   iterating a `ref` parameter, a field and an index projection, each freeze
-   error.
-3. **The indexed form for lists and tensors**, and **tensors**, rank 1 and
-   above, including a transposed and a sliced one.
-4. **Sets and maps**: the runtime cursor with `datalove-rt-tests` for one
-   leaf, several leaves and levels, trees after removals have merged leaves,
-   and bulk-built trees; then the IR and the four engines.
-5. **Port `sys/std` and the demos.** `ord.contains`, `index_of`,
+1. **The runtime protocol**, all three cursors, with `datalove-rt-tests`
+   walking each kind against the positional reads: empty, one element, a
+   `[()]`, lists of linear elements, a transposed and a sliced tensor, rank 2
+   and 3, trees of one leaf and of several levels, trees after removals have
+   merged leaves, and bulk-built trees.
+2. **`for` over lists on the interpreter**: the front end, freezing, the IR,
+   the loop shape, the interpreter's calls. Engine fixtures for: empty, one
+   element, `break` and `continue`, a body that never reads `item`, linear
+   and copy elements, a generic `[T]`, nested loops, a `ref` parameter, a
+   field and an index projection, each freeze error.
+3. **Every collection on every engine**, through the calls: tensors, sets and
+   maps, the indexed form, Cranelift and C AOT, the generics gates.
+4. **Port `sys/std` and the demos.** `ord.contains`, `index_of`,
    `count_of`, `least`, `greatest`, `fixedint.sum`/`product`, `list.flattened`
    and `concat`, the six walks in `set.dfm` (where `is_subset_of` gains its
    early exit), the `keys()`-then-`get_or` loops in the demos, and
-   `wordfreq.top_checksum`. Measure `benchvs/ordered.dfs` and `wordfreq` before
-   and after.
-6. **Inline tree advance within a leaf**, and a bytecode `Len` op, if
-   measurement says so.
+   `wordfreq.top_checksum`. Measure `benchvs/ordered.dfs` and `wordfreq`
+   against the `loop while` versions.
+5. **Open-code** the strided and row cursors, and the tree's done, elem,
+   value and in-leaf advance, in Cranelift and C AOT. Measure again. Bytecode
+   ops if the interpreter's numbers call for them.
 
 ## Open questions
 
@@ -399,10 +472,12 @@ replaces.
   that a set or map could be walked by index. Once `for` does that, they are
   quadratic traps with no callers.
 - **A mutable `for`.** `for mut x in mut xs` over a list, tensor, or a map's
-  values. The tree cursor's `value` is already a place; a set element and a
-  map key never are, since changing one moves where it belongs.
-- **Reverse walks.** Lists and tensors are a counter running down. Tree
-  leaves link forward only, so a reverse tree walk needs back links or a
-  stack. Nothing in the survey asks for it.
+  values. The cursors' `elem` and `value` would become writable places,
+  never a set element or a map key, since changing one moves where it
+  belongs.
+- **Reverse walks.** A strided cursor runs backward with a negated stride
+  and a begin at the last element. Tree leaves link forward only, so a
+  reverse tree walk needs back links or a stack. Nothing in the survey asks
+  for it.
 - **Tables.** A row walk binding fields of one row, per column, waits on the
   table design (`design-table-rows.md`).
