@@ -2,10 +2,12 @@
 // many times over. From Are We Fast Yet (github.com/smarr/are-we-fast-yet),
 // whose Sieve counts 669 each time.
 //
-// Prints the sum of the counts. Uses wrapping arithmetic intrinsics to avoid
-// overflow check overhead.
+// Prints the sum of the counts. Uses sys/std's wrapping arithmetic to avoid
+// overflow checks.
 
 require module sys/std/list
+require module sys/std/index
+require module sys/std/u32
 
 const ITERATIONS: u32 = 10000
 const SIZE: index = 5000
@@ -14,15 +16,15 @@ fun sieve(mut flags: [bool], size: index): !u32
   var prime_count: u32 = 0
   var i: index = 2
   loop while i <= size
-    if flags[icall sub_wrapping_index(i, : index / 1)]!
-      set prime_count = icall add_wrapping_u32(prime_count, : u32 / 1)
-      var k = icall add_wrapping_index(i, i)
+    if flags[index.sub_wrapping(i, : index / 1)]!
+      set prime_count = u32.add_wrapping(prime_count, : u32 / 1)
+      var k = index.add_wrapping(i, i)
       loop while k <= size
-        set flags[icall sub_wrapping_index(k, : index / 1)]! = false
-        set k = icall add_wrapping_index(k, i)
+        set flags[index.sub_wrapping(k, : index / 1)]! = false
+        set k = index.add_wrapping(k, i)
       end loop
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = index.add_wrapping(i, : index / 1)
   end loop
   ret ok prime_count
 end fun
@@ -36,8 +38,8 @@ fun run(): !u32
   var total: u32 = 0
   var n: u32 = 0
   loop while n .< ITERATIONS
-    set total = icall add_wrapping_u32(total, benchmark()!)
-    set n = icall add_wrapping_u32(n, : u32 / 1)
+    set total = u32.add_wrapping(total, benchmark()!)
+    set n = u32.add_wrapping(n, : u32 / 1)
   end loop
   ret ok total
 end fun

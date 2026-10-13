@@ -26,8 +26,8 @@ const SIZE: u32 = 1000
 
 // AWFY's Random: a 16-bit linear congruential generator.
 fun next(mut seed: u32): u32
-  set seed = icall bitand_u32(
-    icall add_wrapping_u32(icall mul_wrapping_u32(seed, : u32 / 1309), : u32 / 13849),
+  set seed = u32.bitand(
+    u32.add_wrapping(u32.mul_wrapping(seed, : u32 / 1309), : u32 / 13849),
     : u32 / 65535)
   ret seed
 end fun
@@ -40,9 +40,9 @@ end fun
 // Add to a binary min-heap, sifting the new element up.
 fun heap_push<T>(mut h: [T], elem: T): !() with { T is ord, }
   call list.push(mut h, elem)
-  var i = icall sub_wrapping_index(list.len(ref h), : index / 1)
+  var i = index.sub_wrapping(list.len(ref h), : index / 1)
   loop while i .> 0
-    let parent = icall shr_index(icall sub_wrapping_index(i, : index / 1), : u32 / 1)
+    let parent = index.shift_right_wrapping(index.sub_wrapping(i, : index / 1), : u32 / 1)
     if not (less_at(ref h, i, parent)!)
       break
     end if
@@ -59,17 +59,17 @@ fun heap_pop<T>(mut h: [T]): !?T with { T is ord, }
   if n == 0
     ret ok none
   end if
-  let last = icall sub_wrapping_index(n, : index / 1)
+  let last = index.sub_wrapping(n, : index / 1)
   let swapped = list.swap(mut h, : index / 0, last)
   let least = list.pop(mut h)
   var i: index = : index / 0
   loop
-    let left = icall add_wrapping_index(icall mul_wrapping_index(i, : index / 2), : index / 1)
+    let left = index.add_wrapping(index.mul_wrapping(i, : index / 2), : index / 1)
     if left >= last
       break
     end if
     var child = left
-    let right = icall add_wrapping_index(left, : index / 1)
+    let right = index.add_wrapping(left, : index / 1)
     if right .< last
       if less_at(ref h, right, left)!
         set child = right
@@ -114,10 +114,10 @@ fun out_of_order<T>(ref xs: [T]): !u32 with { T is ord, }
   var i: index = : index / 1
   let n = list.len(ref xs)
   loop while i .< n
-    if less_at(ref xs, i, icall sub_wrapping_index(i, : index / 1))!
-      set count = icall add_wrapping_u32(count, : u32 / 1)
+    if less_at(ref xs, i, index.sub_wrapping(i, : index / 1))!
+      set count = u32.add_wrapping(count, : u32 / 1)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = index.add_wrapping(i, : index / 1)
   end loop
   ret ok count
 end fun
@@ -128,9 +128,9 @@ fun lower_bound<T>(ref xs: [T], ref elem: T): !index with { T is ord, }
   var low: index = : index / 0
   var high = list.len(ref xs)
   loop while low .< high
-    let mid = icall add_wrapping_index(low, icall shr_index(icall sub_wrapping_index(high, low), : u32 / 1))
+    let mid = index.add_wrapping(low, index.shift_right_wrapping(index.sub_wrapping(high, low), : u32 / 1))
     if ord.less(ref xs[mid]!, ref elem)
-      set low = icall add_wrapping_index(mid, : index / 1)
+      set low = index.add_wrapping(mid, : index / 1)
     else
       set high = mid
     end if
@@ -148,14 +148,14 @@ fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 with { T is ord, }
   loop while i .< m
     let at = lower_bound(ref xs, ref probes[i]!)!
     if u32.from_index(at) |position|
-      set total = icall add_wrapping_u32(total, position)
+      set total = u32.add_wrapping(total, position)
     end if
     if at .< n
       if ord.equal(ref xs[at]!, ref probes[i]!)
-        set total = icall add_wrapping_u32(total, : u32 / 1)
+        set total = u32.add_wrapping(total, : u32 / 1)
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = index.add_wrapping(i, : index / 1)
   end loop
   ret ok total
 end fun
@@ -169,10 +169,10 @@ fun distinct<T>(ref xs: [T]): !u32 with { T is ord, }
   var count: u32 = 1
   var i: index = : index / 1
   loop while i .< n
-    if less_at(ref xs, icall sub_wrapping_index(i, : index / 1), i)!
-      set count = icall add_wrapping_u32(count, : u32 / 1)
+    if less_at(ref xs, index.sub_wrapping(i, : index / 1), i)!
+      set count = u32.add_wrapping(count, : u32 / 1)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = index.add_wrapping(i, : index / 1)
   end loop
   ret ok count
 end fun
@@ -184,15 +184,15 @@ fun checksum<T>(elems: [T], ref probes: [T]): !u32 with { T is ord, }
   let bad = out_of_order(ref sorted)!
   let found = search_all(ref sorted, ref probes)!
   let unique = distinct(ref sorted)!
-  ret ok icall add_wrapping_u32(icall add_wrapping_u32(bad, found), unique)
+  ret ok u32.add_wrapping(u32.add_wrapping(bad, found), unique)
 end fun
 
 // Three letters from `a` to `h`, one for each three of the low nine bits.
 fun word(r: u32): string
   var s = string.new()
-  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(r, : u32 / 7)))
-  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(icall shr_u32(r, : u32 / 3), : u32 / 7)))
-  call string.push_char(mut s, icall add_wrapping_u32(: u32 / 97, icall bitand_u32(icall shr_u32(r, : u32 / 6), : u32 / 7)))
+  call string.push_char(mut s, u32.add_wrapping(: u32 / 97, u32.bitand(r, : u32 / 7)))
+  call string.push_char(mut s, u32.add_wrapping(: u32 / 97, u32.bitand(u32.shift_right_wrapping(r, : u32 / 3), : u32 / 7)))
+  call string.push_char(mut s, u32.add_wrapping(: u32 / 97, u32.bitand(u32.shift_right_wrapping(r, : u32 / 6), : u32 / 7)))
   ret s
 end fun
 
@@ -200,8 +200,10 @@ fun ints(mut seed: u32): [u32]
   var xs: [u32] = []
   var i: u32 = 0
   loop while i .< SIZE
-    call list.push(mut xs, icall rem_u32(next(mut seed), : u32 / 500))
-    set i = icall add_wrapping_u32(i, : u32 / 1)
+    if u32.rem_checked(next(mut seed), : u32 / 500) |r|
+      call list.push(mut xs, r)
+    end if
+    set i = u32.add_wrapping(i, : u32 / 1)
   end loop
   ret xs
 end fun
@@ -210,8 +212,10 @@ fun floats(mut seed: u32): [f64]
   var xs: [f64] = []
   var i: u32 = 0
   loop while i .< SIZE
-    call list.push(mut xs, f64.from_u32(icall rem_u32(next(mut seed), : u32 / 500)) * 0.25)
-    set i = icall add_wrapping_u32(i, : u32 / 1)
+    if u32.rem_checked(next(mut seed), : u32 / 500) |r|
+      call list.push(mut xs, f64.from_u32(r) * 0.25)
+    end if
+    set i = u32.add_wrapping(i, : u32 / 1)
   end loop
   ret xs
 end fun
@@ -221,7 +225,7 @@ fun words(mut seed: u32): [string]
   var i: u32 = 0
   loop while i .< SIZE
     call list.push(mut xs, word(next(mut seed)))
-    set i = icall add_wrapping_u32(i, : u32 / 1)
+    set i = u32.add_wrapping(i, : u32 / 1)
   end loop
   ret xs
 end fun
@@ -231,8 +235,8 @@ fun pairs(mut seed: u32): [(string, u32)]
   var i: u32 = 0
   loop while i .< SIZE
     let r = next(mut seed)
-    call list.push(mut xs, (word(icall shr_u32(r, : u32 / 2)), icall bitand_u32(r, : u32 / 3)))
-    set i = icall add_wrapping_u32(i, : u32 / 1)
+    call list.push(mut xs, (word(u32.shift_right_wrapping(r, : u32 / 2)), u32.bitand(r, : u32 / 3)))
+    set i = u32.add_wrapping(i, : u32 / 1)
   end loop
   ret xs
 end fun
@@ -240,13 +244,13 @@ end fun
 fun benchmark(mut seed: u32): !u32
   var total: u32 = 0
   let int_probes = ints(mut seed)
-  set total = icall add_wrapping_u32(total, checksum(ints(mut seed), ref int_probes)!)
+  set total = u32.add_wrapping(total, checksum(ints(mut seed), ref int_probes)!)
   let float_probes = floats(mut seed)
-  set total = icall add_wrapping_u32(total, checksum(floats(mut seed), ref float_probes)!)
+  set total = u32.add_wrapping(total, checksum(floats(mut seed), ref float_probes)!)
   let word_probes = words(mut seed)
-  set total = icall add_wrapping_u32(total, checksum(words(mut seed), ref word_probes)!)
+  set total = u32.add_wrapping(total, checksum(words(mut seed), ref word_probes)!)
   let pair_probes = pairs(mut seed)
-  set total = icall add_wrapping_u32(total, checksum(pairs(mut seed), ref pair_probes)!)
+  set total = u32.add_wrapping(total, checksum(pairs(mut seed), ref pair_probes)!)
   ret ok total
 end fun
 
@@ -255,8 +259,8 @@ fun run(): !u32
   var total: u32 = 0
   var n: u32 = 0
   loop while n .< ITERATIONS
-    set total = icall add_wrapping_u32(total, benchmark(mut seed)!)
-    set n = icall add_wrapping_u32(n, : u32 / 1)
+    set total = u32.add_wrapping(total, benchmark(mut seed)!)
+    set n = u32.add_wrapping(n, : u32 / 1)
   end loop
   ret ok total
 end fun

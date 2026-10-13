@@ -3,10 +3,11 @@
 // (github.com/smarr/are-we-fast-yet), whose Mandelbrot at 750 gives 50, and
 // before it the Computer Language Benchmarks Game.
 //
-// Prints the sum of the checksums. Uses wrapping arithmetic intrinsics to avoid
-// overflow check overhead.
+// Prints the sum of the checksums. Uses sys/std's wrapping arithmetic to
+// avoid overflow checks.
 
 require module sys/std/f64
+require module sys/std/u32
 
 const ITERATIONS: u32 = 4
 const SIZE: u32 = 750
@@ -37,23 +38,23 @@ fun mandelbrot(size: u32): u32
           set not_done = false
           set escape = 1
         end if
-        set z = icall add_wrapping_u32(z, : u32 / 1)
+        set z = u32.add_wrapping(z, : u32 / 1)
       end loop
-      set byte_acc = icall add_wrapping_u32(icall shl_u32(byte_acc, : u32 / 1), escape)
-      set bit_num = icall add_wrapping_u32(bit_num, : u32 / 1)
+      set byte_acc = u32.add_wrapping(u32.shift_left_wrapping(byte_acc, : u32 / 1), escape)
+      set bit_num = u32.add_wrapping(bit_num, : u32 / 1)
       if bit_num == 8
-        set sum = icall bitxor_u32(sum, byte_acc)
+        set sum = u32.bitxor(sum, byte_acc)
         set byte_acc = 0
         set bit_num = 0
-      else if x == icall sub_wrapping_u32(size, : u32 / 1)
-        set byte_acc = icall shl_u32(byte_acc, icall sub_wrapping_u32(: u32 / 8, bit_num))
-        set sum = icall bitxor_u32(sum, byte_acc)
+      else if x == u32.sub_wrapping(size, : u32 / 1)
+        set byte_acc = u32.shift_left_wrapping(byte_acc, u32.sub_wrapping(: u32 / 8, bit_num))
+        set sum = u32.bitxor(sum, byte_acc)
         set byte_acc = 0
         set bit_num = 0
       end if
-      set x = icall add_wrapping_u32(x, : u32 / 1)
+      set x = u32.add_wrapping(x, : u32 / 1)
     end loop
-    set y = icall add_wrapping_u32(y, : u32 / 1)
+    set y = u32.add_wrapping(y, : u32 / 1)
   end loop
   ret sum
 end fun
@@ -61,7 +62,7 @@ end fun
 var total: u32 = 0
 var n: u32 = 0
 loop while n .< ITERATIONS
-  set total = icall add_wrapping_u32(total, mandelbrot(SIZE))
-  set n = icall add_wrapping_u32(n, : u32 / 1)
+  set total = u32.add_wrapping(total, mandelbrot(SIZE))
+  set n = u32.add_wrapping(n, : u32 / 1)
 end loop
 debuglog(total)

@@ -228,6 +228,36 @@ gains on code like this are in the planned call itself, and in making
 `ord.less` a forwarder straight to a native, which would save one of the
 two calls.
 
+## Written through sys/std
+
+The benches and the store demo called intrinsics directly (`icall
+add_wrapping_u32` and the like) until October 2026, when they were moved to
+the `sys/std` functions wrapping them, with those functions marked `inline`.
+A remainder is `u32.rem_checked`, an option, unwrapped before it is compared.
+
+Before (intrinsics) and after (`sys/std`, inlined), seconds, mean of five:
+
+| Bench | interp | JIT | AOT |
+|---|---|---|---|
+| fib | 3.67 / 3.70 | 0.46 / 0.46 | 0.35 / 0.35 |
+| sum | 0.79 / 0.80 | 0.40 / 0.40 | 0.38 / 0.30 |
+| primes | 3.40 / 9.47 | 0.34 / 1.56 | 0.34 / 1.55 |
+| wordfreq | 0.95 / 1.35 | 0.59 / 0.63 | 0.53 / 0.60 |
+| sieve | 4.09 / 5.28 | 1.00 / 1.00 | 0.70 / 0.73 |
+| mandelbrot | 3.11 / 3.63 | 0.57 / 0.56 | 0.55 / 0.56 |
+| nbody | 3.06 / 3.19 | 0.20 / 0.20 | 0.16 / 0.16 |
+| ordered | 3.27 / 3.19 | 0.77 / 0.68 | 0.59 / 0.59 |
+
+Compiled, the calls cost nothing but in `primes`, whose inner loop is a
+remainder: the inlined `rem_checked` still tests for zero, builds `some r`,
+passes it through a block parameter -- an aggregate Cranelift copies through
+memory -- and unwraps it, where the intrinsic was one instruction. The
+interpreter pays for what a splice leaves: a copy per `in` argument, two
+jumps and a block argument, about five ops where an intrinsic was one, and
+still far less than a call. Both want a cleanup after inlining: forwarding
+the copies, merging straight-line blocks, substituting a block parameter with
+one predecessor, and folding `some` into the `unwrap_option` it meets.
+
 ## Additions that would open the rest
 
 Modest, in the order they unlock the most:

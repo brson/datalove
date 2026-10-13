@@ -1,5 +1,7 @@
 // Prime counting benchmark - count primes up to 4,000,000 by trial division.
-// Uses wrapping arithmetic intrinsics to avoid overflow check overhead.
+// Uses sys/std's wrapping arithmetic to avoid overflow checks.
+
+require module sys/std/u32
 
 fun is_prime(n: u32): bool
   if n .< 2
@@ -8,15 +10,19 @@ fun is_prime(n: u32): bool
   if n == 2
     ret true
   end if
-  if icall rem_u32(n, : u32 / 2) == 0
-    ret false
-  end if
-  var d: u32 = 3
-  loop while icall mul_wrapping_u32(d, d) <= n
-    if icall rem_u32(n, d) == 0
+  if u32.rem_checked(n, : u32 / 2) |r|
+    if r == 0
       ret false
     end if
-    set d = icall add_wrapping_u32(d, : u32 / 2)
+  end if
+  var d: u32 = 3
+  loop while u32.mul_wrapping(d, d) <= n
+    if u32.rem_checked(n, d) |r|
+      if r == 0
+        ret false
+      end if
+    end if
+    set d = u32.add_wrapping(d, : u32 / 2)
   end loop
   ret true
 end fun
@@ -26,9 +32,9 @@ fun count_primes(limit: u32): u32
   var n: u32 = 2
   loop while n <= limit
     if is_prime(n)
-      set count = icall add_wrapping_u32(count, : u32 / 1)
+      set count = u32.add_wrapping(count, : u32 / 1)
     end if
-    set n = icall add_wrapping_u32(n, : u32 / 1)
+    set n = u32.add_wrapping(n, : u32 / 1)
   end loop
   ret count
 end fun

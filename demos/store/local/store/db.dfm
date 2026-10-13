@@ -7,6 +7,7 @@
 require module sys/std/list
 require module sys/std/map
 require module sys/std/u64
+require module sys/std/index
 
 type Product: {id: u32, name: string, category: string, price: u32, cost: u32}
 type Tier: enum { atom Bronze, atom Silver, atom Gold }
@@ -25,7 +26,7 @@ const PRODUCT_SLOTS: %{u32 = index} = product_slots()
 const CUSTOMER_SLOTS: %{u32 = index} = customer_slots()
 
 fun next(i: index): index
-    ret icall add_wrapping_index(i, : index / 1)
+    ret index.add_wrapping(i, : index / 1)
 end fun
 
 // A const cannot early-return, so the result is unwrapped here. An error from
