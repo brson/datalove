@@ -18,7 +18,7 @@ when you don't have reference types.
 
 In my [previous round of benchmarking](../posts/20261009A-compound-assignment.md)
 I noted that Datalove's system library iterates over collections by maintaining
-a loop induction variable of type [`index`](../types.md#user-content-index-and-offset),
+a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
 incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element,
 and that this is a problem to be solved soon.
@@ -76,7 +76,7 @@ so I'll go ahead and do it now!
 
 Two properties of the language that are going
 to impact our design are that Datalove has a linear type system,
-and that [Datalove does not have first-class references](../principles.md#todo).
+and that [Datalove does not have first-class references](../principles.md#user-content-power-through-restricted-language-design).
 The latter is going to heavily limit our expressivity.
 
 
@@ -105,7 +105,7 @@ The `item` variable is a [reference (`ref`) binding](../datafun.md#user-content-
 a pointer directly into the container.
 So `item` can't be moved, nor can the iteratee, `self`,
 be mutably referenced or mutated via indexing.
-This is in contrast to [`match` and destructuring `if`](../types-lits-destr.md#user-content-destructuring-sum-types-with-if-and-match),
+This is in contrast to [`match` and destructuring `if`](../datafun.md#user-content-data-types-and-destructuring),
 which fully destructure their operands.
 
 Even though I don't plan immediately to have by-value iteration,
@@ -136,7 +136,7 @@ so to build one means cloning both elements.
 As with lists, the key binding is immutable;
 the value could someday be `mut`.
 
-[Tensors and tables](todo) both add their own complications here,
+[Tensors and tables](../datalit.md#user-content-collections) both add their own complications here,
 but are generally extensions in the same solution space.
 
 
