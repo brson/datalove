@@ -42,10 +42,6 @@
 
 ---
 
-- [Review of datafun.md](review-datafun-md.md)
-
----
-
 - [Tasks](tasks.md)
 - [Releasing](release.md)
 - [Writing Style](writing-style.md)

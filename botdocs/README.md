@@ -56,12 +56,6 @@ Specifications, research, design documents, implementation plans, and reports.
 
 ---
 
-### Reviews
-
-- [Review of datafun.md](review-datafun-md.md)
-
----
-
 ### Process
 
 - [Tasks](tasks.md)
