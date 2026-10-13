@@ -3,13 +3,15 @@
 Datalove is a strongly-typed scripting language
 for data modeling and transformation.
 
-<!--
-I started hacking on Datalove because expressing a struct in Python sucks.
-Why?
-In Datalove you write structs with a straightforward and typical syntax,
-and they and their fields are laid out inline in flat memory.
--->
+Most languages start from code
+and treat data as whatever their objects serialize to.
+The data itself ends up in a second language like JSON,
+with weaker types than the program that reads it.
 
+Datalove starts from the data.
+Its literal syntax is a typed language of its own,
+written the same way in a data file as in a script,
+and its structs and their fields are laid out inline in flat memory.
 Getting plain data right informs the rest of the language.
 
 Datalove is built on a small and restrictive core language.
