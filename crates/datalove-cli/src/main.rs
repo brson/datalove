@@ -1197,6 +1197,7 @@ impl DocsCommand {
                     base_url: "https://datalove-language.net",
                     categories: &["design", "devlog", "milestone"],
                     excerpt_bytes: 600,
+                    syndication: None,
                 }),
             },
             DocSet {
