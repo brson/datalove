@@ -6,18 +6,22 @@ built on a comprehensive definition of the data types
 needed for modern computing tasks.
 
 With Datalove I aim to reinspire the
-programming feel I had growing up in the 90s
+programming feel I had learning to program,
 when the stack was small and comprehensible,
 and we built native applications that were fast
 because they worked closely with the physical machine.
 
-But I aim to do this with the benefit of decades
+I aim to do this with the benefit of decades
 of experience and evolution in compiler architecture and type theory:
 the best of modern practical programming language theory in a simple package,
 with a focus on correctness uncommon in scripting languages.
+Dalatove relishes in a restrictive core language model
+that enables features like fast compilation and execution,
+compile-time evaluation, incremental and parallel recompilation,
+record and replay.
 
 
-## Contents
+## The Principles
 
 <div class="toc toc-repeat-7">
 
@@ -29,7 +33,6 @@ with a focus on correctness uncommon in scripting languages.
 - [Power through restricted language design](#user-content-power-through-restricted-language-design)
 - [Straightforward syntax with minimal sugar](#user-content-straightforward-syntax-with-minimal-sugar)
 - [Strict baseline first; controlled ergonomics later](#user-content-strict-baseline-first-controlled-ergonomics-later)
-- [Sigil-logic](#user-content-sigil-logic)
 - [Small enough to understand and remember](#user-content-small-enough-to-understand-and-remember)
 - [Mechanical and machine-model sympathy](#user-content-mechanical-and-machine-model-sympathy)
 - [Modern compiler and execution architecture](#user-content-modern-compiler-and-execution-architecture)
@@ -87,14 +90,13 @@ Types are never automatically coerced.
 Argument passing modes are explicit.
 All error handling and early returns are expressed consistently in the syntax.
 What you see is always exactly what you get.
-Datalove is verbose, and intentionally so.
 
 
 ## Numerical correctness
 
 It is no longer acceptable to silently overflow and get wrong results.
 
-Integer types never lose information.
+Integer types never implicitly lose information.
 Fixed-size integer types never overflow silently.
 Integer division by zero must be handled.
 The syntactic and cognitive overhead this necessarily imposes is eased
@@ -139,16 +141,13 @@ and predictable performance.
 Datalove's syntax is a throwback to the Pascal family and Visual Basic,
 line-oriented, with keywords everywhere that are easy
 for human eyes to scan and computers to parse.
-It is happily verbose.
 It provides the basic features necessary to write algorithms,
 but does not bloat the compiler and spec with syntactic niceties.
 
 
 ## Strict baseline first; controlled ergonomics later
 
-The baseline Datalove language of today is spartan and strict,
-likely too verbose to be practical as the quick-prototyping interactive
-language it is intended to be.
+The baseline Datalove language of today is spartan and strict.
 This is an intentional development strategy to develop
 the language semantics and architectural capabilities necessary
 to build upon. The ultimate surface language for casual
@@ -156,28 +155,6 @@ interactivity is expected to be more ergonomic,
 and we will get there by incrementally and experimentally developing
 ergonomic modes that reduce boilerplate and transformations between
 which can be mechanically analyzed and applied.
-
-
-## Sigil-logic
-
-Datalove reserves some symbols to strongly mean one thing.
-
-| When you see | it means                       |
-|--------------|--------------------------------|
-| `:`          | type                           |
-| `=`          | value binding                  |
-| `?`          | option                         |
-| `!`          | result                         |
-| `@`          | adapt (clone / widen / coerce) |
-| `;`          | statement break / newline      |
-
-Likewise some bracket pairs are strongly suggestive.
-
-| When you see | it means                        |
-|--------------|---------------------------------|
-| `<` … `>`    | generics                        |
-| `{` … `}`    | struct-like, structs and tables |
-| `[` … `]`    | array-like, lists and tensors   |
 
 
 ## Small enough to understand and remember
