@@ -1209,6 +1209,23 @@ fun log(msg: string)
 end fun
 ```
 
+**Inline functions (temporary).** `inline`, alone as the first statement of a
+body, replaces every call to the function by its body:
+
+```datalove
+fun add(a: u32, b: u32): u32
+    inline
+    ret icall add_wrapping_u32(a, b)
+end fun
+```
+
+The calls are gone from the compiled program, in every engine; what the
+function does, its parameters' modes and its ownership are as they were. An
+inline function may call other inline functions, but not in a cycle, which is
+an error. `inline` anywhere else is an error (P076). Calls in a script's
+top-level code are not inlined, only those in function bodies. This is a
+stand-in for an inliner that decides for itself, and will go.
+
 ### 8.3 Parameter Modes
 
 All parameters are passed by reference. The mode determines permitted

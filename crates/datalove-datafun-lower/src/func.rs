@@ -192,6 +192,7 @@ pub fn lower_function_body<'db>(
             tracked_params: ctx.compute_tracked_params(),
             type_param_count: type_params.len() as u32,
             descriptor_table: Vec::new(),
+            inline: func.signature(ctx.db).inline,
         }),
         nested_units: Vec::new(),
     };

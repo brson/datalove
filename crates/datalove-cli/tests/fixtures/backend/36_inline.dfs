@@ -1,0 +1,50 @@
+// Calls to `inline` functions, replaced by their bodies on every backend: a
+// parameter of each mode, an inline function calling another, a generic one,
+// and an `out` parameter written into a slot and through a projection.
+
+fun add(a: u32, b: u32): u32
+  inline
+  ret icall add_wrapping_u32(a, b)
+end fun
+
+fun twice<T>(x: T): (T, u32)
+  inline
+  ret (x, 2)
+end fun
+
+fun bump(mut n: u32)
+  inline
+  set n = add(n, 1)
+end fun
+
+fun fill(out s: string, ref from: string)
+  inline
+  set s = from@
+end fun
+
+fun reset(mut s: string)
+  inline
+  set s = "reset"
+end fun
+
+fun run(): u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< 10
+    set total = add(total, i)
+    call bump(mut i)
+  end loop
+  var s = "old"
+  call fill(out s, ref "new")
+  debuglog(s)
+  call reset(mut s)
+  debuglog(s)
+  var pair = ("a", "b")
+  call fill(out pair.1, ref "c")
+  debuglog(pair)
+  let t = twice("str")
+  debuglog(t)
+  ret total
+end fun
+
+debuglog(run())

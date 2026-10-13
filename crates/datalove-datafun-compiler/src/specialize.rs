@@ -276,6 +276,7 @@ pub fn monomorphize_function(
             // nothing to rewrite.
             type_param_count: func_ctx.type_param_count,
             descriptor_table: func_ctx.descriptor_table.clone(),
+            inline: func_ctx.inline,
         }),
         nested_units: original.nested_units.clone(),
     }

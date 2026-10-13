@@ -40,6 +40,15 @@ impl<'db> Parser<'db> {
             Some("native") => self.parse_native_fun(),
             Some("match") => self.parse_match(remaining_lines),
             Some("call") => self.parse_call(),
+            Some("inline") => {
+                let ts = self.peek_text_span();
+                self.eat_word("inline");
+                self.emit_stmt_error(ts,
+                    "`inline` is only allowed as the first statement of a function",
+                    "P076",
+                    "not the first statement of a function",
+                )
+            }
             _ => {
                 let ts = self.peek_text_span();
                 self.emit_stmt_error(ts,
@@ -540,6 +549,15 @@ impl<'db> Parser<'db> {
         // Enter function context for expression identity tracking.
         self.enter_function(name);
 
+        // `inline`, alone on the body's first line, marks the function for
+        // inlining. Anywhere else it is an error, which `parse_statement` gives.
+        let inline = remaining_lines.peek().is_some_and(|(_, line)| {
+            matches!(line.as_slice(), [TreeToken::Token(t)] if t.word_str(self.text()) == Some("inline"))
+        });
+        if inline {
+            remaining_lines.next();
+        }
+
         // Parse body until we hit "end fun".
         let mut body = vec![];
         let mut found_end_fun = false;
@@ -568,7 +586,7 @@ impl<'db> Parser<'db> {
             self.db,
             self.module_id(),
             name,
-            ast::FunSignature { type_params, type_bounds, params, return_type },
+            ast::FunSignature { type_params, type_bounds, params, return_type, inline },
             body,
             local_index,
         ))

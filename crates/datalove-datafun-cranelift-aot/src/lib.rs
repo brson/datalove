@@ -338,6 +338,7 @@ impl AotCompiler {
                     tracked_params: vec![],
                     type_param_count: 0,
                     descriptor_table: Vec::new(),
+                    inline: false,
                 }
             ),
             nested_units: vec![], // Functions don't have nested units

@@ -1,0 +1,19 @@
+// Inline functions calling each other in a cycle would be spliced into each
+// other for ever.
+fun even(n: u32): bool
+  inline
+  if n == 0
+    ret true
+  end if
+  ret odd(icall sub_wrapping_u32(n, : u32 / 1))
+end fun
+
+fun odd(n: u32): bool
+  inline
+  if n == 0
+    ret false
+  end if
+  ret even(icall sub_wrapping_u32(n, : u32 / 1))
+end fun
+
+debuglog(even(4))

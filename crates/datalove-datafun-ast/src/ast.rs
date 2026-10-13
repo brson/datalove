@@ -334,6 +334,9 @@ pub struct FunSignature<'db> {
     pub type_bounds: Vec<Option<TypeBound>>,
     pub params: Vec<FunParam<'db>>,
     pub return_type: Option<datalit::ast::TypeHint<'db>>,
+    /// Whether the body began with `inline`: every call to the function is
+    /// replaced by its body, which a caller has to know to compile its calls.
+    pub inline: bool,
 }
 
 #[salsa::tracked]

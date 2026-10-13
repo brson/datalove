@@ -273,12 +273,14 @@ pub struct FunctionContext {
     pub tracked_params: Vec<ParamId>,
     pub type_param_count: u32,
     pub descriptor_table: Vec<IrType>,
+    pub inline: bool,
 }
 ```
 
 `tracked_params` are the `out` parameters, which need a runtime tracking byte
 because they start uninitialized. `type_param_count` and `descriptor_table`
-belong to generics and are described in Section 11.
+belong to generics and are described in Section 11. `inline` says every call
+to the function is replaced by its body (Section 13).
 
 ### ScriptContext
 
@@ -849,6 +851,17 @@ binding's pre-lowered IR to a `ConstValue`, replaces the expression with a
 `Const` instruction, and then eliminates the instructions and blocks that leaves
 unreachable. `dce::instruction_dest` is the shared answer to "what does this
 instruction define".
+
+**Inlining** (`ir::inline`, temporary) replaces each call to a function marked
+`inline` by its body, after specialization: the callee's blocks renumbered in
+after the caller's, the call's block ending in a jump to them, and every
+return a jump to a continuation holding what followed the call, with the
+result as its parameter. An `in` parameter is moved or copied into a value of
+its own, a `ref` or `mut` one is the argument, and an `out` one is a tracked
+slot moved into the argument's place at the continuation. A generic callee's
+types take the call's bindings. The blocks are then put in reverse postorder,
+which the compiled backends need to meet a definition before its uses. A
+cycle of inline functions is an error.
 
 **Const parameter specialization** monomorphizes: the original function stays
 and a copy is added beside it per instantiation, with the const parameter

@@ -297,7 +297,7 @@ fn native_stub<'db>(
         db,
         Some(rider_module_id),
         name,
-        FunSignature { type_params, type_bounds, params, return_type: None },
+        FunSignature { type_params, type_bounds, params, return_type: None, inline: false },
         vec![],
         0,
     )

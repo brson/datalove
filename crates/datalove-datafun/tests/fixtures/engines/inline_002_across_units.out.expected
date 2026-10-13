@@ -1,0 +1,115 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        unit_end
+                    
+                    fn inc(p0):
+                    block0:
+                        v0 = const 1u32
+                        v1 = intrinsic AddWrappingU32(p0, v0)
+                        return v1
+                    
+                    fn bump(p0):
+                    block0:
+                        v0 = const 0u32
+                        v5 = copy v0
+                        goto block1
+                    block1:
+                        v3 = const 1u32
+                        v4 = intrinsic AddWrappingU32(v5, v3)
+                        goto block2(v4)
+                    block2(v1):
+                        v2 = call u2(p0, v1)
+                        return
+                    
+                    fn replace_all(p0, p1):
+                    block0:
+                        v0 = copy p1
+                        v1 = list [v0]
+                        drop p0
+                        store p0, v1
+                        return
+                """,
+            ),
+            output: "(fragment executed)",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 5u32
+                        v1 = call u0(v0)
+                        v2 = call u1()
+                        v3 = pack Tuple2 {v1, v2}
+                        debuglog v3
+                        drop v3
+                        unit_end
+                    
+                    fn twice(p0):
+                    block0:
+                        v4 = copy p0
+                        goto block1
+                    block1:
+                        v2 = const 1u32
+                        v3 = intrinsic AddWrappingU32(v4, v2)
+                        goto block2(v3)
+                    block2(v0):
+                        v7 = copy v0
+                        goto block3
+                    block3:
+                        v5 = const 1u32
+                        v6 = intrinsic AddWrappingU32(v7, v5)
+                        goto block4(v6)
+                    block4(v1):
+                        return v1
+                    
+                    fn fresh():
+                    block0:
+                        v0 = list []
+                        store.move.tracked s0, v0
+                        goto block1
+                    block1:
+                        v3 = const 0u32
+                        v8 = copy v3
+                        goto block2
+                    block2:
+                        v6 = const 1u32
+                        v7 = intrinsic AddWrappingU32(v8, v6)
+                        goto block3(v7)
+                    block3(v4):
+                        v5 = call unit0.u2(s0, v4)
+                        goto block4
+                    block4:
+                        v1 = const ()
+                        v2 = load.move.tracked s0
+                        return v2
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("(7, [1])\n"),
+        ),
+    ],
+)

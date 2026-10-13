@@ -49,6 +49,7 @@ pub fn empty_function_unit(name: &str) -> IrCodeUnit {
                 tracked_params: Vec::new(),
                 type_param_count: 0,
                 descriptor_table: Vec::new(),
+                inline: false,
             },
         ),
         nested_units: Vec::new(),

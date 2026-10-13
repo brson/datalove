@@ -248,6 +248,11 @@ Phase 5c: Specialize comptime functions
     |   One copy of a callee per instantiation; see below
     v   Output: the lowered IR, with the copies in it
     |
+Phase 5c': Inline calls to `inline` functions
+    |   inline_module_graph (non-tracked)
+    |   Each call replaced by the callee's body; see ir::inline
+    v   Output: the lowered IR, without those calls
+    |
 Phase 5d: Assemble modules
     |   lower_module [tracked]
     |   Reuses pre-lowered functions
@@ -373,6 +378,11 @@ evaluates a comptime function's const bindings once the instantiation is known,
 so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
 memoizing it, so a program that does specialize re-specializes on every
 compile.
+
+Phase 5c' is the exception, and a temporary one, as `inline` is: inlining
+needs other modules' bodies. It does nothing unless some function is
+`inline`, and then gives a new handle only to a module whose functions call
+one, so the other modules still assemble from their memos.
 
 #### Why nothing between 5a and 5d is graph-wide
 

@@ -1,0 +1,43 @@
+----------
+module local/test/num
+----------
+
+// Inline functions in a module, inlined into the module's own functions and
+// into the script's.
+fun add(a: u32, b: u32): u32
+  inline
+  ret icall add_wrapping_u32(a, b)
+end fun
+
+fun pick<T>(c: bool, a: T, b: T): T
+  inline
+  if c
+    ret a
+  end if
+  ret b
+end fun
+
+fun sum_to(n: u32): u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    set total = add(total, i)
+    set i = add(i, : u32 / 1)
+  end loop
+  ret total
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/num
+
+fun go(): u32
+  let a = num.sum_to(10)
+  let s = num.pick(true, "yes", "no")
+  debuglog s
+  ret num.add(a, : u32 / 5)
+end fun
+
+debuglog go()

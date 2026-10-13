@@ -37,6 +37,7 @@ fn make_func_unit(
             tracked_params: vec![],
             type_param_count: 0,
             descriptor_table: Vec::new(),
+            inline: false,
         }),
         nested_units: vec![],
     }

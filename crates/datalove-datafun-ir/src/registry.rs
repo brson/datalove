@@ -67,6 +67,11 @@ impl ModuleFunctionRegistry {
         self.modules.get(&module_id)?.get(&func_id).map(|unit| &**unit)
     }
 
+    /// Get a module code unit by module and function ID, shared.
+    pub fn get_module_function(&self, module_id: IrModuleId, func_id: CodeUnitId) -> Option<&Arc<IrCodeUnit>> {
+        self.modules.get(&module_id)?.get(&func_id)
+    }
+
     /// Iterate over all module code units.
     pub fn iter_module_code_units(&self) -> impl Iterator<Item = &IrCodeUnit> {
         self.modules.values().flat_map(|units| units.values()).map(|unit| &**unit)

@@ -1,0 +1,1 @@
+Error: Lowering error: inline function `even` is recursive (`even` calls `odd` calls `even`), and an inline function cannot be

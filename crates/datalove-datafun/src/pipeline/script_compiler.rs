@@ -979,7 +979,14 @@ impl<'db> ScriptCompiler<'db> {
         let ir_unit = self.phase_const_inline(ir_unit, &consts);
 
         // Phase 5: Const parameter specialization.
-        let mut ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs, &consts) {
+        let ir_unit = match self.phase_specialize(ir_unit, unit, &typecheck, &lowered_funcs, &consts) {
+            Ok(ir) => ir,
+            Err(result) => return result,
+        };
+
+        // Phase 5b: Every call to an `inline` function replaced by its body,
+        // after specialization so that a specialized copy is inlined too.
+        let mut ir_unit = match self.phase_inline(ir_unit) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
@@ -1696,6 +1703,54 @@ impl<'db> ScriptCompiler<'db> {
         Ok(ir_unit)
     }
 
+    /// Replace every call to an `inline` function in the unit's functions by
+    /// the function's body; see `datalove_datafun_ir::inline`.
+    ///
+    /// The unit's own code is left calling: it names earlier units' bindings,
+    /// which a function body cannot, and a splice cannot record the moves of
+    /// those it passes.
+    fn phase_inline(&self, mut ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
+        use datalove_datafun_ir::inline::{calls_inline, inline_calls, is_inline, with_calls_into_unit};
+        use datalove_datafun_ir::CodeRef;
+
+        let registry = &self.shared_context.module_registry;
+        let local: HashMap<datalove_datafun_ir::CodeUnitId, Arc<IrCodeUnit>> = ir_unit.nested_units.iter()
+            .filter(|unit| is_inline(unit))
+            .map(|unit| (unit.id, Arc::new(unit.clone())))
+            .collect();
+        let resolve = |func: &CodeRef| -> Option<Arc<IrCodeUnit>> {
+            match func {
+                CodeRef::Local(id) => local.get(id).cloned(),
+                CodeRef::External { unit, id } => self.unit_records.get(*unit as usize)?
+                    .functions.iter()
+                    .find(|f| f.id == *id && is_inline(f))
+                    .map(|f| Arc::new(with_calls_into_unit(f, *unit))),
+                CodeRef::Module { module, id } => registry.get_module_function(*module, *id)
+                    .filter(|f| is_inline(f))
+                    .cloned(),
+            }
+        };
+
+        let mut errors = Vec::new();
+        for func in &mut ir_unit.nested_units {
+            if calls_inline(func, &resolve)
+                && let Err(e) = inline_calls(func, &resolve)
+                && !errors.contains(&e.to_string())
+            {
+                errors.push(e.to_string());
+            }
+        }
+        if !errors.is_empty() {
+            return Err(ScriptCompilationResult {
+                typecheck: TypecheckResult::Success,
+                ownership: OwnershipResult::Success,
+                lowering: LoweringResult::Error { message: errors.join("; ") },
+                ir_unit: None,
+            });
+        }
+        Ok(ir_unit)
+    }
+
     // ========================================================================
     // Phase 4: Const Inlining
     // ========================================================================
@@ -1766,6 +1821,7 @@ impl<'db> ScriptCompiler<'db> {
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),
+            functions: ir_unit.nested_units.iter().cloned().map(Arc::new).collect(),
         };
     }
 }

@@ -1401,11 +1401,17 @@ pub fn lower_module_graph_with_evaluator<'db>(
         )
     };
 
+    // Phase 5c': Every call to an `inline` function replaced by its body,
+    // after specialization so that a specialized copy is inlined too.
+    let (lowered_modules, inline_errors) = inline_module_graph(db_salsa, func_id_map, lowered_modules);
+
     // Module const failures have to reach the lowering result, or a module
     // whose const could not be evaluated compiles as though the functions that
-    // name it were never written. Specialization failures travel the same way.
+    // name it were never written. Specialization and inlining failures travel
+    // the same way.
     for (module_id, errors) in module_const_errors.into_iter()
         .chain(specialize_errors)
+        .chain(inline_errors)
     {
         resolved_consts
             .entry(module_id)
@@ -1513,7 +1519,8 @@ fn module_has_comptime_calls<'db>(
     })
 }
 
-/// One module's IR under a handle, once specialization has rewritten it.
+/// One module's IR under a handle, once specialization or inlining has
+/// rewritten it.
 ///
 /// This is the one place a handle is minted from the IR rather than from
 /// another handle, so it is the one place the key holds a module's
@@ -1527,6 +1534,73 @@ fn specialized_module<'db>(
     functions: Arc<ModuleLoweredFunctions>,
 ) -> ModuleLowered<'db> {
     ModuleLowered::new(db, module_id, functions)
+}
+
+/// Phase 5c' over the whole graph: in every module, each call to an `inline`
+/// function replaced by its body; see `datalove_datafun_ir::inline`.
+///
+/// A module whose functions call nothing inline keeps its handle. Returns the
+/// errors, per module, of calls that could not be inlined.
+fn inline_module_graph<'db>(
+    db: &'db dyn salsa::Database,
+    func_id_map: FuncIdMap<'db>,
+    modules: LoweredModules<'db>,
+) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
+    use datalove_datafun_ir::inline::{calls_inline, inline_calls, is_inline};
+    use datalove_datafun_ir::CodeRef;
+
+    let ir = ir_map(db, &modules);
+    // `CodeRef::Module` names a module by its IR id.
+    let ir_ids: HashMap<ModuleId<'db>, IrModuleId> = func_id_map.entries(db).iter()
+        .map(|((module, _), (ir_id, _))| (*module, *ir_id))
+        .collect();
+    let inline: HashMap<(IrModuleId, CodeUnitId), Arc<IrCodeUnit>> = ir.iter()
+        .filter_map(|(module, funcs)| Some((ir_ids.get(module)?, funcs)))
+        .flat_map(|(ir_id, funcs)| funcs.functions.iter()
+            .filter(|unit| is_inline(unit))
+            .map(move |unit| ((*ir_id, unit.id), Arc::clone(unit))))
+        .collect();
+    if inline.is_empty() {
+        return (modules, Vec::new());
+    }
+    let resolve = |func: &CodeRef| match func {
+        CodeRef::Module { module, id } => inline.get(&(*module, *id)).cloned(),
+        CodeRef::Local(_) | CodeRef::External { .. } => None,
+    };
+
+    let mut errors = Vec::new();
+    let inlined = modules.iter()
+        .map(|(module_id, lowered)| {
+            let funcs = &ir[module_id];
+            if !funcs.functions.iter().any(|unit| calls_inline(unit, &resolve)) {
+                return (*module_id, *lowered);
+            }
+            let mut module_errors = Vec::new();
+            let functions = funcs.functions.iter()
+                .map(|unit| {
+                    if !calls_inline(unit, &resolve) {
+                        return Arc::clone(unit);
+                    }
+                    let mut unit = (**unit).clone();
+                    if let Err(e) = inline_calls(&mut unit, &resolve)
+                        && !module_errors.contains(&e.to_string())
+                    {
+                        module_errors.push(e.to_string());
+                    }
+                    Arc::new(unit)
+                })
+                .collect();
+            if !module_errors.is_empty() {
+                errors.push((*module_id, module_errors));
+            }
+            let ir = Arc::new(ModuleLoweredFunctions {
+                functions,
+                func_name_to_id: funcs.func_name_to_id.clone(),
+            });
+            (*module_id, specialized_module(db, *module_id, ir))
+        })
+        .collect();
+    (inlined, errors)
 }
 
 /// Phase 5c over the whole graph, in and out under handles.

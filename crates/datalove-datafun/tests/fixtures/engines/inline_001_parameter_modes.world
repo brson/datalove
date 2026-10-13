@@ -1,0 +1,120 @@
+----------
+scriptunit-fragment
+----------
+
+// Calls to `inline` functions are replaced by their bodies, a parameter of
+// each mode bound as the call would have: `in` moved or copied into a value
+// of its own, `ref` and `mut` the caller's place, `out` a slot whose value is
+// moved into the caller's place where the call returns, after what was there
+// is destroyed.
+
+fun add(a: u32, b: u32): u32
+  inline
+  ret icall add_wrapping_u32(a, b)
+end fun
+
+fun bump(mut n: u32)
+  inline
+  set n = add(n, 1)
+end fun
+
+fun fill(out s: string, ref from: string)
+  inline
+  set s = from@
+end fun
+
+fun reset(mut s: string)
+  inline
+  set s = "reset"
+end fun
+
+// Generic, and called from a generic, so the arguments are dynamic.
+fun choose<T>(flag: bool, ref a: T, ref b: T): T
+  inline
+  if flag
+    ret a@
+  end if
+  ret b@
+end fun
+
+fun keep<T>(x: T, out o: T)
+  inline
+  set o = x
+end fun
+
+// Early returns, each a jump to where the call returns.
+fun checked(a: u32, b: u32): !u32
+  inline
+  if b == 0
+    ret er error "zero"
+  end if
+  let s = a +! b
+  ret ok s
+end fun
+
+// A tracked binding in the body, spliced into a loop, where its tracking
+// byte lasts from one iteration to the next.
+fun maybe_move(flag: bool, s: string): string
+  inline
+  var t = s
+  if flag
+    let moved = t
+    ret moved
+  end if
+  ret "kept"
+end fun
+
+fun modes(): u32
+  var total: u32 = 0
+  var i: u32 = 0
+  loop while i .< 10
+    set total = add(total, i)
+    call bump(mut i)
+  end loop
+  var s = "old"
+  call fill(out s, ref "new")
+  debuglog s
+  call reset(mut s)
+  debuglog s
+  var pair = ("a", "b")
+  call fill(out pair.1, ref "c")
+  debuglog pair
+  ret total
+end fun
+
+fun generic_caller<T>(ref a: T, ref d: T, x: T): [T]
+  var o: T = d@
+  call keep(x, out o)
+  ret [choose(true, ref a, ref d), choose(false, ref a, ref d), o]
+end fun
+
+fun sum(n: u32): !u32
+  var total: u32 = 0
+  var i: u32 = 1
+  loop while i .< n
+    set total = checked(total, i)!
+    set i +!= 1
+  end loop
+  set total = checked(total, 0)!
+  ret ok total
+end fun
+
+fun moves(n: u32): u32
+  var count: u32 = 0
+  var i: u32 = 0
+  loop while i .< n
+    var s = "s"
+    let r = maybe_move(icall rem_u32(i, : u32 / 2) == 0, s)
+    if r == "s"
+      set count = add(count, 1)
+    end if
+    set i = add(i, 1)
+  end loop
+  ret count
+end fun
+
+debuglog modes()
+debuglog generic_caller(ref "a", ref "d", "x")
+debuglog generic_caller(ref (: u32 / 1), ref (: u32 / 0), : u32 / 7)
+debuglog sum(10)
+debuglog moves(10)

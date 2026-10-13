@@ -1,0 +1,10 @@
+// `inline` marks a function for inlining only as its body's first statement.
+inline
+
+fun f(): u32
+  let x: u32 = 1
+  inline
+  ret x
+end fun
+
+debuglog(f())

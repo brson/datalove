@@ -1,0 +1,35 @@
+----------
+scriptunit-fragment
+----------
+
+// An inline function defined in an earlier unit is inlined into a later
+// unit's function, its own calls into its unit named from there.
+fun inc(x: u32): u32
+  inline
+  ret icall add_wrapping_u32(x, : u32 / 1)
+end fun
+
+fun bump(mut s: [u32])
+  inline
+  call replace_all(mut s, inc(: u32 / 0))
+end fun
+
+fun replace_all(mut s: [u32], x: u32)
+  set s = [x]
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+fun twice(x: u32): u32
+  ret inc(inc(x))
+end fun
+
+fun fresh(): [u32]
+  var s: [u32] = []
+  call bump(mut s)
+  ret s
+end fun
+
+debuglog (twice(: u32 / 5), fresh())

@@ -57,6 +57,9 @@ pub struct UnitLowerRecord {
     /// `uses` is: the reach is walked after the database has been mutated, and
     /// nothing borrowed from salsa survives that.
     pub imports: Vec<String>,
+    /// The unit's functions as compiled, for a later unit's function to
+    /// inline one.
+    pub functions: Vec<Arc<datalove_datafun_ir::IrCodeUnit>>,
 }
 
 /// The lowering context a unit sitting after `records` is lowered against.

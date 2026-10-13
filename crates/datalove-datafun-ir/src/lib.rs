@@ -10,6 +10,7 @@ use std::collections::HashMap;
 
 pub mod display;
 pub mod frame_layout;
+pub mod inline;
 pub mod layout;
 pub mod params;
 pub mod registry;
@@ -1894,6 +1895,84 @@ impl Instruction {
 }
 
 impl Instruction {
+    /// Visit every value and slot an instruction names outside its operands:
+    /// what it defines, a slot it loads from or stores to, the reference a
+    /// `DropViaRef` drops through. With `map_operands_in_instruction` for the
+    /// operands, that is every id in it, for renumbering them.
+    ///
+    /// Exhaustive, so a new instruction has to say.
+    pub fn for_each_id_mut(&mut self, value: &mut impl FnMut(&mut ValueId), slot: &mut impl FnMut(&mut SlotId)) {
+        let mut slot_dest = |dest: &mut SlotDest| match dest {
+            SlotDest::Local(s) => slot(s),
+            SlotDest::External { .. } => {}
+        };
+        match self {
+            Instruction::Const { dest, .. } | Instruction::StaticRef { dest, .. }
+            | Instruction::Copy { dest, .. } | Instruction::Move { dest, .. }
+            | Instruction::BinOp { dest, .. } | Instruction::UnaryOp { dest, .. }
+            | Instruction::Widen { dest, .. } | Instruction::WidenFixed { dest, .. }
+            | Instruction::Clone { dest, .. } | Instruction::Call { dest, .. }
+            | Instruction::ComptimeCall { dest, .. } | Instruction::Pack { dest, .. }
+            | Instruction::GetField { dest, .. } | Instruction::GetFieldRef { dest, .. }
+            | Instruction::WrapSome { dest, .. } | Instruction::WrapNone { dest }
+            | Instruction::WrapOk { dest, .. } | Instruction::WrapErr { dest, .. }
+            | Instruction::EnumVariant { dest, .. } | Instruction::EnumDiscriminant { dest, .. }
+            | Instruction::EnumPayload { dest, .. } | Instruction::ErrorFrom { dest, .. }
+            | Instruction::DataFrom { dest, .. } | Instruction::ListNew { dest, .. }
+            | Instruction::SetNew { dest, .. } | Instruction::MapNew { dest, .. }
+            | Instruction::TensorNew { dest, .. } | Instruction::TableNew { dest, .. }
+            | Instruction::ListElementRef { dest, .. } | Instruction::MapValueRef { dest, .. }
+            | Instruction::TensorIndexRef { dest, .. } | Instruction::Intrinsic { dest, .. } => value(dest),
+            Instruction::BinOpChecked { dest, overflow, .. }
+            | Instruction::UnaryOpChecked { dest, overflow, .. } => {
+                value(dest);
+                value(overflow);
+            }
+            Instruction::OpAssignChecked { overflow, .. } => value(overflow),
+            Instruction::Unpack { dests, .. } => dests.iter_mut().for_each(value),
+            Instruction::UnwrapOption { dest, is_some, .. } => {
+                value(dest);
+                value(is_some);
+            }
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, .. } => {
+                value(ok_dest);
+                value(err_dest);
+                value(is_ok);
+            }
+            Instruction::ListGet { dest, is_valid, .. } | Instruction::MapGet { dest, is_valid, .. }
+            | Instruction::TensorGet { dest, is_valid, .. } => {
+                value(dest);
+                value(is_valid);
+            }
+            Instruction::ListBoundsCheck { is_valid, .. } | Instruction::ListSet { is_valid, .. }
+            | Instruction::MapContainsKey { is_valid, .. } | Instruction::MapSetValue { is_valid, .. }
+            | Instruction::TensorBoundsCheck { is_valid, .. } | Instruction::TensorSet { is_valid, .. } => {
+                value(is_valid)
+            }
+            Instruction::SlotLoadCopy { dest, slot: s } | Instruction::SlotLoadMove { dest, slot: s }
+            | Instruction::SlotLoadMoveTracked { dest, slot: s } => {
+                value(dest);
+                slot(s);
+            }
+            Instruction::SlotStoreCopy { dest, .. } | Instruction::SlotStoreCopyTracked { dest, .. }
+            | Instruction::SlotStoreMove { dest, .. } | Instruction::SlotStoreMoveTracked { dest, .. } => {
+                slot_dest(dest)
+            }
+            Instruction::SetField { slot: dest, .. } | Instruction::SetFieldTracked { slot: dest, .. } => {
+                slot_dest(dest)
+            }
+            Instruction::DropViaRef { ref_value } => value(ref_value),
+            Instruction::OpAssign { .. } | Instruction::ParamStore { .. }
+            | Instruction::ParamStoreTracked { .. } | Instruction::ParamSetField { .. }
+            | Instruction::ParamSetFieldTracked { .. } | Instruction::RefStore { .. }
+            | Instruction::RefSetField { .. } | Instruction::RefStoreTracked { .. }
+            | Instruction::RefSetFieldTracked { .. } | Instruction::Drop { .. }
+            | Instruction::DropTracked { .. } | Instruction::DropField { .. }
+            | Instruction::UnitEndDrop { .. } | Instruction::UnitEndDropTracked { .. }
+            | Instruction::MapUpsert { .. } | Instruction::DebugLog { .. } | Instruction::Nop => {}
+        }
+    }
+
     /// Every value an instruction defines.
     ///
     /// Exhaustive, so a new instruction has to say. Several define a second or
@@ -2289,6 +2368,15 @@ pub struct FunctionContext {
     /// every rewrite agrees on the order. Parts come before what holds them.
     #[serde(default)]
     pub descriptor_table: Vec<IrType>,
+    /// Whether every call to this function is replaced by its body (`inline`
+    /// as the function's first statement); see `inline`. Written only when
+    /// set, so that the serialized form of everything else is as it was.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub inline: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// The descriptor table of a function: every dynamic type it uses.
@@ -2969,6 +3057,7 @@ mod dynamic_type_tests {
                 tracked_params: Vec::new(),
                 type_param_count: 1,
                 descriptor_table: Vec::new(),
+                inline: false,
             }),
             nested_units: Vec::new(),
         }
