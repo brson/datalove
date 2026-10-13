@@ -46,16 +46,20 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## In progress
 
+- for loops
 - reactive scripts
 - repl ux
+- generics overhaul
 
 
 
 
 ## On deck
 
-- collection iteration
+- recursive types
 - saturating and wrapping math ops
+- generic benchmarking
+- generic specialization
 
 
 
