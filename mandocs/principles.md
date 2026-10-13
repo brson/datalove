@@ -1,106 +1,48 @@
 # Datalove Principles
 
 Datalove is a strongly-typed scripting language
-for data modeling and transformation,
-built on a comprehensive definition of the data types
-needed for modern computing tasks.
+for data modeling and transformation.
 
-With Datalove I aim to reinspire the
-programming feel I had learning to program,
-when the stack was small and comprehensible,
-and we built native applications that were fast
-because they worked closely with the physical machine.
+<!--
+What's wrong with scripting languages?
+I started datalove because expressing a struct in Python sucks.
+-->
 
-I aim to do this with the benefit of decades
-of experience and evolution in compiler architecture and type theory:
-the best of modern practical programming language theory in a simple package,
-with a focus on correctness uncommon in scripting languages.
-Dalatove relishes in a restrictive core language model
-that enables features like fast compilation and execution,
-compile-time evaluation, incremental and parallel recompilation,
-record and replay.
+Datalove is built on a small and restrictive core language.
+Dependencies are explicit,
+functions are pure, values are uniquely owned,
+and nothing happens that was not written.
+Those restrictions make modern features easy:
+fast compilation, compile-time evaluation,
+incremental recompilation,
+and scripts whose history can be edited, rolled back and deterministically replayed.
 
 
 ## The Principles
 
-<div class="toc toc-repeat-7">
+<div class="toc toc-repeat-4">
 
 - [Glorify the plain old data types](#user-content-glorify-the-plain-old-data-types)
-- [Advance interactive scripting design](#user-content-advance-interactive-scripting-design)
-- [Determinism and reproducibility](#user-content-determinism-and-reproducibility)
+- [Power through restricted language design](#user-content-power-through-restricted-language-design)
 - [Nothing happens that was not written](#user-content-nothing-happens-that-was-not-written)
 - [Numerical correctness](#user-content-numerical-correctness)
-- [Power through restricted language design](#user-content-power-through-restricted-language-design)
-- [Straightforward syntax with minimal sugar](#user-content-straightforward-syntax-with-minimal-sugar)
 - [Strict baseline first; controlled ergonomics later](#user-content-strict-baseline-first-controlled-ergonomics-later)
 - [Small enough to understand and remember](#user-content-small-enough-to-understand-and-remember)
-- [Mechanical and machine-model sympathy](#user-content-mechanical-and-machine-model-sympathy)
-- [Modern compiler and execution architecture](#user-content-modern-compiler-and-execution-architecture)
 - [Fast compilation over fast execution](#user-content-fast-compilation-over-fast-execution)
 
 </div>
 
 
-
-<!-- What Datalove is for -->
-
 ## Glorify the plain old data types
 
 Good data design leads to good algorithms,
-and most data types should be plain old data,
-not objects. In the design of Datalove,
-consideration for the capabilities,
-memory layout and syntax of data structures comes first,
-and all else derives from that.
-We maintain a strong distinction between the declarative
-language model of Datalove literals and the imperative/procedural languages built on top of it:
-understanding Datalove literals precedes understanding Datalove.
-
-
-## Advance interactive scripting design
-
-Datalove applies state-of-the-art compiler design
-to enable a modern interactive scripting experience with capabilities
-beyond standard REPLs and notebooks, suitable for rapid
-prototyping of data experiments that evolve into maintainable production data transformation pipelines.
-The scripting environment features fast startup and compilation
-and supports incremental recompilation and side-effect-free reevaluation as prior
-statements are modified.
-
-
-
-<!-- What Datalove promises -->
-
-## Determinism and reproducibility
-
-Datalove functions are side-effect free, pure and often total.
-Datalove procedures use virtualized I/O.
-We leverage language properties to create an execution environment
-where both computation and I/O can be rolled back and selectively
-replayed, which is particularly useful in the scripting environment to edit
-and retry the history.
-
-
-## Nothing happens that was not written
-
-The surface syntax of Datalove translates directly to what happens
-at the execution layer, and all is stated explicitly.
-Integers are never automatically truncated or widened.
-Types are never automatically coerced.
-Argument passing modes are explicit.
-All error handling and early returns are expressed consistently in the syntax.
-What you see is always exactly what you get.
-
-
-## Numerical correctness
-
-It is no longer acceptable to silently overflow and get wrong results.
-
-Integer types never implicitly lose information.
-Fixed-size integer types never overflow silently.
-Integer division by zero must be handled.
-The syntactic and cognitive overhead this necessarily imposes is eased
-by language features to whatever extent is reasonable.
+and most data should be plain old data, not objects.
+Datalove designs its data structures first,
+their capabilities, memory layout and literal syntax,
+and derives everything else from them.
+The declarative language of Datalove literals
+is distinct from the imperative languages built on top of it,
+and understanding that core data model comes before understanding Datalove.
 
 
 ## Power through restricted language design
@@ -118,43 +60,66 @@ so constants and const parameters are computed
 with the same code that runs at runtime.
 Loops and integer arithmetic are constrained enough
 that many functions can be proven to terminate (in theory...),
-proving that compile-time evaluation finishes.
+so compile-time evaluation is known to finish.
+
 Any statement in a script can be edited and reevaluated,
 and its history rolled back and replayed,
 because nothing it did escaped into hidden state.
-Datalove's current restrictions leave open
-many possibilites for future design directions.
+Procedures, when they arrive, extend this to I/O
+by running it through a virtualized layer
+that can be recorded and replayed.
+That is the environment Datalove is for:
+past REPLs and notebooks,
+where a data experiment can grow into a production pipeline
+without being rewritten.
 
 The same restrictions keep the compiler simple.
-The code you see lowers directly to the code you expect,
-with little analysis needed to recover performance,
+It needs little analysis to recover performance,
 and users see that simplicity as fast compilation
 and predictable performance.
 
 
+## Nothing happens that was not written
+
+The surface syntax translates directly to what happens at execution,
+and memory layout is obvious from the types.
+Types are never implicitly coerced.
+Values are stored inline, never implicitly boxed.
+Argument passing modes are explicit.
+Error handling and early returns always appear in the syntax.
+What you see is what runs.
 
 
-<!-- How Datalove reads -->
+## Numerical correctness
 
-## Straightforward syntax with minimal sugar
+It is no longer acceptable to silently overflow and get wrong results.
 
-Datalove's syntax is a throwback to the Pascal family and Visual Basic,
-line-oriented, with keywords everywhere that are easy
-for human eyes to scan and computers to parse.
-It provides the basic features necessary to write algorithms,
-but does not bloat the compiler and spec with syntactic niceties.
+Numbers are never implicitly widened or truncated.
+Fixed-size integers have no bare arithmetic.
+If you aren't going think hard about your integer math,
+use bigints and don't sweat it.
+If you do fixed-sized integer math,
+we're going to make you confront those overflows directly in the syntax
+with checked operations.
+(also you can wrap or saturate, but you better think doubly-hard).
 
 
 ## Strict baseline first; controlled ergonomics later
 
-The baseline Datalove language of today is spartan and strict.
-This is an intentional development strategy to develop
-the language semantics and architectural capabilities necessary
-to build upon. The ultimate surface language for casual
-interactivity is expected to be more ergonomic,
-and we will get there by incrementally and experimentally developing
-ergonomic modes that reduce boilerplate and transformations between
-which can be mechanically analyzed and applied.
+All this explicitness makes Datalove verbose, and intentionally so.
+The syntax is a throwback to the Pascal family and Visual Basic:
+line-oriented, with keywords everywhere,
+easy for human eyes to scan and for computers to parse,
+and without syntactic niceties that bloat the compiler and spec.
+
+The baseline language of today is spartan and strict.
+That is deliberate:
+the semantics and architecture come first,
+because they constrain everything built on top of them.
+The surface language for casual interactivity will be more ergonomic,
+and we will get there experimentally,
+with modes that remove boilerplate
+and translate mechanically to and from the strict baseline.
 
 
 ## Small enough to understand and remember
@@ -163,43 +128,15 @@ Datalove is a small language,
 its features driven directly by my personal needs.
 It doesn't need to be a general-purpose language.
 It doesn't need to please anybody.
-This affords us the freedom to ruthlessly omit features.
-Large languages are difficult to understand, difficult to maintain,
-difficult to extend, and are slow to compile.
-
-
-<!-- How Datalove is built -->
-
-## Mechanical and machine-model sympathy
-
-Datalove aims for an execution model and memory layout that
-is obvious from the syntax, and one that can be executed
-efficiently by modern computers without complex compiler transformations
-that exhibit performance characteristics that are difficult for
-human authors to reason about.
-
-Inline values, no implicit boxing.
-Plain threads. No green threads. No async/await state machines.
-
-
-## Modern compiler and execution architecture
-
-Full memoization for efficient recompilation and compiler queries.
-Efficient IR-based interpreter with per-function JIT, or ahead-of-time compilation,
-via Cranelift or to C source code.
-Incremental typechecking and evaluation with full JIT support,
-undo/redo, virtualized I/O with record/replay.
-
-We establish broad architecture-level capabilities early
-to inform and restrict the design trajectory of the language.
+That is the freedom to ruthlessly omit features.
+Large languages are hard to understand, maintain and extend,
+and they are slow to compile.
 
 
 ## Fast compilation over fast execution
 
-Datalove is foremost a scripting language,
-and even though it is statically typed and the data and execution model
-are oriented toward mechanical sympathy,
-tradeoffs are gladly made in service of fast compilation times.
+Datalove is foremost a scripting language.
+Its data and execution model are designed for mechanical sympathy,
+which leads to both fast compile times and fast execution times,
+but when the two conflict, compile times win.
 Datalove does not seek ultimate performance.
-
-
