@@ -666,8 +666,9 @@ fun add(a: u32, b: u32): ?u32
 end fun
 ```
 
-Bigint division `/?` yields `int`. Unary `-?` is permitted only for signed
-fixed integers.
+Bigint division `/?` yields `int`. Unary `-!` and `-?` negate any fixed
+integer. A signed value fails only at its minimum, which has no counterpart;
+an unsigned one fails for any value but zero.
 
 Integer division truncates toward zero, so `-7 /? 2` is `-3`. There is no
 remainder operator; derive one from the quotient, which gives it the sign of
@@ -1463,9 +1464,7 @@ There are three bounds:
   `i16`, `u32`, `i32`, `u64`, `i64`, `index` and `offset`. What all ten have is
   the comparisons and the checked and optional arithmetic — `+!`, `+?` and the
   rest. Bare `+` is not among them, because a fixed-width integer does not have
-  one. Negation is the result form `-!` and not the optional `-?`, which is
-  refused for unsigned operands and so refused for a parameter that may turn
-  out to be one. `sys/std/fixedint` is what is written on top of that: the
+  one. Negation is among them in both forms, `-!` and `-?`. `sys/std/fixedint` is what is written on top of that: the
   arithmetic, and the constants. Comparing and sorting are not there, because
   they ask nothing of a fixed-width integer that another type cannot answer.
 

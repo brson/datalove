@@ -1022,17 +1022,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             return self.compile_neg_checked_dynamic(builder, dest, overflow_dest, operand);
         }
 
-        // Only supported for signed integers.
+        // An unsigned value negates only when it is zero; anything else has no
+        // counterpart and overflows.
+        if matches!(dest_ty, IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index) {
+            let val = self.get_operand_value(builder, operand)?;
+            let overflow = builder.ins().icmp_imm_u(cl_ir::condcodes::IntCC::NotEqual, val, 0);
+            let result = builder.ins().ineg(val);
+            self.values.insert(dest, result);
+            self.values.insert(overflow_dest, overflow);
+            return Ok(());
+        }
+
         let (min_val, cl_ty) = match dest_ty {
             IrType::I8 => (i8::MIN as i64, cl_types::I8),
             IrType::I16 => (i16::MIN as i64, cl_types::I16),
             IrType::I32 => (i32::MIN as i64, cl_types::I32),
             IrType::I64 => (i64::MIN, cl_types::I64),
             IrType::Offset => (datalove_rtdt::OffsetRepr::MIN as i64, crate::index_types::INDEX_TYPE),
-            _ => {
-                panic!("checked negation of {:?}; lowering emits one only for a signed integer, \
-                    an unsigned one having nothing to overflow into", dest_ty);
-            }
+            _ => panic!("checked negation of {:?}, which is not a fixed-width integer", dest_ty),
         };
 
         let val = self.get_operand_value(builder, operand)?;

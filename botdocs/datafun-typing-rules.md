@@ -112,7 +112,6 @@ Several rules test a type against a class:
 | Class | Members |
 |-------|---------|
 | `Fix` | `u8` `u16` `u32` `u64` `i8` `i16` `i32` `i64` `index` `offset` |
-| `Signed` | `i8` `i16` `i32` `i64` `offset` |
 | `Float` | `f32` `f64` |
 | `Num` | `Fix ∪ Float ∪ {int}` |
 | `Eq` | `Num`, `bool`, `string`, `atom a`; and `()`, tuples, structs, `?T`, `term a T` and enums whose components are all in `Eq` |
@@ -302,16 +301,16 @@ Unary operators:
 ------------------------------------ (Syn-NegChecked)
 Γ ⊢ -!e ⇒ T
 
-Γ ⊢ e ⇒ T    T ∈ Signed    Γ(ret) = ?U
--------------------------------------- (Syn-NegOptional)
+Γ ⊢ e ⇒ T    T ∈ Fix⁺    Γ(ret) = ?U
+------------------------------------ (Syn-NegOptional)
 Γ ⊢ -?e ⇒ T
 ```
 
-`-!` takes every fixed-width integer, unsigned ones included, where it fails
-for any non-zero operand. `-?` refuses unsigned operands outright, and so
-refuses a `fixedint`-bounded parameter, which may be unsigned. Bare `-` is
-for floats, `float`-bounded parameters and `int`: `-x` on an `i32` variable is F026, though `-5`
-checks against `i32` by `Check-NegLit`.
+`-!` and `-?` take every fixed-width integer, as the binary checked and
+optional operators do. A signed operand fails only at its minimum; an
+unsigned one fails for any value but zero. Bare `-` is for floats,
+`float`-bounded parameters and `int`: `-x` on an `i32` variable is F026,
+though `-5` checks against `i32` by `Check-NegLit`.
 
 ### Try operators
 

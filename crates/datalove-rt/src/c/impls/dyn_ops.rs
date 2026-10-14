@@ -85,6 +85,8 @@ fn width(tag: TyTag) -> usize {
         TyTag::U8 | TyTag::I8 => 1,
         TyTag::U16 | TyTag::I16 => 2,
         TyTag::U32 | TyTag::I32 | TyTag::F32 => 4,
+        // As wide as `index-64` makes them, as `scalar_bits` reads them.
+        TyTag::Index | TyTag::Offset => rtdt::INDEX_SIZE as usize,
         _ => 8,
     }
 }

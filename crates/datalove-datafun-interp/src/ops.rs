@@ -833,7 +833,7 @@ impl IrInterpreter {
         dest: Destination,
         overflow_dest: Destination,
     ) {
-        // Only negation can overflow for signed integers; type checker ensures this.
+        // Negation is the one unary operator with a checked form.
         if op != UnaryOp::Neg {
             unreachable!("checked unaryop only supports Neg, got {:?}", op);
         }
@@ -847,14 +847,12 @@ impl IrInterpreter {
                 rtdt::TyTag::I32 => Self::execute_checked_neg::<i32>(src, dest, overflow_dest),
                 rtdt::TyTag::I64 => Self::execute_checked_neg::<i64>(src, dest, overflow_dest),
                 rtdt::TyTag::Offset => Self::execute_checked_neg::<rtdt::OffsetRepr>(src, dest, overflow_dest),
-                // Only a generic negates an unsigned value: a `fixedint` type
-                // parameter, which arrives as what it is. The runtime's rule is
-                // the one the generic was written against -- only zero negates
-                // without overflowing.
+                // An unsigned value, concrete or a `fixedint` type parameter
+                // arriving as what it is. The runtime's rule: only zero
+                // negates without overflowing.
                 rtdt::TyTag::U8 | rtdt::TyTag::U16 | rtdt::TyTag::U32 | rtdt::TyTag::U64
                 | rtdt::TyTag::Index => self.execute_checked_neg_dynamic(src, dest, overflow_dest),
-                // Checked negation only for signed ints; type checker ensures this.
-                _ => unreachable!("checked negation only supported for signed integers, got {:?}", tag),
+                _ => unreachable!("checked negation of {:?}, which is not a fixed-width integer", tag),
             }
         }
     }

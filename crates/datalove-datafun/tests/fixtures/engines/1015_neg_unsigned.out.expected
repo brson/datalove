@@ -1,0 +1,132 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/neg"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn neg_result(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "negation overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                    
+                    fn neg_option(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn neg_index(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn neg_i8(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = none
+                        return v2
+                    block2:
+                        v3 = some v0
+                        return v3
+                    
+                    fn neg_i16(p0):
+                    block0:
+                        v0, v1 = neg.checked p0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const "negation overflow"
+                        v3 = error_from v2
+                        v4 = err v3
+                        return v4
+                    block2:
+                        v5 = ok v0
+                        return v5
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        v1 = call m0.u0(v0)
+                        debuglog v1
+                        drop v1
+                        v2 = const 3u32
+                        v3 = call m0.u0(v2)
+                        debuglog v3
+                        drop v3
+                        v4 = const 0u8
+                        v5 = call m0.u1(v4)
+                        debuglog v5
+                        v6 = const 255u8
+                        v7 = call m0.u1(v6)
+                        debuglog v7
+                        v8 = const 0index
+                        v9 = call m0.u2(v8)
+                        debuglog v9
+                        v10 = const 1index
+                        v11 = call m0.u2(v10)
+                        debuglog v11
+                        v12 = const 5i8
+                        v13 = call m0.u3(v12)
+                        debuglog v13
+                        v14 = const -128i8
+                        v15 = call m0.u3(v14)
+                        debuglog v15
+                        v16 = const -7i16
+                        v17 = call m0.u4(v16)
+                        debuglog v17
+                        drop v17
+                        v18 = const -32768i16
+                        v19 = call m0.u4(v18)
+                        debuglog v19
+                        drop v19
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok 0\ner error \"negation overflow\"\nsome 0\nnone\nsome 0\nnone\nsome -5\nnone\nok 7\ner error \"negation overflow\"\n"),
+        ),
+    ],
+)

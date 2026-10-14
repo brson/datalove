@@ -1723,8 +1723,17 @@ impl<'a> FunctionCodegenContext<'a> {
 
         match op {
             UnaryOp::Neg => {
-                // Check for overflow on negation (only INT_MIN for signed types).
+                // A signed value overflows only at its minimum, and an
+                // unsigned one at anything but zero.
                 match src_ty {
+                    IrType::I8 => {
+                        writeln!(out, "    {{ int8_t __v = *(int8_t*){}; *(bool_t*){} = (__v == INT8_MIN); *(int8_t*){} = (int8_t)-__v; }}",
+                            src_addr, overflow_addr, dest_addr).unwrap();
+                    }
+                    IrType::I16 => {
+                        writeln!(out, "    {{ int16_t __v = *(int16_t*){}; *(bool_t*){} = (__v == INT16_MIN); *(int16_t*){} = (int16_t)-__v; }}",
+                            src_addr, overflow_addr, dest_addr).unwrap();
+                    }
                     IrType::I32 => {
                         writeln!(out, "    {{ int32_t __v = *(int32_t*){}; *(bool_t*){} = (__v == INT32_MIN); *(int32_t*){} = -__v; }}",
                             src_addr, overflow_addr, dest_addr).unwrap();
@@ -1737,11 +1746,10 @@ impl<'a> FunctionCodegenContext<'a> {
                         writeln!(out, "    {{ offset_t __v = *(offset_t*){}; *(bool_t*){} = (__v == DTLV_OFFSET_MIN); *(offset_t*){} = -__v; }}",
                             src_addr, overflow_addr, dest_addr).unwrap();
                     }
-                    _ => {
-                        // Unsigned negation doesn't overflow in the same way.
-                        writeln!(out, "    *({c_ty}*){dest_addr} = -(*({c_ty}*){src_addr});").unwrap();
-                        writeln!(out, "    *(bool_t*){} = 0;", overflow_addr).unwrap();
+                    IrType::U8 | IrType::U16 | IrType::U32 | IrType::U64 | IrType::Index => {
+                        writeln!(out, "    {{ {c_ty} __v = *({c_ty}*){src_addr}; *(bool_t*){overflow_addr} = (__v != 0); *({c_ty}*){dest_addr} = ({c_ty})0; }}").unwrap();
                     }
+                    _ => panic!("checked negation of {:?}, which is not a fixed-width integer", src_ty),
                 }
             }
             _ => {

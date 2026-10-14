@@ -1,0 +1,48 @@
+----------
+module local/test/neg
+----------
+
+// An unsigned value negates only when it is zero; anything else has no
+// counterpart, and the checked and optional forms return early.
+fun neg_result(x: u32): !u32
+    ret ok (-! x)
+end fun
+
+fun neg_option(x: u8): ?u8
+    ret some (-? x)
+end fun
+
+fun neg_index(x: index): ?index
+    ret some (-? x)
+end fun
+
+// The narrow signed widths overflow at their minimum too.
+fun neg_i8(x: i8): ?i8
+    ret some (-? x)
+end fun
+
+fun neg_i16(x: i16): !i16
+    ret ok (-! x)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/neg
+import neg.neg_result
+import neg.neg_option
+import neg.neg_index
+import neg.neg_i8
+import neg.neg_i16
+
+debuglog neg_result(: u32 / 0)
+debuglog neg_result(: u32 / 3)
+debuglog neg_option(: u8 / 0)
+debuglog neg_option(: u8 / 255)
+debuglog neg_index(: index / 0)
+debuglog neg_index(: index / 1)
+debuglog neg_i8(: i8 / 5)
+debuglog neg_i8(: i8 / -128)
+debuglog neg_i16(: i16 / -7)
+debuglog neg_i16(: i16 / -32768)

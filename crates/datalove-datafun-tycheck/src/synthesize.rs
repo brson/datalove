@@ -844,10 +844,11 @@ fn synthesize_unaryop<'db>(
             operand_ty
         }
 
-        // Optional negation: only signed fixed ints.
+        // Optional negation: every fixed int, as for the binary optional
+        // operators. An unsigned value negates only when it is zero.
         // Returns element type directly; on overflow, early-returns None.
         UnaryOp::NegOptional => {
-            if !is_fixed_int_type(&operand_type) || is_unsigned_int_type(&operand_type) {
+            if !fixedint_bounded && !is_fixed_int_type(&operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     unaryop_to_str(op),

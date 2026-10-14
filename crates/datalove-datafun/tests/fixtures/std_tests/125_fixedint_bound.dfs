@@ -52,10 +52,14 @@ fun quotient<T>(a: T, b: T): ?T with { T is fixedint, }
   ret some (a /? b)
 end fun
 
-// Negation is the result form, not the optional one: `-?` is refused for
-// unsigned operands, and a parameter may turn out to be one.
+// Negation in both forms, which a parameter has as every fixed-width integer
+// does.
 fun negated<T>(a: T): !T with { T is fixedint, }
   ret ok (-! a)
+end fun
+
+fun negated_optional<T>(a: T): ?T with { T is fixedint, }
+  ret some (-? a)
 end fun
 
 fun ordered<T>(a: T, b: T): bool with { T is fixedint, }
@@ -94,6 +98,9 @@ let quotients = (quotient(: i32 / 7, : i32 / 2), quotient(: i32 / 7, : i32 / 0),
 // counterpart, zero is the only unsigned value that survives it.
 let negations = (negated(: i32 / 5), negated(: i32 / -2147483648),
                  negated(: u32 / 0), negated(: u32 / 3), negated(: offset / -1))
+let optional_negations = (negated_optional(: i32 / 5), negated_optional(: i32 / -2147483648),
+                          negated_optional(: u32 / 0), negated_optional(: u32 / 3),
+                          negated_optional(: index / 1), negated_optional(: offset / -1))
 
 let comparisons = (ordered(: u8 / 3, : u8 / 200), ordered(: i8 / 3, : i8 / -100),
                    ordered(: index / 1, : index / 2), ordered(: offset / -1, : offset / 1))
@@ -150,5 +157,5 @@ let saturating = (add_saturating(: u8 / 200, : u8 / 100),
 
 let output = (zeros, ones, lows, highs, signs, checked, saturating,
               narrow_unsigned, wide_unsigned, narrow_signed, wide_signed,
-              products, quotients, negations, comparisons, forwarded, repeated,
+              products, quotients, negations, optional_negations, comparisons, forwarded, repeated,
               distances, folded, overflowed, ascending, nothing)

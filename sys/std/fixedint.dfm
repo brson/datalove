@@ -117,13 +117,11 @@ fun div_checked<T>(self: T, other: T): ?T with { T is fixedint, }
   ret some (self /? other)
 end fun
 
-// The negation, or an error when the value has no counterpart.
-//
-// A result rather than an option because `-?` is refused for unsigned
-// operands, and a bounded parameter may turn out to be one.
-fun neg_checked<T>(self: T): !T with { T is fixedint, }
+// The negation, or none when the value has no counterpart: the most negative
+// signed value, and every unsigned one but zero.
+fun neg_checked<T>(self: T): ?T with { T is fixedint, }
   inline
-  ret ok (-! self)
+  ret some (-? self)
 end fun
 
 // The sum, stopped at the end of the range rather than running past it.
