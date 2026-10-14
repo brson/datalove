@@ -74,17 +74,15 @@ pub(super) struct StatementCounters {
     pub alias: u32,
 }
 
-/// Parser state for datafun parsing.
-pub(super) struct Parser<'db> {
-    pub(super) db: &'db dyn Db,
-    source: TokenSource<'db>,
-    pub(super) had_error: bool,
-    /// Source text for error reporting when no current token.
-    source_text: bct::text::Text<'db>,
-    /// The same text as a string, which the tokens' spans index.
-    text: &'db str,
-    /// Module ID for stable function identity (None for scripts).
-    module_id: Option<ModuleId<'db>>,
+/// The side tables a parse fills, in the order it fills them.
+///
+/// One per parse rather than one per parser. A nested parser, for a line or a
+/// bracket, used to keep its own and append them to its parent's when it was
+/// merged, so an entry was copied once for each level of nesting above it, and
+/// the appending was a sixth of what parsing allocated. The tables are moved
+/// in and out instead; see `Parser::sub_parser` and `Parser::merge_spans_from`.
+#[derive(Default)]
+struct Filed<'db> {
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
@@ -106,6 +104,49 @@ pub(super) struct Parser<'db> {
     alias_spans: Vec<SpanEntry>,
     /// Accumulated `(alias, function)` pairs of qualified calls, as written.
     qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)>,
+}
+
+impl<'db> Filed<'db> {
+    fn is_empty(&self) -> bool {
+        self.expr_spans.is_empty() && self.break_spans.is_empty() && self.continue_spans.is_empty()
+            && self.ret_spans.is_empty() && self.set_spans.is_empty() && self.fun_spans.is_empty()
+            && self.type_alias_spans.is_empty() && self.import_spans.is_empty()
+            && self.require_spans.is_empty() && self.alias_spans.is_empty()
+            && self.qualified_calls.is_empty()
+    }
+
+    fn append(&mut self, other: &mut Self) {
+        self.expr_spans.append(&mut other.expr_spans);
+        self.break_spans.append(&mut other.break_spans);
+        self.continue_spans.append(&mut other.continue_spans);
+        self.ret_spans.append(&mut other.ret_spans);
+        self.set_spans.append(&mut other.set_spans);
+        self.fun_spans.append(&mut other.fun_spans);
+        self.type_alias_spans.append(&mut other.type_alias_spans);
+        self.import_spans.append(&mut other.import_spans);
+        self.require_spans.append(&mut other.require_spans);
+        self.alias_spans.append(&mut other.alias_spans);
+        self.qualified_calls.append(&mut other.qualified_calls);
+    }
+}
+
+/// Parser state for datafun parsing.
+pub(super) struct Parser<'db> {
+    pub(super) db: &'db dyn Db,
+    source: TokenSource<'db>,
+    pub(super) had_error: bool,
+    /// Source text for error reporting when no current token.
+    source_text: bct::text::Text<'db>,
+    /// The same text as a string, which the tokens' spans index.
+    text: &'db str,
+    /// Module ID for stable function identity (None for scripts).
+    module_id: Option<ModuleId<'db>>,
+    /// What the parse has filed so far, moved into a nested parser while it
+    /// runs and back when it is merged; see `Filed`.
+    filed: Filed<'db>,
+    /// Whether `filed` was lent by an enclosing parser, which a merge has to
+    /// give back.
+    owes_filed: bool,
     /// Optional context for error messages showing the enclosing branch's opening token.
     branch_context: Option<(TextSpan<'db>, &'static str)>,
     /// Current function name for expression identity (None for script-level).
@@ -125,6 +166,15 @@ pub(super) struct Parser<'db> {
     script_call_counter: u32,
 }
 
+/// A sub-parser dropped holding its parent's tables would take everything
+/// filed so far with it.
+impl Drop for Parser<'_> {
+    fn drop(&mut self) {
+        debug_assert!(!self.owes_filed || std::thread::panicking(),
+            "a sub-parser was dropped without being merged back");
+    }
+}
+
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
     pub(super) fn new(
@@ -141,17 +191,8 @@ impl<'db> Parser<'db> {
             source_text,
             text: source_text.as_str(db),
             module_id,
-            expr_spans: Vec::new(),
-            break_spans: Vec::new(),
-            continue_spans: Vec::new(),
-            ret_spans: Vec::new(),
-            set_spans: Vec::new(),
-            fun_spans: Vec::new(),
-            type_alias_spans: Vec::new(),
-            import_spans: Vec::new(),
-            require_spans: Vec::new(),
-            alias_spans: Vec::new(),
-            qualified_calls: Vec::new(),
+            filed: Filed::default(),
+            owes_filed: false,
             branch_context: None,
             current_fn_name: None,
             expr_counter: counters.expr,
@@ -166,7 +207,7 @@ impl<'db> Parser<'db> {
     ///
     /// A nested parser that started its counters from zero would hand out keys
     /// that collide with the enclosing body's.
-    pub(super) fn new_sub(&self, tokens: Vec<TreeToken<'db>>) -> Self {
+    pub(super) fn new_sub(&mut self, tokens: Vec<TreeToken<'db>>) -> Self {
         let mut sub = Parser::new(
             self.db,
             tokens,
@@ -174,6 +215,8 @@ impl<'db> Parser<'db> {
             self.module_id,
             ScriptCounters::default(),
         );
+        sub.filed = rmx::std::mem::take(&mut self.filed);
+        sub.owes_filed = true;
         sub.current_fn_name = self.current_fn_name;
         sub.expr_counter = self.expr_counter;
         sub.script_expr_counter = self.script_expr_counter;
@@ -214,17 +257,8 @@ impl<'db> Parser<'db> {
             source_text,
             text: source_text.as_str(db),
             module_id,
-            expr_spans: Vec::new(),
-            break_spans: Vec::new(),
-            continue_spans: Vec::new(),
-            ret_spans: Vec::new(),
-            set_spans: Vec::new(),
-            fun_spans: Vec::new(),
-            type_alias_spans: Vec::new(),
-            import_spans: Vec::new(),
-            require_spans: Vec::new(),
-            alias_spans: Vec::new(),
-            qualified_calls: Vec::new(),
+            filed: Filed::default(),
+            owes_filed: false,
             branch_context: context,
             current_fn_name: None,
             expr_counter: 0,
@@ -257,17 +291,8 @@ impl<'db> Parser<'db> {
             source_text: self.source_text,
             text: self.text,
             module_id: self.module_id,
-            expr_spans: Vec::new(),
-            break_spans: Vec::new(),
-            continue_spans: Vec::new(),
-            ret_spans: Vec::new(),
-            set_spans: Vec::new(),
-            fun_spans: Vec::new(),
-            type_alias_spans: Vec::new(),
-            import_spans: Vec::new(),
-            require_spans: Vec::new(),
-            alias_spans: Vec::new(),
-            qualified_calls: Vec::new(),
+            filed: rmx::std::mem::take(&mut self.filed),
+            owes_filed: true,
             branch_context: context,
             current_fn_name: self.current_fn_name,
             expr_counter: self.expr_counter,
@@ -481,7 +506,7 @@ impl<'db> Parser<'db> {
             return error.span.start;
         }
         let key = ast::ExprKey::of(self.db, expr);
-        self.expr_spans.iter().rev()
+        self.filed.expr_spans.iter().rev()
             .find(|entry| entry.expr_key == key)
             .map(|entry| entry.span.start)
             .expect("an expression is given its span when it is created")
@@ -496,7 +521,7 @@ impl<'db> Parser<'db> {
             self.next_expr_index(),
             kind,
         );
-        self.expr_spans.push(ast::ParseSpanEntry::new(
+        self.filed.expr_spans.push(ast::ParseSpanEntry::new(
             ast::ExprKey::of(self.db, expr),
             ts.text.source(self.db),
             ts.span,
@@ -506,41 +531,41 @@ impl<'db> Parser<'db> {
 
     /// Take the accumulated expression spans (consumes them).
     pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry<'db>> {
-        rmx::std::mem::take(&mut self.expr_spans)
+        rmx::std::mem::take(&mut self.filed.expr_spans)
     }
 
     /// Take the accumulated break statement spans (consumes them).
     pub(super) fn take_break_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.break_spans)
+        rmx::std::mem::take(&mut self.filed.break_spans)
     }
 
     /// Take the accumulated continue statement spans (consumes them).
     pub(super) fn take_continue_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.continue_spans)
+        rmx::std::mem::take(&mut self.filed.continue_spans)
     }
 
     /// Take the accumulated return statement spans (consumes them).
     pub(super) fn take_ret_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.ret_spans)
+        rmx::std::mem::take(&mut self.filed.ret_spans)
     }
 
     /// Take the accumulated set statement spans (consumes them).
     pub(super) fn take_set_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.set_spans)
+        rmx::std::mem::take(&mut self.filed.set_spans)
     }
 
     /// Take the accumulated function definition spans (consumes them).
     pub(super) fn take_fun_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.fun_spans)
+        rmx::std::mem::take(&mut self.filed.fun_spans)
     }
 
     /// Take the accumulated type alias spans (consumes them).
     pub(super) fn take_type_alias_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.type_alias_spans)
+        rmx::std::mem::take(&mut self.filed.type_alias_spans)
     }
 
     pub(super) fn take_alias_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.alias_spans)
+        rmx::std::mem::take(&mut self.filed.alias_spans)
     }
 
     /// Start this parser's alias numbering where `outer`'s has reached.
@@ -551,79 +576,79 @@ impl<'db> Parser<'db> {
     /// Take back the aliases a sub-parser filed, and its numbering.
     pub(super) fn take_alias_numbering(&mut self, sub: &mut Self) {
         self.stmt_counters.alias = sub.stmt_counters.alias;
-        self.alias_spans.append(&mut sub.alias_spans);
+        self.filed.alias_spans.append(&mut sub.filed.alias_spans);
     }
 
     /// Merge spans from a sub-parser into this parser.
+    ///
+    /// A sub-parser that was lent this parser's tables gives them back whole,
+    /// with what it filed after what was there; one that started its own has
+    /// them appended.
     pub(super) fn merge_spans_from(&mut self, sub: &mut Self) {
-        self.expr_spans.append(&mut sub.expr_spans);
-        self.break_spans.append(&mut sub.break_spans);
-        self.continue_spans.append(&mut sub.continue_spans);
-        self.ret_spans.append(&mut sub.ret_spans);
-        self.set_spans.append(&mut sub.set_spans);
-        self.fun_spans.append(&mut sub.fun_spans);
-        self.type_alias_spans.append(&mut sub.type_alias_spans);
-        self.import_spans.append(&mut sub.import_spans);
-        self.require_spans.append(&mut sub.require_spans);
-        self.alias_spans.append(&mut sub.alias_spans);
-        self.qualified_calls.append(&mut sub.qualified_calls);
+        if sub.owes_filed {
+            debug_assert!(self.filed.is_empty(), "a parser filed spans while a sub-parser held its tables");
+            sub.owes_filed = false;
+            self.filed = rmx::std::mem::take(&mut sub.filed);
+        } else {
+            self.filed.append(&mut sub.filed);
+        }
     }
 
     /// Note a qualified call, for [`ast::ParsedStatements::qualified_calls`].
     pub(super) fn record_qualified_call(&mut self, alias: InternedText<'db>, name: InternedText<'db>) {
-        self.qualified_calls.push((alias, name));
+        self.filed.qualified_calls.push((alias, name));
     }
 
     /// Take the accumulated qualified calls (consumes them).
     pub(super) fn take_qualified_calls(&mut self) -> Vec<(InternedText<'db>, InternedText<'db>)> {
-        rmx::std::mem::take(&mut self.qualified_calls)
+        rmx::std::mem::take(&mut self.filed.qualified_calls)
     }
 
     /// Record a break statement span and return its local_index.
     pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.brk, |p| &mut p.break_spans)
+        self.record_stmt_span(ts, |c| &mut c.brk, |p| &mut p.filed.break_spans)
     }
 
     /// Record a continue statement span and return its local_index.
     pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.cont, |p| &mut p.continue_spans)
+        self.record_stmt_span(ts, |c| &mut c.cont, |p| &mut p.filed.continue_spans)
     }
 
     /// Record a return statement span and return its local_index.
     pub(super) fn record_ret_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.ret, |p| &mut p.ret_spans)
+        self.record_stmt_span(ts, |c| &mut c.ret, |p| &mut p.filed.ret_spans)
     }
 
     /// Record a set statement span and return its local_index.
     pub(super) fn record_set_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.set, |p| &mut p.set_spans)
+        self.record_stmt_span(ts, |c| &mut c.set, |p| &mut p.filed.set_spans)
     }
 
     /// Record a function definition span and return its local_index.
     pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.fun, |p| &mut p.fun_spans)
+        self.record_stmt_span(ts, |c| &mut c.fun, |p| &mut p.filed.fun_spans)
     }
 
     /// Record a type alias span and return its local_index.
     pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.type_alias, |p| &mut p.type_alias_spans)
+        self.record_stmt_span(ts, |c| &mut c.type_alias, |p| &mut p.filed.type_alias_spans)
     }
 
     /// Record an import span and return its local_index.
     pub(super) fn record_import_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.import, |p| &mut p.import_spans)
+        self.record_stmt_span(ts, |c| &mut c.import, |p| &mut p.filed.import_spans)
     }
 
     pub(super) fn take_import_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.import_spans)
+        rmx::std::mem::take(&mut self.filed.import_spans)
     }
 
     pub(super) fn record_require_span(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.require, |p| &mut p.require_spans)
+        self.record_stmt_span(ts, |c| &mut c.require, |p| &mut p.filed.require_spans)
     }
 
     pub(super) fn take_require_spans(&mut self) -> Vec<SpanEntry> {
-        rmx::std::mem::take(&mut self.require_spans)
+        rmx::std::mem::take(&mut self.filed.require_spans)
     }
 
     /// File a statement's span under the count for its kind.
@@ -681,7 +706,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
     /// Only this layer resolves one, so only this layer has anything to say
     /// when it cannot, and saying it needs the name's own span.
     fn alias_index(&mut self, ts: TextSpan<'db>) -> u32 {
-        self.record_stmt_span(ts, |c| &mut c.alias, |p| &mut p.alias_spans)
+        self.record_stmt_span(ts, |c| &mut c.alias, |p| &mut p.filed.alias_spans)
     }
 
     fn alias_base(&self) -> u32 {
@@ -689,7 +714,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
     }
 
     fn absorb_aliases(&mut self, spans: Vec<SpanEntry>, next: u32) {
-        self.alias_spans.extend(spans);
+        self.filed.alias_spans.extend(spans);
         self.stmt_counters.alias = next;
     }
 

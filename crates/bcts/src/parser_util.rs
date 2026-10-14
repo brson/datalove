@@ -98,7 +98,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     fn eat_branch(&mut self, sigil: Sigil) -> Option<BracerIter<'db>> {
         if self.peek_sigil(sigil) {
             match self.next() {
-                Some(TreeToken::Branch { inner, .. }) => Some(*inner),
+                Some(TreeToken::Branch { inner, .. }) => Some(inner.iter()),
                 _ => None,
             }
         } else {
@@ -546,6 +546,9 @@ pub fn non_ascii_names<'a>(
     tokens: &'a [Token],
     chunk_text: &'a str,
 ) -> impl Iterator<Item = Range<usize>> + 'a {
+    // Asking the whole text at once is a word at a time; asking each token is
+    // a pass over every token of a source that is nearly always all ASCII.
+    let tokens = if chunk_text.is_ascii() { &[][..] } else { tokens };
     tokens.iter().filter_map(move |token| {
         let word = token.word_str(chunk_text)?;
         (!word.is_ascii() && !is_number_word(word)).then(|| token.span())

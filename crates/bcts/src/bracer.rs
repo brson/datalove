@@ -194,28 +194,19 @@ impl<'db> BracerIter<'db> {
                                 }
                             };
 
+                            debug_assert_eq!(self.next_token_index, branch_token_range.start);
                             let branch = TreeToken::Branch {
                                 sigil: next_branch.open_sigil,
                                 open: open_token,
                                 close: close_token,
                                 end_byte,
-                                inner: Box::new(BracerIter {
+                                inner: BranchInner {
                                     db: self.db,
                                     tree: self.tree,
-                                    text: self.text,
-                                    all_tokens: self.all_tokens,
-                                    all_branches: self.all_branches,
-                                    all_inserted_closes: self.all_inserted_closes,
-                                    all_removed_closes: self.all_removed_closes,
-                                    real_token_range: branch_token_range,
-                                    branches: Range::from_start_len(self.next_branch_index, next_branch.branches).X(),
-                                    inserted_closes: Range::from_start_len(self.next_inserted_close_index, next_branch.inserted_closes).X(),
-                                    removed_closes: Range::from_start_len(self.next_removed_close_index, next_branch.removed_closes).X(),
-                                    next_token_index: self.next_token_index,
-                                    next_branch_index: self.next_branch_index,
-                                    next_inserted_close_index: self.next_inserted_close_index,
-                                    next_removed_close_index: self.next_removed_close_index,
-                                }),
+                                    branch: u32::try_from(self.next_branch_index - 1).X(),
+                                    inserted_closes: u32::try_from(self.next_inserted_close_index).X(),
+                                    removed_closes: u32::try_from(self.next_removed_close_index).X(),
+                                },
                             };
 
                             self.next_token_index = next_branch.real_token_range.end;
@@ -266,11 +257,57 @@ pub enum TreeToken<'db> {
         open: Token,
         close: Option<Token>,
         end_byte: usize,
-        /// Boxed: a `BracerIter` is 184 bytes and a `Token` is 32, so this one
-        /// field made every `TreeToken` in the stream 264 bytes whether it was a
-        /// branch or not, and the parser moves and clones them constantly.
-        inner: Box<BracerIter<'db>>,
+        inner: BranchInner<'db>,
     },
+}
+
+/// What a branch holds, as the place to start iterating it.
+///
+/// A handle rather than the iterator: a `BracerIter` is 184 bytes, and held in
+/// the token it made every `TreeToken` that size, so it was boxed, which cost
+/// an allocation per bracket and another for every copy of the token, and the
+/// parser copies tokens as it reads them. Everything else the iterator needs
+/// is the branch's own entry and the bracer's, read again in `iter`.
+#[derive(Clone, Copy)]
+pub struct BranchInner<'db> {
+    db: &'db dyn crate::Db,
+    tree: Bracer<'db>,
+    /// The branch's index in the bracer's `branches`.
+    branch: u32,
+    /// Where the branch's own inserted and removed closes start.
+    inserted_closes: u32,
+    removed_closes: u32,
+}
+
+impl<'db> BranchInner<'db> {
+    /// An iterator over the branch's contents, without its delimiters.
+    pub fn iter(self) -> BracerIter<'db> {
+        let db = self.db;
+        let chunk_lex = self.tree.chunk(db);
+        let all_branches = self.tree.branches(db);
+        let branch = &all_branches[self.branch as usize];
+        let token_start = branch.real_token_range.start.checked_add(1).X();
+        let branch_start = (self.branch as usize).checked_add(1).X();
+        let inserted_start = self.inserted_closes as usize;
+        let removed_start = self.removed_closes as usize;
+        BracerIter {
+            db,
+            tree: self.tree,
+            text: chunk_lex.chunk(db).text(db).as_str(db),
+            all_tokens: chunk_lex.tokens(db),
+            all_branches,
+            all_inserted_closes: self.tree.inserted_closes(db),
+            all_removed_closes: self.tree.removed_closes(db),
+            real_token_range: token_start..branch.real_token_range.end,
+            branches: Range::from_start_len(branch_start, branch.branches).X(),
+            inserted_closes: Range::from_start_len(inserted_start, branch.inserted_closes).X(),
+            removed_closes: Range::from_start_len(removed_start, branch.removed_closes).X(),
+            next_token_index: token_start,
+            next_branch_index: branch_start,
+            next_inserted_close_index: inserted_start,
+            next_removed_close_index: removed_start,
+        }
+    }
 }
 
 #[salsa::tracked(returns(copy))]
@@ -666,12 +703,12 @@ impl<'db> Bracer<'db> {
                 TreeToken::Token(token) => {
                     write!(w, "{}", token.debug_str(text))?;
                 }
-                TreeToken::Branch { sigil, mut inner, .. } => {
+                TreeToken::Branch { sigil, inner, .. } => {
                     write!(w, "{} ", sigil.as_str())?;
                     rmx::extras::recurse(|| {
-                        Self::debug_write(inner.C(), w, text)
+                        Self::debug_write(inner.iter(), w, text)
                     })?;
-                    if inner.next().is_some() {
+                    if inner.iter().next().is_some() {
                         write!(w, " ")?;
                     }
                     write!(w, "{}", sigil.close_sigil().as_str())?;

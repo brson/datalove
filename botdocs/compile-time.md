@@ -2,13 +2,14 @@
 
 What a cold compile of the system library costs, phase by phase, and how to
 measure it. Written October 2026, after a pass that took a script requiring
-every `sys/std` module from 273M to 202M user instructions.
+every `sys/std` module from 273M to 197M user instructions.
 
 ## Contents
 
 - [Measuring](#user-content-measuring)
 - [The breakdown](#user-content-the-breakdown)
 - [Page faults](#user-content-page-faults)
+- [Parsing](#user-content-parsing)
 - [What was fixed](#user-content-what-was-fixed)
 - [What is left](#user-content-what-is-left)
 
@@ -56,9 +57,7 @@ Shares of a run, inclusive, after the fixes below:
 An empty script takes 3.7ms and 767 page faults; the library is everything
 above that.
 
-Parsing has no hot spot. Its cost is spread across the lexer, the bracer, the
-token stream and the creation of a salsa tracked struct per expression
-(`ExprFun::new`), at about 22MB/s. Typecheck and ownership analysis keep their
+Parsing has no hot spot; see [Parsing](#user-content-parsing). Typecheck and ownership analysis keep their
 per-expression tables in `BTreeMap`s keyed by `ExprKey`, and inserting into
 those is the largest item in each.
 
@@ -83,6 +82,40 @@ environment at startup, so a process cannot turn it on for itself; doing it
 from inside means another allocator that can be told to, or re-executing with
 the variable set. Neither is done.
 
+## Parsing
+
+Parsing is about a quarter of the run, some 250 instructions per byte of
+source, where a direct hand-written parser needs tens. Measured by
+instructions, top down: statement parsing 18% of the run, the lexer 4.8%
+before the fix below, splitting the top level into lines 3.8%, the non-ASCII
+name check 1.2%, the bracer's own query 0.5%.
+
+Two guesses about it were measured and were wrong, and are worth not making
+again. A branch token carried a boxed sub-iterator, an allocation per bracket
+and per copy; making it a `Copy` handle (`BranchInner`) saved 0.4% of the
+run. Nested parsers kept their own span tables and appended them to their
+parent's, copying an entry once per level of nesting; moving one set of
+tables in and out (`Filed`) saved 0.3%. Neither allocation was where the cost
+was, because `sys/std` does not nest deeply.
+
+What is left is constant factors at every layer, none above about 3%:
+
+- An expression is a salsa tracked struct, created with an identity hash and a
+  disambiguation, and its span entry reads three of its fields back to build
+  its key: `create_expr` is 3.1% of the run. The struct is kept for the stable
+  `ExprKey` identity, `Copy` handles and the parse firewall's cheap equality;
+  see [salsa-patterns.md](salsa-patterns.md). A per-function arena indexed by
+  the local index would keep all three.
+- Every name is interned as it is read.
+- Every bracket starts a sub-parser, a struct of a few hundred bytes, and
+  every line one more.
+- Tokens move as `TreeToken`s, and `BracerIter::next` merges four sequences
+  to produce each one.
+
+Doing much better is a different parser: one cursor over the flat token array
+with each bracket's match index precomputed, and no token trees or
+sub-parsers.
+
 ## What was fixed
 
 - `compute_func_id_map` checked each rider function against every entry so
@@ -97,6 +130,11 @@ the variable set. Neither is done.
   types; they look signatures up by interned name now (`export_signatures`).
 - `simplify` and dead code elimination hashed value and slot ids with SipHash;
   they use `FxHashMap` and `FxHashSet`.
+- The lexer stepped through words and whitespace a `peek` and an `eat_char`
+  per character, with the bounds and overflow checks each makes; it scans
+  bytes now, decoding only where one is not ASCII. And the non-ASCII name
+  check, a pass over every token, is skipped for a source that is all ASCII.
+  Together 1.9% of the run.
 - The CLI's `script` command dropped the salsa database table by table on its
   way out, 5% of the run. It forgets it instead, after dropping the
   interpreters, which check for leaks as they go.
@@ -105,8 +143,7 @@ the variable set. Neither is done.
 
 - Huge pages, above: the largest single item, and a decision about the
   allocator.
-- Parsing: no single fix; the per-expression tracked struct is the structural
-  cost.
+- Parsing: no single fix; see [Parsing](#user-content-parsing).
 - The analysis tables: dense per-function indices instead of `BTreeMap`s keyed
   by `ExprKey`, if their hashing and ordering requirements allow.
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,

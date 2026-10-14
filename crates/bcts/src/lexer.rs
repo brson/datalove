@@ -284,16 +284,8 @@ pub fn lex_chunk<'db>(
         fn eat_word(&mut self) -> Token {
             debug_assert_eq!(self.peek_token(), Some(NextToken::Word));
 
-            let is_word_char = Self::is_word_start;
-
             let start = self.range.start;
-            while let Some(ch) = self.peek() {
-                if is_word_char(ch) {
-                    self.eat_char(ch);
-                } else {
-                    break;
-                }
-            }
+            self.range.start = self.scan(start, Self::is_word_start);
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
@@ -381,16 +373,32 @@ pub fn lex_chunk<'db>(
         fn eat_whitespace(&mut self) -> bool {
             debug_assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
 
-            let mut newline = false;
-            while let Some(ch) = self.peek() {
-                if ch.is_whitespace() {
-                    newline |= ch == '\n';
-                    self.eat_char(ch);
+            let start = self.range.start;
+            self.range.start = self.scan(start, char::is_whitespace);
+            self.text.as_bytes()[start..self.range.start].contains(&b'\n')
+        }
+
+        /// Where the run of characters from `from` that `keep` accepts ends.
+        ///
+        /// A byte at a time, decoding a character only where one is not ASCII:
+        /// a `peek` and an `eat_char` per character, with the bounds and
+        /// overflow checks each makes, was most of what lexing cost.
+        fn scan(&self, from: usize, keep: fn(char) -> bool) -> usize {
+            let bytes = self.text.as_bytes();
+            let mut at = from;
+            while at < self.range.end {
+                let byte = bytes[at];
+                let ch = if byte.is_ascii() {
+                    byte as char
                 } else {
+                    self.text[at..self.range.end].chars().next().X()
+                };
+                if !keep(ch) {
                     break;
                 }
+                at += ch.len_utf8();
             }
-            newline
+            at
         }
 
         fn eat_char(&mut self, ch: char) {

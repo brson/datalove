@@ -512,7 +512,7 @@ impl<'db> Parser<'db> {
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(*inner),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner.iter()),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -523,7 +523,7 @@ impl<'db> Parser<'db> {
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(*inner, Some((open_span, "in this parameter list")))
+                self.parse_fun_params(inner.iter(), Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();
@@ -1288,7 +1288,7 @@ impl<'db> Parser<'db> {
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(*inner),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner.iter()),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -1299,7 +1299,7 @@ impl<'db> Parser<'db> {
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(*inner, Some((open_span, "in this parameter list")))
+                self.parse_fun_params(inner.iter(), Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();
@@ -1375,7 +1375,7 @@ impl<'db> Parser<'db> {
                                 }
                             };
                             case_sub.error_if_not_exhausted();
-                            self.had_error |= case_sub.had_error;
+                            self.merge_identity_from(&mut case_sub);
 
                             // Parse body until next case/default/end match.
                             let body = self.parse_match_arm_body(remaining_lines);
@@ -1411,7 +1411,7 @@ impl<'db> Parser<'db> {
                                 }
                             };
                             case_sub.error_if_not_exhausted();
-                            self.had_error |= case_sub.had_error;
+                            self.merge_identity_from(&mut case_sub);
 
                             // Parse body until next case/default/end match.
                             let body = self.parse_match_arm_body(remaining_lines);
@@ -1424,7 +1424,7 @@ impl<'db> Parser<'db> {
                             let default_span = case_sub.peek_text_span();
                             case_sub.next(); // consume "default"
                             case_sub.error_if_not_exhausted();
-                            self.had_error |= case_sub.had_error;
+                            self.merge_identity_from(&mut case_sub);
 
                             // Parsed either way, so that a second default's body
                             // is checked like any other rather than skipped.
@@ -1446,7 +1446,7 @@ impl<'db> Parser<'db> {
                                 .code("P047")
                                 .primary_label(ts, "expected 'atom', 'term', or 'default'")
                                 .emit_parse();
-                            self.had_error |= case_sub.had_error;
+                            self.merge_identity_from(&mut case_sub);
                             // Skip to next case/end match.
                             let body = self.parse_match_arm_body(remaining_lines);
                             let _ = body;
