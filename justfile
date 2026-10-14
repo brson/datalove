@@ -17,23 +17,23 @@ test:
     cargo check --all --benches
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
-# Run the tests with sys riders built and loaded rather than linked in.
+# Smoke test the sys riders built and loaded rather than linked in.
 #
 # A sys rider is compiled into the binary, so the interpreter takes its
 # addresses directly: no cargo, no component, no dlopen. That is worth having
 # and it means the path every other rider takes goes untested for exactly the
-# riders this suite leans on hardest. Same suite, the other arrangement
-# underneath.
+# riders this suite leans on hardest. The binary's script tests are enough to
+# see that the riders build and load: they run through the driver the switch
+# reaches, and `04_u32_bits` calls a native.
 test-sys-riders:
-    DATALOVE_BUILD_SYS_RIDERS=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+    DATALOVE_BUILD_SYS_RIDERS=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-cli --test script_tests
 
 # Run tests with 64-bit collection indexes.
 test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
 
 # The slow configuration: the property tests and exhaustive cases, the wasm
-# build, the whole suite against sys riders built from source, and generated
-# programs.
+# build, the sys riders built from source, and generated programs.
 test-slow:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt-tests --features slow_tests
@@ -55,8 +55,11 @@ test-demos:
     cd benchvs && just build
     cd demos/store && just gen 2000 && just check
 
+# The slow configuration and the demos, which CI runs as one job.
+test-extras: test-slow test-demos
+
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-slow test-64 test-parallel test-demos
+test-ci: test test-64 test-parallel test-extras
 
 # Run tests with parallelism enabled.
 test-parallel:
