@@ -178,14 +178,16 @@ block_comment  = "/*", { block_comment | ? any character ? }, "*/" ;  (* nests; 
   is D033. Whitespace and comments may sit inside a run: `, ,` is `,,`. Inside
   a row, elements are simply written one after another, and spacing matters
   only where it decides what is glued: `[| 1 -2 |]` and `[|1-2|]` are two
-  elements, `1` and `-2`, and `[| 1 - 2 |]` is D050. `;` is not a tensor
-  separator (D020). With a header, the body is either flat, `d₁ × ... × dₖ`
+  elements, `1` and `-2`, and `[| 1 - 2 |]` is D050. A `;` is a line break,
+  which a tensor passes over like any other. With a header, the body is either flat, `d₁ × ... × dₖ`
   elements, or shaped exactly as the header says (D041); zero extents are
   allowed, `[| 0 3 | |]`. A hint covers one element: `[| : u8 / 1 2 |]` is two
   elements.
-- **Table rows.** Only `\n` separates rows, outside nested brackets and outside
-  block comments; a line comment's own newline counts. A `;` or `,` with
-  nothing before it is D033, a trailing one is fine. Every row has one cell per
+- **Table rows.** A newline or a `;` separates rows, outside nested brackets
+  and outside block comments; a line comment's own newline counts. A `;` is a
+  line break -- the lexer takes it for a newline -- so a run of them is blank
+  rows, which are free. A `,` with nothing before it is D033, a trailing one is
+  fine. Every row has one cell per
   column (D030); each cell is one `full_expr`, so `{| x, y; 1 2, 3 |}` is D021.
   A header cell is one name (D031, D034), and names are unique (D038). The
   header is optional: `{||}` is the empty table.
@@ -207,7 +209,7 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`, `expr.rs`,
 | D030 | Table row with the wrong number of cells | `expr.rs:552` |
 | D031 | A table header cell that is not a name | `expr.rs:579` |
 | D032 | `enum` type without `{` | `type_hint.rs:136` |
-| D033 | A delimiter with nothing before it, in a table or tensor | `expr.rs:417,485` |
+| D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:417,485` |
 | D034 | An extra token in a table header cell | `expr.rs:597` |
 | D035 | `atom` with no name | `expr.rs:175` |
 | D036 | `term` with no name | `expr.rs:187` |

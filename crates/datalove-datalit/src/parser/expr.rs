@@ -523,10 +523,8 @@ impl<'db> Parser<'db> {
     }
 
     fn parse_table_expr(&mut self, iter: Cursor<'db>) -> ast::Expr<'db> {
-        // Split by row delimiters (newline in whitespace, or semicolon).
-        let groups = split::split_lines(iter);
-        self.report_stray_delimiters(&groups, "rows");
-        let rows = split::nonempty_groups(groups);
+        // A row is a line, ended by a newline or a `;`.
+        let rows: Vec<_> = split::Lines::new(iter).collect();
 
         if rows.is_empty() {
             // Empty table: {||}.

@@ -4,4 +4,4 @@
 // expressions until the tokens run out. An unexpected sigil was reported
 // without being consumed, which left the tokens exactly as they were and the
 // loop going round forever: this file used to hang the compiler.
-let grid: [|u32, 1|] = [|1 ; 2|]
+let grid: [|u32, 1|] = [|1 = 2|]

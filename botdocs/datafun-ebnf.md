@@ -33,8 +33,8 @@ not written. Two more notations carry what tokens alone cannot:
   between them. Spacing decides fixity in datafun
   ([spec Section 2.4](botspec.md#user-content-24-spacing)), and `~` is where it
   does.
-- `EOL` is a statement break: a newline before a token at bracket depth 0, or
-  a `;` at depth 0. Inside any bracket pair a newline is not an `EOL`, nor is
+- `EOL` is a statement break: a newline before a token at bracket depth 0. A
+  `;` is lexed as a newline, so it is one too. Inside any bracket pair a newline is not an `EOL`, nor is
   one inside a block comment. `EOLS` is one or more; blank lines are free.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
@@ -172,7 +172,7 @@ entry         = expr, "=", expr ;               (* D017 *)
 struct        = "{", [ sfield, { ",", sfield }, [ "," ] ], "}" ;
 sfield        = NAME, "=", expr ;               (* D018, D038 *)
 table         = "{|", [ ROWSEPS ], [ header_row, { ROWSEPS, data_row }, [ ROWSEPS ] ], "|}" ;
-ROWSEPS       = ( newline | ";" ), { newline | ";" } ;  (* a ";" after nothing: D033 *)
+ROWSEPS       = ( newline | ";" ), { newline | ";" } ;
 header_row    = NAME, { ",", NAME }, [ "," ] ;  (* D031, D034, D038 *)
 data_row      = expr, { ",", expr }, [ "," ] ;  (* D030, D033 *)
 tensor        = "[|", [ shape_header ], [ tensor_body ], "|]" ;   (* D040, D041 *)
@@ -209,7 +209,7 @@ string_lit, digit_run, hex_run, comment, newline
 
 - A statement ends at an `EOL`, so `let x = 1 +` then `2` on the next line is
   P081 and then P001, while the same split inside `(1 +` ... `2)` is one
-  statement. A `;` with nothing before it is P032.
+  statement. A `;` is a line break, so a run of them is blank lines.
 - `end`, `else` and `case` are recognised only at the start of a line. An
   `end fun` inside an open `if` is P001 for that line and then P034 for both
   blocks.

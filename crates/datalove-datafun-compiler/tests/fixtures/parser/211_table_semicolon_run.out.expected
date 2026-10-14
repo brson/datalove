@@ -38,20 +38,5 @@
       }
     ]
   },
-  "diagnostics": [
-    {
-      "code": "D033",
-      "labels": [
-        {
-          "message": "a `;` goes between two rows",
-          "span": [
-            17,
-            18
-          ],
-          "text": ";"
-        }
-      ],
-      "message": "nothing before this `;`"
-    }
-  ]
+  "diagnostics": []
 }

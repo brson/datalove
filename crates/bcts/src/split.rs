@@ -21,24 +21,15 @@ use crate::text::TextSpan;
 #[derive(Clone)]
 pub struct TokenGroup<'db> {
     pub tokens: Cursor<'db>,
-    /// What closed the group, absent where the input ran out instead.
-    pub end: Option<Delimiter>,
+    /// The delimiter that closed the group, absent where the input ran out
+    /// instead.
+    pub end: Option<Written>,
 }
 
 impl<'db> TokenGroup<'db> {
     pub fn is_empty(&self) -> bool {
         self.tokens.is_empty()
     }
-}
-
-/// What closed a group.
-#[derive(Clone)]
-pub enum Delimiter {
-    /// A newline, which falls between whatever happens to be on either side.
-    Newline,
-    /// A `;`, or the run of `,` a tensor separates an axis with: written to
-    /// separate two particular things.
-    Written(Written),
 }
 
 /// A delimiter someone wrote, which is one sigil or a run of them.
@@ -56,76 +47,43 @@ impl Written {
     }
 }
 
-/// Split on line delimiters: a newline outside a comment, or `;`.
+/// The lines of a cursor's tokens, the blank ones left out.
 ///
-/// A newline is kept on the token after it, so one at the end of the tokens
-/// is not seen, and closes nothing that the end would not.
-pub fn split_lines<'db>(tokens: Cursor<'db>) -> Vec<TokenGroup<'db>> {
-    Lines::new(tokens).collect()
-}
-
-/// The groups [`split_lines`] makes, one at a time.
-///
-/// Each is a cursor over its part of the level, so a source's lines are
-/// found rather than collected: what a line holds stays where the lexer put
-/// it.
+/// A token begins a new line if a line break came before it: a newline
+/// outside a comment, or a `;`, which the lexer takes for one. Each line is a
+/// cursor over its part of the level, so a source's lines are found rather
+/// than collected.
 #[derive(Clone)]
 pub struct Lines<'db> {
     rest: Cursor<'db>,
-    /// Where the group being read began.
+    /// Where the line being read began.
     start: u32,
-    /// A group a `;` closed straight after a newline closed the one before.
-    pending: Option<TokenGroup<'db>>,
-    finished: bool,
 }
 
 impl<'db> Lines<'db> {
     pub fn new(tokens: Cursor<'db>) -> Self {
-        Lines { rest: tokens, start: tokens.position(), pending: None, finished: false }
+        Lines { rest: tokens, start: tokens.position() }
     }
 }
 
 impl<'db> Iterator for Lines<'db> {
-    type Item = TokenGroup<'db>;
+    type Item = Cursor<'db>;
 
-    fn next(&mut self) -> Option<TokenGroup<'db>> {
-        if let Some(group) = self.pending.take() {
-            return Some(group);
-        }
-        if self.finished {
-            return None;
-        }
-        while let Some(index) = self.rest.next_index() {
-            let token = self.rest.raw(index);
-            let mut closed = None;
-            if token.newline_before {
-                closed = Some(TokenGroup {
-                    tokens: self.rest.between(self.start, index),
-                    end: Some(Delimiter::Newline),
-                });
+    fn next(&mut self) -> Option<Cursor<'db>> {
+        loop {
+            let Some(index) = self.rest.next_index() else {
+                let line = self.rest.between(self.start, self.rest.end());
+                self.start = self.rest.end();
+                return (!line.is_empty()).then_some(line);
+            };
+            if self.rest.raw(index).newline_before {
+                let line = self.rest.between(self.start, index);
                 self.start = index;
-            }
-            if self.rest.is_plain(index) && token.kind == TokenKind::Sigil(Sigil::Semicolon) {
-                let group = TokenGroup {
-                    tokens: self.rest.between(self.start, index),
-                    end: Some(Delimiter::Written(Written {
-                        sigil: Sigil::Semicolon,
-                        count: 1,
-                        span: token.span(),
-                    })),
-                };
-                self.start = index.checked_add(1).X();
-                match closed {
-                    Some(_) => self.pending = Some(group),
-                    None => closed = Some(group),
+                if !line.is_empty() {
+                    return Some(line);
                 }
             }
-            if closed.is_some() {
-                return closed;
-            }
         }
-        self.finished = true;
-        Some(TokenGroup { tokens: self.rest.between(self.start, self.rest.end()), end: None })
     }
 }
 
@@ -160,11 +118,11 @@ pub fn split_commas<'db>(tokens: Cursor<'db>, level: usize) -> Vec<TokenGroup<'d
             let last = tokens.raw(indices[end.checked_sub(1).X()]).span();
             groups.push(TokenGroup {
                 tokens: tokens.between(start, indices[i]),
-                end: Some(Delimiter::Written(Written {
+                end: Some(Written {
                     sigil: Sigil::Comma,
                     count: level,
                     span: first.start..last.end,
-                })),
+                }),
             });
             start = indices.get(end).copied().unwrap_or(tokens.end());
             i = end;
@@ -201,11 +159,9 @@ pub fn max_comma_run<'db>(tokens: Cursor<'db>) -> usize {
 
 /// The written delimiters that closed a group with nothing in it.
 ///
-/// A newline is not one of them however many of them there are, since it
-/// separates whatever it happens to fall between and a blank line falls
-/// between nothing. A trailing `;` or `,` is not one either: it closes the
-/// group before it, and the empty group after it is closed by the end of the
-/// input rather than by another delimiter.
+/// A trailing `,` is not one: it closes the group before it, and the empty
+/// group after it is closed by the end of the input rather than by another
+/// delimiter.
 pub fn stray_delimiters<'db>(groups: &[TokenGroup<'db>]) -> Vec<Written> {
     groups.iter().filter_map(stray_delimiter).collect()
 }
@@ -216,10 +172,7 @@ pub fn stray_delimiter(group: &TokenGroup<'_>) -> Option<Written> {
     if !group.is_empty() {
         return None;
     }
-    match &group.end {
-        Some(Delimiter::Written(written)) => Some(written.C()),
-        Some(Delimiter::Newline) | None => None,
-    }
+    group.end.C()
 }
 
 /// The diagnostic for a delimiter written with nothing before it.
@@ -253,10 +206,7 @@ pub fn trailing_delimiter<'db>(groups: &[TokenGroup<'db>]) -> Option<Written> {
     if !last.is_empty() || last.end.is_some() {
         return None;
     }
-    match &before.end {
-        Some(Delimiter::Written(written)) => Some(written.C()),
-        Some(Delimiter::Newline) | None => None,
-    }
+    before.end.C()
 }
 
 /// The diagnostic for a delimiter written with nothing after it.
@@ -362,29 +312,26 @@ fn shape<'db>(groups: &[TokenGroup<'db>]) -> (Vec<usize>, Vec<String>) {
 }
 
 #[cfg(test)]
-fn line_shape(db: &crate::Database, text: &str) -> (Vec<usize>, Vec<String>) {
-    shape(&split_lines(tree_tokens(db, text)))
+fn line_shape(db: &crate::Database, text: &str) -> Vec<usize> {
+    Lines::new(tree_tokens(db, text)).map(|line| line.count()).collect()
 }
 
 #[test]
-fn test_split_lines() {
+fn test_lines() {
     let ref db = crate::Database::default();
-    let none: Vec<String> = vec![];
-    // A blank line separates nothing and is nobody's mistake.
-    assert_eq!(line_shape(db, "a\nb"), (vec![1, 1], none.C()));
-    // A run of them is one delimiter, on the token after it, so the run at
-    // the end is not one at all.
-    assert_eq!(line_shape(db, "\n\na\n\nb\n\n"), (vec![0, 1, 1], none.C()));
-    // A `;` written with nothing before it is.
-    assert_eq!(line_shape(db, "a;b"), (vec![1, 1], none.C()));
-    assert_eq!(line_shape(db, "a;;b"), (vec![1, 0, 1], vec![S(";")]));
-    assert_eq!(line_shape(db, ";a"), (vec![0, 1], vec![S(";")]));
-    assert_eq!(line_shape(db, "a\n;\nb"), (vec![1, 0, 0, 1], vec![S(";")]));
-    // A trailing one closes the group before it and is not stray.
-    assert_eq!(line_shape(db, "a;"), (vec![1, 0], none.C()));
-    assert_eq!(line_shape(db, "a;\nb"), (vec![1, 0, 1], none.C()));
-    // A newline inside a branch belongs to the branch.
-    assert_eq!(line_shape(db, "a(b\nc)d"), (vec![3], none.C()));
+    assert_eq!(line_shape(db, "a\nb"), [1, 1]);
+    // A blank line is no line at all, wherever it is.
+    assert_eq!(line_shape(db, "\n\na\n\nb\n\n"), [1, 1]);
+    // A `;` is a line break, as many of them as there are.
+    assert_eq!(line_shape(db, "a;b"), [1, 1]);
+    assert_eq!(line_shape(db, "a;;b"), [1, 1]);
+    assert_eq!(line_shape(db, ";a"), [1]);
+    assert_eq!(line_shape(db, "a\n;\nb"), [1, 1]);
+    assert_eq!(line_shape(db, "a;"), [1]);
+    assert_eq!(line_shape(db, "a b; c"), [2, 1]);
+    // A line break inside a branch belongs to the branch.
+    assert_eq!(line_shape(db, "a(b\nc)d"), [3]);
+    assert_eq!(line_shape(db, "a(b;c)d"), [3]);
 }
 
 #[cfg(test)]

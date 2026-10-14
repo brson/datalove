@@ -91,7 +91,6 @@ pub enum Sigil {
     // Single-character sigils.
     Dot,
     Comma,
-    Semicolon,
     Plus,
     Minus,
     Star,
@@ -156,7 +155,8 @@ impl SigilTable {
             let ch = byte as char;
             match () {
                 _ if !byte.is_ascii() => Class::NonAscii,
-                _ if byte == b'\n' => Class::Newline,
+                // A `;` is a line break written on the line, and nothing else.
+                _ if byte == b'\n' || byte == b';' => Class::Newline,
                 _ if ch.is_whitespace() => Class::Space,
                 _ if ch.is_ascii_alphanumeric() || byte == b'_' => Class::Word,
                 _ if byte == b'"' => Class::Quote,
@@ -370,7 +370,8 @@ impl<'db> Tokenizer<'db, '_> {
 
     fn token_start(ch: char) -> NextToken {
         match ch {
-            _ if ch.is_whitespace() => NextToken::Whitespace,
+            // A `;` is a line break, so it ends whatever ran up to it.
+            _ if ch.is_whitespace() || ch == ';' => NextToken::Whitespace,
             _ if Self::is_word_start(ch) => NextToken::Word,
             _ if Self::is_sigil_start(ch) => NextToken::Sigil,
             '"' => NextToken::Quote,
@@ -654,7 +655,6 @@ impl Sigil {
             // Single-character sigils.
             Sigil::Dot => ".",
             Sigil::Comma => ",",
-            Sigil::Semicolon => ";",
             Sigil::Plus => "+",
             Sigil::Minus => "-",
             Sigil::Star => "*",

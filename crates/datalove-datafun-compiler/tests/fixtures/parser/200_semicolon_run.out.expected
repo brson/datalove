@@ -27,20 +27,5 @@
       }
     ]
   },
-  "diagnostics": [
-    {
-      "code": "P032",
-      "labels": [
-        {
-          "message": "a `;` goes between two statements",
-          "span": [
-            10,
-            11
-          ],
-          "text": ";"
-        }
-      ],
-      "message": "nothing before this `;`"
-    }
-  ]
+  "diagnostics": []
 }

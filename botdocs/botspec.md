@@ -328,11 +328,12 @@ Table literals use a line-oriented syntax:
 |}
 ```
 
-Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` or a `,`
-goes between two things, so one with nothing before it is an error
-(`{| x, y;; 1, 2 |}`); a trailing one closes what it follows and is fine. This
-holds wherever the two languages read a delimiter -- table rows and columns,
-tensor axes, and the `;` between two statements.
+Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` is a
+line break written on the line, here and between two statements alike, so a
+run of them is a blank line and not an error. A `,` goes between two things,
+so one with nothing before it is an error (`{| x,, y |}`); a trailing one
+closes what it follows and is fine. This holds wherever the two languages read
+a `,` -- table columns and tensor axes.
 
 A table is opaque: nothing can look inside one. Column projection
 (`table.x`) is not implemented and is refused as a projection on a value with
