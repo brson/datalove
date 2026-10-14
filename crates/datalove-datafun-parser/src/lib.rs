@@ -107,9 +107,10 @@ fn emit_bracer_errors<'db>(
     let tokens = chunk.tokens(db);
 
     for (token_range, sigil) in bracer.errors(db) {
-        // Single-token range means stray closing brace.
-        // Multi-token range means unclosed opening brace.
-        let is_stray_close = token_range.len() == 1;
+        // A stray close is reported as its own one-token range. An unclosed
+        // open runs to wherever it ended, which is one token too where the
+        // open is the last token of the source, so the token says which.
+        let is_stray_close = tokens.get(token_range.start).is_some_and(|t| t.is_close_sigil());
 
         if is_stray_close {
             // Stray closing brace - no matching open.

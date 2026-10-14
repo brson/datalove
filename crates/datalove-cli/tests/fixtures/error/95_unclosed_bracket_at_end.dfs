@@ -1,0 +1,4 @@
+// An open bracket as the last token of a source is unclosed, not a stray
+// close: both are reported as a one-token range, and telling them apart by
+// the length alone took this for a close and asked it what it opens.
+let x = f(
