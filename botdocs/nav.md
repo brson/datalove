@@ -35,6 +35,7 @@
 - [Generics by Reference](plan-fat-generics.md)
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)
+- [A Plain-Data AST](plan-plain-ast.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
