@@ -216,9 +216,12 @@ Where it departs from the design:
   instructions rather than allocation, and was not done.
 - **The layout is filled by the old walk.** The bracer keeps its branch
   lists long enough to walk them the way `BracerIter` did and write each
-  token's entry, so the levels hand out exactly what they did, odd cases of
-  recovery included: a removed close before a later bracket at the same level
-  is still a token. The lists are not stored.
+  token's entry, so the levels hand out exactly what they did. The lists are
+  not stored. One odd case of recovery the walk carried was then fixed: it
+  handed a removed close to the parser as a token whenever a bracket followed
+  it at the same level, so `let x = 1) + (2)` reported the `)` twice (P050,
+  then P021) and parsed as `let x = 1`. Every removed close is passed over
+  now (`311_stray_close_before_bracket`).
 - **Snapshots rather than two parsers.** The harness writes everything the
   parser as it was returns and checks the new one against that, which needs
   only one parser in the tree.

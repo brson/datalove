@@ -1,0 +1,4 @@
+// A close that matches nothing is reported and removed, and a bracket later
+// on the same line does not bring it back: the parser does not meet the `)`
+// again as a token it did not expect.
+let x = 1) + (2)

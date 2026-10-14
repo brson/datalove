@@ -191,9 +191,10 @@ enum Step {
 /// One level of the branches, walked in order to fill the layout.
 ///
 /// This is how the bracer's output was read before there was a layout, kept
-/// as it was so that the levels hand out exactly what they did, down to the
-/// odd cases of recovery: a removed close before a later bracket at the same
-/// level comes out as a token, for one.
+/// as it was so that the levels hand out what they did. It hands out a
+/// removed close that comes before a later bracket at the same level, since
+/// it asks about the bracket first; [`layout`] passes over every removed
+/// close whatever the walk made of it.
 struct Walk {
     real_token_range: Range<usize>,
     branches: Range<usize>,
@@ -344,6 +345,11 @@ fn layout(lists: &WalkLists<'_>) -> Vec<u32> {
                 levels.pop();
             }
         }
+    }
+    // A close recovery removed is reported (P050) and goes no further, so a
+    // parser does not meet it again as a token it did not expect.
+    for &(index, _) in lists.removed_closes {
+        layout[index] = HIDDEN;
     }
     layout
 }
@@ -934,6 +940,9 @@ fn test_removed_closes() {
     // Stray close inside matched braces.
     assert_eq!(dbglex("(a}b)"), "( a b )");
     assert_eq!(dbglex("(a}b}c)"), "( a b c )");
+    // Stray closes before a later bracket at the same level.
+    assert_eq!(dbglex("a)b(c)"), "a b ( c )");
+    assert_eq!(dbglex("(a)b)c(d)"), "( a ) b c ( d )");
     // Stray closes after matched braces.
     assert_eq!(dbglex("(a))"), "( a )");
     assert_eq!(dbglex("(a)})"), "( a )");

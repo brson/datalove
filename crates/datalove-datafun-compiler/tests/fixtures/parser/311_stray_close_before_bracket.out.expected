@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            },
+            "op": "Add",
+            "rhs": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "2"
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P050",
+      "labels": [
+        {
+          "message": "this ')' has no matching '('",
+          "span": [
+            202,
+            203
+          ],
+          "text": ")"
+        }
+      ],
+      "message": "unmatched ')'"
+    }
+  ]
+}
