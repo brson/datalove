@@ -64,19 +64,25 @@ fn run_every_backend(path: &Path) -> Result<String, String> {
 
     let interp = run(&binary, &["script".as_ref(), script])
         .map_err(|e| format!("interpreter: {}", e))?;
-    let jit = run(&binary, &["script".as_ref(), "--jit".as_ref(), script])
-        .map_err(|e| format!("jit: {}", e))?;
-    if interp != jit {
-        return Err(format!("interpreter and jit disagree:\n{interp}---\n{jit}"));
+    if datalove_exampletest::engine_enabled("jit") {
+        let jit = run(&binary, &["script".as_ref(), "--jit".as_ref(), script])
+            .map_err(|e| format!("jit: {}", e))?;
+        if interp != jit {
+            return Err(format!("interpreter and jit disagree:\n{interp}---\n{jit}"));
+        }
     }
 
-    let aot = run_aot(&binary, script, &[]).map_err(|e| format!("aot: {}", e))?;
-    let c_aot = run_aot(&binary, script, &["--c"]).map_err(|e| format!("c aot: {}", e))?;
-    if interp != aot {
-        return Err(format!("interpreter and aot disagree:\n{interp}---\n{aot}"));
+    if datalove_exampletest::engine_enabled("aot") {
+        let aot = run_aot(&binary, script, &[]).map_err(|e| format!("aot: {}", e))?;
+        if interp != aot {
+            return Err(format!("interpreter and aot disagree:\n{interp}---\n{aot}"));
+        }
     }
-    if interp != c_aot {
-        return Err(format!("interpreter and c aot disagree:\n{interp}---\n{c_aot}"));
+    if datalove_exampletest::engine_enabled("c") {
+        let c_aot = run_aot(&binary, script, &["--c"]).map_err(|e| format!("c aot: {}", e))?;
+        if interp != c_aot {
+            return Err(format!("interpreter and c aot disagree:\n{interp}---\n{c_aot}"));
+        }
     }
     Ok(interp)
 }

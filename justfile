@@ -61,9 +61,13 @@ test-extras: test-slow test-demos
 # Everything CI runs, which it does one configuration per runner.
 test-ci: test test-64 test-parallel test-extras
 
-# Run tests with parallelism enabled.
+# Run tests with parallel compilation enabled.
+#
+# Parallelism stops at lowering, so what runs the IR is the same either way.
+# The engine suites run the reference and the bytecode only, with const
+# inlining and specialization each turned off, which lower differently.
 test-parallel:
-    DATALOVE_PARALLEL=1 DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+    DATALOVE_PARALLEL=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:

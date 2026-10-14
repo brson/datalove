@@ -41,6 +41,9 @@ debuglog(down({depth}))
 /// thousand.
 #[test]
 fn bytecode_recursion_is_not_bounded_by_the_rust_stack() {
+    if !datalove_exampletest::engine_enabled("bytecode") {
+        return;
+    }
     let output = recurse(200_000);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "the script failed: {}", stderr);
@@ -53,6 +56,9 @@ fn bytecode_recursion_is_not_bounded_by_the_rust_stack() {
 /// Rust stack and overflows it a few thousand levels down.
 #[test]
 fn generic_recursion_under_the_jit_is_not_bounded_by_the_rust_stack() {
+    if !datalove_exampletest::engine_enabled("jit") {
+        return;
+    }
     let dir = rmx::tempfile::tempdir().X();
     let script = dir.path().join("deep.dfs");
     std::fs::write(&script, "\
@@ -82,6 +88,9 @@ debuglog(down(\"s\", : u32 / 200000))
 /// reports and exits from, not a signal.
 #[test]
 fn running_out_of_frame_stack_is_an_error() {
+    if !datalove_exampletest::engine_enabled("bytecode") {
+        return;
+    }
     let output = recurse(10_000_000);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.code().is_some(), "killed by a signal: {:?}\n{}", output.status, stderr);
@@ -125,11 +134,17 @@ debuglog(down(: u32 / 5))
 
 #[test]
 fn cranelift_aot_recursion_without_end_is_reported() {
+    if !datalove_exampletest::engine_enabled("aot") {
+        return;
+    }
     aot_recursion_without_end_is_reported(false);
 }
 
 #[test]
 fn c_aot_recursion_without_end_is_reported() {
+    if !datalove_exampletest::engine_enabled("c") {
+        return;
+    }
     aot_recursion_without_end_is_reported(true);
 }
 
@@ -163,11 +178,14 @@ end fun
 #[test]
 fn an_error_frees_what_the_unwound_frames_owned() {
     let script = format!("{LEAKY}let x = down(\"abc\")\ndebuglog x\n");
-    for (env, args) in [
-        (&[][..], &[][..]),
-        (&[("DATALOVE_INTERP", "ir")][..], &[][..]),
-        (&[][..], &["--jit"][..]),
+    for (engine, env, args) in [
+        (Some("bytecode"), &[][..], &[][..]),
+        (None, &[("DATALOVE_INTERP", "ir")][..], &[][..]),
+        (Some("jit"), &[][..], &["--jit"][..]),
     ] {
+        if engine.is_some_and(|e| !datalove_exampletest::engine_enabled(e)) {
+            continue;
+        }
         let output = run_checking_leaks(&script, env, args);
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert_eq!(output.status.code(), Some(1), "{env:?} {args:?}: {:?}\n{stderr}", output.status);

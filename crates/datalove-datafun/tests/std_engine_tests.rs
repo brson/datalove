@@ -288,16 +288,6 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
         let (interp_value, rider_lib_paths) =
             run_with_executor(db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Interp")?;
 
-        let bytecode_result = run_with_executor(
-            db, compiled, descriptor, &script_text, Engine::Bytecode, None, "Bytecode")
-            .map(|(value, _)| value);
-
-        // The bytecode without its optimization pass, for the pass's rules to
-        // be checked against.
-        let plain_result = run_with_executor(
-            db, compiled, descriptor, &script_text, Engine::PlainBytecode, None, "PlainBytecode")
-            .map(|(value, _)| value);
-
         // The JIT.
         //
         // Caught rather than allowed to propagate, so that a jit that panics on
@@ -328,34 +318,37 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
                 Err(format!("{name} panicked: {}", msg))
             })
         };
-        let jit_result: Result<String, String> = under_jit(Engine::IrWalker, 1, None, "JIT");
-        // The bytecode with the JIT, which it calls into from planned call
-        // sites; and with the JIT compiling no function by its calls and
-        // entering every loop at its second iteration instead, so that the
-        // library's loops and everything after them run in code entered
-        // partway through a call.
-        let bytecode_jit_result = under_jit(Engine::Bytecode, 1, None, "Bytecode JIT");
-        let osr_result = under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR");
+        let interpreted = |engine: Engine, name: &str| {
+            run_with_executor(db, compiled, descriptor, &script_text, engine, None, name)
+                .map(|(value, _)| value)
+        };
 
-        // Cranelift AOT.
-        let aot_result = run_aot(db, compiled, &script_text, &rider_lib_paths);
-
-        // C AOT.
-        let c_aot_result = run_c_aot(db, compiled, &script_text, &rider_lib_paths);
-
-        // Compare all backends against interpreter. All errors are fatal.
+        // Every other backend, by its name here and its name to
+        // `engine_enabled`, compared against the interpreter. All errors are
+        // fatal.
+        let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 7] = [
+            ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
+            // The bytecode without its optimization pass, for the pass's rules
+            // to be checked against.
+            ("PlainBytecode", "plain", &|| interpreted(Engine::PlainBytecode, "PlainBytecode")),
+            ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, "JIT")),
+            // The bytecode with the JIT, which it calls into from planned call
+            // sites; and with the JIT compiling no function by its calls and
+            // entering every loop at its second iteration instead, so that the
+            // library's loops and everything after them run in code entered
+            // partway through a call.
+            ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, "Bytecode JIT")),
+            ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR")),
+            ("AOT", "aot", &|| run_aot(db, compiled, &script_text, &rider_lib_paths)),
+            ("C AOT", "c", &|| run_c_aot(db, compiled, &script_text, &rider_lib_paths)),
+        ];
         let mut mismatches = Vec::new();
-        for (name, result) in [
-            ("Bytecode", &bytecode_result),
-            ("PlainBytecode", &plain_result),
-            ("JIT", &jit_result),
-            ("Bytecode JIT", &bytecode_jit_result),
-            ("OSR", &osr_result),
-            ("AOT", &aot_result),
-            ("C AOT", &c_aot_result),
-        ] {
-            match result {
-                Ok(value) if value != &interp_value => mismatches.push(format!(
+        for (name, engine, run) in backends {
+            if !datalove_exampletest::engine_enabled(engine) {
+                continue;
+            }
+            match run() {
+                Ok(value) if value != interp_value => mismatches.push(format!(
                     "{} output mismatch:\n  interp: {}\n  {}: {}",
                     name, interp_value, name, value)),
                 Err(e) => mismatches.push(format!("{} error: {}", name, e)),

@@ -409,7 +409,7 @@ fn check(path: &Path) -> Result<String, String> {
     let seed = seed.finish();
 
     for (i, engine) in Differential::ALL.into_iter().enumerate() {
-        if skip.contains(&engine) {
+        if skip.contains(&engine) || !datalove_exampletest::engine_enabled(engine.name()) {
             continue;
         }
         if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec) {
@@ -502,21 +502,25 @@ fn report() -> Result<(), String> {
     if cfg!(miri) || !datalove_exampletest::parse_test_filters().is_empty() {
         return Ok(());
     }
-    let compiled = CHAOS_COMPILED.load(Ordering::Relaxed);
-    let loops = CHAOS_LOOPS.load(Ordering::Relaxed);
-    let refused = CHAOS_LOOPS_REFUSED.load(Ordering::Relaxed);
-    println!("chaos: {compiled} functions JIT-compiled, {loops} loops entered ({refused} refused)");
-    if compiled == 0 {
-        return Err("the chaos dispatcher never engaged: 0 compiled".to_string());
+    if datalove_exampletest::engine_enabled("chaos") {
+        let compiled = CHAOS_COMPILED.load(Ordering::Relaxed);
+        let loops = CHAOS_LOOPS.load(Ordering::Relaxed);
+        let refused = CHAOS_LOOPS_REFUSED.load(Ordering::Relaxed);
+        println!("chaos: {compiled} functions JIT-compiled, {loops} loops entered ({refused} refused)");
+        if compiled == 0 {
+            return Err("the chaos dispatcher never engaged: 0 compiled".to_string());
+        }
+        if loops == 0 {
+            return Err("the chaos dispatcher never entered a loop".to_string());
+        }
     }
-    if loops == 0 {
-        return Err("the chaos dispatcher never entered a loop".to_string());
-    }
-    let osr = OSR_LOOPS.load(Ordering::Relaxed);
-    let osr_refused = OSR_LOOPS_REFUSED.load(Ordering::Relaxed);
-    println!("osr: {osr} loops entered ({osr_refused} refused)");
-    if osr == 0 {
-        return Err("the osr engine never entered a loop".to_string());
+    if datalove_exampletest::engine_enabled("osr") {
+        let osr = OSR_LOOPS.load(Ordering::Relaxed);
+        let osr_refused = OSR_LOOPS_REFUSED.load(Ordering::Relaxed);
+        println!("osr: {osr} loops entered ({osr_refused} refused)");
+        if osr == 0 {
+            return Err("the osr engine never entered a loop".to_string());
+        }
     }
     let jit = JIT_LOOPS.load(Ordering::Relaxed);
     if jit != 0 {

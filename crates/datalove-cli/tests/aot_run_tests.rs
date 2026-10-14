@@ -55,6 +55,10 @@ fn run_aot(path: &Path) -> Result<String, String> {
 }
 
 fn main() {
+    if !datalove_exampletest::engine_enabled("aot") {
+        println!("skipped: DATALOVE_TEST_ENGINES leaves out aot");
+        return;
+    }
     datalove_exampletest::ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), run_aot)
         .fixture_subdir("aot_run")
         .file_extension("dfs")

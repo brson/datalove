@@ -1327,7 +1327,9 @@ exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
 
 `just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`, as one of CI's
-four jobs.
+four jobs. Everything parallel happens before the IR exists, so the engine
+suites run only the reference and the bytecode there, by
+`DATALOVE_TEST_ENGINES`.
 
 ## Ownership Analysis
 
@@ -1921,6 +1923,12 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
   build, a smoke test of sys riders built from source and `just
   test-worldgen` -- then `just test-demos`. Those four are CI's four jobs, and
   `just test-ci` runs them all.
+- `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
+  on several engines -- `engine_tests`, `std_engine_tests`, and the cli's
+  `backend_tests`, `aot_run_tests` and `deep_recursion_tests` -- to the ones
+  named, from `engine_tests`' names: `bytecode`, `plain`, `jit`, `chaos`,
+  `osr`, `aot`, `c`, `noconst`, `nospec`. The IR walker, the reference, always
+  runs. Unset, all do.
 - `DATALOVE_INTERP=ir` runs function bodies on the IR walker rather than the
   bytecode, for debugging; `engine_tests` and `std_engine_tests` choose each
   engine themselves and ignore it.

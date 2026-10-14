@@ -41,6 +41,33 @@ pub fn matches_filters(test_name: &str, filters: &[String]) -> bool {
     filters.iter().any(|filter| test_name.contains(filter.as_str()))
 }
 
+/// The engines [`engine_enabled`] knows, as `engine_tests` names them.
+pub const ENGINES: &[&str] = &["bytecode", "plain", "jit", "chaos", "osr", "aot", "c", "noconst", "nospec"];
+
+/// Whether a test should run `engine`, according to `DATALOVE_TEST_ENGINES`.
+///
+/// The variable is a comma-separated list of [`ENGINES`], and unset it allows
+/// every one. The IR walker is not among them: it is the reference the others
+/// are held to, and runs whatever this says. A name not in the list panics,
+/// so that a misspelling fails rather than quietly running nothing.
+///
+/// For a configuration that only changes what happens before code reaches an
+/// engine -- parallel compilation stops at lowering -- running every backend
+/// again tests what the default configuration already has.
+pub fn engine_enabled(engine: &str) -> bool {
+    assert!(ENGINES.contains(&engine), "unknown engine {engine:?}");
+    let Some(list) = std::env::var_os("DATALOVE_TEST_ENGINES") else {
+        return true;
+    };
+    let list = list.to_str().expect("DATALOVE_TEST_ENGINES is not UTF-8");
+    let mut enabled = false;
+    for name in list.split(',').map(str::trim).filter(|n| !n.is_empty()) {
+        assert!(ENGINES.contains(&name), "DATALOVE_TEST_ENGINES names an unknown engine {name:?}; known: {}", ENGINES.join(", "));
+        enabled |= name == engine;
+    }
+    enabled
+}
+
 /// Result of running a single test case.
 #[derive(Debug)]
 pub enum TestResult {
