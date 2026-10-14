@@ -23,7 +23,7 @@ incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element,
 and that this is a problem to be solved soon.
 
-Here's how it's done today:
+Here's how it has been done prior to this work in `list.contains`:
 
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
@@ -54,15 +54,42 @@ but for the purposes of the work at hand I care about the
 [early-return error handling indicated by `?`](../datafun.md#user-content-option-and-result-handling)),
 and the intrinsic call to `add_wrapping_index`.
 
-The indexing hazard gets _much worse_ when we look at how sets and maps are iterated today:
+The indexing hazard gets _much worse_ when we look at how sets and maps are iterated.
+Here's `set.is_subset_of`:
 
 ```datalove
-todo
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
+  var all_present: bool = true
+  let n = len(ref self)
+  var i: index = : index / 0
+  loop while i .< n
+    if get(ref self, i) |elem|
+      if contains(ref other, ref elem)
+      else
+        set all_present = false
+      end if
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret all_present
+end fun
 ```
 
-No longer just a bounds check and some pointer math,
-each of those is a full B-tree lookup,
-which makes a loop over the full collection O(n log n).
+`get(ref self, i)` is the element at position `i` in sort order.
+A set is a B+tree,
+so there's no jumping straight to position `i`:
+each call starts at the leftmost leaf,
+walks the chain of leaves until it has passed `i` elements,
+and clones the element it lands on.
+So it's no longer just a bounds check and some pointer math per element.
+Reaching element `i` costs O(i),
+which makes a loop over the whole set O(n²).
+Maps are the same, through `map.key_at` and `map.value_at`.
+
+The clone causes its own trouble too.
+`is_subset_of` can't return as soon as it finds an element `other` lacks,
+because returning from inside `if get(...) |elem|` would dispose of `elem`
+on that path and not the other.
 
 The indexing is a performance hazard,
 but also the wrapping math is a
