@@ -2,17 +2,17 @@ use rmx::prelude::*;
 
 use rmx::core::ops::Range;
 
-use crate::lexer::{ChunkLex, Token, TokenKind, Sigil};
+use crate::lexer::{Lexed, Token, TokenKind, Sigil};
 
 #[cfg(test)]
 use rmx::std::io::Write;
 
-/// A chunk's brackets matched, with recovery: where each token stands among
+/// A source's brackets matched, with recovery: where each token stands among
 /// them, and what was wrong.
 #[salsa::tracked]
 pub struct Bracer<'db> {
     #[returns(copy)]
-    pub chunk: ChunkLex<'db>,
+    pub lexed: Lexed<'db>,
     /// One entry per token; see [`Cursor`].
     #[returns(ref)]
     pub layout: Vec<u32>,
@@ -27,9 +27,9 @@ const HIDDEN: u32 = u32::MAX;
 const PLAIN: u32 = u32::MAX - 1;
 
 impl<'db> Bracer<'db> {
-    /// The chunk's tokens at the top level.
+    /// The source's tokens at the top level.
     pub fn iter(&self, db: &'db dyn crate::Db) -> Cursor<'db> {
-        let tokens = self.chunk(db).tokens(db);
+        let tokens = self.lexed(db).tokens(db);
         Cursor {
             tokens,
             layout: self.layout(db),
@@ -169,7 +169,7 @@ pub enum TreeToken<'db> {
     },
 }
 
-/// Match a chunk's brackets, recovering from the ones that do not match.
+/// Match a source's brackets, recovering from the ones that do not match.
 ///
 /// A close finds the nearest open of its kind still waiting, and any opens
 /// inside that one are cut off where it closes, each reported unclosed (P051).
@@ -183,9 +183,9 @@ pub enum TreeToken<'db> {
 #[salsa::tracked(returns(copy))]
 pub fn bracer<'db>(
     db: &'db dyn crate::Db,
-    chunk: ChunkLex<'db>
+    lexed: Lexed<'db>
 ) -> Bracer<'db> {
-    let tokens = chunk.tokens(db);
+    let tokens = lexed.tokens(db);
     let count = tokens.len();
     let mut layout = vec![PLAIN; count];
 
@@ -253,7 +253,7 @@ pub fn bracer<'db>(
         errors.append(&mut open.errors);
     }
 
-    Bracer::new(db, chunk, layout, top_errors)
+    Bracer::new(db, lexed, layout, top_errors)
 }
 
 impl<'db> TreeToken<'db> {
@@ -309,7 +309,7 @@ impl<'db> Bracer<'db> {
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
         let mut buf = Vec::<u8>::new();
         let iter = self.iter(db);
-        let text = self.chunk(db).chunk(db).source(db).as_str(db);
+        let text = self.lexed(db).source(db).as_str(db);
         Self::debug_write(iter, &mut buf, text).X();
         String::from_utf8(buf).X()
     }
@@ -350,9 +350,7 @@ fn dbglex(s: &str) -> String {
     debug!("dbglex {s}");
     let ref db = crate::Database::default();
     let source = crate::input::Source::new(db, S(s));
-    let chunk = crate::source_map::basic_source_map(db, source);
-    let chunk_lex = crate::lexer::lex_chunk(db, chunk);
-    let bracer = bracer(db, chunk_lex);
+    let bracer = bracer(db, crate::lexer::lex(db, source));
     bracer.debug_str(db)
 }
 
@@ -481,10 +479,8 @@ fn test_text_span() {
     // Helper to get the span string from input.
     let get_span = |s: &str| -> Option<(usize, usize, String)> {
         let source = crate::input::Source::new(db, S(s));
-        let chunk = crate::source_map::basic_source_map(db, source);
-        let chunk_lex = crate::lexer::lex_chunk(db, chunk);
-        let bracer = bracer(db, chunk_lex);
-        let source_text = chunk_lex.chunk(db).source(db);
+        let bracer = bracer(db, crate::lexer::lex(db, source));
+        let source_text = source;
         // Find the first branch.
         for token in bracer.iter(db) {
             if let TreeToken::Branch { .. } = &token {

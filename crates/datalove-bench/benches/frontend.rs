@@ -59,8 +59,7 @@ fn module_texts(sys: &datafun::pipeline::SystemLibrary) -> Vec<String> {
 fn lex(bencher: Bencher) {
     bencher.with_inputs(Corpus::new).bench_local_values(|corpus| {
         for source in &corpus.sources {
-            let chunk = bct::source_map::basic_source_map(&corpus.db, *source);
-            divan::black_box(bct::lexer::lex_chunk(&corpus.db, chunk));
+            divan::black_box(bct::lexer::lex(&corpus.db, *source));
         }
     });
 }
@@ -69,8 +68,7 @@ fn lex(bencher: Bencher) {
 fn brace(bencher: Bencher) {
     bencher.with_inputs(Corpus::new).bench_local_values(|corpus| {
         for source in &corpus.sources {
-            let chunk = bct::source_map::basic_source_map(&corpus.db, *source);
-            let lexed = bct::lexer::lex_chunk(&corpus.db, chunk);
+            let lexed = bct::lexer::lex(&corpus.db, *source);
             divan::black_box(bct::bracer::bracer(&corpus.db, lexed));
         }
     });

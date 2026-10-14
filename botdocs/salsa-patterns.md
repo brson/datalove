@@ -335,7 +335,7 @@ looks up by identity.
 
 `Token` was a tracked struct, one per token: 1032 of them, 66 KB, the largest
 single thing in the database for 24 four-line modules. As a plain value in the
-`Vec` a `ChunkLex` already held, the same tokens cost 50 KB, and a tracked
+`Vec` a `ChunkLex` (now `Lexed`) already held, the same tokens cost 50 KB, and a tracked
 function that memoized `text.contains("\n")` *per token* became a direct call.
 
 Backdating was unaffected, which was worth checking rather than assuming: a
@@ -443,7 +443,7 @@ work moves between places. `QueryRecorder` measures execution and does not.
 **Memory.** `<dyn salsa::Database>::memory_usage(&db)` reports per-ingredient
 counts and bytes. It sizes fields by their stack size, so a `Vec` looks like
 three words whatever it holds; declare `#[salsa::tracked(heap_size = f)]` to
-count the rest. `ChunkLex` does, and without it the tokens would appear free.
+count the rest. `Lexed` does, and without it the tokens would appear free.
 `database_memory_tests.rs` includes a test whose only job is to check the bytes
 are still counted, so that "no `Token` structs" cannot pass by hiding them.
 
@@ -481,7 +481,8 @@ Enabled with `DATALOVE_PARALLEL=1`.
   point stands for inputs.
 - **A tracked function taking the whole graph invalidates on any module.** Key
   per-module functions on the module.
-- **`no_eq`** is used twice, in `bcts/src/source_map.rs`. It suppresses the equality check that backdating
+- **`no_eq`** is not used now; the source map's scanners, function pointers
+  with no meaningful equality, were its last use. It suppresses the equality check that backdating
   relies on, so add it only when equality is genuinely meaningless or too
   expensive, and say why.
 - **A tracked field read is a table lookup**, though it looks like a field

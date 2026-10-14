@@ -7,11 +7,11 @@
 //! interned string, a byte range and a one-byte kind, and that nothing ever
 //! looks up by identity.
 //!
-//! As plain values in the `Vec` a `ChunkLex` already held, the same tokens cost
+//! As plain values in the `Vec` a `Lexed` already held, the same tokens cost
 //! 50 KB of heap. Counting the vector of ids the old arrangement also needed,
 //! the change is 78 KB to 50 KB.
 //!
-//! The measurement only works because `ChunkLex` declares a `heap_size`:
+//! The measurement only works because `Lexed` declares a `heap_size`:
 //! salsa sizes fields by their stack size, and a `Vec` is three words whatever
 //! it holds, so without that the tokens would appear to cost nothing at all and
 //! this file would be measuring its own blind spot.
@@ -62,7 +62,7 @@ fn tokens_are_not_tracked_structs() {
     let token = held.iter().find(|(name, _, _)| name.ends_with("Token"));
     assert!(
         token.is_none(),
-        "the database is holding {:?}; tokens are plain values in a ChunkLex \
+        "the database is holding {:?}; tokens are plain values in a Lexed \
          and should not be salsa structs",
         token,
     );
@@ -75,21 +75,21 @@ fn tokens_are_not_tracked_structs() {
 /// nothing of the kind.
 ///
 /// The tokens are about 20 KB, whitespace and comments having stopped being
-/// tokens; without the heap size each `ChunkLex` is only its fields, a chunk
+/// tokens; without the heap size each `Lexed` is only its fields, a chunk
 /// id and a `Vec` header.
 #[test]
 fn the_tokens_are_still_accounted_for() {
     let held = ingredients(24);
     let (_, count, bytes) = held.iter()
-        .find(|(name, _, _)| name.ends_with("ChunkLex"))
-        .expect("the database should hold a ChunkLex per module")
+        .find(|(name, _, _)| name.ends_with("Lexed"))
+        .expect("the database should hold a Lexed per module")
         .C();
 
-    assert_eq!(count, 24, "one ChunkLex per module");
+    assert_eq!(count, 24, "one Lexed per module");
     assert!(
         bytes > 8 * 1024,
-        "24 modules of tokens should be kilobytes, but ChunkLex \
-         reports {} bytes; has the heap_size on ChunkLex been dropped?",
+        "24 modules of tokens should be kilobytes, but Lexed \
+         reports {} bytes; has the heap_size on Lexed been dropped?",
         bytes,
     );
 }
@@ -97,7 +97,7 @@ fn the_tokens_are_still_accounted_for() {
 /// Tokens cost what values cost, not what tracked structs cost.
 ///
 /// As a tracked struct per token this was 1032 structs and about 78 KB counting
-/// the vector of ids; as values in the `Vec` a `ChunkLex` already held it is
+/// the vector of ids; as values in the `Vec` a `Lexed` already held it is
 /// about 50 KB. The ceiling is the old figure, so the test fails if they go back
 /// to being structs -- which is what its sibling above checks directly, and this
 /// checks by the bill.
@@ -113,14 +113,14 @@ fn the_tokens_are_still_accounted_for() {
 #[test]
 fn tokens_cost_what_values_cost() {
     let held = ingredients(24);
-    let chunk_lex = held.iter()
-        .find(|(name, _, _)| name.ends_with("ChunkLex"))
+    let lexed = held.iter()
+        .find(|(name, _, _)| name.ends_with("Lexed"))
         .map(|(_, _, bytes)| *bytes)
-        .expect("the database should hold a ChunkLex per module");
+        .expect("the database should hold a Lexed per module");
 
     assert!(
-        chunk_lex < 66 * 1024,
-        "tokens cost {chunk_lex} bytes; as tracked structs they cost about \
+        lexed < 66 * 1024,
+        "tokens cost {lexed} bytes; as tracked structs they cost about \
          78 KB and the structs alone were 66 KB, so this has gone backwards",
     );
 }

@@ -12,7 +12,6 @@ mod tests;
 use bct::{
     input::Source,
     bracer::Bracer,
-    source_map,
     lexer,
     bracer,
     parser_util,
@@ -30,17 +29,15 @@ pub fn parse<'db>(
     db: &'db dyn crate::Db,
     source: Source,
 ) -> ast::ParseResult<'db> {
-    let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.source(db);
-    let chunk_lex = lexer::lex_chunk(db, chunk);
-    let bracer = bracer::bracer(db, chunk_lex);
-    let chunk_text = chunk.source(db).as_str(db);
-    for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
-        parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
+    let lexed = lexer::lex(db, source);
+    let bracer = bracer::bracer(db, lexed);
+    let text = source.as_str(db);
+    for span in parser_util::non_ascii_names(lexed.tokens(db), text) {
+        parser_util::non_ascii_name_error(db, source, span)
             .code("D043")
             .emit_parse();
     }
-    parse_bracer(db, bracer, source_text)
+    parse_bracer(db, bracer, source)
 }
 
 fn parse_bracer<'db>(

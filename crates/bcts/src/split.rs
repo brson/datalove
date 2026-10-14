@@ -230,14 +230,14 @@ pub fn stray_delimiter(group: &TokenGroup<'_>) -> Option<Written> {
 /// the delimiter was meant to go between - rows, columns, statements.
 pub fn stray_delimiter_error<'db>(
     db: &'db dyn crate::Db,
-    text: Source,
+    source: Source,
     written: &Written,
     what: &str,
 ) -> DiagnosticBuilder<'db> {
     let sigil = written.as_string();
     DiagnosticBuilder::error(db, &fmt!("nothing before this `{sigil}`"))
         .primary_label(
-            TextSpan::new(text, written.span.C()),
+            TextSpan::new(source, written.span.C()),
             &fmt!("a `{sigil}` goes between two {what}"),
         )
 }
@@ -262,14 +262,14 @@ pub fn trailing_delimiter<'db>(groups: &[TokenGroup<'db>]) -> Option<Written> {
 /// The diagnostic for a delimiter written with nothing after it.
 pub fn trailing_delimiter_error<'db>(
     db: &'db dyn crate::Db,
-    text: Source,
+    source: Source,
     written: &Written,
     what: &str,
 ) -> DiagnosticBuilder<'db> {
     let sigil = written.as_string();
     DiagnosticBuilder::error(db, &fmt!("nothing after this `{sigil}`"))
         .primary_label(
-            TextSpan::new(text, written.span.C()),
+            TextSpan::new(source, written.span.C()),
             &fmt!("a `{sigil}` goes between two {what}"),
         )
 }
@@ -294,7 +294,7 @@ pub struct TensorHeaderError {
 /// What comes before the first `|` is the header: whole numbers, one per axis, of which
 /// there has to be at least one, since a tensor has at least one axis.
 pub fn split_tensor_header<'db>(
-    chunk_text: &str,
+    text: &str,
     tokens: Cursor<'db>,
 ) -> (Option<Result<TensorHeader, TensorHeaderError>>, Cursor<'db>) {
     let mut rest = tokens;
@@ -321,7 +321,7 @@ pub fn split_tensor_header<'db>(
     let mut extents = vec![];
     for token in header {
         let extent = match &token {
-            TreeToken::Token(t) => t.word_str(chunk_text)
+            TreeToken::Token(t) => t.word_str(text)
                 .filter(|w| crate::parser_util::is_decimal_run(w))
                 .and_then(|w| crate::parser_util::strip_separators(w).parse::<u32>().ok()),
             TreeToken::Branch { .. } => None,
@@ -350,9 +350,7 @@ pub fn nonempty_groups<'db>(groups: Vec<TokenGroup<'db>>) -> Vec<Cursor<'db>> {
 #[cfg(test)]
 fn tree_tokens<'db>(db: &'db crate::Database, text: &str) -> Cursor<'db> {
     let source = crate::input::Source::new(db, text.S());
-    let chunk = crate::source_map::basic_source_map(db, source);
-    let chunk_lex = crate::lexer::lex_chunk(db, chunk);
-    crate::bracer::bracer(db, chunk_lex).iter(db)
+    crate::bracer::bracer(db, crate::lexer::lex(db, source)).iter(db)
 }
 
 #[cfg(test)]

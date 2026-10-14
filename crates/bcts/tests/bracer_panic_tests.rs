@@ -13,9 +13,7 @@ fn dbglex(s: &str) -> Result<usize, String> {
     let result = catch_unwind(AssertUnwindSafe(|| {
         let db = bcts::Database::default();
         let source = bcts::input::Source::new(&db, s.to_string());
-        let chunk = bcts::source_map::basic_source_map(&db, source);
-        let chunk_lex = bcts::lexer::lex_chunk(&db, chunk);
-        let bracer = bcts::bracer::bracer(&db, chunk_lex);
+        let bracer = bcts::bracer::bracer(&db, bcts::lexer::lex(&db, source));
         count(bracer.iter(&db))
     }));
 

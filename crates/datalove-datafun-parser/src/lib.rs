@@ -16,7 +16,6 @@ use bct::{
     parser_util,
     split,
     text::TextSpan,
-    source_map,
     lexer,
     bracer,
 };
@@ -48,13 +47,10 @@ pub fn parse_with_module_id<'db>(
     source: Source,
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
-    let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.source(db);
-    let chunk_lex = lexer::lex_chunk(db, chunk);
-    let bracer = bracer::bracer(db, chunk_lex);
-    emit_bracer_errors(db, bracer, source_text);
-    emit_non_ascii_name_errors(db, bracer, source_text);
-    parse_bracer(db, bracer, source_text, module_id)
+    let bracer = bracer::bracer(db, lexer::lex(db, source));
+    emit_bracer_errors(db, bracer, source);
+    emit_non_ascii_name_errors(db, bracer, source);
+    parse_bracer(db, bracer, source, module_id)
 }
 
 /// Parse a Source as a single expression.
@@ -63,14 +59,11 @@ pub fn parse_expr<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> ast::ParsedExpr<'db> {
-    let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.source(db);
-    let chunk_lex = lexer::lex_chunk(db, chunk);
-    let bracer = bracer::bracer(db, chunk_lex);
-    emit_bracer_errors(db, bracer, source_text);
-    emit_non_ascii_name_errors(db, bracer, source_text);
+    let bracer = bracer::bracer(db, lexer::lex(db, source));
+    emit_bracer_errors(db, bracer, source);
+    emit_non_ascii_name_errors(db, bracer, source);
     // Expressions don't have module context.
-    parse_bracer_expr(db, bracer, source_text)
+    parse_bracer_expr(db, bracer, source)
 }
 
 fn parse_bracer_expr<'db>(
@@ -103,8 +96,7 @@ fn emit_bracer_errors<'db>(
     bracer: Bracer<'db>,
     source_text: Source,
 ) {
-    let chunk = bracer.chunk(db);
-    let tokens = chunk.tokens(db);
+    let tokens = bracer.lexed(db).tokens(db);
 
     for (token_range, sigil) in bracer.errors(db) {
         // A stray close is reported as its own one-token range. An unclosed
@@ -144,10 +136,9 @@ fn emit_non_ascii_name_errors<'db>(
     bracer: Bracer<'db>,
     source_text: Source,
 ) {
-    let chunk_lex = bracer.chunk(db);
-    let chunk_text = chunk_lex.chunk(db).source(db).as_str(db);
-    for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
-        parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
+    let text = source_text.as_str(db);
+    for span in parser_util::non_ascii_names(bracer.lexed(db).tokens(db), text) {
+        parser_util::non_ascii_name_error(db, source_text, span)
             .code("P075")
             .emit_parse();
     }

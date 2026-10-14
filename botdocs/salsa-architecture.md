@@ -64,8 +64,8 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 11 | Deduplicated by content: `InternedText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`, `RiderSources`. |
-| `#[salsa::tracked]` struct | 53 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
-| `#[salsa::tracked]` fn | 123 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
+| `#[salsa::tracked]` struct | 51 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` fn | 120 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The three structs with a tracked field, and why
 
@@ -130,7 +130,7 @@ These are where the work is, and they are what an edit is supposed to re-run
 exactly one of. They may look at their own module's functions; they must not
 look at the rest of the world -- which is what `reachable_func_ids` is for.
 
-`parse`, `lex_chunk`, `bracer`, `source_map`, `basic_source_map`,
+`parse`, `lex`, `bracer`,
 `parse_module_full`, `parse_module_ast`, `resolve_module_names`,
 `resolve_module_imports`, `module_import_demands`,
 `typecheck_module`, `analyze_module`, `module_const_kinds`,
@@ -156,17 +156,17 @@ Measured on the system library plus one local module, 26 modules:
 
 | | queries run |
 |---|---|
-| cold compile | 615 |
+| cold compile | 565 |
 | unchanged recompile | **0** |
 | a second unchanged recompile | **0** |
-| edit one function in your own module | 23 |
-| edit one function at the bottom of the system library | 23 |
+| edit one function in your own module | 19 |
+| edit one function at the bottom of the system library | 19 |
 
 The two edits costing the same is the point and not a coincidence: what an edit
 pays for is the per-module work for the module that changed plus the
 graph-keyed passes, and which module changed does not enter into it.
 
-The 23 are: the edited module's `parse`/`lex`/`source_map` chain, its
+The 19 are: the edited module's `parse`/`lex`/`bracer` chain, its
 `typecheck_module`, `analyze_module`, `lower_module_functions`,
 `module_shape_inputs`, `lower_module` and so on -- one each -- plus the
 graph-keyed passes that must re-run because one of their inputs moved. Nothing

@@ -3,34 +3,13 @@ use rmx::prelude::*;
 use rmx::std::ops::Range;
 use rmx::std::{iter, mem};
 
-use crate::chunk::{Chunk, RangeKind};
 
-#[cfg(test)]
 use crate::input::Source;
-#[cfg(test)]
-use crate::source_map::basic_source_map;
-
-#[salsa::tracked(heap_size = chunk_lex_heap_size)]
-pub struct ChunkLex<'db> {
-    #[returns(copy)]
-    pub chunk: Chunk<'db>,
-    #[returns(ref)]
-    pub tokens: Vec<Token>,
-}
-
-/// The tokens are values in a `Vec`, so they are heap, not fields.
-///
-/// Without this salsa's memory reporting would show the tokens costing nothing,
-/// since it measures fields by their stack size and a `Vec` is three words
-/// whatever it holds.
-fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token>)) -> usize {
-    fields.1.capacity() * mem::size_of::<Token>()
-}
 
 /// One lexed token.
 ///
 /// A plain value rather than a tracked struct. Tokens are read straight out of
-/// the `Vec` in a [`ChunkLex`] and never looked up by identity, so the salsa id
+/// the `Vec` in a [`Lexed`] and never looked up by identity, so the salsa id
 /// and page slot each one used to carry paid for nothing.
 ///
 /// Whitespace and comments are not tokens. Every reader skipped them, and the
@@ -40,9 +19,8 @@ fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token>)) -> usize {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct Token {
-    /// Where the token is in its chunk, as `u32`s: a chunk is a source file,
-    /// and halving a token is a third less memory for everything that reads
-    /// one.
+    /// Where the token is in its source, as `u32`s: halving a token is a
+    /// third less memory for everything that reads one.
     start: u32,
     end: u32,
     pub kind: TokenKind,
@@ -181,6 +159,7 @@ impl SigilTable {
                 _ if byte == b'\n' => Class::Newline,
                 _ if ch.is_whitespace() => Class::Space,
                 _ if ch.is_ascii_alphanumeric() || byte == b'_' => Class::Word,
+                _ if byte == b'"' => Class::Quote,
                 _ if starts[byte as usize] => Class::Sigil,
                 _ => Class::Other,
             }
@@ -201,6 +180,8 @@ enum Class {
     Newline,
     Word,
     Sigil,
+    /// The `"` that opens a string.
+    Quote,
     /// An ASCII byte that begins nothing, so an error token.
     Other,
     /// The first byte of a character outside ASCII, which is asked about
@@ -214,315 +195,387 @@ fn sigil_table() -> &'static SigilTable {
     TABLE.get_or_init(SigilTable::build)
 }
 
+/// A source's tokens.
+#[salsa::tracked(heap_size = lexed_heap_size)]
+pub struct Lexed<'db> {
+    #[returns(copy)]
+    pub source: Source,
+    #[returns(ref)]
+    pub tokens: Vec<Token>,
+}
+
+/// The tokens are values in a `Vec`, so they are heap, not fields.
+///
+/// Without this salsa's memory reporting would show the tokens costing nothing,
+/// since it measures fields by their stack size and a `Vec` is three words
+/// whatever it holds.
+fn lexed_heap_size(fields: &(Source, Vec<Token>)) -> usize {
+    fields.1.capacity() * mem::size_of::<Token>()
+}
+
+/// Lex a source: its words, sigils and strings, with whitespace and comments
+/// left out and whether a line ended before each token kept on it.
 #[salsa::tracked(returns(copy))]
-pub fn lex_chunk<'db>(
-    db: &'db dyn crate::Db,
-    chunk: Chunk<'db>,
-) -> ChunkLex<'db> {
-    let chunk_text = chunk.source(db);
-    let chunk_str = chunk_text.as_str(db);
+pub fn lex<'db>(db: &'db dyn crate::Db, source: Source) -> Lexed<'db> {
+    let text = source.as_str(db);
     // About one token for every four or five bytes of source, so a guess at
     // that saves the vector growing by doubling, which copied every token a
     // couple of times over.
-    let mut tokens = Vec::with_capacity(chunk_str.len() / 4);
-    // Carried across ranges, since a comment can come between a newline and
-    // the token it goes on.
+    let mut tokens = Vec::with_capacity(text.len() / 4);
     let mut newline_before = false;
+    let mut tokenizer = Tokenizer {
+        text,
+        range: 0..text.len(),
+        newline_before: &mut newline_before,
+        table: sigil_table(),
+    };
+    tokens.extend(iter::from_fn(|| tokenizer.next()));
+    Lexed::new(db, source, tokens)
+}
 
-    for range in chunk.ranges(db) {
-        match range {
-            (_, RangeKind::Comment) => {}
-            (range, RangeKind::String) => {
-                tokens.push(Token {
-                    start: u32::try_from(range.start).X(),
-                    end: u32::try_from(range.end).X(),
-                    kind: TokenKind::String,
-                    newline_before: mem::take(&mut newline_before),
-                });
-            }
-            (range, RangeKind::Error) => {
-                tokens.push(Token {
-                    start: u32::try_from(range.start).X(),
-                    end: u32::try_from(range.end).X(),
-                    kind: TokenKind::Error,
-                    newline_before: mem::take(&mut newline_before),
-                });
-            }
-            (range, RangeKind::Unknown) => {
-                let mut tokenizer = Tokenizer {
-                    text: chunk_str,
-                    range,
-                    newline_before: &mut newline_before,
-                    table: sigil_table(),
-                };
-
-                tokens.extend(
-                    iter::from_fn(|| tokenizer.next())
-                );
-            }
-        }
-    }
-
-    return ChunkLex::new(db, chunk, tokens);
-
-    /// What is left of one unknown range, and where in the chunk it started.
-    ///
-    /// `text` is the whole chunk rather than a handle to fetch it with: reading
-    /// it back out of salsa on every `peek` was two field reads per character,
-    /// and `peek` is what every other method is built on.
-    struct Tokenizer<'db, 'a> {
-        text: &'db str,
-        range: Range<usize>,
-        newline_before: &'a mut bool,
-        table: &'static SigilTable,
-    }
-
-    #[derive(Eq, PartialEq, Debug, Copy, Clone)]
-    enum NextToken {
-        Whitespace,
-        Word,
-        Sigil,
-        Error,
-    }
-
-    impl<'db> Tokenizer<'db, '_> {
-        fn next(&mut self) -> Option<Token> {
-            let bytes = self.text.as_bytes();
-            loop {
-                if self.range.is_empty() {
-                    return None;
-                }
-                // An ASCII byte is classified by the table; anything else
-                // goes the way of a whole character.
-                let mut token = match self.table.class[bytes[self.range.start] as usize] {
-                    Class::Space => {
-                        self.range.start += 1;
-                        continue;
-                    }
-                    Class::Newline => {
-                        self.range.start += 1;
-                        *self.newline_before = true;
-                        continue;
-                    }
-                    Class::Word => self.eat_word(),
-                    Class::Sigil => self.eat_sigil(),
-                    Class::Other => self.eat_error(),
-                    Class::NonAscii => match self.peek_token()? {
-                        NextToken::Whitespace => {
-                            if self.eat_whitespace() {
-                                *self.newline_before = true;
-                            }
-                            continue;
-                        }
-                        NextToken::Word => self.eat_word(),
-                        NextToken::Sigil => self.eat_sigil(),
-                        NextToken::Error => self.eat_error(),
-                    },
-                };
-                token.newline_before = mem::take(self.newline_before);
-                return Some(token);
-            }
-        }
-
-        fn peek_token(&self) -> Option<NextToken> {
-            self.peek().map(Self::token_start)
-        }
-
-        fn token_start(ch: char) -> NextToken {
-            match ch {
-                _ if ch.is_whitespace() => NextToken::Whitespace,
-                _ if Self::is_word_start(ch) => NextToken::Word,
-                _ if Self::is_sigil_start(ch) => NextToken::Sigil,
-                _ => NextToken::Error,
-            }
-        }
-
-        fn is_word_start(ch: char) -> bool {
-            ch.is_alphanumeric() || ch == '_'
-        }
-
-        fn eat_word(&mut self) -> Token {
-            debug_assert_eq!(self.peek_token(), Some(NextToken::Word));
-
-            let start = self.range.start;
-            let bytes = self.text.as_bytes();
-            let mut at = start;
-            while at < self.range.end && self.table.class[bytes[at] as usize] == Class::Word {
-                at += 1;
-            }
-            // A letter or digit outside ASCII carries a word on.
-            self.range.start = if at < self.range.end && !bytes[at].is_ascii() {
-                self.scan(at, Self::is_word_start)
-            } else {
-                at
-            };
-            assert!(start < self.range.start);
-            let span = start .. self.range.start;
-            Token {
-                start: u32::try_from(span.start).X(),
-                end: u32::try_from(span.end).X(),
-                kind: TokenKind::Word,
-                newline_before: false,
-            }
-        }
-
-        fn is_sigil_start(ch: char) -> bool {
-            // No sigil starts with a character outside ASCII, so one index
-            // answers this. It used to ask every sigil for its first character,
-            // for every character the tokenizer classified.
-            ch.is_ascii() && sigil_table().starts[ch as usize]
-        }
-
-        fn eat_sigil(&mut self) -> Token {
-            debug_assert_eq!(self.peek_token(), Some(NextToken::Sigil));
-
-            let text = &self.text[self.range.C()];
-
-            // Only the sigils that could start here, rather than all of them.
-            for &(sigil, sigil_str) in self.table.starting_with(text.as_bytes()[0]) {
-                if text.starts_with(sigil_str) {
-                    let range_start = self.range.start;
-                    self.range.start = range_start.checked_add(sigil_str.len()).X();
-                    let span = range_start .. self.range.start;
-                    return Token {
-                        start: u32::try_from(span.start).X(),
-                        end: u32::try_from(span.end).X(),
-                        kind: TokenKind::Sigil(sigil),
-                        newline_before: false,
-                    }
-                }
-            }
-
-            let ch = self.peek().X();
-            self.eat_char(ch);
-            self.eat_error_from(ch)
-        }
-
-        fn eat_error(&mut self) -> Token {
-            let ch = self.peek().X();
-            self.eat_char(ch);
-            self.eat_error_from(ch)
-        }
-
-        fn eat_error_from(&mut self, start_ch: char) -> Token {
-            // The first error character has already been consumed by the
-            // caller, so the token starts however wide that character was --
-            // not one byte back. Backing up by one put the span inside a
-            // multibyte character, and interning it sliced the chunk on a
-            // boundary that is not one.
-            let token_start = Self::token_start(start_ch);
-            let start = self.range.start.checked_sub(start_ch.len_utf8()).X();
-            while let Some(ch) = self.peek() {
-                let next_token_start = Self::token_start(ch);
-                let recover = match (token_start, next_token_start) {
-                    (NextToken::Whitespace, _) => unreachable!(),
-                    (NextToken::Word, _) => unreachable!(),
-                    (NextToken::Sigil, NextToken::Error) => false,
-                    (NextToken::Sigil, NextToken::Whitespace) => true,
-                    (NextToken::Sigil, NextToken::Word) => true,
-                    (NextToken::Sigil, NextToken::Sigil) => true,
-                    (NextToken::Error, NextToken::Error) => false,
-                    (NextToken::Error, NextToken::Whitespace) => true,
-                    (NextToken::Error, NextToken::Word) => true,
-                    (NextToken::Error, NextToken::Sigil) => true,
-                };
-                if !recover {
-                    self.eat_char(ch);
-                } else {
-                    break;
-                }
-            }
-            assert!(start < self.range.start);
-            let span = start .. self.range.start;
-            Token {
-                start: u32::try_from(span.start).X(),
-                end: u32::try_from(span.end).X(),
-                kind: TokenKind::Error,
-                newline_before: false,
-            }
-        }
-
-        /// Skip a run of whitespace, saying whether it held a newline.
-        fn eat_whitespace(&mut self) -> bool {
-            debug_assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
-
-            let start = self.range.start;
-            self.range.start = self.scan(start, char::is_whitespace);
-            self.text.as_bytes()[start..self.range.start].contains(&b'\n')
-        }
-
-        /// Where the run of characters from `from` that `keep` accepts ends.
-        ///
-        /// A byte at a time, decoding a character only where one is not ASCII:
-        /// a `peek` and an `eat_char` per character, with the bounds and
-        /// overflow checks each makes, was most of what lexing cost.
-        fn scan(&self, from: usize, keep: fn(char) -> bool) -> usize {
-            let bytes = self.text.as_bytes();
-            let mut at = from;
-            while at < self.range.end {
-                let byte = bytes[at];
-                let ch = if byte.is_ascii() {
-                    byte as char
-                } else {
-                    self.text[at..self.range.end].chars().next().X()
-                };
-                if !keep(ch) {
-                    break;
-                }
-                at += ch.len_utf8();
-            }
-            at
-        }
-
-        fn eat_char(&mut self, ch: char) {
-            // Debug only: the caller has just peeked this character, and paying
-            // for a second peek per character consumed doubled the lexer's work.
-            debug_assert!(self.peek() == Some(ch));
-            self.range.start = self.range.start.checked_add(ch.len_utf8()).X();
-            assert!(self.range.start <= self.range.end);
-        }
-
-        fn peek(&self) -> Option<char> {
-            if self.range.is_empty() {
-                return None;
-            }
-            // Nearly everything is ASCII, which needs no decoding, and slicing
-            // the text to decode it checks that both ends are boundaries.
-            let byte = self.text.as_bytes()[self.range.start];
-            if byte.is_ascii() {
-                return Some(byte as char);
-            }
-            self.text[self.range.C()].chars().next()
-        }
+/// How far a comment starting at the front of `text` runs, if one does: `Ok`
+/// for one that ends, `Err` for one that runs to the end unclosed. A line
+/// comment stops short of its newline, which is whitespace like any other.
+fn scan_comment(text: &str) -> Option<Result<usize, usize>> {
+    let bytes = text.as_bytes();
+    match bytes {
+        [b'/', b'/', ..] => Some(Ok(rmx::memchr::memchr(b'\n', bytes).unwrap_or(text.len()))),
+        [b'/', b'*', ..] => Some(scan_block_comment(text)),
+        _ => None,
     }
 }
 
-impl<'db> ChunkLex<'db> {
+/// A block comment, which nests: `/* /* */ */` is one comment.
+fn scan_block_comment(text: &str) -> Result<usize, usize> {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut at = 0;
+    while at + 1 < bytes.len() {
+        match (bytes[at], bytes[at + 1]) {
+            (b'/', b'*') => {
+                depth += 1;
+                at += 2;
+            }
+            (b'*', b'/') => {
+                depth -= 1;
+                at += 2;
+                if depth == 0 {
+                    return Ok(at);
+                }
+            }
+            _ => at += 1,
+        }
+    }
+    Err(text.len())
+}
+
+/// How far a string starting at the front of `text` runs: `Ok` through its
+/// closing `"`, `Err` to the end where it has none. A `\` takes the byte
+/// after it with it, so `\"` does not close the string.
+fn scan_string(text: &str) -> Result<usize, usize> {
+    let bytes = text.as_bytes();
+    let mut at = 1;
+    while at < bytes.len() {
+        match bytes[at] {
+            b'"' => return Ok(at + 1),
+            b'\\' => at += 2,
+            _ => at += 1,
+        }
+    }
+    Err(text.len())
+}
+
+
+/// What is left of a source to lex.
+///
+/// `text` is the whole source rather than a handle to fetch it with: reading
+/// it back out of salsa on every `peek` was two field reads per character,
+/// and `peek` is what every other method is built on.
+struct Tokenizer<'db, 'a> {
+    text: &'db str,
+    range: Range<usize>,
+    newline_before: &'a mut bool,
+    table: &'static SigilTable,
+}
+
+#[derive(Eq, PartialEq, Debug, Copy, Clone)]
+enum NextToken {
+    Whitespace,
+    Word,
+    Sigil,
+    Quote,
+    Error,
+}
+
+impl<'db> Tokenizer<'db, '_> {
+    fn next(&mut self) -> Option<Token> {
+        let bytes = self.text.as_bytes();
+        loop {
+            if self.range.is_empty() {
+                return None;
+            }
+            // An ASCII byte is classified by the table; anything else
+            // goes the way of a whole character.
+            let mut token = match self.table.class[bytes[self.range.start] as usize] {
+                Class::Space => {
+                    self.range.start += 1;
+                    continue;
+                }
+                Class::Newline => {
+                    self.range.start += 1;
+                    *self.newline_before = true;
+                    continue;
+                }
+                Class::Word => self.eat_word(),
+                // A `/` that begins a comment is skipped like whitespace,
+                // and one that is not closed is an error to the end.
+                Class::Sigil if bytes[self.range.start] == b'/' => {
+                    match scan_comment(&self.text[self.range.start..]) {
+                        Some(Ok(length)) => {
+                            self.range.start += length;
+                            continue;
+                        }
+                        Some(Err(length)) => self.eat_bytes(length, TokenKind::Error),
+                        None => self.eat_sigil(),
+                    }
+                }
+                Class::Sigil => self.eat_sigil(),
+                Class::Quote => match scan_string(&self.text[self.range.start..]) {
+                    Ok(length) => self.eat_bytes(length, TokenKind::String),
+                    Err(length) => self.eat_bytes(length, TokenKind::Error),
+                },
+                Class::Other => self.eat_error(),
+                Class::NonAscii => match self.peek_token()? {
+                    NextToken::Whitespace => {
+                        if self.eat_whitespace() {
+                            *self.newline_before = true;
+                        }
+                        continue;
+                    }
+                    NextToken::Word => self.eat_word(),
+                    NextToken::Sigil => self.eat_sigil(),
+                    // A character outside ASCII is never `"`.
+                    NextToken::Quote => bug!(),
+                    NextToken::Error => self.eat_error(),
+                },
+            };
+            token.newline_before = mem::take(self.newline_before);
+            return Some(token);
+        }
+    }
+
+    fn peek_token(&self) -> Option<NextToken> {
+        self.peek().map(Self::token_start)
+    }
+
+    fn token_start(ch: char) -> NextToken {
+        match ch {
+            _ if ch.is_whitespace() => NextToken::Whitespace,
+            _ if Self::is_word_start(ch) => NextToken::Word,
+            _ if Self::is_sigil_start(ch) => NextToken::Sigil,
+            '"' => NextToken::Quote,
+            _ => NextToken::Error,
+        }
+    }
+
+    fn is_word_start(ch: char) -> bool {
+        ch.is_alphanumeric() || ch == '_'
+    }
+
+    fn eat_word(&mut self) -> Token {
+        debug_assert_eq!(self.peek_token(), Some(NextToken::Word));
+
+        let start = self.range.start;
+        let bytes = self.text.as_bytes();
+        let mut at = start;
+        while at < self.range.end && self.table.class[bytes[at] as usize] == Class::Word {
+            at += 1;
+        }
+        // A letter or digit outside ASCII carries a word on.
+        self.range.start = if at < self.range.end && !bytes[at].is_ascii() {
+            self.scan(at, Self::is_word_start)
+        } else {
+            at
+        };
+        assert!(start < self.range.start);
+        let span = start .. self.range.start;
+        Token {
+            start: u32::try_from(span.start).X(),
+            end: u32::try_from(span.end).X(),
+            kind: TokenKind::Word,
+            newline_before: false,
+        }
+    }
+
+    fn is_sigil_start(ch: char) -> bool {
+        // No sigil starts with a character outside ASCII, so one index
+        // answers this. It used to ask every sigil for its first character,
+        // for every character the tokenizer classified.
+        ch.is_ascii() && sigil_table().starts[ch as usize]
+    }
+
+    fn eat_sigil(&mut self) -> Token {
+        debug_assert_eq!(self.peek_token(), Some(NextToken::Sigil));
+
+        let text = &self.text[self.range.C()];
+
+        // Only the sigils that could start here, rather than all of them.
+        for &(sigil, sigil_str) in self.table.starting_with(text.as_bytes()[0]) {
+            if text.starts_with(sigil_str) {
+                let range_start = self.range.start;
+                self.range.start = range_start.checked_add(sigil_str.len()).X();
+                let span = range_start .. self.range.start;
+                return Token {
+                    start: u32::try_from(span.start).X(),
+                    end: u32::try_from(span.end).X(),
+                    kind: TokenKind::Sigil(sigil),
+                    newline_before: false,
+                }
+            }
+        }
+
+        let ch = self.peek().X();
+        self.eat_char(ch);
+        self.eat_error_from(ch)
+    }
+
+    /// The next `length` bytes as one token of `kind`.
+    fn eat_bytes(&mut self, length: usize, kind: TokenKind) -> Token {
+        let start = self.range.start;
+        self.range.start = start.checked_add(length).X();
+        Token {
+            start: u32::try_from(start).X(),
+            end: u32::try_from(self.range.start).X(),
+            kind,
+            newline_before: false,
+        }
+    }
+
+    fn eat_error(&mut self) -> Token {
+        let ch = self.peek().X();
+        self.eat_char(ch);
+        self.eat_error_from(ch)
+    }
+
+    fn eat_error_from(&mut self, start_ch: char) -> Token {
+        // The first error character has already been consumed by the
+        // caller, so the token starts however wide that character was --
+        // not one byte back. Backing up by one put the span inside a
+        // multibyte character, and interning it sliced the source on a
+        // boundary that is not one.
+        let token_start = Self::token_start(start_ch);
+        let start = self.range.start.checked_sub(start_ch.len_utf8()).X();
+        while let Some(ch) = self.peek() {
+            let next_token_start = Self::token_start(ch);
+            let recover = match (token_start, next_token_start) {
+                (NextToken::Whitespace | NextToken::Word | NextToken::Quote, _) => unreachable!(),
+                // A string is a token of its own, so it ends the run.
+                (_, NextToken::Quote) => true,
+                (NextToken::Sigil, NextToken::Error) => false,
+                (NextToken::Sigil, NextToken::Whitespace) => true,
+                (NextToken::Sigil, NextToken::Word) => true,
+                (NextToken::Sigil, NextToken::Sigil) => true,
+                (NextToken::Error, NextToken::Error) => false,
+                (NextToken::Error, NextToken::Whitespace) => true,
+                (NextToken::Error, NextToken::Word) => true,
+                (NextToken::Error, NextToken::Sigil) => true,
+            };
+            if !recover {
+                self.eat_char(ch);
+            } else {
+                break;
+            }
+        }
+        assert!(start < self.range.start);
+        let span = start .. self.range.start;
+        Token {
+            start: u32::try_from(span.start).X(),
+            end: u32::try_from(span.end).X(),
+            kind: TokenKind::Error,
+            newline_before: false,
+        }
+    }
+
+    /// Skip a run of whitespace, saying whether it held a newline.
+    fn eat_whitespace(&mut self) -> bool {
+        debug_assert_eq!(self.peek_token(), Some(NextToken::Whitespace));
+
+        let start = self.range.start;
+        self.range.start = self.scan(start, char::is_whitespace);
+        self.text.as_bytes()[start..self.range.start].contains(&b'\n')
+    }
+
+    /// Where the run of characters from `from` that `keep` accepts ends.
+    ///
+    /// A byte at a time, decoding a character only where one is not ASCII:
+    /// a `peek` and an `eat_char` per character, with the bounds and
+    /// overflow checks each makes, was most of what lexing cost.
+    fn scan(&self, from: usize, keep: fn(char) -> bool) -> usize {
+        let bytes = self.text.as_bytes();
+        let mut at = from;
+        while at < self.range.end {
+            let byte = bytes[at];
+            let ch = if byte.is_ascii() {
+                byte as char
+            } else {
+                self.text[at..self.range.end].chars().next().X()
+            };
+            if !keep(ch) {
+                break;
+            }
+            at += ch.len_utf8();
+        }
+        at
+    }
+
+    fn eat_char(&mut self, ch: char) {
+        // Debug only: the caller has just peeked this character, and paying
+        // for a second peek per character consumed doubled the lexer's work.
+        debug_assert!(self.peek() == Some(ch));
+        self.range.start = self.range.start.checked_add(ch.len_utf8()).X();
+        assert!(self.range.start <= self.range.end);
+    }
+
+    fn peek(&self) -> Option<char> {
+        if self.range.is_empty() {
+            return None;
+        }
+        // Nearly everything is ASCII, which needs no decoding, and slicing
+        // the text to decode it checks that both ends are boundaries.
+        let byte = self.text.as_bytes()[self.range.start];
+        if byte.is_ascii() {
+            return Some(byte as char);
+        }
+        self.text[self.range.C()].chars().next()
+    }
+}
+
+impl<'db> Lexed<'db> {
     #[cfg(test)]
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
-        let chunk_text = self.chunk(db).source(db).as_str(db);
+        let text = self.source(db).as_str(db);
         #[allow(unstable_name_collisions)] // intersperse
         self.tokens(db).iter().map(|token| {
             if token.newline_before {
-                fmt!("nl {}", token.debug_str(chunk_text))
+                fmt!("nl {}", token.debug_str(text))
             } else {
-                token.debug_str(chunk_text).S()
+                token.debug_str(text).S()
             }
         }).intersperse(S(" ")).collect()
     }
 }
 
 impl Token {
-    /// The token's span in its chunk.
+    /// The token's span in its source.
     pub fn span(&self) -> Range<usize> {
         self.start as usize..self.end as usize
     }
 
     #[cfg(test)]
-    pub fn debug_str<'a>(&self, chunk_text: &'a str) -> &'a str {
+    pub fn debug_str<'a>(&self, text: &'a str) -> &'a str {
         match self.kind {
             TokenKind::Word | TokenKind::String => {
-                self.text(chunk_text)
+                self.text(text)
             }
             TokenKind::Sigil(s) => s.as_str(),
             TokenKind::Error => "err",
@@ -536,16 +589,16 @@ impl Token {
         }
     }
 
-    /// The token's text, out of the text of the chunk it was lexed from.
-    pub fn text<'a>(&self, chunk_text: &'a str) -> &'a str {
-        &chunk_text[self.span()]
+    /// The token's text, out of the text of the source it was lexed from.
+    pub fn text<'a>(&self, text: &'a str) -> &'a str {
+        &text[self.span()]
     }
 
-    pub fn word_str<'a>(&self, chunk_text: &'a str) -> Option<&'a str> {
+    pub fn word_str<'a>(&self, text: &'a str) -> Option<&'a str> {
         if self.kind != TokenKind::Word {
             return None;
         }
-        Some(self.text(chunk_text))
+        Some(self.text(text))
     }
 }
 
@@ -667,13 +720,11 @@ impl Sigil {
 }
 
 #[test]
-fn test_lex_chunk() {
+fn test_lex() {
     fn dbglex(s: &str) -> String {
         let ref db = crate::Database::default();
         let source = Source::new(db, S(s));
-        let chunk = basic_source_map(db, source);
-        let chunk_lex = lex_chunk(db, chunk);
-        chunk_lex.debug_str(db)
+        lex(db, source).debug_str(db)
     }
 
     assert_eq!(
@@ -939,8 +990,7 @@ fn test_lex_multibyte_error() {
     fn dbglex(s: &str) -> String {
         let ref db = crate::Database::default();
         let source = Source::new(db, S(s));
-        let chunk = basic_source_map(db, source);
-        lex_chunk(db, chunk).debug_str(db)
+        lex(db, source).debug_str(db)
     }
 
     // At the start, at the end, and between two words.
@@ -979,8 +1029,7 @@ fn test_lex_error_spans() {
     fn spans(s: &str) -> Vec<(Range<usize>, String)> {
         let ref db = crate::Database::default();
         let source = Source::new(db, S(s));
-        let chunk = basic_source_map(db, source);
-        lex_chunk(db, chunk)
+        lex(db, source)
             .tokens(db)
             .iter()
             .map(|t| (t.span(), t.debug_str(s).to_string()))
@@ -1019,4 +1068,90 @@ fn test_lex_error_spans() {
             assert!(src.is_char_boundary(span.end), "{src:?} {span:?}");
         }
     }
+}
+
+/// Comments and strings, found where they begin wherever that is.
+///
+/// Each case is the text in pieces: `C` a comment, which makes no token; `S`
+/// a string and `E` an error, each of which is exactly one token; and `T`
+/// anything else, lexed however it lexes.
+#[test]
+fn test_lex_comments_and_strings() {
+    #[derive(Copy, Clone)]
+    enum F<'s> {
+        T(&'s str),
+        C(&'s str),
+        S(&'s str),
+        E(&'s str),
+    }
+
+    fn run(frags: &[F<'_>]) {
+        let db = &crate::Database::default();
+        let mut text = String::new();
+        let mut comments = vec![];
+        let mut expected = vec![];
+        for frag in frags {
+            let start = text.len();
+            match *frag {
+                F::T(s) => text.push_str(s),
+                F::C(s) => {
+                    text.push_str(s);
+                    comments.push(start..text.len());
+                }
+                F::S(s) => {
+                    text.push_str(s);
+                    expected.push((TokenKind::String, start..text.len()));
+                }
+                F::E(s) => {
+                    text.push_str(s);
+                    expected.push((TokenKind::Error, start..text.len()));
+                }
+            }
+        }
+        let source = Source::new(db, text.C());
+        let tokens = lex(db, source).tokens(db).C();
+        let found: Vec<_> = tokens.iter()
+            .filter(|t| matches!(t.kind, TokenKind::String | TokenKind::Error))
+            .map(|t| (t.kind, t.span()))
+            .collect();
+        assert_eq!(found, expected, "strings and errors in {text:?}");
+        for token in &tokens {
+            let span = token.span();
+            assert!(
+                comments.iter().all(|c| span.end <= c.start || c.end <= span.start),
+                "a token inside a comment in {text:?}",
+            );
+        }
+    }
+
+    use F::*;
+    run(&[T("ab"), T("bdd"), C("//")]);
+    run(&[T("ab"), T("bdd"), C("//"), T("\n")]);
+    run(&[T("ab"), C("//a"), T("\nbdd"), C("//b"), T("\n"), C("//b")]);
+    run(&[T("ab"), T("bdd"), S("\"x\"")]);
+    run(&[T("ab"), T("bdd"), S("\"x\""), S("\"x\"")]);
+    run(&[T("a"), T("b"), T("c")]);
+    run(&[T("ab"), E("\"x")]);
+    run(&[E("\"x . //")]);
+    run(&[C("// \" . \""), T("\n")]);
+    run(&[S("\"// . \"")]);
+    run(&[T("/ a")]);
+    run(&[E("/* a")]);
+    run(&[C("/* */")]);
+    run(&[C("/*/**/*/")]);
+    run(&[E("/*/**/ab")]);
+
+    // Escapes: a backslash takes the byte after it, so `\"` does not close.
+    run(&[S("\"foo\\\"bar\"")]);
+    run(&[S("\"foo\\\\\"")]);
+    run(&[S("\"foo\\\\\\\"bar\"")]);
+    run(&[S("\"\\\\\\\\\"")]);
+    run(&[E("\"foo\\\"bar")]);
+    run(&[E("\"foo\\\\")]);
+    run(&[T("x"), S("\"a\\\"b\""), T("y")]);
+
+    // A string or a comment ends a run of error characters, and a comment
+    // begins wherever a `/` would begin a token.
+    run(&[E("\u{2603}"), S("\"x\"")]);
+    run(&[T("a *"), C("//c"), T("\nb")]);
 }

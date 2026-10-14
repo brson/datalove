@@ -39,7 +39,7 @@ pub trait TokenStream<'db> {
     /// The source, for error reporting when there is no current token.
     fn source_text(&self) -> crate::input::Source;
 
-    /// The text of the chunk the tokens were lexed from, which their spans
+    /// The text of the source the tokens were lexed from, which their spans
     /// index.
     fn text(&self) -> &'db str;
 
@@ -519,11 +519,11 @@ fn split_suffix(word: &str, is_digit: impl Fn(char) -> bool) -> (&str, Option<St
 }
 
 /// The text of a word that begins with a digit, which is a number attempt.
-fn number_word<'a>(token: &TreeToken<'_>, chunk_text: &'a str) -> Option<&'a str> {
+fn number_word<'a>(token: &TreeToken<'_>, text: &'a str) -> Option<&'a str> {
     let TreeToken::Token(token) = token else {
         return None;
     };
-    let word = token.word_str(chunk_text)?;
+    let word = token.word_str(text)?;
     is_number_word(word).then_some(word)
 }
 
@@ -545,13 +545,13 @@ pub fn is_identifier(word: &str) -> bool {
 /// number reports a suffix it does not know.
 pub fn non_ascii_names<'a>(
     tokens: &'a [Token],
-    chunk_text: &'a str,
+    text: &'a str,
 ) -> impl Iterator<Item = Range<usize>> + 'a {
     // Asking the whole text at once is a word at a time; asking each token is
     // a pass over every token of a source that is nearly always all ASCII.
-    let tokens = if chunk_text.is_ascii() { &[][..] } else { tokens };
+    let tokens = if text.is_ascii() { &[][..] } else { tokens };
     tokens.iter().filter_map(move |token| {
-        let word = token.word_str(chunk_text)?;
+        let word = token.word_str(text)?;
         (!word.is_ascii() && !is_number_word(word)).then(|| token.span())
     })
 }
@@ -562,14 +562,13 @@ pub fn non_ascii_names<'a>(
 /// [`crate::split::stray_delimiter_error`].
 pub fn non_ascii_name_error<'db>(
     db: &'db dyn crate::Db,
-    text: Source,
+    source: Source,
     span: Range<usize>,
-    chunk_text: &str,
 ) -> DiagnosticBuilder<'db> {
-    let word = &chunk_text[span.C()];
+    let word = &source.as_str(db)[span.C()];
     let ch = word.chars().find(|c| !c.is_ascii()).X();
     DiagnosticBuilder::error(db, &fmt!("`{word}` is not an ASCII name"))
-        .primary_label(TextSpan::new(text, span), &fmt!("`{ch}` is not ASCII"))
+        .primary_label(TextSpan::new(source, span), &fmt!("`{ch}` is not ASCII"))
         .note("a name is ASCII letters, digits and `_`, and does not begin with a digit")
 }
 
@@ -730,25 +729,23 @@ mod tests {
     use super::*;
     use crate::bracer::bracer;
     use crate::input::Source;
-    use crate::lexer::lex_chunk;
-    use crate::source_map::basic_source_map;
+    use crate::lexer::lex;
 
     /// A token stream over a whole source, for reading numbers off it.
     struct TestStream<'db> {
         db: &'db dyn crate::Db,
         tokens: Vec<TreeToken<'db>>,
         pos: usize,
-        text: Source,
+        source: Source,
     }
 
     impl<'db> TestStream<'db> {
         fn new(db: &'db crate::Database, source_text: &str) -> Self {
             let source = Source::new(db, source_text.S());
-            let chunk = basic_source_map(db, source);
-            let tokens = bracer(db, lex_chunk(db, chunk))
+            let tokens = bracer(db, lex(db, source))
                 .iter(db)
                 .collect();
-            TestStream { db, tokens, pos: 0, text: chunk.source(db) }
+            TestStream { db, tokens, pos: 0, source }
         }
     }
 
@@ -778,11 +775,11 @@ mod tests {
         }
 
         fn source_text(&self) -> Source {
-            self.text
+            self.source
         }
 
         fn text(&self) -> &'db str {
-            self.text.as_str(self.db)
+            self.source.as_str(self.db)
         }
     }
 
@@ -875,11 +872,9 @@ mod tests {
         let ref db = crate::Database::default();
         let names = |text: &str| -> Vec<String> {
             let source = Source::new(db, text.S());
-            let chunk = basic_source_map(db, source);
-            let chunk_text = chunk.source(db).as_str(db);
-            let lexed = lex_chunk(db, chunk);
-            non_ascii_names(lexed.tokens(db), chunk_text)
-                .map(|span| chunk_text[span].S())
+            let text = source.as_str(db);
+            non_ascii_names(lex(db, source).tokens(db), text)
+                .map(|span| text[span].S())
                 .collect()
         };
 

@@ -267,7 +267,12 @@ With chunking gone, a `Text` -- a tracked struct holding a copy of a
 source's text -- was always its source's whole text, so `Source` replaced it,
 and `TextSpan` and `SpanEntry` became one type naming a `Source`. That ended
 the copy and the hash of every source, but saved memory (63 fewer page
-faults) rather than instructions: copying and hashing 216KB is cheap.
+faults) rather than instructions: copying and hashing 216KB is cheap. Then the
+source map, a pass ahead of the lexer finding comments and strings, folded
+into the lexer, which finds them where a token would begin; `lex` takes a
+`Source` and gives a `Lexed`, and `Chunk`, `ChunkLex` and `source_map.rs` are
+gone. A cold compile runs 565 queries rather than 618, and an edit 19 rather
+than 20.
 
 ## Open questions
 
