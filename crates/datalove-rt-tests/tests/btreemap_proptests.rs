@@ -11,6 +11,7 @@ use rmx::proptest::prelude::*;
 fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     let key_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -20,6 +21,7 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
 
     let value_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -29,6 +31,7 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
 
     let map_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
@@ -46,6 +49,7 @@ fn create_map_u32_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, Box<rtd
 fn create_string_tydesc() -> Box<rtdt::TyDesc> {
     Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::String,
+        flags: 0,
         size: std::mem::size_of::<rtdt::String>() as u32,
         align: std::mem::align_of::<rtdt::String>() as u32,
         type_info: rtdt::TyInfo {
@@ -61,6 +65,7 @@ fn create_map_string_string_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>, B
 
     let map_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Map,
+        flags: 0,
         size: std::mem::size_of::<rtdt::Map>() as u32,
         align: std::mem::align_of::<rtdt::Map>() as u32,
         type_info: rtdt::TyInfo {
@@ -981,6 +986,7 @@ proptest! {
 fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     let inner_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::U32,
+        flags: 0,
         size: 4,
         align: 4,
         type_info: rtdt::TyInfo {
@@ -991,6 +997,7 @@ fn create_option_u32_tydesc() -> (Box<rtdt::TyDesc>, Box<rtdt::TyDesc>) {
     // Create the option tydesc first with placeholder size/align.
     let mut option_tydesc = Box::new(rtdt::TyDesc {
         type_tag: rtdt::TyTag::Option,
+        flags: 0,
         size: 0,
         align: 0,
         type_info: rtdt::TyInfo {
