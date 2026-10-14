@@ -158,7 +158,12 @@ Sets bind a reference to the key,
 maps to both the key and value.
 
 ```datalove
-todo map example
+fun top_checksum(ref counts: %{string = u32}): !u32
+  var ranked: [(u32, string)] = []
+  for word, seen in ref counts
+    call list.push(mut ranked, (u32.max_value() -! seen, word@))
+  end for
+  // ...
 ```
 
 _The bindings are not a tuple_:
@@ -206,7 +211,7 @@ unless I want to force users to keep their own index counter in sync with the co
 then the iteration needs to provide the index value as well.
 
 Go and Zig and probably others do this with another form of `for` that adds another term to
-the loop header to represent the index. So I guess I'll just do that too!
+the loop header to represent the index. So I guess I'll do that too!
 
 ```datalove
 fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord }
@@ -225,6 +230,7 @@ Personally **this smells a bit to me, smells like a big special case**,
 and I'm used to Rust with its many iterator adapters that
 can do this and much more (what about reverse iteration? seems important...).
 I don't know if Datalove will grow an iterator protocol like Rust has.
+I don't know if Datalove will ever get first-class reference types that could be stored in an iterator struct.
 I don't intend Datalove to have a high level of expressivity in its language integration.
 So for now this is a compromise I have to make to make `for` loops useful in
 the most common case.
