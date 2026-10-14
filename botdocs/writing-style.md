@@ -242,7 +242,8 @@ When reviewing, look for:
 - **Factual errors.** Check claims about the code and the language against
   the code and the specs.
 - **Mechanics.** Frontmatter (`title`, `category` of `design`, `devlog`,
-  or `milestone`, `summary`), file name `YYYYMMDDX-slug.md`, broken relative links, typos.
+  or `milestone`, `summary`), file name `YYYYMMDDx-slug.md` with `x` a
+  lowercase letter ordering same-day posts, broken relative links, typos.
 
 When editing, preserve the voice:
 

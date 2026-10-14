@@ -11,7 +11,7 @@ repository.workspace = true
 rmx.workspace = true
 serde = { version = "1", features = ["derive"] }
 datalove-buildinfo.workspace = true
-megaspace-pipeliner = "0.4"
+megaspace-pipeliner = "0.5"
 datalove.workspace = true
 datalove-repl-rat.workspace = true
 datalove-worldgen.workspace = true

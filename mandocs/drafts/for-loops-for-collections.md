@@ -16,7 +16,7 @@ when you don't have reference types.
 
 <!-- the problem -->
 
-In my [previous round of benchmarking](../posts/20261009A-compound-assignment.md)
+In my [previous round of benchmarking](../posts/20261009a-compound-assignment.md)
 I noted that Datalove's system library iterates over collections by maintaining
 a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
 incrementing it with wrapping math,
