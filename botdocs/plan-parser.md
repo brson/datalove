@@ -265,9 +265,8 @@ input now, and random soup besides.
 
 Still open: the source map copies a source's whole text into a `Text` and
 hashes it, since the text is one of `Text`'s identity fields; about 0.8% of
-the run. A `Text` named by its source and a byte range would neither copy nor
-hash it, but would change what an edit backdates, and `chunks.rs` makes
-`Text`s whose text is not their source's, so it wants its own look.
+the run. With chunking gone a `Text` is always its source's whole text, so a
+`Source` can stand in for it.
 
 ## Open questions
 

@@ -481,8 +481,7 @@ Enabled with `DATALOVE_PARALLEL=1`.
   point stands for inputs.
 - **A tracked function taking the whole graph invalidates on any module.** Key
   per-module functions on the module.
-- **`no_eq`** is used three times, in `bcts/src/chunks.rs` and
-  `bcts/src/source_map.rs`. It suppresses the equality check that backdating
+- **`no_eq`** is used twice, in `bcts/src/source_map.rs`. It suppresses the equality check that backdating
   relies on, so add it only when equality is genuinely meaningless or too
   expensive, and say why.
 - **A tracked field read is a table lookup**, though it looks like a field

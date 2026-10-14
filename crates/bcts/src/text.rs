@@ -5,10 +5,7 @@ use std::ops::Range;
 /// Byte span type alias.
 pub type ByteSpan = Range<usize>;
 
-/// Lightweight text + span pair for passing around without salsa overhead.
-///
-/// Unlike `SubText` which is salsa-tracked, this is a simple struct
-/// for temporary use during parsing and error reporting.
+/// A span of a text, for use during parsing and error reporting.
 #[derive(Clone)]
 pub struct TextSpan<'db> {
     pub text: Text<'db>,
@@ -37,7 +34,7 @@ impl<'db> TextSpan<'db> {
     }
 }
 
-/// The text of a source, or of a chunk of one.
+/// The text of a source.
 ///
 /// Carries the `Source` it came from as an identity field, so anything holding
 /// a `Text` can name that source. That matters because a `Text` is a tracked
@@ -52,14 +49,6 @@ pub struct Text<'db> {
     pub text: String,
 }
 
-#[salsa::tracked]
-pub struct SubText<'db> {
-    #[returns(copy)]
-    pub text: Text<'db>,
-    #[returns(clone)]
-    pub range: Range<usize>,
-}
-
 #[salsa::interned]
 #[derive(Debug)]
 pub struct InternedText<'db> {
@@ -67,118 +56,15 @@ pub struct InternedText<'db> {
     pub text: String,
 }
 
-#[salsa::interned]
-#[derive(Debug)]
-pub struct InternedSubText<'db> {
-    #[returns(copy)]
-    pub text: InternedText<'db>,
-    #[returns(clone)]
-    pub range: Range<usize>,
-}
-
-impl<'db> Text<'db> {
-    pub fn as_sub(
-        &self,
-        db: &'db dyn crate::Db,
-    ) -> SubText<'db> {
-        SubText::new(
-            db,
-            *self,
-            0..self.text(db).len() ,
-        )
-    }
-
-    pub fn sub(
-        &self,
-        db: &'db dyn crate::Db,
-        range: Range<usize>,
-    ) -> SubText<'db> {
-        SubText::new(
-            db,
-            *self,
-            range,
-        )
-    }
-}
-
-impl<'db> SubText<'db> {
-    pub fn sub(
-        &self,
-        db: &'db dyn crate::Db,
-        range: Range<usize>,
-    ) -> Option<SubText<'db>> {
-        let text_len = self.text(db).text(db).len();
-        let subrange = (0..text_len).subrange(range)?;
-        Some(SubText::new(
-            db,
-            self.text(db),
-            subrange,
-        ))
-    }
-}
-
-impl<'db> InternedText<'db> {
-    pub fn as_sub(
-        &self,
-        db: &'db dyn crate::Db,
-    ) -> InternedSubText<'db> {
-        InternedSubText::new(
-            db,
-            *self,
-            0..self.text(db).len() ,
-        )
-    }
-
-    pub fn sub(
-        &self,
-        db: &'db dyn crate::Db,
-        range: Range<usize>,
-    ) -> InternedSubText<'db> {
-        InternedSubText::new(
-            db,
-            *self,
-            range,
-        )
-    }
-}
-
-impl<'db> InternedSubText<'db> {
-    pub fn sub(
-        &self,
-        db: &'db dyn crate::Db,
-        range: Range<usize>,
-    ) -> Option<InternedSubText<'db>> {
-        let text_len = self.text(db).text(db).len();
-        let subrange = (0..text_len).subrange(range)?;
-        Some(InternedSubText::new(
-            db,
-            self.text(db),
-            subrange,
-        ))
-    }
-}
-
 impl<'db> Text<'db> {
     pub fn as_str(&self, db: &'db dyn crate::Db) -> &'db str {
         self.text(db).as_str()
     }
 }
 
-impl<'db> SubText<'db> {
-    pub fn as_str(&self, db: &'db dyn crate::Db) -> &'db str {
-        &self.text(db).text(db)[self.range(db)]
-    }
-}
-
 impl<'db> InternedText<'db> {
     pub fn as_str(&self, db: &'db dyn crate::Db) -> &'db str {
         self.text(db).as_str()
-    }
-}
-
-impl<'db> InternedSubText<'db> {
-    pub fn as_str(&self, db: &'db dyn crate::Db) -> &'db str {
-        &self.text(db).text(db)[self.range(db)]
     }
 }
 
@@ -205,17 +91,4 @@ fn interned_text_eq() {
     let s1 = InternedText::new(db, S("abc"));
     let s2 = InternedText::new(db, S("abc"));
     assert_eq!(s1, s2);
-
-    #[salsa::tracked(returns(copy))]
-    fn test_sub<'db>(
-        db: &'db dyn crate::Db,
-        s1: InternedText<'db>,
-        s2: InternedText<'db>,
-    ) {
-        let s1 = s1.sub(db, 1..2);
-        let s2 = s2.sub(db, 1..2);
-        assert_eq!(s1, s2);
-    }
-
-    test_sub(db, s1, s2);
 }
