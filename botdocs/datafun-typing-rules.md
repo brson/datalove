@@ -1,804 +1,854 @@
 # Datafun Typing Rules
 
-This document specifies the type system for datafun (the expression/statement language).
-It extends datalit typing rules with functions, control flow, and operations.
+The type system of datafun, the expression and statement language, as
+inference rules. This is a reference: it states what the checker in
+`crates/datalove-datafun-tycheck` accepts. Revised October 2026 against that
+code. It extends [Datalit Typing Rules](datalit-typing-rules.md), whose
+notation, type equivalence and literal rules it assumes; read that first.
 
-## Core Principles
+## Contents
 
-- **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
-- **Extends datalit**: All datalit types are also datafun types
-- **Function types**: Functions have types of the form `(T1, T2, ...) -> R`
-- **Effect tracking**: Checked/optional operators require compatible function return types
-- **No implicit coercion**: A checked expression must have exactly the expected
-  type. Numeric widening is written with `@` and wrapping in `data` with
-  `data` (botspec Sections 3.5, 10 and 12)
+- [Notation](#user-content-notation)
+- [Types](#user-content-types)
+- [Expressions](#user-content-expressions)
+  - [Inherited rules](#user-content-inherited-rules)
+  - [Variables](#user-content-variables)
+  - [Arithmetic, comparison and logic](#user-content-arithmetic-comparison-and-logic)
+  - [Try operators](#user-content-try-operators)
+  - [Adapt](#user-content-adapt)
+  - [Calls](#user-content-calls)
+  - [Fields and indexes](#user-content-fields-and-indexes)
+  - [Rule selection](#user-content-rule-selection)
+- [Statements](#user-content-statements)
+  - [Patterns](#user-content-patterns)
+  - [Bindings](#user-content-bindings)
+  - [Assignment](#user-content-assignment)
+  - [Control flow](#user-content-control-flow)
+  - [Functions](#user-content-functions)
+  - [Modules and scripts](#user-content-modules-and-scripts)
+- [Diagnostics](#user-content-diagnostics)
+- [Known gaps](#user-content-known-gaps)
+- [Implementation](#user-content-implementation)
+- [References](#user-content-references)
 
-## Type Representation
+## Notation
 
-Datafun types extend datalit types:
+Expressions are typed by the two bidirectional judgments of datalit, now
+under a context `Γ`; statements by a third judgment that threads the context
+through:
 
-```rust
-enum Type {
-    Datalit(datalit::Type),  // All datalit types
-    Function(TypeFunction),   // Function types
-}
 ```
-
-### Function Types
-
-```
-TypeFunction {
-    param_types: Vec<Type>,
-    param_modes: Vec<ParamMode>,  // In, Out, Ref, Mut
-    param_comptime: Vec<bool>,    // Which parameters are `const`
-    return_type: Type,
-}
-```
-
-Function type syntax: `(T1, T2, ...) -> R`
-
-Examples:
-```datalove
-(u32, u32) -> u32       // Two u32 params, returns u32
-(string) -> bool        // One string param, returns bool
-() -> ()                // No params, returns unit (void)
+Γ ⊢ e ⇒ T        e synthesizes T
+Γ ⊢ e ⇐ T        e checks against T
+Γ ⊢ s ⊣ Γ'       s is well typed under Γ, and the statements after it see Γ'
 ```
-
-### Unit Type
-
-The unit type `()` is represented as an empty anonymous tuple.
-Functions without explicit return types implicitly return `()`.
 
-## Expression Synthesis Rules
+A context is a list of entries; a later entry for a name shadows an earlier
+one:
 
-### Rule: Syn-Name
 ```
-x is bound to type T in context
--------------------------------
-x => T
-```
-
-### Rule: Syn-BinOp
+Γ ::= ·
+    | Γ, x :^q T          variable x of type T, with binding kind q
+    | Γ, α :: b           type parameter α with bound b
+    | Γ, ret R            the enclosing function returns R
+    | Γ, ret void         the enclosing function declares no return type
+    | Γ, loop             inside a loop body
 
-Binary operations require operands of the same type.
-
-#### Basic Arithmetic (+, -, *)
-```
-e1 => T, e2 => T
-T is float (f32, f64) or bigint (int)
--------------------------------------
-e1 + e2 => T
+q ::= let | var | const
+b ::= any | ord | float | fixedint
 ```
 
-**Note**: Bare arithmetic on fixed integers (u8 through u64, i8 through i64,
-`index`, `offset`) is an error (F026). Widen the operands to `int` with `@`, or
-use the checked or optional operators.
+`Γ(x) = T^q` looks a variable up, `Γ(ret)` is the return entry if there is
+one, and `loop ∈ Γ` tests the loop entry. `Γ|const` is `Γ` with every
+variable that is not `const` removed. A binding of kind `var` is mutable; the
+others are not.
 
-#### Division (/)
-```
-e1 => T, e2 => T
-T is float (f32, f64)
----------------------
-e1 / e2 => T
-```
+Function signatures live in a global table `Σ`, collected before any body is
+checked, so functions may call each other in any order:
 
-**Note**: Bare division only works for floats. Use `/!` or `/?` for integers.
-
-#### Checked Arithmetic (+!, -!, *!, /!)
 ```
-e1 => T, e2 => T
-T is fixed int (or bigint for /!)
-function returns Result<U>
----------------------------------
-e1 +! e2 => T
+Σ(f) = ∀α₁::b₁, ..., αₖ::bₖ. (m₁ T₁, ..., mₙ Tₙ) → R
+m ::= in | ref | mut | out | const
 ```
 
-**Note**: Checked operators return the element type directly. On overflow/error, the function early-returns an error.
-
-#### Optional Arithmetic (+?, -?, *?, /?)
-```
-e1 => T, e2 => T
-T is fixed int (or bigint for /?)
-function returns Option<U>
----------------------------------
-e1 +? e2 => T
-```
+`Σ` is written only where a rule reads it.
 
-**Note**: Optional operators return the element type directly. On overflow/error, the function early-returns None.
+Statement sequences and blocks:
 
-#### Ordering (.<, .>, <=, >=)
-```
-e1 => T, e2 => T
-T is numeric type
------------------
-e1 .< e2 => bool
 ```
+Γ₀ ⊢ s₁ ⊣ Γ₁    ...    Γₙ₋₁ ⊢ sₙ ⊣ Γₙ
+--------------------------------------- (Seq)
+Γ₀ ⊢ s₁ ... sₙ ⊣ Γₙ
 
-#### Equality (==, !=)
+Γ ⊢ s̄ ⊣ Γ'
+------------- (Block)
+Γ ⊢ { s̄ }
 ```
-e1 => T, e2 => T
-T has equality
------------------
-e1 == e2 => bool
-```
-
-A type has equality if it is numeric, `bool`, `string`, unit or an atom, or
-if it is an option, tuple, struct, term or enum whose parts all have
-equality. Floats inside compare by IEEE 754. Lists, sets, maps, tables,
-tensors, results, `data`, `error` and functions do not have equality, and
-neither does a type parameter inside another type.
 
-When one operand is a construction with no type of its own (`none`,
-`some e`, a tuple or struct literal, an atom or a term) and the other is
-not, the construction is checked against the other operand's type.
-
-Comparisons do not chain: `a == b == c` is a parse error (P067).
-
-### Rule: Syn-UnaryOp
-
-#### Negation (-)
-```
-e => T
-T is float (f32, f64) or bigint (int)
--------------------------------------
--e => T
-```
+`Γ ⊢ { s̄ }` is a block: the bodies of `if`, `loop` and `match`. What it binds
+does not escape it. (Datafun writes no braces; they mark a block here.)
 
-**Note**: Bare negation only for floats and bigints (no overflow possible). A
-negated integer literal checked against a fixed int is read as a signed
-literal, so `let x: i32 = -5` is fine; `-x` for an `i32` variable is not.
+## Types
 
-#### Checked Negation (-!)
-```
-e => T
-T is fixed signed int
-function returns Result<U>
---------------------------
--!e => T
-```
+Datafun's types are datalit's, plus two:
 
-#### Optional Negation (-?)
 ```
-e => T
-T is fixed signed int
-function returns Option<U>
---------------------------
--?e => T
+T ::= ... datalit types ...
+    | α                                type parameter
 ```
-
-**Note**: Unsigned integers cannot use `-?` (always fails - footgun prevention).
 
-### Rule: Syn-FunctionCall
-```
-f is bound to function type (T1, T2, ..., Tn) -> R
-args.len() == n
-for all i: ei <= Ti
----------------------------------------------------
-f(e1, e2, ..., en) => R
-```
+and function types, which appear only in `Σ`. Functions are not values: no
+expression has a function type, and a name that is not a variable is not an
+expression.
 
-### Rule: Syn-QualifiedCall
-```
-m is required as a module or rider whose function f has type (T1, ..., Tn) -> R
-args.len() == n
-for all i: ei <= Ti
----------------------------------------------------
-m.f(e1, e2, ..., en) => R
-```
+A type alias (`type Point: {x: f32, y: f32}`) is a name for a structural
+type and is expanded before types are compared. An unknown name is F064; an
+alias defined twice is F066.
 
-**Note**: Only the `m.f` pairs a unit writes are looked up, gathered by the
-parser into `ParsedStatements::qualified_calls`, so a unit depends on the
-functions it calls and not on everything its required modules have.
+Equivalence `T ≡ U` is datalit's, extended by `α ≡ α` and nothing else: a
+type parameter is equivalent only to itself.
 
-### Rule: Syn-TryOption (?)
-```
-e => Option<T>
-function returns Option<U>
---------------------------
-e? => T
-```
+Several rules test a type against a class:
 
-**Note**: Unwraps the option, early-returning None if the value is None.
+| Class | Members |
+|-------|---------|
+| `Fix` | `u8` `u16` `u32` `u64` `i8` `i16` `i32` `i64` `index` `offset` |
+| `Signed` | `i8` `i16` `i32` `i64` `offset` |
+| `Float` | `f32` `f64` |
+| `Num` | `Fix ∪ Float ∪ {int}` |
+| `Eq` | `Num`, `bool`, `string`, `atom a`; and `()`, tuples, structs, `?T`, `term a T` and enums whose components are all in `Eq` |
 
-### Rule: Syn-TryResult (!)
-```
-e => Result<T>
-function returns Result<U>
---------------------------
-e! => T
-```
+`Eq` excludes lists, sets, maps, tables, tensors, results, `data`, `error`
+and type parameters, at any depth.
 
-**Note**: Unwraps the result, early-returning the error if the value is Err.
+A type parameter is in a class only by its bound: `α ∈ Float` when
+`α :: float ∈ Γ`, and `α ∈ Fix` when `α :: fixedint ∈ Γ`. Where a rule
+below says `Fix` or `Float` without qualification it means the concrete
+types only; `Fix⁺` and `Float⁺` include bounded parameters.
 
-### Rule: Syn-Tuple
-```
-for all i: ei => Ti
-----------------------------------
-(e1, e2, ..., en) => (T1, T2, ..., Tn)
-```
+## Expressions
 
-### Literal Synthesis
+### Inherited rules
 
-Literals follow the same rules as datalit:
+Every datalit rule holds in datafun, with `Γ` added on the left of each
+judgment: annotation (`Syn-TypedExpr`, `Check-Hinted`), subsumption, the
+literal rules, tuples, structs, collections, tensors, tables, the option,
+result, `data` and `error` constructors, atoms, terms and enums. Their
+diagnostics are F-codes here: a mismatch is F016, a missing synthesis rule
+F011, a literal out of range F065, and a literal of the wrong shape (tuple
+length, struct field count or order, table columns, tensor rank or element
+count) F075.
 
-- `true`, `false` => `bool`
-- Integer literals => `int` (arbitrary-precision) by default
-- Float literals => `f64` by default (a float literal checks against `f32` or `f64`)
-- Hex literals => `int` by default
-- String literals => `string`
-- `none` => cannot synthesize (requires type context)
+Datafun adds one checking rule for a negated literal, since datafun has a
+negation operator and datalit has only signed literals:
 
-### Rule: Syn-Some
 ```
-e => T
-------------------
-some(e) => Option<T>
+-n ∈ ⟦I⟧    I ∈ Fix
+-------------------- (Check-NegLit)
+Γ ⊢ -n ⇐ I
 ```
 
-### Rule: Syn-Ok
-```
-e => T
-------------------
-ok(e) => Result<T>
-```
+And for negation of anything under a float:
 
-### Rule: Syn-Er
 ```
--------------------
-er(e) => cannot synthesize (requires type context)
+Γ ⊢ e ⇐ F    F ∈ Float
+---------------------- (Check-Neg)
+Γ ⊢ -e ⇐ F
 ```
 
-### Rule: Syn-Data
-```
-e => T (any type)
-------------------
-data(e) => data
-```
+These make `let x: i32 = -5` and `let y: f32 = -1.5` check.
 
-### Rule: Syn-Error
-```
-e => T (any type)
-------------------
-error(e) => error
-```
+### Variables
 
-### Rule: Syn-Atom
 ```
----------------------
-atom Name => Atom(Name)
+Γ(x) = T^q
+------------- (Syn-Var)
+Γ ⊢ x ⇒ T
 ```
 
-Atom expressions synthesize a standalone atom type.
+An unbound name is F001. Inside a `const` initializer the context is
+`Γ|const`, so naming a `let`, `var` or parameter there is F058.
 
-### Rule: Syn-Term
-```
-e => T
----------------------
-term Name e => Term(Name, T)
-```
+### Arithmetic, comparison and logic
 
-Term expressions synthesize a standalone term type from the payload.
+Binary operators synthesize through an auxiliary judgment that pairs the two
+operands at one type:
 
-### Rule: Syn-EnumLiteral
 ```
----------------------
-Cannot synthesize type for enum literal (requires type context)
+Γ ⊢ e₁ ~ e₂ ⇒ T        e₁ and e₂ both have type T
 ```
 
-Enum literals (`enum { atom Foo }`) can only be checked, not synthesized.
+The rules of `~` decide which operand, if either, gives its type to the
+other. They use three syntactic predicates:
 
-### Collection Synthesis
+- `adapt(e)`: `e` is `e'@`, or `-e'`, `-?e'` or `-!e'` with `adapt(e')`.
+- `cons(e)`: `e` is an unhinted `none`, `some e'`, tuple, struct, atom,
+  term or enum literal: a construction whose synthesized type, if it has
+  one, is a guess.
+- `lit(e)`: `e` is an integer, hex or float literal, or a negation of one.
 
-Collections follow datalit rules with element type inference:
+The rules are tried in this order, and each is shown for an operand on the
+left; each has a mirror image with the operands swapped.
 
-```
-[e1, e2, ...] => [T]          where first element determines T
-#{e1, e2, ...} => #{T}
-%{k1 = v1, ...} => %{K = V}
 ```
+adapt(e₁)    ¬adapt(e₂)    Γ ⊢ e₂ ⇒ T    Γ ⊢ e₁ ⇐ T
+---------------------------------------------------- (Pair-Adapt)
+Γ ⊢ e₁ ~ e₂ ⇒ T
 
-Empty collections default to unit element type: `[] => [()]`
+cons(e₁)    ¬cons(e₂)    ¬lit(e₂)    Γ ⊢ e₂ ⇒ T    Γ ⊢ e₁ ⇐ T
+-------------------------------------------------------------- (Pair-Cons)
+Γ ⊢ e₁ ~ e₂ ⇒ T
 
-## Expression Checking Rules
+lit(e₁)    ¬lit(e₂)    Γ ⊢ e₂ ⇒ T    T ∈ Num    Γ ⊢ e₁ ⇐ T
+----------------------------------------------------------- (Pair-Lit)
+Γ ⊢ e₁ ~ e₂ ⇒ T
 
-### Rule: Check-Subsume
+Γ ⊢ e₁ ⇒ T    Γ ⊢ e₂ ⇒ T'    T ≡ T'
+----------------------------------- (Pair-Syn)
+Γ ⊢ e₁ ~ e₂ ⇒ T
 ```
-e => T'
-T' = T
--------
-e <= T
-```
 
-There is no subsumption beyond equality: no numeric widening and no implicit
-`data`.
+So with `x : u32`, `x == 0` pairs at `u32` by `Pair-Lit`, `x == none` with
+`x : ?u32` by `Pair-Cons`, and `a@ .< b` takes `b`'s type by `Pair-Adapt`.
+`1 == 2` has a literal on each side, falls to `Pair-Syn`, and compares two
+`int`s. Operands that do not pair are F016, "operands must have the same
+type", reported before the operator is checked against the type.
 
-### Rule: Check-None
-```
--------------------
-none <= Option<T>
-```
+Each arithmetic operator `⊕` admits a set of operand types, `Arith(⊕)`, and
+may require the enclosing function to return an option or a result:
 
-### Rule: Check-Some
-```
-e <= T
--------------------
-some(e) <= Option<T>
-```
+| `⊕` | `Arith(⊕)` | Requires `Γ(ret)` |
+|-----|------------|-------------------|
+| `+` `-` `*` | `Float⁺ ∪ {int}` | -- |
+| `/` | `Float⁺` | -- |
+| `+!` `-!` `*!` | `Fix⁺` | `!U` |
+| `/!` | `Fix⁺ ∪ {int}` | `!U` |
+| `+?` `-?` `*?` | `Fix⁺` | `?U` |
+| `/?` | `Fix⁺ ∪ {int}` | `?U` |
 
-### Rule: Check-Ok
-```
-e <= T
--------------------
-ok(e) <= Result<T>
-```
+`fits(⊕, Γ)` holds when the third column is `--`, or `Γ(ret)` has the shape
+it gives. At script top level `Γ(ret) = !()`, so the `!` forms fit there and
+the `?` forms do not.
 
-### Rule: Check-Er
 ```
-e <= error
--------------------
-er(e) <= Result<T>
-```
+Γ ⊢ e₁ ~ e₂ ⇒ T    T ∈ Arith(⊕)    fits(⊕, Γ)
+--------------------------------------------- (Syn-Arith)
+Γ ⊢ e₁ ⊕ e₂ ⇒ T
 
-### Rule: Check-BinOp (Bidirectional Type Propagation)
+Γ ⊢ e₁ ~ e₂ ⇒ T    T ∈ Num ∪ Float⁺ ∪ Fix⁺
+------------------------------------------ (Syn-Ord)        ⊙ ∈ {.<, .>, <=, >=}
+Γ ⊢ e₁ ⊙ e₂ ⇒ bool
 
-Binary operators support checking mode for type propagation from context to operands.
+Γ ⊢ e₁ ~ e₂ ⇒ T    T ∈ Eq ∪ Float⁺ ∪ Fix⁺
+----------------------------------------- (Syn-Eq)          ⊙ ∈ {==, !=}
+Γ ⊢ e₁ ⊙ e₂ ⇒ bool
 
-#### Check-BinOp-Checked (Fixed Int)
-```
-T is fixed int (u8, i8, u16, i16, u32, i32, u64, i64, index, offset)
-function returns Result<U>
-e1 <= T
-e2 <= T
-------------------------------------------
-e1 +! e2 <= T   (also -!, *!, /!)
+Γ ⊢ e₁ ~ e₂ ⇒ bool
+---------------------------- (Syn-Logic)                    ⊙ ∈ {and, or, xor}
+Γ ⊢ e₁ ⊙ e₂ ⇒ bool
 ```
 
-**Note**: The expected type T propagates to both operands, allowing literals to infer their type from context.
-
-#### Check-BinOp-Optional (Fixed Int)
-```
-T is fixed int
-function returns Option<U>
-e1 <= T
-e2 <= T
-------------------------------------------
-e1 +? e2 <= T   (also -?, *?, /?)
-```
+A checked or optional operator yields its operand type, not an option or
+result: on failure the function returns early, with an error or `none`. An
+operator applied to a type it does not admit is F026; one whose early return
+does not fit is F049. Comparisons do not chain: `a == b == c` is a parse
+error (P067).
 
-#### Check-BinOp-Checked (Bigint Division)
-```
-T is bigint (int)
-function returns Result<U>
-e1 <= T
-e2 <= T
-------------------------------------------
-e1 /! e2 <= T
-```
+Equality compares floats by IEEE 754 wherever they sit, so
+`some nan != some nan`. A bounded parameter has the comparisons; an unbounded
+or `ord`-bounded one has none, and orders through `sys/std/ord` instead.
 
-#### Check-BinOp-Optional (Bigint Division)
-```
-T is bigint (int)
-function returns Option<U>
-e1 <= T
-e2 <= T
-------------------------------------------
-e1 /? e2 <= T
-```
+In checking mode, an operator whose result type is its operand type passes
+the expected type down to both operands:
 
-#### Check-BinOp-Float
 ```
-T is float (f32 or f64)
-e1 <= T
-e2 <= T
-------------------------------------------
-e1 + e2 <= T   (also -, *, /)
+T ∈ Prop(⊕)    fits(⊕, Γ)    Γ ⊢ e₁ ⇐ T    Γ ⊢ e₂ ⇐ T
+----------------------------------------------------- (Check-BinOp)
+Γ ⊢ e₁ ⊕ e₂ ⇐ T
 ```
-
-**Note**: Float literals can check against f32 or f64 and infer their type.
 
-#### Check-BinOp Fallback
+| `⊕` | `Prop(⊕)` |
+|-----|-----------|
+| `+` `-` `*` | `Float ∪ {int}` |
+| `/` | `Float` |
+| `+!` `-!` `*!` `+?` `-?` `*?` | `Fix` |
+| `/!` `/?` | `Fix ∪ {int}` |
+| `and` `or` `xor` | `{bool}` |
 
-If checking fails (e.g., operand type mismatch, wrong return type), the expression falls through to synthesis mode and the synthesized type is compared against the expected type.
-
-```
-check fails
-e => T'
-T' = T
--------
-e <= T
-```
+`Prop(⊕) ⊆ Arith(⊕)` for each operator, so `Check-BinOp` never accepts an
+operator at a type synthesis would refuse. It is how literals and `@` operands
+learn their type from context:
 
-**Example - Type Propagation:**
 ```datalove
 fun add(): !u32
-    ret ok (1 +! 2)    // 1 and 2 check against u32 from ok wrapper
+    ret ok (1 +! 2)       // 1 and 2 are checked against u32
 end fun
+
+let c: int = a@ + b@      // with a, b : u32, both widen to int
 ```
 
-1. `ok (1 +! 2)` checks against `!u32`
-2. Check-Ok extracts inner type `u32`
-3. `1 +! 2` checks against `u32`
-4. Check-BinOp-Checked: return type is Result, T=u32 is fixed int
-5. `1` checks against `u32` (Check-Int succeeds)
-6. `2` checks against `u32` (Check-Int succeeds)
-7. Expression type is `u32`
+`Check-BinOp` overlaps `Check-Subsume`. The checker tries `Check-BinOp`
+first and, if any premise fails, discards its diagnostics and uses
+`Check-Subsume` instead; see [Rule selection](#user-content-rule-selection).
 
-**Example - Return Type Validation:**
-```datalove
-// ERROR: +? requires Option return, but script returns Result
-let x: u32 = a +? b    // Falls through to synthesis, produces error
+Unary operators:
+
+```
+Γ ⊢ e ⇒ T    T ∈ Float ∪ {int}              Γ ⊢ e ⇒ bool
+------------------------------ (Syn-Neg)    ------------------ (Syn-Not)
+Γ ⊢ -e ⇒ T                                  Γ ⊢ not e ⇒ bool
+
+Γ ⊢ e ⇒ T    T ∈ Fix⁺    Γ(ret) = !U
+------------------------------------ (Syn-NegChecked)
+Γ ⊢ -!e ⇒ T
+
+Γ ⊢ e ⇒ T    T ∈ Signed    Γ(ret) = ?U
+-------------------------------------- (Syn-NegOptional)
+Γ ⊢ -?e ⇒ T
 ```
 
-### Rule: Check-Atom
-```
-expected is Atom(Name) with same name
---------------------------------------
-atom Name <= Atom(Name)
+`-!` takes every fixed-width integer, unsigned ones included, where it fails
+for any non-zero operand. `-?` refuses unsigned operands outright, and so
+refuses a `fixedint`-bounded parameter, which may be unsigned. Bare `-` is
+for floats and `int` only: `-x` on an `i32` variable is F026, though `-5`
+checks against `i32` by `Check-NegLit`.
 
-expected is Enum(variants) and Name is atom variant in variants
----------------------------------------------------------------
-atom Name <= Enum(variants)
-```
+### Try operators
 
-### Rule: Check-Term
 ```
-expected is Term(Name, T) with same name
-e <= T
---------------------------------------
-term Name e <= Term(Name, T)
-
-expected is Enum(variants) and Name is term variant with payload T
-e <= T
-------------------------------------------------------------------
-term Name e <= Enum(variants)
+Γ ⊢ e ⇒ ?T    Γ(ret) = ?U                     Γ ⊢ e ⇒ !T    Γ(ret) = !U
+------------------------- (Syn-TryOption)     ------------------------- (Syn-TryResult)
+Γ ⊢ e? ⇒ T                                    Γ ⊢ e! ⇒ T
 ```
 
-### Rule: Check-EnumLiteral
+`e?` unwraps an option, returning `none` from the function when it is
+empty; `e!` unwraps a result, returning its error. These are the elimination
+forms of `?T` and `!T`, and they synthesize, as an elimination form does in
+the Pfenning recipe. The operand's shape is checked first (F048), then the
+return type (F049). `U` and `T` are unrelated: the early return carries no
+payload of type `T`.
+
+### Adapt
+
+The postfix `@` clones, and converts where a type is expected. `T ⇝ U`, "a
+`T` adapts to a `U`", is the least relation with:
+
+- `T ⇝ U` when `T ≡ U` (a clone).
+- Same-sign integer widening: `u8 ⇝ u16 ⇝ u32 ⇝ u64 ⇝ int` and
+  `i8 ⇝ i16 ⇝ i32 ⇝ i64 ⇝ int`, transitively.
+- Unsigned to wider signed: `u8 ⇝ i16, i32, i64`; `u16 ⇝ i32, i64`;
+  `u32 ⇝ i64`; each also `⇝ int`.
+- `index ⇝ int`, `offset ⇝ int`, `f32 ⇝ f64`.
+- `atom a ⇝ E` when `atom a ∈ E`, and `term a T ⇝ E` when `term a T' ∈ E`
+  with `T ≡ T'`.
+
+Nothing else adapts. There is no narrowing, and no enum adapts to another.
+
 ```
-expected is Enum(variants)
-inner variant checks against expected
---------------------------------------
-enum { variant } <= Enum(variants)
-```
-
-### Rule: Check-Int
-```
-n fits in expected integer type
--------------------------------
-n <= T (where T is integer type)
-```
-
-**Note**: Integer literals can check against any integer type they fit in.
-
-### Coercion Rules
-
-There are none: the only rule is exact match, `T <= T`. Widening is the `@`
-operator (botspec Sections 6.8 and 10), which is itself checked against the
-expected type, and a value becomes `data` only through `data e`.
-
-## Statement Typing
-
-### Statement: Let
-```
-let x: T = e
--------------
-e <= T
-x : T in subsequent context
-
-let x = e
-----------
-e => T
-x : T in subsequent context
+Γ ⊢ e ⇒ T    T ⇝ U                Γ ⊢ e ⇒ T
+------------------ (Check-Adapt)    -------------- (Syn-Adapt)
+Γ ⊢ e@ ⇐ U                         Γ ⊢ e@ ⇒ T
 ```
 
-### Statement: Let, destructuring
+With an expected type, `@` converts to it; with none, it clones and keeps
+its type. `Check-Adapt` failing is F016, "@ operator cannot convert". An
+expected type reaches `@` through any checking rule: an annotated `let`, a
+`ret`, a call argument, `Check-BinOp`, or the other operand by `Pair-Adapt`.
+
+### Calls
+
+A call's arguments carry markers that must repeat the parameter modes:
+`ref e`, `mut e` and `out e` for those modes, and nothing for `in` and
+`const`. A marker that disagrees is F057. Whether a `mut` or `out` argument
+denotes something assignable is checked by the ownership pass (D011, D012),
+not here.
+
+For a function with no type parameters:
+
 ```
-let (x1, ..., xn) = e
----------------------
-e => (T1, ..., Tn)
-xi : Ti in subsequent context
-
-let {f1 = x1, ..., fn = xn} = e
--------------------------------
-e => {f1: T1, ..., fn: Tn}
-xi : Ti in subsequent context
-
-let term N x = e
-----------------
-e => term N T
-x : T in subsequent context
-
-let atom N = e
---------------
-e => atom N
-```
-
-With a hint, `e <= T` against the hint instead, and the pattern is checked
-against the hint. `{f}` is short for `{f = f}`. A struct pattern names every
-field, in any order. `let ()` takes apart `()`. The pattern is one level deep,
-and an enum is not taken apart here but with `match`. `var` takes the same
-patterns, each name a mutable binding of its own. A pattern that does not fit
-is F071, reported at the value.
-
-### Statement: Var
-```
-var x: T = e
--------------
-e <= T
-x : T in subsequent context (mutable)
-
-var x = e
-----------
-e => T
-x : T in subsequent context (mutable)
+Σ(f) = (m₁ T₁, ..., mₙ Tₙ) → R    Γ ⊢ eᵢ ⇐ Tᵢ    const-arg(mᵢ, eᵢ)
+------------------------------------------------------------------ (Syn-Call)
+Γ ⊢ f(m₁ e₁, ..., mₙ eₙ) ⇒ R
 ```
 
-### Statement: Set
-```
-x : T in context
-e <= T
----------------
-set x = e
-```
+`const-arg(m, e)` holds when `m ≠ const`, or `e` is a variable `x` with
+`Γ(x) = T^const`. Any other argument to a const parameter, a literal
+included, is F076. An unknown function is F002 and a wrong argument count
+F045, which stops checking the call.
 
-### Statement: Fun
-```
-params have types T1, T2, ...
-return type is R (or () if omitted)
-body type checks with params in scope
--------------------------------------
-fun name(p1: T1, p2: T2, ...): R body end fun
-name : (T1, T2, ...) -> R in subsequent context
-```
+A qualified call `M.f(...)` is the same with `Σ(M.f)`, the function `f` of
+the module or rider required as `M`. A qualifier no `require` introduced is
+F078; a function the module lacks is F002.
 
-### Statement: Ret
-```
-e <= R (where R is function's return type)
-------------------------------------------
-ret e
+**Generic calls.** For `Σ(f) = ∀ᾱ::b̄. (m₁ T₁, ..., mₙ Tₙ) → R`, the type
+arguments are not written. The checker finds a substitution `θ` for `ᾱ` by
+one-way matching, not unification:
 
-function has no declared return type
-------------------------------------
-ret  (bare return for void functions)
-```
+1. For each `i` in order such that `Tᵢ` mentions some `α`: if `eᵢ`
+   synthesizes a type `Uᵢ` that mentions no type parameter still to be
+   determined, match `Tᵢ` against `Uᵢ`, binding each `α` at its position in
+   `Tᵢ` to what `Uᵢ` has there. The first binding of an `α` wins.
+   An argument that does not synthesize (`none`, `er e`) binds nothing.
+2. In checking mode against `T'`, match `R` against `T'` to bind any `α`
+   still unbound. Arguments take precedence.
 
-### Statement: If
-
-#### Boolean condition
 ```
-condition <= bool
-then_body type checks
-else_body type checks (if present)
-----------------------------------
-if condition then_body else else_body end if
+θ from step 1     dom θ = ᾱ    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    const-arg(mᵢ, eᵢ)
+------------------------------------------------------------------------------ (Syn-GenericCall)
+Γ ⊢ f(m₁ e₁, ..., mₙ eₙ) ⇒ θR
+
+θ from steps 1-2    dom θ = ᾱ    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    θR ≡ T'    const-arg(mᵢ, eᵢ)
+--------------------------------------------------------------------------------------- (Check-GenericCall)
+Γ ⊢ f(m₁ e₁, ..., mₙ eₙ) ⇐ T'
 ```
 
-#### Option destructuring
-```
-condition => Option<T>
-binding : T in then_body scope
-then_body type checks
-else_body type checks (if present)
-----------------------------------
-if condition |binding| then_body else else_body end if
-```
+`θ(α) ∈ b` reads: `any` and `ord` admit every type, `float` admits `Float`,
+and `fixedint` admits `Fix`. A bound refused is F016; a parameter left unbound
+(`dom θ ≠ ᾱ`) is F011, "nothing here says what `T` is". Because
+`Syn-GenericCall` has no expected type to draw on, a call like
+`self == zero()` in operand position is refused for that reason.
 
-#### Result destructuring
-```
-condition => Result<T>
-binding : T in then_body scope
-err_binding : error in else_body scope
-else_body and err_binding required (F046)
-then_body type checks
-else_body type checks
-----------------------------------
-if condition |binding| then_body else |err_binding| else_body end if
-```
+Argument order matters, because the first argument to reach an `α` fixes
+it. With `pick_first<T>(a: T, b: T)`, `pick_first(99, : u32 / 1)` binds
+`T = int` from the bare literal and then fails on the `u32`, while
+`pick_first(: u32 / 1, 99)` binds `T = u32` and checks `99` against it.
+Likewise `let y: u32 = id(5)` is F016: the argument binds `T = int` before
+the expected type is consulted.
 
-### Statement: Loop
+**Intrinsics.** `icall n(e₁, ..., eₙ)` calls a built-in with signature
+`(T₁, ..., Tₙ) → R`. Its arguments are synthesized and compared, not
+checked:
+
 ```
-condition <= bool (if present)
-body type checks
-------------------------------
-loop while condition body end loop
+icall(n) = (T₁, ..., Tₙ) → R    Γ ⊢ eᵢ ⇒ Uᵢ    Uᵢ ≡ Tᵢ
+------------------------------------------------------- (Syn-Intrinsic)
+Γ ⊢ icall n(e₁, ..., eₙ) ⇒ R
 ```
 
-### Statement: Break
-```
-inside a loop (F050 otherwise)
-------------------------------
-break
-```
+So `icall add_wrapping_u32(a, 2)` is F016, since `2` synthesizes `int`; write
+`: u32 / 2`. Arguments take no mode markers (F057). An unknown intrinsic or
+wrong argument count is F011.
 
-### Statement: Continue
+### Fields and indexes
+
 ```
-inside a loop (F051 otherwise)
-------------------------------
-continue
+Γ ⊢ e ⇒ (T₀, ..., Tₙ₋₁)    i < n             Γ ⊢ e ⇒ {..., ℓ: T, ...}
+------------------------------ (Syn-TupleProj)    ------------------------ (Syn-FieldProj)
+Γ ⊢ e.i ⇒ Tᵢ                                       Γ ⊢ e.ℓ ⇒ T
 ```
 
-### Statement: Match
-```
-input => Enum(variants)
-for each case:
-  atom Name: Name is atom variant in variants
-  term Name binding: Name is term variant with payload T, binding : T in body scope
-all variant names covered (or default present)
-no duplicate cases
-------------------------------------------------------
-match input
-case atom Name
-    body
-case term Name binding
-    body
-case default
-    body
-end match
-```
+A projection on a type with no fields, tables included, is F068; a missing
+field F067; a tuple index out of range F069.
 
-The input must synthesize an enum type. Each case arm must name a variant in
-the enum. Term arms bind the payload to a variable in scope for the arm body.
-Without a default arm, the match must be exhaustive.
+Indexing is defined over the element of a collection:
 
-### Statement: DebugLog
+| `C` | `key(C)` | `elem(C)` |
+|-----|----------|-----------|
+| `[T]` | `index` | `T` |
+| `%{K = V}` | `K` | `V` |
+| `[|T, 1|]` | `index` | `T` |
+| `[|T, k|]`, `k > 1` | `index` | `[|T, k-1|]`, a view |
+
 ```
-e => T (any type)
------------------
-debuglog e
+Γ ⊢ e ⇒ C    Γ ⊢ k ⇐ key(C)    Γ(ret) = ?U
+----------------------------------------- (Syn-IndexOption)
+Γ ⊢ e[k]? ⇒ elem(C)
+
+Γ ⊢ e ⇒ C    Γ ⊢ k ⇐ key(C)    Γ(ret) = !U
+----------------------------------------- (Syn-IndexResult)
+Γ ⊢ e[k]! ⇒ elem(C)
 ```
 
-## Function Typing Context
+An index is fallible: a missing key or an out-of-range index returns early
+from the function, as `?` and `!` do (F049 if the return type does not fit).
+An index into something that is not a list, map or tensor is F011, and so is
+a bare `e[k]` outside a `set` target.
 
-Functions establish a typing context:
+**Borrowed positions.** A projection or index that reads a part of a linear
+type moves it out of the aggregate that still holds it, which is refused:
+F070 for a field, F072 for an element. The read is allowed in a *borrowed
+position*, where nothing is moved: an operand of an operator, an argument
+passed `ref`, `mut` or `out`, the argument of `debuglog`, and the inner steps
+of a place. A part of a copy type may be read anywhere. Rules that admit a
+read only in a borrowed position carry the side condition
+`copy(T) ∨ borrowed`; it is left out of the rules above for brevity. A view
+(an element of a tensor of rank above 1) passed `mut` or `out` is F073.
 
-- **expected_return_type**: The declared return type (or `()` if void)
-- **is_void_function**: Whether the function has no declared return type
-- **parameters**: Added to variable context with declared types
-- **loop_contexts**: Stack for validating break/continue
+### Rule selection
 
-Try operators (`?`, `!`) and checked/optional arithmetic require the return
-type to match the operator: Option for `?`/`+?`, Result for `!`/`+!` (F049
-otherwise). Script top level returns `!()`, so the Result forms work there and
-the Option forms do not.
+`check_expr` in `check.rs` chooses a rule in this order:
 
-## Type Error Codes
+1. A hinted expression `: T₀ / e` compares `T₀` with the expected type
+   (F016, "the type hint disagrees"), then continues with `e`.
+2. If a checking rule matches the expression form and the expected type, it
+   is used. Its failure is an error, except for `Check-BinOp`, which falls
+   back to step 3.
+3. Otherwise `Check-Subsume`: synthesize, then compare by `≡`. A failure is
+   F016, with a note suggesting `@` where `Check-Adapt` would have succeeded.
 
-Every code here is rendered as a diagnostic with a source span. F047 and F056
-are unassigned.
+Synthesis is syntax-directed throughout, except that `~` and generic
+matching try their premises in order. The two backtracking points, then,
+are `Check-BinOp` and the speculative synthesis in step 1 of generic
+matching.
 
-### Expression Errors
-- **F001**: Undefined variable
-- **F002**: Undefined function; also an import or qualified call of a function
-  the module or rider does not have
-- **F011**: Cannot synthesize type; also an index into something that is not a
-  list, map or tensor, whether read or written by `set`
-- **F016**: Type mismatch; also an element of an unhinted collection literal
-  that differs from the first
-- **F026**: Invalid operand type for operator
-- **F045**: Function arity mismatch
-- **F046**: Result destructuring requires error binding
-- **F048**: Try operator operand type mismatch
-- **F049**: Try operator return type mismatch; also `set a[i]? = v` outside a
-  function returning an option, and `set a[i]! = v` outside one returning a
-  result
-- **F057**: Argument mode marker does not match the parameter's mode
-- **F058**: A const expression names something that is not a const
-- **F065**: Integer or hex literal out of range for its type
-- **F071**: Destructuring pattern does not fit the value
-- **F075**: A tuple, struct, table or tensor literal whose shape does not fit
-  its type: the wrong number of elements, fields or columns, fields or
-  columns out of order, or the wrong rank
-- **F076**: An argument to a const parameter that is not a const binding
+There is no implicit conversion anywhere: no numeric widening, no implicit
+`data`, and no implicit enum injection of a non-literal. Each is written:
+`@`, `data e`, or `@` again.
 
-### Place Errors
-Fields and elements read out of an aggregate, and the targets of `set`.
+## Statements
 
-- **F067**: No such field
-- **F068**: Field projection on a type with no fields
-- **F069**: Tuple element index out of range
-- **F070**: A non-copy field read out of the aggregate that holds it
-- **F072**: A non-copy element read out of the collection that holds it
-- **F073**: A view into a tensor of rank above one passed `mut` or `out`, or
-  assigned with `set`
-- **F074**: A bare index (upsert) in a `set` target that is not the last step,
-  or not into a map
+### Patterns
 
-### Match Errors (reported as F016 type mismatches)
-- Non-exhaustive match: missing variant names without default arm
-- Unknown variant name in match case
-- Atom case used for term variant (or vice versa)
-- Match input is not an enum type
+`⊢ p : T ⊣ Δ` says pattern `p` matches type `T` and binds `Δ`, a list of
+`x : T`. A pattern is one level deep.
 
-### Statement and Function Errors
-- **F050** (BreakOutsideLoop): Break statement outside loop
-- **F051** (ContinueOutsideLoop): Continue statement outside loop
-- **F052**: A void function returns a value
-- **F053**: A bare `ret` in a function that returns a value
-- **F054**: `set` on an undefined variable
-- **F055**: `set` on an immutable variable
-- **F063**: A function that can reach the end of its body without returning a
-  value
-- **F085**: `inline` functions calling each other in a cycle, a function
-  calling itself included; reported once per cycle, at the first function of
-  it
+```
+---------------- (Pat-Var)
+⊢ x : T ⊣ x : T
 
-### Declaration Errors
-- **F059**: A name imported twice
-- **F060**: Retired. A type parameter under a collection in a signature, which
-  the old erasure could not reach. Every engine handles one now.
-- **F061**: A type parameter used as a set element or map key without
-  `is ord`
-- **F062**: A native function declared where no rider implements it
-- **F064**: Unknown type name
-- **F066**: A type alias defined twice
-- **F077**: A const parameter whose type is a type parameter
-- **F078**: An import from, or qualified call through, a name that no
-  `require` brought in
-- **F079**: A `require` of a module, rider or data file that does not exist
-- **F080**: The same module or rider required twice in one module or script
-  unit
-- **F081**: A module required under an alias another required module already
-  has, since a module is called through the last part of its path
-- **F082**: `require rider` in a script
-- **F083**: A `require` that closes a cycle of modules, a module requiring
-  itself included
-- **F084**: A `require data` whose file is not of the type it gives, or has no
-  type of its own when it gives none; the mismatch in the file is reported
-  where it is too
+------------------------------------------------------- (Pat-Tuple)
+⊢ (x₁, ..., xₙ) : (T₁, ..., Tₙ) ⊣ x₁ : T₁, ..., xₙ : Tₙ
 
-A refused `require` is reported where it is written, and an import from or
-qualified call through its alias is not reported again as F078.
+{ℓ₁, ..., ℓₙ} = {ℓ'₁, ..., ℓ'ₙ}    ℓᵢ = ℓ'_π(i)
+--------------------------------------------------------------------- (Pat-Struct)
+⊢ {ℓ₁ = x₁, ..., ℓₙ = xₙ} : {ℓ'₁: T₁, ..., ℓ'ₙ: Tₙ} ⊣ x₁ : T_π(1), ..., xₙ : T_π(n)
 
-### Inherited from Datalit
-Datalit's own `TypeMismatch`, `CannotSynthesize` and `IntOutOfRange` are
-reported as F016, F011 and F065, and its structural `ArityMismatch` and
-`FieldOrderMismatch` as F075.
+--------------------------------- (Pat-Term)    ------------------------ (Pat-Atom)
+⊢ term a x : term a T ⊣ x : T                   ⊢ atom a : atom a ⊣ ·
+```
 
-## Operator Type Requirements
+A one-element tuple pattern is written `(x,)`; `(x)` is P070. A struct
+pattern names every field, in any order; `{ℓ}` is short for `{ℓ = ℓ}`. `()`
+matches unit and binds nothing. An enum is not taken apart by
+a pattern but by `match`. A pattern that does not fit is F071, reported at
+the value.
 
-| Operator | Allowed Types | Return Type | Context Required |
-|----------|---------------|-------------|------------------|
-| `+`, `-`, `*` | f32, f64, int | T | - |
-| `/` | f32, f64 | T | - |
-| `+!`, `-!`, `*!` | fixed int | T | Result return |
-| `/!` | fixed int, bigint | T | Result return |
-| `+?`, `-?`, `*?` | fixed int | T | Option return |
-| `/?` | fixed int, bigint | T | Option return |
-| `-` (unary) | f32, f64, int | T | - |
-| `-!` (unary) | signed fixed int | T | Result return |
-| `-?` (unary) | signed fixed int | T | Option return |
-| `.<`, `.>`, `<=`, `>=` | numeric | bool | - |
-| `==`, `!=` | numeric, bool, string, unit, atom; option, tuple, struct, term, enum of those | bool | - |
-| `?` | Option<T> | T | Option return |
-| `!` | Result<T> | T | Result return |
+### Bindings
 
-## Implementation Notes
+`Δ^q` is `Δ` with every entry given binding kind `q`.
 
-### Two-Pass Function Processing
+```
+Γ ⊢ e ⇒ T    ⊢ p : T ⊣ Δ            Γ ⊢ e ⇐ T    ⊢ p : T ⊣ Δ
+---------------------------- (Let)    -------------------------------- (Let-Hinted)
+Γ ⊢ let p = e ⊣ Γ, Δ^let             Γ ⊢ let p: T = e ⊣ Γ, Δ^let
+```
 
-Function definitions are processed in two passes:
-1. **Signature collection**: Extract parameter types and return type, add to context
-2. **Body checking**: Type check function body with parameters in scope
+`var` is the same with `Δ^var`, and adds an uninitialized form, which takes
+a plain name and needs a type:
 
-This allows mutual recursion between functions.
+```
+--------------------------------- (Var-Uninit)
+Γ ⊢ var x: T ⊣ Γ, x :^var T
+```
 
-### Expression Type Storage
+Whether it is written before it is read is the ownership pass's business
+(D005), not the type checker's.
 
-Expression types are stored in a `BTreeMap` keyed by `ExprKey`, which is the
-expression's module, enclosing function name and sequential index within that
-function.
+```
+Γ|const ⊢ e ⇒ T                         Γ|const ⊢ e ⇐ T
+------------------------------ (Const)    -------------------------------- (Const-Hinted)
+Γ ⊢ const x = e ⊣ Γ, x :^const T        Γ ⊢ const x: T = e ⊣ Γ, x :^const T
+```
 
-They were once a vector indexed by salsa id. That indexed by the wrong half of
-an id, dropping the generation that tells two expressions in a reused slot
-apart, and the vector grew to the highest index salsa had handed out - in one
-measured case 1416 slots to hold 8 entries. See `salsa-patterns.md`.
+`require data p: T` is `const x: T = ⟨file⟩`, where `x` is the last part of
+`p`, and the file is checked against `T` by datalit's
+`type_check_with_expected`. A missing file is F079; one not of type `T`, or
+with no type of its own and no `T` given, or a `T` that is a function type,
+is F084, with datalit's own errors as its notes.
 
-### Call Target Resolution
+Shadowing is allowed: a binding of a name already in scope replaces it for
+the statements that follow.
 
-Function calls store resolved call targets (AST + module ID) for the interpreter/compiler, eliminating runtime name lookup.
+### Assignment
 
-### Module Imports
+`Γ ⊢ p :=: T` says `p` is a place that may be assigned a `T`. Its root must
+be mutable: a `var` binding, or a `mut` or `out` parameter (which enter `Γ`
+with kind `var`).
 
-Imported functions are added to the context with their resolved AST and source module ID. The type signature comes from the source module's exports.
+```
+Γ(x) = T^var
+-------------- (Place-Var)
+Γ ⊢ x :=: T
 
-Qualified calls resolve the same way, into `TypeContext::qualified` rather than the name table, so `u8.from_int` and `i8.from_int` sit side by side. A module's are resolved with its imports in `resolve_module_imports`; a script unit's in `typecheck_script_unit`, through `module_alias_at` for an alias an earlier unit required, adding the module to the unit's `imported_modules`.
+Γ ⊢ p :=: {..., ℓ: T, ...}         Γ ⊢ p :=: (T₀, ..., Tₙ₋₁)    i < n
+-------------------------- (Place-Field)    -------------------------------- (Place-Tuple)
+Γ ⊢ p.ℓ :=: T                      Γ ⊢ p.i :=: Tᵢ
+
+Γ ⊢ p :=: C    Γ ⊢ k ⇐ key(C)                    Γ ⊢ p :=: %{K = V}    Γ ⊢ k ⇐ K
+------------------------------- (Place-Index)    -------------------------------- (Place-Upsert)
+Γ ⊢ p[k]? :=: elem(C)                            Γ ⊢ p[k] :=: V
+Γ ⊢ p[k]! :=: elem(C)
+```
+
+`Place-Upsert`, the bare index that inserts a missing key, applies only to a
+map and only as the last step (F074 otherwise). Writing through a view, an
+element of a tensor of rank above 1, is F073.
+
+```
+Γ ⊢ p :=: T    Γ ⊢ e ⇐ T    fits(p, Γ)
+-------------------------------------- (Set)
+Γ ⊢ set p = e ⊣ Γ
+
+Γ ⊢ p :=: T    Γ ⊢ e ⇐ T    T ∈ Arith(⊕)    fits(⊕, Γ)    fits(p, Γ)    p not an upsert
+---------------------------------------------------------------------------------------- (Set-Compound)
+Γ ⊢ set p ⊕= e ⊣ Γ
+```
+
+`fits(p, Γ)` holds when the last step of `p` is not `[k]?` or `[k]!`, or is
+`[k]?` with `Γ(ret) = ?U`, or `[k]!` with `Γ(ret) = !U` (F049). An undefined
+root is F054; an immutable one is F055. A compound operator the place's type
+does not admit is F026. The order in which a `set` evaluates its parts is in
+[the spec](botspec.md#user-content-81-bindings).
+
+### Control flow
+
+```
+Γ ⊢ e ⇐ bool    Γ ⊢ { s̄₁ }    Γ ⊢ { s̄₂ }
+---------------------------------------- (If)
+Γ ⊢ if e s̄₁ else s̄₂ end if ⊣ Γ
+
+Γ ⊢ e ⇒ ?T    Γ, x :^let T ⊢ { s̄₁ }    Γ ⊢ { s̄₂ }
+------------------------------------------------- (If-Some)
+Γ ⊢ if e |x| s̄₁ else s̄₂ end if ⊣ Γ
+
+Γ ⊢ e ⇒ !T    Γ, x :^let T ⊢ { s̄₁ }    Γ, y :^let error ⊢ { s̄₂ }
+-------------------------------------------------------------- (If-Ok)
+Γ ⊢ if e |x| s̄₁ else |y| s̄₂ end if ⊣ Γ
+```
+
+A missing `else` is an empty `s̄₂`, except that a result needs its
+`else |y|` (F046). A binding `if` whose condition is neither an option nor a
+result is F016, and so is `else |y|` on an option. `else if` is a nested `if`
+in the `else` block; a binding `if` cannot take part in such a chain (P073).
+
+```
+Γ, loop ⊢ { s̄ }                         Γ ⊢ e ⇐ bool    Γ, loop ⊢ { s̄ }
+------------------------- (Loop)        --------------------------------------- (Loop-While)
+Γ ⊢ loop s̄ end loop ⊣ Γ                Γ ⊢ loop while e s̄ end loop ⊣ Γ
+
+loop ∈ Γ                                loop ∈ Γ
+------------------- (Break)             ---------------------- (Continue)
+Γ ⊢ break ⊣ Γ                           Γ ⊢ continue ⊣ Γ
+```
+
+`break` or `continue` outside a loop is F050 or F051.
+
+```
+Γ ⊢ e ⇒ E    E = enum {v₁, ..., vₙ}
+each case names a distinct variant of E, of the same kind
+for case atom a:     Γ ⊢ { s̄ }
+for case term a x:   term a T ∈ E    Γ, x :^let T ⊢ { s̄ }
+for case default:    Γ ⊢ { s̄ }
+the cases name every vᵢ, or there is a default
+---------------------------------------------------------- (Match)
+Γ ⊢ match e cases end match ⊣ Γ
+```
+
+The input must synthesize an enum; options and results are taken apart by
+the binding `if`, not by `match`. Every failure of `Match` is F016: an input
+that is not an enum, a case naming no variant, an atom case for a term
+variant or the reverse, a duplicate case, and a missing variant with no
+default.
+
+```
+Γ(ret) = R    Γ ⊢ e ⇐ R           Γ(ret) = void
+----------------------- (Ret)      --------------- (Ret-Void)
+Γ ⊢ ret e ⊣ Γ                      Γ ⊢ ret ⊣ Γ
+```
+
+`ret e` in a void function is F052;
+bare `ret` in a function with a return type is F053, `fun f(): ()` included.
+
+```
+Γ ⊢ e ⇒ T                         Γ ⊢ f(ā) ⇒ ()
+---------------------- (DebugLog)   ------------------------ (Call)
+Γ ⊢ debuglog e ⊣ Γ                 Γ ⊢ call f(ā) ⊣ Γ
+```
+
+`debuglog` takes any type, in a borrowed position. A `call` statement's
+callee must return `()`: a value computed and discarded is F016. `call`
+followed by anything but a call is P031.
+
+### Functions
+
+For `fun f<ᾱ>(m₁ x₁: T₁, ..., mₙ xₙ: Tₙ): R with {α :: b, ...}`, with
+`Σ(f)` as collected:
+
+```
+Γ_f = Γ|const, ᾱ :: b̄, x₁ :^q(m₁) T₁, ..., xₙ :^q(mₙ) Tₙ, ret R̂
+Γ_f ⊢ s̄ ⊣ Γ'    R̂ ≠ void  ⟹  ¬completes(s̄)    mᵢ = const  ⟹  Tᵢ mentions no α
+------------------------------------------------------------------------------- (Fun)
+Γ ⊢ fun f ... s̄ end fun ⊣ Γ
+```
+
+where `q(in) = q(ref) = let`, `q(mut) = q(out) = var`, `q(const) = const`,
+and `R̂` is `R` when a return type is written and `void` when none is. A
+`void` function returns `()`. An unwritten bound is `any`. A const parameter
+whose type mentions a type parameter is F077.
+
+The body sees the consts in scope but no other enclosing binding, and no
+`loop` entry. A function's own parameters are in `Γ_f` under their modes'
+kinds, so `set` on an `in` or `ref` parameter is F055.
+
+`completes(s̄)`, "control can reach the end of `s̄`", is the conservative
+reachability test that F063 uses: a function with a return type whose body
+completes is F063. It is defined by:
+
+- A sequence completes when each statement in it does.
+- `ret`, `break` and `continue` do not complete.
+- `if` without `else` completes; with one, when either branch completes.
+- `loop while` completes. A bare `loop` completes when its body contains a
+  `break` belonging to it, not to a nested loop.
+- `match` completes when any arm, or its default, completes.
+- Every other statement completes, including those containing `?`, `!` and
+  calls.
+
+`native fun` declares a signature implemented by a rider. In a module or
+script it is F062. `inline`, as the first statement of a body, marks the
+function for inlining; inline functions that call each other in a cycle are
+F085.
+
+A type parameter used as a set element or map key in a signature needs a
+bound that implies `ord` (all of them do, other than `any`); otherwise F061.
+
+### Modules and scripts
+
+**Modules.** `Σ` is collected from every `fun` and `native fun` first, so
+order of definition does not matter. Module-level consts are checked next,
+before any other statement, and are in scope throughout the module. Module
+top level has no `ret` entry, so `?`, `!` and the checked and optional
+operators are F049 there ("no enclosing function"), and `ret e` is F011.
+
+**Scripts.** A script's top level is checked under `Γ, ret !()`: it is a
+body returning a result, so `!`, `+!` and `ret ok ()` work there and `?`
+does not. A script is checked as a sequence of units; a later unit sees the
+bindings of earlier ones. A unit that is a lone expression is synthesized,
+at any type.
+
+**Requires and imports.** `require module p`, `require rider p` and
+`require data p` bind an alias; `import` brings functions into `Σ`
+unqualified. Their errors are F059 and F078 to F084 below. A `require`
+refused is reported where it is written, and calls through its alias are
+not reported again.
+
+## Diagnostics
+
+| Code | Meaning |
+|------|---------|
+| F001 | Undefined variable |
+| F002 | Undefined function; an import or qualified call of a function the module or rider does not have |
+| F011 | No synthesis rule: `none`, `er e` or an enum literal with nothing expected; a type parameter left unbound at a call; an index into something that is not a list, map or tensor, read or `set`; a bare `e[k]` outside a `set` target; an unknown intrinsic or wrong intrinsic arity; `ret e` at module top level; a set element or map key of type parameter type without `ord` in a body annotation |
+| F016 | Type mismatch: a failed `Check-Subsume`; operands that do not pair; a collection element that differs from the first; a hint that disagrees with the expected type; `@` that cannot convert; a bound not satisfied; an intrinsic argument; a binding `if` on something that is not an option or result, or `else \|y\|` on an option; a `call` whose callee does not return `()`; every `match` error |
+| F026 | An operator applied to a type it does not admit, including a compound `set` |
+| F045 | Wrong number of arguments |
+| F046 | A binding `if` on a result without `else \|y\|` |
+| F048 | `?` on a non-option or `!` on a non-result |
+| F049 | An early-return form (`?`, `!`, `[k]?`, `[k]!`, the checked and optional operators, and their compound `set` forms) whose return type does not fit, or outside any function |
+| F050 | `break` outside a loop |
+| F051 | `continue` outside a loop |
+| F052 | `ret e` in a function with no declared return type |
+| F053 | Bare `ret` in a function with a return type |
+| F054 | `set` on an undefined variable |
+| F055 | `set` on an immutable binding |
+| F057 | Argument mode marker does not match the parameter's mode |
+| F058 | A const initializer names something that is not a const |
+| F059 | A name imported twice |
+| F061 | A type parameter used as a set element or map key in a signature without `ord` |
+| F062 | `native fun` outside a rider |
+| F063 | A function with a return type whose body can complete |
+| F064 | Unknown type name |
+| F065 | Integer or hex literal out of range for its type |
+| F066 | A type alias defined twice |
+| F067 | No such field |
+| F068 | Projection on a type with no fields |
+| F069 | Tuple index out of range |
+| F070 | A non-copy field read outside a borrowed position |
+| F071 | Destructuring pattern does not fit the value |
+| F072 | A non-copy element read outside a borrowed position |
+| F073 | A tensor view passed `mut` or `out`, or written by `set` |
+| F074 | A bare index in a `set` target that is not the last step, not into a map, or under a compound assignment |
+| F075 | A literal whose shape does not fit its type: tuple length, struct fields, table columns, tensor rank or element count |
+| F076 | An argument to a const parameter that is not a const binding |
+| F077 | A const parameter whose type mentions a type parameter |
+| F078 | An import from, or qualified call through, a name no `require` introduced |
+| F079 | A `require` of a module, rider or data file that does not exist |
+| F080 | The same module or rider required twice in one unit |
+| F081 | A module required under an alias another required module already has |
+| F082 | `require rider` in a script |
+| F083 | A `require` that closes a cycle of modules |
+| F084 | A `require data` whose file does not have the given type, has no type of its own and is given none, or is given a function type |
+| F085 | `inline` functions calling each other in a cycle |
+
+F047 and F056 are unassigned. F060 is retired. The datalit checker's
+`TypeError` converts into datafun's, but datafun reports its literal errors
+through its own checks, so the datalit T-codes do not appear in datafun
+programs except as the notes of F084.
+
+## Known gaps
+
+Places where the checker and the rules above, or the spec, part ways.
+Each is a checker fix, not a rule to keep.
+
+- **Duplicate functions.** Two `fun`s with the same name are not reported;
+  the last signature wins and both bodies are checked against it.
+- **Nested functions.** A `fun` inside a block parses but is never added to
+  `Σ`, so its body goes unchecked unless a top-level function shares its
+  name.
+- **Inner index steps in a `set` target.** `fits(p, Γ)` is enforced only
+  for the last step: `set a[i]?.x = v` outside an option-returning function
+  is not F049, though the same read is.
+- **Bare `ret` at module top level** is accepted silently.
+- **F061 in bodies.** `let x: #{T} = ...` without `ord` is reported as F011
+  rather than F061, and `var x: #{T}` with no value is not reported at all.
+- **Negation of a `float`-bounded parameter.** `-a` with `a : T`,
+  `T is float`, is F026, though the bound admits bare `+ - * /`. `Syn-Neg`
+  should take `Float⁺`.
+- **Hinted literals as operands.** `lit(e)` ignores a hint, so
+  `(: u8 / 1) == 1` treats both sides as bare literals, synthesizes `u8` and
+  `int`, and is F016.
+- **Stale comments.** `statement.rs` mentions an "F017" that does not exist
+  (around line 460) and claims an earlier check catches a bare module-level
+  `ret` (around line 413); `ast.rs` around line 797 says F050 for what is
+  F057.
+
+## Implementation
+
+The checker is split by judgment: `synthesize.rs` (`⇒`), `check.rs` (`⇐`),
+`statement.rs` (`⊣`), with the context in `context.rs` and the entry points
+in `api.rs`. Signatures are collected in `crates/datalove-datafun-resolve`.
+
+The context is `TypeContext`. Its variable map is `Γ`'s variables; its
+`type_aliases` overlay holds the type parameters as `Type::Var`, with their
+bounds in `type_param_bounds`; the expected return type and
+`is_void_function` are `Γ(ret)`; `loop_depth` is the `loop` entry;
+`in_const_expr` restricts lookups to `Γ|const`; and `ref_context` and
+`mut_context` mark borrowed positions.
+
+`TypeFunction` (`crates/datalove-datafun-common`) holds a signature's
+parameter types, modes, const flags and return type. Type parameters and
+their bounds are read from the callee's AST at the call, so a native
+function, which has none, is never generic.
+
+Expression types are stored in a `BTreeMap` keyed by `ExprKey`: module,
+enclosing function and index within it (see
+[Salsa Patterns](salsa-patterns.md) for why not a vector). Each call stores
+a `ResolvedCallTarget`, the callee's AST, module and type arguments, so later
+passes do not look names up again. Qualified calls resolve into
+`TypeContext::qualified`, not the name table, so `u8.from_int` and
+`i8.from_int` sit side by side; a module's resolve in
+`resolve_module_imports`, a script unit's in `typecheck_script_unit`, through
+`module_alias_at` for an alias an earlier unit required.
+
+An `AutoAdaptMode` inserts `@` where `Check-Adapt` would succeed instead of
+reporting F016. Only tests enable it.
+
+## References
+
+- Jana Dunfield and Neel Krishnaswami, "Bidirectional Typing", ACM
+  Computing Surveys 2021. The judgment forms, mode-correctness, and the
+  Pfenning recipe: introduction forms check, elimination forms synthesize.
+- Benjamin C. Pierce and David N. Turner, "Local Type Inference", TOPLAS
+  2000. Synthesizing type arguments from arguments, locally.
+- Robert Harper, *Practical Foundations for Programming Languages*, 2nd ed.,
+  Cambridge 2016. Contexts, statement judgments and the presentation of
+  rules.

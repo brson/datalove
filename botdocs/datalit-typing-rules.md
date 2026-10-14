@@ -1,778 +1,526 @@
 # Datalit Typing Rules
 
-This document specifies the type system for datalit expressions.
-It follows a bidirectional typing discipline based on Dunfield & Krishnaswami (2013).
+The type system of datalit, the data-literal language, as a bidirectional
+system of inference rules. This is a reference: it states what the checker in
+`crates/datalove-datalit/src/tycheck` accepts, rule by rule, and the rule
+names match the `Rule:` comments there. Revised October 2026 against that
+code. The datafun rules in [Datafun Typing Rules](datafun-typing-rules.md)
+extend these.
 
-## Core Principles
+## Contents
 
-- **Bidirectional**: Expressions either synthesize (=>) or check (<=) against types
-- **Structural typing**: Anonymous types (tuples, structs) are compatible by structure
-- **No nominal types**: There are no named struct or tuple types. A type alias is
-  only a name for a structural type, and two aliases for the same structure are
-  the same type (botspec Section 3.7)
-- **Explicit at boundaries**: The `: type / expr` syntax provides type information at expression boundaries
+- [Notation](#user-content-notation)
+- [Syntax](#user-content-syntax)
+- [Type equivalence](#user-content-type-equivalence)
+- [Synthesis](#user-content-synthesis)
+- [Checking](#user-content-checking)
+- [Rule selection](#user-content-rule-selection)
+- [Consequences](#user-content-consequences)
+- [Diagnostics](#user-content-diagnostics)
+- [Implementation](#user-content-implementation)
+- [References](#user-content-references)
 
-## Type Equivalence
+## Notation
 
-Two types are equivalent (T = T') when:
+The system is bidirectional in the style of Pierce and Turner and of Dunfield
+and Krishnaswami's survey (see [References](#user-content-references)). It has
+two typing judgments:
 
-### Primitives
-- `bool = bool`
-- `u8 = u8`, `i8 = i8`
-- `u16 = u16`, `i16 = i16`
-- `u32 = u32`, `i32 = i32`
-- `u64 = u64`, `i64 = i64`
-- `index = index`, `offset = offset`
-- `f32 = f32`, `f64 = f64`
-- `int = int` (arbitrary precision integers)
-- `string = string`
-- `data = data`
-- `error = error`
-
-### Tuples (structural)
-- `(T1, T2, ..., Tn) = (T1', T2', ..., Tn')` iff Ti = Ti' for all i
-- Order matters
-- Length must match
-
-Examples:
-```datalove
-(u32, bool) = (u32, bool)  ok
-(u32, bool) = (bool, u32)  FAIL (different order)
-(u32, bool) = (u32)        FAIL (different length)
+```
+⊢ e ⇒ T      e synthesizes T: T is an output, computed from e
+⊢ e ⇐ T      e checks against T: T is an input, given by the context
 ```
 
-### Anonymous Structs (structural)
-- `{f1: T1, f2: T2, ...} = {f1: T1', f2: T2', ...}` iff:
-  - Same field names
-  - Same field order
-  - Ti = Ti' for all i
+A datalit is a closed term: it has no variables, so there is no context `Γ`,
+and the turnstile has nothing on its left. Datafun adds one.
 
-Examples:
-```datalove
-{x: u32, y: bool} = {x: u32, y: bool}  ok
-{x: u32, y: bool} = {y: bool, x: u32}  FAIL (different order)
-{x: u32} = {x: u32, y: bool}           FAIL (different fields)
+A rule has premises above the line and a conclusion below, with its name on
+the right. A rule with no premises is an axiom. Side conditions that are not
+typing judgments, such as a range test, are written as premises too.
+
+```
+premise₁    ...    premiseₙ
+---------------------------- (Rule-Name)
+conclusion
+```
+
+Rules are read bottom-up, as the checker runs them: to derive the conclusion,
+derive each premise. Every rule is *mode-correct*: a type that is an input to
+a premise is known from the conclusion's inputs or from an earlier premise's
+outputs, so the rules describe an algorithm and not only a relation.
+
+Metavariables:
+
+| Symbol | Ranges over |
+|--------|-------------|
+| `T`, `U`, `K`, `V` | types |
+| `I` | integer types: `u8` to `u64`, `i8` to `i64`, `index`, `offset`, `int` |
+| `e` | expressions |
+| `n` | integer literals, read as their value in ℤ (sign included) |
+| `h` | hex literals, read as their value in ℕ |
+| `r` | float literals |
+| `s` | string literals |
+| `ℓ` | field and column names |
+| `a` | atom and term names |
+| `E` | enum types |
+
+`e₁, ..., eₙ` is a sequence of length `n ≥ 0`, and a premise containing `i`
+stands for one premise for each `i ∈ 1..n`.
+
+## Syntax
+
+The abstract syntax of types:
+
+```
+T ::= bool | u8 | u16 | u32 | u64 | i8 | i16 | i32 | i64
+    | index | offset | f32 | f64 | int | string | data | error
+    | (T₁, ..., Tₙ)                    tuple; () is unit
+    | {ℓ₁: T₁, ..., ℓₙ: Tₙ}            struct
+    | [T]                              list
+    | #{T}                             set
+    | %{K = V}                         map
+    | ?T                               option
+    | !T                               result
+    | [|T, k|]                         tensor of rank k ≥ 1
+    | {| ℓ₁: T₁, ..., ℓₙ: Tₙ |}        table
+    | atom a                           atom
+    | term a T                         term
+    | enum {v₁, ..., vₙ}               enum, n ≥ 1
+
+v ::= atom a | term a T                enum variant
+```
+
+`!T` has no error type parameter: the failure of every result is an `error`.
+
+The abstract syntax of expressions:
+
+```
+e ::= true | false | n | h | r | s
+    | (e₁, ..., eₙ)                    tuple; one element needs a trailing comma
+    | {ℓ₁ = e₁, ..., ℓₙ = eₙ}
+    | [e₁, ..., eₙ]
+    | #{e₁, ..., eₙ}
+    | %{e₁ = e₁', ..., eₙ = eₙ'}
+    | [| d₁ ... dₖ | e₁ ... eₘ |]      tensor, shape d₁ × ... × dₖ, row-major
+    | {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |}   table, each row ēⱼ = eⱼ₁, ..., eⱼₙ
+    | none | some e | ok e | er e
+    | data e | error e
+    | atom a | term a e | enum {e}
+    | : T / e                          type hint (annotation)
+```
+
+The concrete syntax is in [Datalit Grammar](datalit-ebnf.md). Two forms
+differ from it here. A tensor's shape is written in the abstract syntax as a
+header, though the concrete syntax usually gives it by separators
+(`[| 1 2, 3 4 |]` is `[| 2 2 | 1 2 3 4 |]`). Parentheses around a single
+expression are not a node: `(e)` is `e`, and `: T / (: U / e)` is two nested
+hints. (The AST keeps a `Group` node only to hold the inner of two such
+hints apart; `Syn-Group` and `Check-Group` pass straight through it.)
+
+## Type equivalence
+
+`T ≡ U` is syntactic equality, with one exception: an enum's variants are a
+set, so their order does not matter. The checker sorts variants by name when
+it builds an enum type, which makes equivalence plain structural equality on
+the sorted form.
+
+```
+enum {v₁, ..., vₙ} ≡ enum {v_π(1), ..., v_π(n)}     for any permutation π
+```
+
+Everything else is positional and exact:
+
+- Tuples have equal length and equivalent elements in order.
+- Structs and tables have the same field names in the same order, with
+  equivalent types. `{x: u32, y: bool} ≢ {y: bool, x: u32}`.
+- `atom a ≡ atom a'` iff `a = a'`; `term a T ≡ term a' T'` iff `a = a'` and
+  `T ≡ T'`.
+- `[|T, k|] ≡ [|T', k'|]` iff `T ≡ T'` and `k = k'`.
+- Distinct numeric types are never equivalent. There is no subtyping and no
+  implicit widening: `u8 ≢ u16`, `f32 ≢ f64`.
+- A type alias is a name for a structural type, so it is not a type of its own
+  (datalit has no aliases; datafun expands them before comparing).
+
+## Synthesis
+
+### Literals
+
+```
+---------------- (Syn-Bool)        ---------------- (Syn-Bool)
+⊢ true ⇒ bool                      ⊢ false ⇒ bool
+
+---------------- (Syn-Int)         ---------------- (Syn-Hex)
+⊢ n ⇒ int                          ⊢ h ⇒ int
+
+---------------- (Syn-Float)       ---------------- (Syn-String)
+⊢ r ⇒ f64                          ⊢ s ⇒ string
+```
+
+An unannotated number gets the type that keeps what was written: `int` for
+integer and hex literals, `f64` for floats. Any other width is had by
+checking (a hint, or in datafun an expected type).
+
+### Annotation
+
+```
+⊢ e ⇐ T
+------------------ (Syn-TypedExpr)
+⊢ (: T / e) ⇒ T
+```
+
+This is the annotation rule. It is how a term with no synthesizable type,
+such as `none`, gets one, and how a literal gets a width other than its
+default.
+
+### Tuples and structs
+
+```
+⊢ eᵢ ⇒ Tᵢ
+------------------------------------- (Syn-AnonTuple)
+⊢ (e₁, ..., eₙ) ⇒ (T₁, ..., Tₙ)
+
+⊢ eᵢ ⇒ Tᵢ
+------------------------------------------------- (Syn-AnonStruct)
+⊢ {ℓ₁ = e₁, ..., ℓₙ = eₙ} ⇒ {ℓ₁: T₁, ..., ℓₙ: Tₙ}
 ```
 
 ### Collections
-- `[T] = [T']` iff T = T'
-- `%{K = V} = %{K' = V'}` iff K = K' and V = V'
-- `#{T} = #{T'}` iff T = T'
 
-### Option and Result
-- `?T = ?T'` iff T = T'
-- `!T = !T'` iff T = T'
+A non-empty collection takes its element type from its first element; every
+later element must synthesize an equivalent type. An empty one synthesizes
+unit as its element type.
 
-### Tensor
-- `[|T, R|] = [|T', R'|]` iff T = T' and R = R' (same element type and rank)
-
-### Table
-- `{| c1: T1, c2: T2, ... |} = {| c1': T1', c2': T2', ... |}` iff column names and types match in order
-
-### Atom, Term, and Enum
-- `atom A = atom A'` iff A and A' have the same name
-- `term T(P) = term T'(P')` iff T = T' (same name) and P = P' (payload types equivalent)
-- `enum { v1, v2, ... } = enum { v1', v2', ... }` iff variants match (sorted by name)
-
-Each enum variant is either an atom (no payload) or a term (with payload type).
-
-## No Implicit Widening
-
-There is no implicit numeric widening, in datalit or datafun. A value of one
-numeric type is never accepted where another is expected, however lossless the
-conversion would be; datafun converts with the explicit `@` operator, and
-datalit, having no operators, does not convert at all.
-
-A type hint is what makes a datalit value one numeric type rather than
-another, so the rule shows up as a rule about hints: a hint must be the type
-that is expected of it (Check-Hinted).
-
-```datalove
-: [u16] / [: u8 / 42]                  FAIL (a u8 where a u16 is expected)
-: [u16] / [42]                         ok
-: {a: f64} / {a = : f32 / 1.0}         FAIL (floats do not widen either)
-```
-
-## Synthesis Rules (e => T)
-
-Synthesis rules determine what type an expression produces.
-
-### Rule: Syn-TypedExpr
-```
-e : ExprFull with type_hint = Some(T)
-e.expr <= T
-------------------------------------
-e => T
-```
-
-Example:
-```datalove
-: u32 / 42 => u32
-```
-
-### Rule: Syn-Bool
-```
------------------
-true => bool
-
------------------
-false => bool
-```
-
-### Rule: Syn-Int
-```
-n : integer literal
---------------------------------
-n => int
-```
-
-Integer literals without type context synthesize as `int` (arbitrary-precision).
-Use explicit type hints for fixed-width integer types.
-
-Examples:
-```datalove
-42 => int                              ok
-99999999999999999999 => int            ok (arbitrary-precision)
-: u32 / 42 => u32                      ok (explicit type hint)
-: i32 / -42 => i32                     ok (explicit type hint)
-```
-
-### Rule: Syn-Float
-```
-f : float literal (contains decimal point)
-------------------------------------
-f => f64
 ```
+n ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
+----------------------------------------- (Syn-List)        ------------- (Syn-List)
+⊢ [e₁, ..., eₙ] ⇒ [T]                                       ⊢ [] ⇒ [()]
 
-Float literals without type context synthesize as `f64`.
-Use a type hint for `f32`: `: f32 / 3.14`.
-
-Example:
-```datalove
-1.0 => f64
-3.14159 => f64
-: f32 / 3.14 => f32
-```
+n ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
+----------------------------------------- (Syn-Set)         --------------- (Syn-Set)
+⊢ #{e₁, ..., eₙ} ⇒ #{T}                                     ⊢ #{} ⇒ #{()}
 
-### Rule: Syn-Hex
-```
-h : hex literal (0x...)
---------------------------------
-h => int
-```
+n ≥ 1    ⊢ e₁ ⇒ K    ⊢ e₁' ⇒ V    ⊢ eᵢ ⇒ Kᵢ    ⊢ eᵢ' ⇒ Vᵢ    Kᵢ ≡ K    Vᵢ ≡ V
+------------------------------------------------------------------------------ (Syn-Map)
+⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇒ %{K = V}
 
-Hex literals synthesize as `int`. Use type hints for fixed-width types.
-
-Example:
-```datalove
-0xFF => int
-0xFFFFFFFFFF => int                    ok (arbitrary-precision)
-: u64 / 0xFFFFFFFFFF => u64           ok (explicit type hint)
-: f32 / 0xABABABAB => f32             ok (hex as bit pattern)
-: f64 / 0x400921FB54442D18 => f64     ok (hex as f64 bit pattern)
+-------------------------- (Syn-Map)
+⊢ %{} ⇒ %{() = ()}
 ```
 
-### Rule: Syn-String
-```
-s : string literal
---------------------
-"s" => string
-```
+### Tensors and tables
 
-Example:
-```
-"hello" => string
 ```
+m = d₁ × ... × dₖ    m ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
+------------------------------------------------------------- (Syn-Tensor)
+⊢ [| d₁ ... dₖ | e₁ ... eₘ |] ⇒ [|T, k|]
 
-### Rule: Syn-AnonTuple
+------------------------------------------- (Syn-Tensor)
+⊢ [| d₁ ... dₖ | |] ⇒ [|(), k|]
 ```
-for all i: ei => Ti
------------------------------------
-(e1, e2, ..., en) => (T1, T2, ..., Tn)
-```
 
-Anonymous tuples are synthesized by synthesizing each element independently.
+The rank `k` is the number of extents in the shape. A tensor with elements
+has exactly `d₁ × ... × dₖ` of them; one with none, whose shape has a zero
+extent, synthesizes unit as its element type.
 
-Example:
-```datalove
-(true, 42, 3.14) => (bool, int, f64)
 ```
+m ≥ 1    |ēⱼ| = n    ⊢ e₁ᵢ ⇒ Tᵢ    ⊢ eⱼᵢ ⇒ Tⱼᵢ    Tⱼᵢ ≡ Tᵢ
+--------------------------------------------------------------- (Syn-Table)
+⊢ {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |} ⇒ {| ℓ₁: T₁, ..., ℓₙ: Tₙ |}
 
-### Rule: Syn-AnonStruct
+------------------------------------------------------- (Syn-Table)
+⊢ {| ℓ₁, ..., ℓₙ |} ⇒ {| ℓ₁: (), ..., ℓₙ: () |}
 ```
-for all i: ei => Ti (for field fi = ei)
--------------------------------------------
-{f1 = e1, f2 = e2, ...} => {f1: T1, f2: T2, ...}
-```
-
-Anonymous structs are synthesized by synthesizing each field value independently.
 
-Example:
-```datalove
-{x = 42, y = 3.14} => {x: int, y: f64}
-```
+Every row has one element per column. Each column takes its type from the
+first row, as a list's element type comes from its first element.
 
-### Rule: Syn-List
-```
-n >= 1
-e1 => T
-for all i in [2..n]: ei => T' where T = T'
--------------------------------------------
-[e1, e2, ..., en] => [T]
-```
+### Constructors
 
-Lists are synthesized by synthesizing all elements and ensuring they have
-the same type. The first element determines the expected type. Empty lists
-synthesize as `[()]` (list of unit).
-
-Example:
-```datalove
-[1, 2, 3] => [int]
-[] => [()]                              (empty list, unit element type)
 ```
+⊢ e ⇒ T                       ⊢ e ⇒ T
+------------------ (Syn-Some)   ---------------- (Syn-Ok)
+⊢ some e ⇒ ?T                   ⊢ ok e ⇒ !T
 
-### Rule: Syn-Set
-```
-n >= 1
-e1 => T
-for all i in [2..n]: ei => T' where T = T'
--------------------------------------------
-#{e1, e2, ..., en} => #{T}
+⊢ e ⇒ T                       ⊢ e ⇒ T
+------------------ (Syn-Data)   ---------------------- (Syn-Error)
+⊢ data e ⇒ data                 ⊢ error e ⇒ error
 ```
 
-Sets are synthesized by synthesizing all elements and ensuring they have
-the same type. Empty sets synthesize as `#{()}`.
+`data` and `error` are existential packages: the payload's type is forgotten
+in the result's type, but the payload must still have one of its own. So
+`data none` is an error and `data : ?u32 / none` is not.
 
-Example:
 ```
-#{true, false} => #{bool}
-#{} => #{()}                       (empty set, unit element type)
+------------------------ (Syn-Atom)       ⊢ e ⇒ T
+⊢ atom a ⇒ atom a                         -------------------------- (Syn-Term)
+                                          ⊢ term a e ⇒ term a T
 ```
 
-### Rule: Syn-Map
-```
-n >= 1
-k1 => K, v1 => V
-for all i in [2..n]: ki => K' where K = K'
-for all i in [2..n]: vi => V' where V = V'
---------------------------------------------
-%{k1 = v1, k2 = v2, ...} => %{K = V}
-```
-
-Maps are synthesized by synthesizing all keys and values. Empty maps
-synthesize as `%{() = ()}`.
-
-Example:
-```datalove
-%{1 = 10, 2 = 20} => %{int = int}
-%{} => %{() = ()}                   (empty map, unit key/value types)
-```
-
-### Rule: Syn-Tensor
-```
-shape = [d1, d2, ..., dn]
-elements.len() == d1 * d2 * ... * dn
-all elements synthesize to same type T
------------------------------------------
-[| e1 e2 ... |] => [|T, n|]
-```
+An atom or term literal synthesizes its own singleton type, not an enum.
 
-Tensors are synthesized if non-empty and all elements have the same type.
-Rank is the length of the shape vector. Empty tensors synthesize as `tensor<(), N>`.
+`none`, `er e` and `enum {e}` have no synthesis rule. Each is a value of many
+types (any option, any result, any enum listing the variant), so it needs an
+expected type, from a hint or from its position. Synthesizing one is T016.
 
-### Rule: Syn-Table
-```
-every row has one element per column c1 ... cn
-the first row's elements synthesize to T1 ... Tn
-every later row's element in column ci synthesizes to Ti
----------------------------------------------------------
-{| c1, ..., cn; row1; row2; ... |} => {| c1: T1, ..., cn: Tn |}
-```
+## Checking
 
-Each column takes its type from its first row, as a list takes its element
-type from its first element, and a later row that disagrees is T060. A table
-with no rows synthesizes with unit columns, as the empty collections do. As
-the datafun typechecker does, so a table literal no longer needs a hint.
+### Annotation
 
-### Rule: Syn-Some
-```
-e => T
----------------------------
-some e => ?T
 ```
-
-The `some` constructor synthesizes an Option type.
-
-Example:
-```datalove
-some 42 => ?int
-some "hello" => ?string
+T₀ ≡ T    ⊢ e ⇐ T
+--------------------- (Check-Hinted)
+⊢ (: T₀ / e) ⇐ T
 ```
 
-### Rule: Syn-Ok
-```
-e => T
----------------------------
-ok e => !T
-```
+A hint names the type of the expression it is on, and that must be the
+expected type. It is not a conversion: `: [u16] / [: u8 / 42]` fails, because
+the element is a `u8` where a `u16` is expected (T040).
 
-The `ok` constructor synthesizes a Result type.
+### Subsumption
 
-Example:
 ```
-ok 42 => !int
+⊢ e ⇒ T'    T' ≡ T
+--------------------- (Check-Subsume)
+⊢ e ⇐ T
 ```
 
-### Rule: Syn-Data
-```
-e => T
----------------------------
-data e => data
-```
+The mode switch: an expression that synthesizes can be checked against any
+equivalent type. Because `≡` is equality and not subtyping, this rule never
+converts anything. It is the fallback, used only when no rule below matches
+the pair of expression form and expected type (see
+[Rule selection](#user-content-rule-selection)).
 
-Data expressions synthesize as `data` type.
+### Numeric literals
 
-### Rule: Syn-Error
 ```
-msg => T
-------------------------
-error msg => error
-```
+n ∈ ⟦I⟧                       r a float literal    F ∈ {f32, f64}
+-------------- (Check-Int)    ------------------------------------ (Check-Float)
+⊢ n ⇐ I                       ⊢ r ⇐ F
 
-Error values always synthesize as `error` type.
+h ∈ ⟦I⟧    I ∈ {u8, u16, u32, u64, index, int}
+---------------------------------------------- (Check-Hex)
+⊢ h ⇐ I
 
-Example:
-```datalove
-error "oops" => error
+h < 2³²                       h < 2⁶⁴
+-------------- (Check-Hex)    -------------- (Check-Hex)
+⊢ h ⇐ f32                     ⊢ h ⇐ f64
 ```
 
-### Rule: Syn-None
-```
------------------
-Cannot synthesize type for none (needs context)
-```
+`⟦I⟧` is the set of integers type `I` represents:
 
-`none` can only be checked, not synthesized.
+| `I` | `⟦I⟧` |
+|-----|-------|
+| `uN` | `[0, 2ᴺ - 1]` |
+| `iN` | `[-2ᴺ⁻¹, 2ᴺ⁻¹ - 1]` |
+| `index` | `[0, 2ʷ - 1]`, `w` = 32, or 64 with the `index-64` feature |
+| `offset` | `[-2ʷ⁻¹, 2ʷ⁻¹ - 1]`, the same `w` |
+| `int` | ℤ |
 
-### Rule: Syn-Er
-```
------------------
-Cannot synthesize type for er (needs context)
-```
+A hex literal is a bit pattern. It checks against the unsigned integer types,
+`int`, and the floats, as the IEEE 754 encoding of the float. It has no sign
+and does not check against a signed type: `: i32 / 0xFF` falls through to
+`Check-Subsume`, where `int ≢ i32`.
 
-`er` cannot be synthesized - requires Result type context.
+An integer literal does not check against a float type and a float literal
+does not check against an integer type. Both fall through to `Check-Subsume`
+and fail.
 
-### Rule: Syn-Atom
-```
------------------
-atom A => atom A
-```
+### Tuples and structs
 
-### Rule: Syn-Term
 ```
-e => T
------------------
-term A e => term A T
-```
+⊢ eᵢ ⇐ Tᵢ
+------------------------------------- (Check-AnonTuple)
+⊢ (e₁, ..., eₙ) ⇐ (T₁, ..., Tₙ)
 
-### Rule: Syn-Enum
-```
------------------
-Cannot synthesize type for enum { v } (needs context)
+⊢ eᵢ ⇐ Tᵢ
+------------------------------------------------- (Check-AnonStruct)
+⊢ {ℓ₁ = e₁, ..., ℓₙ = eₙ} ⇐ {ℓ₁: T₁, ..., ℓₙ: Tₙ}
 ```
 
-## Checking Rules (e <= T)
+The literal and the type have the same length, and in a struct the same
+field names in the same order. A tuple of the wrong length is T038; a struct
+with the wrong number of fields is T039, and with a field out of place T042.
 
-Checking rules verify an expression against an expected type.
+### Collections
 
-### Rule: Check-Subsume
 ```
-e => T'
-T' = T
------------
-e <= T
-```
-
-This is the key rule that allows synthesizing expressions to be checked.
-
-### Rule: Check-Int (all integer types)
-```
-n : integer literal
-n fits in u8 range
---------------------------------
-n <= u8
-
-n fits in i8 range
---------------------------------
-n <= i8
-
-... (similarly for u16, i16, u32, i32, u64, i64, index, offset)
-
-any integer literal
---------------------------------
-n <= int
-```
+⊢ eᵢ ⇐ T                          ⊢ eᵢ ⇐ T
+------------------------ (Check-List)   ------------------------ (Check-Set)
+⊢ [e₁, ..., eₙ] ⇐ [T]              ⊢ #{e₁, ..., eₙ} ⇐ #{T}
 
-Examples:
-```datalove
-: u32 / 42                              ok
-: int / 42                              ok
-: u32 / -1                              FAIL (negative, out of range for u32)
-: i32 / -1                              ok
-: int / -1                              ok
-: int / 99999999999999999999            ok
-: u32 / 99999999999999999999            FAIL (out of range)
+⊢ eᵢ ⇐ K    ⊢ eᵢ' ⇐ V
+-------------------------------------- (Check-Map)
+⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇐ %{K = V}
 ```
 
-### Rule: Check-Hinted
-```
-e : ExprFull with type_hint = Some(T_hint)
-T_hint = T
-e.expr <= T
-------------------------------------------------
-: T_hint / e.expr <= T
-```
+With `n = 0` these have no premises, so an empty collection checks against a
+collection of any element type.
 
-Applies before every other checking rule. The hint has to be the expected
-type exactly; it is not a conversion. Parentheses keep a hint of their own
-where they are themselves under one, so `: u32 / (: u8 / 1)` is a `u8` where a
-`u32` is expected, and fails.
-
-Example:
-```datalove
-: [u16] / [: u8 / 10]                  FAIL (u8 is not u16)
-: [u8] / [: u8 / 10]                   ok
-```
+### Tensors and tables
 
-### Rule: Check-Float
-```
-f : float literal
---------------------------------
-f <= f32
-
-f : float literal
---------------------------------
-f <= f64
 ```
+d₁ × ... × dₖ = m    ⊢ eᵢ ⇐ T
+----------------------------------------- (Check-Tensor)
+⊢ [| d₁ ... dₖ | e₁ ... eₘ |] ⇐ [|T, k|]
 
-Float literals check against both `f32` and `f64`.
-
-### Rule: Check-Hex
-```
-h : hex literal (0x..., non-negative)
-h fits in u8 range
---------------------------------
-h <= u8
-
-... (similarly for u16, u32, u64, index)
-
-any hex literal
---------------------------------
-h <= int
-
-h fits in 32 bits (non-negative)
---------------------------------
-h <= f32  (as IEEE 754 bit pattern)
-
-h fits in 64 bits (non-negative)
---------------------------------
-h <= f64  (as IEEE 754 bit pattern)
+|ēⱼ| = n    ⊢ eⱼᵢ ⇐ Tᵢ
+--------------------------------------------------------------- (Check-Table)
+⊢ {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |} ⇐ {| ℓ₁: T₁, ..., ℓₙ: Tₙ |}
 ```
 
-Hex literals can check against unsigned integer types, `int`, and float
-types (as bit patterns). They cannot check against signed integer types.
-
-Examples:
-```datalove
-: u8 / 0xFF                             ok
-: u32 / 0xFFFFFFFF                      ok
-: int / 0xFFFFFFFFFF                    ok
-: f32 / 0x3F800000                      ok (IEEE 754 bit pattern for 1.0)
-: f64 / 0x3FF0000000000000              ok (IEEE 754 bit pattern for 1.0)
-: i32 / 0xFF                            FAIL (hex cannot check against signed)
-: i32 / -0x1                            FAIL (a hex literal takes no sign)
-```
+The shape's rank must be the type's `k` (else T048) and the element count
+must match the shape (T049). The table's columns must be the type's, by name
+and in order (T054 for the count, T055 for a name), and every row has one
+element per column (T056).
 
-### Rule: Check-AnonTuple
-```
-(T1, T2, ..., Tn) is expected type
-length matches
-for all i: ei <= Ti
-----------------------------------
-(e1, e2, ..., en) <= (T1, T2, ..., Tn)
-```
+### Option and result constructors
 
-### Rule: Check-AnonStruct
 ```
-{f1: T1, f2: T2, ...} is expected type
-fields match (same names, same order)
-for all i: ei <= Ti
------------------------------------------
-{f1 = e1, f2 = e2, ...} <= {f1: T1, f2: T2, ...}
-```
+------------- (Check-None)    ⊢ e ⇐ T
+⊢ none ⇐ ?T                   ----------------- (Check-Some)
+                              ⊢ some e ⇐ ?T
 
-### Rule: Check-List
-```
-[T] is expected type
-for all ei in elements: ei <= T
-------------------------------
-[e1, e2, ...] <= [T]
+⊢ e ⇐ T                       ⊢ e ⇐ error
+--------------- (Check-Ok)    ---------------- (Check-Er)
+⊢ ok e ⇐ !T                   ⊢ er e ⇐ !T
 ```
 
-Empty lists check against any list type.
+The payload of `er` is the error, so a failure is written
+`er error "failed"`. There is no rule `⊢ error e ⇐ !T`: an error does not
+become a result by being where one is expected.
 
-### Rule: Check-Map
-```
-%{K = V} is expected type
-for all (ki, vi) in entries: ki <= K and vi <= V
-------------------------------------------------
-%{k1 = v1, k2 = v2, ...} <= %{K = V}
-```
+### Data and error
 
-### Rule: Check-Set
 ```
-#{T} is expected type
-for all ei in elements: ei <= T
-------------------------------
-#{e1, e2, ...} <= #{T}
+⊢ e ⇒ T                         ⊢ e ⇒ T
+--------------------- (Check-Data)   ---------------------- (Check-Error)
+⊢ data e ⇐ data                 ⊢ error e ⇐ error
 ```
 
-### Rule: Check-Tensor
-```
-[|T, R|] is expected type
-rank matches R
-element count matches product of shape dimensions
-for all ei: ei <= T
------------------------------------------------
-[| e1 ... |] <= [|T, R|]
-```
+These are derivable from `Syn-Data`, `Syn-Error` and `Check-Subsume`; the
+checker handles them directly. There is no rule `⊢ e ⇐ data` for other
+forms: a value is a `data` only when written as one.
 
-### Rule: Check-Table
-```
-{| c1: T1, c2: T2, ... |} is expected type
-column count matches
-column names match in order
-for all rows: row element count matches column count
-for all row elements: ei <= Ti (column type)
------------------------------------------------
-{| headers; rows... |} <= {| c1: T1, c2: T2, ... |}
-```
+### Atoms, terms and enums
 
-### Rule: Check-None
 ```
---------------
-none <= ?T
-```
+------------------- (Check-Atom)    atom a ∈ E
+⊢ atom a ⇐ atom a                   ---------------- (Check-AtomVariant)
+                                    ⊢ atom a ⇐ E
 
-`none` checks against any option type.
+⊢ e ⇐ T                             term a T ∈ E    ⊢ e ⇐ T
+------------------------- (Check-Term)    -------------------------- (Check-TermVariant)
+⊢ term a e ⇐ term a T               ⊢ term a e ⇐ E
 
-### Rule: Check-Some
-```
-e <= T
---------------
-some e <= ?T
+⊢ e ⇐ E
+------------------- (Check-Enum)
+⊢ enum {e} ⇐ E
 ```
 
-The `some` constructor checks payload against inner type.
-
-### Rule: Check-Ok
-```
-e <= T
---------------
-ok e <= !T
-```
+`v ∈ E` means `v` is one of `E`'s variants. These rules are what make an atom
+or term literal a value of an enum: they apply to literals only, and there is
+no subtyping `atom a <: E` behind them. In datafun, an atom held in a
+variable keeps its singleton type and is widened to an enum with `@`.
 
-The `ok` constructor checks payload against inner type.
+A name mismatch, or a variant that is not in the enum, is T057; an enum
+literal checked against a type that is not an enum is T058.
 
-### Rule: Check-Er
-```
-e <= error
---------------
-er e <= !T
-```
+## Rule selection
 
-The `er` constructor for Results. The payload is the error the result holds,
-and is checked against `error`, so it is written `er error "failed"`. An
-`error` does not check against `!T` by itself: there is no implicit wrapping,
-in datalit or datafun.
+The rules are syntax-directed: for a given expression form, and in checking
+mode a given head constructor of the expected type, at most one rule applies.
+The checker (`check` in `check.rs`) decides which in this order:
 
-### Rule: Check-Data
-```
-e => T
-----------------------
-data e <= data
-```
+1. A hinted expression is checked by `Check-Hinted`, whose premise
+   `⊢ e ⇐ T` continues with the steps below.
+2. If a rule above matches the form of `e` and the head of `T`, it is the
+   only rule tried. Failing a premise is an error; the checker does not fall
+   back to subsumption. So `[1, 2] ⇐ [u8]` uses `Check-List` and checks each
+   element against `u8`.
+3. `none` or `er e` against anything but an option or result is T032.
+4. Otherwise `Check-Subsume` applies. For `true`, `false` and string
+   literals its failure is reported as T022, and for anything else as T032.
 
-### Rule: Check-Error
-```
-e => T
-----------------------
-error e <= error
-```
+A derivation is therefore unique when it exists, and the checker either
+finds it or reports the first premise that fails.
 
-The payload has to synthesize a type of its own, which is the type the value
-carries, so `data none` is an error and `data : ?u32 / none` is not.
+## Consequences
 
-### Rule: Check-Atom
-```
-----------------------
-atom A <= atom A
-
-atom A is a variant of E
-----------------------
-atom A <= E
-```
+Some properties follow from the rules and are worth stating outright.
 
-### Rule: Check-Term
-```
-e <= T
-----------------------
-term A e <= term A T
-
-term A T is a variant of E    e <= T
-----------------------
-term A e <= E
-```
+- **No implicit widening.** No rule relates two different numeric types, so a
+  `u8` is never accepted where a `u16` is. Datalit has no operators and so no
+  way to convert; datafun converts with `@`.
+- **Literals are polymorphic only under checking.** `42` checks against any
+  integer type it fits but synthesizes `int`, so `[: u8 / 1, 2]` fails (T018:
+  the second element is an `int`) while `: [u8] / [1, 2]` succeeds.
+- **Empty collections.** `[]` checks against every list type and synthesizes
+  `[()]`; the same holds for sets, maps, tables and tensors.
+- **A tensor's shape is the parser's business.** The parser refuses a body
+  that does not fill its shape (D041), so the element-count premises of
+  `Syn-Tensor` and `Check-Tensor` (T051, T049) only guard ASTs built some
+  other way. An empty tensor such as `[| 0 3 | |]` is the one with no
+  elements.
 
-### Rule: Check-Enum
-```
-v <= E    E is an enum type
-----------------------
-enum { v } <= E
-```
+## Diagnostics
 
-An atom or term checks against an enum listing it without the
-`enum { }` wrapper, as it does in datafun.
-
-## Type Error Codes
-
-The type checker produces the following diagnostic codes:
-
-| Code | Context | Description |
-|------|---------|-------------|
-| T005 | int/hex | u8 out of range |
-| T006 | int/hex | i8 out of range |
-| T007 | int/hex | u16 out of range |
-| T008 | int/hex | i16 out of range |
-| T009 | int/hex | u32 out of range |
-| T010 | int/hex | i32 out of range |
-| T011 | int/hex | u64 out of range |
-| T012 | int/hex | i64 out of range |
-| T013 | hex | f32 bit pattern out of range |
-| T014 | hex | f64 bit pattern out of range |
-| T015 | int/hex | index out of range |
-| T016 | synth | Cannot synthesize type for none, er or an enum literal |
-| T017 | synth | Cannot type-check expression with parse errors |
-| T018 | synth | List element type mismatch |
-| T019 | synth | Set element type mismatch |
-| T020 | synth | Map key type mismatch |
-| T021 | synth | Map value type mismatch |
-| T022 | check | Primitive literal type mismatch (bool, string) |
-| T032 | check | General type mismatch (subsumption fallback) |
-| T038 | check | Tuple arity mismatch |
-| T039 | check | Struct arity mismatch |
-| T040 | check | Type hint mismatch / er payload must be error |
-| T042 | check | Struct field order mismatch |
+| Code | Mode | Meaning |
+|------|------|---------|
+| T005-T012 | check | Integer or hex literal out of range for `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `u64`, `i64`, in that order |
+| T013 | check | Hex literal too wide for an `f32` bit pattern |
+| T014 | check | Hex literal too wide for an `f64` bit pattern |
+| T015 | check | Integer or hex literal out of range for `index` |
+| T016 | synth | No synthesis rule: `none`, `er e` or `enum {e}` with nothing expected |
+| T016 | check | Integer literal out of range for `offset` (shares the code above; see below) |
+| T017 | synth | Expression contains a parse error |
+| T018 | synth | List element differs from the first |
+| T019 | synth | Set element differs from the first |
+| T020 | synth | Map key differs from the first |
+| T021 | synth | Map value differs from the first |
+| T022 | check | `true`, `false` or a string literal against another type |
+| T032 | check | `Check-Subsume` failed, or `none` / `er` against a non-option / non-result |
+| T038 | check | Tuple length mismatch |
+| T039 | check | Struct field count mismatch |
+| T040 | check | Hint differs from the expected type |
+| T042 | check | Struct field out of order or misnamed |
 | T048 | check | Tensor rank mismatch |
-| T049 | check | Tensor element count mismatch |
-| T051 | synth | Tensor element count mismatch |
-| T052 | synth | Tensor element type mismatch |
+| T049 | check | Tensor element count does not match the shape |
+| T051 | synth | Tensor element count does not match the shape |
+| T052 | synth | Tensor element differs from the first |
 | T054 | check | Table column count mismatch |
 | T055 | check | Table column name mismatch |
-| T056 | check | Table row column count mismatch |
-| T057 | check | Atom or term is not the expected atom, term or enum variant |
-| T058 | check | Enum literal checked against a type that is not an enum |
-| T059 | hint | Unknown type name in a type hint |
-| T060 | synth | Table column type mismatch with the first row |
+| T056 | both | Table row with the wrong number of elements |
+| T057 | check | Atom or term is not the expected one, or not a variant of the expected enum |
+| T058 | check | Enum literal against a type that is not an enum |
+| T059 | hint | A bare name in a hint; datalit has no type aliases |
+| T060 | synth | Table element differs from its column's first row |
 
-## Design Decisions Summary
+T016 is assigned twice: `int_type_range_info` in `types.rs` gives it to an
+out-of-range `offset`, which collides with "cannot synthesize". The offset
+range error should get a code of its own.
 
-### 1. Empty collections
+## Implementation
 
-Empty collections synthesize with unit element type, and check against any element type:
+The checker is `synthesize` and `check` in
+`crates/datalove-datalit/src/tycheck/`, one function per judgment, with
+`synthesize_unhinted` for synthesis that ignores a hint the caller has
+already compared (`Check-Subsume` after `Check-Hinted`). `type_check` in
+`api.rs` synthesizes a root expression; `type_check_with_expected` checks it
+against a type the caller supplies, which is how datafun checks a
+`require data` file against its declared type.
 
-```datalove
-[] => [()]                   (synthesis: unit element type)
-: [u32] / []                 ok (checking: any element type)
-#{} => #{()}            (synthesis)
-: #{u32} / #{}          ok (checking)
-%{} => %{() = ()}        (synthesis)
-: %{u32 = string} / %{}  ok (checking)
-{| x, y |} => {| x: (), y: () |}            (synthesis)
-: {| x: u32, y: string |} / {| x, y |}      ok (checking)
-```
+`Type` in `types.rs` has one variant per type former above, plus `Var`, a
+type parameter of an enclosing datafun generic function. Datalit itself
+never produces a `Var`; `Var(a) ≡ Var(b)` iff `a = b`, and a `Var` is
+equivalent to nothing else.
 
-### 2. Field order in anonymous structs
+## References
 
-Field order must match:
-
-```datalove
-{x: u32, y: bool} != {y: bool, x: u32}
-```
-
-### 3. Default numeric types
-
-Bare numeric literals synthesize to concrete types:
-- Integer literals -> `int` (arbitrary-precision)
-- Float literals -> `f64`
-- Hex literals -> `int` (arbitrary-precision)
-
-Use explicit type hints for fixed-width numeric types:
-```datalove
-: u32 / 42                              unsigned 32-bit
-: i64 / -42                             signed 64-bit
-: u8 / 255                              unsigned 8-bit
-: f32 / 3.14                            32-bit float
-```
-
-### 4. Explicit Option/Result constructors
-
-Option and Result values use explicit constructors:
-- `none` for Option's None
-- `some x` for Option's Some
-- `ok x` for Result's Ok
-- `er error "msg"` for Result's Err
-
-### 5. Anonymous composite type synthesis
-
-Anonymous composite types can be synthesized when all their components can be synthesized:
-- **Tuples**: `(true, 42)` synthesizes as `(bool, int)`
-- **Structs**: `{x = 42}` synthesizes as `{x: int}`
-- **Lists**: `[1, 2, 3]` synthesizes as `[int]`
-- **Sets**: `#{true, false}` synthesizes as `#{bool}`
-- **Maps**: `%{1 = 10}` synthesizes as `%{int = int}`
-
-For collections (lists, sets, maps), all elements/keys/values must have the
-same type. The first element determines the expected type for the rest.
-
-### 6. Data and Error types
-
-- `data` type represents opaque data values
-- `error` type represents error values with messages
-- An error becomes a Result's failure only under `er`
-
-### 7. Hex literal type restrictions
-
-Hex literals check against unsigned integer types (`u8`, `u16`, `u32`, `u64`,
-`index`), `int`, and float types (`f32`, `f64` as IEEE 754 bit patterns).
-They do NOT check against signed integer types.
-
-## Implementation Notes
-
-### Bidirectional algorithm structure
-
-```rust
-fn synthesize(ctx, expr: ExprFull) -> Result<Type, TypeError>
-fn check(ctx, expr: ExprFull, expected: Type) -> Result<(), TypeError>
-```
-
-### Type representation
-
-The `Type` enum in `crates/datalove-datalit/src/tycheck/types.rs` includes:
-- Primitives: Bool, U8, I8, U16, I16, U32, I32, U64, I64, Index, Offset, F32, F64, Int, String
-- Composites: AnonTuple, AnonStruct
-- Collections: List, Map, Set
-- Wrappers: Option, Result
-- Tagged: Atom, Term, Enum
-- Special: Tensor, Table, Data, Error
-- Type parameters: Var (a type parameter of the enclosing generic function)
+- Benjamin C. Pierce and David N. Turner, "Local Type Inference", TOPLAS
+  2000. The origin of the synthesis/checking split.
+- Jana Dunfield and Neel Krishnaswami, "Bidirectional Typing", ACM
+  Computing Surveys 2021. Notation, mode-correctness, the annotation and
+  subsumption rules, and the Pfenning recipe: introduction forms check,
+  elimination forms synthesize.
+- Benjamin C. Pierce, *Types and Programming Languages*, MIT Press 2002.
+  Inference-rule notation.
