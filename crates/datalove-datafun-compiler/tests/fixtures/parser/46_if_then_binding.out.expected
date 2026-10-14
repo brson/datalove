@@ -11,6 +11,7 @@
         },
         "else_body": null,
         "kind": "If",
+        "then_binding": "val",
         "then_body": [
           {
             "kind": "Let",

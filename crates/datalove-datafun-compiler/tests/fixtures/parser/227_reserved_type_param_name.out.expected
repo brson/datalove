@@ -24,7 +24,13 @@
             "type_hint": "Bool"
           }
         ],
-        "return_type": "Bool"
+        "return_type": "Bool",
+        "type_bounds": [
+          null
+        ],
+        "type_params": [
+          "bool"
+        ]
       }
     ]
   },

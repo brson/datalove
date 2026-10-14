@@ -18,6 +18,7 @@
         },
         "value": {
           "expr": {
+            "data_alias": "values",
             "kind": "DataFile",
             "path": "local/app/values"
           }

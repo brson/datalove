@@ -146,6 +146,12 @@ pub enum FieldSelector {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtFun {
     pub name: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub inline: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_params: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_bounds: Vec<Option<String>>,
     pub params: Vec<FunParam>,
     pub return_type: Option<datalove_datalit::ast_serde::TypeHint>,
     pub body: Vec<Statement>,
@@ -201,6 +207,10 @@ pub struct StmtImport {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtIf {
     pub condition: ExprFun,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub then_binding: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub else_binding: Option<String>,
     pub then_body: Vec<Statement>,
     pub else_body: Option<Vec<Statement>>,
 }
@@ -242,6 +252,10 @@ pub struct StmtTypeAlias {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StmtNativeFun {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_params: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub type_bounds: Vec<Option<String>>,
     pub params: Vec<FunParam>,
     pub return_type: Option<datalove_datalit::ast_serde::TypeHint>,
 }
@@ -350,12 +364,18 @@ pub struct ExprFunctionCall {
     pub qualifier: Option<String>,
     pub name: String,
     pub args: Vec<ExprFun>,
+    /// The mode written before each argument, where any was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arg_modes: Option<Vec<Option<ParamMode>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprIntrinsicCall {
     pub name: String,
     pub args: Vec<ExprFun>,
+    /// The mode written before each argument, where any was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub arg_modes: Option<Vec<Option<ParamMode>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -580,6 +600,7 @@ pub struct ExprData {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ExprDataFile {
     pub path: String,
+    pub data_alias: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -643,6 +664,8 @@ impl StmtNativeFun {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtNativeFun<'db>) -> Self {
         StmtNativeFun {
             name: ast.name.as_str(db).to_string(),
+            type_params: ast.type_params.iter().map(|t| t.as_str(db).to_string()).collect(),
+            type_bounds: bounds(&ast.type_bounds),
             params: ast.params.iter().map(|p| FunParam::from_ast(db, p)).collect(),
             return_type: ast.return_type.clone().map(|th| datalove_datalit::ast_serde::TypeHint::from_ast(db, th)),
         }
@@ -746,6 +769,9 @@ impl StmtFun {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: crate::ast::StmtFun<'db>) -> Self {
         StmtFun {
             name: ast.name(db).as_str(db).to_string(),
+            inline: ast.signature(db).inline,
+            type_params: ast.type_params(db).iter().map(|t| t.as_str(db).to_string()).collect(),
+            type_bounds: bounds(ast.type_bounds(db)),
             params: ast.params(db).iter().map(|p| FunParam::from_ast(db, p)).collect(),
             return_type: ast.return_type(db).map(|rt| datalove_datalit::ast_serde::TypeHint::from_ast(db, rt)),
             body: ast.body(db).iter().map(|s| Statement::from_ast(db, s)).collect(),
@@ -815,6 +841,8 @@ impl StmtIf {
     pub fn from_ast<'db>(db: &'db dyn Db, ast: &crate::ast::StmtIf<'db>) -> Self {
         StmtIf {
             condition: ExprFun::from_ast(db, ast.condition),
+            then_binding: ast.then_binding.map(|b| b.as_str(db).to_string()),
+            else_binding: ast.else_binding.map(|b| b.as_str(db).to_string()),
             then_body: ast.then_body.iter().map(|s| Statement::from_ast(db, s)).collect(),
             else_body: ast.else_body.as_ref().map(|stmts| {
                 stmts.iter().map(|s| Statement::from_ast(db, s)).collect()
@@ -918,7 +946,7 @@ impl ExprFunKind {
             crate::ast::ExprFunKind::Ok(e) => ExprFunKind::Ok(ExprOk::from_ast(db, e)),
             crate::ast::ExprFunKind::Er(e) => ExprFunKind::Er(ExprEr::from_ast(db, e)),
             crate::ast::ExprFunKind::Data(e) => ExprFunKind::Data(ExprData::from_ast(db, e)),
-            crate::ast::ExprFunKind::DataFile(e) => ExprFunKind::DataFile(ExprDataFile { path: e.path(db) }),
+            crate::ast::ExprFunKind::DataFile(e) => ExprFunKind::DataFile(ExprDataFile { path: e.path(db), data_alias: e.data_alias.as_str(db).to_string() }),
             crate::ast::ExprFunKind::Error(e) => ExprFunKind::Error(ExprError::from_ast(db, e)),
 
             // Table expression.
@@ -957,6 +985,7 @@ impl ExprIntrinsicCall {
         ExprIntrinsicCall {
             name: ast.name.as_str(db).to_string(),
             args: ast.args.iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
+            arg_modes: modes(&ast.arg_modes),
         }
     }
 }
@@ -977,6 +1006,7 @@ impl ExprFunctionCall {
             qualifier: ast.qualifier(db).map(|q| q.as_str(db).to_string()),
             name: ast.name(db).as_str(db).to_string(),
             args: ast.args(db).iter().map(|a| ExprFun::from_ast(db, *a)).collect(),
+            arg_modes: modes(ast.arg_modes(db)),
         }
     }
 }
@@ -1276,4 +1306,15 @@ impl ExprError {
             value: Box::new(ExprFun::from_ast(db, ast.value)),
         }
     }
+}
+
+/// Type bounds as written, by their debug names.
+fn bounds(bounds: &[Option<crate::ast::TypeBound>]) -> Vec<Option<String>> {
+    bounds.iter().map(|b| b.map(|b| format!("{b:?}"))).collect()
+}
+
+/// Argument modes, absent where none was written at all.
+fn modes(modes: &[Option<crate::ast::ParamMode>]) -> Option<Vec<Option<ParamMode>>> {
+    modes.iter().any(Option::is_some)
+        .then(|| modes.iter().map(|m| m.map(ParamMode::from_ast)).collect())
 }

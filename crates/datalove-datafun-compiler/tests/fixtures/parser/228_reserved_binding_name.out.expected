@@ -33,6 +33,7 @@
         },
         "else_body": null,
         "kind": "If",
+        "then_binding": "none",
         "then_body": [
           {
             "kind": "DebugLog",

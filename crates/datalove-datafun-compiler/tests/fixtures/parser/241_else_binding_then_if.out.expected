@@ -9,6 +9,7 @@
             "steps": []
           }
         },
+        "else_binding": "e",
         "else_body": [
           {
             "condition": {
@@ -36,6 +37,7 @@
           }
         ],
         "kind": "If",
+        "then_binding": "v",
         "then_body": [
           {
             "kind": "Let",

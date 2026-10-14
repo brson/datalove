@@ -10,6 +10,7 @@
         },
         "else_body": null,
         "kind": "If",
+        "then_binding": "x",
         "then_body": []
       }
     ]

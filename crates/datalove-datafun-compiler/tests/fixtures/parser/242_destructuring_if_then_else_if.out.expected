@@ -36,6 +36,7 @@
           }
         ],
         "kind": "If",
+        "then_binding": "v",
         "then_body": [
           {
             "kind": "Let",

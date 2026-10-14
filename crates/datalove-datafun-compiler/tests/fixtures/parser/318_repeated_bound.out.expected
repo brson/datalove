@@ -28,7 +28,13 @@
         ],
         "return_type": {
           "Alias": "T"
-        }
+        },
+        "type_bounds": [
+          "Ord"
+        ],
+        "type_params": [
+          "T"
+        ]
       }
     ]
   },

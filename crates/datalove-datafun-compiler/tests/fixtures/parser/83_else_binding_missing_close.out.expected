@@ -8,6 +8,7 @@
             "type_hint": null
           }
         },
+        "else_binding": "x",
         "else_body": [],
         "kind": "If",
         "then_body": []

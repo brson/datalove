@@ -31,6 +31,10 @@
       {
         "expr": {
           "expr": {
+            "arg_modes": [
+              "Mut",
+              null
+            ],
             "args": [
               {
                 "expr": {
@@ -66,6 +70,9 @@
                 "kind": "TryOption",
                 "operand": {
                   "expr": {
+                    "arg_modes": [
+                      "Ref"
+                    ],
                     "args": [
                       {
                         "expr": {
