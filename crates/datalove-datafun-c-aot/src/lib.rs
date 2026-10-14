@@ -476,6 +476,7 @@ impl CAotCompiler {
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_dyn_binop_checked(void* rt, uint8_t op, const void* lhs, const dtlv_tydesc_t* lhs_td, const void* rhs, const dtlv_tydesc_t* rhs_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
         writeln!(out, "extern uint8_t dtlv_rti_dyn_neg_checked(void* rt, const void* value, const dtlv_tydesc_t* value_td, void* out, const dtlv_tydesc_t* out_td, bool_t* overflow_out);").unwrap();
+        writeln!(out, "extern uint8_t dtlv_rti_dyn_unop(void* rt, uint8_t op, const void* value, const dtlv_tydesc_t* value_td, void* out, const dtlv_tydesc_t* out_td);").unwrap();
         writeln!(out).unwrap();
 
         // Rider functions, which the linker resolves against the native

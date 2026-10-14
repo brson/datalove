@@ -193,6 +193,18 @@ pub enum PendingDiagnostic<'db> {
         module_id: Option<ModuleId<'db>>,
         name: InternedText<'db>,
     },
+    /// F086: A function defined twice.
+    DuplicateFunction {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
+    /// F086: An import of a name a function here is defined by.
+    ImportShadowsFunction {
+        local_index: u32,
+        module_id: Option<ModuleId<'db>>,
+        name: InternedText<'db>,
+    },
     /// F026: Invalid operand type.
     InvalidOperandType {
         expr_key: ExprKey<'db>,

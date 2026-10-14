@@ -1,0 +1,23 @@
+----------
+module local/test/lib
+----------
+
+fun twice(x: u32): u32
+    ret x
+end fun
+
+----------
+module local/test/user
+----------
+
+require module local/test/lib
+import lib.twice
+
+// A name binds one function: the import is refused and this one stays.
+fun twice(x: u32): string
+    ret "local"
+end fun
+
+fun use_it(): string
+    ret twice(: u32 / 1)
+end fun

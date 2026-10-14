@@ -1201,6 +1201,10 @@ fun name(param1: T1, param2: T2): ReturnType
 end fun
 ```
 
+A function is defined once in a module or script: a second definition of the
+name is F086, and the first is the one that is used. A function is defined at
+the top level only; one inside a block is P074.
+
 Void functions omit the return type and may omit `ret`:
 
 ```datalove
@@ -1645,7 +1649,11 @@ The module system has three levels: library, package, module.
 
 A **library** is a directory of packages (e.g. `sys/`, `local/`).
 A **package** is a directory of modules and data (e.g. `sys/std/`).
-A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`).
+A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`). It defines
+things for others to use, and its top level holds only declarations: `fun`,
+`native fun`, `const`, `type`, `require` and `import`. Any other statement
+there, which would never run, is P077. A script's top level runs from top to
+bottom.
 A **data file** is a single `.dlt` file of datalit (e.g. `local/shop/orders.dlt`),
 which `require data` reads; see Section 9.6.
 
@@ -1680,7 +1688,7 @@ require data local/shop/orders: [{sku: string, qty: u32}]
 ```
 
 A `require` or `import` is read only at the top level of a module or script,
-and one inside a block is P074. Where it stands at the top level does not
+and one inside a block is P074, as is a `fun`, `native fun` or `type`. Where it stands at the top level does not
 matter: the requires and imports are gathered before anything is resolved, so
 a call above the `require` it goes through is fine.
 
@@ -1702,7 +1710,9 @@ import std.string_len
 ```
 
 A name binds one function, so importing a second under a name already bound
-is an error rather than a shadowing. Two modules exporting the same name is
+is an error rather than a shadowing (F059). The same holds between an import
+and a function the module or script defines: the import is refused (F086),
+and the function stays. Two modules exporting the same name is
 ordinary - `min` is in every numeric module - so only one of them can be
 imported into a given scope. In a session the imports arrive on separate
 lines and the rule is the same across them; importing the same function

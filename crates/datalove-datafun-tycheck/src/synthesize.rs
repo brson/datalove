@@ -451,9 +451,14 @@ pub fn synthesize_unhinted<'db>(
 ///
 /// Such a literal synthesizes `int` by default, so its type is a fallback
 /// rather than information. A negated literal counts, since the sign does not
-/// constrain the width either.
+/// constrain the width either. A hinted one does not: `: u8 / 1` says what it
+/// is as plainly as a `u8` variable does.
 fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    match expr.expr(ctx.db) {
+    let kind = expr.expr(ctx.db);
+    if kind.type_hint().is_some() {
+        return false;
+    }
+    match kind {
         ExprFunKind::Int(_) | ExprFunKind::Hex(_) | ExprFunKind::Float(_) => true,
         ExprFunKind::UnaryOp(ref unary) => {
             matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
@@ -800,6 +805,7 @@ fn synthesize_unaryop<'db>(
 
     let bound = operand_bound(ctx, &operand_type);
     let fixedint_bounded = bound == Some(datalove_datafun_ast::ast::TypeBound::FixedInt);
+    let float_bounded = bound == Some(datalove_datafun_ast::ast::TypeBound::Float);
 
     // Boolean not requires bool operand.
     if matches!(op, UnaryOp::Not) {
@@ -810,7 +816,7 @@ fn synthesize_unaryop<'db>(
                 &type_to_string(db, &operand_type)
             ));
         }
-    } else if fixedint_bounded {
+    } else if fixedint_bounded || float_bounded {
         // Every type the bound admits is numeric.
     } else {
         // All other unary operators require numeric types.
@@ -825,9 +831,10 @@ fn synthesize_unaryop<'db>(
 
     // Determine result type based on operator.
     let result_ty = match op {
-        // Bare negation: only floats and bigints.
+        // Bare negation: only floats and bigints, and a parameter bounded to
+        // the floats, which all have it.
         UnaryOp::Neg => {
-            if !is_float_type(&operand_type) && !is_bigint_type(&operand_type) {
+            if !float_bounded && !is_float_type(&operand_type) && !is_bigint_type(&operand_type) {
                 return Err(ctx.error_invalid_operand_type(
                     expr,
                     unaryop_to_str(op),

@@ -27,7 +27,6 @@ notation, type equivalence and literal rules it assumes; read that first.
   - [Functions](#user-content-functions)
   - [Modules and scripts](#user-content-modules-and-scripts)
 - [Diagnostics](#user-content-diagnostics)
-- [Known gaps](#user-content-known-gaps)
 - [Implementation](#user-content-implementation)
 - [References](#user-content-references)
 
@@ -185,7 +184,8 @@ other. They use three syntactic predicates:
 - `cons(e)`: `e` is an unhinted `none`, `some e'`, tuple, struct, atom,
   term or enum literal: a construction whose synthesized type, if it has
   one, is a guess.
-- `lit(e)`: `e` is an integer, hex or float literal, or a negation of one.
+- `lit(e)`: `e` is an unhinted integer, hex or float literal, or a negation
+  of one. A hinted literal such as `: u8 / 1` has a type of its own.
 
 The rules are tried in this order, and each is shown for an operand on the
 left; each has a mirror image with the operands swapped.
@@ -294,7 +294,7 @@ first and, if any premise fails, discards its diagnostics and uses
 Unary operators:
 
 ```
-Γ ⊢ e ⇒ T    T ∈ Float ∪ {int}              Γ ⊢ e ⇒ bool
+Γ ⊢ e ⇒ T    T ∈ Float⁺ ∪ {int}             Γ ⊢ e ⇒ bool
 ------------------------------ (Syn-Neg)    ------------------ (Syn-Not)
 Γ ⊢ -e ⇒ T                                  Γ ⊢ not e ⇒ bool
 
@@ -310,7 +310,7 @@ Unary operators:
 `-!` takes every fixed-width integer, unsigned ones included, where it fails
 for any non-zero operand. `-?` refuses unsigned operands outright, and so
 refuses a `fixedint`-bounded parameter, which may be unsigned. Bare `-` is
-for floats and `int` only: `-x` on an `i32` variable is F026, though `-5`
+for floats, `float`-bounded parameters and `int`: `-x` on an `i32` variable is F026, though `-5`
 checks against `i32` by `Check-NegLit`.
 
 ### Try operators
@@ -594,8 +594,9 @@ element of a tensor of rank above 1, is F073.
 Γ ⊢ set p ⊕= e ⊣ Γ
 ```
 
-`fits(p, Γ)` holds when the last step of `p` is not `[k]?` or `[k]!`, or is
-`[k]?` with `Γ(ret) = ?U`, or `[k]!` with `Γ(ret) = !U` (F049). An undefined
+`fits(p, Γ)` holds when `Γ(ret) = ?U` if any step of `p` is `[k]?`, and
+`Γ(ret) = !U` if any is `[k]!` (F049): an index partway along the target
+returns early as surely as the last one. An undefined
 root is F054; an immutable one is F055. A compound operator the place's type
 does not admit is F026. The order in which a `set` evaluates its parts is in
 [the spec](botspec.md#user-content-81-bindings).
@@ -658,6 +659,7 @@ default.
 
 `ret e` in a void function is F052;
 bare `ret` in a function with a return type is F053, `fun f(): ()` included.
+A `ret` at the top level of a module is refused by the parser (P077).
 
 ```
 Γ ⊢ e ⇒ T                         Γ ⊢ f(ā) ⇒ ()
@@ -708,16 +710,26 @@ script it is F062. `inline`, as the first statement of a body, marks the
 function for inlining; inline functions that call each other in a cycle are
 F085.
 
-A type parameter used as a set element or map key in a signature needs a
-bound that implies `ord` (all of them do, other than `any`); otherwise F061.
+A type parameter used as a set element or map key, in a signature or in the
+type of a binding in the body, needs a bound that implies `ord` (all of them
+do, other than `any`); otherwise F061.
+
+A name is defined by one function in a module or script: a second `fun` or
+`native fun` of the same name is F086, and so is an `import` of a name a
+function there defines. The first definition stays, so the rest of the unit
+resolves against it. A `fun`, `native fun` or `type` is only a declaration at
+the top level; inside a block it is P074.
 
 ### Modules and scripts
 
-**Modules.** `Σ` is collected from every `fun` and `native fun` first, so
-order of definition does not matter. Module-level consts are checked next,
-before any other statement, and are in scope throughout the module. Module
-top level has no `ret` entry, so `?`, `!` and the checked and optional
-operators are F049 there ("no enclosing function"), and `ret e` is F011.
+**Modules.** A module's top level holds declarations only: `fun`,
+`native fun`, `const`, `type`, `require` and `import`. Any other statement
+there would never run, and the parser refuses it (P077). `Σ` is collected
+from every `fun` and `native fun` first, so order of definition does not
+matter. Module-level consts are checked next, before any other statement,
+and are in scope throughout the module. Module top level has no `ret` entry,
+so `?`, `!` and the checked and optional operators in a module const are
+F049 ("no enclosing function").
 
 **Scripts.** A script's top level is checked under `Γ, ret !()`: it is a
 body returning a result, so `!`, `+!` and `ret ok ()` work there and `?`
@@ -737,7 +749,7 @@ not reported again.
 |------|---------|
 | F001 | Undefined variable |
 | F002 | Undefined function; an import or qualified call of a function the module or rider does not have |
-| F011 | No synthesis rule: `none`, `er e` or an enum literal with nothing expected; a type parameter left unbound at a call; an index into something that is not a list, map or tensor, read or `set`; a bare `e[k]` outside a `set` target; an unknown intrinsic or wrong intrinsic arity; `ret e` at module top level; a set element or map key of type parameter type without `ord` in a body annotation |
+| F011 | No synthesis rule: `none`, `er e` or an enum literal with nothing expected; a type parameter left unbound at a call; an index into something that is not a list, map or tensor, read or `set`; a bare `e[k]` outside a `set` target; an unknown intrinsic or wrong intrinsic arity |
 | F016 | Type mismatch: a failed `Check-Subsume`; operands that do not pair; a collection element that differs from the first; a hint that disagrees with the expected type; `@` that cannot convert; a bound not satisfied; an intrinsic argument; a binding `if` on something that is not an option or result, or `else \|y\|` on an option; a `call` whose callee does not return `()`; every `match` error |
 | F026 | An operator applied to a type it does not admit, including a compound `set` |
 | F045 | Wrong number of arguments |
@@ -753,7 +765,7 @@ not reported again.
 | F057 | Argument mode marker does not match the parameter's mode |
 | F058 | A const initializer names something that is not a const |
 | F059 | A name imported twice |
-| F061 | A type parameter used as a set element or map key in a signature without `ord` |
+| F061 | A type parameter used as a set element or map key, in a signature or a body binding, without `ord` |
 | F062 | `native fun` outside a rider |
 | F063 | A function with a return type whose body can complete |
 | F064 | Unknown type name |
@@ -778,38 +790,14 @@ not reported again.
 | F083 | A `require` that closes a cycle of modules |
 | F084 | A `require data` whose file does not have the given type, has no type of its own and is given none, or is given a function type |
 | F085 | `inline` functions calling each other in a cycle |
+| F086 | A function defined twice in one module or script, or an import of a name a function there defines |
 
-F047 and F056 are unassigned. F060 is retired. The datalit checker's
+F047 and F056 are unassigned. F060 is retired. Two parse errors belong to
+the same rules: P074, a declaration inside a block, and P077, a statement at
+the top level of a module that is not a declaration. The datalit checker's
 `TypeError` converts into datafun's, but datafun reports its literal errors
 through its own checks, so the datalit T-codes do not appear in datafun
 programs except as the notes of F084.
-
-## Known gaps
-
-Places where the checker and the rules above, or the spec, part ways.
-Each is a checker fix, not a rule to keep.
-
-- **Duplicate functions.** Two `fun`s with the same name are not reported;
-  the last signature wins and both bodies are checked against it.
-- **Nested functions.** A `fun` inside a block parses but is never added to
-  `Σ`, so its body goes unchecked unless a top-level function shares its
-  name.
-- **Inner index steps in a `set` target.** `fits(p, Γ)` is enforced only
-  for the last step: `set a[i]?.x = v` outside an option-returning function
-  is not F049, though the same read is.
-- **Bare `ret` at module top level** is accepted silently.
-- **F061 in bodies.** `let x: #{T} = ...` without `ord` is reported as F011
-  rather than F061, and `var x: #{T}` with no value is not reported at all.
-- **Negation of a `float`-bounded parameter.** `-a` with `a : T`,
-  `T is float`, is F026, though the bound admits bare `+ - * /`. `Syn-Neg`
-  should take `Float⁺`.
-- **Hinted literals as operands.** `lit(e)` ignores a hint, so
-  `(: u8 / 1) == 1` treats both sides as bare literals, synthesizes `u8` and
-  `int`, and is F016.
-- **Stale comments.** `statement.rs` mentions an "F017" that does not exist
-  (around line 460) and claims an earlier check catches a bare module-level
-  `ret` (around line 413); `ast.rs` around line 797 says F050 for what is
-  F057.
 
 ## Implementation
 

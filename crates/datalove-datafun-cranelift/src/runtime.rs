@@ -130,6 +130,8 @@ pub struct RuntimeImports {
     pub dyn_binop_checked: FuncId,
     /// `dtlv_rti_dyn_neg_checked(rt, value, value_td, out, out_td, overflow)`
     pub dyn_neg_checked: FuncId,
+    /// `dtlv_rti_dyn_unop(rt, op, value, value_td, out, out_td)`
+    pub dyn_unop: FuncId,
 }
 
 impl RuntimeImports {
@@ -673,6 +675,19 @@ impl RuntimeImports {
                 .map_err(|e| CraneliftError::Module(
                     format!("declare dtlv_rti_dyn_neg_checked: {}", e)))?
         };
+        let dyn_unop = {
+            let mut sig = module.make_signature();
+            sig.params.push(AbiParam::new(PTR_TYPE));       // rt
+            sig.params.push(AbiParam::new(cl_types::I8));   // op
+            sig.params.push(AbiParam::new(PTR_TYPE));       // value
+            sig.params.push(AbiParam::new(PTR_TYPE));       // value tydesc
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out
+            sig.params.push(AbiParam::new(PTR_TYPE));       // out tydesc
+            sig.returns.push(AbiParam::new(cl_types::I8));
+            module.declare_function("dtlv_rti_dyn_unop", Linkage::Import, &sig)
+                .map_err(|e| CraneliftError::Module(
+                    format!("declare dtlv_rti_dyn_unop: {}", e)))?
+        };
 
         // Where a field of an aggregate of a dynamic type is, which only its
         // descriptor says.
@@ -816,6 +831,7 @@ impl RuntimeImports {
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
+            dyn_unop,
         })
     }
     /// Every import, for a backend that resolves them itself.
@@ -874,6 +890,7 @@ impl RuntimeImports {
             dyn_binop,
             dyn_binop_checked,
             dyn_neg_checked,
+            dyn_unop,
         } = self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
@@ -890,6 +907,7 @@ impl RuntimeImports {
             map_contains_key, map_get_value_ref, map_set_value, error_from, data_from,
             dyn_binop, dyn_binop_checked,
             dyn_neg_checked,
+            dyn_unop,
         ]
     }
 }

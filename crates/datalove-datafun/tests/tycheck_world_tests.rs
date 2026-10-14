@@ -221,6 +221,18 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "name": name
             })
         }
+        TypeError::DuplicateFunction { name, .. } => {
+            json!({
+                "kind": "DuplicateFunction",
+                "name": name
+            })
+        }
+        TypeError::ImportShadowsFunction { name } => {
+            json!({
+                "kind": "ImportShadowsFunction",
+                "name": name
+            })
+        }
         TypeError::DuplicateImport { name, first, second } => {
             json!({
                 "kind": "DuplicateImport",

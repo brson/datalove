@@ -74,6 +74,8 @@ pub struct TypeContext<'db> {
     pub(crate) in_function_body: bool,
     /// The `inline` function whose body is being checked, if it is one.
     pub(crate) checking_inline: Option<StmtFun<'db>>,
+    /// The function whose body is being checked, if any.
+    pub(crate) enclosing_fun: Option<StmtFun<'db>>,
     /// Each call from an `inline` function to an `inline` function, caller
     /// first, in the order they were checked; see `report_inline_cycles`.
     pub(crate) inline_calls: Vec<(StmtFun<'db>, StmtFun<'db>)>,
@@ -197,6 +199,7 @@ impl<'db> TypeContext<'db> {
             inherited: None,
             in_function_body: false,
             checking_inline: None,
+            enclosing_fun: None,
             inline_calls: Vec::new(),
             spans,
             current_module_id: module_id,
@@ -412,6 +415,22 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             first: first.S(),
             second: second.S(),
         }
+    }
+
+    /// F086: An import of a name a function here is defined by.
+    ///
+    /// Filed against the import, which is refused; the function stays.
+    pub fn error_import_shadows_function(
+        &mut self,
+        local_index: u32,
+        name: InternedText<'db>,
+    ) -> TypeError {
+        self.pending_diagnostics.push(PendingDiagnostic::ImportShadowsFunction {
+            local_index,
+            module_id: self.current_module_id,
+            name,
+        });
+        TypeError::ImportShadowsFunction { name: name.as_str(self.db).S() }
     }
 
     /// F002: Undefined function.
@@ -1253,6 +1272,13 @@ replace the view rather than the elements it shows. Index down to single element
             if let TypeError::DuplicateTypeAlias { name, local_index } = error {
                 self.pending_diagnostics.push(PendingDiagnostic::DuplicateTypeAlias {
                     local_index: *local_index,
+                    module_id,
+                    name: InternedText::new(self.db, name.C()),
+                });
+            }
+            if let TypeError::DuplicateFunction { name, fun_local_index } = error {
+                self.pending_diagnostics.push(PendingDiagnostic::DuplicateFunction {
+                    local_index: *fun_local_index,
                     module_id,
                     name: InternedText::new(self.db, name.C()),
                 });

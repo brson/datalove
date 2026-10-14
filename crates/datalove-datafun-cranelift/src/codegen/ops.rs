@@ -226,6 +226,12 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     ) -> Result<(), CraneliftError> {
         let dest_ty = &self.func.value_types[dest.0 as usize];
 
+        // A type parameter bounded to `float`, whose width only the
+        // descriptor says.
+        if dest_ty.is_dynamic() {
+            return self.compile_neg_dynamic(builder, dest, op, operand);
+        }
+
         // Int (bigint) negation requires runtime call.
         if matches!(dest_ty, IrType::Int) && matches!(op, UnaryOp::Neg) {
             return self.compile_int_neg(builder, dest, operand);
@@ -883,6 +889,34 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let overflow = builder.ins().load(
             cl_types::I8, cl_ir::MemFlagsData::new(), overflow_ptr, 0);
         self.values.insert(overflow_dest, overflow);
+        Ok(())
+    }
+
+    /// Negation of a value of a type parameter bounded to `float`.
+    fn compile_neg_dynamic(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        op: UnaryOp,
+        operand: &Operand,
+    ) -> Result<(), CraneliftError> {
+        assert_eq!(op, UnaryOp::Neg, "negation is the one operator a bounded type parameter has");
+        let (rt_handle, runtime) = self.dynamic_call_context("a dynamic negation")?;
+
+        let op_val = builder.ins().iconst(cl_types::I8, datalove_rtdt::DynUnOp::Neg as u8 as i64);
+        let value_ptr = self.get_operand_ptr(builder, operand)?;
+        let value_td = self.operand_tydesc(builder, operand)?;
+
+        let dest_ty = self.func.value_types[dest.0 as usize].clone();
+        let dest_ptr = self.dest_addr(builder, dest)?;
+        let dest_td = self.static_tydesc(builder, &dest_ty)?;
+
+        let callee = self.module.declare_func_in_func(runtime.dyn_unop, builder.func);
+        builder.ins().call(callee, &[
+            rt_handle, op_val, value_ptr, value_td, dest_ptr, dest_td,
+        ]);
+
+        self.read_back_dynamic(builder, dest, &dest_ty, dest_ptr);
         Ok(())
     }
 

@@ -1,0 +1,62 @@
+{
+  "diagnostics": [
+    {
+      "code": "F049",
+      "labels": [
+        {
+          "message": "this index can return early",
+          "span": [
+            181,
+            189
+          ],
+          "text": "xs[0]?.0"
+        }
+      ],
+      "message": "`set` through an index with `?` requires function to return Option, found `!()`",
+      "notes": [
+        "function must return Option to use `?`"
+      ]
+    },
+    {
+      "code": "F049",
+      "labels": [
+        {
+          "message": "this index can return early",
+          "span": [
+            338,
+            349
+          ],
+          "text": "xss[0]![0]?"
+        }
+      ],
+      "message": "`set` through an index with `!` requires function to return Result, found `?()`",
+      "notes": [
+        "function must return Result to use `!`"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "DatalitError",
+      "message": "`set` through an index with `?` requires function to return Option, found `!()`"
+    },
+    {
+      "kind": "DatalitError",
+      "message": "`set` through an index with `!` requires function to return Result, found `?()`"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "f",
+      "params": [],
+      "return_type": "!()"
+    },
+    {
+      "kind": "function",
+      "name": "g",
+      "params": [],
+      "return_type": "?()"
+    }
+  ]
+}

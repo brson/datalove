@@ -1,0 +1,16 @@
+{
+  "diagnostics": [],
+  "errors": [],
+  "judgements": [
+    {
+      "kind": "variable",
+      "name": "a",
+      "type": "bool"
+    },
+    {
+      "kind": "variable",
+      "name": "b",
+      "type": "bool"
+    }
+  ]
+}

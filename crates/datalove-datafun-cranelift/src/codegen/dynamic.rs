@@ -509,6 +509,7 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::ListElementRef { .. }
         | Instruction::BinOp { .. }
         | Instruction::BinOpChecked { .. }
+        | Instruction::UnaryOp { .. }
         | Instruction::UnaryOpChecked { .. }
         | Instruction::Pack { .. }
         | Instruction::Unpack { .. }

@@ -115,8 +115,12 @@ pub fn gen_module<'db, R: Rng>(
     //
     // A name is imported once: two modules may export the same one, and a
     // second import under a name already bound is an error rather than a
-    // shadowing.
-    let mut imported_names: HashSet<String> = HashSet::new();
+    // shadowing. Nor is a name this module defines a function by imported,
+    // which is an error too: every module names its functions `fn0`, `fn1`
+    // and so on.
+    let mut imported_names: HashSet<String> = info.functions.iter().map(|f| f.name.clone())
+        .chain(info.generics.iter().map(|g| g.name.clone()))
+        .collect();
     let mut imported_generics: Vec<GenericSig> = Vec::new();
     for prior in prior_modules {
         if !prior.functions.is_empty() && rng.gen_bool(0.5) {

@@ -1,0 +1,10 @@
+// A declaration is only collected from the top level, so one inside a block
+// is refused rather than ignored.
+fun outer(): u32
+    fun inner(): u32
+        ret 1
+    end fun
+    type N: u32
+    native fun nat(): u32
+    ret 1
+end fun

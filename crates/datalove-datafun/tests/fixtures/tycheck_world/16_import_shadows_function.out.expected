@@ -1,0 +1,54 @@
+{
+  "diagnostics": [
+    {
+      "code": "F086",
+      "labels": [
+        {
+          "message": "a name binds one function",
+          "span": [
+            31,
+            47
+          ],
+          "text": "import lib.twice"
+        }
+      ],
+      "message": "`twice` is imported, and also defined here as a function"
+    }
+  ],
+  "modules": {
+    "lib": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "twice",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    },
+    "user": {
+      "errors": [
+        {
+          "kind": "ImportShadowsFunction",
+          "name": "twice"
+        }
+      ],
+      "functions": [
+        {
+          "name": "twice",
+          "params": [
+            "u32"
+          ],
+          "return_type": "string"
+        },
+        {
+          "name": "use_it",
+          "params": [],
+          "return_type": "string"
+        }
+      ]
+    }
+  }
+}

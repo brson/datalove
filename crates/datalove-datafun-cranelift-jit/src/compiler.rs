@@ -785,6 +785,7 @@ fn runtime_addresses() -> HashMap<&'static str, *const u8> {
         dtlv_rti_dyn_binop,
         dtlv_rti_dyn_binop_checked,
         dtlv_rti_dyn_neg_checked,
+        dtlv_rti_dyn_unop,
     }
 }
 

@@ -1,0 +1,23 @@
+----------
+module local/test/lib
+----------
+
+fun twice(x: u32): u32
+    ret x
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+// A name binds one function: an import of a name the script defines a
+// function by is refused, and the script's own stays.
+require module local/test/lib
+import lib.twice
+
+fun twice(x: u32): string
+    ret "local"
+end fun
+
+let s: string = twice(: u32 / 1)
+debuglog s

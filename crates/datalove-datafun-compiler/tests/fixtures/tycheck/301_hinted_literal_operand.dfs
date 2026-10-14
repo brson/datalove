@@ -1,0 +1,4 @@
+// A hinted literal has a type of its own, and gives it to a bare literal on
+// the other side.
+let a: bool = (: u8 / 1) == 1
+let b: bool = 1 .< (: u8 / 2)

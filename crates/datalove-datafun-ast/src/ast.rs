@@ -794,7 +794,7 @@ pub struct ExprFunctionCall<'db> {
     /// Mode marker written before each argument, parallel to `args`.
     ///
     /// `None` where the argument carried no marker, which denotes `in`. The
-    /// marker must agree with the callee's declared mode; see F050.
+    /// marker must agree with the callee's declared mode; see F057.
     #[returns(ref)]
     pub arg_modes: Vec<Option<ParamMode>>,
 }

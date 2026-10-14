@@ -1,0 +1,32 @@
+{
+  "ast": {
+    "expr": {
+      "Int": {
+        "value": "99999999999999999999"
+      }
+    },
+    "type_hint": "Offset"
+  },
+  "diagnostics": [
+    {
+      "code": "T061",
+      "labels": [
+        {
+          "message": "value out of range",
+          "span": [
+            0,
+            31
+          ],
+          "text": ": offset / 99999999999999999999"
+        }
+      ],
+      "message": "integer literal out of range for type offset"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "IntOutOfRange"
+    }
+  ],
+  "root_type": null
+}

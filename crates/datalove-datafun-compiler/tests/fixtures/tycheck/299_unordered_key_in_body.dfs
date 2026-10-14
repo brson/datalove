@@ -1,0 +1,13 @@
+// A set over a type parameter needs `is ord` in a body binding as in a
+// signature, with a value or without.
+fun with_value<T>(a: T)
+    let s: #{T} = #{}
+end fun
+
+fun without_value<T>(a: T)
+    var s: #{T}
+end fun
+
+fun ordered<T>(a: T) with { T is ord, }
+    var s: #{T}
+end fun

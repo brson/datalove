@@ -79,20 +79,31 @@ pub fn resolve_names_impl<'db>(
     // Pass 1: collect function signatures.
     let mut functions = Vec::new();
     let mut function_asts = Vec::new();
+    let mut defined = std::collections::HashSet::new();
 
     for statement in statements {
         // Extract function signature from either regular or native fun.
-        let (name, type_params, type_bounds, params, return_type, func_ast) = match statement {
+        let (name, type_params, type_bounds, params, return_type, func_ast, local_index) = match statement {
             Statement::Fun(stmt) => {
                 (stmt.name(db), stmt.type_params(db).clone(), stmt.type_bounds(db).clone(),
-                 stmt.params(db).clone(), stmt.return_type(db), Some(*stmt))
+                 stmt.params(db).clone(), stmt.return_type(db), Some(*stmt), stmt.local_index(db))
             }
             Statement::NativeFun(stmt) => {
                 (stmt.name, stmt.type_params.clone(), stmt.type_bounds.clone(),
-                 stmt.params.clone(), stmt.return_type.clone(), None)
+                 stmt.params.clone(), stmt.return_type.clone(), None, stmt.local_index)
             }
             _ => continue,
         };
+
+        // The first definition of a name is the function; a later one is
+        // refused rather than allowed to replace it.
+        if !defined.insert(name) {
+            errors.push(TypeError::DuplicateFunction {
+                name: name.as_str(db).to_string(),
+                fun_local_index: local_index,
+            });
+            continue;
+        }
 
         // Which of this signature's type parameters have promised an order.
         // A set or map written over one that has not is refused below; see

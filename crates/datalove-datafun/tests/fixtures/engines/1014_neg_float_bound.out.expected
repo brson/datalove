@@ -1,0 +1,52 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/neg"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn negated(p0):
+                      desc0 = T0
+                    block0:
+                        v0 = neg p0
+                        drop p0
+                        return v0
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1.5f32
+                        v1 = call m0.u0(v0) <f32>
+                        debuglog v1
+                        v2 = const 2.5f64
+                        v3 = call m0.u0(v2) <f64>
+                        debuglog v3
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("-1.5\n-2.5\n"),
+        ),
+    ],
+)

@@ -320,6 +320,16 @@ fn emit_single_diagnostic<'db>(
                     .emit_type();
             }
         }
+        PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_import(db, *local_index) {
+                let msg = format!("`{}` is imported, and also defined here as a function", name.as_str(db));
+                bct::diagnostic::DiagnosticBuilder::error(db, &msg)
+                    .code("F086")
+                    .primary_label(ts, "a name binds one function")
+                    .note("the function defined here is the one that is used")
+                    .emit_type();
+            }
+        }
         PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
             if let Some(ts) = spans.lookup_fun(db, *local_index) {
                 let msg = format!(
@@ -387,6 +397,15 @@ drop the return type.")
                 bct::diagnostic::DiagnosticBuilder::error(db, &format!("`{}` is defined twice", name.as_str(db)))
                     .code("F066")
                     .primary_label(ts, "a type alias is defined once")
+                    .emit_type();
+            }
+        }
+        PendingDiagnostic::DuplicateFunction { local_index, module_id: _, name } => {
+            if let Some(ts) = spans.lookup_fun(db, *local_index) {
+                bct::diagnostic::DiagnosticBuilder::error(db, &format!("function `{}` is defined twice", name.as_str(db)))
+                    .code("F086")
+                    .primary_label(ts, "a function is defined once")
+                    .note("the first definition is the one that is used")
                     .emit_type();
             }
         }
@@ -699,6 +718,14 @@ fn format_single_diagnostic<'db>(
                 loc, name.as_str(db), first.as_str(db),
             ))
         }
+        PendingDiagnostic::ImportShadowsFunction { local_index, module_id: _, name } => {
+            let ts = spans.lookup_import(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!(
+                "{}: error[F086]: `{}` is imported, and also defined here as a function",
+                loc, name.as_str(db),
+            ))
+        }
         PendingDiagnostic::CollectionKeyNotOrdered { local_index, module_id: _, param, position } => {
             let ts = spans.lookup_fun(db, *local_index)?;
             let loc = format_location(db, &ts);
@@ -758,6 +785,11 @@ fn format_single_diagnostic<'db>(
             let ts = spans.lookup_type_alias(db, *local_index)?;
             let loc = format_location(db, &ts);
             Some(format!("{}: error[F066]: `{}` is defined twice", loc, name.as_str(db)))
+        }
+        PendingDiagnostic::DuplicateFunction { local_index, module_id: _, name } => {
+            let ts = spans.lookup_fun(db, *local_index)?;
+            let loc = format_location(db, &ts);
+            Some(format!("{}: error[F086]: function `{}` is defined twice", loc, name.as_str(db)))
         }
         PendingDiagnostic::PatternMismatch { expr_key, module_id: _, message, label: _ } => {
             let ts = spans.lookup_expr(db, *expr_key)?;

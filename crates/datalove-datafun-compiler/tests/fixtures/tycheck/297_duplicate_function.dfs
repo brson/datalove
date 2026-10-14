@@ -1,0 +1,11 @@
+// The first definition is the function; the second is refused, and its body
+// is not checked against the first's signature.
+fun twice(): u32
+    ret 1
+end fun
+
+fun twice(): string
+    ret "two"
+end fun
+
+let n: u32 = twice()

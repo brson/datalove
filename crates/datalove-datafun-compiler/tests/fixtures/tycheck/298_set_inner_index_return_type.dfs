@@ -1,0 +1,14 @@
+// An index partway along a `set` target returns early as the last one does,
+// so it needs the function to return an option.
+fun f(): !()
+    var xs: [(u8, u8)] = [(1, 2)]
+    set xs[0]?.0 = 5
+    ret ok ()
+end fun
+
+// Both kinds along one target ask for both, which no function returns.
+fun g(): ?()
+    var xss: [[u8]] = [[1]]
+    set xss[0]![0]? = 5
+    ret some ()
+end fun

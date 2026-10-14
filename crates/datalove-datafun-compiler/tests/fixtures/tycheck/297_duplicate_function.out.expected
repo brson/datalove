@@ -1,0 +1,46 @@
+{
+  "diagnostics": [
+    {
+      "code": "F086",
+      "labels": [
+        {
+          "message": "a function is defined once",
+          "span": [
+            162,
+            165
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "function `twice` is defined twice",
+      "notes": [
+        "the first definition is the one that is used"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "DuplicateFunction",
+      "name": "twice"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "twice",
+      "params": [],
+      "return_type": "u32"
+    },
+    {
+      "kind": "function",
+      "name": "twice",
+      "params": [],
+      "return_type": "string"
+    },
+    {
+      "kind": "variable",
+      "name": "n",
+      "type": "u32"
+    }
+  ]
+}

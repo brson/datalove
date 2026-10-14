@@ -314,6 +314,7 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::Nop
         | Instruction::BinOp { .. }
         | Instruction::BinOpChecked { .. }
+        | Instruction::UnaryOp { .. }
         | Instruction::UnaryOpChecked { .. }
         | Instruction::Pack { .. }
         | Instruction::Unpack { .. }
@@ -1422,6 +1423,18 @@ impl<'a> FunctionCodegenContext<'a> {
         let dest_addr = self.value_addr(dest);
         let src_addr = self.operand_addr(operand);
         let src_ty = self.operand_type(operand).clone();
+
+        // A type parameter bounded to `float`, whose width only the
+        // descriptor says.
+        if src_ty.is_dynamic() {
+            assert_eq!(op, UnaryOp::Neg, "negation is the one operator a bounded type parameter has");
+            let src_td = self.operand_tydesc(operand);
+            let dest_ty = self.value_type(dest).clone();
+            let dest_td = self.tydesc_name(&dest_ty);
+            let code = datalove_rtdt::DynUnOp::Neg as u8;
+            writeln!(out, "    dtlv_rti_dyn_unop(rt, {code}, {src_addr}, {src_td}, {dest_addr}, &{dest_td});").unwrap();
+            return Ok(());
+        }
 
         // Check if this is an Int operation.
         if matches!(src_ty, IrType::Int) {

@@ -30,7 +30,7 @@ fn check_variable_decl<'db>(
         Some(hint) => {
             match ctx.convert_hint(hint) {
                 Ok(expected_type) => {
-                    if let Some(err) = unordered_binding_error(ctx, &expected_type, value) {
+                    if let Some(err) = unordered_binding_error(ctx, &expected_type, Some(value)) {
                         ctx.add_error(err);
                         return;
                     }
@@ -156,15 +156,18 @@ fn bind_pattern<'db>(
     }
 }
 
-/// Reject a binding whose type puts a type parameter where an order is needed.
+/// Reject a binding whose type puts a type parameter where an order is needed
+/// (F061).
 ///
 /// The signature is checked where it is resolved; this is the same rule for a
 /// type written inside the body, where `var seen: #{T} = #{}` asks `T` for an
-/// ordering just as a parameter of that type would.
+/// ordering just as a parameter of that type would. It is reported at the
+/// value, or, for a `var` with none, at the function the type parameter
+/// belongs to.
 fn unordered_binding_error<'db>(
     ctx: &mut TypeContext<'db>,
     ty: &Type<'db>,
-    at: ExprFun<'db>,
+    at: Option<ExprFun<'db>>,
 ) -> Option<TypeError> {
     let Type::Datalit(dt) = ty else { return None };
     let bounds = ctx.type_param_bounds.clone();
@@ -172,12 +175,27 @@ fn unordered_binding_error<'db>(
         bounds.get(&name).is_some_and(|bound| bound.implies_ord())
     };
     let param = datalove_datafun_common::generics::first_unordered_collection_key(dt, &ordered)?;
-    Some(ctx.error_cannot_synthesize(at, &format!(
-        "`{}` has not said it can be ordered, and this binding puts it in a set or a map. \
-A set keeps its elements in order and a map keeps its keys in order, so say so with \
-`with {{ {} is ord, }}`, which every type there is satisfies",
-        param.as_str(ctx.db), param.as_str(ctx.db),
-    )))
+    let db = ctx.db;
+    let fun = ctx.enclosing_fun
+        .expect("a type parameter is only in scope inside a function body");
+    let site = match at {
+        Some(value) => crate::ErrorSite::Expr(ExprKey::of(db, value)),
+        None => crate::ErrorSite::Fun(fun.local_index(db)),
+    };
+    let param = param.as_str(db);
+    ctx.push_coded(
+        site,
+        "F061",
+        fmt!("`{param}` has not said it can be ordered, and this binding puts it in a set or a map"),
+        S("a set or map over a type parameter needs `is ord`"),
+        Some(fmt!("a set keeps its elements in order and a map keeps its keys in order, so say so \
+with `with {{ {param} is ord, }}`, which every type there is satisfies")),
+    );
+    Some(TypeError::CollectionKeyNotOrdered {
+        param: param.S(),
+        position: S("a binding"),
+        fun_local_index: fun.local_index(db),
+    })
 }
 
 /// Check a statement.
@@ -202,6 +220,9 @@ pub fn check_statement<'db>(
                     if let Some(hint) = stmt.type_hint.clone() {
                         match ctx.convert_hint(hint) {
                             Ok(ty) => {
+                                if let Some(err) = unordered_binding_error(ctx, &ty, None) {
+                                    ctx.add_error(err);
+                                }
                                 let name = stmt.binding.as_name()
                                     .expect("the parser requires a plain name without a value");
                                 ctx.add_variable(name, ty, true);
@@ -254,6 +275,11 @@ pub fn check_statement<'db>(
             let Some(func_type) = ctx.lookup_function(name) else {
                 return;
             };
+            // A second definition of the name was reported (F086) and the
+            // signature is the first one's, which is no basis for its body.
+            if ctx.lookup_function_ast(name).is_some_and(|(ast, _)| ast != *stmt) {
+                return;
+            }
 
             let param_types = func_type.param_types(db);
             let ret_ty = func_type.return_type(db);
@@ -314,9 +340,11 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             let saved_variables = ctx.variables.C();
             let saved_in_function_body = ctx.in_function_body;
             let saved_checking_inline = ctx.checking_inline;
+            let saved_enclosing_fun = ctx.enclosing_fun;
             ctx.variables.retain(|_, binding| binding.is_const);
             ctx.in_function_body = true;
             ctx.checking_inline = stmt.signature(db).inline.then_some(*stmt);
+            ctx.enclosing_fun = Some(*stmt);
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
             // `var x: T` and `let pair: (T, T)` name a type the function has,
@@ -371,6 +399,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.variables = saved_variables;
             ctx.in_function_body = saved_in_function_body;
             ctx.checking_inline = saved_checking_inline;
+            ctx.enclosing_fun = saved_enclosing_fun;
             ctx.type_aliases = saved_type_aliases;
             ctx.type_param_bounds = saved_type_param_bounds;
             ctx.expected_return_type = saved_return_type;
@@ -404,13 +433,9 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     }
                     // Void function with bare ret - OK.
                 }
-                (Some(value), None) => {
-                    // F011: Cannot synthesize return type.
-                    let err = ctx.error_cannot_synthesize(value, "cannot infer return type");
-                    ctx.add_error(err);
-                }
-                (None, None) => {
-                    // Bare ret outside function - already an error from earlier checks.
+                (_, None) => {
+                    // Only a module's top level has no return type, and a
+                    // `ret` there was refused by the parser (P077).
                 }
             }
         }
@@ -457,11 +482,11 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         res.inner_type.clone()
                     }
                     _ => {
-                        // F017: If/match condition type mismatch.
+                        // F016: only an option or a result has a value to bind.
                         let err = ctx.error_type_mismatch(
                             condition,
                             "Option or Result",
-                            "other type",
+                            &type_to_string(db, &condition_ty),
                             "expected Option or Result type for destructuring"
                         );
                         ctx.add_error(err);
@@ -777,6 +802,24 @@ fn typecheck_place_for_set<'db>(
         .expect("the set statement reported an undefined root before checking its place");
 
     let steps = &place.steps;
+
+    // Every `?` or `!` index along the target can fail and return early, the
+    // first step as surely as the last, so each asks the function for an
+    // option or a result. Each kind is asked for once.
+    let mut error_modes: Vec<IndexErrorMode> = Vec::new();
+    for step in steps {
+        if let PlaceStep::Index(PlaceIndex { error_mode: Some(mode), .. }) = step {
+            if !error_modes.contains(mode) {
+                error_modes.push(*mode);
+            }
+        }
+    }
+    for error_mode in error_modes {
+        if let Err(e) = require_return_type_for_set(ctx, stmt, error_mode) {
+            ctx.add_error(e);
+        }
+    }
+
     for (i, step) in steps.iter().enumerate() {
         let is_last = i == steps.len() - 1;
         match step {
@@ -937,7 +980,7 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
                 }
             }
         }
-        Some(error_mode) => {
+        Some(_) => {
             let (element_ty, index_type) = match crate::synthesize::resolve_index_types(db, base_ty) {
                 Ok(types) => types,
                 Err(msg) => {
@@ -960,10 +1003,6 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
                 ctx.add_error(e);
             }
             check_set_value(ctx, stmt, value, &element_ty);
-            // Verify function returns Option or Result depending on error_mode.
-            if let Err(e) = require_return_type_for_set(ctx, stmt, error_mode) {
-                ctx.add_error(e);
-            }
         }
     }
 }

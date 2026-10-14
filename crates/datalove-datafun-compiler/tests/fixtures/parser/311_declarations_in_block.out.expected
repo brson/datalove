@@ -1,0 +1,97 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "body": [
+              {
+                "kind": "Ret",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ],
+            "kind": "Fun",
+            "name": "inner",
+            "params": [],
+            "return_type": "U32"
+          },
+          {
+            "kind": "TypeAlias",
+            "name": "N",
+            "type_hint": "U32"
+          },
+          {
+            "kind": "NativeFun",
+            "name": "nat",
+            "params": [],
+            "return_type": "U32"
+          },
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "outer",
+        "params": [],
+        "return_type": "U32"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`fun` is only read at the top level",
+          "span": [
+            133,
+            136
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`fun` inside a block"
+    },
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`type` is only read at the top level",
+          "span": [
+            180,
+            184
+          ],
+          "text": "type"
+        }
+      ],
+      "message": "`type` inside a block"
+    },
+    {
+      "code": "P074",
+      "labels": [
+        {
+          "message": "`native` is only read at the top level",
+          "span": [
+            196,
+            202
+          ],
+          "text": "native"
+        }
+      ],
+      "message": "`native` inside a block"
+    }
+  ]
+}

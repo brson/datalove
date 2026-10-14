@@ -797,7 +797,7 @@ pub fn int_type_range_info(ty: &Type<'_>) -> (&'static str, &'static str) {
         Type::U64 => ("T011", "u64 can represent values from 0 to 18,446,744,073,709,551,615"),
         Type::I64 => ("T012", "i64 can represent values from -9,223,372,036,854,775,808 to 9,223,372,036,854,775,807"),
         Type::Index => ("T015", INDEX_RANGE),
-        Type::Offset => ("T016", OFFSET_RANGE),
+        Type::Offset => ("T061", OFFSET_RANGE),
         Type::Int => ("T000", "int is arbitrary precision"),
         _ => ("T000", ""),
     }

@@ -70,17 +70,19 @@ impl<'db> Parser<'db> {
     /// Creates a sub-parser for the line and parses the statement.
     ///
     /// Every line parsed this way is inside a block -- the top level is parsed
-    /// line by line in `parse_statements` -- so this is where a `require` or
-    /// `import` written inside one is refused (P074). Only a top-level one is
-    /// ever read, and one anywhere else was silently nothing, leaving the
-    /// calls it was meant to serve to report that nothing was required.
+    /// line by line in `parse_statements` -- so this is where a declaration
+    /// written inside one is refused (P074). A `require`, `import`, `fun`,
+    /// `native fun` or `type` is only collected from the top level. One
+    /// anywhere else was silently nothing, leaving the calls a `require` was
+    /// meant to serve to report that nothing was required, a `type` to be an
+    /// unknown name, and a `fun` to bring lowering down.
     pub(super) fn parse_line_statement(
         &mut self,
         line: Vec<TreeToken<'db>>,
         remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
     ) -> ast::Statement<'db> {
         if let Some(TreeToken::Token(first)) = line.first() {
-            if let Some(word @ ("require" | "import")) = first.word_str(self.text()) {
+            if let Some(word @ ("require" | "import" | "fun" | "native" | "type")) = first.word_str(self.text()) {
                 self.had_error = true;
                 let ts = self.extract_text_span(&line[0]);
                 DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
@@ -94,6 +96,30 @@ impl<'db> Parser<'db> {
         let stmt = sub.parse_statement(remaining_lines);
         self.merge_identity_from(&mut sub);
         stmt
+    }
+
+    /// Refuse a statement a module's top level has no use for (P077).
+    ///
+    /// A module defines things for others to use; only a script runs
+    /// statements from top to bottom. Anything but a declaration at the top
+    /// of a module was never run, so a `debuglog` there printed nothing and
+    /// a `let` bound nothing anyone could name. The statement is still parsed,
+    /// so what is wrong inside it is reported too.
+    pub(super) fn refuse_at_module_top_level(&mut self) {
+        let Some(word) = self.peek_word() else {
+            return;
+        };
+        if matches!(word, "require" | "import" | "fun" | "native" | "type" | "const") {
+            return;
+        }
+        self.had_error = true;
+        let ts = self.peek_text_span();
+        DiagnosticBuilder::error(self.db, &fmt!("`{word}` at the top level of a module"))
+            .code("P077")
+            .primary_label(ts, "a module's top level is not run")
+            .help("a module holds `fun`, `const`, `type`, `require` and `import`; \
+statements that run belong in a function or a script")
+            .emit_parse();
     }
 
     /// Consume an `end <keyword>` line, complaining about anything after it.

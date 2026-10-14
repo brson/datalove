@@ -471,7 +471,6 @@ Some properties follow from the rules and are worth stating outright.
 | T014 | check | Hex literal too wide for an `f64` bit pattern |
 | T015 | check | Integer or hex literal out of range for `index` |
 | T016 | synth | No synthesis rule: `none`, `er e` or `enum {e}` with nothing expected |
-| T016 | check | Integer literal out of range for `offset` (shares the code above; see below) |
 | T017 | synth | Expression contains a parse error |
 | T018 | synth | List element differs from the first |
 | T019 | synth | Set element differs from the first |
@@ -494,10 +493,7 @@ Some properties follow from the rules and are worth stating outright.
 | T058 | check | Enum literal against a type that is not an enum |
 | T059 | hint | A bare name in a hint; datalit has no type aliases |
 | T060 | synth | Table element differs from its column's first row |
-
-T016 is assigned twice: `int_type_range_info` in `types.rs` gives it to an
-out-of-range `offset`, which collides with "cannot synthesize". The offset
-range error should get a code of its own.
+| T061 | check | Integer literal out of range for `offset` |
 
 ## Implementation
 

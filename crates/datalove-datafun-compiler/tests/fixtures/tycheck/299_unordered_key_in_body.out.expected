@@ -1,0 +1,85 @@
+{
+  "diagnostics": [
+    {
+      "code": "F061",
+      "labels": [
+        {
+          "message": "a set or map over a type parameter needs `is ord`",
+          "span": [
+            153,
+            156
+          ],
+          "text": "#{}"
+        }
+      ],
+      "message": "`T` has not said it can be ordered, and this binding puts it in a set or a map",
+      "notes": [
+        "a set keeps its elements in order and a map keeps its keys in order, so say so with `with { T is ord, }`, which every type there is satisfies"
+      ]
+    },
+    {
+      "code": "F061",
+      "labels": [
+        {
+          "message": "a set or map over a type parameter needs `is ord`",
+          "span": [
+            166,
+            169
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "`T` has not said it can be ordered, and this binding puts it in a set or a map",
+      "notes": [
+        "a set keeps its elements in order and a map keeps its keys in order, so say so with `with { T is ord, }`, which every type there is satisfies"
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CollectionKeyNotOrdered",
+      "name": "T",
+      "position": "a binding"
+    },
+    {
+      "kind": "CollectionKeyNotOrdered",
+      "name": "T",
+      "position": "a binding"
+    }
+  ],
+  "judgements": [
+    {
+      "kind": "function",
+      "name": "with_value",
+      "params": [
+        {
+          "name": "a",
+          "type": "T"
+        }
+      ],
+      "return_type": "?"
+    },
+    {
+      "kind": "function",
+      "name": "without_value",
+      "params": [
+        {
+          "name": "a",
+          "type": "T"
+        }
+      ],
+      "return_type": "?"
+    },
+    {
+      "kind": "function",
+      "name": "ordered",
+      "params": [
+        {
+          "name": "a",
+          "type": "T"
+        }
+      ],
+      "return_type": "?"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+----------
+module local/test/m
+----------
+
+// A module's top level holds declarations; nothing else there is run.
+const C: u32 = : u32 / 1
+let x = 1
+debuglog x
+ret
+
+fun f(): u32
+    ret C
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/m
+debuglog 1

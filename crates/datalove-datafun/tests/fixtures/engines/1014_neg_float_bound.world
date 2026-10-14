@@ -1,0 +1,18 @@
+----------
+module local/test/neg
+----------
+
+// Bare negation of a parameter bounded to the floats, at both widths.
+fun negated<T>(a: T): T with { T is float, }
+    ret -a
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/neg
+import neg.negated
+
+debuglog negated(: f32 / 1.5)
+debuglog negated(2.5)

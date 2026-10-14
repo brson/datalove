@@ -394,6 +394,18 @@ pub enum TypeError {
     NativeFunOutsideRider { name: String, fun_local_index: u32 },
     /// A type alias defined twice; the index is the second definition's.
     DuplicateTypeAlias { name: String, local_index: u32 },
+    /// F086: A function defined twice in one module or script; the index is
+    /// the second definition's.
+    ///
+    /// The second used to replace the first's signature without a word, and
+    /// both bodies were then checked against it.
+    DuplicateFunction { name: String, fun_local_index: u32 },
+    /// F086: An import of a name the module or script defines a function by.
+    ///
+    /// Which of the two a call reached used to depend on the order the
+    /// checker happened to bind them in, which differed between modules and
+    /// scripts.
+    ImportShadowsFunction { name: String },
     /// Two imports bound the same name.
     ///
     /// The second used to overwrite the first without a word, which made a

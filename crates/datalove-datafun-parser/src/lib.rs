@@ -231,6 +231,9 @@ fn parse_statements<'db>(
 
     while let Some((_line_num, line)) = line_iter.next() {
         let mut parser = Parser::new(db, line, source_text, module_id, counters);
+        if module_id.is_some() {
+            parser.refuse_at_module_top_level();
+        }
         let statement = parser.parse_statement(&mut line_iter);
         counters = parser.script_counters();
         statements.push(statement);
