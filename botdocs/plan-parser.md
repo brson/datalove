@@ -221,7 +221,7 @@ Where it departs from the design:
   handed a removed close to the parser as a token whenever a bracket followed
   it at the same level, so `let x = 1) + (2)` reported the `)` twice (P050,
   then P021) and parsed as `let x = 1`. Every removed close is passed over
-  now (`311_stray_close_before_bracket`).
+  now (`312_stray_close_before_bracket`).
 - **Snapshots rather than two parsers.** The harness writes everything the
   parser as it was returns and checks the new one against that, which needs
   only one parser in the tree.
