@@ -7,7 +7,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 use rmx::std::hash::Hash;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature, ParsedStatements};
+use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -44,18 +44,6 @@ pub fn parse_module_graph<'db>(
     resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, bct::input::Source)>,
 ) -> ParsedModuleGraph<'db> {
-    // Sequential implementation for salsa tracking.
-    //
-    // Only the statements are collected. The spans are a query of their own
-    // now, keyed on the module, so nothing here builds a span table for a
-    // module no diagnostic ever names.
-    let mut statements_only = Vec::new();
-    for module in graph.iter_modules(db) {
-        let module_id = module.id(db);
-        let parsed = parse_module_full(db, module).parsed.clone();
-        statements_only.push((module_id, parsed));
-    }
-
     // Convert String aliases to InternedText.
     let resolved_requires: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>> =
         resolved_requires_str.into_iter()
@@ -69,9 +57,9 @@ pub fn parse_module_graph<'db>(
 
     // Build RiderInterfaces from rider sources inside this tracked function,
     // where salsa tracked struct creation (TypeFunction) is allowed.
-    let resolved_riders = build_resolved_riders_from_sources(db, &rider_sources, &statements_only);
+    let resolved_riders = build_resolved_riders_from_sources(db, graph, &rider_sources);
 
-    ParsedModuleGraph::new(db, graph, statements_only, resolved_requires, resolved_riders)
+    ParsedModuleGraph::new(db, graph, resolved_requires, resolved_riders)
 }
 
 /// Parse all modules in a graph with resolved requires, using parallel execution.
@@ -173,16 +161,16 @@ fn generic_natives<'db>(
 /// Parses each rider source, extracts function signatures via name resolution,
 /// then maps riders to the modules whose `require rider X` statements name them.
 ///
-/// The requires are read from the parsed statements. They used to be found by
+/// The requires are read from each module's `module_uses`. They used to be found by
 /// scanning each module's source a line at a time, which took a trailing
 /// comment for part of the rider's name and so left `require rider std // why`
 /// resolving to nothing.
 fn build_resolved_riders_from_sources<'db>(
     db: &'db dyn salsa::Database,
+    graph: ModuleGraph<'db>,
     rider_sources: &[(String, bct::input::Source)],
-    statements: &[(ModuleId<'db>, ParsedStatements<'db>)],
 ) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
-    use datalove_datafun_ast::ast::{Statement, StmtRequire};
+    use datalove_datafun_ast::ast::{Item, StmtRequire};
     use datalove_datafun_common::RiderInterface;
 
     if rider_sources.is_empty() {
@@ -192,13 +180,14 @@ fn build_resolved_riders_from_sources<'db>(
     let rider_interfaces = rider_interfaces(db, RiderSources::new(db, rider_sources.to_vec()));
 
     let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
-    for (module_id, parsed) in statements {
-        for statement in parsed.statements(db).iter() {
-            let Statement::Require(StmtRequire::Rider(require)) = statement else {
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        for item in &datalove_datafun_parser::module_uses(db, module).items {
+            let Item::Require(StmtRequire::Rider(require)) = item else {
                 continue;
             };
             if let Some(interface) = rider_interfaces.get(require.name.as_str(db)) {
-                result.entry(*module_id)
+                result.entry(module_id)
                     .or_default()
                     .push((require.name, interface.clone()));
             }
@@ -488,6 +477,16 @@ mod tests {
         get_executed_modules,
     };
 
+    /// Parse every module of a graph, as a compile does.
+    ///
+    /// `parse_module_graph` does not parse the modules; each phase asks for
+    /// the parse of the modules it reads.
+    fn parse_every_module<'db>(db: &'db Database, graph: ModuleGraph<'db>) {
+        for module in graph.iter_modules(db) {
+            parse_module_ast(db, module);
+        }
+    }
+
     #[test]
     fn test_query_log_records_all_modules_parsed() {
         let db = Database::default();
@@ -504,6 +503,7 @@ mod tests {
 
         enable_query_logging();
         let _parsed = parse_module_graph(&db, graph, requires, Vec::new());
+        parse_every_module(&db, graph);
         let log = disable_query_logging();
 
         // All 3 modules should have been parsed.
@@ -523,6 +523,7 @@ mod tests {
 
         enable_query_logging();
         let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        parse_every_module(&db, graph);
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
@@ -532,6 +533,7 @@ mod tests {
         // The outer parse_module_graph is cached, so the loop doesn't run.
         enable_query_logging();
         let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        parse_every_module(&db, graph);
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");
@@ -565,6 +567,7 @@ mod tests {
         let (graph, _, _, requires) = build(&db, source_a, source_b);
         enable_query_logging();
         parse_module_graph(&db, graph.clone(), requires.clone(), Vec::new());
+        parse_every_module(&db, graph);
         let log1 = disable_query_logging();
 
         let first_parsed = get_executed_modules(&log1, "parse");
@@ -578,6 +581,7 @@ mod tests {
         let (graph, _, _, requires) = build(&db, source_a, source_b);
         enable_query_logging();
         parse_module_graph(&db, graph, requires, Vec::new());
+        parse_every_module(&db, graph);
         let log2 = disable_query_logging();
 
         let second_parsed = get_executed_modules(&log2, "parse");

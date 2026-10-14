@@ -1651,14 +1651,20 @@ impl<'db> ScriptCompiler<'db> {
                     let name = original.name.clone();
                     // The module's own expressions were typechecked with the
                     // module graph, not with this script.
-                    let Some((module_id, parsed)) = self.shared_context.parsed_graph
-                        .statements_only(self.db)
-                        .get(module.0 as usize)
+                    let parsed_graph = self.shared_context.parsed_graph;
+                    let Some(module_id) = datalove_datafun_compiler::tracked_lower::ir_module_ids(self.db, parsed_graph)
+                        .iter()
+                        .find(|(_, ir_id)| **ir_id == module)
+                        .map(|(module_id, _)| *module_id)
                     else {
                         return (HashMap::new(), Vec::new());
                     };
+                    let Some(source_module) = parsed_graph.get_module(self.db, module_id) else {
+                        return (HashMap::new(), Vec::new());
+                    };
+                    let parsed = datalove_datafun_parser::parse_module_ast(self.db, source_module);
                     let module_results = self.shared_context.graph_typecheck.module_results(self.db);
-                    let Some(single) = module_results.get(module_id) else {
+                    let Some(single) = module_results.get(&module_id) else {
                         return (HashMap::new(), Vec::new());
                     };
                     let funcs: Vec<std::sync::Arc<IrCodeUnit>> = registry.iter_module_code_units_with_ids()

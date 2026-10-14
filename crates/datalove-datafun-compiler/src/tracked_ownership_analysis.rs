@@ -8,7 +8,7 @@ use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
-use datalove_datafun_ast::ast::{ParsedStatements, Statement};
+use datalove_datafun_ast::ast::Statement;
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
     SingleModuleTypecheckResult,
@@ -86,7 +86,6 @@ impl<'db> ModuleGraphAnalysis<'db> {
 pub fn analyze_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
-    parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> SingleModuleAnalysis<'db> {
@@ -96,6 +95,7 @@ pub fn analyze_module<'db>(
     log_query("ownership_analysis", module_path, QueryPhase::Start);
 
     let expr_types = typecheck_result.expr_types(db);
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
 
     // Build map of function name -> resolved param types from exports.
     // This is needed to resolve type aliases in function parameters.
@@ -160,10 +160,6 @@ pub fn analyze_module_graph<'db>(
 ) -> ModuleGraphAnalysis<'db> {
     let graph = parsed_graph.graph(db);
 
-    // Build module lookup.
-    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
-        .map(|m| (m.id(db), m))
-        .collect();
 
     // Get per-module typecheck results.
     let typecheck_errors = typecheck_result.module_errors(db);
@@ -173,19 +169,18 @@ pub fn analyze_module_graph<'db>(
     let mut module_results = BTreeMap::new();
     let mut all_success = true;
 
-    for (module_id, parsed) in parsed_graph.statements_only(db).iter() {
+    for module in graph.iter_modules(db) {
+        let module_id = &module.id(db);
         // Skip modules with typecheck errors.
         if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
             continue;
         }
 
-        let module = *module_map.get(module_id).expect("module should exist");
-
         // Get the tracked per-module typecheck result.
         let single_typecheck = *typecheck_module_results.get(module_id)
             .expect("module should have typecheck result");
 
-        let result = analyze_module(db, module, parsed.clone(), single_typecheck, auto_adapt_mode);
+        let result = analyze_module(db, module, single_typecheck, auto_adapt_mode);
 
         if !result.errors(db).is_empty() {
             all_success = false;
@@ -209,34 +204,29 @@ pub fn analyze_module_graph_parallel<'db>(
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);
 
-    // Build module lookup.
-    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
 
     let typecheck_errors = typecheck_result.module_errors(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
-    let work: Vec<_> = parsed_graph.statements_only(db_salsa)
-        .iter()
-        .filter_map(|(module_id, parsed)| {
+    let work: Vec<_> = graph.iter_modules(db_salsa)
+        .filter_map(|module| {
+            let module_id = &module.id(db_salsa);
             // Skip modules with typecheck errors.
             if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
                 return None;
             }
 
-            let module = *module_map.get(module_id)?;
             let single_typecheck = *typecheck_module_results.get(module_id)?;
 
-            Some((db.dyn_clone(), module, parsed.clone(), single_typecheck))
+            Some((db.dyn_clone(), module, single_typecheck))
         })
         .collect();
 
     // Analyze modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, parsed, single_typecheck)| {
+    work.into_par_iter().for_each(|(db_clone, module, single_typecheck)| {
         let db_s = db_clone.as_salsa_db();
-        let _ = analyze_module(db_s, module, parsed, single_typecheck, auto_adapt_mode);
+        let _ = analyze_module(db_s, module, single_typecheck, auto_adapt_mode);
     });
 
     // Delegate to tracked function which aggregates results.

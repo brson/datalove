@@ -283,6 +283,19 @@ caught. Consts are not in it yet: what reads them, the const kinds and the
 graph-level passes, is phase 3's. The census gained the two queries cold
 (566 to 616) and nothing per edit.
 
+**Phase 3's first step** removed `ParsedModuleGraph::statements_only`.
+`typecheck_module`, `analyze_module` and `lower_module` are keyed on the
+`Module` and read `parse_module_ast` inside; `lower_module` reads only
+`module_items` unless it lowers from scratch. The graph-level passes walk the
+graph's modules, `compute_func_id_map` numbers functions from `module_items`,
+`parse_module_graph` reads riders' requires from `module_uses` and no longer
+parses anything, and the untracked const and specialization passes ask for
+each module's parse. The script compiler's specialization had looked a module
+up by its `IrModuleId` as an index into `statements_only`, which is wrong
+whenever a rider is numbered ahead of the modules; it looks the id up now.
+Three query-log tests in `module_graph.rs` counted parses through
+`parse_module_graph` and now parse each module themselves.
+
 ## Verifying each phase
 
 - **Parse snapshots**, against a baseline written before the phase: identical,

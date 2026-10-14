@@ -383,33 +383,6 @@ pub struct TypeErrorEntry<'db> {
     pub error: TypeError,
 }
 
-/// Result of typechecking a script.
-#[salsa::tracked]
-pub struct TypecheckResult<'db> {
-    /// The root parsed statements.
-    #[returns(clone)]
-    pub root_parsed: ParsedStatements<'db>,
-
-    /// Type errors encountered.
-    #[returns(clone)]
-    pub errors: Vec<TypeErrorEntry<'db>>,
-
-    /// Expression types, keyed by `ExprKey`.
-    #[returns(ref)]
-    pub expr_types: ExprTypes<'db>,
-
-    /// Resolved call targets, keyed by `ExprKey::of_call`.
-    #[returns(ref)]
-    pub call_targets: CallTargets<'db>,
-
-    /// Function signatures defined in this script.
-    ///
-    /// Contains resolved function types needed for lowering when type aliases
-    /// are used in function parameters.
-    #[returns(ref)]
-    pub function_types: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-}
-
 /// Result of typechecking a single expression.
 #[salsa::tracked]
 pub struct ExprTypecheckResult<'db> {

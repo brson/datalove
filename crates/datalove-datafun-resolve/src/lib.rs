@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, BTreeMap};
 use bct::text::InternedText;
-use bct::module_graph::{ModuleId, Module};
+use bct::module_graph::Module;
 use datalove_ct::query_log::{log_query, QueryPhase};
 
 use datalove_datafun_ast::ast::*;
@@ -249,18 +249,11 @@ pub fn resolve_all_names<'db>(
     db: &'db dyn Db,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> AllModuleNameResolutions<'db> {
-    let graph = parsed_graph.graph(db);
-    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
-        .map(|m| (m.id(db), m))
-        .collect();
-
     let mut all_resolutions = BTreeMap::new();
 
-    for (module_id, _) in parsed_graph.statements_only(db) {
-        let module = module_to_module_obj.get(module_id)
-            .expect("module should exist in graph");
-        let resolution = resolve_module_names(db, *module);
-        all_resolutions.insert(*module_id, resolution);
+    for module in parsed_graph.graph(db).iter_modules(db) {
+        let resolution = resolve_module_names(db, module);
+        all_resolutions.insert(module.id(db), resolution);
     }
 
     AllModuleNameResolutions::new(db, all_resolutions)
@@ -279,18 +272,8 @@ pub fn resolve_all_names_parallel<'db>(
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);
 
-    // Build module lookup and work items.
-    let module_to_module_obj: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
-
-    let work: Vec<_> = parsed_graph.statements_only(db_salsa)
-        .iter()
-        .map(|(module_id, _)| {
-            let module = *module_to_module_obj.get(module_id)
-                .expect("module should exist in graph");
-            (db.dyn_clone(), module)
-        })
+    let work: Vec<_> = graph.iter_modules(db_salsa)
+        .map(|module| (db.dyn_clone(), module))
         .collect();
 
     // Resolve names in parallel - populates salsa's memoization cache.

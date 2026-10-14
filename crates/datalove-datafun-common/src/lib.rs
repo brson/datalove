@@ -13,7 +13,7 @@ use datalit::ast::TypeHint;
 
 use salsa::Database as Db;
 
-use datalove_datafun_ast::ast::{FunHead, ParsedStatements, ParamMode, TypeBound};
+use datalove_datafun_ast::ast::{FunHead, ParamMode, TypeBound};
 
 // ============================================================================
 // Parallel Execution Infrastructure
@@ -161,13 +161,6 @@ pub struct ParsedModuleGraph<'db> {
     #[returns(copy)]
     pub graph: bct::module_graph::ModuleGraph<'db>,
 
-    /// Pre-parsed statements only, as (ModuleId<'db>, ParsedStatements) tuples.
-    /// Separate from spans so typecheck can depend only on statements.
-    /// Order matches graph.iter_modules() order.
-    #[tracked]
-    #[returns(ref)]
-    pub statements_only: Vec<(ModuleId<'db>, ParsedStatements<'db>)>,
-
     /// Resolved module requires from package resolution.
     ///
     /// Maps each module to its resolved require aliases: (alias, target_module_id).
@@ -187,13 +180,6 @@ pub struct ParsedModuleGraph<'db> {
 }
 
 impl<'db> ParsedModuleGraph<'db> {
-    /// Get the parsed statements for a module by its ID.
-    pub fn get_parsed(&self, db: &'db dyn Db, module_id: ModuleId<'db>) -> Option<ParsedStatements<'db>> {
-        self.statements_only(db).iter()
-            .find(|(id, _)| *id == module_id)
-            .map(|(_, parsed)| parsed.clone())
-    }
-
     /// The module in the graph with this id.
     ///
     /// Spans used to be materialized for every module whether or not anything

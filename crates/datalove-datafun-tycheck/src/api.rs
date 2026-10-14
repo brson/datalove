@@ -576,8 +576,6 @@ pub type ResolvedImportData<'db> =
 pub fn typecheck_module<'db>(
     db: &'db dyn crate::Db,
     module: Module<'db>,
-    parsed: ParsedStatements<'db>,
-    spans: DatafunSpans<'db>,
     name_resolution: crate::ModuleNameResolution<'db>,
     resolved_imports: Vec<ResolvedImportData<'db>>,
     import_errors: Vec<crate::UnresolvedImport>,
@@ -591,8 +589,12 @@ pub fn typecheck_module<'db>(
 
     log_query("typecheck", module_path, QueryPhase::Start);
 
-    // Create type context for this module with module_id for pending diagnostics.
-    let mut ctx = TypeContext::with_options(db, spans, Some(module_id), auto_adapt_mode);
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
+
+    // Create type context for this module with module_id for pending
+    // diagnostics, whose spans are found when they are emitted.
+    let mut ctx = TypeContext::with_options(
+        db, DatafunSpans::new(vec![]), Some(module_id), auto_adapt_mode);
     ctx.data_files = data_files;
 
     for error in &require_errors {
@@ -683,34 +685,6 @@ pub fn typecheck_module<'db>(
     )
 }
 
-/// Prepared data for typechecking a module graph.
-struct TypecheckPreparation<'db> {
-    graph: bct::module_graph::ModuleGraph<'db>,
-    module_parsed: HashMap<ModuleId<'db>, ParsedStatements<'db>>,
-}
-
-/// Prepare data structures needed for typechecking.
-///
-/// Builds module graph and parsed statements map.
-/// This is shared between sequential and parallel typecheck paths.
-fn prepare_typecheck<'db>(
-    db: &'db dyn crate::Db,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> TypecheckPreparation<'db> {
-    let graph = parsed_graph.graph(db);
-
-    // Build parsed statements map.
-    let module_parsed: HashMap<ModuleId<'db>, ParsedStatements<'db>> = parsed_graph.statements_only(db)
-        .iter()
-        .map(|(id, parsed)| (*id, parsed.C()))
-        .collect();
-
-    TypecheckPreparation {
-        graph,
-        module_parsed,
-    }
-}
-
 /// Typecheck a module graph.
 ///
 /// Accepts pre-computed name resolution results from the resolve crate.
@@ -724,7 +698,7 @@ pub fn typecheck_module_graph<'db>(
     all_names: AllModuleNameResolutions<'db>,
     auto_adapt_mode: crate::AutoAdaptMode,
 ) -> ModuleGraphTypecheckResult<'db> {
-    let prep = prepare_typecheck(db, parsed_graph);
+    let graph = parsed_graph.graph(db);
 
     // ========================================================================
     // TYPECHECK PASS
@@ -734,12 +708,8 @@ pub fn typecheck_module_graph<'db>(
     let mut module_imports_map: BTreeMap<ModuleId<'db>, ModuleImports<'db>> = BTreeMap::new();
     let mut module_results_map: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
 
-    for module in prep.graph.iter_modules(db) {
+    for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-
-        let parsed = prep.module_parsed.get(&module_id)
-            .cloned()
-            .expect("module should have been parsed");
 
         // Get pre-computed name resolution for this module.
         let name_resolution = *all_names.resolutions(db).get(&module_id)
@@ -752,13 +722,10 @@ pub fn typecheck_module_graph<'db>(
         let require_errors = import_resolution.require_errors(db).C();
         let qualified = import_resolution.qualified(db).C();
 
-        // Use empty spans inside tracked function.
-        let spans = DatafunSpans::new(vec![]);
-
         // Call the tracked typecheck function.
         let result = typecheck_module(
-            db, module, parsed, spans, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, prep.graph.data(db).C(), auto_adapt_mode,
+            db, module, name_resolution, resolved_imports, import_errors,
+            require_errors, qualified, graph.data(db).C(), auto_adapt_mode,
         );
 
         // Collect errors from typecheck result.
@@ -783,7 +750,7 @@ pub fn typecheck_module_graph<'db>(
         module_results_map.insert(module_id, result);
     }
 
-    ModuleGraphTypecheckResult::new(db, prep.graph, module_errors, module_exports_map, module_imports_map, module_results_map)
+    ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, module_results_map)
 }
 
 /// Typecheck a module graph using parallel execution.
@@ -803,30 +770,26 @@ pub fn typecheck_module_graph_parallel<'db>(
     use rmx::rayon::prelude::*;
 
     let db_salsa = db.as_salsa_db();
-    let prep = prepare_typecheck(db_salsa, parsed_graph);
+    let graph = parsed_graph.graph(db_salsa);
 
     // ========================================================================
     // PARALLEL TYPECHECK PASS (warms salsa cache)
     // ========================================================================
 
     // Clone databases upfront for parallel execution.
-    let work: Vec<_> = prep.graph
+    let work: Vec<_> = graph
         .iter_modules(db_salsa)
         .map(|module| {
             let module_id = module.id(db_salsa);
-            let parsed = prep.module_parsed
-                .get(&module_id)
-                .cloned()
-                .expect("module should have been parsed");
             let name_resolution = *all_names.resolutions(db_salsa).get(&module_id)
                 .expect("module should have name resolution");
-            (db.dyn_clone(), module, parsed, name_resolution)
+            (db.dyn_clone(), module, name_resolution)
         })
         .collect();
 
     // Typecheck modules in parallel - populates salsa's memoization cache.
     // Both resolve_module_imports and typecheck_module are tracked and cached.
-    work.into_par_iter().for_each(|(db_clone, module, parsed, name_resolution)| {
+    work.into_par_iter().for_each(|(db_clone, module, name_resolution)| {
         let db_salsa = db_clone.as_salsa_db();
 
         // Resolve imports (tracked, memoized per module).
@@ -837,10 +800,9 @@ pub fn typecheck_module_graph_parallel<'db>(
         let qualified = import_resolution.qualified(db_salsa).C();
 
         // Typecheck (tracked, memoized per module).
-        let spans = DatafunSpans::new(vec![]);
         let _ = typecheck_module(
-            db_salsa, module, parsed, spans, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, prep.graph.data(db_salsa).C(), auto_adapt_mode,
+            db_salsa, module, name_resolution, resolved_imports, import_errors,
+            require_errors, qualified, graph.data(db_salsa).C(), auto_adapt_mode,
         );
     });
 

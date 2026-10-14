@@ -8,7 +8,7 @@ use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap, HashSet};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
-use datalove_datafun_ast::ast::{ParsedStatements, Statement};
+use datalove_datafun_ast::ast::{Item, Statement};
 use std::sync::Arc;
 use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, SharedConst, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
@@ -175,11 +175,21 @@ pub fn ir_module_ids<'db>(
         ids.insert(rider_module_id, IrModuleId(next));
         next += 1;
     }
-    for (module_id, _) in parsed_graph.statements_only(db) {
-        ids.insert(*module_id, IrModuleId(next));
+    let graph = parsed_graph.graph(db);
+    for module in graph.iter_modules(db) {
+        ids.insert(module.id(db), IrModuleId(next));
         next += 1;
     }
     ids
+}
+
+/// Each module in the graph, in order, with its statements.
+fn module_statements<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> impl Iterator<Item = (ModuleId<'db>, &'db datalove_datafun_ast::ast::ParsedStatements<'db>)> {
+    parsed_graph.graph(db).modules(db).iter()
+        .map(move |&module| (module.id(db), datalove_datafun_parser::parse_module_ast(db, module)))
 }
 
 /// Compute the function ID map from a parsed module graph.
@@ -194,16 +204,18 @@ pub fn compute_func_id_map<'db>(
     let mut entries = Vec::new();
     let module_ids = ir_module_ids(db, parsed_graph);
 
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
-        let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
+    let graph = parsed_graph.graph(db);
+    for module in graph.iter_modules(db) {
+        let module_id = module.id(db);
+        let ir_module_id = *module_ids.get(&module_id).expect("every parsed module is numbered");
         let mut next_func_id: u32 = 0;
 
-        for statement in parsed.statements(db).iter() {
-            if let Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).S();
+        for item in &datalove_datafun_parser::module_items(db, module).items {
+            if let Item::Fun(func) = item {
+                let func_name = func.name.text(db).S();
                 let func_id = FuncId(next_func_id);
                 next_func_id += 1;
-                entries.push(((*module_id, func_name), (ir_module_id, func_id)));
+                entries.push(((module_id, func_name), (ir_module_id, func_id)));
             }
         }
     }
@@ -391,7 +403,6 @@ pub fn lower_module<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
     ir_module_id: IrModuleId,
-    parsed: ParsedStatements<'db>,
     typecheck_result: SingleModuleTypecheckResult<'db>,
     ownership_analysis: SingleModuleAnalysis<'db>,
     func_ids: ReachableFuncIds<'db>,
@@ -425,9 +436,9 @@ pub fn lower_module<'db>(
 
     // Assign module-local FuncIds (0, 1, 2, ...).
     let mut next_func_id: u32 = 0;
-    for statement in parsed.statements(db).iter() {
-        if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).S();
+    for item in &datalove_datafun_parser::module_items(db, module).items {
+        if let Item::Fun(func) = item {
+            let func_name = func.name.text(db).S();
             let func_id = FuncId(next_func_id);
             next_func_id += 1;
             func_ids.push((func_name, func_id));
@@ -453,6 +464,7 @@ pub fn lower_module<'db>(
         // Lower functions from scratch.
         functions = Vec::new();
         let mut func_idx = 0;
+        let parsed = datalove_datafun_parser::parse_module_ast(db, module);
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
@@ -930,17 +942,13 @@ pub fn lower_all_module_functions<'db>(
     let graph = parsed_graph.graph(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
     let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
-    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
 
     // The modules that have everything lowering needs, in graph order, with the
     // arguments their query is keyed on. Built here rather than in the workers
     // so that the two modes key the query identically.
-    let ready: Vec<_> = parsed_graph.statements_only(db_salsa)
-        .iter()
-        .filter_map(|(module_id, _parsed)| {
-            let module = *module_map.get(module_id)?;
+    let ready: Vec<_> = graph.iter_modules(db_salsa)
+        .filter_map(|module| {
+            let module_id = &module.id(db_salsa);
             let single_typecheck = *typecheck_module_results.get(module_id)?;
             let single_ownership = *ownership_analysis_results.get(module_id)?;
 
@@ -1031,7 +1039,9 @@ pub fn evaluate_all_module_consts<'db>(
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
 
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
+    for (module_id, parsed) in module_statements(db, parsed_graph) {
+
+        let module_id = &module_id;
         let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
             continue;
         };
@@ -1192,7 +1202,9 @@ fn evaluate_module_level_consts<'db>(
     let typecheck_module_results = typecheck_result.module_results(db);
     let mut result = HashMap::new();
 
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
+    for (module_id, parsed) in module_statements(db, parsed_graph) {
+
+        let module_id = &module_id;
         let Some(single_typecheck) = typecheck_module_results.get(module_id) else {
             continue;
         };
@@ -1327,8 +1339,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // evaluating; see `data_consts`.
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
     let data_consts: HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> =
-        parsed_graph.statements_only(db_salsa).iter()
+        module_statements(db_salsa, parsed_graph)
             .filter_map(|(module_id, parsed)| {
+                let module_id = &module_id;
                 let single = typecheck_module_results.get(module_id)?;
                 let consts = crate::const_eval::data_consts(
                     db_salsa, parsed.body(db_salsa), single.expr_types(db_salsa), single.data_files(db_salsa));
@@ -1689,7 +1702,8 @@ fn specialize_comptime_functions<'db>(
     // instantiation is known.
     let mut func_asts: HashMap<(ModuleId<'db>, String), datalove_datafun_ast::ast::StmtFun<'db>> =
         HashMap::new();
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
+    for (module_id, parsed) in module_statements(db, parsed_graph) {
+        let module_id = &module_id;
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
                 func_asts.insert((*module_id, func_stmt.name(db).text(db).S()), *func_stmt);
@@ -1846,11 +1860,6 @@ fn assemble_module_graph<'db>(
     // Compute func_id_map (tracked, cached based on parsed_graph).
     let func_id_map = compute_func_id_map(db, parsed_graph);
 
-    // Build module lookup.
-    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db)
-        .map(|m| (m.id(db), m))
-        .collect();
-
     // Get per-module typecheck results.
     let typecheck_errors = typecheck_result.module_errors(db);
     let typecheck_module_results = typecheck_result.module_results(db);
@@ -1863,15 +1872,14 @@ fn assemble_module_graph<'db>(
     let mut all_success = true;
 
     let module_ids = ir_module_ids(db, parsed_graph);
-    for (module_id, parsed) in parsed_graph.statements_only(db) {
+    for module in graph.iter_modules(db) {
+        let module_id = &module.id(db);
         let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
 
         // Skip modules with typecheck errors.
         if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
             continue;
         }
-
-        let module = *module_map.get(module_id).expect("module should exist");
 
         // Get the tracked per-module typecheck result.
         let single_typecheck = *typecheck_module_results.get(module_id)
@@ -1891,7 +1899,6 @@ fn assemble_module_graph<'db>(
             db,
             module,
             ir_module_id,
-            parsed.clone(),
             single_typecheck,
             single_ownership_analysis,
             reachable_func_ids(db, graph, func_id_map, *module_id),
@@ -1934,26 +1941,19 @@ fn assemble_module_graph_parallel<'db>(
     // Compute func_id_map once (will be cached).
     let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
 
-    // Build module lookup and data for parallel phase.
-    let module_map: HashMap<ModuleId<'db>, Module> = graph.iter_modules(db_salsa)
-        .map(|m| (m.id(db_salsa), m))
-        .collect();
-
     let typecheck_errors = typecheck_result.module_errors(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
     let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
 
     // Prepare work items for parallel execution.
     let module_ids = ir_module_ids(db_salsa, parsed_graph);
-    let work: Vec<_> = parsed_graph.statements_only(db_salsa)
-        .iter()
-        .filter_map(|(module_id, parsed)| {
+    let work: Vec<_> = graph.iter_modules(db_salsa)
+        .filter_map(|module| {
+            let module_id = &module.id(db_salsa);
             // Skip modules with typecheck errors.
             if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
                 return None;
             }
-
-            let module = *module_map.get(module_id)?;
 
             // Get the tracked per-module typecheck result.
             let single_typecheck = *typecheck_module_results.get(module_id)?;
@@ -1971,7 +1971,6 @@ fn assemble_module_graph_parallel<'db>(
                 db.dyn_clone(),
                 module,
                 *module_ids.get(module_id).expect("every parsed module is numbered"),
-                parsed.clone(),
                 single_typecheck,
                 single_ownership_analysis,
                 reachable_func_ids(db_salsa, graph, func_id_map, *module_id),
@@ -1984,7 +1983,7 @@ fn assemble_module_graph_parallel<'db>(
         .collect();
 
     // Assemble modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, func_ids, module_consts, inline_modules, skip_const_inlining, module_funcs)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, single_typecheck, single_ownership_analysis, func_ids, module_consts, inline_modules, skip_const_inlining, module_funcs)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -1992,7 +1991,6 @@ fn assemble_module_graph_parallel<'db>(
             db_s,
             module,
             ir_module_id,
-            parsed,
             single_typecheck,
             single_ownership_analysis,
             func_ids,
