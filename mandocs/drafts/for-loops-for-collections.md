@@ -144,8 +144,10 @@ it probably makes sense to write the word `ref` somewhere in the loop header -
 I've got a mostly consistent explicit philosophy of writing `ref` everywhere
 there is a reference binding.
 Here I've put it next to the _collection_, not the binding,
-since as we'll see below there may be many bindings in a loop header.
+since as we'll see below there may be two bindings in a loop header
+and just now I don't want to think about distinguishing the case where one is by-val and one is by-ref.
 We'll see how that feels over time.
+Seems like something I'll have to revisit.
 
 Besides lists we also have other collections that need
 iteration consideration: maps, sets, tensors, and tables.
@@ -159,11 +161,11 @@ maps to both the key and value.
 todo map example
 ```
 
-The bindings are not a tuple:
+_The bindings are not a tuple_:
 a `(K, V)` would be a new value built from the two,
 not a place in the map.
-And Datalove doesn't have first-class references that could be shoved into a tuple
-so to build one means cloning both elements.
+And Datalove doesn't have first-class references that could be shoved into a tuple,
+so if we built a tuple the elements would need to be cloned.
 As with lists, the key binding is immutable;
 the value could someday be `mut`.
 
