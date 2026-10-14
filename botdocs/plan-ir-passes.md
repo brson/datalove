@@ -101,15 +101,55 @@ own, and an edit re-optimizes the function and what inlined it.
 ## Later: lowering on demand
 
 The interpreter and the JIT could ask for a function's IR the first time it
-is called rather than finding every function of the import closure lowered;
-for a script requiring every module, that is most of the 15 ms. What holds it
-up is consts. A module's consts are evaluated when the module compiles, and a
-failure is an error then, whether or not anything reads the const; lowered on
-demand, a const's evaluation and its failure would move to its first use, and
-CTFE's own lowering with them. Whether that is acceptable, and what a module
-author would see, is not settled. Specialized copies also need an identity
-that does not depend on which others exist, which today they get from being
-numbered in a pass over the graph.
+is called, rather than finding every function of the import closure lowered.
+For a script requiring every module, that would save 5a's lowering and most
+of 5d, around a quarter of the run; analysis (parse, typecheck, ownership) is
+another 9ms and stays eager, so that is the cap.
+
+**Consts are the open question.** A module's consts are evaluated when the
+module compiles, and a failure is an error then, whether or not anything reads
+the const. Lowered on demand, a const's evaluation and its failure would move
+to its first use, and CTFE's own lowering with them. Whether that is
+acceptable, and what a module author would see, is not settled. Specialized
+copies also need an identity that does not depend on which others exist,
+which today they get from being numbered in a pass over the graph.
+
+**Functions that name no const are not part of that question.** Keeping
+consts, and the functions naming them, eager would leave 952 of `sys/std`'s
+970 functions to lower on demand; the other 18 name `index`'s and `offset`'s
+module consts. Nothing is in the way of those 952 semantically:
+
+- Lowering one cannot fail. The only `LowerError` lowering constructs is
+  `BindingNotAvailable`, a module const not yet evaluated. Analysis errors are
+  reported before lowering, and a cycle of inline functions is refused by
+  typecheck (F085), so inlining cannot fail either.
+- None reaches specialization. A const argument has to be the name of a const
+  binding, so every call site that is specialized names a const, and is eager.
+- A call to one is already addressable unlowered: function ids come from the
+  AST (`compute_func_id_map`), not from lowering.
+- The interpreter already turns IR into bytecode on a body's first call, and
+  the JIT compiles on hotness.
+
+**What is in the way is plumbing.** In rough order of size:
+
+1. The engines are handed a finished `ModuleFunctionRegistry`, a map built in
+   a memo. Lowering on a miss means a registry that can call back into the
+   compiler, so a salsa handle held while the program runs.
+2. That handle pins a revision, and setting an input cancels queries running
+   on other handles: an edit in the REPL or a reactive session would surface
+   as a cancellation in the middle of a run. A one-shot `datalove script` has
+   no edits. For the others, whether an edit waits for the run, stops it, or
+   leaves it on its revision is a design question of its own.
+3. Lowering is per module. This is the per-function query above, which on
+   demand needs anyway.
+4. Consts call functions. The first stratum of 5a lowers every function that
+   names no const so that CTFE has them; on demand, CTFE's registry would ask
+   for them through the same query, and the strata go.
+5. The AOT and C backends compile what they are given, and would walk what is
+   reachable from the entry instead.
+6. Engine fixtures dump every function's IR, and the `incremental_lowering`
+   and `module_memo` tests assert what is lowered, so an eager mode stays, for
+   them and for AOT.
 
 ## Phases
 
@@ -123,4 +163,6 @@ numbered in a pass over the graph.
    `DATALOVE_PARALLEL` set, 5d is 1.5ms, and the run went from 29.3ms to
    26.3ms, since inlining now runs in the parallel phase.
 2. **Per-function handles out of 5a**, and `optimized_function`.
-3. **Lowering on demand**, once the const question is settled.
+3. **Lowering on demand**, for functions naming no const once the question of
+   a salsa handle across edits is settled, and for the rest once the const
+   question is.
