@@ -4,7 +4,7 @@ use rmx::prelude::*;
 
 use bct::{
     lexer::{TokenKind, Sigil},
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     text::InternedText,
 };
 
@@ -179,7 +179,7 @@ impl<'db> Parser<'db> {
                     let text = self.source_text();
                     let start_pos = self.current_byte_pos();
                     let inner = match self.next() {
-                        Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner.iter(),
+                        Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
                         _ => unreachable!(),
                     };
                     let mut sub = self.sub_parser(inner, None);
@@ -258,7 +258,7 @@ impl<'db> Parser<'db> {
         let callee_end = self.last_byte_end();
         let (args_iter, open_span) = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
-                (inner.iter(), TextSpan::new(self.source_text(), open.span()))
+                (inner, TextSpan::new(self.source_text(), open.span()))
             }
             _ => unreachable!("the caller saw a `(`"),
         };
@@ -682,7 +682,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             };
                                             // Intrinsics have no parameter modes; a marker
                                             // here is rejected during typechecking.
-                                            self.parse_function_call_args(args_iter.iter(), Some((open_span, "in this argument list")))
+                                            self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")))
                                         }
                                         _ => {
                                             return self.emit_expr_error(ts,
@@ -726,7 +726,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                             }
                                             _ => unreachable!(),
                                         };
-                                        let (args, arg_modes) = self.parse_function_call_args(args_iter.iter(), Some((open_span, "in this argument list")));
+                                        let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
                                         let call = ast::ExprFunctionCall::new(
                                             self.db,
@@ -819,7 +819,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
 
     pub(super) fn parse_function_call_args(
         &mut self,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> (Vec<ast::ExprFun<'db>>, Vec<Option<ast::ParamMode>>) {
         let mut sub = self.sub_parser(iter, context);
@@ -868,7 +868,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
         };
         let tuple_ts = TextSpan::new(open_span.text, open_span.span.start..self.last_byte_end());
 
-        let mut sub = self.sub_parser(iter.iter(), Some((open_span, "in this tuple")));
+        let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));
         let (elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
         self.merge_from_sub(&mut sub);

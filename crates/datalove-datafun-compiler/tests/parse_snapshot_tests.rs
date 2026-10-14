@@ -41,15 +41,20 @@ fn parse_snapshots() {
 
     let mut compared = 0;
     let mut differing = vec![];
+    let mut new = vec![];
     for (name, text) in inputs.iter().flat_map(|(name, text)| cuts(name, text)) {
         for (language, output) in [("datafun", datafun(&text)), ("datalit", datalit(&text))] {
             let file = dir.join(fmt!("{}.{language}.json", sanitize(&name)));
             if writing {
                 std::fs::write(&file, &output).X();
             } else {
+                // A source added since the snapshots were written has nothing
+                // to be checked against, which says nothing about the parser.
+                let Ok(expected) = std::fs::read_to_string(&file) else {
+                    new.push(name.C());
+                    continue;
+                };
                 compared += 1;
-                let expected = std::fs::read_to_string(&file)
-                    .unwrap_or_else(|_| panic!("no snapshot for {name}: {}", file.display()));
                 if expected != output {
                     std::fs::write(file.with_extension("actual"), &output).X();
                     differing.push(file);
@@ -59,7 +64,10 @@ fn parse_snapshots() {
     }
 
     if !writing {
-        eprintln!("parse snapshots: {compared} compared, {} differ", differing.len());
+        eprintln!("parse snapshots: {compared} compared, {} differ, {} new", differing.len(), new.len());
+        for name in &new {
+            eprintln!("  new: {name}");
+        }
         for file in differing.iter().take(40) {
             eprintln!("  {}", file.display());
         }

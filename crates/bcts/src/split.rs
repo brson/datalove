@@ -10,9 +10,8 @@
 use rmx::prelude::*;
 
 use rmx::core::ops::Range;
-use rmx::std::mem;
 
-use crate::bracer::TreeToken;
+use crate::bracer::{Cursor, TreeToken};
 use crate::diagnostic::DiagnosticBuilder;
 use crate::lexer::{Sigil, TokenKind};
 use crate::text::{Text, TextSpan};
@@ -20,7 +19,7 @@ use crate::text::{Text, TextSpan};
 /// A run of tokens between two delimiters.
 #[derive(Clone)]
 pub struct TokenGroup<'db> {
-    pub tokens: Vec<TreeToken<'db>>,
+    pub tokens: Cursor<'db>,
     /// What closed the group, absent where the input ran out instead.
     pub end: Option<Delimiter>,
 }
@@ -60,36 +59,78 @@ impl Written {
 ///
 /// A newline is kept on the token after it, so one at the end of the tokens
 /// is not seen, and closes nothing that the end would not.
-pub fn split_lines<'db>(
-    tokens: impl IntoIterator<Item = TreeToken<'db>>,
-) -> Vec<TokenGroup<'db>> {
-    let mut groups = vec![];
-    let mut current = vec![];
+pub fn split_lines<'db>(tokens: Cursor<'db>) -> Vec<TokenGroup<'db>> {
+    Lines::new(tokens).collect()
+}
 
-    for token in tokens {
-        if token.newline_before() {
-            groups.push(TokenGroup {
-                tokens: mem::take(&mut current),
-                end: Some(Delimiter::Newline),
-            });
+/// The groups [`split_lines`] makes, one at a time.
+///
+/// Each is a cursor over its part of the level, so a source's lines are
+/// found rather than collected: what a line holds stays where the lexer put
+/// it.
+#[derive(Clone)]
+pub struct Lines<'db> {
+    rest: Cursor<'db>,
+    /// Where the group being read began.
+    start: u32,
+    /// A group a `;` closed straight after a newline closed the one before.
+    pending: Option<TokenGroup<'db>>,
+    finished: bool,
+}
+
+impl<'db> Lines<'db> {
+    pub fn new(tokens: Cursor<'db>) -> Self {
+        Lines { rest: tokens, start: tokens.position(), pending: None, finished: false }
+    }
+}
+
+impl<'db> Iterator for Lines<'db> {
+    type Item = TokenGroup<'db>;
+
+    fn next(&mut self) -> Option<TokenGroup<'db>> {
+        if let Some(group) = self.pending.take() {
+            return Some(group);
         }
-        match &token {
-            TreeToken::Token(t) if t.kind == TokenKind::Sigil(Sigil::Semicolon) => {
-                groups.push(TokenGroup {
-                    tokens: mem::take(&mut current),
+        if self.finished {
+            return None;
+        }
+        while let Some(index) = self.rest.next_index() {
+            let token = self.rest.raw(index);
+            let mut closed = None;
+            if token.newline_before {
+                closed = Some(TokenGroup {
+                    tokens: self.rest.between(self.start, index),
+                    end: Some(Delimiter::Newline),
+                });
+                self.start = index;
+            }
+            if self.rest.is_plain(index) && token.kind == TokenKind::Sigil(Sigil::Semicolon) {
+                let group = TokenGroup {
+                    tokens: self.rest.between(self.start, index),
                     end: Some(Delimiter::Written(Written {
                         sigil: Sigil::Semicolon,
                         count: 1,
-                        span: t.span(),
+                        span: token.span(),
                     })),
-                });
+                };
+                self.start = index.checked_add(1).X();
+                match closed {
+                    Some(_) => self.pending = Some(group),
+                    None => closed = Some(group),
+                }
             }
-            _ => current.push(token),
+            if closed.is_some() {
+                return closed;
+            }
         }
+        self.finished = true;
+        Some(TokenGroup { tokens: self.rest.between(self.start, self.rest.end()), end: None })
     }
+}
 
-    groups.push(TokenGroup { tokens: current, end: None });
-    groups
+/// Whether the level hands out a comma at `index`.
+fn is_comma(tokens: &Cursor<'_>, index: u32) -> bool {
+    tokens.is_plain(index) && tokens.raw(index).kind == TokenKind::Sigil(Sigil::Comma)
 }
 
 /// Split on separators of `level` commas.
@@ -99,44 +140,41 @@ pub fn split_lines<'db>(
 /// separates, and is split from it one level down. A longer run is that many
 /// separators rather than one, so the group between two of them is empty and
 /// the caller hears about it.
-pub fn split_commas<'db>(
-    tokens: impl IntoIterator<Item = TreeToken<'db>>,
-    level: usize,
-) -> Vec<TokenGroup<'db>> {
+pub fn split_commas<'db>(tokens: Cursor<'db>, level: usize) -> Vec<TokenGroup<'db>> {
     assert!(level > 0, "a separator is at least one comma");
-    let tokens: Vec<_> = tokens.into_iter().collect();
+    let indices: Vec<u32> = std::iter::from_fn({
+        let mut rest = tokens;
+        move || rest.next_index()
+    }).collect();
 
     let mut groups = vec![];
-    let mut current = vec![];
+    let mut start = tokens.position();
     let mut i = 0;
 
-    while i < tokens.len() {
-        let run = comma_run(&tokens[i..]);
-        if run == 0 {
-            current.push(tokens[i].C());
-            i = i.checked_add(1).X();
-            continue;
-        }
+    while i < indices.len() {
+        let run = indices[i..].iter().take_while(|&&index| is_comma(&tokens, index)).count();
         if run >= level {
             let end = i.checked_add(level).X();
+            let first = tokens.raw(indices[i]).span();
+            let last = tokens.raw(indices[end.checked_sub(1).X()]).span();
             groups.push(TokenGroup {
-                tokens: mem::take(&mut current),
+                tokens: tokens.between(start, indices[i]),
                 end: Some(Delimiter::Written(Written {
                     sigil: Sigil::Comma,
                     count: level,
-                    span: token_span(&tokens[i]).start..token_span(&tokens[end.checked_sub(1).X()]).end,
+                    span: first.start..last.end,
                 })),
             });
+            start = indices.get(end).copied().unwrap_or(tokens.end());
             i = end;
         } else {
             // Below this level the run is not a separator, so it travels on
             // to whichever level it does separate.
-            current.extend(tokens[i..i.checked_add(run).X()].iter().cloned());
-            i = i.checked_add(run).X();
+            i = i.checked_add(run.max(1)).X();
         }
     }
 
-    groups.push(TokenGroup { tokens: current, end: None });
+    groups.push(TokenGroup { tokens: tokens.between(start, tokens.end()), end: None });
     groups
 }
 
@@ -145,24 +183,19 @@ pub fn split_commas<'db>(
 /// A tensor's rank is one more than this: the widest separator written is the
 /// outermost axis, and the elements inside the innermost one are separated by
 /// spaces rather than by anything.
-pub fn max_comma_run<'db>(tokens: &[TreeToken<'db>]) -> usize {
-    (0..tokens.len()).map(|i| comma_run(&tokens[i..])).max().unwrap_or(0)
-}
-
-/// How many commas a slice of tokens starts with.
-fn comma_run<'db>(tokens: &[TreeToken<'db>]) -> usize {
-    tokens
-        .iter()
-        .take_while(|t| {
-            matches!(t, TreeToken::Token(t) if t.kind == TokenKind::Sigil(Sigil::Comma))
-        })
-        .count()
-}
-
-/// A comma's span, the only kind of token [`split_commas`] asks for one from.
-fn token_span<'db>(token: &TreeToken<'db>) -> Range<usize> {
-    let TreeToken::Token(token) = token else { bug!() };
-    token.span()
+pub fn max_comma_run<'db>(tokens: Cursor<'db>) -> usize {
+    let mut rest = tokens;
+    let mut longest = 0;
+    let mut run = 0;
+    while let Some(index) = rest.next_index() {
+        if is_comma(&tokens, index) {
+            run += 1;
+            longest = longest.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    longest
 }
 
 /// The written delimiters that closed a group with nothing in it.
@@ -173,14 +206,19 @@ fn token_span<'db>(token: &TreeToken<'db>) -> Range<usize> {
 /// group before it, and the empty group after it is closed by the end of the
 /// input rather than by another delimiter.
 pub fn stray_delimiters<'db>(groups: &[TokenGroup<'db>]) -> Vec<Written> {
-    groups
-        .iter()
-        .filter(|group| group.is_empty())
-        .filter_map(|group| match &group.end {
-            Some(Delimiter::Written(written)) => Some(written.C()),
-            Some(Delimiter::Newline) | None => None,
-        })
-        .collect()
+    groups.iter().filter_map(stray_delimiter).collect()
+}
+
+/// The written delimiter that closed a group with nothing in it, if one did;
+/// see [`stray_delimiters`].
+pub fn stray_delimiter(group: &TokenGroup<'_>) -> Option<Written> {
+    if !group.is_empty() {
+        return None;
+    }
+    match &group.end {
+        Some(Delimiter::Written(written)) => Some(written.C()),
+        Some(Delimiter::Newline) | None => None,
+    }
 }
 
 /// The diagnostic for a delimiter written with nothing before it.
@@ -256,21 +294,21 @@ pub struct TensorHeaderError {
 /// there has to be at least one, since a tensor has at least one axis.
 pub fn split_tensor_header<'db>(
     chunk_text: &str,
-    tokens: Vec<TreeToken<'db>>,
-) -> (Option<Result<TensorHeader, TensorHeaderError>>, Vec<TreeToken<'db>>) {
-    let is_pipe = |t: &TreeToken<'db>| {
-        matches!(t, TreeToken::Token(t) if t.kind == TokenKind::Sigil(Sigil::Pipe))
-    };
-    let Some(pipe) = tokens.iter().position(is_pipe) else {
+    tokens: Cursor<'db>,
+) -> (Option<Result<TensorHeader, TensorHeaderError>>, Cursor<'db>) {
+    let mut rest = tokens;
+    let pipe = std::iter::from_fn(|| rest.next_index()).find(|&index| {
+        tokens.is_plain(index) && tokens.raw(index).kind == TokenKind::Sigil(Sigil::Pipe)
+    });
+    let Some(pipe) = pipe else {
         return (None, tokens);
     };
-    let mut tokens = tokens;
-    let body = tokens.split_off(pipe.checked_add(1).X());
-    let pipe_token = tokens.pop().X();
-    let header = tokens;
+    let header = tokens.between(tokens.position(), pipe);
+    let body = tokens.between(pipe.checked_add(1).X(), tokens.end());
+    let pipe_span = tokens.raw(pipe).span();
 
-    let start = header.first().unwrap_or(&pipe_token).span().start;
-    let span = start..pipe_token.span().end;
+    let start = header.first().map_or(pipe_span.start, |token| token.span().start);
+    let span = start..pipe_span.end;
     if header.is_empty() {
         return (Some(Err(TensorHeaderError {
             span,
@@ -280,8 +318,8 @@ pub fn split_tensor_header<'db>(
     }
 
     let mut extents = vec![];
-    for token in &header {
-        let extent = match token {
+    for token in header {
+        let extent = match &token {
             TreeToken::Token(t) => t.word_str(chunk_text)
                 .filter(|w| crate::parser_util::is_decimal_run(w))
                 .and_then(|w| crate::parser_util::strip_separators(w).parse::<u32>().ok()),
@@ -300,7 +338,7 @@ pub fn split_tensor_header<'db>(
 }
 
 /// The groups with tokens in them, which is what a caller parses.
-pub fn nonempty_groups<'db>(groups: Vec<TokenGroup<'db>>) -> Vec<Vec<TreeToken<'db>>> {
+pub fn nonempty_groups<'db>(groups: Vec<TokenGroup<'db>>) -> Vec<Cursor<'db>> {
     groups
         .into_iter()
         .map(|group| group.tokens)
@@ -309,17 +347,17 @@ pub fn nonempty_groups<'db>(groups: Vec<TokenGroup<'db>>) -> Vec<Vec<TreeToken<'
 }
 
 #[cfg(test)]
-fn tree_tokens<'db>(db: &'db crate::Database, text: &str) -> Vec<TreeToken<'db>> {
+fn tree_tokens<'db>(db: &'db crate::Database, text: &str) -> Cursor<'db> {
     let source = crate::input::Source::new(db, text.S());
     let chunk = crate::source_map::basic_source_map(db, source);
     let chunk_lex = crate::lexer::lex_chunk(db, chunk);
-    crate::bracer::bracer(db, chunk_lex).iter(db).collect()
+    crate::bracer::bracer(db, chunk_lex).iter(db)
 }
 
 #[cfg(test)]
 fn shape<'db>(groups: &[TokenGroup<'db>]) -> (Vec<usize>, Vec<String>) {
     (
-        groups.iter().map(|g| g.tokens.len()).collect(),
+        groups.iter().map(|g| g.tokens.count()).collect(),
         stray_delimiters(groups).iter().map(|w| w.as_string()).collect(),
     )
 }
@@ -377,7 +415,7 @@ fn test_split_commas() {
 fn test_max_comma_run() {
     let ref db = crate::Database::default();
     let run = |text: &str| {
-        max_comma_run(&tree_tokens(db, text))
+        max_comma_run(tree_tokens(db, text))
     };
     assert_eq!(run("a b"), 0);
     assert_eq!(run("a, b"), 1);

@@ -12,7 +12,7 @@ use rmx::prelude::*;
 use bct::{
     input::Source,
     module_graph::ModuleId,
-    bracer::{Bracer, TreeToken},
+    bracer::{Bracer, Cursor},
     parser_util,
     split,
     text::{Text, TextSpan},
@@ -161,17 +161,18 @@ fn parse_bracer<'db>(
 ) -> ast::ParseResult<'db> {
     // Split into lines. A newline inside balanced braces is not a line break,
     // since the bracer has already put it inside a branch.
-    let groups = split::split_lines(bracer.iter(db));
+    let lines = split::Lines::new(bracer.iter(db));
 
     // A `;` separates two statements, so one with nothing before it separates
-    // nothing. A blank line is not the same thing and is left alone.
-    for written in split::stray_delimiters(&groups) {
+    // nothing. A blank line is not the same thing and is left alone. Reported
+    // before anything is parsed, and finding the lines again is a scan.
+    for written in lines.clone().filter_map(|group| split::stray_delimiter(&group)) {
         split::stray_delimiter_error(db, source_text, &written, "statements")
             .code("P032")
             .emit_parse();
     }
 
-    let lines = split::nonempty_groups(groups).into_iter();
+    let lines = lines.map(|group| group.tokens).filter(|line| !line.is_empty());
     let (statements, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id);
     let parsed = ast::ParsedStatements {
         statements: std::sync::Arc::new(statements),
@@ -211,7 +212,7 @@ struct ParsedSpans<'db> {
 /// Returns statements and accumulated spans.
 fn parse_statements<'db>(
     db: &'db dyn Db,
-    lines: impl Iterator<Item = Vec<TreeToken<'db>>>,
+    lines: impl Iterator<Item = Cursor<'db>>,
     source_text: bct::text::Text<'db>,
     module_id: Option<ModuleId<'db>>,
 ) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {

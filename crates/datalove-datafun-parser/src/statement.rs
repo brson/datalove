@@ -5,7 +5,7 @@ use rmx::core::iter::Peekable;
 
 use bct::{
     lexer::Sigil,
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     text::InternedText,
 };
 use bct::diagnostic::DiagnosticBuilder;
@@ -20,7 +20,7 @@ use datalove_datalit::parser_util::NameKind;
 impl<'db> Parser<'db> {
     pub(super) fn parse_statement(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         let stmt = match self.peek_word() {
             Some("let") => self.parse_let(),
@@ -78,13 +78,13 @@ impl<'db> Parser<'db> {
     /// unknown name, and a `fun` to bring lowering down.
     pub(super) fn parse_line_statement(
         &mut self,
-        line: Vec<TreeToken<'db>>,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        line: Cursor<'db>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
-        if let Some(TreeToken::Token(first)) = line.first() {
+        if let Some(token @ TreeToken::Token(first)) = &line.first() {
             if let Some(word @ ("require" | "import" | "fun" | "native" | "type")) = first.word_str(self.text()) {
                 self.had_error = true;
-                let ts = self.extract_text_span(&line[0]);
+                let ts = self.extract_text_span(token);
                 DiagnosticBuilder::error(self.db, &fmt!("`{word}` inside a block"))
                     .code("P074")
                     .primary_label(ts, &fmt!("`{word}` is only read at the top level"))
@@ -129,17 +129,17 @@ statements that run belong in a function or a script")
     /// came to mean `end fun`.
     fn eat_end_line(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
         keyword: &str,
     ) {
         let (_, line) = remaining_lines.next().X();
-        let Some(extra) = line.get(2) else {
+        let Some(extra) = line.peek_nth(2) else {
             return;
         };
         self.had_error = true;
         DiagnosticBuilder::error(self.db, &fmt!("unexpected token after `end {keyword}`"))
             .code("P033")
-            .primary_label(self.extract_text_span(extra), "`end` takes the keyword and nothing else")
+            .primary_label(self.extract_text_span(&extra), "`end` takes the keyword and nothing else")
             .emit_parse();
     }
 
@@ -514,7 +514,7 @@ statements that run belong in a function or a script")
 
     fn parse_fun(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         // Record function span starting at 'fun' keyword.
         let fun_span = self.peek_text_span();
@@ -538,7 +538,7 @@ statements that run belong in a function or a script")
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner.iter()),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -549,7 +549,7 @@ statements that run belong in a function or a script")
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(inner.iter(), Some((open_span, "in this parameter list")))
+                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();
@@ -578,7 +578,9 @@ statements that run belong in a function or a script")
         // `inline`, alone on the body's first line, marks the function for
         // inlining. Anywhere else it is an error, which `parse_statement` gives.
         let inline = remaining_lines.peek().is_some_and(|(_, line)| {
-            matches!(line.as_slice(), [TreeToken::Token(t)] if t.word_str(self.text()) == Some("inline"))
+            let mut line = *line;
+            matches!((line.next(), line.next()), (Some(TreeToken::Token(t)), None)
+                if t.word_str(self.text()) == Some("inline"))
         });
         if inline {
             remaining_lines.next();
@@ -625,7 +627,7 @@ statements that run belong in a function or a script")
     /// fills them in.
     fn parse_type_params(
         &mut self,
-        inner: BracerIter<'db>,
+        inner: Cursor<'db>,
     ) -> (Vec<InternedText<'db>>, Vec<Option<ast::TypeBound>>) {
         let mut sub = Parser::from_branch_with_context(
             self.db, inner, self.source_text(), None, self.module_id());
@@ -716,7 +718,7 @@ statements that run belong in a function or a script")
 
     fn parse_fun_params(
         &mut self,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Vec<ast::FunParam<'db>> {
         let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
@@ -1019,7 +1021,7 @@ statements that run belong in a function or a script")
 
     fn parse_if(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         self.eat_word("if");
         match self.parse_if_arm(remaining_lines, false) {
@@ -1043,7 +1045,7 @@ statements that run belong in a function or a script")
     /// an `else |e|` at the end of the chain would bind, are not obvious.
     fn parse_if_arm(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
         chained: bool,
     ) -> Option<ast::StmtIf<'db>> {
         let condition = self.parse_expr_full();
@@ -1066,7 +1068,7 @@ statements that run belong in a function or a script")
                 break;
             }
 
-            if let Some(TreeToken::Token(t1)) = line.get(0) {
+            if let Some(TreeToken::Token(t1)) = line.first() {
                 if let Some("else") = t1.word_str(self.text()) {
                     found_else = true;
                     break;
@@ -1170,7 +1172,7 @@ statements that run belong in a function or a script")
 
     fn parse_loop(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         self.eat_word("loop");
 
@@ -1314,7 +1316,7 @@ statements that run belong in a function or a script")
         let (type_params, type_bounds) = match self.peek() {
             Some(TreeToken::Branch { sigil: Sigil::AngleOpen, .. }) => {
                 match self.next() {
-                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner.iter()),
+                    Some(TreeToken::Branch { inner, .. }) => self.parse_type_params(inner),
                     _ => unreachable!("peeked an angle branch"),
                 }
             }
@@ -1325,7 +1327,7 @@ statements that run belong in a function or a script")
         let params = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {
                 let open_span = TextSpan::new(self.source_text(), open.span());
-                self.parse_fun_params(inner.iter(), Some((open_span, "in this parameter list")))
+                self.parse_fun_params(inner, Some((open_span, "in this parameter list")))
             }
             _ => {
                 let ts = self.error_span();
@@ -1359,7 +1361,7 @@ statements that run belong in a function or a script")
 
     fn parse_match(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> ast::Statement<'db> {
         self.eat_word("match");
 
@@ -1379,7 +1381,7 @@ statements that run belong in a function or a script")
             }
 
             // Check for "case" line.
-            if let Some(TreeToken::Token(t1)) = line.get(0) {
+            if let Some(TreeToken::Token(t1)) = line.first() {
                 if let Some("case") = t1.word_str(self.text()) {
                     let (_, case_line) = remaining_lines.next().X();
                     let mut case_sub = self.new_sub(case_line);
@@ -1485,7 +1487,7 @@ statements that run belong in a function or a script")
             // A line inside a match that is not a `case` belongs to no arm.
             let (_, line) = remaining_lines.next().X();
             self.had_error = true;
-            let ts = self.extract_text_span(&line[0]);
+            let ts = self.extract_text_span(&line.first().X());
             DiagnosticBuilder::error(self.db, "this line is in no case of the match")
                 .code("P048")
                 .primary_label(ts, "every statement here belongs to a `case`")
@@ -1506,7 +1508,7 @@ statements that run belong in a function or a script")
     /// Parse match arm body lines until the next case/default/end match.
     fn parse_match_arm_body(
         &mut self,
-        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Vec<TreeToken<'db>>)>>,
+        remaining_lines: &mut Peekable<impl Iterator<Item = (usize, Cursor<'db>)>>,
     ) -> Vec<ast::Statement<'db>> {
         let mut body = vec![];
         while let Some((_, line)) = remaining_lines.peek() {
@@ -1514,7 +1516,7 @@ statements that run belong in a function or a script")
                 break;
             }
             // Check for next "case".
-            if let Some(TreeToken::Token(t1)) = line.get(0) {
+            if let Some(TreeToken::Token(t1)) = line.first() {
                 if let Some("case") = t1.word_str(self.text()) {
                     break;
                 }

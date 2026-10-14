@@ -2,8 +2,9 @@
 
 A plan for rewriting how the datafun and datalit parsers get their tokens, so
 that a parse allocates for the AST it returns rather than for the tokens it
-reads. Written October 2026; not implemented. The measurements behind it are
-in [Where Compile Time Goes](compile-time.md).
+reads. Written October 2026, and phases 1 to 5 implemented the same month,
+with the departures and the results in [What was built](#user-content-what-was-built).
+The measurements behind it are in [Where Compile Time Goes](compile-time.md).
 
 ## Contents
 
@@ -14,6 +15,7 @@ in [Where Compile Time Goes](compile-time.md).
 - [Recovery](#user-content-recovery)
 - [Migrating](#user-content-migrating)
 - [Phases](#user-content-phases)
+- [What was built](#user-content-what-was-built)
 - [Open questions](#user-content-open-questions)
 
 ## The problem
@@ -196,13 +198,54 @@ Each phase is measured against the `sys/std` numbers above: allocations and
 bytes during parsing (a counting allocator, as in
 [compile-time.md](compile-time.md)), and user instructions.
 
+## What was built
+
+The cursor, the layout, `Lines` and cursor groups, as designed, and no token
+is copied into a vector anywhere: `Vec<TreeToken>` is gone from both parsers,
+and so are the vector-backed token sources. All 40,356 parse snapshots
+(`parse_snapshot_tests`) are identical before and after.
+
+Where it departs from the design:
+
+- **`TreeToken` stays, as a view.** A cursor makes one when the parser looks
+  at a token, and the parser holds two for lookahead; none is collected.
+  Every parser function matches on it, so keeping it kept the cutover to the
+  token plumbing.
+- **Sub-parsers stay.** They no longer allocate -- the span tables are lent
+  to them and the cursor is `Copy` -- so one parser per parse would save
+  instructions rather than allocation, and was not done.
+- **The layout is filled by the old walk.** The bracer keeps its branch
+  lists long enough to walk them the way `BracerIter` did and write each
+  token's entry, so the levels hand out exactly what they did, odd cases of
+  recovery included: a removed close before a later bracket at the same level
+  is still a token. The lists are not stored.
+- **Snapshots rather than two parsers.** The harness writes everything the
+  parser as it was returns and checks the new one against that, which needs
+  only one parser in the tree.
+- **One difference between the old sources was dead.** A parser over a
+  bracket forgot where the last token ended when read past its end, and one
+  over a line did not; making both remember changed no snapshot, so they do.
+
+Writing the first snapshots found a crash, now fixed: an unclosed bracket as
+the last token of a source was taken for a stray close.
+
+**Results.** Parsing `sys/std` went from 35,726 allocations and 12.0MB to
+26,189 and 5.6MB, and the cold compile from 196.8M to 192.0M user
+instructions; parsing went from about 27% of the run to 23%. The targets
+missed, because the AST allocates more than this plan supposed: a function
+body's `Vec<Statement>` is at least 512 bytes, since a `Statement` is 128 and
+a vector's first growth reserves four; argument and mode vectors and number
+strings make most of the small allocations; and salsa's pages for the
+`ExprFun` structs are 1.6MB. What is left of parsing's instructions is
+spread thin, the lexer the largest at 5.9% of the run.
+
 ## Open questions
 
 - **Should the bracer fold into the lexer?** Both run once per source and
   re-run together on any edit, so as separate queries they are two memos for
   one piece of work. Folding them saves a memo and a pass, and makes the
   lexer responsible for recovery, which it is not now.
-- **Is the AST's own allocation worth attacking next?** After this, statement
-  and argument vectors are most of what is left. Small-vector storage for
-  argument lists, or the expression arena above, would be the next step, and
-  should wait for the numbers this produces.
+- **Is the AST's own allocation worth attacking next?** It is most of what
+  is left, as above. A body's statements boxed as a slice rather than a
+  growing vector, argument lists and their modes in one vector, and the
+  expression arena would each be measured on their own.

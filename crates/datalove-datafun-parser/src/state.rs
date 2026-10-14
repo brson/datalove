@@ -5,7 +5,7 @@ use rmx::prelude::*;
 use bct::{
     module_graph::ModuleId,
     lexer::Sigil,
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     text::InternedText,
 };
 
@@ -17,27 +17,32 @@ use datalove_diagnostic::DiagnosticBuilderExt;
 
 use super::Db;
 
-/// Token source for parser - either Vec-backed or iterator-backed.
-enum TokenSource<'db> {
-    /// Vec-backed with position index (original approach).
-    Vec {
-        tokens: Vec<TreeToken<'db>>,
-        pos: usize,
-        /// The end of the last token consumed, for span tracking.
-        last_end: Option<usize>,
-    },
-    /// Iterator-backed with lookahead buffer (zero allocation).
-    Iter {
-        iter: BracerIter<'db>,
-        /// Lookahead buffer: [0] = current, [1] = next.
-        buffer: [Option<TreeToken<'db>>; 2],
-        /// The end of the last token consumed, for span tracking.
-        ///
-        /// The token itself was kept here once, which meant cloning every
-        /// `TreeToken` a second time on the way past -- and a branch carries a
-        /// whole sub-iterator -- to read one `usize` back out of it.
-        last_end: Option<usize>,
-    },
+/// Where a parser reads its tokens: a cursor over a line or a bracket, with
+/// the two tokens at it held for lookahead.
+pub(super) struct TokenSource<'db> {
+    cursor: Cursor<'db>,
+    /// Lookahead buffer: [0] = current, [1] = next.
+    buffer: [Option<TreeToken<'db>>; 2],
+    /// The end of the last token consumed, for span tracking.
+    last_end: Option<usize>,
+}
+
+impl<'db> TokenSource<'db> {
+    pub(super) fn new(mut cursor: Cursor<'db>) -> Self {
+        let first = cursor.next();
+        let second = cursor.next();
+        TokenSource { cursor, buffer: [first, second], last_end: None }
+    }
+
+    fn next(&mut self) -> Option<TreeToken<'db>> {
+        let result = self.buffer[0].take();
+        if let Some(token) = &result {
+            self.last_end = Some(token.span().end);
+        }
+        self.buffer[0] = self.buffer[1].take();
+        self.buffer[1] = self.cursor.next();
+        result
+    }
 }
 
 /// Script-level identity counters carried from one line's parser to the next.
@@ -179,14 +184,14 @@ impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
     pub(super) fn new(
         db: &'db dyn Db,
-        tokens: Vec<TreeToken<'db>>,
+        tokens: Cursor<'db>,
         source_text: bct::text::Text<'db>,
         module_id: Option<ModuleId<'db>>,
         counters: ScriptCounters,
     ) -> Self {
         Parser {
             db,
-            source: TokenSource::Vec { tokens, pos: 0, last_end: None },
+            source: TokenSource::new(tokens),
             had_error: false,
             source_text,
             text: source_text.as_str(db),
@@ -207,7 +212,7 @@ impl<'db> Parser<'db> {
     ///
     /// A nested parser that started its counters from zero would hand out keys
     /// that collide with the enclosing body's.
-    pub(super) fn new_sub(&mut self, tokens: Vec<TreeToken<'db>>) -> Self {
+    pub(super) fn new_sub(&mut self, tokens: Cursor<'db>) -> Self {
         let mut sub = Parser::new(
             self.db,
             tokens,
@@ -235,24 +240,20 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Create a new parser from a BracerIter with an optional context label.
+    /// Create a new parser from a Cursor with an optional context label.
     ///
     /// The context is used to add a secondary label to error messages showing
     /// the enclosing branch (e.g., "in this argument list").
     pub(super) fn from_branch_with_context(
         db: &'db dyn Db,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
         source_text: bct::text::Text<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
         module_id: Option<ModuleId<'db>>,
     ) -> Self {
-        let mut parser = Parser {
+        Parser {
             db,
-            source: TokenSource::Iter {
-                iter,
-                buffer: [None, None],
-                last_end: None,
-            },
+            source: TokenSource::new(iter),
             had_error: false,
             source_text,
             text: source_text.as_str(db),
@@ -266,10 +267,7 @@ impl<'db> Parser<'db> {
             script_expr_counter: 0,
             call_counter: 0,
             script_call_counter: 0,
-        };
-        // Prime the buffer.
-        parser.fill_iter_buffer();
-        parser
+        }
     }
 
     /// Create a sub-parser that inherits function context from parent.
@@ -277,16 +275,12 @@ impl<'db> Parser<'db> {
     /// This ensures expressions in sub-parsers get the correct function identity.
     pub(super) fn sub_parser(
         &mut self,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
         context: Option<(TextSpan<'db>, &'static str)>,
     ) -> Self {
-        let mut parser = Parser {
+        Parser {
             db: self.db,
-            source: TokenSource::Iter {
-                iter,
-                buffer: [None, None],
-                last_end: None,
-            },
+            source: TokenSource::new(iter),
             had_error: false,
             source_text: self.source_text,
             text: self.text,
@@ -300,9 +294,7 @@ impl<'db> Parser<'db> {
             script_expr_counter: self.script_expr_counter,
             call_counter: self.call_counter,
             script_call_counter: self.script_call_counter,
-        };
-        parser.fill_iter_buffer();
-        parser
+        }
     }
 
     /// Merge a nested parser's spans and identity counters, but not its
@@ -340,10 +332,7 @@ impl<'db> Parser<'db> {
 
     /// Peek at the next token after the current one (lookahead of 2).
     pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos, .. } => tokens.get(*pos + 1),
-            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
-        }
+        self.source.buffer[1].as_ref()
     }
 
     /// Enter function context for expression identity tracking.
@@ -374,18 +363,6 @@ impl<'db> Parser<'db> {
         let idx = self.call_counter;
         self.call_counter += 1;
         idx
-    }
-
-    /// Fill the iterator buffer.
-    fn fill_iter_buffer(&mut self) {
-        if let TokenSource::Iter { iter, buffer, .. } = &mut self.source {
-            if buffer[0].is_none() {
-                buffer[0] = iter.next();
-            }
-            if buffer[1].is_none() {
-                buffer[1] = iter.next();
-            }
-        }
     }
 
     /// Get the source text for this parser.
@@ -456,11 +433,7 @@ impl<'db> Parser<'db> {
 
     /// Get the byte position at end of previous token (after consuming).
     pub(super) fn last_byte_end(&self) -> usize {
-        match &self.source {
-            TokenSource::Vec { last_end, .. } | TokenSource::Iter { last_end, .. } => {
-                last_end.unwrap_or(0)
-            }
-        }
+        self.source.last_end.unwrap_or(0)
     }
 
     /// Get span for error reporting.
@@ -671,13 +644,14 @@ impl<'db> Parser<'db> {
     }
 
     /// Check if a line starts with "end <keyword>".
-    pub(super) fn line_is_end_keyword(&self, line: &[TreeToken<'db>], keyword: &str) -> bool {
-        if line.len() >= 2 {
-            if let (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) = (line.get(0), line.get(1)) {
-                return t1.word_str(self.text()) == Some("end") && t2.word_str(self.text()) == Some(keyword);
+    pub(super) fn line_is_end_keyword(&self, line: &Cursor<'db>, keyword: &str) -> bool {
+        let mut line = *line;
+        match (line.next(), line.next()) {
+            (Some(TreeToken::Token(t1)), Some(TreeToken::Token(t2))) => {
+                t1.word_str(self.text()) == Some("end") && t2.word_str(self.text()) == Some(keyword)
             }
+            _ => false,
         }
-        false
     }
 
     /// Emit error if tokens remain unconsumed after a successful parse.
@@ -753,46 +727,19 @@ impl<'db> TokenStream<'db> for Parser<'db> {
     }
 
     fn peek(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos, .. } => tokens.get(*pos),
-            TokenSource::Iter { buffer, .. } => buffer[0].as_ref(),
-        }
+        self.source.buffer[0].as_ref()
     }
 
     fn peek_next(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos, .. } => tokens.get(pos.checked_add(1).X()),
-            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
-        }
+        self.source.buffer[1].as_ref()
     }
 
     fn prev_end(&self) -> Option<usize> {
-        match &self.source {
-            TokenSource::Vec { last_end, .. } | TokenSource::Iter { last_end, .. } => *last_end,
-        }
+        self.source.last_end
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
-        match &mut self.source {
-            TokenSource::Vec { tokens, pos, last_end } => {
-                let token = tokens.get(*pos).cloned();
-                if let Some(token) = token.as_ref() {
-                    *pos += 1;
-                    *last_end = Some(token.span().end);
-                }
-                token
-            }
-            TokenSource::Iter { iter, buffer, last_end } => {
-                // Take from slot 0.
-                let result = buffer[0].take();
-                *last_end = result.as_ref().map(|token| token.span().end);
-                // Shift slot 1 to slot 0.
-                buffer[0] = buffer[1].take();
-                // Fill slot 1 from iterator.
-                buffer[1] = iter.next();
-                result
-            }
-        }
+        self.source.next()
     }
 
     fn source_text(&self) -> bct::text::Text<'db> {

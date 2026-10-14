@@ -7,77 +7,194 @@ use crate::lexer::{ChunkLex, Token, TokenKind, Sigil};
 #[cfg(test)]
 use rmx::std::io::Write;
 
+/// A chunk's brackets matched, with recovery: where each token stands among
+/// them, and what was wrong.
 #[salsa::tracked]
 pub struct Bracer<'db> {
     #[returns(copy)]
     pub chunk: ChunkLex<'db>,
+    /// One entry per token; see [`Cursor`].
     #[returns(ref)]
-    pub branches: Vec<Branch>,
-    #[returns(ref)]
-    pub inserted_closes: Vec<(usize, Sigil)>,
-    #[returns(ref)]
-    pub removed_closes: Vec<(usize, Sigil)>,
+    pub layout: Vec<u32>,
     #[returns(ref)]
     pub errors: Vec<(Range<usize>, Sigil)>,
 }
 
-#[derive(Clone, Debug, Hash, Eq, PartialEq, salsa::SalsaValue)]
-pub struct Branch {
-    real_token_range: Range<usize>,
-    branches: usize,
-    inserted_closes: usize,
-    removed_closes: usize,
-    errors: usize,
-    open_sigil: Sigil,
-    close_sigil: Sigil,
-}
+/// A token its level passes over: the close of a bracket, or a close that
+/// recovery removed.
+const HIDDEN: u32 = u32::MAX;
+/// A token its level hands out as it is.
+const PLAIN: u32 = u32::MAX - 1;
 
 impl<'db> Bracer<'db> {
-    pub fn iter(
-        &self,
-        db: &'db dyn crate::Db,
-    ) -> BracerIter<'db> {
-        let chunk_lex = self.chunk(db);
-        let all_tokens = chunk_lex.tokens(db);
-        BracerIter {
-            db,
-            tree: *self,
-            text: chunk_lex.chunk(db).text(db).as_str(db),
-            all_tokens,
-            all_branches: self.branches(db),
-            all_inserted_closes: self.inserted_closes(db),
-            all_removed_closes: self.removed_closes(db),
-            real_token_range: 0..all_tokens.len(),
-            branches: 0..self.branches(db).len(),
-            inserted_closes: 0..self.inserted_closes(db).len(),
-            removed_closes: 0..self.removed_closes(db).len(),
-            next_token_index: 0,
-            next_branch_index: 0,
-            next_inserted_close_index: 0,
-            next_removed_close_index: 0,
+    /// The chunk's tokens at the top level.
+    pub fn iter(&self, db: &'db dyn crate::Db) -> Cursor<'db> {
+        let tokens = self.chunk(db).tokens(db);
+        Cursor {
+            tokens,
+            layout: self.layout(db),
+            pos: 0,
+            end: u32::try_from(tokens.len()).X(),
         }
     }
 }
 
+/// The tokens of one level of bracket nesting, in place in the lexer's array.
+///
+/// A level is a range of token indices, and the bracer's `layout` says, for
+/// each token, whether the level hands it out (`PLAIN`), passes over it
+/// (`HIDDEN`), or opens a bracket whose contents run to the index given, after
+/// which the level carries on. A bracket comes out as one
+/// [`TreeToken::Branch`] holding a cursor over its contents, so nothing is
+/// copied to say what a line or a bracket holds: a cursor is a few words, and
+/// `Copy`.
+#[derive(Clone, Copy)]
+pub struct Cursor<'db> {
+    tokens: &'db [Token],
+    layout: &'db [u32],
+    /// The next index to look at, which may be one the level passes over.
+    pos: u32,
+    end: u32,
+}
+
+impl<'db> Cursor<'db> {
+    /// Whether there is nothing left to hand out.
+    pub fn is_empty(&self) -> bool {
+        self.clone().next_index().is_none()
+    }
+
+    /// The token at the cursor, without moving it.
+    pub fn first(&self) -> Option<TreeToken<'db>> {
+        self.clone().next()
+    }
+
+    /// The `n`th token from the cursor, without moving it.
+    pub fn peek_nth(&self, n: usize) -> Option<TreeToken<'db>> {
+        self.clone().nth(n)
+    }
+
+    /// The index of the next token handed out, and the cursor moved past it.
+    pub fn next_index(&mut self) -> Option<u32> {
+        while self.pos < self.end {
+            let index = self.pos;
+            let entry = self.layout[index as usize];
+            match entry {
+                HIDDEN => self.pos = index + 1,
+                PLAIN => {
+                    self.pos = index + 1;
+                    return Some(index);
+                }
+                resume => {
+                    self.pos = resume;
+                    return Some(index);
+                }
+            }
+        }
+        None
+    }
+
+    /// The token or bracket at `index`, which this level hands out.
+    pub fn token_at(&self, index: u32) -> TreeToken<'db> {
+        let token = &self.tokens[index as usize];
+        match self.layout[index as usize] {
+            PLAIN => TreeToken::Token(token.clone()),
+            HIDDEN => bug!(),
+            resume => {
+                let TokenKind::Sigil(sigil) = token.kind else { bug!() };
+                // The contents run to `resume`, the close included where
+                // there is one, so the last token says whether there is.
+                let last = &self.tokens[resume as usize - 1];
+                let (close, end_byte) = if last.kind == TokenKind::Sigil(sigil.close_sigil()) {
+                    (Some(last.clone()), last.span().end)
+                } else {
+                    (None, last.span().end)
+                };
+                TreeToken::Branch {
+                    sigil,
+                    open: token.clone(),
+                    close,
+                    end_byte,
+                    inner: Cursor { tokens: self.tokens, layout: self.layout, pos: index + 1, end: resume },
+                }
+            }
+        }
+    }
+
+    /// The raw token at `index`, whatever the level makes of it.
+    pub fn raw(&self, index: u32) -> &'db Token {
+        &self.tokens[index as usize]
+    }
+
+    /// Whether the level hands out the token at `index` as a plain token.
+    pub fn is_plain(&self, index: u32) -> bool {
+        self.layout[index as usize] == PLAIN
+    }
+
+    /// Where the cursor is: the next index it will look at.
+    pub fn position(&self) -> u32 {
+        self.pos
+    }
+
+    /// Where the level ends.
+    pub fn end(&self) -> u32 {
+        self.end
+    }
+
+    /// The same level from `from` to `to`, which have to be boundaries of it:
+    /// indices this cursor stopped at, or its end.
+    pub fn between(&self, from: u32, to: u32) -> Cursor<'db> {
+        debug_assert!(from <= to && to <= self.end);
+        Cursor { tokens: self.tokens, layout: self.layout, pos: from, end: to }
+    }
+}
+
+impl<'db> Iterator for Cursor<'db> {
+    type Item = TreeToken<'db>;
+
+    fn next(&mut self) -> Option<TreeToken<'db>> {
+        let index = self.next_index()?;
+        Some(self.token_at(index))
+    }
+}
+
 #[derive(Clone)]
-pub struct BracerIter<'db> {
-    pub db: &'db dyn crate::Db,
-    tree: Bracer<'db>,
-    /// The text of the chunk, which the tokens' spans index.
-    pub text: &'db str,
+pub enum TreeToken<'db> {
+    Token(Token),
+    Branch {
+        sigil: Sigil,
+        open: Token,
+        close: Option<Token>,
+        end_byte: usize,
+        inner: Cursor<'db>,
+    },
+}
 
-    // The four sequences the iterator walks in step, borrowed once.
-    //
-    // `next` consults all four to decide what comes next, so reading them back
-    // out of salsa there cost five tracked-struct field reads -- the chunk, its
-    // tokens, and three of the bracer's own -- to advance by one token. They are
-    // `#[returns(ref)]` fields, so a `&'db` borrow of each outlives any iterator
-    // over them and the sub-iterator for a branch shares the same four.
-    all_tokens: &'db [Token],
-    all_branches: &'db [Branch],
-    all_inserted_closes: &'db [(usize, Sigil)],
-    all_removed_closes: &'db [(usize, Sigil)],
+/// The bracer's branches, as the recovery found them: a level's contents, and
+/// how many of each list belong to the levels inside it.
+#[derive(Clone, Debug)]
+struct Branch {
+    real_token_range: Range<usize>,
+    branches: usize,
+    inserted_closes: usize,
+    removed_closes: usize,
+}
 
+/// What [`Walk`] meets at one level.
+enum Step {
+    /// A token the level hands out, by index.
+    Token(usize),
+    /// A bracket opening at an index, its contents, and where the level
+    /// resumes after it.
+    Branch(usize, Walk, usize),
+}
+
+/// One level of the branches, walked in order to fill the layout.
+///
+/// This is how the bracer's output was read before there was a layout, kept
+/// as it was so that the levels hand out exactly what they did, down to the
+/// odd cases of recovery: a removed close before a later bracket at the same
+/// level comes out as a token, for one.
+struct Walk {
     real_token_range: Range<usize>,
     branches: Range<usize>,
     inserted_closes: Range<usize>,
@@ -88,128 +205,79 @@ pub struct BracerIter<'db> {
     next_removed_close_index: usize,
 }
 
-impl<'db> Iterator for BracerIter<'db> {
-    type Item = TreeToken<'db>;
-
-    fn next(&mut self) -> Option<TreeToken<'db>> {
-        self.next2()
-    }
+struct WalkLists<'a> {
+    tokens: &'a [Token],
+    branches: &'a [Branch],
+    inserted_closes: &'a [(usize, Sigil)],
+    removed_closes: &'a [(usize, Sigil)],
 }
 
-impl<'db> BracerIter<'db> {
-    /// Get source Text and byte span for this branch, including delimiters.
-    ///
-    /// Returns None for top-level iterators (which have no enclosing braces).
-    pub fn text_span(&self) -> Option<crate::text::TextSpan<'db>> {
-        let chunk_lex = self.tree.chunk(self.db);
-        let tokens = chunk_lex.tokens(self.db);
-        // real_token_range starts AFTER the open brace, so go back 1 for open brace.
-        let open_idx = self.real_token_range.start.checked_sub(1)?;
-        let close_idx = self.real_token_range.end.checked_sub(1)?;
-        let open_token = tokens.get(open_idx)?;
-        let close_token = tokens.get(close_idx)?;
-        let text = chunk_lex.chunk(self.db).text(self.db);
-        let span = open_token.span().start
-                 ..close_token.span().end;
-        Some(crate::text::TextSpan::new(text, span))
-    }
-
-    fn next2(&mut self) -> Option<TreeToken<'db>> {
+impl Walk {
+    fn next(&mut self, lists: &WalkLists<'_>) -> Option<Step> {
         loop {
-            let tokens = &self.all_tokens[0..self.real_token_range.end];
-            let branches = &self.all_branches[0..self.branches.end];
-            let inserted_closes = &self.all_inserted_closes[0..self.inserted_closes.end];
-            let removed_closes = &self.all_removed_closes[0..self.removed_closes.end];
+            let tokens = &lists.tokens[0..self.real_token_range.end];
+            let branches = &lists.branches[0..self.branches.end];
+            let inserted_closes = &lists.inserted_closes[0..self.inserted_closes.end];
+            let removed_closes = &lists.removed_closes[0..self.removed_closes.end];
 
-            let next_token = tokens.get(self.next_token_index);
+            let index = self.next_token_index;
+            let next_token = tokens.get(index);
             let next_branch = branches.get(self.next_branch_index);
             let next_inserted_close = inserted_closes.get(self.next_inserted_close_index);
             let next_removed_close = removed_closes.get(self.next_removed_close_index);
 
-            return match (
-                next_token,
-                next_branch,
-                next_inserted_close,
-                next_removed_close,
-            ) {
+            return match (next_token, next_branch, next_inserted_close, next_removed_close) {
                 (Some(next_token), None, _, None) => {
-                    self.next_token_index = self.next_token_index.checked_add(1).X();
+                    self.next_token_index = index.checked_add(1).X();
                     if !next_token.is_close_sigil() {
-                        Some(TreeToken::Token(next_token.clone()))
+                        Some(Step::Token(index))
                     } else {
                         continue;
                     }
-                },
+                }
                 (Some(next_token), None, _, Some(next_removed_close)) => {
-                    match self.next_token_index.cmp(&next_removed_close.0) {
+                    match index.cmp(&next_removed_close.0) {
                         Ordering::Less => {
-                            self.next_token_index = self.next_token_index.checked_add(1).X();
+                            self.next_token_index = index.checked_add(1).X();
                             if !next_token.is_close_sigil() {
-                                Some(TreeToken::Token(next_token.clone()))
+                                Some(Step::Token(index))
                             } else {
                                 panic!("is this possible?")
                             }
                         }
                         Ordering::Equal => {
-                            self.next_token_index = self.next_token_index.checked_add(1).X();
+                            self.next_token_index = index.checked_add(1).X();
                             self.next_removed_close_index = self.next_removed_close_index.checked_add(1).X();
                             continue;
                         }
                         Ordering::Greater => bug!(),
                     }
-                },
-                (Some(next_token), Some(next_branch), _, _) => {
-                    match self.next_token_index.cmp(&next_branch.real_token_range.start) {
+                }
+                (Some(_), Some(next_branch), _, _) => {
+                    match index.cmp(&next_branch.real_token_range.start) {
                         Ordering::Less => {
-                            self.next_token_index = self.next_token_index.checked_add(1).X();
-                            Some(TreeToken::Token(next_token.clone()))
-                        },
+                            self.next_token_index = index.checked_add(1).X();
+                            Some(Step::Token(index))
+                        }
                         Ordering::Equal => {
-                            self.next_token_index = self.next_token_index.checked_add(1).X();
+                            self.next_token_index = index.checked_add(1).X();
                             self.next_branch_index = self.next_branch_index.checked_add(1).X();
 
                             // Skip the opening brace of the branch.
                             let branch_token_range_start = next_branch.real_token_range.start.checked_add(1).X();
-                            let branch_token_range = branch_token_range_start..next_branch.real_token_range.end;
-
-                            // Get the open token.
-                            let open_token = next_token.clone();
-
-                            // Get the potential close token and check if it's a real close.
-                            let all_tokens = self.all_tokens;
-                            let close_idx = next_branch.real_token_range.end.checked_sub(1);
-                            let expected_close_sigil = next_branch.open_sigil.close_sigil();
-                            let (close_token, end_byte) = match close_idx.and_then(|i| all_tokens.get(i)) {
-                                Some(tok) if tok.kind == TokenKind::Sigil(expected_close_sigil) => {
-                                    // Real close token found.
-                                    (Some(tok.clone()), tok.span().end)
-                                }
-                                Some(tok) => {
-                                    // Last token exists but isn't the close sigil (unclosed/mismatched).
-                                    (None, tok.span().end)
-                                }
-                                None => {
-                                    // No tokens at all after open (empty unclosed branch).
-                                    (None, open_token.span().end)
-                                }
+                            let inner = Walk {
+                                real_token_range: branch_token_range_start..next_branch.real_token_range.end,
+                                branches: Range::from_start_len(self.next_branch_index, next_branch.branches).X(),
+                                inserted_closes: Range::from_start_len(self.next_inserted_close_index, next_branch.inserted_closes).X(),
+                                removed_closes: Range::from_start_len(self.next_removed_close_index, next_branch.removed_closes).X(),
+                                next_token_index: self.next_token_index,
+                                next_branch_index: self.next_branch_index,
+                                next_inserted_close_index: self.next_inserted_close_index,
+                                next_removed_close_index: self.next_removed_close_index,
                             };
+                            let resume = next_branch.real_token_range.end;
 
-                            debug_assert_eq!(self.next_token_index, branch_token_range.start);
-                            let branch = TreeToken::Branch {
-                                sigil: next_branch.open_sigil,
-                                open: open_token,
-                                close: close_token,
-                                end_byte,
-                                inner: BranchInner {
-                                    db: self.db,
-                                    tree: self.tree,
-                                    branch: u32::try_from(self.next_branch_index - 1).X(),
-                                    inserted_closes: u32::try_from(self.next_inserted_close_index).X(),
-                                    removed_closes: u32::try_from(self.next_removed_close_index).X(),
-                                },
-                            };
-
-                            self.next_token_index = next_branch.real_token_range.end;
+                            self.next_token_index = resume;
                             self.next_branch_index = self.next_branch_index
                                 .checked_add(next_branch.branches).X();
                             self.next_inserted_close_index = self.next_inserted_close_index
@@ -220,7 +288,7 @@ impl<'db> BracerIter<'db> {
                             // Skip any removed_closes that are now behind our position.
                             // This handles cases where removed_closes exist at positions
                             // we've jumped past after exiting the branch.
-                            let removed_closes = &self.all_removed_closes[0..self.removed_closes.end];
+                            let removed_closes = &lists.removed_closes[0..self.removed_closes.end];
                             while let Some(rc) = removed_closes.get(self.next_removed_close_index) {
                                 if rc.0 < self.next_token_index {
                                     self.next_removed_close_index = self.next_removed_close_index.checked_add(1).X();
@@ -229,8 +297,8 @@ impl<'db> BracerIter<'db> {
                                 }
                             }
 
-                            Some(branch)
-                        },
+                            Some(Step::Branch(index, inner, resume))
+                        }
                         Ordering::Greater => bug!(),
                     }
                 }
@@ -249,65 +317,35 @@ impl<'db> BracerIter<'db> {
     }
 }
 
-#[derive(Clone)]
-pub enum TreeToken<'db> {
-    Token(Token),
-    Branch {
-        sigil: Sigil,
-        open: Token,
-        close: Option<Token>,
-        end_byte: usize,
-        inner: BranchInner<'db>,
-    },
-}
-
-/// What a branch holds, as the place to start iterating it.
-///
-/// A handle rather than the iterator: a `BracerIter` is 184 bytes, and held in
-/// the token it made every `TreeToken` that size, so it was boxed, which cost
-/// an allocation per bracket and another for every copy of the token, and the
-/// parser copies tokens as it reads them. Everything else the iterator needs
-/// is the branch's own entry and the bracer's, read again in `iter`.
-#[derive(Clone, Copy)]
-pub struct BranchInner<'db> {
-    db: &'db dyn crate::Db,
-    tree: Bracer<'db>,
-    /// The branch's index in the bracer's `branches`.
-    branch: u32,
-    /// Where the branch's own inserted and removed closes start.
-    inserted_closes: u32,
-    removed_closes: u32,
-}
-
-impl<'db> BranchInner<'db> {
-    /// An iterator over the branch's contents, without its delimiters.
-    pub fn iter(self) -> BracerIter<'db> {
-        let db = self.db;
-        let chunk_lex = self.tree.chunk(db);
-        let all_branches = self.tree.branches(db);
-        let branch = &all_branches[self.branch as usize];
-        let token_start = branch.real_token_range.start.checked_add(1).X();
-        let branch_start = (self.branch as usize).checked_add(1).X();
-        let inserted_start = self.inserted_closes as usize;
-        let removed_start = self.removed_closes as usize;
-        BracerIter {
-            db,
-            tree: self.tree,
-            text: chunk_lex.chunk(db).text(db).as_str(db),
-            all_tokens: chunk_lex.tokens(db),
-            all_branches,
-            all_inserted_closes: self.tree.inserted_closes(db),
-            all_removed_closes: self.tree.removed_closes(db),
-            real_token_range: token_start..branch.real_token_range.end,
-            branches: Range::from_start_len(branch_start, branch.branches).X(),
-            inserted_closes: Range::from_start_len(inserted_start, branch.inserted_closes).X(),
-            removed_closes: Range::from_start_len(removed_start, branch.removed_closes).X(),
-            next_token_index: token_start,
-            next_branch_index: branch_start,
-            next_inserted_close_index: inserted_start,
-            next_removed_close_index: removed_start,
+/// Every level walked, each token's entry written: see [`Cursor`].
+fn layout(lists: &WalkLists<'_>) -> Vec<u32> {
+    let mut layout = vec![HIDDEN; lists.tokens.len()];
+    let top = Walk {
+        real_token_range: 0..lists.tokens.len(),
+        branches: 0..lists.branches.len(),
+        inserted_closes: 0..lists.inserted_closes.len(),
+        removed_closes: 0..lists.removed_closes.len(),
+        next_token_index: 0,
+        next_branch_index: 0,
+        next_inserted_close_index: 0,
+        next_removed_close_index: 0,
+    };
+    // A stack rather than recursion, since how deep brackets nest is up to
+    // whoever wrote the source.
+    let mut levels = vec![top];
+    while let Some(level) = levels.last_mut() {
+        match level.next(lists) {
+            Some(Step::Token(index)) => layout[index] = PLAIN,
+            Some(Step::Branch(index, inner, resume)) => {
+                layout[index] = u32::try_from(resume).X();
+                levels.push(inner);
+            }
+            None => {
+                levels.pop();
+            }
         }
     }
+    layout
 }
 
 #[salsa::tracked(returns(copy))]
@@ -357,9 +395,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: open_s,
-                            close_sigil: close_s,
                         });
                         parent_brace_map.append(brace_map);
                         break;
@@ -374,9 +409,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::ParenOpen,
-                            close_sigil: Sigil::ParenClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::BraceOpen {
@@ -390,9 +422,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BraceOpen,
-                            close_sigil: Sigil::BraceClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::BracketOpen {
@@ -406,9 +435,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BracketOpen,
-                            close_sigil: Sigil::BracketClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::AngleOpen {
@@ -422,9 +448,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::AngleOpen,
-                            close_sigil: Sigil::AngleClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::ParenPipeOpen {
@@ -438,9 +461,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::ParenPipeOpen,
-                            close_sigil: Sigil::ParenPipeClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::BracePipeOpen {
@@ -454,9 +474,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BracePipeOpen,
-                            close_sigil: Sigil::BracePipeClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::BracketPipeOpen {
@@ -470,9 +487,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::BracketPipeOpen,
-                            close_sigil: Sigil::BracketPipeClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::AnglePipeOpen {
@@ -486,9 +500,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::AnglePipeOpen,
-                            close_sigil: Sigil::AnglePipeClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::PercentBraceOpen {
@@ -502,9 +513,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::PercentBraceOpen,
-                            close_sigil: Sigil::BraceClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else if open_sigil == Sigil::HashBraceOpen {
@@ -518,9 +526,6 @@ pub fn bracer<'db>(
                             branches: brace_map.branches.len(),
                             inserted_closes: brace_map.inserted_closes.len(),
                             removed_closes: brace_map.removed_closes.len(),
-                            errors: brace_map.errors.len(),
-                            open_sigil: Sigil::HashBraceOpen,
-                            close_sigil: Sigil::BraceClose,
                         });
                         parent_brace_map.append(brace_map);
                     } else {
@@ -613,9 +618,6 @@ pub fn bracer<'db>(
             branches: brace_map.branches.len(),
             inserted_closes: brace_map.inserted_closes.len(),
             removed_closes: brace_map.removed_closes.len(),
-            errors: brace_map.errors.len(),
-            open_sigil,
-            close_sigil: open_sigil.close_sigil(),
         });
         parent_brace_map.errors.push((
             open_index..num_tokens,
@@ -624,14 +626,13 @@ pub fn bracer<'db>(
         parent_brace_map.append(brace_map);
     }
 
-    Bracer::new(
-        db,
-        chunk,
-        top_map.branches,
-        top_map.inserted_closes,
-        top_map.removed_closes,
-        top_map.errors,
-    )
+    let layout = layout(&WalkLists {
+        tokens: chunk.tokens(db),
+        branches: &top_map.branches,
+        inserted_closes: &top_map.inserted_closes,
+        removed_closes: &top_map.removed_closes,
+    });
+    Bracer::new(db, chunk, layout, top_map.errors)
 }
 
 impl<'db> TreeToken<'db> {
@@ -687,7 +688,7 @@ impl<'db> Bracer<'db> {
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
         let mut buf = Vec::<u8>::new();
         let iter = self.iter(db);
-        let text = iter.text;
+        let text = self.chunk(db).chunk(db).text(db).as_str(db);
         Self::debug_write(iter, &mut buf, text).X();
         String::from_utf8(buf).X()
     }
@@ -706,9 +707,9 @@ impl<'db> Bracer<'db> {
                 TreeToken::Branch { sigil, inner, .. } => {
                     write!(w, "{} ", sigil.as_str())?;
                     rmx::extras::recurse(|| {
-                        Self::debug_write(inner.iter(), w, text)
+                        Self::debug_write(inner, w, text)
                     })?;
-                    if inner.iter().next().is_some() {
+                    if !inner.is_empty() {
                         write!(w, " ")?;
                     }
                     write!(w, "{}", sigil.close_sigil().as_str())?;

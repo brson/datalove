@@ -6,7 +6,7 @@ use rmx::prelude::*;
 
 use bct::{
     lexer::{TokenKind, Sigil},
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     split,
     text::InternedText,
 };
@@ -272,7 +272,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, .. }) => {
                 // Map: %{k = v, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, inner, .. }) => inner.iter(),
+                    Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
                 let entries = self.parse_comma_separated_map_entries(inner);
@@ -281,7 +281,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, .. }) => {
                 // Set: #{e, ...}
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, inner, .. }) => inner.iter(),
+                    Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
                 let elements = self.parse_comma_separated_exprs(inner);
@@ -290,7 +290,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner.iter(),
+                    Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
                 return self.parse_lit_table(type_hint, inner);
@@ -298,7 +298,7 @@ impl<'db> Parser<'db> {
             Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, .. }) => {
                 // Tensor: [| data |] with multi-comma separators.
                 let inner = match self.next() {
-                    Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => inner.iter(),
+                    Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, inner, .. }) => inner,
                     _ => unreachable!(),
                 };
                 return self.parse_lit_tensor_multicomma(type_hint, inner);
@@ -374,7 +374,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner.iter(),
+            Some(TreeToken::Branch { sigil: Sigil::ParenOpen, inner, .. }) => inner,
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
 
@@ -403,7 +403,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner.iter(),
+            Some(TreeToken::Branch { sigil: Sigil::BraceOpen, inner, .. }) => inner,
             _ => unreachable!("caller must peek for BraceOpen before calling"),
         };
 
@@ -419,7 +419,7 @@ impl<'db> Parser<'db> {
         type_hint: Option<datalit::ast::TypeHint<'db>>,
     ) -> ast::ExprFunKind<'db> {
         let inner = match self.next() {
-            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner.iter(),
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, inner, .. }) => inner,
             _ => unreachable!("caller must peek for BracketOpen before calling"),
         };
 
@@ -431,11 +431,9 @@ impl<'db> Parser<'db> {
     fn parse_lit_tensor_multicomma(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
     ) -> ast::ExprFunKind<'db> {
-        let tokens: Vec<_> = iter.collect();
-
-        let (header, body) = split::split_tensor_header(self.text(), tokens);
+        let (header, body) = split::split_tensor_header(self.text(), iter);
         let header = match header {
             None => None,
             Some(Ok(header)) => Some(header),
@@ -447,8 +445,8 @@ impl<'db> Parser<'db> {
 
         // The widest separator written decides the rank. `[| |]` has no
         // separator and no element, which is the empty tensor of rank 1.
-        let rank = split::max_comma_run(&body) + 1;
-        let (shape, elements) = self.parse_tensor_multicomma_inner(&body, rank as u32);
+        let rank = split::max_comma_run(body) + 1;
+        let (shape, elements) = self.parse_tensor_multicomma_inner(body, rank as u32);
 
         let Some(header) = header else {
             return ast::ExprFunKind::Tensor(ast::ExprTensor { type_hint, shape, elements, header: false });
@@ -465,8 +463,8 @@ impl<'db> Parser<'db> {
     }
 
     /// Split a table row into its cells, reporting any stray `,`.
-    fn split_table_cells(&mut self, tokens: &[TreeToken<'db>]) -> Vec<Vec<TreeToken<'db>>> {
-        let groups = split::split_commas(tokens.iter().cloned(), 1);
+    fn split_table_cells(&mut self, tokens: Cursor<'db>) -> Vec<Cursor<'db>> {
+        let groups = split::split_commas(tokens, 1);
         self.report_stray_delimiters(&groups, "columns");
         split::nonempty_groups(groups)
     }
@@ -484,12 +482,12 @@ impl<'db> Parser<'db> {
     /// Parse tensor data from tokens with multi-comma structure.
     fn parse_tensor_multicomma_inner(
         &mut self,
-        tokens: &[TreeToken<'db>],
+        tokens: Cursor<'db>,
         rank: u32,
     ) -> (Vec<u32>, Vec<ast::ExprFun<'db>>) {
         if rank == 1 {
             // Innermost level: space-separated elements.
-            let mut sub = self.new_sub(tokens.to_vec());
+            let mut sub = self.new_sub(tokens);
             let mut elements = Vec::new();
             while sub.peek().is_some() {
                 elements.push(sub.parse_expr_full());
@@ -501,7 +499,7 @@ impl<'db> Parser<'db> {
 
         // Split by (rank-1) consecutive commas.
         let split_level = rank - 1;
-        let groups = split::split_commas(tokens.iter().cloned(), split_level as usize);
+        let groups = split::split_commas(tokens, split_level as usize);
         self.report_stray_delimiters(&groups, "parts");
         if let Some(written) = split::trailing_delimiter(&groups) {
             self.had_error = true;
@@ -518,7 +516,7 @@ impl<'db> Parser<'db> {
         let mut all_elements = Vec::new();
         let mut inner_shape: Option<Vec<u32>> = None;
 
-        for (group_idx, group) in groups.iter().enumerate() {
+        for (group_idx, &group) in groups.iter().enumerate() {
             let (sub_shape, sub_elements) = self.parse_tensor_multicomma_inner(group, rank - 1);
             match &inner_shape {
                 None => inner_shape = Some(sub_shape),
@@ -549,7 +547,7 @@ impl<'db> Parser<'db> {
     fn parse_lit_table(
         &mut self,
         type_hint: Option<datalit::ast::TypeHint<'db>>,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
     ) -> ast::ExprFunKind<'db> {
         // Split by row delimiters (newline in whitespace, or semicolon).
         let groups = split::split_lines(iter);
@@ -566,12 +564,12 @@ impl<'db> Parser<'db> {
         }
 
         // First row is header (column names).
-        let header = self.parse_table_header(&rows[0]);
+        let header = self.parse_table_header(rows[0]);
         let num_columns = header.len();
 
         // Remaining rows are data.
         let mut data_rows = Vec::new();
-        for (row_idx, row_tokens) in rows.iter().skip(1).enumerate() {
+        for (row_idx, &row_tokens) in rows.iter().skip(1).enumerate() {
             let elements = self.parse_table_data_row(row_tokens);
             if elements.len() != num_columns && !elements.is_empty() {
                 let ts = self.peek_text_span();
@@ -593,7 +591,7 @@ impl<'db> Parser<'db> {
     /// A cell is one word and nothing else. Anything after the word is
     /// reported rather than dropped, so that `{| x zzz |}` is a refusal and
     /// not a one-column table.
-    fn parse_table_header(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<InternedText<'db>> {
+    fn parse_table_header(&mut self, row_tokens: Cursor<'db>) -> Vec<InternedText<'db>> {
         let parts = self.split_table_cells(row_tokens);
         let mut names = Vec::new();
         let mut seen = parser_util::SeenNames::default();
@@ -601,9 +599,9 @@ impl<'db> Parser<'db> {
         for part in parts {
             // A group `nonempty_groups` kept has a first token.
             let first = part.first().X();
-            let Some(name) = self.cell_word(first).filter(|w| parser_util::is_identifier(w)) else {
+            let Some(name) = self.cell_word(&first).filter(|w| parser_util::is_identifier(w)) else {
                 self.had_error = true;
-                let ts = self.extract_text_span(first);
+                let ts = self.extract_text_span(&first);
                 DiagnosticBuilder::error(self.db, "expected column name in table header")
                     .code("D031")
                     .primary_label(ts, "expected name")
@@ -612,15 +610,15 @@ impl<'db> Parser<'db> {
                 continue;
             };
             let name_text = InternedText::new(self.db, name.S());
-            let ts = self.extract_text_span(first);
+            let ts = self.extract_text_span(&first);
             if !seen.take(self.db, name_text, ts, "column") {
                 self.had_error = true;
             }
             names.push(name_text);
 
-            if let Some(extra) = part.get(1) {
+            if let Some(extra) = part.peek_nth(1) {
                 self.had_error = true;
-                let ts = self.extract_text_span(extra);
+                let ts = self.extract_text_span(&extra);
                 DiagnosticBuilder::error(self.db,
                     &format!("unexpected token after column name `{}`", name))
                     .code("D034")
@@ -641,7 +639,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse table data row (comma-separated expressions).
-    fn parse_table_data_row(&mut self, row_tokens: &[TreeToken<'db>]) -> Vec<ast::ExprFun<'db>> {
+    fn parse_table_data_row(&mut self, row_tokens: Cursor<'db>) -> Vec<ast::ExprFun<'db>> {
         let parts = self.split_table_cells(row_tokens);
         let mut elements = Vec::new();
 
@@ -657,7 +655,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated expressions from a branch.
-    pub(super) fn parse_comma_separated_exprs(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprFun<'db>> {
+    pub(super) fn parse_comma_separated_exprs(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprFun<'db>> {
         let mut sub = self.sub_parser(iter, None);
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
@@ -666,7 +664,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated struct fields.
-    fn parse_comma_separated_struct_fields(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprStructField<'db>> {
+    fn parse_comma_separated_struct_fields(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprStructField<'db>> {
         let mut sub = self.sub_parser(iter, None);
         let mut seen = parser_util::SeenNames::default();
         let fields = sub.parse_comma_separated(|p| p.parse_struct_field(&mut seen));
@@ -712,7 +710,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated map entries.
-    fn parse_comma_separated_map_entries(&mut self, iter: BracerIter<'db>) -> Vec<ast::ExprMapEntry<'db>> {
+    fn parse_comma_separated_map_entries(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprMapEntry<'db>> {
         let mut sub = self.sub_parser(iter, None);
         let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();

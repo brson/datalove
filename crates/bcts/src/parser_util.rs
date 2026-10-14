@@ -3,7 +3,7 @@
 //! Provides traits and helpers that can be shared between parsers using the bcts lexer.
 
 use crate::{
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     diagnostic::DiagnosticBuilder,
     lexer::{Sigil, Token, TokenKind},
     text::{InternedText, Text, TextSpan},
@@ -95,10 +95,10 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Consume a branch if it matches the given sigil, returning its iterator.
-    fn eat_branch(&mut self, sigil: Sigil) -> Option<BracerIter<'db>> {
+    fn eat_branch(&mut self, sigil: Sigil) -> Option<Cursor<'db>> {
         if self.peek_sigil(sigil) {
             match self.next() {
-                Some(TreeToken::Branch { inner, .. }) => Some(inner.iter()),
+                Some(TreeToken::Branch { inner, .. }) => Some(inner),
                 _ => None,
             }
         } else {
@@ -167,7 +167,7 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Extract the TextSpan covering a nonempty run of tokens.
-    fn extract_group_text_span(&self, tokens: &[TreeToken<'db>]) -> TextSpan<'db> {
+    fn extract_group_text_span(&self, tokens: Cursor<'db>) -> TextSpan<'db> {
         let start = tokens.first().X().span().start;
         let end = tokens.last().X().span().end;
         TextSpan::new(self.source_text(), start..end)

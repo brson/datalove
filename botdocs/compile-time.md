@@ -2,7 +2,8 @@
 
 What a cold compile of the system library costs, phase by phase, and how to
 measure it. Written October 2026, after a pass that took a script requiring
-every `sys/std` module from 273M to 197M user instructions.
+every `sys/std` module from 273M to 197M user instructions, and 192M after the
+parser read its tokens in place.
 
 ## Contents
 
@@ -114,8 +115,10 @@ What is left is constant factors at every layer, none above about 3%:
 
 Doing much better is a different parser: one cursor over the flat token array
 with each bracket's match index precomputed, and no token trees or
-sub-parsers. See [the plan for it](plan-parser.md), which also has where the
-allocation is: 35,726 allocations and 12MB to parse `sys/std`.
+sub-parsers. See [the plan for it](plan-parser.md), which has where the
+allocation was -- 35,726 allocations and 12MB to parse `sys/std` -- and what
+building it did: 26,189 and 5.6MB, and parsing from 27% of the run to 23%,
+the rest of the allocation being the AST's own.
 
 ## What was fixed
 

@@ -6,7 +6,7 @@ use std::rc::Rc;
 use rustc_hash::FxHashMap;
 
 use bct::{
-    bracer::{BracerIter, TreeToken},
+    bracer::{Cursor, TreeToken},
     text::InternedText,
 };
 
@@ -15,25 +15,32 @@ use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 
-/// Token source for parser - either Vec-backed or iterator-backed.
-enum TokenSource<'db> {
-    /// Vec-backed with position index (original approach).
-    Vec {
-        tokens: Vec<TreeToken<'db>>,
-        pos: usize,
-    },
-    /// Iterator-backed with lookahead buffer (zero allocation).
-    Iter {
-        iter: BracerIter<'db>,
-        /// Lookahead buffer: [0] = current, [1] = next.
-        buffer: [Option<TreeToken<'db>>; 2],
-        /// The end of the last token consumed, for span tracking.
-        ///
-        /// The token itself was kept here once, which meant cloning every
-        /// `TreeToken` a second time on the way past -- and a branch carries a
-        /// whole sub-iterator -- to read one `usize` back out of it.
-        last_end: Option<usize>,
-    },
+/// Where a parser reads its tokens: a cursor over a bracket or a part of
+/// one, with the two tokens at it held for lookahead.
+struct TokenSource<'db> {
+    cursor: Cursor<'db>,
+    /// Lookahead buffer: [0] = current, [1] = next.
+    buffer: [Option<TreeToken<'db>>; 2],
+    /// The end of the last token consumed, for span tracking.
+    last_end: Option<usize>,
+}
+
+impl<'db> TokenSource<'db> {
+    fn new(mut cursor: Cursor<'db>) -> Self {
+        let first = cursor.next();
+        let second = cursor.next();
+        TokenSource { cursor, buffer: [first, second], last_end: None }
+    }
+
+    fn next(&mut self) -> Option<TreeToken<'db>> {
+        let result = self.buffer[0].take();
+        if let Some(token) = &result {
+            self.last_end = Some(token.span().end);
+        }
+        self.buffer[0] = self.buffer[1].take();
+        self.buffer[1] = self.cursor.next();
+        result
+    }
 }
 
 /// Text interned during one parse, shared by a parser and the sub-parsers it
@@ -65,10 +72,10 @@ pub(super) struct Parser<'db> {
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
-    pub(super) fn new(db: &'db dyn crate::Db, tokens: Vec<TreeToken<'db>>, source_text: bct::text::Text<'db>) -> Self {
+    pub(super) fn new(db: &'db dyn crate::Db, tokens: Cursor<'db>, source_text: bct::text::Text<'db>) -> Self {
         Parser {
             db,
-            source: TokenSource::Vec { tokens, pos: 0 },
+            source: TokenSource::new(tokens),
             expr_spans: Vec::new(),
             expr_counter: 0,
             alias_counter: 0,
@@ -80,8 +87,8 @@ impl<'db> Parser<'db> {
         }
     }
 
-    /// Create a new parser from a BracerIter (iterator-backed, zero allocation).
-    pub(super) fn from_branch(db: &'db dyn crate::Db, iter: BracerIter<'db>, source_text: bct::text::Text<'db>) -> Self {
+    /// Create a new parser from a Cursor (iterator-backed, zero allocation).
+    pub(super) fn from_branch(db: &'db dyn crate::Db, iter: Cursor<'db>, source_text: bct::text::Text<'db>) -> Self {
         Self::from_branch_numbering_aliases(db, iter, source_text, 0)
     }
 
@@ -92,17 +99,13 @@ impl<'db> Parser<'db> {
     /// aliases from zero again and file their spans where no one looks.
     pub(super) fn from_branch_numbering_aliases(
         db: &'db dyn crate::Db,
-        iter: BracerIter<'db>,
+        iter: Cursor<'db>,
         source_text: bct::text::Text<'db>,
         alias_base: u32,
     ) -> Self {
-        let mut parser = Parser {
+        Parser {
             db,
-            source: TokenSource::Iter {
-                iter,
-                buffer: [None, None],
-                last_end: None,
-            },
+            source: TokenSource::new(iter),
             expr_spans: Vec::new(),
             expr_counter: 0,
             alias_counter: alias_base,
@@ -111,29 +114,15 @@ impl<'db> Parser<'db> {
             source_text,
             text: source_text.as_str(db),
             interned: Interned::default(),
-        };
-        parser.fill_iter_buffer();
-        parser
+        }
     }
 
     pub(super) fn take_alias_spans(&mut self) -> Vec<bct::diagnostic::SpanEntry> {
         rmx::std::mem::take(&mut self.alias_spans)
     }
 
-    /// Fill the iterator buffer.
-    fn fill_iter_buffer(&mut self) {
-        if let TokenSource::Iter { iter, buffer, .. } = &mut self.source {
-            if buffer[0].is_none() {
-                buffer[0] = iter.next();
-            }
-            if buffer[1].is_none() {
-                buffer[1] = iter.next();
-            }
-        }
-    }
-
     /// A sub-parser over a braced branch, carrying on this one's numbering.
-    pub(super) fn sub_parser_from_branch(&self, iter: BracerIter<'db>) -> Self {
+    pub(super) fn sub_parser_from_branch(&self, iter: Cursor<'db>) -> Self {
         let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
@@ -141,7 +130,7 @@ impl<'db> Parser<'db> {
     }
 
     /// A sub-parser over a slice of tokens, carrying on this one's numbering.
-    pub(super) fn sub_parser_from_tokens(&self, tokens: Vec<TreeToken<'db>>) -> Self {
+    pub(super) fn sub_parser_from_tokens(&self, tokens: Cursor<'db>) -> Self {
         let mut sub = Parser::new(self.db, tokens, self.source_text());
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
@@ -257,48 +246,19 @@ impl<'db> TokenStream<'db> for Parser<'db> {
     }
 
     fn peek(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos } => tokens.get(*pos),
-            TokenSource::Iter { buffer, .. } => buffer[0].as_ref(),
-        }
+        self.source.buffer[0].as_ref()
     }
 
     fn peek_next(&self) -> Option<&TreeToken<'db>> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos } => tokens.get(pos.checked_add(1).X()),
-            TokenSource::Iter { buffer, .. } => buffer[1].as_ref(),
-        }
+        self.source.buffer[1].as_ref()
     }
 
     fn prev_end(&self) -> Option<usize> {
-        match &self.source {
-            TokenSource::Vec { tokens, pos } => {
-                tokens.get(pos.checked_sub(1)?).map(|token| token.span().end)
-            }
-            TokenSource::Iter { last_end, .. } => *last_end,
-        }
+        self.source.last_end
     }
 
     fn next(&mut self) -> Option<TreeToken<'db>> {
-        match &mut self.source {
-            TokenSource::Vec { tokens, pos } => {
-                let token = tokens.get(*pos).cloned();
-                if token.is_some() {
-                    *pos += 1;
-                }
-                token
-            }
-            TokenSource::Iter { iter, buffer, last_end } => {
-                // Take from slot 0.
-                let result = buffer[0].take();
-                *last_end = result.as_ref().map(|token| token.span().end);
-                // Shift slot 1 to slot 0.
-                buffer[0] = buffer[1].take();
-                // Fill slot 1 from iterator.
-                buffer[1] = iter.next();
-                result
-            }
-        }
+        self.source.next()
     }
 
     fn source_text(&self) -> bct::text::Text<'db> {
