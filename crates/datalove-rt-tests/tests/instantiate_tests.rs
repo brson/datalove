@@ -520,8 +520,11 @@ fn growing_moves_to_a_new_chunk_and_keeps_the_old() {
     assert!(!big.is_null());
     unsafe { std::ptr::write_bytes(big, 0xab, 100_000) };
     assert_eq!(unsafe { (small as *const u64).read() }, 0x5eed, "growing moved what was there");
+    // The big request filled its chunk, so this one is in yet another, which
+    // the allocator may have put anywhere, as long as it is clear of the big.
     let after_big = shadow_alloc(&rt, 8, 8);
-    assert!(after_big as usize >= big as usize + 100_000);
+    let after_big_end = after_big as usize + 8;
+    assert!(after_big_end <= big as usize || after_big as usize >= big as usize + 100_000);
 
     // Restoring past the chunk boundary goes back to the first chunk, limit
     // and all, so the next small request is beside the first.
