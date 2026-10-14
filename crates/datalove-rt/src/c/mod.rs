@@ -2867,8 +2867,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_shadow_alloc(
 // the whole protocol, and the interpreter runs exactly them; compiled code may
 // open-code them, but only on the cursor layouts in `datalove-rtdt` and with
 // these meanings. A cursor points into a collection the language keeps frozen
-// for the walk, and owns nothing. Begin, and the trees' advance, read the
-// collection; the rest touch only the cursor, and cannot fail.
+// for the walk, and owns nothing.
+//
+// Each takes the handle and returns a status, with what it answers written
+// through an out parameter, as everything here does. Begin, and the trees'
+// advance, read the collection and take its descriptor; the rest touch only
+// the cursor, and cannot fail. A cursor is not a value of the language and has
+// no descriptor, so a cursor argument is not followed by one.
 
 /// Starts a walk over a list at its first element.
 #[unsafe(no_mangle)]
@@ -2904,31 +2909,41 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_cursor_begin_local(
     RtStatus::Ok
 }
 
-/// Whether a walk over a list or a rank-1 tensor is over.
+/// Whether a walk over a list or a rank-1 tensor is over: 1 if so, else 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_done(
+pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_done_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::StrideCursor,
-) -> bool {
+    done_out: *mut u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::stride_cursor_done_impl(cursor_ref) }
+    debug_assert!(!done_out.is_null(), "done_out is null");
+    unsafe { *done_out = crate::c::impls::cursor::stride_cursor_done_impl(cursor_ref) as u8 };
+    RtStatus::Ok
 }
 
 /// The current element of a walk over a list or a rank-1 tensor.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_elem(
+pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_elem_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::StrideCursor,
-) -> *const u8 {
+    elem_out: *mut *const u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::stride_cursor_elem_impl(cursor_ref) }
+    debug_assert!(!elem_out.is_null(), "elem_out is null");
+    unsafe { *elem_out = crate::c::impls::cursor::stride_cursor_elem_impl(cursor_ref) };
+    RtStatus::Ok
 }
 
 /// Moves a walk over a list or a rank-1 tensor to the next element.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_advance(
+pub unsafe extern "C-unwind" fn dtlv_rti_stride_cursor_advance_local(
+    _rt: LocalRtHandle,
     cursor_mut: *mut rtdt::StrideCursor,
-) {
+) -> RtStatus {
     debug_assert!(!cursor_mut.is_null(), "cursor_mut is null");
-    unsafe { crate::c::impls::cursor::stride_cursor_advance_impl(cursor_mut) }
+    unsafe { crate::c::impls::cursor::stride_cursor_advance_impl(cursor_mut) };
+    RtStatus::Ok
 }
 
 /// Starts a walk over the rows of a tensor of rank above 1.
@@ -2948,31 +2963,41 @@ pub unsafe extern "C-unwind" fn dtlv_rti_tensor_row_cursor_begin_local(
     RtStatus::Ok
 }
 
-/// Whether a walk over the rows of a tensor is over.
+/// Whether a walk over the rows of a tensor is over: 1 if so, else 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_done(
+pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_done_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::RowCursor,
-) -> bool {
+    done_out: *mut u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::row_cursor_done_impl(cursor_ref) }
+    debug_assert!(!done_out.is_null(), "done_out is null");
+    unsafe { *done_out = crate::c::impls::cursor::row_cursor_done_impl(cursor_ref) as u8 };
+    RtStatus::Ok
 }
 
 /// The current row of a walk over a tensor: a view, inside the cursor.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_elem(
+pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_elem_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::RowCursor,
-) -> *const u8 {
+    elem_out: *mut *const u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::row_cursor_elem_impl(cursor_ref) }
+    debug_assert!(!elem_out.is_null(), "elem_out is null");
+    unsafe { *elem_out = crate::c::impls::cursor::row_cursor_elem_impl(cursor_ref) };
+    RtStatus::Ok
 }
 
 /// Moves a walk over the rows of a tensor to the next row.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_advance(
+pub unsafe extern "C-unwind" fn dtlv_rti_row_cursor_advance_local(
+    _rt: LocalRtHandle,
     cursor_mut: *mut rtdt::RowCursor,
-) {
+) -> RtStatus {
     debug_assert!(!cursor_mut.is_null(), "cursor_mut is null");
-    unsafe { crate::c::impls::cursor::row_cursor_advance_impl(cursor_mut) }
+    unsafe { crate::c::impls::cursor::row_cursor_advance_impl(cursor_mut) };
+    RtStatus::Ok
 }
 
 /// Starts a walk over a set at its least element.
@@ -3035,29 +3060,41 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_cursor_advance_local(
     RtStatus::Ok
 }
 
-/// Whether a walk over a set or a map is over.
+/// Whether a walk over a set or a map is over: 1 if so, else 0.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_done(
+pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_done_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::TreeCursor,
-) -> bool {
+    done_out: *mut u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::tree_cursor_done_impl(cursor_ref) }
+    debug_assert!(!done_out.is_null(), "done_out is null");
+    unsafe { *done_out = crate::c::impls::cursor::tree_cursor_done_impl(cursor_ref) as u8 };
+    RtStatus::Ok
 }
 
 /// The current element of a walk over a set; a map's current key.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_elem(
+pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_elem_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::TreeCursor,
-) -> *const u8 {
+    elem_out: *mut *const u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::tree_cursor_elem_impl(cursor_ref) }
+    debug_assert!(!elem_out.is_null(), "elem_out is null");
+    unsafe { *elem_out = crate::c::impls::cursor::tree_cursor_elem_impl(cursor_ref) };
+    RtStatus::Ok
 }
 
 /// The current value of a walk over a map.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_value(
+pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_value_local(
+    _rt: LocalRtHandle,
     cursor_ref: *const rtdt::TreeCursor,
-) -> *const u8 {
+    value_out: *mut *const u8,
+) -> RtStatus {
     debug_assert!(!cursor_ref.is_null(), "cursor_ref is null");
-    unsafe { crate::c::impls::cursor::tree_cursor_value_impl(cursor_ref) }
+    debug_assert!(!value_out.is_null(), "value_out is null");
+    unsafe { *value_out = crate::c::impls::cursor::tree_cursor_value_impl(cursor_ref) };
+    RtStatus::Ok
 }

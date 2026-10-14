@@ -355,35 +355,38 @@ impl IrInterpreter {
                         }
                         wr(base, valid, in_bounds);
                     }
+                    // The out parameter is the destination itself.
                     Op::CursorDone { dst, cursor, kind } => {
-                        let at = cursor.at(base);
-                        let done = match kind {
-                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done(at as *const rtdt::StrideCursor),
-                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done(at as *const rtdt::RowCursor),
-                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done(at as *const rtdt::TreeCursor),
+                        let (rt, at, out) = (self.runtime.handle(), cursor.at(base), dst.at(base));
+                        let status = match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done_local(rt, at as *const rtdt::StrideCursor, out),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done_local(rt, at as *const rtdt::RowCursor, out),
+                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done_local(rt, at as *const rtdt::TreeCursor, out),
                         };
-                        wr(base, dst, done);
+                        debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "asking whether a cursor is done cannot fail");
                     }
                     Op::CursorElem { dst, cursor, kind } => {
-                        let at = cursor.at(base);
-                        let elem = match kind {
-                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem(at as *const rtdt::StrideCursor),
-                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem(at as *const rtdt::RowCursor),
-                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem(at as *const rtdt::TreeCursor),
+                        let (rt, at, out) = (self.runtime.handle(), cursor.at(base), dst.at(base) as *mut *const u8);
+                        let status = match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem_local(rt, at as *const rtdt::StrideCursor, out),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem_local(rt, at as *const rtdt::RowCursor, out),
+                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem_local(rt, at as *const rtdt::TreeCursor, out),
                         };
-                        wr(base, dst, elem);
+                        debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
                     }
                     Op::CursorValue { dst, cursor } => {
-                        let at = cursor.at(base);
-                        wr(base, dst, datalove_rt::c::dtlv_rti_tree_cursor_value(at as *const rtdt::TreeCursor));
+                        let (rt, at, out) = (self.runtime.handle(), cursor.at(base), dst.at(base) as *mut *const u8);
+                        let status = datalove_rt::c::dtlv_rti_tree_cursor_value_local(rt, at as *const rtdt::TreeCursor, out);
+                        debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
                     }
                     Op::CursorAdvance { cursor, kind } => {
-                        let at = cursor.at(base);
-                        match kind {
-                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance(at as *mut rtdt::StrideCursor),
-                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance(at as *mut rtdt::RowCursor),
+                        let (rt, at) = (self.runtime.handle(), cursor.at(base));
+                        let status = match kind {
+                            CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance_local(rt, at as *mut rtdt::StrideCursor),
+                            CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance_local(rt, at as *mut rtdt::RowCursor),
                             CursorKind::Tree => unreachable!("a tree's advance runs on the walker"),
-                        }
+                        };
+                        debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");
                     }
                     Op::ListElementRef { dst, list, index, size } => {
                         let list = &*(list.at(base) as *const rtdt::List);

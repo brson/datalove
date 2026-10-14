@@ -100,37 +100,43 @@ tracking bytes and leak checking never see it. A cursor holds pointers into
 the collection's heap storage, which is sound only because the iteratee is
 frozen.
 
-Every function, by name:
+Every function, with its types:
 
-```
+```rust
 // Lists and rank-1 tensors.
-dtlv_rti_list_cursor_begin_local(rt, list_ref, list_tydesc, cursor_out) -> RtStatus
-dtlv_rti_tensor_cursor_begin_local(rt, tensor_ref, tensor_tydesc, cursor_out) -> RtStatus
-dtlv_rti_stride_cursor_done(cursor_ref) -> bool
-dtlv_rti_stride_cursor_elem(cursor_ref) -> *const u8
-dtlv_rti_stride_cursor_advance(cursor_mut)
+dtlv_rti_list_cursor_begin_local(rt: LocalRtHandle, list_ref: *const u8, list_tydesc: *const TyDesc, cursor_out: *mut StrideCursor) -> RtStatus
+dtlv_rti_tensor_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const TyDesc, cursor_out: *mut StrideCursor) -> RtStatus
+dtlv_rti_stride_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const StrideCursor, done_out: *mut u8) -> RtStatus
+dtlv_rti_stride_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const StrideCursor, elem_out: *mut *const u8) -> RtStatus
+dtlv_rti_stride_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut StrideCursor) -> RtStatus
 
 // Tensors of rank above 1.
-dtlv_rti_tensor_row_cursor_begin_local(rt, tensor_ref, tensor_tydesc, cursor_out) -> RtStatus
-dtlv_rti_row_cursor_done(cursor_ref) -> bool
-dtlv_rti_row_cursor_elem(cursor_ref) -> *const u8
-dtlv_rti_row_cursor_advance(cursor_mut)
+dtlv_rti_tensor_row_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const TyDesc, cursor_out: *mut RowCursor) -> RtStatus
+dtlv_rti_row_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const RowCursor, done_out: *mut u8) -> RtStatus
+dtlv_rti_row_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const RowCursor, elem_out: *mut *const u8) -> RtStatus
+dtlv_rti_row_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut RowCursor) -> RtStatus
 
 // Sets and maps.
-dtlv_rti_btreeset_cursor_begin_local(rt, set_ref, set_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreemap_cursor_begin_local(rt, map_ref, map_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreeset_cursor_advance_local(rt, cursor_mut, set_tydesc) -> RtStatus
-dtlv_rti_btreemap_cursor_advance_local(rt, cursor_mut, map_tydesc) -> RtStatus
-dtlv_rti_tree_cursor_done(cursor_ref) -> bool
-dtlv_rti_tree_cursor_elem(cursor_ref) -> *const u8
-dtlv_rti_tree_cursor_value(cursor_ref) -> *const u8
+dtlv_rti_btreeset_cursor_begin_local(rt: LocalRtHandle, set_ref: *const u8, set_tydesc: *const TyDesc, cursor_out: *mut TreeCursor) -> RtStatus
+dtlv_rti_btreemap_cursor_begin_local(rt: LocalRtHandle, map_ref: *const u8, map_tydesc: *const TyDesc, cursor_out: *mut TreeCursor) -> RtStatus
+dtlv_rti_btreeset_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut TreeCursor, set_tydesc: *const TyDesc) -> RtStatus
+dtlv_rti_btreemap_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut TreeCursor, map_tydesc: *const TyDesc) -> RtStatus
+dtlv_rti_tree_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const TreeCursor, done_out: *mut u8) -> RtStatus
+dtlv_rti_tree_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const TreeCursor, elem_out: *mut *const u8) -> RtStatus
+dtlv_rti_tree_cursor_value_local(rt: LocalRtHandle, cursor_ref: *const TreeCursor, value_out: *mut *const u8) -> RtStatus
 ```
 
-Sixteen functions. Begin, and the tree's advance, read the collection's heap,
-take its descriptor, and follow the `_local` and `RtStatus` conventions. The
-rest only read or bump the cursor's own fields, need neither the handle nor a
-descriptor, cannot fail, and return their answer directly, as
-`dtlv_rti_field_offset` does.
+Sixteen functions, all in the runtime's usual shape: each takes the handle,
+returns an `RtStatus`, and writes what it answers through an out parameter, a
+flag as a `u8` that is 1 or 0. Begin, and a tree's advance, read the
+collection and take its descriptor. The rest touch only the cursor and cannot
+fail. A cursor is not a value of the language and has no descriptor, so the
+one rule they leave out is a descriptor after every value pointer.
+
+An earlier version had done, elem, value and the strided and row advances
+skip the handle and return their answer directly, for speed. Nothing needs
+that: compiled code open-codes all ten, and the interpreter calls them in the
+same crate graph, where thin LTO inlines them whatever their shape.
 
 ## Strided cursors: lists and rank-1 tensors
 

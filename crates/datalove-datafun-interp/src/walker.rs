@@ -678,60 +678,66 @@ impl IrInterpreter {
                 debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "starting a cursor cannot fail");
                 frame.mark_slot_live(*cursor);
             }
+            // Done, elem and value write their answer straight into the
+            // destination, the out parameter being where the value goes.
             Instruction::CursorDone { dest, cursor } => {
                 let at = frame.slot(*cursor).ptr;
-                let done = unsafe {
+                let out = frame.value_dest(*dest).ptr;
+                let rt = self.runtime.handle();
+                let status = unsafe {
                     match frame.cursor_kind(*cursor) {
-                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done(at as *const rtdt::StrideCursor),
-                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done(at as *const rtdt::RowCursor),
-                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done(at as *const rtdt::TreeCursor),
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done_local(rt, at as *const rtdt::StrideCursor, out),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done_local(rt, at as *const rtdt::RowCursor, out),
+                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done_local(rt, at as *const rtdt::TreeCursor, out),
                     }
                 };
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { *(dest_slot.ptr as *mut bool) = done; }
+                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "asking whether a cursor is done cannot fail");
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorElem { dest, cursor } => {
                 let at = frame.slot(*cursor).ptr;
-                let elem = unsafe {
+                let out = frame.value_dest(*dest).ptr as *mut *const u8;
+                let rt = self.runtime.handle();
+                let status = unsafe {
                     match frame.cursor_kind(*cursor) {
-                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem(at as *const rtdt::StrideCursor),
-                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem(at as *const rtdt::RowCursor),
-                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem(at as *const rtdt::TreeCursor),
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem_local(rt, at as *const rtdt::StrideCursor, out),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem_local(rt, at as *const rtdt::RowCursor, out),
+                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem_local(rt, at as *const rtdt::TreeCursor, out),
                     }
                 };
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { *(dest_slot.ptr as *mut *const u8) = elem; }
+                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorValue { dest, cursor } => {
                 debug_assert_eq!(frame.cursor_kind(*cursor), CursorKind::Tree, "only a map's cursor has values");
                 let at = frame.slot(*cursor).ptr;
-                let value = unsafe { datalove_rt::c::dtlv_rti_tree_cursor_value(at as *const rtdt::TreeCursor) };
-                let dest_slot = frame.value_dest(*dest);
-                unsafe { *(dest_slot.ptr as *mut *const u8) = value; }
+                let out = frame.value_dest(*dest).ptr as *mut *const u8;
+                let status = unsafe {
+                    datalove_rt::c::dtlv_rti_tree_cursor_value_local(self.runtime.handle(), at as *const rtdt::TreeCursor, out)
+                };
+                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorAdvance { cursor, coll } => {
                 let at = frame.slot_dest(*cursor).ptr;
-                unsafe {
+                let rt = self.runtime.handle();
+                let status = unsafe {
                     match frame.cursor_kind(*cursor) {
-                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance(at as *mut rtdt::StrideCursor),
-                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance(at as *mut rtdt::RowCursor),
+                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance_local(rt, at as *mut rtdt::StrideCursor),
+                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance_local(rt, at as *mut rtdt::RowCursor),
                         CursorKind::Tree => {
                             let coll_val = self.read_operand(coll, frame, frames);
-                            let rt = self.runtime.handle();
-                            let status = match (*coll_val.tydesc).type_tag {
+                            match (*coll_val.tydesc).type_tag {
                                 rtdt::TyTag::Set => datalove_rt::c::dtlv_rti_btreeset_cursor_advance_local(
                                     rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
                                 rtdt::TyTag::Map => datalove_rt::c::dtlv_rti_btreemap_cursor_advance_local(
                                     rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
                                 tag => unreachable!("a tree cursor over a {tag:?}"),
-                            };
-                            debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");
+                            }
                         }
                     }
-                }
+                };
+                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");
             }
             _ => return false,
         }

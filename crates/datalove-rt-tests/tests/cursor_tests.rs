@@ -115,13 +115,33 @@ impl Drop for Rt {
 
 // ==================== Walks ====================
 
+/// Whether a walk is over, as a protocol function says, checking it answered.
+unsafe fn done<C>(rt: &Rt, f: unsafe extern "C-unwind" fn(LocalRtHandle, *const C, *mut u8) -> RtStatus, cursor: *const C) -> bool {
+    let mut out = 2u8;
+    assert_eq!(unsafe { f(rt.0, cursor, &mut out) }, RtStatus::Ok);
+    assert!(out <= 1, "done answers 0 or 1, not {out}");
+    out == 1
+}
+
+/// What a protocol function reads off a cursor, checking it answered.
+unsafe fn read<C>(rt: &Rt, f: unsafe extern "C-unwind" fn(LocalRtHandle, *const C, *mut *const u8) -> RtStatus, cursor: *const C) -> *const u8 {
+    let mut out = ptr::null();
+    assert_eq!(unsafe { f(rt.0, cursor, &mut out) }, RtStatus::Ok);
+    out
+}
+
+/// Move a walk on with a protocol function, checking it succeeded.
+unsafe fn step<C>(rt: &Rt, f: unsafe extern "C-unwind" fn(LocalRtHandle, *mut C) -> RtStatus, cursor: *mut C) {
+    assert_eq!(unsafe { f(rt.0, cursor) }, RtStatus::Ok);
+}
+
 /// Every element a list or rank-1 tensor walk visits.
-unsafe fn walk_stride(cursor: &mut rtdt::StrideCursor) -> Vec<*const u8> {
+unsafe fn walk_stride(rt: &Rt, cursor: &mut rtdt::StrideCursor) -> Vec<*const u8> {
     unsafe {
         let mut seen = Vec::new();
-        while !c::dtlv_rti_stride_cursor_done(cursor) {
-            seen.push(c::dtlv_rti_stride_cursor_elem(cursor));
-            c::dtlv_rti_stride_cursor_advance(cursor);
+        while !done(rt, c::dtlv_rti_stride_cursor_done_local, cursor) {
+            seen.push(read(rt, c::dtlv_rti_stride_cursor_elem_local, cursor));
+            step(rt, c::dtlv_rti_stride_cursor_advance_local, cursor);
         }
         seen
     }
@@ -132,7 +152,7 @@ unsafe fn walk_list_u32(rt: &Rt, list: &rtdt::List, list_td: *const rtdt::TyDesc
         let mut cursor = MaybeUninit::uninit();
         let status = c::dtlv_rti_list_cursor_begin_local(rt.0, list as *const rtdt::List as *const u8, list_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
-        walk_stride(cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
+        walk_stride(rt, cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
     }
 }
 
@@ -141,7 +161,7 @@ unsafe fn walk_tensor_u32(rt: &Rt, tensor: &rtdt::Tensor, tensor_td: *const rtdt
         let mut cursor = MaybeUninit::uninit();
         let status = c::dtlv_rti_tensor_cursor_begin_local(rt.0, tensor as *const rtdt::Tensor as *const u8, tensor_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
-        walk_stride(cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
+        walk_stride(rt, cursor.assume_init_mut()).into_iter().map(|p| *(p as *const u32)).collect()
     }
 }
 
@@ -164,11 +184,11 @@ unsafe fn walk_tensor_nested(
         assert_eq!(status, RtStatus::Ok);
         let cursor = cursor.assume_init_mut();
         let mut all = Vec::new();
-        while !c::dtlv_rti_row_cursor_done(cursor) {
-            let row = c::dtlv_rti_row_cursor_elem(cursor) as *const rtdt::Tensor;
+        while !done(rt, c::dtlv_rti_row_cursor_done_local, cursor) {
+            let row = read(rt, c::dtlv_rti_row_cursor_elem_local, cursor) as *const rtdt::Tensor;
             assert_eq!((*row).capacity_elems, rtdt::Index::ZERO, "a row is a view");
             all.extend(walk_tensor_nested(rt, row, rank - 1, tds));
-            c::dtlv_rti_row_cursor_advance(cursor);
+            step(rt, c::dtlv_rti_row_cursor_advance_local, cursor);
         }
         all
     }
@@ -181,8 +201,8 @@ unsafe fn walk_set_u32(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) ->
         assert_eq!(status, RtStatus::Ok);
         let cursor = cursor.assume_init_mut();
         let mut seen = Vec::new();
-        while !c::dtlv_rti_tree_cursor_done(cursor) {
-            seen.push(*(c::dtlv_rti_tree_cursor_elem(cursor) as *const u32));
+        while !done(rt, c::dtlv_rti_tree_cursor_done_local, cursor) {
+            seen.push(*(read(rt, c::dtlv_rti_tree_cursor_elem_local, cursor) as *const u32));
             assert_eq!(c::dtlv_rti_btreeset_cursor_advance_local(rt.0, cursor, set_td), RtStatus::Ok);
         }
         assert!(cursor.elem.is_null(), "a done cursor points at nothing");
@@ -197,9 +217,9 @@ unsafe fn walk_map_u32(rt: &Rt, map: &rtdt::Map, map_td: *const rtdt::TyDesc) ->
         assert_eq!(status, RtStatus::Ok);
         let cursor = cursor.assume_init_mut();
         let mut seen = Vec::new();
-        while !c::dtlv_rti_tree_cursor_done(cursor) {
-            let k = *(c::dtlv_rti_tree_cursor_elem(cursor) as *const u32);
-            let v = *(c::dtlv_rti_tree_cursor_value(cursor) as *const u32);
+        while !done(rt, c::dtlv_rti_tree_cursor_done_local, cursor) {
+            let k = *(read(rt, c::dtlv_rti_tree_cursor_elem_local, cursor) as *const u32);
+            let v = *(read(rt, c::dtlv_rti_tree_cursor_value_local, cursor) as *const u32);
             seen.push((k, v));
             assert_eq!(c::dtlv_rti_btreemap_cursor_advance_local(rt.0, cursor, map_td), RtStatus::Ok);
         }
@@ -342,7 +362,7 @@ fn test_list_cursor_walks_zero_sized_elements() -> AnyResult<()> {
     let seen = unsafe {
         let status = c::dtlv_rti_list_cursor_begin_local(rt.0, &list as *const rtdt::List as *const u8, list_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
-        walk_stride(cursor.assume_init_mut())
+        walk_stride(&rt, cursor.assume_init_mut())
     };
     assert_eq!(seen.len(), 3);
     assert!(seen.iter().all(|&p| p == seen[0]));
