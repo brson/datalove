@@ -17,25 +17,25 @@ use datalove_datafun_compiler::IrTypeExt;
 use datalove_datafun_ir::{IrType, ConstBindingInfo, ConstBindingGraph, ConstValue, ResolvedConsts};
 use datalove_datafun_interp::InterpCtfeEvaluator;
 use bct::input::Source;
-use datalove_datafun_ast::ast::Statement;
+use datalove_datafun_ast::ast::{Body, Statement};
 
 /// Build a simple const binding graph from statements and expr_types.
 /// This is a non-tracked version of collect_const_graph for tests.
 fn build_const_graph<'db>(
     db: &'db dyn salsa::Database,
-    stmts: &[Statement<'db>],
+    body: &'db Body<'db>,
     expr_types: &datalove_datafun_tycheck::ExprTypes<'db>,
 ) -> ConstBindingGraph {
     let mut bindings = Vec::new();
 
-    for stmt in stmts {
+    for stmt in &body.statements {
         if let Statement::Const(const_stmt) = stmt {
-            let expr = const_stmt.value;
+            let expr = body.arena.get(const_stmt.value);
             let stmt_id = datalove_datafun_ir::ConstStmtId(bindings.len() as u32);
             let name = const_stmt.name.text(db).to_string();
             // Get the type from the typechecker's table.
             let ir_type = expr_types
-                .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
+                .get(&expr.key())
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
@@ -73,7 +73,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 let source_obj = Source::new(&db, source.clone());
                 let parse_result = datalove_datafun_parser::parse(&db, source_obj);
                 let parsed_ast = &parse_result.parsed;
-                let stmts: Vec<Statement> = parsed_ast.statements.to_vec();
+                let body = parsed_ast.body(&db);
+                let stmts = &body.statements;
 
                 // Typecheck to get expression types using production path.
                 let tycheck_result = datalove_datafun_tycheck::type_check_single_script(&db, source_obj);
@@ -106,7 +107,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 }
 
                 // Run drop analysis on all functions first.
-                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types_raw, call_targets_raw, &stmts, Some(&func_param_types)) {
+                let func_analyses = match ownership_analysis::analyze_script_functions(&db, expr_types_raw, call_targets_raw, stmts, Some(&func_param_types)) {
                     Ok(analyses) => analyses,
                     Err(errors) => {
                         for (func_name, errs) in errors {
@@ -122,7 +123,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Run script-level ownership analysis.
-                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types_raw, call_targets_raw, &stmts);
+                let script_analysis_raw = ownership_analysis::analyze_script_statements(&db, expr_types_raw, call_targets_raw, body);
 
                 // Check for script analysis errors.
                 if !script_analysis_raw.errors.is_empty() {
@@ -154,13 +155,13 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 // These fixtures require no data.
                 let no_data = lower::DataFiles::new();
                 let lowered = lower_script_functions(
-                    &db, expr_types_raw, call_targets_raw, &stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, &no_data, ScriptLowerContext::new(),
+                    &db, expr_types_raw, call_targets_raw, stmts, &func_analyses, None, Some(&func_return_types), &func_id_map, &no_data, ScriptLowerContext::new(),
                     &HashMap::new(), false,
                 ).expect("function lowering failed");
                 let (lowered_functions, func_name_to_id) = (lowered.functions, lowered.func_name_to_id);
 
                 // Evaluate const bindings using CTFE with "lower then evaluate" pattern.
-                let const_graph = build_const_graph(&db, &stmts, expr_types_raw);
+                let const_graph = build_const_graph(&db, body, expr_types_raw);
                 let resolved_consts = if !const_graph.bindings.is_empty() {
                     let mut evaluator = InterpCtfeEvaluator::new();
                     let mut resolved = ResolvedConsts::new();
@@ -170,7 +171,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     // A binding's id is its position among the const statements.
                     let const_exprs: Vec<_> = stmts.iter()
                         .filter_map(|s| match s {
-                            Statement::Const(c) => Some(c.value),
+                            Statement::Const(c) => Some(body.arena.get(c.value)),
                             _ => None,
                         })
                         .collect();
@@ -233,7 +234,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     Some((lowered_functions, func_name_to_id))
                 };
 
-                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), stmts, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
+                match lower::lower_script_fragment_raw(&db, expr_types_raw, call_targets_raw, &func_id_map, &no_data, script_ctx.clone(), body, func_analyses, script_analysis, Some(&func_param_types), Some(&func_return_types), lowered_funcs_arg) {
                     Ok(ir_code_unit) => {
                         // Inline const values into the IR.
                         let const_values_map: HashMap<String, Arc<datalove_datafun_ir::ConstValue>> = resolved_consts

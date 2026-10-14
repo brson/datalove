@@ -14,15 +14,15 @@ use datalove_datalit::ast_gen::{AstGenConfig, gen_expr_full_seeded};
 
 /// Extract expression from a let statement in a ParsedStatements.
 fn extract_let_value<'db>(
-    _db: &'db datalove_datafun_compiler::Database,
+    db: &'db datalove_datafun_compiler::Database,
     parsed: datalove_datafun_ast::ast::ParsedStatements<'db>,
 ) -> Result<datalove_datafun_ast::ast::ExprFun<'db>, String> {
-    let statements = parsed.statements;
+    let statements = parsed.statements(db);
     if statements.len() != 1 {
         return Err(format!("expected 1 statement, got {}", statements.len()));
     }
     match &statements[0] {
-        datalove_datafun_ast::ast::Statement::Let(stmt) => Ok(stmt.value),
+        datalove_datafun_ast::ast::Statement::Let(stmt) => Ok(parsed.body(db).arena.get(stmt.value)),
         other => Err(format!("expected Let statement, got {:?}", std::mem::discriminant(other))),
     }
 }

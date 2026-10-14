@@ -27,7 +27,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use datalove_datafun_ast::ast::{ExprFun, Statement};
+use datalove_datafun_ast::ast::{Body, ParsedExpr, Statement, TopLevel};
 use datalove_datafun_compiler::lower::{
     lower_script_fragment_raw, lower_script_expr, lower_script_functions,
 };
@@ -117,10 +117,11 @@ enum ParsedUnit<'db> {
     /// The parse itself is not carried here: `unit_ast` holds it, keyed on the
     /// unit, and these are the statements the later phases walk.
     Fragment {
-        stmts: Vec<Statement<'db>>,
+        top: TopLevel<'db>,
+        body: &'db Body<'db>,
     },
     /// A single expression.
-    Expr(ExprFun<'db>),
+    Expr(ParsedExpr<'db>),
 }
 
 // Extension impl for CompiledModules to create script compiler.
@@ -711,14 +712,14 @@ impl<'db> ScriptCompiler<'db> {
             output.asked_names(db).iter().map(|name| name.as_str(db).S()).collect();
         let qualified_calls = match &unit_ast(db, self.scripts[index].unit(db)).kind {
             ScriptUnitKind::Fragment(parsed, _) => {
-                for statement in parsed.statements.iter() {
+                for statement in parsed.statements(db).iter() {
                     if let Statement::Import(import) = statement {
                         used.push(import.module_name.as_str(db).S());
                     }
                 }
                 &parsed.qualified_calls
             }
-            ScriptUnitKind::Expr(_, qualified_calls) => qualified_calls,
+            ScriptUnitKind::Expr(parsed) => &parsed.qualified_calls,
         };
         // A qualified call uses its alias the way an import does.
         for (alias, _) in qualified_calls.iter() {
@@ -881,9 +882,9 @@ impl<'db> ScriptCompiler<'db> {
         let spec = unit_ast(self.db, self.scripts[index].unit(self.db));
         match &spec.kind {
             ScriptUnitKind::Fragment(parsed, _) => {
-                ParsedUnit::Fragment { stmts: parsed.statements.to_vec() }
+                ParsedUnit::Fragment { top: parsed.top, body: parsed.body(self.db) }
             }
-            ScriptUnitKind::Expr(expr, _) => ParsedUnit::Expr(*expr),
+            ScriptUnitKind::Expr(parsed) => ParsedUnit::Expr(parsed.clone()),
         }
     }
 
@@ -933,9 +934,9 @@ impl<'db> ScriptCompiler<'db> {
         // This unit's data consts are in the first stratum's scope already;
         // see `data_consts`.
         let mut first_consts = script_consts_over(&self.unit_records[..index]);
-        if let ParsedUnit::Fragment { stmts, .. } = unit {
+        if let ParsedUnit::Fragment { body, .. } = unit {
             first_consts.extend(datalove_datafun_compiler::const_eval::data_consts(
-                self.db, stmts, typecheck.expr_types, self.env.data(self.db)));
+                self.db, body, typecheck.expr_types, self.env.data(self.db)));
         }
         let lowered_funcs = match self.phase_lower_functions(
             index, unit, &typecheck, &ownership, &first_consts, true,
@@ -1055,11 +1056,11 @@ impl<'db> ScriptCompiler<'db> {
         let dead_externals = dead_externals_over(&self.unit_records[..index]);
         let external_consts = external_consts_over(&self.unit_records[..index]);
         match unit {
-            ParsedUnit::Fragment { stmts, .. } => {
+            ParsedUnit::Fragment { top, body } => {
                 let ownership_result = analyze_script_fragment_tracked(
                     self.db,
                     typecheck.result,
-                    stmts.clone(),
+                    *top,
                     self.auto_adapt_mode,
                     dead_externals,
                     external_consts,
@@ -1075,7 +1076,7 @@ impl<'db> ScriptCompiler<'db> {
                         ir_unit: None,
                     });
                 }
-                let mut func_analyses = ownership_result.to_function_analyses_map(self.db, stmts);
+                let mut func_analyses = ownership_result.to_function_analyses_map(self.db, &body.statements);
                 let mut script_analysis = ownership_result.script_analysis(self.db).clone();
 
                 // Type adaptations are decided during typechecking, and lowering
@@ -1096,11 +1097,11 @@ impl<'db> ScriptCompiler<'db> {
                     revived: ownership_result.revived_exports(self.db).clone(),
                 })
             }
-            ParsedUnit::Expr(expr) => {
+            ParsedUnit::Expr(parsed) => {
                 let ownership_result = analyze_script_expr_tracked(
                     self.db,
                     typecheck.result,
-                    *expr,
+                    parsed.clone(),
                     self.auto_adapt_mode,
                     dead_externals,
                     external_consts,
@@ -1148,7 +1149,7 @@ impl<'db> ScriptCompiler<'db> {
         script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         defer_missing_consts: bool,
     ) -> Result<LoweredFunctions, ScriptCompilationResult> {
-        let ParsedUnit::Fragment { stmts, .. } = unit else {
+        let ParsedUnit::Fragment { body, .. } = unit else {
             // Expressions don't have function definitions.
             return Ok(LoweredFunctions {
                 functions: Vec::new(),
@@ -1179,7 +1180,7 @@ impl<'db> ScriptCompiler<'db> {
             self.db,
             typecheck.expr_types,
             typecheck.call_targets,
-            stmts,
+            &body.statements,
             &ownership.func_analyses,
             Some(&func_param_types),
             Some(&func_return_types),
@@ -1227,7 +1228,7 @@ impl<'db> ScriptCompiler<'db> {
         lowered_funcs: &LoweredFunctions,
     ) -> Result<ConstEvalOutput, ScriptCompilationResult> {
         let earlier_consts = script_consts_over(&self.unit_records[..index]);
-        let ParsedUnit::Fragment { stmts, .. } = unit else {
+        let ParsedUnit::Fragment { top, body } = unit else {
             // Expressions don't have const bindings.
             return Ok(ConstEvalOutput {
                 resolved_consts: ResolvedConsts::new(),
@@ -1238,7 +1239,7 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         // Collect const graph (memoized).
-        let const_graph = collect_const_graph(self.db, stmts.clone(), typecheck.result);
+        let const_graph = collect_const_graph(self.db, *top, typecheck.result);
 
         // Evaluate script-level consts.
         //
@@ -1253,7 +1254,7 @@ impl<'db> ScriptCompiler<'db> {
             match self.evaluate_script_consts(
                 &earlier_consts,
                 &const_graph,
-                stmts,
+                body,
                 typecheck.expr_types,
                 typecheck.call_targets,
                 lowered_funcs,
@@ -1289,7 +1290,7 @@ impl<'db> ScriptCompiler<'db> {
         // Skip if skip_const_inlining is enabled - consts will be lowered as let bindings.
         let func_consts_result = if !self.skip_const_inlining {
             self.evaluate_function_consts(
-                stmts,
+                &body.statements,
                 typecheck.expr_types,
                 typecheck.call_targets,
                 &script_consts,
@@ -1324,7 +1325,7 @@ impl<'db> ScriptCompiler<'db> {
         &self,
         earlier_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
         const_graph: &datalove_datafun_ir::ConstBindingGraph,
-        statements: &[Statement<'db>],
+        body: &'db Body<'db>,
         expr_types: &'db datalove_datafun_tycheck::ExprTypes<'db>,
         call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
         lowered_funcs: &LoweredFunctions,
@@ -1343,9 +1344,9 @@ impl<'db> ScriptCompiler<'db> {
 
         // A binding's id is its position among the const statements, so the
         // expressions only have to be gathered once.
-        let const_exprs: Vec<_> = statements.iter()
+        let const_exprs: Vec<_> = body.statements.iter()
             .filter_map(|s| match s {
-                Statement::Const(c) => Some(c.value),
+                Statement::Const(c) => Some(body.arena.get(c.value)),
                 _ => None,
             })
             .collect();
@@ -1460,7 +1461,7 @@ impl<'db> ScriptCompiler<'db> {
         let script_ctx = lower_context_over(&self.unit_records[..index]);
 
         match unit {
-            ParsedUnit::Fragment { stmts, .. } => {
+            ParsedUnit::Fragment { body, .. } => {
                 // Build func_param_types and func_return_types for type alias support.
                 let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
                 let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
@@ -1494,7 +1495,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.shared_context.func_id_map,
                     self.env.data(self.db),
                     script_ctx,
-                    stmts.clone(),
+                    body,
                     ownership.func_analyses.clone(),
                     script_analysis,
                     Some(&func_param_types),
@@ -1507,7 +1508,7 @@ impl<'db> ScriptCompiler<'db> {
                     ir_unit: None,
                 })
             }
-            ParsedUnit::Expr(expr) => {
+            ParsedUnit::Expr(parsed) => {
                 lower_script_expr(
                     self.db,
                     typecheck.expr_types,
@@ -1515,7 +1516,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.shared_context.func_id_map,
                     self.env.data(self.db),
                     script_ctx,
-                    *expr,
+                    parsed.expr(self.db),
                 ).map_err(|e| ScriptCompilationResult {
                     typecheck: TypecheckResult::Success,
                     ownership: OwnershipResult::Success,
@@ -1624,7 +1625,7 @@ impl<'db> ScriptCompiler<'db> {
         // finally have values. The source is the script's own statements for a
         // function defined beside it, and the module's for one it called into.
         let script_stmts: &[Statement<'db>] = match unit {
-            ParsedUnit::Fragment { stmts, .. } => stmts.as_slice(),
+            ParsedUnit::Fragment { body, .. } => &body.statements,
             ParsedUnit::Expr(_) => &[],
         };
         let instantiation_consts = |callee: CalleeKey, indices: &[usize], values: &[ConstValue]| {
@@ -1669,7 +1670,7 @@ impl<'db> ScriptCompiler<'db> {
                         .collect();
                     // A module function's consts may name its module's.
                     self.instantiation_consts_from(
-                        &parsed.statements, &name,
+                        parsed.statements(self.db), &name,
                         single.expr_types(self.db), single.call_targets(self.db),
                         self.shared_context.module_consts.get(&module).cloned().unwrap_or_default(),
                         indices, values, &funcs, &names,

@@ -9,7 +9,7 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use bct::input::Source;
-use datalove_datafun_ast::ast::{ExprDataFile, ExprFun, ExprKey};
+use datalove_datafun_ast::ast::{ExprDataFile, ExprFun};
 use datalove_datalit as datalit;
 use datalove_datalit::tycheck::TypeError as DatalitTypeError;
 
@@ -72,7 +72,7 @@ pub(crate) fn type_data_file<'db>(
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let path = file.path(db);
-    let site = ErrorSite::Expr(ExprKey::of(db, expr));
+    let site = ErrorSite::Expr(expr.key());
 
     let Some(source) = ctx.data_files.get(&path).copied() else {
         let message = fmt!("no data `{path}` to require");

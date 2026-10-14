@@ -39,7 +39,7 @@ fn is_self_assignment_script<'db>(
     value_expr: ExprFun<'db>,
 ) -> bool {
     // Check if the value expression is just a name reference.
-    if let ExprFunKind::Place(ref place) = value_expr.expr(ctx.db) {
+    if let ExprFunKind::Place(place) = value_expr.kind() {
         if !place.steps.is_empty() {
             return false;
         }
@@ -82,7 +82,7 @@ pub fn lower_script_fragment_raw<'db>(
     func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
-    stmts: Vec<Statement<'db>>,
+    body: &'db ast::Body<'db>,
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: ScriptAnalysisData,
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
@@ -90,6 +90,8 @@ pub fn lower_script_fragment_raw<'db>(
     lowered_functions: Option<(Vec<IrCodeUnit>, HashMap<String, FuncId>)>,
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
+    ctx.arena = Some(&body.arena);
+    let stmts = &body.statements;
 
     // Use pre-computed script analysis from ownership analysis phase.
     ctx.body.drop_schedule = script_analysis.schedule;
@@ -117,7 +119,7 @@ pub fn lower_script_fragment_raw<'db>(
 
         // Pre-register all functions to enable forward references (mutual recursion).
         // This must happen before lowering any function bodies.
-        for stmt in &stmts {
+        for stmt in stmts {
             if let Statement::Fun(fun_stmt) = stmt {
                 let func_name = fun_stmt.name(db).text(db).to_string();
                 let param_count = fun_stmt.params(db).len();
@@ -303,6 +305,8 @@ pub fn lower_script_expr<'db>(
 ) -> Result<IrCodeUnit, LowerError> {
     let mut ctx = LowerCtx::new_for_script(db, expr_types, Some(call_targets), Some(func_id_map), data_files, script_ctx);
 
+    ctx.arena = Some(expr.arena());
+
     // An expression unit that is just a name is the prompt asking to see a
     // binding, not to take it. Name it and compute nothing.
     let result_name = shown_binding(&ctx, expr);
@@ -347,7 +351,7 @@ pub fn lower_script_expr<'db>(
 /// A bare name bound by an earlier unit needs no code: the caller reads that
 /// binding where it lives, which is both cheaper and non-consuming.
 fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String> {
-    let ExprFunKind::Place(ref place) = expr.expr(ctx.db) else {
+    let ExprFunKind::Place(place) = expr.kind() else {
         return None;
     };
     if !place.steps.is_empty() {
@@ -387,8 +391,8 @@ fn lower_statement_for_script<'db>(
     match stmt {
         Statement::Let(let_stmt) => {
             let init_expr = let_stmt.value;
-            let value_id = lower_expression(ctx, init_expr)?;
-            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, init_expr, value_id) {
+            let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
+            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, ctx.expr(init_expr), value_id) {
                 let operand = Operand::Value(value_id);
                 ctx.bind_var(&name, operand);
                 // Record binding operand for drop schedule.
@@ -416,11 +420,11 @@ fn lower_statement_for_script<'db>(
 
             if place.steps.is_empty() {
                 // Simple name assignment.
-                if is_self_assignment_script(ctx, &root_name_str, set_stmt.value) {
+                if is_self_assignment_script(ctx, &root_name_str, ctx.expr(set_stmt.value)) {
                     return Ok(());
                 }
 
-                let value_id = lower_expression(ctx, set_stmt.value)?;
+                let value_id = lower_expression(ctx, ctx.expr(set_stmt.value))?;
                 let operand = ctx.lookup_var(&root_name_str)
                     .unwrap_or_else(|| panic!("variable '{}' not found - typechecker should catch this", root_name_str));
                 match operand {
@@ -454,7 +458,7 @@ fn lower_statement_for_script<'db>(
             } else {
                 // Pure field projections.
                 let field_path = collect_field_path_from_place(ctx, place)?;
-                let value_id = lower_expression(ctx, set_stmt.value)?;
+                let value_id = lower_expression(ctx, ctx.expr(set_stmt.value))?;
                 match ctx.lookup_var(&root_name_str) {
                     Some(Operand::Slot(slot)) => {
                         ctx.emit_set_field(SlotDest::Local(slot), field_path, Operand::Value(value_id));
@@ -471,7 +475,7 @@ fn lower_statement_for_script<'db>(
         Statement::Ret(ret_stmt) => {
             // In scripts, return means early return from the unit.
             let value = if let Some(expr) = ret_stmt.value {
-                let value_id = lower_expression(ctx, expr)?;
+                let value_id = lower_expression(ctx, ctx.expr(expr))?;
                 Operand::Value(value_id)
             } else {
                 // Return unit value for bare `ret`.
@@ -582,7 +586,7 @@ fn lower_statement_for_script<'db>(
         Statement::DebugLog(stmt) => {
             // Use lower_expression_for_ref to handle field projections with GetFieldRef.
             // This borrows the value instead of copying, avoiding shallow-copy issues.
-            let operand = lower_expression_for_ref(ctx, stmt.value)?;
+            let operand = lower_expression_for_ref(ctx, ctx.expr(stmt.value))?;
             // If the operand is a ref, dereference it for reading.
             let operand = ctx.deref_if_ref(operand);
             ctx.emit(Instruction::DebugLog { operand });
@@ -601,7 +605,7 @@ fn lower_statement_for_script<'db>(
             // The const inlining pass runs later to replace with literal values.
             let name = const_stmt.name.text(ctx.db).to_string();
             let init_expr = const_stmt.value;
-            let value_id = lower_expression(ctx, init_expr)?;
+            let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
             ctx.record_binding_operand(operand);
@@ -618,7 +622,7 @@ fn lower_statement_for_script<'db>(
         }
         Statement::ExprStatement(stmt) => {
             // Lower the function call expression and discard the unit result.
-            lower_expression(ctx, stmt.expr)?;
+            lower_expression(ctx, ctx.expr(stmt.expr))?;
             ctx.emit_expr_temp_drops();
             Ok(())
         }

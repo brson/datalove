@@ -22,7 +22,7 @@ impl<'db> Parser<'db> {
     /// Parse a literal expression into new inline variants.
     ///
     /// This handles the `: type / expr` pattern.
-    pub(super) fn parse_lit_expr_full(&mut self) -> ast::ExprFun<'db> {
+    pub(super) fn parse_lit_expr_full(&mut self) -> ast::ExprId {
         // The span runs from the hint, if there is one, to the end of what it
         // is on, so that a diagnostic about either points at both.
         let ts = self.peek_text_span();
@@ -381,7 +381,7 @@ impl<'db> Parser<'db> {
             let inner = elements.pop().X();
             return match type_hint {
                 Some(type_hint) => ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner }),
-                None => inner.expr(self.db).clone(),
+                None => self.expr_kind(inner).clone(),
             };
         }
         ast::ExprFunKind::AnonTuple(ast::ExprAnonTuple { type_hint, elements })
@@ -476,7 +476,7 @@ impl<'db> Parser<'db> {
         &mut self,
         tokens: Cursor<'db>,
         rank: u32,
-    ) -> (Vec<u32>, Vec<ast::ExprFun<'db>>) {
+    ) -> (Vec<u32>, Vec<ast::ExprId>) {
         if rank == 1 {
             // Innermost level: space-separated elements.
             let mut sub = self.new_sub(tokens);
@@ -629,7 +629,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse table data row (comma-separated expressions).
-    fn parse_table_data_row(&mut self, row_tokens: Cursor<'db>) -> Vec<ast::ExprFun<'db>> {
+    fn parse_table_data_row(&mut self, row_tokens: Cursor<'db>) -> Vec<ast::ExprId> {
         let parts = self.split_table_cells(row_tokens);
         let mut elements = Vec::new();
 
@@ -645,7 +645,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated expressions from a branch.
-    pub(super) fn parse_comma_separated_exprs(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprFun<'db>> {
+    pub(super) fn parse_comma_separated_exprs(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprId> {
         let mut sub = self.sub_parser(iter, None);
         let elements = sub.parse_comma_separated(|p| p.parse_expr_full());
         sub.error_if_not_exhausted();
@@ -700,7 +700,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Helper to parse comma-separated map entries.
-    fn parse_comma_separated_map_entries(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprMapEntry<'db>> {
+    fn parse_comma_separated_map_entries(&mut self, iter: Cursor<'db>) -> Vec<ast::ExprMapEntry> {
         let mut sub = self.sub_parser(iter, None);
         let entries = sub.parse_comma_separated(|p| p.parse_map_entry());
         sub.error_if_not_exhausted();
@@ -709,7 +709,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Parse a single map entry: `key = value`.
-    fn parse_map_entry(&mut self) -> ast::ExprMapEntry<'db> {
+    fn parse_map_entry(&mut self) -> ast::ExprMapEntry {
         let key = self.parse_expr_full();
 
         if !self.eat_sigil(Sigil::Equals) {

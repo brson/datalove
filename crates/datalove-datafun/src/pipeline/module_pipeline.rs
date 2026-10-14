@@ -334,7 +334,7 @@ impl ModuleCompilationPipeline {
 
         let mut roots: rmx::std::collections::BTreeSet<String> =
             also.iter().filter(|p| self.world.contains(p)).cloned().collect();
-        for statement in parsed.parsed.statements.iter() {
+        for statement in parsed.parsed.statements(db).iter() {
             let Statement::Require(StmtRequire::Module(require)) = statement else {
                 continue;
             };

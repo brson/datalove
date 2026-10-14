@@ -8,7 +8,7 @@
 use std::sync::Arc;
 use std::collections::{BTreeMap, HashMap};
 use bct::module_graph::ModuleId;
-use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunctionCall, ExprKey};
+use datalove_datafun_ast::ast::{Statement, ExprArena, ExprFun, ExprFunctionCall, ExprId, ExprKey};
 use datalove_datafun_ir::{
     IrType, IrBlock, IrCodeUnit, Operand, ValueId, SlotId, ParamId, BlockId, FuncId,
     CodeRef, CodeUnitId, Terminator, Instruction, SymbolTable, ExportBinding, IrModuleId, ParamMode,
@@ -234,14 +234,6 @@ impl ScriptLowerContext {
 
 }
 
-/// What kind of script unit we're lowering.
-pub enum ScriptUnitKind<'db> {
-    /// A sequence of statements.
-    Fragment(Vec<Statement<'db>>),
-    /// A single expression.
-    Expr(ExprFun<'db>),
-}
-
 /// Main lowering context.
 ///
 /// Contains shared state (database, type info) plus the current [`FrameState`].
@@ -254,7 +246,7 @@ pub struct LowerCtx<'db> {
     pub(super) db: &'db dyn salsa::Database,
     /// Expression types from typechecker.
     pub(super) expr_types: &'db ExprTypes<'db>,
-    /// Resolved call targets from typechecker, indexed by ExprFunctionCall salsa ID.
+    /// Resolved call targets from typechecker, keyed by `ExprKey::of_call`.
     /// None where there is nothing to resolve against, as when lowering a
     /// const expression in isolation.
     pub(super) call_targets: Option<&'db CallTargets<'db>>,
@@ -289,6 +281,8 @@ pub struct LowerCtx<'db> {
     pub(super) is_script_unit: bool,
     /// Const bindings evaluated at compile time: name -> (type, value).
     pub(super) const_bindings: HashMap<String, (IrType, Arc<ConstValue>)>,
+    /// The expressions of the body being lowered.
+    pub(super) arena: Option<&'db ExprArena<'db>>,
 }
 
 impl<'db> LowerCtx<'db> {
@@ -316,7 +310,13 @@ impl<'db> LowerCtx<'db> {
             return_type: None,
             is_script_unit: false,
             const_bindings: HashMap::new(),
+            arena: None,
         }
+    }
+
+    /// The expression at `id` in the body being lowered.
+    pub fn expr(&self, id: ExprId) -> ExprFun<'db> {
+        self.arena.expect("an expression is lowered inside a body").get(id)
     }
 
     /// The IR type of a typechecker type, in the function being lowered,
@@ -332,7 +332,7 @@ impl<'db> LowerCtx<'db> {
     }
 
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        let key = ExprKey::of(self.db, expr);
+        let key = expr.key();
         match self.expr_types.get(&key) {
             Some(datalove_datafun_common::Type::Datalit(dl)) => self.ir_type(dl),
             Some(ty) => IrType::from_tycheck(self.db, ty),
@@ -396,6 +396,7 @@ impl<'db> LowerCtx<'db> {
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
             is_script_unit: true,
             const_bindings: HashMap::new(),
+            arena: None,
         }
     }
 
@@ -449,9 +450,9 @@ impl<'db> LowerCtx<'db> {
     ///
     /// For module functions (module_id = Some), looks up in `func_id_map`.
     /// For local functions (module_id = None), uses `func_scope` lookup.
-    pub fn resolve_call(&self, call: ExprFunctionCall<'db>) -> CodeRef {
-        let key = ExprKey::of_call(self.db, call);
-        let func_name = call.name(self.db).text(self.db).to_string();
+    pub fn resolve_call(&self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> CodeRef {
+        let key = ExprKey::of_call(expr, call);
+        let func_name = call.name.text(self.db).to_string();
 
         // Get the resolved call target from typechecking.
         let target = self.call_targets.and_then(|t| t.get(&key))
@@ -635,7 +636,7 @@ impl<'db> LowerCtx<'db> {
     /// Such a use clones instead of moving, which is what leaves the binding
     /// available to the use that would otherwise have been an error.
     pub fn is_adapt_site(&self, expr: ExprFun<'db>) -> bool {
-        self.body.adapt_sites.contains(ExprKey::of(self.db, expr))
+        self.body.adapt_sites.contains(expr.key())
     }
 
     /// Look up a variable.

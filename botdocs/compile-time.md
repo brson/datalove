@@ -102,12 +102,10 @@ was, because `sys/std` does not nest deeply.
 
 What is left is constant factors at every layer, none above about 3%:
 
-- An expression is a salsa tracked struct, created with an identity hash and a
-  disambiguation, and its span entry reads three of its fields back to build
-  its key: `create_expr` is 3.1% of the run. The struct is kept for the stable
-  `ExprKey` identity, `Copy` handles and the parse firewall's cheap equality;
-  see [salsa-patterns.md](salsa-patterns.md). A per-function arena indexed by
-  the local index would keep all three.
+- An expression was a salsa tracked struct, created with an identity hash and
+  a disambiguation, and `create_expr` was 3.1% of the run. Expressions are now
+  in a per-function arena, which took the whole compile from 178M instructions
+  to 159M; see [plan-plain-ast.md](plan-plain-ast.md).
 - Every name is interned as it is read.
 - Every bracket starts a sub-parser, a struct of a few hundred bytes, and
   every line one more.

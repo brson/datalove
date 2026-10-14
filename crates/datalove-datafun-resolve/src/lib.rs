@@ -229,7 +229,7 @@ pub fn resolve_module_names<'db>(
     let parsed = datalove_datafun_parser::parse_module_ast(db, module);
 
     // Resolve names: collect type aliases and function signatures.
-    let collected = resolve_names_impl(db, &parsed.statements);
+    let collected = resolve_names_impl(db, parsed.statements(db));
 
     log_query("resolve_names", module_path, QueryPhase::End);
 
@@ -335,7 +335,7 @@ pub fn resolve_script_names<'db>(
     parsed: ParsedStatements<'db>,
 ) -> CollectedNames<'db> {
     let _ = source; // Used as memoization key.
-    resolve_names_impl(db, &parsed.statements)
+    resolve_names_impl(db, parsed.statements(db))
 }
 
 // ============================================================================
@@ -358,7 +358,7 @@ pub fn resolve_module_exports<'db>(
     module: Module<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
     let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-    resolve_names_impl(db, &parsed.statements).functions
+    resolve_names_impl(db, parsed.statements(db)).functions
 }
 
 /// The functions one module declares, by name, for an importer to inline.
@@ -372,7 +372,7 @@ pub fn module_function_asts<'db>(
     module: Module<'db>,
 ) -> Vec<(InternedText<'db>, StmtFun<'db>)> {
     let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-    parsed.statements.iter()
+    parsed.statements(db).iter()
         .filter_map(|statement| match statement {
             Statement::Fun(func) => Some((func.name(db), *func)),
             _ => None,

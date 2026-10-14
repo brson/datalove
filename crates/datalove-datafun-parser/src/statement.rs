@@ -643,20 +643,17 @@ statements that run belong in a function or a script")
             body.push(stmt);
         }
 
+        let arena = self.exit_function();
         if !found_end_fun {
-            self.exit_function();
             return self.unterminated_block("fun");
         }
-
-        // Exit function context.
-        self.exit_function();
 
         ast::Statement::Fun(ast::StmtFun::new(
             self.db,
             self.module_id(),
             name,
             ast::FunSignature { type_params, type_bounds, params, return_type, inline },
-            body,
+            ast::Body { statements: body, arena },
             local_index,
         ))
     }
@@ -1292,7 +1289,7 @@ statements that run belong in a function or a script")
     }
 
     /// The names a `for` binds and what it walks, after the `for`.
-    fn parse_for_header(&mut self) -> Result<(Vec<InternedText<'db>>, ast::ExprFun<'db>), ast::Statement<'db>> {
+    fn parse_for_header(&mut self) -> Result<(Vec<InternedText<'db>>, ast::ExprId), ast::Statement<'db>> {
         let mut bindings = vec![];
         let mut seen = datalit::parser_util::SeenNames::default();
         loop {
@@ -1364,7 +1361,7 @@ statements that run belong in a function or a script")
         self.eat_word("call");
         let expr = self.parse_expr_full();
         // Verify the expression is a function call.
-        match expr.expr(self.db) {
+        match self.expr_kind(expr) {
             ast::ExprFunKind::FunctionCall(_) => {
                 ast::Statement::ExprStatement(ast::StmtExprStatement { expr })
             }

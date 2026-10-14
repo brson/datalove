@@ -10,10 +10,11 @@ use datalove_datalit as datalit;
 
 /// Stable identity of an expression.
 ///
-/// These are the identity keys salsa gives `ExprFun`, held as a plain value.
-/// A salsa `Id` is not usable for this: its generation counter changes when
-/// salsa recycles a slot, and an id renumbers between salsa releases, so
-/// neither side of a lookup can rely on one staying put.
+/// The body an expression belongs to and its place in that body's arena. A
+/// salsa `Id` would not do for this, were expressions salsa structs: its
+/// generation counter changes when salsa recycles a slot, and an id renumbers
+/// between salsa releases, so neither side of a lookup could rely on one
+/// staying put.
 ///
 /// The module has to be part of it. Within one module a function name and an
 /// index identify an expression, but the type table is merged across a whole
@@ -25,7 +26,8 @@ pub struct ExprKey<'db> {
     pub module_id: Option<ModuleId<'db>>,
     /// Function the expression belongs to, or None at script level.
     pub fn_name: Option<InternedText<'db>>,
-    /// Sequential index within that function.
+    /// Index within that function: its `ExprId`, or for a call, its place
+    /// among the function's calls.
     pub local_index: u32,
 }
 
@@ -53,17 +55,12 @@ impl<'db> ExprKey<'db> {
         ExprKey { module_id, fn_name, local_index }
     }
 
-    /// The key identifying `expr`.
-    pub fn of(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> Self {
-        ExprKey::new(expr.module_id(db), expr.fn_name(db), expr.local_index(db))
-    }
-
-    /// The key identifying `call`.
+    /// The key identifying `call`, which `expr` is.
     ///
     /// Calls are numbered separately from expressions, so these keys only make
     /// sense against a table of calls.
-    pub fn of_call(db: &'db dyn salsa::Database, call: ExprFunctionCall<'db>) -> Self {
-        ExprKey::new(call.module_id(db), call.fn_name(db), call.local_index(db))
+    pub fn of_call(expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> Self {
+        ExprKey::new(expr.arena.module_id, expr.arena.fn_name, call.local_index)
     }
 }
 
@@ -84,16 +81,14 @@ impl<'db> ParseTextSpan<'db> {
 
 /// Result of parsing a source text into statements.
 ///
-/// Behind an `Arc` because `ParsedModuleGraph::statements_only` holds one of
-/// these per module and is rebuilt whenever any module's parse moves, so
-/// cloning the statements was a copy of every statement in the program per
-/// edit -- the largest thing the compiler itself was doing. As an `Arc` it is
-/// a refcount, and the modules that did not change hand back the same
-/// allocation, which also lets the aggregate compare equal by pointer.
+/// The statements are behind a salsa struct, `TopLevel`, because
+/// `ParsedModuleGraph::statements_only` holds one of these per module and is
+/// rebuilt whenever any module's parse moves: as an id it is a copy of one
+/// word per module, and the modules that did not change hand back the same id.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ParsedStatements<'db> {
-    pub statements: std::sync::Arc<Vec<Statement<'db>>>,
+    pub top: TopLevel<'db>,
     /// Every `alias.function` a qualified call names, once each, in the order
     /// first written.
     ///
@@ -104,6 +99,18 @@ pub struct ParsedStatements<'db> {
     pub qualified_calls: QualifiedCalls<'db>,
 }
 
+impl<'db> ParsedStatements<'db> {
+    /// The statements outside any function, functions' own included.
+    pub fn statements(&self, db: &'db dyn salsa::Database) -> &'db [Statement<'db>] {
+        &self.top.body(db).statements
+    }
+
+    /// The statements outside any function, with the expressions they hold.
+    pub fn body(&self, db: &'db dyn salsa::Database) -> &'db Body<'db> {
+        self.top.body(db)
+    }
+}
+
 /// The `(alias, function)` pairs a source's qualified calls name.
 pub type QualifiedCalls<'db> = std::sync::Arc<Vec<(InternedText<'db>, InternedText<'db>)>>;
 
@@ -111,9 +118,133 @@ pub type QualifiedCalls<'db> = std::sync::Arc<Vec<(InternedText<'db>, InternedTe
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ParsedExpr<'db> {
-    pub expr: ExprFun<'db>,
+    /// A body with no statements, holding the expression.
+    pub top: TopLevel<'db>,
+    pub root: ExprId,
     /// As [`ParsedStatements::qualified_calls`].
     pub qualified_calls: QualifiedCalls<'db>,
+}
+
+impl<'db> ParsedExpr<'db> {
+    pub fn expr(&self, db: &'db dyn salsa::Database) -> ExprFun<'db> {
+        self.top.body(db).arena.get(self.root)
+    }
+}
+
+/// The code outside any function: a source's top level, or an expression
+/// parsed on its own.
+///
+/// A salsa struct so that what is read out of it lives as long as the
+/// database, as a function's body does: an `ExprFun` borrows the arena it
+/// points into. Its body is its identity, so it compares as its contents do,
+/// as the statements did when they were held directly.
+#[salsa::tracked]
+pub struct TopLevel<'db> {
+    #[returns(ref)]
+    pub body: Body<'db>,
+}
+
+/// The statements of a function, or of the code outside one, and the
+/// expressions they hold.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct Body<'db> {
+    pub statements: Vec<Statement<'db>>,
+    pub arena: ExprArena<'db>,
+}
+
+/// An expression's place in the arena of the body it belongs to.
+///
+/// The same number as its key's `local_index`.
+#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprId(pub u32);
+
+/// The expressions of one body, by `ExprId`.
+///
+/// Children before parents, since the parser makes an expression's parts
+/// before the expression.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ExprArena<'db> {
+    /// Module the body belongs to, or None for a script.
+    pub module_id: Option<ModuleId<'db>>,
+    /// Function the body is, or None for the code outside any function.
+    pub fn_name: Option<InternedText<'db>>,
+    pub exprs: Vec<ExprFunKind<'db>>,
+}
+
+impl<'db> ExprArena<'db> {
+    pub fn get(&'db self, id: ExprId) -> ExprFun<'db> {
+        ExprFun { arena: self, id }
+    }
+}
+
+/// An expression: an arena and a place in it.
+///
+/// Two words and `Copy`, and reading it is a borrow, with no database to ask.
+/// Its children are `ExprId`s in the same arena, which `at` makes into
+/// handles of their own.
+#[derive(Copy, Clone)]
+pub struct ExprFun<'db> {
+    arena: &'db ExprArena<'db>,
+    id: ExprId,
+}
+
+impl<'db> ExprFun<'db> {
+    pub fn id(self) -> ExprId {
+        self.id
+    }
+
+    pub fn kind(self) -> &'db ExprFunKind<'db> {
+        &self.arena.exprs[self.id.0 as usize]
+    }
+
+    /// Another expression of the same body, typically a child of this one.
+    pub fn at(self, id: ExprId) -> ExprFun<'db> {
+        ExprFun { arena: self.arena, id }
+    }
+
+    pub fn arena(self) -> &'db ExprArena<'db> {
+        self.arena
+    }
+
+    pub fn key(self) -> ExprKey<'db> {
+        ExprKey::new(self.arena.module_id, self.arena.fn_name, self.id.0)
+    }
+
+    pub fn module_id(self) -> Option<ModuleId<'db>> {
+        self.arena.module_id
+    }
+
+    pub fn fn_name(self) -> Option<InternedText<'db>> {
+        self.arena.fn_name
+    }
+
+    pub fn local_index(self) -> u32 {
+        self.id.0
+    }
+}
+
+/// The same expression, by key: one body has one arena.
+impl PartialEq for ExprFun<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.key() == other.key()
+    }
+}
+
+impl Eq for ExprFun<'_> {}
+
+impl std::hash::Hash for ExprFun<'_> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.key().hash(state)
+    }
+}
+
+impl fmt::Debug for ExprFun<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.key().fmt(f)
+    }
 }
 
 /// Parse result containing parsed statements and span side tables.
@@ -150,7 +281,7 @@ pub enum Statement<'db> {
     Const(StmtConst<'db>),
     Set(StmtSet<'db>),
     Fun(StmtFun<'db>),
-    Ret(StmtRet<'db>),
+    Ret(StmtRet),
     Require(StmtRequire<'db>),
     Import(StmtImport<'db>),
     If(StmtIf<'db>),
@@ -158,11 +289,11 @@ pub enum Statement<'db> {
     For(StmtFor<'db>),
     Break(StmtBreak),
     Continue(StmtContinue),
-    DebugLog(StmtDebugLog<'db>),
+    DebugLog(StmtDebugLog),
     TypeAlias(StmtTypeAlias<'db>),
     NativeFun(StmtNativeFun<'db>),
     Match(StmtMatch<'db>),
-    ExprStatement(StmtExprStatement<'db>),
+    ExprStatement(StmtExprStatement),
     ParseError(StmtParseError<'db>),
 }
 
@@ -171,7 +302,7 @@ pub enum Statement<'db> {
 pub struct StmtLet<'db> {
     pub binding: Binding<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
 }
 
 /// What a `let` or `var` binds: one name, or the parts of a value taken apart.
@@ -232,7 +363,7 @@ pub struct StmtVar<'db> {
     pub binding: Binding<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     /// The initial value. None for uninitialized declarations like `var x: i32`.
-    pub value: Option<ExprFun<'db>>,
+    pub value: Option<ExprId>,
 }
 
 /// Compile-time constant binding.
@@ -244,7 +375,7 @@ pub struct StmtVar<'db> {
 pub struct StmtConst<'db> {
     pub name: InternedText<'db>,
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
 }
 
 /// Mutation of an existing mutable variable or field.
@@ -257,7 +388,7 @@ pub struct StmtSet<'db> {
     /// Only the arithmetic operators appear here, in their bare, checked and
     /// optional forms.
     pub op: Option<BinOp>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,
 }
@@ -284,14 +415,14 @@ pub enum PlaceStep<'db> {
     ///
     /// `error_mode` is `None` for bare index (map upsert in set context),
     /// `Some(Option)` for `?`, `Some(Result)` for `!`.
-    Index(PlaceIndex<'db>),
+    Index(PlaceIndex),
 }
 
 /// Index step in a place.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct PlaceIndex<'db> {
-    pub index: ExprFun<'db>,
+pub struct PlaceIndex {
+    pub index: ExprId,
     pub error_mode: Option<IndexErrorMode>,
 }
 
@@ -357,7 +488,7 @@ pub struct StmtFun<'db> {
     /// not a reason to re-run when a body changes.
     #[tracked]
     #[returns(ref)]
-    pub body: Vec<Statement<'db>>,
+    pub body: Body<'db>,
     /// Index for span lookup in DatafunSpans.fun_spans.
     #[returns(copy)]
     pub local_index: u32,
@@ -406,8 +537,8 @@ pub enum ParamMode {
 /// Return statement. Value is None for bare `ret` in void functions.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct StmtRet<'db> {
-    pub value: Option<ExprFun<'db>>,
+pub struct StmtRet {
+    pub value: Option<ExprId>,
     /// Index for span lookup in DatafunSpans.
     pub local_index: u32,
 }
@@ -449,7 +580,7 @@ pub struct StmtImport<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtIf<'db> {
-    pub condition: ExprFun<'db>,
+    pub condition: ExprId,
     pub then_binding: Option<InternedText<'db>>,
     pub then_body: Vec<Statement<'db>>,
     pub else_binding: Option<InternedText<'db>>,
@@ -464,7 +595,7 @@ pub struct StmtIf<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct StmtLoop<'db> {
     /// Optional while condition, checked at the start of each iteration.
-    pub condition: Option<ExprFun<'db>>,
+    pub condition: Option<ExprId>,
     pub body: Vec<Statement<'db>>,
 }
 
@@ -480,7 +611,7 @@ pub struct StmtFor<'db> {
     /// The names bound, as written: one or two.
     pub bindings: Vec<InternedText<'db>>,
     /// The collection walked, written after `in ref`.
-    pub iteratee: ExprFun<'db>,
+    pub iteratee: ExprId,
     pub body: Vec<Statement<'db>>,
 }
 
@@ -503,8 +634,8 @@ pub struct StmtContinue {
 /// Debug log statement for outputting values during execution.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct StmtDebugLog<'db> {
-    pub value: ExprFun<'db>,
+pub struct StmtDebugLog {
+    pub value: ExprId,
 }
 
 /// Type alias statement: `type Name: structural_type`.
@@ -601,15 +732,15 @@ pub struct StmtNativeFun<'db> {
 /// Allows calling unit-returning functions at statement position.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct StmtExprStatement<'db> {
-    pub expr: ExprFun<'db>,
+pub struct StmtExprStatement {
+    pub expr: ExprId,
 }
 
 /// Match statement for exhaustive enum destructuring.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtMatch<'db> {
-    pub input: ExprFun<'db>,
+    pub input: ExprId,
     pub cases: Vec<MatchCase<'db>>,
     pub default_body: Option<Vec<Statement<'db>>>,
 }
@@ -638,38 +769,22 @@ pub struct StmtParseError<'db> {
     pub message: InternedText<'db>,
 }
 
-// Datafun expressions - wraps datalit expressions and adds datafun-specific variants
-#[salsa::tracked]
-pub struct ExprFun<'db> {
-    /// Module this expression belongs to (identity key). None for scripts.
-    #[returns(copy)]
-    pub module_id: Option<ModuleId<'db>>,
-    /// Function this expression belongs to (identity key). None for script-level.
-    #[returns(copy)]
-    pub fn_name: Option<InternedText<'db>>,
-    /// Sequential index within the function (identity key).
-    #[returns(copy)]
-    pub local_index: u32,
-    #[returns(clone)]
-    pub expr: ExprFunKind<'db>,
-}
-
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum ExprFunKind<'db> {
     // Binary operation
-    BinOp(ExprBinOp<'db>),
+    BinOp(ExprBinOp),
     // Function call
     FunctionCall(ExprFunctionCall<'db>),
     // Datafun tuple (elements are datafun expressions)
-    Tuple(ExprTuple<'db>),
+    Tuple(ExprTuple),
     // Unary operators
-    UnaryOp(ExprUnaryOp<'db>),
+    UnaryOp(ExprUnaryOp),
     // Try operators (postfix ? and !)
-    TryOption(ExprTryOption<'db>),
-    TryResult(ExprTryResult<'db>),
+    TryOption(ExprTryOption),
+    TryResult(ExprTryResult),
     // Clone/coerce operator (postfix @)
-    CloneCoerce(ExprCloneCoerce<'db>),
+    CloneCoerce(ExprCloneCoerce),
     // Field projection (postfix .field or .0)
     FieldProj(ExprFieldProj<'db>),
 
@@ -723,7 +838,7 @@ pub enum ExprFunKind<'db> {
     Hinted(ExprHinted<'db>),
 
     // Index expression: base[index].
-    Index(ExprIndex<'db>),
+    Index(ExprIndex),
 
     /// Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
     Place(Place<'db>),
@@ -782,44 +897,35 @@ impl<'db> ExprFunKind<'db> {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprBinOp<'db> {
+pub struct ExprBinOp {
     pub op: BinOp,
-    pub lhs: ExprFun<'db>,
-    pub rhs: ExprFun<'db>,
+    pub lhs: ExprId,
+    pub rhs: ExprId,
 }
 
-#[salsa::tracked]
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct ExprFunctionCall<'db> {
-    /// Module this call belongs to (identity key). None for scripts.
-    #[returns(copy)]
-    pub module_id: Option<ModuleId<'db>>,
-    /// Function this call belongs to (identity key). None for script-level.
-    #[returns(copy)]
-    pub fn_name: Option<InternedText<'db>>,
-    /// Sequential index within the function (identity key).
-    #[returns(copy)]
+    /// Place among the function's calls, which are numbered apart from its
+    /// expressions; see `ExprKey::of_call`.
     pub local_index: u32,
     /// Module alias the call is qualified with: `u8` in `u8.max_value()`.
     ///
     /// `None` for an unqualified call, which names a function in scope.
-    #[returns(copy)]
     pub qualifier: Option<InternedText<'db>>,
-    #[returns(copy)]
     pub name: InternedText<'db>,
-    #[returns(ref)]
-    pub args: Vec<ExprFun<'db>>,
+    pub args: Vec<ExprId>,
     /// Mode marker written before each argument, parallel to `args`.
     ///
     /// `None` where the argument carried no marker, which denotes `in`. The
     /// marker must agree with the callee's declared mode; see F057.
-    #[returns(ref)]
     pub arg_modes: Vec<Option<ParamMode>>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprTuple<'db> {
-    pub elements: Vec<ExprFun<'db>>,
+pub struct ExprTuple {
+    pub elements: Vec<ExprId>,
 }
 
 #[derive(Copy, Clone, Hash, Debug, PartialEq, Eq)]
@@ -868,21 +974,21 @@ pub enum UnaryOp {
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprUnaryOp<'db> {
+pub struct ExprUnaryOp {
     pub op: UnaryOp,
-    pub operand: ExprFun<'db>,
+    pub operand: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprTryOption<'db> {
-    pub operand: ExprFun<'db>,
+pub struct ExprTryOption {
+    pub operand: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprTryResult<'db> {
-    pub operand: ExprFun<'db>,
+pub struct ExprTryResult {
+    pub operand: ExprId,
 }
 
 /// Clone/coerce expression (postfix @).
@@ -895,15 +1001,15 @@ pub struct ExprTryResult<'db> {
 /// Target type is inferred from context (assignment, parameter, binary op).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprCloneCoerce<'db> {
-    pub operand: ExprFun<'db>,
+pub struct ExprCloneCoerce {
+    pub operand: ExprId,
 }
 
 /// Field projection expression (a.x or a.0).
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprFieldProj<'db> {
-    pub base: ExprFun<'db>,
+    pub base: ExprId,
     pub field: FieldSelector<'db>,
 }
 
@@ -913,9 +1019,9 @@ pub struct ExprFieldProj<'db> {
 /// Bare `a[i]` is a type error.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprIndex<'db> {
-    pub base: ExprFun<'db>,
-    pub index: ExprFun<'db>,
+pub struct ExprIndex {
+    pub base: ExprId,
+    pub index: ExprId,
 }
 
 /// Selector for field projection.
@@ -967,28 +1073,28 @@ pub struct ExprString<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprList<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub elements: Vec<ExprFun<'db>>,
+    pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprSet<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub elements: Vec<ExprFun<'db>>,
+    pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprMap<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub entries: Vec<ExprMapEntry<'db>>,
+    pub entries: Vec<ExprMapEntry>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprMapEntry<'db> {
-    pub key: ExprFun<'db>,
-    pub value: ExprFun<'db>,
+pub struct ExprMapEntry {
+    pub key: ExprId,
+    pub value: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -996,7 +1102,7 @@ pub struct ExprMapEntry<'db> {
 pub struct ExprTensor<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub shape: Vec<u32>,
-    pub elements: Vec<ExprFun<'db>>,
+    pub elements: Vec<ExprId>,
     /// Whether the shape was written in a header, `[| 2 3 | ... |]`, rather
     /// than read off the body's separators.
     pub header: bool,
@@ -1006,7 +1112,7 @@ pub struct ExprTensor<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprAnonTuple<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub elements: Vec<ExprFun<'db>>,
+    pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -1020,7 +1126,7 @@ pub struct ExprAnonStruct<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprStructField<'db> {
     pub name: InternedText<'db>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
 }
 
 
@@ -1028,28 +1134,28 @@ pub struct ExprStructField<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprSome<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub payload: ExprFun<'db>,
+    pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprOk<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub payload: ExprFun<'db>,
+    pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprEr<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub payload: ExprFun<'db>,
+    pub payload: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprData<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
 }
 
 /// The `.dlt` file at `import_space/package_alias/data_alias`.
@@ -1077,7 +1183,7 @@ impl<'db> ExprDataFile<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprError<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub value: ExprFun<'db>,
+    pub value: ExprId,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -1085,13 +1191,13 @@ pub struct ExprError<'db> {
 pub struct ExprTable<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub header: Vec<InternedText<'db>>,
-    pub rows: Vec<ExprTableRow<'db>>,
+    pub rows: Vec<ExprTableRow>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ExprTableRow<'db> {
-    pub elements: Vec<ExprFun<'db>>,
+pub struct ExprTableRow {
+    pub elements: Vec<ExprId>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -1116,7 +1222,7 @@ pub struct ExprAtom<'db> {
 pub struct ExprTerm<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
     pub name: InternedText<'db>,
-    pub payload: ExprFun<'db>,
+    pub payload: ExprId,
 }
 
 /// Enum literal expression: `enum { atom Foo }` (requires type context).
@@ -1124,7 +1230,7 @@ pub struct ExprTerm<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprEnumLiteral<'db> {
     pub type_hint: Option<datalit::ast::TypeHint<'db>>,
-    pub variant: ExprFun<'db>,
+    pub variant: ExprId,
 }
 
 /// An expression written under a type hint: `: type / expression`.
@@ -1132,7 +1238,7 @@ pub struct ExprEnumLiteral<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ExprHinted<'db> {
     pub type_hint: datalit::ast::TypeHint<'db>,
-    pub inner: ExprFun<'db>,
+    pub inner: ExprId,
 }
 
 /// Intrinsic call expression (icall name(args)).
@@ -1142,7 +1248,7 @@ pub struct ExprIntrinsicCall<'db> {
     /// The intrinsic name (e.g., "bitnot_u32").
     pub name: InternedText<'db>,
     /// Arguments to the intrinsic.
-    pub args: Vec<ExprFun<'db>>,
+    pub args: Vec<ExprId>,
     /// Mode marker written before each argument, parallel to `args`.
     ///
     /// Intrinsics take every argument by value, so any marker here is an

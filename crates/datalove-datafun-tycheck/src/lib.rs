@@ -394,11 +394,11 @@ pub struct TypecheckResult<'db> {
     #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
 
-    /// Expression types, indexed by ExprFun ID.
+    /// Expression types, keyed by `ExprKey`.
     #[returns(ref)]
     pub expr_types: ExprTypes<'db>,
 
-    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    /// Resolved call targets, keyed by `ExprKey::of_call`.
     #[returns(ref)]
     pub call_targets: CallTargets<'db>,
 
@@ -416,7 +416,7 @@ pub struct ExprTypecheckResult<'db> {
     /// Type errors encountered.
     #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
-    /// Expression types, indexed by ExprFun ID.
+    /// Expression types, keyed by `ExprKey`.
     #[returns(ref)]
     pub expr_types: ExprTypes<'db>,
 }
@@ -427,8 +427,8 @@ pub struct ExprTypecheckResult<'db> {
 pub enum ScriptUnitKind<'db> {
     /// A fragment containing statements and pre-computed name resolution.
     Fragment(ParsedStatements<'db>, CollectedNames<'db>),
-    /// A single expression, and the qualified calls it makes.
-    Expr(ExprFun<'db>, datalove_datafun_ast::ast::QualifiedCalls<'db>),
+    /// A single expression, with the qualified calls it makes.
+    Expr(datalove_datafun_ast::ast::ParsedExpr<'db>),
 }
 
 /// Spec for a single script unit (with pre-parsed content).
@@ -484,10 +484,10 @@ pub struct UnitTypecheckResultTracked<'db> {
     /// Type errors encountered.
     #[returns(clone)]
     pub errors: Vec<TypeErrorEntry<'db>>,
-    /// Expression types, indexed by ExprFun ID.
+    /// Expression types, keyed by `ExprKey`.
     #[returns(ref)]
     pub expr_types: ExprTypes<'db>,
-    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    /// Resolved call targets, keyed by `ExprKey::of_call`.
     #[returns(ref)]
     pub call_targets: CallTargets<'db>,
     /// Function signatures defined in this script unit.

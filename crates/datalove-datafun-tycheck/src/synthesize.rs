@@ -143,14 +143,13 @@ pub fn synthesize_expr<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-    if ctx.ref_context && builds_from_parts(&expr.expr(db)) {
+    if ctx.ref_context && builds_from_parts(expr.kind()) {
         ctx.ref_context = false;
         let result = synthesize_expr(ctx, expr);
         ctx.ref_context = true;
         return result;
     }
-    if let Some(type_hint) = expr.expr(db).type_hint().cloned() {
+    if let Some(type_hint) = expr.kind().type_hint().cloned() {
         let expected = ctx.convert_hint(type_hint)?;
         check_expr(ctx, expr, &expected)?;
         ctx.store_expr_type(expr, &expected);
@@ -197,19 +196,18 @@ pub fn synthesize_unhinted<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Type<'db>, TypeError> {
-    let db = ctx.db;
-    let expr_kind = expr.expr(db);
+    let expr_kind = expr.kind();
 
     match expr_kind {
-        ExprFunKind::DataFile(ref file) => {
+        ExprFunKind::DataFile(file) => {
             crate::datafile::type_data_file(ctx, expr, file, None)
         }
 
-        ExprFunKind::BinOp(ref binop) => {
+        ExprFunKind::BinOp(binop) => {
             synthesize_binop(ctx, expr, binop)
         }
 
-        ExprFunKind::UnaryOp(ref unaryop) => {
+        ExprFunKind::UnaryOp(unaryop) => {
             synthesize_unaryop(ctx, expr, unaryop)
         }
 
@@ -223,7 +221,7 @@ pub fn synthesize_unhinted<'db>(
             let mut datalit_element_types = Vec::new();
 
             for elem in elements {
-                let elem_ty = ctx.synthesize_expr(*elem)?;
+                let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
 
                 // Extract datalit type from datafun Type.
                 // Tuple elements must be datalit types. Function types cannot
@@ -248,15 +246,15 @@ pub fn synthesize_unhinted<'db>(
             Ok(ty)
         }
 
-        ExprFunKind::TryOption(ref try_op) => {
+        ExprFunKind::TryOption(try_op) => {
             synthesize_try_option(ctx, expr, try_op)
         }
 
-        ExprFunKind::TryResult(ref try_op) => {
+        ExprFunKind::TryResult(try_op) => {
             synthesize_try_result(ctx, expr, try_op)
         }
 
-        ExprFunKind::CloneCoerce(ref cc_expr) => {
+        ExprFunKind::CloneCoerce(cc_expr) => {
             // With nothing to coerce to, `@` clones, and a clone is the type
             // it was taken from. Coercion is the half that needs a target;
             // cloning does not, and `can_clone_coerce_to` says as much by
@@ -271,14 +269,14 @@ pub fn synthesize_unhinted<'db>(
             // under one.
             let old_ref_context = ctx.ref_context;
             ctx.ref_context = true;
-            let operand_ty = ctx.synthesize_expr(cc_expr.operand);
+            let operand_ty = ctx.synthesize_expr(ctx.expr(cc_expr.operand));
             ctx.ref_context = old_ref_context;
             let operand_ty = operand_ty?;
             ctx.store_expr_type(expr, &operand_ty);
             Ok(operand_ty)
         }
 
-        ExprFunKind::FieldProj(ref proj) => {
+        ExprFunKind::FieldProj(proj) => {
             synthesize_field_proj(ctx, expr, proj)
         }
 
@@ -325,24 +323,24 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Collection types.
-        ExprFunKind::List(ref list_expr) => {
+        ExprFunKind::List(list_expr) => {
             synthesize_inline_list(ctx, expr, list_expr)
         }
-        ExprFunKind::Set(ref set_expr) => {
+        ExprFunKind::Set(set_expr) => {
             synthesize_inline_set(ctx, expr, set_expr)
         }
-        ExprFunKind::Map(ref map_expr) => {
+        ExprFunKind::Map(map_expr) => {
             synthesize_inline_map(ctx, expr, map_expr)
         }
-        ExprFunKind::Tensor(ref tensor_expr) => {
+        ExprFunKind::Tensor(tensor_expr) => {
             synthesize_inline_tensor(ctx, expr, tensor_expr)
         }
 
         // Aggregate types.
-        ExprFunKind::AnonTuple(ref tuple_expr) => {
+        ExprFunKind::AnonTuple(tuple_expr) => {
             synthesize_inline_anon_tuple(ctx, expr, tuple_expr)
         }
-        ExprFunKind::AnonStruct(ref struct_expr) => {
+        ExprFunKind::AnonStruct(struct_expr) => {
             synthesize_inline_anon_struct(ctx, expr, struct_expr)
         }
 
@@ -351,7 +349,7 @@ pub fn synthesize_unhinted<'db>(
             // Synthesize inner type and wrap in Option.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = some_expr.payload;
-            let inner_ty = ctx.synthesize_expr(payload)?;
+            let inner_ty = ctx.synthesize_expr(ctx.expr(payload))?;
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -365,7 +363,7 @@ pub fn synthesize_unhinted<'db>(
             // Synthesize inner type and wrap in Result.
             // Synthesized expression types are always Datalit (Function types only appear in signatures).
             let payload = ok_expr.payload;
-            let inner_ty = ctx.synthesize_expr(payload)?;
+            let inner_ty = ctx.synthesize_expr(ctx.expr(payload))?;
             let inner_datalit_ty = match inner_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -379,20 +377,20 @@ pub fn synthesize_unhinted<'db>(
             // Er needs a type hint to know the Result's ok type.
             Err(ctx.error_cannot_synthesize(expr, "cannot infer type for Er value"))
         }
-        ExprFunKind::Data(ref data_expr) => {
+        ExprFunKind::Data(data_expr) => {
             synthesize_inline_data(ctx, expr, data_expr)
         }
-        ExprFunKind::Error(ref err_expr) => {
+        ExprFunKind::Error(err_expr) => {
             synthesize_inline_err(ctx, expr, err_expr)
         }
 
         // Table expression.
-        ExprFunKind::Table(ref table_expr) => {
+        ExprFunKind::Table(table_expr) => {
             synthesize_inline_table(ctx, expr, table_expr)
         }
 
         // Atom expression: synthesize standalone Atom type.
-        ExprFunKind::Atom(ref atom_expr) => {
+        ExprFunKind::Atom(atom_expr) => {
             let ty = Type::Datalit(datalit::tycheck::Type::Atom(
                 datalit::tycheck::TypeAtom { name: atom_expr.name }
             ));
@@ -401,8 +399,8 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Term expression: synthesize standalone Term type.
-        ExprFunKind::Term(ref term_expr) => {
-            let payload_ty = ctx.synthesize_expr(term_expr.payload)?;
+        ExprFunKind::Term(term_expr) => {
+            let payload_ty = ctx.synthesize_expr(ctx.expr(term_expr.payload))?;
             let payload_datalit = match payload_ty {
                 Type::Datalit(dt) => dt.clone(),
                 Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -418,7 +416,7 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // What is under the hint, the hint being left aside.
-        ExprFunKind::Hinted(ref hinted) => ctx.synthesize_expr(hinted.inner),
+        ExprFunKind::Hinted(hinted) => ctx.synthesize_expr(ctx.expr(hinted.inner)),
 
         // An enum literal has no type of its own.
         ExprFunKind::EnumLiteral(_) => {
@@ -426,7 +424,7 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Intrinsic call expression.
-        ExprFunKind::IntrinsicCall(ref icall) => {
+        ExprFunKind::IntrinsicCall(icall) => {
             synthesize_intrinsic_call(ctx, expr, icall)
         }
 
@@ -436,7 +434,7 @@ pub fn synthesize_unhinted<'db>(
         }
 
         // Place expression with index steps (e.g., `a[i]?`, `a[i]?.field`).
-        ExprFunKind::Place(ref place) => {
+        ExprFunKind::Place(place) => {
             synthesize_place(ctx, expr, place)
         }
     }
@@ -454,15 +452,15 @@ pub fn synthesize_unhinted<'db>(
 /// constrain the width either. A hinted one does not: `: u8 / 1` says what it
 /// is as plainly as a `u8` variable does.
 fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    let kind = expr.expr(ctx.db);
+    let kind = expr.kind();
     if kind.type_hint().is_some() {
         return false;
     }
     match kind {
         ExprFunKind::Int(_) | ExprFunKind::Hex(_) | ExprFunKind::Float(_) => true,
-        ExprFunKind::UnaryOp(ref unary) => {
+        ExprFunKind::UnaryOp(unary) => {
             matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
-                && is_bare_numeric_literal(ctx, unary.operand)
+                && is_bare_numeric_literal(ctx, ctx.expr(unary.operand))
         }
         _ => false,
     }
@@ -479,11 +477,11 @@ fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> b
 ///
 /// With one on each side there is nothing to draw on and each clones.
 fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    match expr.expr(ctx.db) {
+    match expr.kind() {
         ExprFunKind::CloneCoerce(_) => true,
-        ExprFunKind::UnaryOp(ref unary) => {
+        ExprFunKind::UnaryOp(unary) => {
             matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
-                && operand_has_no_type(ctx, unary.operand)
+                && operand_has_no_type(ctx, ctx.expr(unary.operand))
         }
         _ => false,
     }
@@ -495,8 +493,8 @@ fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool 
 /// synthesize one that is a default rather than information: `?int` where a
 /// `?u32` was meant, or an atom where an enum was. Beside an operand that has
 /// a type of its own, they take that one instead.
-fn is_untyped_construction<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    let kind = expr.expr(ctx.db);
+fn is_untyped_construction(expr: ExprFun<'_>) -> bool {
+    let kind = expr.kind();
     if kind.type_hint().is_some() {
         return false;
     }
@@ -593,7 +591,7 @@ pub(crate) fn arithmetic_early_return(op: BinOp) -> Option<EarlyReturn> {
 fn synthesize_binop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    binop: &ExprBinOp<'db>,
+    binop: &ExprBinOp,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let op = binop.op;
@@ -612,25 +610,25 @@ fn synthesize_binop<'db>(
     // synthesize `int`, so `1 == 2` is a bigint comparison as before.
     let old_ref_context = ctx.ref_context;
     ctx.ref_context = true;
-    let lhs_bare = is_bare_numeric_literal(ctx, lhs);
-    let rhs_bare = is_bare_numeric_literal(ctx, rhs);
-    let lhs_untyped = operand_has_no_type(ctx, lhs);
-    let rhs_untyped = operand_has_no_type(ctx, rhs);
-    let lhs_construction = is_untyped_construction(ctx, lhs);
-    let rhs_construction = is_untyped_construction(ctx, rhs);
+    let lhs_bare = is_bare_numeric_literal(ctx, ctx.expr(lhs));
+    let rhs_bare = is_bare_numeric_literal(ctx, ctx.expr(rhs));
+    let lhs_untyped = operand_has_no_type(ctx, ctx.expr(lhs));
+    let rhs_untyped = operand_has_no_type(ctx, ctx.expr(rhs));
+    let lhs_construction = is_untyped_construction(ctx.expr(lhs));
+    let rhs_construction = is_untyped_construction(ctx.expr(rhs));
     let result: Result<(Type<'db>, Type<'db>), TypeError> = (|ctx: &mut TypeContext<'db>| {
         // An operand with no type of its own takes the other one's, whatever
         // that is, so `a@ == b` works for any type and `a@ .< 0` takes the
         // literal's int. With one on each side there is nothing to draw on and
         // both report that they needed a type context.
         if lhs_untyped && !rhs_untyped {
-            let rhs_ty = ctx.synthesize_expr(rhs)?;
-            check_expr(ctx, lhs, &rhs_ty)?;
+            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
+            check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
             return Ok((rhs_ty.clone(), rhs_ty));
         }
         if rhs_untyped && !lhs_untyped {
-            let lhs_ty = ctx.synthesize_expr(lhs)?;
-            check_expr(ctx, rhs, &lhs_ty)?;
+            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
+            check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
             return Ok((lhs_ty.clone(), lhs_ty));
         }
 
@@ -638,13 +636,13 @@ fn synthesize_binop<'db>(
         // against that type, so `x == none` and `x == some 1` work for an
         // `x: ?u32`. With constructions on both sides each picks its own.
         if rhs_construction && !lhs_construction && !lhs_bare {
-            let lhs_ty = ctx.synthesize_expr(lhs)?;
-            check_expr(ctx, rhs, &lhs_ty)?;
+            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
+            check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
             return Ok((lhs_ty.clone(), lhs_ty));
         }
         if lhs_construction && !rhs_construction && !rhs_bare {
-            let rhs_ty = ctx.synthesize_expr(rhs)?;
-            check_expr(ctx, lhs, &rhs_ty)?;
+            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
+            check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
             return Ok((rhs_ty.clone(), rhs_ty));
         }
 
@@ -652,24 +650,24 @@ fn synthesize_binop<'db>(
         // else the operands are simply incompatible, and saying so is clearer
         // than reporting that the literal failed to be a string.
         if rhs_bare && !lhs_bare {
-            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
             if is_numeric_type(&lhs_ty) {
-                check_expr(ctx, rhs, &lhs_ty)?;
+                check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
                 return Ok((lhs_ty.clone(), lhs_ty));
             }
-            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
             Ok((lhs_ty, rhs_ty))
         } else if lhs_bare && !rhs_bare {
-            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
             if is_numeric_type(&rhs_ty) {
-                check_expr(ctx, lhs, &rhs_ty)?;
+                check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
                 return Ok((rhs_ty.clone(), rhs_ty));
             }
-            let lhs_ty = ctx.synthesize_expr(lhs)?;
+            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
             Ok((lhs_ty, rhs_ty))
         } else {
-            let lhs_ty = ctx.synthesize_expr(lhs)?;
-            let rhs_ty = ctx.synthesize_expr(rhs)?;
+            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
+            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
             Ok((lhs_ty, rhs_ty))
         }
     })(ctx);
@@ -789,7 +787,7 @@ fn synthesize_binop<'db>(
 fn synthesize_unaryop<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    unaryop: &ExprUnaryOp<'db>,
+    unaryop: &ExprUnaryOp,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let op = unaryop.op;
@@ -799,7 +797,7 @@ fn synthesize_unaryop<'db>(
     // Unary operators treat their operands as ref (they don't move).
     let old_ref_context = ctx.ref_context;
     ctx.ref_context = true;
-    let operand_ty = ctx.synthesize_expr(operand)?;
+    let operand_ty = ctx.synthesize_expr(ctx.expr(operand))?;
     ctx.ref_context = old_ref_context;
     let operand_type = operand_ty.clone();
 
@@ -916,7 +914,7 @@ fn has_undetermined_type_param<'db>(
 fn synthesize_function_call<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    call: ExprFunctionCall<'db>,
+    call: &'db ExprFunctionCall<'db>,
 ) -> Result<Type<'db>, TypeError> {
     synthesize_function_call_expecting(ctx, expr, call, None)
 }
@@ -928,16 +926,16 @@ fn synthesize_function_call<'db>(
 pub(crate) fn synthesize_function_call_expecting<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    call: ExprFunctionCall<'db>,
+    call: &'db ExprFunctionCall<'db>,
     expected: Option<&Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    let name = call.name(db);
-    let args = call.args(db);
+    let name = call.name;
+    let args: Vec<ExprFun<'db>> = call.args.iter().map(|&arg| expr.at(arg)).collect();
 
     // F002: Undefined function. A qualified call is looked for in the module
     // its alias names, and an unqualified one among the functions in scope.
-    let (func_type, func_ast) = match call.qualifier(db) {
+    let (func_type, func_ast) = match call.qualifier {
         Some(alias) => {
             let found = ctx.lookup_qualified(expr, alias, name)?;
             (found.func, Some((found.ast, Some(found.module_id))))
@@ -975,7 +973,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     // Every argument must carry the parameter's mode, so that mutation and
     // borrowing are visible at the call site rather than only in the callee's
     // signature. `in` is written by omitting the marker.
-    let arg_modes = call.arg_modes(db);
+    let arg_modes = &call.arg_modes;
     for (i, mode) in param_modes.iter().enumerate() {
         let written = arg_modes.get(i).copied().flatten();
         if written == mode_marker(*mode) {
@@ -1095,7 +1093,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
                 }
             }
         }
-        ctx.store_call_target(call, func_ast, module_id, type_args);
+        ctx.store_call_target(ExprKey::of_call(expr, call), func_ast, module_id, type_args);
     }
 
     // Return the function's return type.
@@ -1182,7 +1180,7 @@ fn mode_name(mode: ParamMode) -> &'static str {
 
 /// Report an argument to a const parameter that is not a const binding. F076.
 fn report_comptime_arg<'db>(ctx: &mut TypeContext<'db>, arg: ExprFun<'db>, message: String) {
-    let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, arg));
+    let site = crate::ErrorSite::Expr(arg.key());
     ctx.push_coded(
         site,
         "F076",
@@ -1212,8 +1210,8 @@ fn validate_comptime_arg<'db>(
 ) -> Result<(), TypeError> {
     let db = ctx.db;
 
-    match arg.expr(db) {
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+    match arg.kind() {
+        ExprFunKind::Place(place) if place.steps.is_empty() => {
             let name = place.root;
             // Must be a const binding, not a let/var/parameter.
             if !ctx.is_const_binding(name) {
@@ -1251,7 +1249,7 @@ fn synthesize_intrinsic_call<'db>(
     // Intrinsics take every argument by value, so a marker is always wrong.
     for (i, written) in icall.arg_modes.iter().enumerate() {
         if let Some(mode) = written {
-            let err = ctx.error_argument_mode_mismatch(args[i], i, "in", mode_name(*mode));
+            let err = ctx.error_argument_mode_mismatch(ctx.expr(args[i]), i, "in", mode_name(*mode));
             ctx.add_error(err);
         }
     }
@@ -1270,7 +1268,7 @@ fn synthesize_intrinsic_call<'db>(
 
     // Check argument types.
     for (arg, expected_intrinsic_ty) in args.iter().zip(intrinsic_def.params.iter()) {
-        let arg_ty = ctx.synthesize_expr(*arg)?;
+        let arg_ty = ctx.synthesize_expr(ctx.expr(*arg))?;
         let expected_datafun_ty = intrinsic_type_to_datafun(db, *expected_intrinsic_ty);
 
         if !types_equivalent(db, &arg_ty, &expected_datafun_ty) {
@@ -1321,17 +1319,17 @@ fn intrinsic_type_to_datafun<'db>(_db: &'db dyn crate::Db, ty: datalove_datafun_
 fn synthesize_try_option<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    try_op: &ExprTryOption<'db>,
+    try_op: &ExprTryOption,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
     // Special case: a[i]? — list index with option early-return.
-    if let ExprFunKind::Index(ref index_expr) = try_op.operand.expr(db) {
+    if let ExprFunKind::Index(index_expr) = expr.at(try_op.operand).kind() {
         return synthesize_index_try_option(ctx, expr, index_expr);
     }
 
     // Synthesize operand type first (to report operand errors before context errors).
-    let operand_ty = ctx.synthesize_expr(try_op.operand)?;
+    let operand_ty = ctx.synthesize_expr(ctx.expr(try_op.operand))?;
 
     // Operand must be Option<T>.
     let inner_ty = match operand_ty {
@@ -1358,17 +1356,17 @@ fn synthesize_try_option<'db>(
 fn synthesize_try_result<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    try_op: &ExprTryResult<'db>,
+    try_op: &ExprTryResult,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
 
     // Special case: a[i]! — list index with result early-return.
-    if let ExprFunKind::Index(ref index_expr) = try_op.operand.expr(db) {
+    if let ExprFunKind::Index(index_expr) = expr.at(try_op.operand).kind() {
         return synthesize_index_try_result(ctx, expr, index_expr);
     }
 
     // Synthesize operand type first (to report operand errors before context errors).
-    let operand_ty = ctx.synthesize_expr(try_op.operand)?;
+    let operand_ty = ctx.synthesize_expr(ctx.expr(try_op.operand))?;
 
     // Operand must be Result<T>.
     let inner_ty = match operand_ty {
@@ -1399,7 +1397,7 @@ fn synthesize_try_result<'db>(
 fn synthesize_index_try_option<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    index_expr: &ExprIndex<'db>,
+    index_expr: &ExprIndex,
 ) -> Result<Type<'db>, TypeError> {
     let element_ty = synthesize_index_common(ctx, expr, index_expr)?;
 
@@ -1413,7 +1411,7 @@ fn synthesize_index_try_option<'db>(
 fn synthesize_index_try_result<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    index_expr: &ExprIndex<'db>,
+    index_expr: &ExprIndex,
 ) -> Result<Type<'db>, TypeError> {
     let element_ty = synthesize_index_common(ctx, expr, index_expr)?;
 
@@ -1430,19 +1428,19 @@ fn synthesize_index_try_result<'db>(
 fn synthesize_index_common<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    index_expr: &ExprIndex<'db>,
+    index_expr: &ExprIndex,
 ) -> Result<Type<'db>, TypeError> {
-    let base_ty = ctx.synthesize_expr(index_expr.base)?;
+    let base_ty = ctx.synthesize_expr(ctx.expr(index_expr.base))?;
     let (element_ty, index_type) = resolve_index_types(ctx.db, &base_ty)
         .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
 
-    if let Err(e) = check_expr(ctx, index_expr.index, &index_type) {
+    if let Err(e) = check_expr(ctx, ctx.expr(index_expr.index), &index_type) {
         ctx.add_error(e);
     }
 
     // Reject view-producing index in mut/out context.
     if ctx.mut_context && is_view_producing_index(&base_ty) {
-        let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, expr));
+        let site = crate::ErrorSite::Expr(expr.key());
         return Err(ctx.report_place_error(site, TypeError::ViewTypeMutBinding {
             view_ty: type_to_string(ctx.db, &element_ty),
         }));
@@ -1633,7 +1631,7 @@ fn synthesize_place_field_step<'db>(
     field: &FieldSelector<'db>,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
-    let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
+    let site = crate::ErrorSite::Expr(expr.key());
     let field_ty = resolve_field_type(db, base_ty, field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
@@ -1655,19 +1653,19 @@ fn synthesize_place_index_step<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
     base_ty: &Type<'db>,
-    idx: &PlaceIndex<'db>,
+    idx: &PlaceIndex,
 ) -> Result<Type<'db>, TypeError> {
     let db = ctx.db;
     let (element_ty, index_type) = resolve_index_types(db, base_ty)
         .map_err(|msg| ctx.error_cannot_synthesize(expr, &msg))?;
 
-    if let Err(e) = check_expr(ctx, idx.index, &index_type) {
+    if let Err(e) = check_expr(ctx, ctx.expr(idx.index), &index_type) {
         ctx.add_error(e);
     }
 
     // Reject view-producing index in mut/out context.
     if ctx.mut_context && is_view_producing_index(base_ty) {
-        let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
+        let site = crate::ErrorSite::Expr(expr.key());
         return Err(ctx.report_place_error(site, TypeError::ViewTypeMutBinding {
             view_ty: type_to_string(ctx.db, &element_ty),
         }));
@@ -1677,7 +1675,7 @@ fn synthesize_place_index_step<'db>(
     // requires ref context (e.g. via @, ref param, or intermediate step).
     if let Type::Datalit(ref dt) = element_ty {
         if !is_copy_type(db, dt) && !ctx.ref_context {
-            let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
+            let site = crate::ErrorSite::Expr(expr.key());
             return Err(ctx.report_place_error(site, TypeError::NonCopyIndexProjection {
                 elem_ty: datalit::tycheck::type_to_string(db, dt),
             }));
@@ -1700,9 +1698,9 @@ fn synthesize_field_proj<'db>(
     let db = ctx.db;
 
     // Synthesize base type.
-    let base_ty = ctx.synthesize_expr(proj.base)?;
+    let base_ty = ctx.synthesize_expr(ctx.expr(proj.base))?;
 
-    let site = crate::ErrorSite::Expr(ExprKey::of(db, expr));
+    let site = crate::ErrorSite::Expr(expr.key());
     let field_ty = resolve_field_type(db, &base_ty, &proj.field)
         .map_err(|e| ctx.report_place_error(site, e))?;
 
@@ -1737,7 +1735,7 @@ fn synthesize_inline_list<'db>(
     }
 
     // Synthesize type of first element.
-    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_ty = ctx.synthesize_expr(ctx.expr(elements[0]))?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1745,8 +1743,8 @@ fn synthesize_inline_list<'db>(
 
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
+        let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
+        check_like_first(ctx, ctx.expr(*elem), &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::List(
@@ -1768,7 +1766,7 @@ fn synthesize_inline_set<'db>(
         return Ok(ty);
     }
 
-    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_ty = ctx.synthesize_expr(ctx.expr(elements[0]))?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1776,8 +1774,8 @@ fn synthesize_inline_set<'db>(
 
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
+        let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
+        check_like_first(ctx, ctx.expr(*elem), &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Set(
@@ -1799,12 +1797,12 @@ fn synthesize_inline_map<'db>(
         return Ok(ty);
     }
 
-    let first_key_ty = ctx.synthesize_expr(entries[0].key)?;
+    let first_key_ty = ctx.synthesize_expr(ctx.expr(entries[0].key))?;
     let first_key_datalit = match first_key_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
     };
-    let first_value_ty = ctx.synthesize_expr(entries[0].value)?;
+    let first_value_ty = ctx.synthesize_expr(ctx.expr(entries[0].value))?;
     let first_value_datalit = match first_value_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1812,10 +1810,10 @@ fn synthesize_inline_map<'db>(
 
     // Check remaining entries for type compatibility.
     for entry in &entries[1..] {
-        let key_ty = ctx.synthesize_expr(entry.key)?;
-        let value_ty = ctx.synthesize_expr(entry.value)?;
-        check_like_first(ctx, entry.key, &first_key_ty, &key_ty, "differs from the first key")?;
-        check_like_first(ctx, entry.value, &first_value_ty, &value_ty, "differs from the first value")?;
+        let key_ty = ctx.synthesize_expr(ctx.expr(entry.key))?;
+        let value_ty = ctx.synthesize_expr(ctx.expr(entry.value))?;
+        check_like_first(ctx, ctx.expr(entry.key), &first_key_ty, &key_ty, "differs from the first key")?;
+        check_like_first(ctx, ctx.expr(entry.value), &first_value_ty, &value_ty, "differs from the first value")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Map(
@@ -1841,7 +1839,7 @@ fn synthesize_inline_tensor<'db>(
         return Ok(ty);
     }
 
-    let first_ty = ctx.synthesize_expr(elements[0])?;
+    let first_ty = ctx.synthesize_expr(ctx.expr(elements[0]))?;
     let first_datalit = match first_ty {
         Type::Datalit(ref dt) => dt.clone(),
         Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1849,8 +1847,8 @@ fn synthesize_inline_tensor<'db>(
 
     // Check remaining elements for type compatibility.
     for elem in &elements[1..] {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
-        check_like_first(ctx, *elem, &first_ty, &elem_ty, "differs from the first element")?;
+        let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
+        check_like_first(ctx, ctx.expr(*elem), &first_ty, &elem_ty, "differs from the first element")?;
     }
 
     let ty = Type::Datalit(datalit::tycheck::Type::Tensor(
@@ -1889,7 +1887,7 @@ fn synthesize_inline_table<'db>(
             ));
             }
             for element in &first.elements {
-                let ty = ctx.synthesize_expr(*element)?;
+                let ty = ctx.synthesize_expr(ctx.expr(*element))?;
                 column_types.push(ty);
             }
         }
@@ -1910,8 +1908,8 @@ fn synthesize_inline_table<'db>(
             ));
         }
         for (element, column_ty) in row.elements.iter().zip(column_types.iter()) {
-            let element_ty = ctx.synthesize_expr(*element)?;
-            check_like_first(ctx, *element, column_ty, &element_ty, "differs from the first row")?;
+            let element_ty = ctx.synthesize_expr(ctx.expr(*element))?;
+            check_like_first(ctx, ctx.expr(*element), column_ty, &element_ty, "differs from the first row")?;
         }
     }
 
@@ -1945,7 +1943,7 @@ fn synthesize_inline_anon_tuple<'db>(
 
     let mut elem_types = Vec::new();
     for elem in elements {
-        let elem_ty = ctx.synthesize_expr(*elem)?;
+        let elem_ty = ctx.synthesize_expr(ctx.expr(*elem))?;
         let elem_datalit = match elem_ty {
             Type::Datalit(dt) => dt.clone(),
             Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1970,7 +1968,7 @@ fn synthesize_inline_anon_struct<'db>(
 
     let mut field_types = Vec::new();
     for field in fields {
-        let field_ty = ctx.synthesize_expr(field.value)?;
+        let field_ty = ctx.synthesize_expr(ctx.expr(field.value))?;
         let field_datalit = match field_ty {
             Type::Datalit(dt) => dt.clone(),
             Type::Function(_) => unreachable!("synthesized expression type is always Datalit"),
@@ -1993,7 +1991,7 @@ fn synthesize_inline_data<'db>(
     let value = data_expr.value;
 
     // Type-check the inner value.
-    let _ = ctx.synthesize_expr(value)?;
+    let _ = ctx.synthesize_expr(ctx.expr(value))?;
 
     // Data synthesizes to Type::Data (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Data);
@@ -2009,7 +2007,7 @@ fn synthesize_inline_err<'db>(
     let value = err_expr.value;
 
     // Type-check the inner value.
-    let _ = ctx.synthesize_expr(value)?;
+    let _ = ctx.synthesize_expr(ctx.expr(value))?;
 
     // Error synthesizes to Type::Error (unit type).
     let ty = Type::Datalit(datalit::tycheck::Type::Error);

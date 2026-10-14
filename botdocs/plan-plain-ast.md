@@ -4,8 +4,8 @@ A plan for taking salsa out of the AST: expressions and functions become
 ordinary data held by a memoized parse, the incremental boundary moves to an
 explicit summary of each module's items, and later phases name functions and
 expressions by stable keys rather than by salsa ids. Written October 2026,
-after the parser stopped copying tokens ([plan-parser.md](plan-parser.md));
-not implemented.
+after the parser stopped copying tokens ([plan-parser.md](plan-parser.md)).
+Phases 0 and 1 are done; see [Progress](#user-content-progress).
 
 ## Contents
 
@@ -16,6 +16,7 @@ not implemented.
 - [What stops naming the AST](#user-content-what-stops-naming-the-ast)
 - [The firewall](#user-content-the-firewall)
 - [Phases](#user-content-phases)
+- [Progress](#user-content-progress)
 - [Verifying each phase](#user-content-verifying-each-phase)
 - [What it should buy](#user-content-what-it-should-buy)
 - [Open questions](#user-content-open-questions)
@@ -220,6 +221,44 @@ snapshots unchanged.
    `BTreeMap<ExprKey, _>` today; `ResolvedCallTarget` and `TypeFunction` as
    plain values where nothing needs their identity; `lru` on the parse if
    memory wants it.
+
+## Progress
+
+**Phase 0** added the missing fields to `ast_serde` and re-blessed 16 parser
+fixtures. The numbers it pinned, on the `sys/std` compile:
+
+| | phase 0 | phase 1 |
+|---|---:|---:|
+| queries, cold / per edit | 566 / 19 | 566 / 19 |
+| `ExprFun` structs | 6,227 (946KB) | none |
+| `ExprFunctionCall` structs | 920 (110KB) | none |
+| `StmtFun` structs | 1,130 (244KB) | 1,130 (289KB) |
+| instructions | 178.1M | 158.7M |
+| page faults | 3,794 | 3,687 |
+
+**Phase 1** is done, and cost 11% of the run where the estimate was about 4%:
+the lookups behind `.expr(db)` were worth more than `create_expr`. The parse
+snapshots are identical, the census did not move, and no incremental test
+changed. It differs from the design above in four ways:
+
+- **The handle kept the name `ExprFun`.** It is `{ arena, id }` as designed,
+  and the name kept about 200 signatures as they were. `kind()` borrows the
+  node, `at(id)` makes a child's handle, and `key()` is `ExprKey::of`.
+- **Calls are not in an arena of their own.** `ExprFunctionCall` is a plain
+  node inside `ExprFunKind::FunctionCall`, carrying its call index, and
+  `ExprKey::of_call(expr, call)` keys it.
+- **The top level is a salsa struct, `TopLevel`, for now.** An `ExprFun`
+  borrows its arena for `'db`, and a function's body gets that from its
+  tracked field. The statements outside any function had no such owner while
+  `ParsedStatements` is passed around by value, so they are put behind a
+  tracked struct whose body is its identity. It therefore compares as the
+  statements did. `ParsedExpr` uses the same struct for a script expression.
+  This goes in phase 3, when the queries read `parse_module_ast(module)` by
+  reference.
+- **Walkers keep the current arena in their context**, as `arena` on
+  `TypeContext`, `AnalysisCtx` and `LowerCtx`. It is set where a body is
+  entered and restored after. Statements hold `ExprId`s, and `ctx.expr(id)`
+  makes a handle from one.
 
 ## Verifying each phase
 

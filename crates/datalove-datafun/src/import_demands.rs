@@ -58,7 +58,7 @@ pub fn module_import_demands<'db>(
 ) -> Vec<ImportDemand> {
     let parsed = &parser::parse_module_full(db, module).parsed;
 
-    parsed.statements.iter()
+    parsed.statements(db).iter()
         .filter_map(|statement| match statement {
             ast::Statement::Require(ast::StmtRequire::Module(require)) => Some((
                 require.import_space.as_str(db).S(),

@@ -86,8 +86,8 @@ impl<'db> DatafunSpans<'db> {
     }
 
     /// Look up span for an expression.
-    pub fn lookup(&self, db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> Option<TextSpan> {
-        self.lookup_key(ExprKey::of(db, expr))
+    pub fn lookup(&self, expr: ExprFun<'db>) -> Option<TextSpan> {
+        self.lookup_key(expr.key())
     }
 
     /// Look up span by an expression's stable key.

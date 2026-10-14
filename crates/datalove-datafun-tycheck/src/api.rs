@@ -156,7 +156,7 @@ pub fn unit_ast<'db>(
     let spans = datalove_datafun_parser::datafun_spans(db, source);
     let kind = if unit.is_expr(db) {
         let parsed = datalove_datafun_parser::parse_expr(db, source);
-        ScriptUnitKind::Expr(parsed.expr, parsed.qualified_calls.clone())
+        ScriptUnitKind::Expr(parsed.clone())
     } else {
         let parsed = datalove_datafun_parser::parse(db, source).parsed.clone();
         let names = datalove_datafun_resolve::resolve_script_names(db, source, parsed.clone());
@@ -355,7 +355,7 @@ pub fn typecheck_script_unit<'db>(
             // that one is answering. In a session the two arrive on separate
             // lines, which is exactly where the shadowing is hardest to see.
             let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = HashMap::new();
-            let defined = defined_function_names(db, &parsed.statements);
+            let defined = defined_function_names(db, parsed.statements(db));
 
             for (item_name, func_ty, func_ast, source_module_id, local_index) in resolved_imports {
                 if defined.contains(&item_name) {
@@ -390,7 +390,7 @@ pub fn typecheck_script_unit<'db>(
             }
 
             // An import through a refused require was reported at the require.
-            let through_failed: std::collections::HashSet<u32> = parsed.statements.iter()
+            let through_failed: std::collections::HashSet<u32> = parsed.statements(db).iter()
                 .filter_map(|statement| match statement {
                     Statement::Import(import)
                         if ctx.failed_aliases.contains(import.module_name.as_str(db)) =>
@@ -408,13 +408,14 @@ pub fn typecheck_script_unit<'db>(
             }
 
             // Second pass: typecheck all statements.
-            for statement in parsed.statements.iter() {
+            ctx.arena = Some(&parsed.body(db).arena);
+            for statement in parsed.statements(db).iter() {
                 check_statement(&mut ctx, &statement);
             }
             ctx.report_inline_cycles();
 
             // Extract new bindings for subsequent units.
-            for stmt in parsed.statements.iter() {
+            for stmt in parsed.statements(db).iter() {
                 match stmt {
                     Statement::Let(let_stmt) => {
                         for name in let_stmt.binding.names() {
@@ -448,10 +449,10 @@ pub fn typecheck_script_unit<'db>(
                 }
             }
         }
-        ScriptUnitKind::Expr(expr, qualified_calls) => {
+        ScriptUnitKind::Expr(parsed) => {
             let (qualified, qualified_modules) = resolve_script_qualified_calls(
                 db,
-                qualified_calls,
+                &parsed.qualified_calls,
                 &[],
                 |alias| earlier.and_then(|prev| module_alias_at(db, prev, env, alias)),
                 &modules_by_path,
@@ -461,7 +462,9 @@ pub fn typecheck_script_unit<'db>(
             imported_modules.sort();
             imported_modules.dedup();
 
-            if let Err(e) = ctx.synthesize_expr(*expr) {
+            let expr = parsed.expr(db);
+            ctx.arena = Some(expr.arena());
+            if let Err(e) = ctx.synthesize_expr(expr) {
                 ctx.add_error(e);
             }
         }
@@ -611,7 +614,7 @@ pub fn typecheck_module<'db>(
     // is refused rather than allowed to take it over. The first stays, which
     // keeps the rest of the module resolving to what it was written against.
     let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
-    let defined = defined_function_names(db, &parsed.statements);
+    let defined = defined_function_names(db, parsed.statements(db));
     for (local_name, func_type, func_ast, source_module, local_index) in &resolved_imports {
         if defined.contains(local_name) {
             let err = ctx.error_import_shadows_function(*local_index, *local_name);
@@ -640,14 +643,15 @@ pub fn typecheck_module<'db>(
     // Pass 2a: module-level consts, before anything that could name one. A
     // module const is in scope for every function in the module regardless of
     // where it is written, and functions are checked in source order below.
-    for statement in parsed.statements.iter() {
+    ctx.arena = Some(&parsed.body(db).arena);
+    for statement in parsed.statements(db).iter() {
         if matches!(statement, Statement::Const(_)) {
             check_statement(&mut ctx, &statement);
         }
     }
 
     // Pass 2b: everything else.
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         if !matches!(statement, Statement::Const(_)) {
             check_statement(&mut ctx, &statement);
         }
@@ -963,7 +967,7 @@ fn check_module_requires<'db>(
 
     let mut errors = Vec::new();
     let mut seen = RequireScope::default();
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         let Statement::Require(require) = statement else {
             continue;
         };
@@ -1104,7 +1108,7 @@ fn resolve_module_imports_internal<'db>(
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
 
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         if let Statement::Import(import) = statement {
             let module_name = import.module_name;
             let item_name = import.item_name;
@@ -1322,7 +1326,7 @@ fn collect_module_aliases<'db>(
     script: &ParsedStatements<'db>,
 ) -> Vec<(InternedText<'db>, String)> {
     let mut aliases = Vec::new();
-    for statement in script.statements.iter() {
+    for statement in script.statements(db).iter() {
         if let Statement::Require(StmtRequire::Module(req)) = statement {
             let import_space = req.import_space;
             let package_alias = req.package_alias;
@@ -1353,7 +1357,7 @@ fn check_script_requires<'db>(
 
     let mut errors = Vec::new();
     let mut seen = RequireScope::default();
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         let Statement::Require(require) = statement else {
             continue;
         };
@@ -1418,7 +1422,7 @@ fn resolve_script_imports<'db>(
     let mut errors = Vec::new();
     let mut imported = std::collections::BTreeSet::new();
 
-    for statement in script.statements.iter() {
+    for statement in script.statements(db).iter() {
         if let Statement::Import(import) = statement {
             let module_alias = import.module_name;
             let item_name = import.item_name;

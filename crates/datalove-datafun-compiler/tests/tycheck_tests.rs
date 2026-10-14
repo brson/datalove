@@ -383,7 +383,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     // Collect type judgements for variables and functions.
     let mut judgements = Vec::new();
     let expr_types = tycheck_result.expr_types(&db);
-    for statement in script.statements.iter() {
+    for statement in script.statements(&db).iter() {
         match statement {
             datalove_datafun_ast::ast::Statement::Let(let_stmt) => {
                 // A destructure is judged by the type of what it takes apart.
@@ -392,8 +392,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     .collect::<Vec<_>>()
                     .join(", ");
                 // Get type from the let statement's value expression.
-                let value_expr = let_stmt.value;
-                let key = datalove_datafun_ast::ast::ExprKey::of(&db, value_expr);
+                let key = script.body(&db).arena.get(let_stmt.value).key();
                 if let Some(ty) = expr_types.get(&key) {
                     judgements.push(json!({
                         "kind": "variable",

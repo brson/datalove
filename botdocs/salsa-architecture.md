@@ -64,7 +64,7 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 11 | Deduplicated by content: `InternedText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`, `RiderSources`. |
-| `#[salsa::tracked]` struct | 51 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` struct | 50 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
 | `#[salsa::tracked]` fn | 120 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
 ### The three structs with a tracked field, and why
@@ -84,7 +84,10 @@ salsa-patterns.md. Only these three earn it:
 `ExprFun`, `TypeFunction` and `ExprFunctionCall` used to be on this list and
 are not: expressions, signatures and call sites are read whole by consumers
 that are keyed per module, so the fine grain cost edges and bought nothing.
-Untracking them was worth 2.6x, 12% and 12% of a 512-module edit.
+Untracking them was worth 2.6x, 12% and 12% of a 512-module edit. Expressions
+and call sites have since stopped being salsa structs at all: they live in a
+per-body arena, and an `ExprFun` is a handle into it. See
+[plan-plain-ast.md](plan-plain-ast.md).
 
 The call site one needed a fixture with calls in it to see. The synthetic world
 in `recompile_profile` is arithmetic and has none, so it reported the change as
@@ -218,7 +221,8 @@ which is inherent while the graph-keyed passes ask about every module.
   does and what nothing did before.
 - **Dependency-edge counts are not measured directly**, so the `#[tracked]`
   decisions rest on the memo-size proxy. Re-adding `#[tracked]` to
-  `ExprFun::expr` costs 2.6x at 512 modules and passes everything.
+  `ExprFun::expr`, when expressions were tracked structs, cost 2.6x at 512
+  modules and passed everything.
 - **Durability** is not observable through salsa events; see
   `durability_tests`' own header.
 - **Wall-clock anything.** The suite says what runs and what a run depends on.

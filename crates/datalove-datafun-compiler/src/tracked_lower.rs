@@ -198,7 +198,7 @@ pub fn compute_func_id_map<'db>(
         let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
         let mut next_func_id: u32 = 0;
 
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
                 let func_id = FuncId(next_func_id);
@@ -425,7 +425,7 @@ pub fn lower_module<'db>(
 
     // Assign module-local FuncIds (0, 1, 2, ...).
     let mut next_func_id: u32 = 0;
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
             let func_id = FuncId(next_func_id);
@@ -453,7 +453,7 @@ pub fn lower_module<'db>(
         // Lower functions from scratch.
         functions = Vec::new();
         let mut func_idx = 0;
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func) = statement {
                 let func_name = func.name(db).text(db).S();
                 let func_id = func_ids[func_idx].1;
@@ -822,7 +822,7 @@ pub fn lower_module_functions<'db>(
 
     // Assign FuncIds and lower each function.
     let mut next_func_id: u32 = 0;
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         if let Statement::Fun(func) = statement {
             let func_name = func.name(db).text(db).S();
             let func_id = FuncId(next_func_id);
@@ -1080,7 +1080,7 @@ pub fn evaluate_all_module_consts<'db>(
             data_files: single_typecheck.data_files(db),
         };
         let mut body = Vec::new();
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
                 let func_name = func_stmt.name(db).text(db);
                 let const_params = func_stmt.params(db).iter()
@@ -1145,14 +1145,14 @@ fn module_const_kinds<'db>(
     let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
     let mut module_level = false;
     let mut anywhere = false;
-    for statement in parsed.statements.iter() {
+    for statement in parsed.statements(db).iter() {
         match statement {
             Statement::Const(_) => {
                 module_level = true;
                 anywhere = true;
             }
             Statement::Fun(func) => {
-                anywhere |= func.body(db).iter().any(|s| matches!(s, Statement::Const(_)));
+                anywhere |= func.body(db).statements.iter().any(|s| matches!(s, Statement::Const(_)));
             }
             _ => {}
         }
@@ -1224,14 +1224,15 @@ fn evaluate_module_level_consts<'db>(
         };
         let mut consts: HashMap<String, (IrType, Arc<ConstValue>)> = HashMap::new();
         let mut failed = false;
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             if let Statement::Const(const_stmt) = statement {
                 // A module const is outside any function, so there is no return
                 // type for an early-return operator to check against, and no
                 // const parameters for it to name.
                 let name = const_stmt.name.text(db).S();
-                let evaluated = const_type(&env, const_stmt.value).and_then(|ty| {
-                    evaluate_const(&mut env, const_stmt.value, &ty, &consts, None, &Default::default())
+                let value = parsed.body(db).arena.get(const_stmt.value);
+                let evaluated = const_type(&env, value).and_then(|ty| {
+                    evaluate_const(&mut env, value, &ty, &consts, None, &Default::default())
                         .map(|value| (ty, value.expect("nothing is deferred at module level")))
                 });
                 match evaluated {
@@ -1330,7 +1331,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
             .filter_map(|(module_id, parsed)| {
                 let single = typecheck_module_results.get(module_id)?;
                 let consts = crate::const_eval::data_consts(
-                    db_salsa, &parsed.statements, single.expr_types(db_salsa), single.data_files(db_salsa));
+                    db_salsa, parsed.body(db_salsa), single.expr_types(db_salsa), single.data_files(db_salsa));
                 (!consts.is_empty()).then_some((*module_id, consts))
             })
             .collect();
@@ -1689,7 +1690,7 @@ fn specialize_comptime_functions<'db>(
     let mut func_asts: HashMap<(ModuleId<'db>, String), datalove_datafun_ast::ast::StmtFun<'db>> =
         HashMap::new();
     for (module_id, parsed) in parsed_graph.statements_only(db) {
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
                 func_asts.insert((*module_id, func_stmt.name(db).text(db).S()), *func_stmt);
             }

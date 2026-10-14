@@ -219,7 +219,7 @@ fn datafun(text: &str) -> String {
         "require_spans": spans_json(&result.require_spans),
         "alias_spans": spans_json(&result.alias_spans),
         "diagnostics": diagnostics_json(&db, text, diagnostics.into_iter()),
-        "expr": datalove_datafun_ast::ast_serde::ExprFun::from_ast(&db, expr.expr),
+        "expr": datalove_datafun_ast::ast_serde::ExprFun::from_ast(&db, expr.expr(&db)),
         "expr_qualified_calls": expr.qualified_calls.len(),
         "expr_diagnostics": diagnostics_json(&db, text, expr_diagnostics.into_iter()),
     });

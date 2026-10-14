@@ -74,8 +74,8 @@ pub fn lower_operand<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
-    match expr.expr(ctx.db) {
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+    match expr.kind() {
+        ExprFunKind::Place(place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
@@ -92,7 +92,7 @@ pub fn lower_operand<'db>(
         //
         // A copy element keeps the direct read: there is nothing to move out
         // and nothing to free, so a borrow would buy nothing.
-        ExprFunKind::Place(ref place)
+        ExprFunKind::Place(place)
             if !place.steps.is_empty()
                 && !ctx.expr_type(expr).is_copy() =>
         {
@@ -137,7 +137,7 @@ fn lower_call_arg<'db>(
             return Ok(operand);
         }
         // Place with steps: lower as ref.
-        if let ExprFunKind::Place(ref place) = arg.expr(ctx.db) {
+        if let ExprFunKind::Place(place) = arg.kind() {
             if !place.steps.is_empty() {
                 let operand = lower_place_as_ref(ctx, place)?;
                 if mode == ParamMode::Out {
@@ -152,7 +152,7 @@ fn lower_call_arg<'db>(
                 return Ok(ctx.deref_if_ref(operand));
             }
         }
-        if let ExprFunKind::FieldProj(proj) = arg.expr(ctx.db) {
+        if let ExprFunKind::FieldProj(proj) = arg.kind() {
             let operand = lower_field_proj_as_ref(ctx, arg, proj)?;
             // For out params, destroy existing field value before call.
             // Use DropViaRef since we have a reference, not the value itself.
@@ -182,8 +182,8 @@ fn lower_call_arg<'db>(
     }
 
     // For 'in' mode: function consumes the argument, so don't record temps.
-    match arg.expr(ctx.db) {
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+    match arg.kind() {
+        ExprFunKind::Place(place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             let is_external = matches!(
@@ -219,22 +219,22 @@ fn try_lower_arg_index_as_ref<'db>(
     mode: ParamMode,
     arg_type: Option<&IrType>,
 ) -> Result<Option<Operand>, LowerError> {
-    let operand = match arg.expr(ctx.db) {
+    let operand = match arg.kind() {
         ExprFunKind::TryOption(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?
             } else {
                 return Ok(None);
             }
         }
         ExprFunKind::TryResult(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?
             } else {
                 return Ok(None);
             }
         }
-        ExprFunKind::Place(ref place) => {
+        ExprFunKind::Place(place) => {
             lower_place_as_ref(ctx, place)?
         }
         _ => return Ok(None),
@@ -262,12 +262,12 @@ fn try_lower_arg_index_as_ref<'db>(
 /// Returns a reference operand suitable for passing to ref/mut/out params.
 fn lower_index_as_ref<'db>(
     ctx: &mut LowerCtx<'db>,
-    index_expr: &ast::ExprIndex<'db>,
+    index_expr: &ast::ExprIndex,
     error_mode: ast::IndexErrorMode,
 ) -> Result<Operand, LowerError> {
-    let base_op = lower_operand(ctx, index_expr.base)?;
-    let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = ctx.expr_type(index_expr.base);
+    let base_op = lower_operand(ctx, ctx.expr(index_expr.base))?;
+    let key_op = lower_operand(ctx, ctx.expr(index_expr.index))?;
+    let base_type = ctx.expr_type(ctx.expr(index_expr.base));
     super::stmt::emit_fallible_index_check(ctx, base_op, &base_type, key_op, error_mode, false)?;
     let dest = super::stmt::emit_collection_element_ref(ctx, base_op, &base_type, key_op);
     Ok(Operand::Value(dest))
@@ -281,41 +281,41 @@ fn lower_index_as_ref<'db>(
 pub fn lower_field_proj_as_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    proj: ast::ExprFieldProj<'db>,
+    proj: &ast::ExprFieldProj<'db>,
 ) -> Result<Operand, LowerError> {
-    let base_type = ctx.expr_type(proj.base);
+    let base_type = ctx.expr_type(ctx.expr(proj.base));
 
     // When the base is a Place (with or without steps), build an extended
     // Place with the field step appended and delegate to lower_place_as_ref.
-    if let ExprFunKind::Place(ref place) = proj.base.expr(ctx.db) {
+    if let ExprFunKind::Place(place) = ctx.expr(proj.base).kind() {
         let mut extended = place.clone();
-        extended.steps.push(ast::PlaceStep::Field(proj.field));
+        extended.steps.push(ast::PlaceStep::Field(proj.field.clone()));
         return lower_place_as_ref(ctx, &extended);
     }
 
     // When the base is a nested FieldProj, recurse to get a ref, then
     // apply GetFieldRef on top.
-    let src = match proj.base.expr(ctx.db) {
+    let src = match ctx.expr(proj.base).kind() {
         ExprFunKind::FieldProj(inner_proj) => {
-            let base_ref = lower_field_proj_as_ref(ctx, proj.base, inner_proj)?;
+            let base_ref = lower_field_proj_as_ref(ctx, ctx.expr(proj.base), inner_proj)?;
             operand_as_value_ref(base_ref)
         }
         ExprFunKind::TryOption(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)?)
             } else {
-                Operand::Value(lower_expression(ctx, proj.base)?)
+                Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
             }
         }
         ExprFunKind::TryResult(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 operand_as_value_ref(lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)?)
             } else {
-                Operand::Value(lower_expression(ctx, proj.base)?)
+                Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
             }
         }
         _ => {
-            Operand::Value(lower_expression(ctx, proj.base)?)
+            Operand::Value(lower_expression(ctx, ctx.expr(proj.base))?)
         }
     };
 
@@ -353,13 +353,13 @@ pub fn lower_expression_for_ref<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<Operand, LowerError> {
-    match expr.expr(ctx.db) {
+    match expr.kind() {
         ExprFunKind::FieldProj(proj) => {
             // Field projections use GetFieldRef to borrow without copying.
             lower_field_proj_as_ref(ctx, expr, proj)
         }
         ExprFunKind::TryOption(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 // a[i]? — borrow list element by reference.
                 lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Option)
             } else {
@@ -370,7 +370,7 @@ pub fn lower_expression_for_ref<'db>(
             }
         }
         ExprFunKind::TryResult(try_op) => {
-            if let ExprFunKind::Index(index_expr) = try_op.operand.expr(ctx.db) {
+            if let ExprFunKind::Index(index_expr) = ctx.expr(try_op.operand).kind() {
                 // a[i]! — borrow list element by reference.
                 lower_index_as_ref(ctx, &index_expr, ast::IndexErrorMode::Result)
             } else {
@@ -380,7 +380,7 @@ pub fn lower_expression_for_ref<'db>(
                 Ok(Operand::Value(value_id))
             }
         }
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+        ExprFunKind::Place(place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
@@ -388,7 +388,7 @@ pub fn lower_expression_for_ref<'db>(
             }
             Ok(operand)
         }
-        ExprFunKind::Place(ref place) => {
+        ExprFunKind::Place(place) => {
             // Place expression with steps — borrow by reference.
             lower_place_as_ref(ctx, place)
         }
@@ -440,8 +440,8 @@ pub fn lower_expression<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
 ) -> Result<ValueId, LowerError> {
-    match expr.expr(ctx.db) {
-        ExprFunKind::Place(ref place) if place.steps.is_empty() => {
+    match expr.kind() {
+        ExprFunKind::Place(place) if place.steps.is_empty() => {
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
 
@@ -556,10 +556,10 @@ pub fn lower_expression<'db>(
             let expr_temp_mark = ctx.expr_temps_mark();
 
             // Resolve function reference using typechecker's resolved call target.
-            let func_ref = ctx.resolve_call(call);
+            let func_ref = ctx.resolve_call(expr, call);
 
             // Get param modes and types from the resolved call target.
-            let target = ctx.call_targets.and_then(|t| t.get(&ExprKey::of_call(ctx.db, call)));
+            let target = ctx.call_targets.and_then(|t| t.get(&ExprKey::of_call(expr, call)));
             // A const argument is passed by reference, as the callee's const
             // parameter is lowered: see `lower_function_body`.
             let param_modes: Vec<ParamMode> = target
@@ -589,11 +589,11 @@ pub fn lower_expression<'db>(
                 .unwrap_or_default();
 
             // Lower each arg, tracking in-mode args as pending intermediates.
-            let call_args = call.args(ctx.db);
+            let call_args = &call.args;
             let mut args = Vec::with_capacity(call_args.len());
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
-                let operand = lower_call_arg(ctx, *arg, mode, param_types.get(i))?;
+                let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i))?;
                 // Track in-mode args as pending intermediate.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {
@@ -637,21 +637,21 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Some(some_expr) => {
-            let inner_id = lower_expression(ctx, some_expr.payload)?;
+            let inner_id = lower_expression(ctx, ctx.expr(some_expr.payload))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_wrap_some(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Ok(ok_expr) => {
-            let inner_id = lower_expression(ctx, ok_expr.payload)?;
+            let inner_id = lower_expression(ctx, ctx.expr(ok_expr.payload))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_wrap_ok(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Er(er_expr) => {
-            let inner_id = lower_expression(ctx, er_expr.payload)?;
+            let inner_id = lower_expression(ctx, ctx.expr(er_expr.payload))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_wrap_err(dest, Operand::Value(inner_id));
@@ -687,7 +687,7 @@ pub fn lower_expression<'db>(
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in list.elements.iter() {
-                let value = lower_expression(ctx, *e)?;
+                let value = lower_expression(ctx, ctx.expr(*e))?;
                 ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
@@ -709,7 +709,7 @@ pub fn lower_expression<'db>(
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in set.elements.iter() {
-                let value = lower_expression(ctx, *e)?;
+                let value = lower_expression(ctx, ctx.expr(*e))?;
                 ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
@@ -731,9 +731,9 @@ pub fn lower_expression<'db>(
             // Lower each entry and track keys/values as pending intermediates.
             let mut entries = Vec::new();
             for e in map.entries.iter() {
-                let k = lower_expression(ctx, e.key)?;
+                let k = lower_expression(ctx, ctx.expr(e.key))?;
                 ctx.push_pending_intermediate(k, &key_type);
-                let v = lower_expression(ctx, e.value)?;
+                let v = lower_expression(ctx, ctx.expr(e.value))?;
                 ctx.push_pending_intermediate(v, &val_type);
                 entries.push((Operand::Value(k), Operand::Value(v)));
             }
@@ -744,14 +744,14 @@ pub fn lower_expression<'db>(
             Ok(dest)
         }
         ExprFunKind::Error(err_expr) => {
-            let inner_id = lower_expression(ctx, err_expr.value)?;
+            let inner_id = lower_expression(ctx, ctx.expr(err_expr.value))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_error_from(dest, Operand::Value(inner_id));
             Ok(dest)
         }
         ExprFunKind::Data(data_expr) => {
-            let inner_id = lower_expression(ctx, data_expr.value)?;
+            let inner_id = lower_expression(ctx, ctx.expr(data_expr.value))?;
             let result_type = ctx.expr_type(expr);
             let dest = ctx.fresh_value(result_type);
             ctx.emit_data_from(dest, Operand::Value(inner_id));
@@ -803,7 +803,7 @@ pub fn lower_expression<'db>(
                 std::collections::HashMap::new();
             for field in struct_expr.fields.iter() {
                 let name = field.name.text(ctx.db).to_string();
-                let value = lower_expression(ctx, field.value)?;
+                let value = lower_expression(ctx, ctx.expr(field.value))?;
                 // Track as pending intermediate so it's dropped on early return.
                 if let Some(field_ty) = field_types.get(&name) {
                     ctx.push_pending_intermediate(value, field_ty);
@@ -841,7 +841,7 @@ pub fn lower_expression<'db>(
             // Lower each element and track as pending intermediate.
             let mut elements = Vec::new();
             for e in tensor.elements.iter() {
-                let value = lower_expression(ctx, *e)?;
+                let value = lower_expression(ctx, ctx.expr(*e))?;
                 ctx.push_pending_intermediate(value, &elem_type);
                 elements.push(Operand::Value(value));
             }
@@ -875,7 +875,7 @@ pub fn lower_expression<'db>(
                 // Lower row elements, tracking each as pending intermediate.
                 let mut elem_operands = Vec::new();
                 for (i, e) in row.elements.iter().enumerate() {
-                    let value = lower_expression(ctx, *e)?;
+                    let value = lower_expression(ctx, ctx.expr(*e))?;
                     if let Some(elem_ty) = tuple_fields.get(i) {
                         ctx.push_pending_intermediate(value, elem_ty);
                     }
@@ -898,7 +898,7 @@ pub fn lower_expression<'db>(
             ctx.pop_pending_scope();
             Ok(dest)
         }
-        ExprFunKind::Place(ref place) => {
+        ExprFunKind::Place(place) => {
             lower_place_expression(ctx, expr, place)
         }
         ExprFunKind::Index(_) => {
@@ -918,7 +918,7 @@ pub fn lower_expression<'db>(
             let expr_temp_mark = ctx.expr_temps_mark();
             let args: Result<Vec<_>, _> = icall.args
                 .iter()
-                .map(|arg| lower_operand(ctx, *arg))
+                .map(|arg| lower_operand(ctx, ctx.expr(*arg)))
                 .collect();
             let args = args?;
 
@@ -973,7 +973,7 @@ pub fn lower_expression<'db>(
             match &result_type {
                 IrType::Term(_, _) => {
                     // Term has same layout as payload. Lower payload then move.
-                    let payload_id = lower_expression(ctx, term.payload)?;
+                    let payload_id = lower_expression(ctx, ctx.expr(term.payload))?;
                     let dest = ctx.fresh_value(result_type);
                     ctx.emit(Instruction::Move {
                         dest,
@@ -989,7 +989,7 @@ pub fn lower_expression<'db>(
                         .position(|(n, _)| n == name_str)
                         .unwrap_or_else(|| panic!("term variant '{}' not found in type", name_str))
                         as u32;
-                    let payload_id = lower_expression(ctx, term.payload)?;
+                    let payload_id = lower_expression(ctx, ctx.expr(term.payload))?;
                     let dest = ctx.fresh_value(result_type);
                     ctx.emit(Instruction::EnumVariant {
                         dest,
@@ -1004,12 +1004,12 @@ pub fn lower_expression<'db>(
         ExprFunKind::EnumLiteral(enum_lit) => {
             // EnumLiteral wraps an atom or term expr checked against target enum type.
             // Just lower the inner variant expression.
-            lower_expression(ctx, enum_lit.variant)
+            lower_expression(ctx, ctx.expr(enum_lit.variant))
         }
         ExprFunKind::Hinted(hinted) => {
             // The hint said what to check against and has done its work by
             // now; what runs is the expression under it.
-            lower_expression(ctx, hinted.inner)
+            lower_expression(ctx, ctx.expr(hinted.inner))
         }
     }
 }
@@ -1018,7 +1018,7 @@ pub fn lower_expression<'db>(
 fn lower_binop<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    binop: ast::ExprBinOp<'db>,
+    binop: &ast::ExprBinOp,
 ) -> Result<ValueId, LowerError> {
     // Only the temps these operands create are ours to drop. An enclosing
     // expression that has already lowered something still needs it.
@@ -1026,8 +1026,8 @@ fn lower_binop<'db>(
 
     // Use lower_operand for borrowing semantics - operands are read by
     // reference, not consumed.
-    let lhs = lower_operand(ctx, binop.lhs)?;
-    let rhs = lower_operand(ctx, binop.rhs)?;
+    let lhs = lower_operand(ctx, ctx.expr(binop.lhs))?;
+    let rhs = lower_operand(ctx, ctx.expr(binop.rhs))?;
 
     let result_type = ctx.expr_type(expr);
     lower_binop_operands(ctx, binop.op, lhs, rhs, result_type, expr_temp_mark)
@@ -1170,7 +1170,7 @@ pub(crate) fn lower_op_assign<'db>(
 fn lower_unaryop<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    unary: ast::ExprUnaryOp<'db>,
+    unary: &ast::ExprUnaryOp,
 ) -> Result<ValueId, LowerError> {
     let result_type = ctx.expr_type(expr);
 
@@ -1178,7 +1178,7 @@ fn lower_unaryop<'db>(
     // This handles cases like `let x: i32 = -2147483648` where the literal
     // value (2147483648) doesn't fit in the target type but the negated value does.
     if unary.op == ast::UnaryOp::Neg {
-        if let ExprFunKind::Int(lit) = unary.operand.expr(ctx.db) {
+        if let ExprFunKind::Int(lit) = ctx.expr(unary.operand).kind() {
             let text = lit.value.text(ctx.db);
             if let Some(const_value) = try_parse_negated_int_const(text, &result_type) {
                 let dest = ctx.fresh_value(result_type);
@@ -1191,7 +1191,7 @@ fn lower_unaryop<'db>(
     // Use lower_operand for borrowing semantics. Only the temps the operand
     // creates are ours to drop.
     let expr_temp_mark = ctx.expr_temps_mark();
-    let operand = lower_operand(ctx, unary.operand)?;
+    let operand = lower_operand(ctx, ctx.expr(unary.operand))?;
     let dest = ctx.fresh_value(result_type);
 
     match unary.op {
@@ -1439,14 +1439,14 @@ fn lower_checked_result_unaryop<'db>(
 fn lower_try_option<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    try_expr: ast::ExprTryOption<'db>,
+    try_expr: &ast::ExprTryOption,
 ) -> Result<ValueId, LowerError> {
     // Special case: a[i]? / m[k]? — index with option early-return.
-    if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
+    if let ExprFunKind::Index(index_expr) = ctx.expr(try_expr.operand).kind() {
         return lower_collection_index_value(ctx, expr, index_expr, ast::IndexErrorMode::Option);
     }
 
-    let src_id = lower_expression(ctx, try_expr.operand)?;
+    let src_id = lower_expression(ctx, ctx.expr(try_expr.operand))?;
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type.clone());
     let is_some = ctx.fresh_value(IrType::Bool);
@@ -1482,14 +1482,14 @@ fn lower_try_option<'db>(
 fn lower_try_result<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    try_expr: ast::ExprTryResult<'db>,
+    try_expr: &ast::ExprTryResult,
 ) -> Result<ValueId, LowerError> {
     // Special case: a[i]! / m[k]! — index with result early-return.
-    if let ExprFunKind::Index(ref index_expr) = try_expr.operand.expr(ctx.db) {
+    if let ExprFunKind::Index(index_expr) = ctx.expr(try_expr.operand).kind() {
         return lower_collection_index_value(ctx, expr, index_expr, ast::IndexErrorMode::Result);
     }
 
-    let src_id = lower_expression(ctx, try_expr.operand)?;
+    let src_id = lower_expression(ctx, ctx.expr(try_expr.operand))?;
     let result_type = ctx.expr_type(expr);
     let ok_dest = ctx.fresh_value(result_type.clone());
     let err_dest = ctx.fresh_value(IrType::Error);
@@ -1529,16 +1529,16 @@ fn lower_try_result<'db>(
 fn lower_collection_index_value<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    index_expr: &ast::ExprIndex<'db>,
+    index_expr: &ast::ExprIndex,
     error_mode: ast::IndexErrorMode,
 ) -> Result<ValueId, LowerError> {
     // A get borrows what it is given, so anything made to hand it is this
     // expression's to let go of, on whichever way out it takes. A map keyed by
     // a string leaked the key it was looked up with.
     let temps_mark = ctx.expr_temps_mark();
-    let base_op = lower_operand(ctx, index_expr.base)?;
-    let key_op = lower_operand(ctx, index_expr.index)?;
-    let base_type = ctx.expr_type(index_expr.base);
+    let base_op = lower_operand(ctx, ctx.expr(index_expr.base))?;
+    let key_op = lower_operand(ctx, ctx.expr(index_expr.index))?;
+    let base_type = ctx.expr_type(ctx.expr(index_expr.base));
     let is_map = matches!(&base_type, IrType::Map(_, _));
     let result_type = ctx.expr_type(expr);
     let dest = ctx.fresh_value(result_type);
@@ -1651,7 +1651,7 @@ fn lower_place_expression<'db>(
                 // As in `lower_collection_index_value`: a get borrows its key,
                 // so anything made to hand it over is dropped on both ways out.
                 let temps_mark = ctx.expr_temps_mark();
-                let key_op = lower_operand(ctx, idx.index)?;
+                let key_op = lower_operand(ctx, ctx.expr(idx.index))?;
                 let is_map = matches!(&base_type, IrType::Map(_, _));
                 let is_tensor = matches!(&base_type, IrType::Tensor(_, _));
 
@@ -1754,7 +1754,7 @@ fn lower_place_as_ref<'db>(
                 let error_mode = idx.error_mode
                     .expect("Place expression index steps always have error mode");
                 let base_type = operand_type(ctx, &current_op);
-                let key_op = lower_operand(ctx, idx.index)?;
+                let key_op = lower_operand(ctx, ctx.expr(idx.index))?;
                 super::stmt::emit_fallible_index_check(ctx, current_op, &base_type, key_op, error_mode, false)?;
                 let dest = super::stmt::emit_collection_element_ref(ctx, current_op, &base_type, key_op);
                 current_op = Operand::ValueRef(dest);
@@ -1818,9 +1818,9 @@ pub(crate) fn field_type_from_base(base_type: &IrType, field_index: u32) -> IrTy
 fn lower_clone_coerce<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    cc_expr: ast::ExprCloneCoerce<'db>,
+    cc_expr: &ast::ExprCloneCoerce,
 ) -> Result<ValueId, LowerError> {
-    let src_type = ctx.expr_type(cc_expr.operand);
+    let src_type = ctx.expr_type(ctx.expr(cc_expr.operand));
     let dest_type = ctx.expr_type(expr);
 
     // Only the temps this operand creates are ours to drop. An enclosing
@@ -1829,7 +1829,7 @@ fn lower_clone_coerce<'db>(
     let expr_temp_mark = ctx.expr_temps_mark();
 
     // Use lower_operand to borrow the operand (@ doesn't consume).
-    let src = lower_operand(ctx, cc_expr.operand)?;
+    let src = lower_operand(ctx, ctx.expr(cc_expr.operand))?;
 
     let dest = ctx.fresh_value(dest_type.clone());
 
@@ -1911,12 +1911,12 @@ fn lower_clone_coerce<'db>(
 fn lower_field_proj<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    proj: ast::ExprFieldProj<'db>,
+    proj: &ast::ExprFieldProj<'db>,
 ) -> Result<ValueId, LowerError> {
     // Lower the base expression.
     let temps_mark = ctx.expr_temps_mark();
-    let base_id = lower_expression(ctx, proj.base)?;
-    let base_type = ctx.expr_type(proj.base);
+    let base_id = lower_expression(ctx, ctx.expr(proj.base))?;
+    let base_type = ctx.expr_type(ctx.expr(proj.base));
 
     // A base that is not a place is a value made here, and reading one field
     // out of it leaves the rest to be let go of: `f().0` takes the number out
@@ -1924,7 +1924,7 @@ fn lower_field_proj<'db>(
     // does not reach this -- `v.a` parses as a place with a field step, which
     // the place walker lowers -- but the guard says so rather than relying on
     // it, because dropping something a binding owns would be worse.
-    if !matches!(proj.base.expr(ctx.db), ExprFunKind::Place(_)) {
+    if !matches!(ctx.expr(proj.base).kind(), ExprFunKind::Place(_)) {
         ctx.record_expr_temp(base_id, base_type.clone());
     }
 
@@ -1998,7 +1998,7 @@ fn widens_to_int(ty: &IrType) -> bool {
 fn lower_tuple_elements<'db>(
     ctx: &mut LowerCtx<'db>,
     expr: ExprFun<'db>,
-    elements: &[ExprFun<'db>],
+    elements: &[ast::ExprId],
 ) -> Result<ValueId, LowerError> {
     ctx.push_pending_scope();
 
@@ -2010,7 +2010,7 @@ fn lower_tuple_elements<'db>(
     };
     let mut fields = Vec::new();
     for (i, e) in elements.iter().enumerate() {
-        let value = lower_expression(ctx, *e)?;
+        let value = lower_expression(ctx, expr.at(*e))?;
         if let Some(elem_ty) = element_types.get(i) {
             ctx.push_pending_intermediate(value, elem_ty);
         }

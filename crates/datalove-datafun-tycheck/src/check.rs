@@ -27,7 +27,7 @@ pub fn check_expr<'db>(
     expected: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
-    let expr_kind = expr.expr(db);
+    let expr_kind = expr.kind();
 
     // See `builds_from_parts`: a borrow of what is built is not a borrow of
     // its parts.
@@ -79,7 +79,7 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::Option(opt)) => {
                     // Check payload against inner type.
                     let expected_inner = Type::Datalit(*opt.inner_type.clone());
-                    check_expr(ctx, some_expr.payload, &expected_inner)?;
+                    check_expr(ctx, ctx.expr(some_expr.payload), &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -96,7 +96,7 @@ pub fn check_expr<'db>(
                 Type::Datalit(datalit::tycheck::Type::Result(res)) => {
                     // Check payload against inner type.
                     let expected_inner = Type::Datalit(*res.inner_type.clone());
-                    check_expr(ctx, ok_expr.payload, &expected_inner)?;
+                    check_expr(ctx, ctx.expr(ok_expr.payload), &expected_inner)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -114,7 +114,7 @@ pub fn check_expr<'db>(
                     // Check payload against Error type.
                     let error_ty = Type::Datalit(datalit::tycheck::Type::Error
                     );
-                    check_expr(ctx, er_expr.payload, &error_ty)?;
+                    check_expr(ctx, ctx.expr(er_expr.payload), &error_ty)?;
                     ctx.store_expr_type(expr, &expected);
                     Ok(())
                 }
@@ -363,13 +363,13 @@ pub fn check_expr<'db>(
             // This is how datalit reads a signed literal, which carries its
             // sign in the token rather than under an operator.
             if let (Type::Datalit(expected_datalit_ty), ExprFunKind::Int(int_expr)) =
-                (expected, unary.operand.expr(db))
+                (expected, expr.at(unary.operand).kind())
             {
                 if is_fixed_int_type(expected) {
                     let negated = format!("-{}", int_expr.value.as_str(db));
                     check_int_fits_type(&negated, expected_datalit_ty)
                         .map_err(|_| ctx.error_literal_out_of_range(expr, false, expected_datalit_ty))?;
-                    ctx.store_expr_type(unary.operand, expected);
+                    ctx.store_expr_type(ctx.expr(unary.operand), expected);
                     ctx.store_expr_type(expr, expected);
                     return Ok(());
                 }
@@ -377,7 +377,7 @@ pub fn check_expr<'db>(
             // A float negates to its own type, so the expected width reaches
             // the operand.
             if is_float_type(expected) {
-                check_expr(ctx, unary.operand, expected)?;
+                check_expr(ctx, ctx.expr(unary.operand), expected)?;
                 ctx.store_expr_type(expr, expected);
                 return Ok(());
             }
@@ -394,11 +394,11 @@ pub fn check_expr<'db>(
         }
 
         // Handle clone/coerce operator (@) - explicit lossless conversion.
-        ExprFunKind::CloneCoerce(ref cc_expr) => {
+        ExprFunKind::CloneCoerce(cc_expr) => {
             // @ borrows its operand, so set ref_context to allow non-copy projections.
             let old_ref_context = ctx.ref_context;
             ctx.ref_context = true;
-            let operand_ty = ctx.synthesize_expr(cc_expr.operand);
+            let operand_ty = ctx.synthesize_expr(ctx.expr(cc_expr.operand));
             ctx.ref_context = old_ref_context;
             let operand_ty = operand_ty?;
 
@@ -415,7 +415,7 @@ pub fn check_expr<'db>(
         }
 
         // Handle binary operations - bidirectional type propagation for arithmetic.
-        ExprFunKind::BinOp(ref binop) => {
+        ExprFunKind::BinOp(binop) => {
             let op = binop.op;
             let is_checked = matches!(op,
                 BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked);
@@ -476,8 +476,8 @@ pub fn check_expr<'db>(
             // dropped, since it describes a path not taken.
             if propagates {
                 let propagated = ctx.try_check(|ctx| {
-                    let lhs_ok = check_expr(ctx, binop.lhs, expected).is_ok();
-                    let rhs_ok = check_expr(ctx, binop.rhs, expected).is_ok();
+                    let lhs_ok = check_expr(ctx, ctx.expr(binop.lhs), expected).is_ok();
+                    let rhs_ok = check_expr(ctx, ctx.expr(binop.rhs), expected).is_ok();
                     (lhs_ok && rhs_ok).then_some(())
                 });
                 if propagated.is_some() {
@@ -498,7 +498,7 @@ pub fn check_expr<'db>(
         }
 
         // Handle atom expressions - check against expected Atom or Enum type.
-        ExprFunKind::Atom(ref atom_expr) => {
+        ExprFunKind::Atom(atom_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Atom(expected_atom)) => {
                     if atom_expr.name == expected_atom.name {
@@ -534,13 +534,13 @@ pub fn check_expr<'db>(
         }
 
         // Handle term expressions - check against expected Term or Enum type.
-        ExprFunKind::Term(ref term_expr) => {
+        ExprFunKind::Term(term_expr) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Term(expected_term)) => {
                     if term_expr.name == expected_term.name {
                         // Check payload against expected payload type.
                         let expected_payload = Type::Datalit(*expected_term.payload.clone());
-                        check_expr(ctx, term_expr.payload, &expected_payload)?;
+                        check_expr(ctx, ctx.expr(term_expr.payload), &expected_payload)?;
                         ctx.store_expr_type(expr, expected);
                         Ok(())
                     } else {
@@ -557,7 +557,7 @@ pub fn check_expr<'db>(
                             match &v.payload {
                                 Some(payload_ty) => {
                                     let expected_payload = Type::Datalit(*payload_ty.clone());
-                                    check_expr(ctx, term_expr.payload, &expected_payload)?;
+                                    check_expr(ctx, ctx.expr(term_expr.payload), &expected_payload)?;
                                     ctx.store_expr_type(expr, expected);
                                     Ok(())
                                 }
@@ -589,17 +589,17 @@ pub fn check_expr<'db>(
         // The hint is what `synthesize` returns for it, and reaching here
         // means something outside already said what the type must be, so
         // agreement between the two is checked where the two meet.
-        ExprFunKind::Hinted(ref hinted) => {
-            check_expr(ctx, hinted.inner, expected)?;
+        ExprFunKind::Hinted(hinted) => {
+            check_expr(ctx, ctx.expr(hinted.inner), expected)?;
             ctx.store_expr_type(expr, expected);
             Ok(())
         }
 
-        ExprFunKind::EnumLiteral(ref enum_lit) => {
+        ExprFunKind::EnumLiteral(enum_lit) => {
             match expected {
                 Type::Datalit(datalit::tycheck::Type::Enum(_)) => {
                     // Check the inner variant expression against the expected enum type.
-                    check_expr(ctx, enum_lit.variant, expected)?;
+                    check_expr(ctx, ctx.expr(enum_lit.variant), expected)?;
                     ctx.store_expr_type(expr, expected);
                     Ok(())
                 }
@@ -649,7 +649,7 @@ pub fn check_expr<'db>(
 /// Check list elements against expected type.
 pub fn check_list_elements<'db>(
     ctx: &mut TypeContext<'db>,
-    elements: &[ExprFun<'db>],
+    elements: &[ExprId],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -665,8 +665,9 @@ pub fn check_list_elements<'db>(
         }
         _ => unreachable!("check_list_elements called with non-list type"),
     };
-    for elem in elements {
-        check_expr(ctx, *elem, &expected_elem_ty)?;
+    for &elem in elements {
+        let elem = ctx.expr(elem);
+        check_expr(ctx, elem, &expected_elem_ty)?;
     }
 
     Ok(())
@@ -675,7 +676,7 @@ pub fn check_list_elements<'db>(
 /// Check set elements against expected type.
 pub fn check_set_elements<'db>(
     ctx: &mut TypeContext<'db>,
-    elements: &[ExprFun<'db>],
+    elements: &[ExprId],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -691,8 +692,9 @@ pub fn check_set_elements<'db>(
         }
         _ => unreachable!("check_set_elements called with non-set type"),
     };
-    for elem in elements {
-        check_expr(ctx, *elem, &expected_elem_ty)?;
+    for &elem in elements {
+        let elem = ctx.expr(elem);
+        check_expr(ctx, elem, &expected_elem_ty)?;
     }
 
     Ok(())
@@ -701,7 +703,7 @@ pub fn check_set_elements<'db>(
 /// Check map entries against expected type.
 pub fn check_map_entries<'db>(
     ctx: &mut TypeContext<'db>,
-    entries: &[ExprMapEntry<'db>],
+    entries: &[ExprMapEntry],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -721,8 +723,8 @@ pub fn check_map_entries<'db>(
         _ => unreachable!("check_map_entries called with non-map type"),
     };
     for entry in entries {
-        check_expr(ctx, entry.key, &expected_key_ty)?;
-        check_expr(ctx, entry.value, &expected_value_ty)?;
+        check_expr(ctx, ctx.expr(entry.key), &expected_key_ty)?;
+        check_expr(ctx, ctx.expr(entry.value), &expected_value_ty)?;
     }
 
     Ok(())
@@ -777,7 +779,7 @@ pub fn check_tensor_shape_and_elements<'db>(
     // Check each element against expected element type.
     let expected_elem = Type::Datalit(*elem_type);
     for elem in elements {
-        check_expr(ctx, *elem, &expected_elem)?;
+        check_expr(ctx, ctx.expr(*elem), &expected_elem)?;
     }
 
     Ok(())
@@ -787,7 +789,7 @@ pub fn check_tensor_shape_and_elements<'db>(
 pub fn check_tuple_elements<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
-    elements: &[ExprFun<'db>],
+    elements: &[ExprId],
     expected_ty: &Type<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -819,7 +821,8 @@ pub fn check_tuple_elements<'db>(
     for (elem, expected_field) in elements.iter().zip(expected_fields.iter()) {
         let expected_elem_ty = Type::Datalit(expected_field.clone(),
         );
-        check_expr(ctx, *elem, &expected_elem_ty)?;
+        let elem = ctx.expr(*elem);
+        check_expr(ctx, elem, &expected_elem_ty)?;
     }
 
     Ok(())
@@ -871,7 +874,7 @@ pub fn check_struct_fields<'db>(
         }
 
         let expected_field_ty = Type::Datalit(*expected_field.ty.clone());
-        check_expr(ctx, field.value, &expected_field_ty)?;
+        check_expr(ctx, ctx.expr(field.value), &expected_field_ty)?;
     }
 
     Ok(())
@@ -883,7 +886,7 @@ pub fn check_table_rows<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
     header: &[bct::text::InternedText<'db>],
-    rows: &[ExprTableRow<'db>],
+    rows: &[ExprTableRow],
     table_ty: &datalit::tycheck::TypeTable<'db>,
 ) -> Result<(), TypeError> {
     let db = ctx.db;
@@ -925,7 +928,7 @@ pub fn check_table_rows<'db>(
 
         for (elem, col) in row.elements.iter().zip(expected_columns.iter()) {
             let expected_col_ty = Type::Datalit(*col.ty.clone());
-            check_expr(ctx, *elem, &expected_col_ty)?;
+            check_expr(ctx, ctx.expr(*elem), &expected_col_ty)?;
         }
     }
 
@@ -941,7 +944,7 @@ pub(crate) fn shape_error<'db>(
     note: Option<&str>,
     error: TypeError,
 ) -> TypeError {
-    let site = crate::ErrorSite::Expr(ExprKey::of(ctx.db, expr));
+    let site = crate::ErrorSite::Expr(expr.key());
     ctx.push_coded(site, "F075", message, S("does not fit the type"), note.map(S));
     error
 }

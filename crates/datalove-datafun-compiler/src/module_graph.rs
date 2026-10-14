@@ -7,7 +7,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 use rmx::std::hash::Hash;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{FunParam, FunSignature, ParsedStatements, StmtFun};
+use datalove_datafun_ast::ast::{Body, ExprArena, FunParam, FunSignature, ParsedStatements, StmtFun};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -193,7 +193,7 @@ fn build_resolved_riders_from_sources<'db>(
 
     let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
     for (module_id, parsed) in statements {
-        for statement in parsed.statements.iter() {
+        for statement in parsed.statements(db).iter() {
             let Statement::Require(StmtRequire::Rider(require)) = statement else {
                 continue;
             };
@@ -242,7 +242,7 @@ fn rider_interfaces<'db>(
         let rider_path = format!("@rider/{}", name);
         let module_id = ModuleId::new(db, rider_path);
         let generic_functions = generic_natives(
-            db, &parse_result.parsed.statements, &collected.functions);
+            db, parse_result.parsed.statements(db), &collected.functions);
         let function_stubs = collected.functions.iter()
             .map(|(func_name, func_type)| {
                 (*func_name, native_stub(db, module_id, *func_name, *func_type, &generic_functions))
@@ -272,7 +272,7 @@ pub fn check_rider_interface<'db>(
     source: bct::input::Source,
 ) -> datalove_datafun_common::CollectedNames<'db> {
     let parse_result = datalove_datafun_parser::parse_rider_interface(db, source);
-    let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
+    let collected = datalove_datafun_resolve::resolve_names_impl(db, parse_result.parsed.statements(db));
     datalove_datafun_tycheck::report_interface_resolution_errors(
         db, &collected, datalove_datafun_parser::parse_result_spans(parse_result));
     collected
@@ -327,7 +327,10 @@ fn native_stub<'db>(
         Some(rider_module_id),
         name,
         FunSignature { type_params, type_bounds, params, return_type: None, inline: false },
-        vec![],
+        Body {
+            statements: vec![],
+            arena: ExprArena { module_id: Some(rider_module_id), fn_name: Some(name), exprs: vec![] },
+        },
         0,
     )
 }

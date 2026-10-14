@@ -13,13 +13,13 @@ use datalove_datalit::parser_util::{self, TextSpan, TokenStream, TokenStreamExt}
 use super::state::Parser;
 
 impl<'db> Parser<'db> {
-    pub(super) fn parse_expr_full(&mut self) -> ast::ExprFun<'db> {
+    pub(super) fn parse_expr_full(&mut self) -> ast::ExprId {
         // Note: span recording now happens in create_expr for each expression.
         self.parse_expr_binop(0)
     }
 
     /// Parse binary operations with precedence climbing algorithm.
-    fn parse_expr_binop(&mut self, min_precedence: u8) -> ast::ExprFun<'db> {
+    fn parse_expr_binop(&mut self, min_precedence: u8) -> ast::ExprId {
         // Track start position for span.
         let start_pos = self.current_byte_pos();
         let text = self.source_text();
@@ -32,7 +32,7 @@ impl<'db> Parser<'db> {
         // worth less than the first: `$-` at the end of a line reported the
         // `$`, then reported an expression missing after the `-` at the top of
         // the file, there being no token left to point at.
-        if matches!(lhs.expr(self.db), ast::ExprFunKind::ParseError(_)) {
+        if matches!(self.expr_kind(lhs), ast::ExprFunKind::ParseError(_)) {
             return lhs;
         }
 
@@ -103,7 +103,7 @@ impl<'db> Parser<'db> {
     /// When an index `[expr]` is followed by `?` or `!` and the base expression
     /// can be decomposed into a root name + field steps, produces
     /// `ExprFunKind::Place` instead of `TryOption(Index(...))`.
-    pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprFun<'db>) -> ast::ExprFun<'db> {
+    pub(super) fn parse_postfix_try_operators(&mut self, mut expr: ast::ExprId) -> ast::ExprId {
         // Where the whole chain begins. A postfix operator's own expression is
         // spanned from the operator, but a call names what it calls from the
         // start: all of `u8.max_value`.
@@ -153,7 +153,7 @@ impl<'db> Parser<'db> {
                             let end_pos = self.last_byte_end();
                             let span = op_span.start..end_pos;
                             // If base is a Place, push Field step directly.
-                            if let ast::ExprFunKind::Place(ref place) = expr.expr(self.db) {
+                            if let ast::ExprFunKind::Place(place) = self.expr_kind(expr) {
                                 let root = place.root;
                                 let mut steps = place.steps.clone();
                                 steps.push(ast::PlaceStep::Field(field));
@@ -201,7 +201,7 @@ impl<'db> Parser<'db> {
                     };
 
                     // If base is a Place, push Index step directly.
-                    if let ast::ExprFunKind::Place(ref place) = expr.expr(self.db) {
+                    if let ast::ExprFunKind::Place(place) = self.expr_kind(expr) {
                         let root = place.root;
                         let mut steps = place.steps.clone();
                         steps.push(ast::PlaceStep::Index(ast::PlaceIndex {
@@ -253,7 +253,7 @@ impl<'db> Parser<'db> {
     /// The only such call is one qualified by a module alias, `u8.max_value()`,
     /// which until the `(` reads as a projection of a field from a value named
     /// `u8`. Nothing else can be called, as no value is a function.
-    fn parse_postfix_call(&mut self, base: ast::ExprFun<'db>, start: usize) -> ast::ExprFun<'db> {
+    fn parse_postfix_call(&mut self, base: ast::ExprId, start: usize) -> ast::ExprId {
         let text = self.source_text();
         let callee_end = self.last_byte_end();
         let (args_iter, open_span) = match self.next() {
@@ -265,7 +265,7 @@ impl<'db> Parser<'db> {
         let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
         let callee = TextSpan::new(text, start..callee_end);
 
-        let qualified = match base.expr(self.db) {
+        let qualified = match self.expr_kind(base) {
             ast::ExprFunKind::Place(place) => match place.steps.as_slice() {
                 [ast::PlaceStep::Field(ast::FieldSelector::Name(name))] => Some((place.root, *name)),
                 _ => None,
@@ -281,16 +281,13 @@ impl<'db> Parser<'db> {
         };
 
         self.record_qualified_call(qualifier, name);
-        let call = ast::ExprFunctionCall::new(
-            self.db,
-            self.module_id(),
-            self.current_fn_name(),
-            self.next_call_index(),
-            Some(qualifier),
+        let call = ast::ExprFunctionCall {
+            local_index: self.next_call_index(),
+            qualifier: Some(qualifier),
             name,
             args,
             arg_modes,
-        );
+        };
         self.create_expr(ast::ExprFunKind::FunctionCall(call), callee)
     }
 
@@ -487,7 +484,7 @@ impl<'db> Parser<'db> {
     /// operator applies to the constructed value, which none of these have,
     /// or that the payload reaches further than it does; either way what was
     /// meant needs parentheses to say.
-    pub(super) fn parse_payload(&mut self) -> ast::ExprFun<'db> {
+    pub(super) fn parse_payload(&mut self) -> ast::ExprId {
         let payload = self.parse_expr_primary();
         let payload = self.parse_postfix_try_operators(payload);
         if self.peek_binop().is_some() {
@@ -505,7 +502,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
         payload
     }
 
-    pub(super) fn parse_expr_primary(&mut self) -> ast::ExprFun<'db> {
+    pub(super) fn parse_expr_primary(&mut self) -> ast::ExprId {
         // Check for unary operators (-, -?, -!, not).
         if let Some(TreeToken::Token(token)) = self.peek() {
             let unary_op = match token.kind {
@@ -723,16 +720,13 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         };
                                         let (args, arg_modes) = self.parse_function_call_args(args_iter, Some((open_span, "in this argument list")));
                                         // For function calls, span should include the parens, but for now just use the name span.
-                                        let call = ast::ExprFunctionCall::new(
-                                            self.db,
-                                            self.module_id(),
-                                            self.current_fn_name(),
-                                            self.next_call_index(),
-                                            None,
+                                        let call = ast::ExprFunctionCall {
+                                            local_index: self.next_call_index(),
+                                            qualifier: None,
                                             name,
                                             args,
                                             arg_modes,
-                                        );
+                                        };
                                         self.create_expr(
                                             ast::ExprFunKind::FunctionCall(call),
                                             ts
@@ -816,7 +810,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
         &mut self,
         iter: Cursor<'db>,
         context: Option<(TextSpan, &'static str)>,
-    ) -> (Vec<ast::ExprFun<'db>>, Vec<Option<ast::ParamMode>>) {
+    ) -> (Vec<ast::ExprId>, Vec<Option<ast::ParamMode>>) {
         let mut sub = self.sub_parser(iter, context);
         let args = sub.parse_comma_separated(|p| {
             let mode = p.parse_arg_mode();
@@ -852,7 +846,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
     /// Parse a datafun tuple: (expr1, expr2, ...).
     ///
     /// Caller must have already peeked and confirmed a `ParenOpen` branch.
-    pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprFun<'db> {
+    pub(super) fn parse_datafun_tuple(&mut self) -> ast::ExprId {
         // Consume the ParenOpen branch and get its contents.
         let (iter, open_span) = match self.next() {
             Some(TreeToken::Branch { sigil: Sigil::ParenOpen, open, inner, .. }) => {

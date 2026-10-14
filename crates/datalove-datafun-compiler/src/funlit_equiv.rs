@@ -35,83 +35,83 @@ pub fn datafun_expr_to_datalit_serde<'db>(
     db: &'db dyn salsa::Database,
     expr: ast::ExprFun<'db>,
 ) -> Result<datalit::ast_serde::ExprFull, ConversionError> {
-    let kind = expr.expr(db);
+    let kind = expr.kind();
 
     // Get type_hint and expr_serde from the expression kind.
     let (type_hint, expr_serde) = match kind {
         ast::ExprFunKind::True(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::True,
         ),
         ast::ExprFunKind::False(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::False,
         ),
         ast::ExprFunKind::None(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::None,
         ),
         ast::ExprFunKind::Int(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Float(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::Float(datalit::ast_serde::ExprFloat {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Hex(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::Hex(datalit::ast_serde::ExprHex {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::String(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::String(datalit::ast_serde::ExprString {
                 value: e.value.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::List(e) => {
             let elements = e.elements.iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::List(datalit::ast_serde::ExprList { elements }),
             )
         }
         ast::ExprFunKind::Set(e) => {
             let elements = e.elements.iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Set(datalit::ast_serde::ExprSet { elements }),
             )
         }
         ast::ExprFunKind::Map(e) => {
             let entries = e.entries.iter()
                 .map(|entry| {
-                    let key = datafun_expr_to_datalit_serde(db, entry.key)?;
-                    let value = datafun_expr_to_datalit_serde(db, entry.value)?;
+                    let key = datafun_expr_to_datalit_serde(db, expr.at(entry.key))?;
+                    let value = datafun_expr_to_datalit_serde(db, expr.at(entry.value))?;
                     Ok(datalit::ast_serde::ExprMapEntry { key, value })
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Map(datalit::ast_serde::ExprMap { entries }),
             )
         }
         ast::ExprFunKind::Tensor(e) => {
             let elements = e.elements.iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Tensor(datalit::ast_serde::ExprTensor {
                     shape: e.shape.C(),
                     elements,
@@ -121,17 +121,17 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         }
         ast::ExprFunKind::AnonTuple(e) => {
             let elements = e.elements.iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::AnonTuple(datalit::ast_serde::ExprAnonTuple { elements }),
             )
         }
         ast::ExprFunKind::AnonStruct(e) => {
             let fields = e.fields.iter()
                 .map(|field| {
-                    let value = datafun_expr_to_datalit_serde(db, field.value)?;
+                    let value = datafun_expr_to_datalit_serde(db, expr.at(field.value))?;
                     Ok(datalit::ast_serde::ExprStructField {
                         name: field.name.as_str(db).S(),
                         value,
@@ -139,66 +139,66 @@ pub fn datafun_expr_to_datalit_serde<'db>(
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::AnonStruct(datalit::ast_serde::ExprAnonStruct { fields }),
             )
         }
 
         ast::ExprFunKind::Some(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
+            let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Some(datalit::ast_serde::ExprSome {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Ok(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
+            let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Ok(datalit::ast_serde::ExprOk {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Er(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
+            let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Er(datalit::ast_serde::ExprEr {
                     payload: Box::new(payload),
                 }),
             )
         }
         ast::ExprFunKind::Data(e) => {
-            let value = datafun_expr_to_datalit_serde(db, e.value)?;
+            let value = datafun_expr_to_datalit_serde(db, expr.at(e.value))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Data(datalit::ast_serde::ExprData {
                     value: Box::new(value),
                 }),
             )
         }
         ast::ExprFunKind::Error(e) => {
-            let value = datafun_expr_to_datalit_serde(db, e.value)?;
+            let value = datafun_expr_to_datalit_serde(db, expr.at(e.value))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Error(datalit::ast_serde::ExprError {
                     value: Box::new(value),
                 }),
             )
         }
         ast::ExprFunKind::Atom(e) => (
-            e.type_hint,
+            e.type_hint.clone(),
             datalit::ast_serde::Expr::Atom(datalit::ast_serde::ExprAtom {
                 name: e.name.as_str(db).S(),
             }),
         ),
         ast::ExprFunKind::Term(e) => {
-            let payload = datafun_expr_to_datalit_serde(db, e.payload)?;
+            let payload = datafun_expr_to_datalit_serde(db, expr.at(e.payload))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Term(datalit::ast_serde::ExprTerm {
                     name: e.name.as_str(db).S(),
                     payload: Box::new(payload),
@@ -206,9 +206,9 @@ pub fn datafun_expr_to_datalit_serde<'db>(
             )
         }
         ast::ExprFunKind::EnumLiteral(e) => {
-            let variant = datafun_expr_to_datalit_serde(db, e.variant)?;
+            let variant = datafun_expr_to_datalit_serde(db, expr.at(e.variant))?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Enum(datalit::ast_serde::ExprEnum {
                     variant: Box::new(variant),
                 }),
@@ -221,13 +221,13 @@ pub fn datafun_expr_to_datalit_serde<'db>(
             let rows = e.rows.iter()
                 .map(|row| {
                     let elements = row.elements.iter()
-                        .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                        .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok(datalit::ast_serde::ExprTableRow { elements })
                 })
                 .collect::<Result<Vec<_>, ConversionError>>()?;
             (
-                e.type_hint,
+                e.type_hint.clone(),
                 datalit::ast_serde::Expr::Table(datalit::ast_serde::ExprTable { header, rows }),
             )
         }
@@ -246,7 +246,7 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         // Datafun Tuple (no type hint) - convert to AnonTuple.
         ast::ExprFunKind::Tuple(e) => {
             let elements = e.elements.iter()
-                .map(|elem| datafun_expr_to_datalit_serde(db, *elem))
+                .map(|elem| datafun_expr_to_datalit_serde(db, expr.at(*elem)))
                 .collect::<Result<Vec<_>, _>>()?;
             (
                 None,
@@ -259,13 +259,13 @@ pub fn datafun_expr_to_datalit_serde<'db>(
             match e.op {
                 ast::UnaryOp::Neg => {
                     // Try to convert -N to a single negative integer.
-                    let operand = e.operand;
-                    match operand.expr(db) {
+                    let operand = expr.at(e.operand);
+                    match operand.kind() {
                         ast::ExprFunKind::Int(int_expr) => {
                             let value_str = int_expr.value.as_str(db);
                             let neg_value = format!("-{}", value_str);
                             (
-                                int_expr.type_hint,
+                                int_expr.type_hint.clone(),
                                 datalit::ast_serde::Expr::Int(datalit::ast_serde::ExprInt {
                                     value: neg_value,
                                 }),
@@ -308,14 +308,14 @@ pub fn datafun_expr_to_datalit_serde<'db>(
         // what they hold has a hint of its own, and otherwise reads them as
         // what they hold.
         ast::ExprFunKind::Hinted(e) => {
-            let inner = datafun_expr_to_datalit_serde(db, e.inner)?;
+            let inner = datafun_expr_to_datalit_serde(db, expr.at(e.inner))?;
             let expr_serde = match inner.type_hint {
                 Some(_) => datalit::ast_serde::Expr::Group(datalit::ast_serde::ExprGroup {
                     inner: Box::new(inner),
                 }),
                 None => inner.expr,
             };
-            (Some(e.type_hint), expr_serde)
+            (Some(e.type_hint.clone()), expr_serde)
         }
         ast::ExprFunKind::Index(_) => {
             return Err(ConversionError::NotPureDatalit("Index".to_string()));
@@ -402,7 +402,7 @@ pub fn datafun_unit_typecheck_to_serde<'db>(
     // Find the type for this expression in expr_types.
     let expr_types = result.expr_types(db);
     let root_type = expr_types
-        .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
+        .get(&expr.key())
         .map(|t| datafun_type_to_serde(db, t));
 
     let errors = result.errors(db).iter()

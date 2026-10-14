@@ -7,7 +7,7 @@
 use rmx::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind};
+use datalove_datafun_ast::ast::{Statement, ExprFun, ExprFunKind, TopLevel};
 use datalove_datafun_ir::{
     IrType, ConstValue, ExportBinding,
     ConstBindingInfo, ConstBindingGraph, ConstStmtId,
@@ -149,7 +149,7 @@ pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
 #[salsa::tracked(returns(clone))]
 pub fn collect_const_graph<'db>(
     db: &'db dyn salsa::Database,
-    statements: Vec<Statement<'db>>,
+    top: TopLevel<'db>,
     typecheck_result: UnitTypecheckResultTracked<'db>,
 ) -> ConstBindingGraph {
     // First pass: collect all const bindings.
@@ -163,16 +163,17 @@ pub fn collect_const_graph<'db>(
     // does not have to go looking for it again.
     let mut binding_exprs = Vec::new();
 
-    for stmt in &statements {
+    let body = top.body(db);
+    for stmt in &body.statements {
         if let Statement::Const(const_stmt) = stmt {
-            let expr = const_stmt.value;
+            let expr = body.arena.get(const_stmt.value);
             // Const statements are numbered in the order they appear.
             let stmt_id = ConstStmtId(bindings.len() as u32);
             let name = const_stmt.name.text(db).to_string();
 
             // Get the type from the typechecker's table.
             let ir_type = expr_types
-                .get(&datalove_datafun_ast::ast::ExprKey::of(db, expr))
+                .get(&expr.key())
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
@@ -220,108 +221,108 @@ fn find_const_refs_inner<'db>(
     name_to_stmt: &HashMap<String, ConstStmtId>,
     refs: &mut Vec<ConstStmtId>,
 ) {
-    match expr.expr(db) {
+    match expr.kind() {
         ExprFunKind::BinOp(binop) => {
-            find_const_refs_inner(db, binop.lhs, const_names, name_to_stmt, refs);
-            find_const_refs_inner(db, binop.rhs, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(binop.lhs), const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(binop.rhs), const_names, name_to_stmt, refs);
         }
         ExprFunKind::UnaryOp(unop) => {
-            find_const_refs_inner(db, unop.operand, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(unop.operand), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Tuple(t) => {
             for elem in &t.elements {
-                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::List(l) => {
             for elem in &l.elements {
-                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::Set(s) => {
             for elem in &s.elements {
-                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::Map(m) => {
             for entry in &m.entries {
-                find_const_refs_inner(db, entry.key, const_names, name_to_stmt, refs);
-                find_const_refs_inner(db, entry.value, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(entry.key), const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(entry.value), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::Tensor(t) => {
             for elem in &t.elements {
-                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::Table(t) => {
             for row in &t.rows {
                 for elem in &row.elements {
-                    find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                    find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
                 }
             }
         }
         ExprFunKind::FunctionCall(call) => {
-            for arg in call.args(db) {
-                find_const_refs_inner(db, *arg, const_names, name_to_stmt, refs);
+            for &arg in &call.args {
+                find_const_refs_inner(db, expr.at(arg), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::IntrinsicCall(call) => {
             for arg in &call.args {
-                find_const_refs_inner(db, *arg, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*arg), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::CloneCoerce(c) => {
-            find_const_refs_inner(db, c.operand, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(c.operand), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Hinted(h) => {
-            find_const_refs_inner(db, h.inner, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(h.inner), const_names, name_to_stmt, refs);
         }
         ExprFunKind::TryOption(t) => {
-            find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(t.operand), const_names, name_to_stmt, refs);
         }
         ExprFunKind::TryResult(t) => {
-            find_const_refs_inner(db, t.operand, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(t.operand), const_names, name_to_stmt, refs);
         }
         ExprFunKind::FieldProj(p) => {
-            find_const_refs_inner(db, p.base, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(p.base), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Some(s) => {
-            find_const_refs_inner(db, s.payload, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(s.payload), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Ok(o) => {
-            find_const_refs_inner(db, o.payload, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(o.payload), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Er(e) => {
-            find_const_refs_inner(db, e.payload, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(e.payload), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Data(d) => {
-            find_const_refs_inner(db, d.value, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(d.value), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Error(e) => {
-            find_const_refs_inner(db, e.value, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(e.value), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Term(t) => {
-            find_const_refs_inner(db, t.payload, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(t.payload), const_names, name_to_stmt, refs);
         }
         ExprFunKind::EnumLiteral(e) => {
-            find_const_refs_inner(db, e.variant, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(e.variant), const_names, name_to_stmt, refs);
         }
         ExprFunKind::Index(i) => {
-            find_const_refs_inner(db, i.base, const_names, name_to_stmt, refs);
-            find_const_refs_inner(db, i.index, const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(i.base), const_names, name_to_stmt, refs);
+            find_const_refs_inner(db, expr.at(i.index), const_names, name_to_stmt, refs);
         }
         ExprFunKind::AnonTuple(t) => {
             for elem in &t.elements {
-                find_const_refs_inner(db, *elem, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(*elem), const_names, name_to_stmt, refs);
             }
         }
         ExprFunKind::AnonStruct(s) => {
             for field in &s.fields {
-                find_const_refs_inner(db, field.value, const_names, name_to_stmt, refs);
+                find_const_refs_inner(db, expr.at(field.value), const_names, name_to_stmt, refs);
             }
         }
-        ExprFunKind::Place(ref place) => {
+        ExprFunKind::Place(place) => {
             // Zero-step Place is a bare variable reference — check for const ref.
             if place.steps.is_empty() {
                 let name_str = place.root.text(db);
@@ -334,7 +335,7 @@ fn find_const_refs_inner<'db>(
             // Walk index sub-expressions for const refs.
             for step in &place.steps {
                 if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-                    find_const_refs_inner(db, idx.index, const_names, name_to_stmt, refs);
+                    find_const_refs_inner(db, expr.at(idx.index), const_names, name_to_stmt, refs);
                 }
             }
         }

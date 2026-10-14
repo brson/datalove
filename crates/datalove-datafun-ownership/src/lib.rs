@@ -43,7 +43,7 @@ use std::collections::{BTreeMap, HashMap};
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
-    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey,
+    ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey, ExprId, ExprArena, Body,
 };
 use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ast::ast::Binding;
@@ -138,6 +138,8 @@ struct AnalysisCtx<'a, 'db> {
     /// Each is frozen for its loop's body: its cursor and its element bindings
     /// point into it.
     walked: Vec<Walked>,
+    /// The expressions of the body being analyzed.
+    arena: Option<&'db ExprArena<'db>>,
 }
 
 /// The root of a collection a `for` walks.
@@ -263,7 +265,13 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             auto_adapt_mode,
             loop_exits: Vec::new(),
             walked: Vec::new(),
+            arena: None,
         }
+    }
+
+    /// The expression at `id` in the body being analyzed.
+    fn expr(&self, id: ExprId) -> ExprFun<'db> {
+        self.arena.expect("an expression is analyzed inside a body").get(id)
     }
 
     /// Report using a name an earlier unit exported without a value.
@@ -567,9 +575,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// What a place is rooted in: the binding of the name it starts from,
     /// or that name, where an earlier script unit made the binding.
     fn place_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
-        match expr.expr(self.db) {
+        match expr.kind() {
             ExprFunKind::Place(place) => Some(self.walked_root(place.root.text(self.db))),
-            ExprFunKind::FieldProj(proj) => self.place_root(proj.base),
+            ExprFunKind::FieldProj(proj) => self.place_root(self.expr(proj.base)),
             _ => None,
         }
     }
@@ -729,7 +737,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Get the type of an expression.
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        self.expr_types.get(&ExprKey::of(self.db, expr))
+        self.expr_types.get(&expr.key())
             .map(|ty| self.ir_type(ty))
             .unwrap_or(IrType::Unit)
     }
@@ -744,7 +752,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// If the expression is a simple name, return its binding ID.
     fn expr_to_binding(&self, expr: ExprFun<'db>) -> Option<BindingId> {
-        if let ExprFunKind::Place(ref place) = expr.expr(self.db) {
+        if let ExprFunKind::Place(place) = expr.kind() {
             if place.steps.is_empty() {
                 let name: &str = place.root.text(self.db).as_ref();
                 return self.name_to_binding.get(name).copied();
@@ -758,7 +766,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Unlike `expr_to_binding` this answers for projections and indexes too:
     /// `a.x` and `a[i]?` are both rooted at `a`.
     fn expr_to_place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
-        if let ExprFunKind::Place(ref place) = expr.expr(self.db) {
+        if let ExprFunKind::Place(place) = expr.kind() {
             let name: &str = place.root.text(self.db).as_ref();
             return self.name_to_binding.get(name).copied();
         }
@@ -780,9 +788,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// otherwise `let` bindings are mutable in fact while immutable by
     /// declaration, and writes through a temporary are silently discarded.
     fn check_mutable_argument(&mut self, arg: ExprFun<'db>) {
-        let expr_key = ExprKey::of(self.db, arg);
+        let expr_key = arg.key();
 
-        let ExprFunKind::Place(place) = arg.expr(self.db) else {
+        let ExprFunKind::Place(place) = arg.kind() else {
             self.errors.push(AnalysisError::CannotMutateTemporary { expr_key });
             return;
         };
@@ -839,7 +847,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     continue;
                 }
                 let name = self.bindings[later_root.0 as usize].name.C();
-                let expr_key = ExprKey::of(self.db, *later);
+                let expr_key = later.key();
                 self.errors.push(AnalysisError::AliasedMutableArgument { expr_key, name });
                 break;
             }
@@ -848,7 +856,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Check if an expression contains early-return operators.
     fn expr_may_early_return(&self, expr: ExprFun<'db>) -> bool {
-        match expr.expr(self.db) {
+        match expr.kind() {
             ExprFunKind::TryOption(_) | ExprFunKind::TryResult(_) => true,
             ExprFunKind::BinOp(binop) => {
                 let op_may_return = matches!(
@@ -857,66 +865,66 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked
                 );
                 op_may_return
-                    || self.expr_may_early_return(binop.lhs)
-                    || self.expr_may_early_return(binop.rhs)
+                    || self.expr_may_early_return(self.expr(binop.lhs))
+                    || self.expr_may_early_return(self.expr(binop.rhs))
             }
             ExprFunKind::UnaryOp(unary) => {
                 let op_may_return = matches!(
                     unary.op,
                     UnaryOp::NegOptional | UnaryOp::NegResult
                 );
-                op_may_return || self.expr_may_early_return(unary.operand)
+                op_may_return || self.expr_may_early_return(self.expr(unary.operand))
             }
             ExprFunKind::FunctionCall(call) => {
-                call.args(self.db).iter().any(|arg| self.expr_may_early_return(*arg))
+                call.args.iter().any(|&arg| self.expr_may_early_return(expr.at(arg)))
             }
             ExprFunKind::Tuple(tuple) => {
-                tuple.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+                tuple.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::List(list) => {
-                list.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+                list.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::Set(set) => {
-                set.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+                set.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::Map(map) => {
                 map.entries.iter().any(|entry| {
-                    self.expr_may_early_return(entry.key)
-                        || self.expr_may_early_return(entry.value)
+                    self.expr_may_early_return(self.expr(entry.key))
+                        || self.expr_may_early_return(self.expr(entry.value))
                 })
             }
             ExprFunKind::Tensor(tensor) => {
-                tensor.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+                tensor.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::Table(table) => {
                 table.rows.iter()
                     .flat_map(|row| &row.elements)
-                    .any(|elem| self.expr_may_early_return(*elem))
+                    .any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::AnonTuple(tuple) => {
-                tuple.elements.iter().any(|elem| self.expr_may_early_return(*elem))
+                tuple.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
             ExprFunKind::AnonStruct(s) => {
-                s.fields.iter().any(|f| self.expr_may_early_return(f.value))
+                s.fields.iter().any(|f| self.expr_may_early_return(self.expr(f.value)))
             }
-            ExprFunKind::Some(s) => self.expr_may_early_return(s.payload),
-            ExprFunKind::Ok(o) => self.expr_may_early_return(o.payload),
-            ExprFunKind::Er(e) => self.expr_may_early_return(e.payload),
-            ExprFunKind::Data(d) => self.expr_may_early_return(d.value),
-            ExprFunKind::Error(e) => self.expr_may_early_return(e.value),
-            ExprFunKind::Term(t) => self.expr_may_early_return(t.payload),
-            ExprFunKind::EnumLiteral(lit) => self.expr_may_early_return(lit.variant),
-            ExprFunKind::FieldProj(proj) => self.expr_may_early_return(proj.base),
-            ExprFunKind::Index(ref idx) => {
-                self.expr_may_early_return(idx.base)
-                    || self.expr_may_early_return(idx.index)
+            ExprFunKind::Some(s) => self.expr_may_early_return(self.expr(s.payload)),
+            ExprFunKind::Ok(o) => self.expr_may_early_return(self.expr(o.payload)),
+            ExprFunKind::Er(e) => self.expr_may_early_return(self.expr(e.payload)),
+            ExprFunKind::Data(d) => self.expr_may_early_return(self.expr(d.value)),
+            ExprFunKind::Error(e) => self.expr_may_early_return(self.expr(e.value)),
+            ExprFunKind::Term(t) => self.expr_may_early_return(self.expr(t.payload)),
+            ExprFunKind::EnumLiteral(lit) => self.expr_may_early_return(self.expr(lit.variant)),
+            ExprFunKind::FieldProj(proj) => self.expr_may_early_return(self.expr(proj.base)),
+            ExprFunKind::Index(idx) => {
+                self.expr_may_early_return(self.expr(idx.base))
+                    || self.expr_may_early_return(self.expr(idx.index))
             }
-            ExprFunKind::Place(ref place) => {
+            ExprFunKind::Place(place) => {
                 // Place expressions with index steps always may early-return.
                 place.steps.iter().any(|s| matches!(s, datalove_datafun_ast::ast::PlaceStep::Index(_)))
             }
-            ExprFunKind::CloneCoerce(cc) => self.expr_may_early_return(cc.operand),
-            ExprFunKind::Hinted(h) => self.expr_may_early_return(h.inner),
+            ExprFunKind::CloneCoerce(cc) => self.expr_may_early_return(self.expr(cc.operand)),
+            ExprFunKind::Hinted(h) => self.expr_may_early_return(self.expr(h.inner)),
             _ => false,
         }
     }
@@ -955,18 +963,17 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     }
 
     fn analyze_expr_moves(&mut self, expr: ExprFun<'db>, is_consumed: bool) -> Option<BindingId> {
-        // Use salsa ID index for span lookup (not the AST sequential local_index).
-        let expr_key = ExprKey::of(self.db, expr);
-        match expr.expr(self.db) {
+        let expr_key = expr.key();
+        match expr.kind() {
             ExprFunKind::BinOp(binop) => {
                 // Binary ops read their operands, not consume them.
-                self.analyze_expr_moves(binop.lhs, false);
-                self.analyze_expr_moves(binop.rhs, false);
+                self.analyze_expr_moves(self.expr(binop.lhs), false);
+                self.analyze_expr_moves(self.expr(binop.rhs), false);
                 None
             }
             ExprFunKind::UnaryOp(unary) => {
                 // Unary ops read their operand, not consume it.
-                self.analyze_expr_moves(unary.operand, false);
+                self.analyze_expr_moves(self.expr(unary.operand), false);
                 None
             }
             ExprFunKind::FunctionCall(call) => {
@@ -974,17 +981,17 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // established that each marker matches the callee's declared
                 // mode, so the call site alone says how each argument is passed.
                 // An absent marker denotes `in`.
-                let callee_modes: Vec<ParamMode> = call.arg_modes(self.db).iter()
+                let callee_modes: Vec<ParamMode> = call.arg_modes.iter()
                     .map(|m| m.unwrap_or(ParamMode::In))
                     .collect();
 
-                let args = call.args(self.db);
+                let args: Vec<ExprFun<'db>> = call.args.iter().map(|&arg| expr.at(arg)).collect();
                 self.check_argument_aliasing(&args, &callee_modes);
 
                 // A const argument is not passed: specialization writes its
                 // value into the callee. So it is not a move, and the argument
                 // is the bare const name the typechecker required.
-                let target = self.call_targets.get(&ExprKey::of_call(self.db, call))
+                let target = self.call_targets.get(&ExprKey::of_call(expr, call))
                     .expect("ownership analysis runs only on a typechecked body, where every call is resolved");
                 let callee_comptime: Vec<bool> = target.func(self.db).params(self.db).iter()
                     .map(|p| p.is_comptime)
@@ -1012,7 +1019,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                                 && !self.auto_adapt_mode.is_enabled()
                             {
                                 let name = self.bindings[binding_id.0 as usize].name.C();
-                                let expr_key = ExprKey::of(self.db, *arg);
+                                let expr_key = arg.key();
                                 let moved_at = self.get_moved_at(binding_id).unwrap_or(expr_key);
                                 let recovery_hint = OwnershipRecoveryHint::InsertAdapt {
                                     description: format!("clone `{}` before the earlier use", name),
@@ -1043,99 +1050,99 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::Tuple(tuple) => {
                 // Tuple elements are consumed.
                 for elem in &tuple.elements {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::TryOption(try_opt) => {
                 // Try operand is consumed.
-                self.analyze_expr_moves(try_opt.operand, true);
+                self.analyze_expr_moves(self.expr(try_opt.operand), true);
                 None
             }
             ExprFunKind::TryResult(try_res) => {
                 // Try operand is consumed.
-                self.analyze_expr_moves(try_res.operand, true);
+                self.analyze_expr_moves(self.expr(try_res.operand), true);
                 None
             }
             ExprFunKind::CloneCoerce(cc) => {
                 // Clone/coerce reads its operand (creates a clone), doesn't consume it.
                 // The original value remains valid after @.
-                self.analyze_expr_moves(cc.operand, false);
+                self.analyze_expr_moves(self.expr(cc.operand), false);
                 None
             }
             ExprFunKind::List(list) => {
                 // List elements are consumed.
                 for elem in &list.elements {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::Set(set) => {
                 // Set elements are consumed.
                 for elem in &set.elements {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::Map(map) => {
                 // Map entries are consumed.
                 for entry in &map.entries {
-                    self.analyze_expr_moves(entry.key, true);
-                    self.analyze_expr_moves(entry.value, true);
+                    self.analyze_expr_moves(self.expr(entry.key), true);
+                    self.analyze_expr_moves(self.expr(entry.value), true);
                 }
                 None
             }
             ExprFunKind::Tensor(tensor) => {
                 // Tensor elements are consumed.
                 for elem in &tensor.elements {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::Table(table) => {
                 // Table cells are consumed, row by row.
                 for elem in table.rows.iter().flat_map(|row| &row.elements) {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::AnonTuple(tuple) => {
                 // Tuple elements are consumed.
                 for elem in &tuple.elements {
-                    self.analyze_expr_moves(*elem, true);
+                    self.analyze_expr_moves(self.expr(*elem), true);
                 }
                 None
             }
             ExprFunKind::AnonStruct(s) => {
                 // Struct fields are consumed.
                 for field in &s.fields {
-                    self.analyze_expr_moves(field.value, true);
+                    self.analyze_expr_moves(self.expr(field.value), true);
                 }
                 None
             }
             ExprFunKind::Some(s) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(s.payload, true);
+                self.analyze_expr_moves(self.expr(s.payload), true);
                 None
             }
             ExprFunKind::Ok(o) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(o.payload, true);
+                self.analyze_expr_moves(self.expr(o.payload), true);
                 None
             }
             ExprFunKind::Er(e) => {
                 // Payload is consumed.
-                self.analyze_expr_moves(e.payload, true);
+                self.analyze_expr_moves(self.expr(e.payload), true);
                 None
             }
             ExprFunKind::Data(d) => {
                 // Value is consumed.
-                self.analyze_expr_moves(d.value, true);
+                self.analyze_expr_moves(self.expr(d.value), true);
                 None
             }
             ExprFunKind::Error(e) => {
                 // Value is consumed.
-                self.analyze_expr_moves(e.value, true);
+                self.analyze_expr_moves(self.expr(e.value), true);
                 None
             }
             ExprFunKind::Term(t) => {
@@ -1143,35 +1150,35 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // a` moves `a` in. Reaching the fallthrough below instead left
                 // the payload unanalyzed, so nothing was marked moved and both
                 // the term and what it was built from were dropped.
-                self.analyze_expr_moves(t.payload, true);
+                self.analyze_expr_moves(self.expr(t.payload), true);
                 None
             }
             ExprFunKind::EnumLiteral(lit) => {
                 // An enum literal is the variant it wraps, checked against the
                 // enum type, and consumes what that consumes.
-                self.analyze_expr_moves(lit.variant, is_consumed);
+                self.analyze_expr_moves(self.expr(lit.variant), is_consumed);
                 None
             }
             ExprFunKind::Hinted(h) => {
                 // A hint says what the expression under it must be and takes
                 // nothing of its own, so the expression moves what it would
                 // have moved written without one.
-                self.analyze_expr_moves(h.inner, is_consumed)
+                self.analyze_expr_moves(self.expr(h.inner), is_consumed)
             }
 
             ExprFunKind::FieldProj(proj) => {
                 // Field projection reads from the base, doesn't consume it.
                 // The base expression may itself consume values (e.g., try operator).
-                self.analyze_expr_moves(proj.base, false);
+                self.analyze_expr_moves(self.expr(proj.base), false);
                 None
             }
-            ExprFunKind::Index(ref idx) => {
+            ExprFunKind::Index(idx) => {
                 // Index borrows base (like field projection), borrows index.
-                self.analyze_expr_moves(idx.base, false);
-                self.analyze_expr_moves(idx.index, false);
+                self.analyze_expr_moves(self.expr(idx.base), false);
+                self.analyze_expr_moves(self.expr(idx.index), false);
                 None
             }
-            ExprFunKind::Place(ref place) => {
+            ExprFunKind::Place(place) => {
                 if place.steps.is_empty() {
                     // Zero-step Place: same as old Name — full move tracking.
                     let root_name = place.root.text(self.db);
@@ -1216,7 +1223,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                     }
                     for step in &place.steps {
                         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-                            self.analyze_expr_moves(idx.index, false);
+                            self.analyze_expr_moves(self.expr(idx.index), false);
                         }
                     }
                     None
@@ -1285,14 +1292,16 @@ pub fn analyze_function_with_mode<'db>(
     }
 
     // Analyze function body.
-    analyze_statements(&mut ctx, func.body(db));
+    let body = func.body(db);
+    ctx.arena = Some(&body.arena);
+    analyze_statements(&mut ctx, &body.statements);
 
     // The end of the body is a return too, and an out parameter has to have
     // been written by every return there is. Only a written `ret` checked, so
     // a body that simply ended -- which for a function returning nothing is
     // the usual way to write one -- promised an out parameter and delivered
     // nothing, and the caller read whatever was in the slot.
-    if datalove_datafun_ast::reachable::body_completes(func.body(db)) {
+    if datalove_datafun_ast::reachable::body_completes(&body.statements) {
         check_out_params_initialized(&mut ctx, None);
     }
 
@@ -1432,10 +1441,10 @@ pub fn analyze_script_statements<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    stmts: &[Statement<'db>],
+    body: &'db Body<'db>,
 ) -> ScriptAnalysis<'db> {
     analyze_script_statements_with_mode(
-        db, expr_types, call_targets, stmts, AutoAdaptMode::Disabled, Vec::new(), Vec::new(),
+        db, expr_types, call_targets, body, AutoAdaptMode::Disabled, Vec::new(), Vec::new(),
     )
 }
 
@@ -1444,7 +1453,7 @@ pub fn analyze_script_statements_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    stmts: &[Statement<'db>],
+    body: &'db Body<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
@@ -1458,7 +1467,8 @@ pub fn analyze_script_statements_with_mode<'db>(
     ctx.enter_scope(ScopeKind::ScriptUnit);
 
     // Analyze statements.
-    analyze_statements(&mut ctx, stmts);
+    ctx.arena = Some(&body.arena);
+    analyze_statements(&mut ctx, &body.statements);
 
     // Collect bindings for UnitEndDrop before exiting scope.
     //
@@ -1549,6 +1559,7 @@ pub fn analyze_expr_with_mode<'db>(
     ctx.enter_scope(ScopeKind::Function);
 
     // Expression result is consumed (it's the unit result).
+    ctx.arena = Some(expr.arena());
     ctx.analyze_expr_moves(expr, true);
 
     // Exit scope. No drops needed since expression result is returned.
@@ -1615,7 +1626,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             }
             Statement::DebugLog(stmt) => {
                 // Debuglog borrows its value, so analyze the expression but don't consume it.
-                ctx.analyze_expr_moves(stmt.value, false);
+                ctx.analyze_expr_moves(ctx.expr(stmt.value), false);
             }
             Statement::TypeAlias(_) => {
                 // Type aliases are resolved at typecheck time; nothing to analyze.
@@ -1630,8 +1641,8 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             }
             Statement::ExprStatement(stmt) => {
                 // Expression statement consumes its args via the function call.
-                let may_early_return = ctx.expr_may_early_return(stmt.expr);
-                ctx.analyze_expr_moves(stmt.expr, true);
+                let may_early_return = ctx.expr_may_early_return(ctx.expr(stmt.expr));
+                ctx.analyze_expr_moves(ctx.expr(stmt.expr), true);
                 if may_early_return {
                     let drops = early_return_drops(ctx, stmt_id);
                     if !drops.is_empty() {
@@ -1648,10 +1659,10 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
 
 fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_idx: usize) {
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(expr);
+    let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
 
     // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(expr, true);
+    ctx.analyze_expr_moves(ctx.expr(expr), true);
 
     // Check for early return operators AFTER analyzing moves.
     // This ensures bindings consumed by the expression itself aren't dropped.
@@ -1662,7 +1673,7 @@ fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_id
         }
     }
 
-    let ty = ctx.expr_type(expr);
+    let ty = ctx.expr_type(ctx.expr(expr));
     alloc_pattern_bindings(ctx, &stmt.binding, ty, false);
 }
 
@@ -1697,10 +1708,10 @@ fn alloc_pattern_bindings<'db>(
 /// Const bindings are lowered as let bindings and need the same ownership tracking.
 fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(expr);
+    let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
 
     // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(expr, true);
+    ctx.analyze_expr_moves(ctx.expr(expr), true);
 
     // Check for early return operators AFTER analyzing moves.
     if may_early_return {
@@ -1713,17 +1724,17 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
     // Create binding for the const. It is dropped at the end of the scope like
     // a let, but is borrowed wherever it is named.
     let name = stmt.name.text(ctx.db).S();
-    let ty = ctx.expr_type(expr);
+    let ty = ctx.expr_type(ctx.expr(expr));
     ctx.alloc_const_binding(name, ty);
 }
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
     if let Some(expr) = stmt.value {
         // Initialized var - analyze the initializer expression.
-        let may_early_return = ctx.expr_may_early_return(expr);
+        let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
 
         // Analyze moves in the expression. The expression result is consumed by the binding.
-        ctx.analyze_expr_moves(expr, true);
+        ctx.analyze_expr_moves(ctx.expr(expr), true);
 
         // Check for early return operators AFTER analyzing moves.
         if may_early_return {
@@ -1734,7 +1745,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
         }
 
         // Create a binding for each name the var binds, each its own slot.
-        let ty = ctx.expr_type(expr);
+        let ty = ctx.expr_type(ctx.expr(expr));
         alloc_pattern_bindings(ctx, &stmt.binding, ty, true);
     } else {
         let name = stmt.binding.as_name()
@@ -1756,7 +1767,7 @@ fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_id
 
 fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_idx: usize) {
     let place = &stmt.target;
-    let expr = stmt.value;
+    let expr = ctx.expr(stmt.value);
     let compound = stmt.op.is_some();
 
     // Assigning to a collection a `for` walks, or to any part of it, would
@@ -1775,7 +1786,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     let mut keys_may_early_return = false;
     for step in &place.steps {
         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-            keys_may_early_return |= ctx.expr_may_early_return(idx.index);
+            keys_may_early_return |= ctx.expr_may_early_return(ctx.expr(idx.index));
         }
     }
 
@@ -1794,7 +1805,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
 
     for step in &place.steps {
         if let datalove_datafun_ast::ast::PlaceStep::Index(idx) = step {
-            ctx.analyze_expr_moves(idx.index, idx.error_mode.is_none());
+            ctx.analyze_expr_moves(ctx.expr(idx.index), idx.error_mode.is_none());
         }
     }
 
@@ -1804,7 +1815,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     if compound {
         check_compound_target_readable(ctx, stmt);
     } else if !place.steps.is_empty() {
-        let expr_key = ExprKey::of(ctx.db, expr);
+        let expr_key = expr.key();
         if let Some(id) = ctx.lookup(place.root.text(ctx.db)) {
             ctx.check_not_moved(id, expr_key);
         }
@@ -1829,7 +1840,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         if let Some(id) = ctx.lookup(name) {
             ctx.set_state(id, BindingState::Live);
             if let Some(frame) = ctx.scope_stack.last_mut() {
-                frame.assigned_at.insert(id, ExprKey::of(ctx.db, expr));
+                frame.assigned_at.insert(id, expr.key());
             }
             if ctx.get_out_param_init(id).is_some() {
                 ctx.set_out_param_init(id, OutParamInitState::Initialized);
@@ -1843,7 +1854,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
         if let Some(id) = ctx.lookup(root_name) {
             if ctx.get_out_param_init(id) == Some(OutParamInitState::Uninitialized) {
                 ctx.errors.push(AnalysisError::OutParamPartialWrite {
-                    expr_key: ExprKey::of(ctx.db, stmt.value),
+                    expr_key: ctx.expr(stmt.value).key(),
                     name: root_name.to_string(),
                 });
             }
@@ -1856,7 +1867,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
 /// The errors point at the value, the nearest thing the statement has to an
 /// expression of its own.
 fn check_compound_target_readable<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>) {
-    let expr_key = ExprKey::of(ctx.db, stmt.value);
+    let expr_key = ctx.expr(stmt.value).key();
     let root_name = stmt.target.root.text(ctx.db);
     let Some(id) = ctx.lookup(root_name) else {
         ctx.check_dead_external(root_name, expr_key);
@@ -1911,17 +1922,17 @@ fn early_return_drops<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt_idx: usize) -> V
     ctx.live_bindings_for_return()
 }
 
-fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet<'db>, stmt_idx: usize) {
+fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx: usize) {
     // Check that all Out params are initialized before return.
     check_out_params_initialized(ctx, Some(stmt_idx));
 
     let may_early_return = stmt.value
-        .map(|expr| ctx.expr_may_early_return(expr))
+        .map(|expr| ctx.expr_may_early_return(ctx.expr(expr)))
         .unwrap_or(false);
 
     // Analyze moves in return value if any. The return value is consumed.
     if let Some(expr) = stmt.value {
-        ctx.analyze_expr_moves(expr, true);
+        ctx.analyze_expr_moves(ctx.expr(expr), true);
     }
 
     // Check for early return operators AFTER analyzing moves.
@@ -1949,8 +1960,8 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // Analyze condition. For regular bool conditions, it's just read.
     // For Option/Result conditions with bindings, it's consumed by the destructure.
     let has_binding = stmt.then_binding.is_some();
-    let condition_may_leave = ctx.expr_may_early_return(stmt.condition);
-    ctx.analyze_expr_moves(stmt.condition, has_binding);
+    let condition_may_leave = ctx.expr_may_early_return(ctx.expr(stmt.condition));
+    ctx.analyze_expr_moves(ctx.expr(stmt.condition), has_binding);
 
     // A condition can leave the function before either branch is reached -- a
     // `?` in it, or a checked overflow -- and what the function still owns has
@@ -1980,7 +1991,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // If there's a then-binding (if-let), create it.
     if let Some(binding_name) = stmt.then_binding {
         let name = binding_name.text(ctx.db).S();
-        let ty = ctx.expr_type(stmt.condition);
+        let ty = ctx.expr_type(ctx.expr(stmt.condition));
         // The binding type depends on the condition type (unwrap Option/Result).
         let inner_ty = match &ty {
             IrType::Option(inner) => (**inner).C(),
@@ -2064,7 +2075,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     // clauses anyone writes.
     if !then_leaves && !else_leaves {
         let else_end = else_end.as_ref().unwrap_or(&before);
-        let at = ExprKey::of(ctx.db, stmt.condition);
+        let at = ctx.expr(stmt.condition).key();
         check_branches_agree(ctx, stmt_idx, at, &before, &[&then_end, else_end]);
     }
 
@@ -2182,8 +2193,8 @@ fn check_branches_agree<'db>(
 fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
     // Match consumes its input, which can leave the function before any arm
     // is reached.
-    let input_may_leave = ctx.expr_may_early_return(stmt.input);
-    ctx.analyze_expr_moves(stmt.input, true);
+    let input_may_leave = ctx.expr_may_early_return(ctx.expr(stmt.input));
+    ctx.analyze_expr_moves(ctx.expr(stmt.input), true);
     if input_may_leave {
         let drops = early_return_drops(ctx, stmt_idx);
         if !drops.is_empty() {
@@ -2216,7 +2227,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
             let name = binding.text(ctx.db).S();
             // Get payload type from the input expr type's enum variant.
             // For now, use a placeholder - the typechecker has validated it.
-            let input_ty = ctx.expr_type(stmt.input);
+            let input_ty = ctx.expr_type(ctx.expr(stmt.input));
             let variant_name = match &case.kind {
                 MatchCaseKind::Term { name, .. } => name.text(ctx.db).to_string(),
                 _ => unreachable!(),
@@ -2277,7 +2288,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         .map(|(end, _)| end)
         .collect();
 
-    let at = ExprKey::of(ctx.db, stmt.input);
+    let at = ctx.expr(stmt.input).key();
     check_branches_agree(ctx, stmt_idx, at, &before, &merging);
 
     // Update state after match convergence. With every arm leaving, nothing
@@ -2311,7 +2322,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
     // where the subtraction goes under -- so what the function still owns has
     // to go with it. Nothing was dropped on that way out.
     if let Some(condition) = stmt.condition {
-        analyze_read_before_loop(ctx, condition, stmt_idx);
+        analyze_read_before_loop(ctx, ctx.expr(condition), stmt_idx);
     }
 
     let entry = LoopEntry::of(ctx);
@@ -2342,17 +2353,17 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     // The collection is read, as a `ref` argument is, and an element step on
     // the way to it -- `for x in ref xss[i]?` -- can leave the function before
     // the walk starts.
-    analyze_read_before_loop(ctx, stmt.iteratee, stmt_idx);
+    analyze_read_before_loop(ctx, ctx.expr(stmt.iteratee), stmt_idx);
 
     // What the walk freezes, found before the loop's own names can shadow
     // it: in `for xs in ref xs`, it is the outer `xs`.
-    let walked = ctx.place_root(stmt.iteratee);
+    let walked = ctx.place_root(ctx.expr(stmt.iteratee));
 
     let entry = LoopEntry::of(ctx);
     ctx.loop_exits.push(LoopExits::default());
     ctx.enter_scope(ScopeKind::Loop);
 
-    let coll_ty = ctx.expr_type(stmt.iteratee);
+    let coll_ty = ctx.expr_type(ctx.expr(stmt.iteratee));
     let elem_ty = CursorKind::elem_type(&coll_ty);
     let binding_types = match (&coll_ty, stmt.bindings.len()) {
         (IrType::Map(_, value), 2) => vec![(elem_ty, true), ((**value).C(), true)],

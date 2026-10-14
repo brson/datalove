@@ -154,7 +154,7 @@ impl StmtKey {
             Statement::Match(_) => (15, None),
             Statement::NativeFun(_) => (16, None),
             Statement::ExprStatement(_) => (17, None),
-            Statement::For(s) => (18, Some(s.iteratee.local_index(db))),
+            Statement::For(s) => (18, Some(s.iteratee.0)),
         };
         Self { kind, local_index }
     }

@@ -6,7 +6,7 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{Statement, StmtFun};
+use datalove_datafun_ast::ast::{ParsedExpr, Statement, StmtFun, TopLevel};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -113,18 +113,19 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
 
 /// Analyze ownership for a script fragment unit.
 ///
-/// Memoized: if typecheck_result, statements, and auto_adapt_mode match a previous call,
-/// returns the cached result.
+/// Memoized: if typecheck_result, the unit's statements, and auto_adapt_mode
+/// match a previous call, returns the cached result.
 #[salsa::tracked(returns(copy))]
 pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
-    statements: Vec<Statement<'db>>,
+    top: TopLevel<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     let expr_types = typecheck_result.expr_types(db);
+    let body = top.body(db);
 
     // Build map of function name -> resolved param types for type alias support.
     let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
@@ -134,7 +135,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze functions in this unit for ownership.
     let func_analyses_result = ownership_analysis::analyze_script_functions_with_mode(
-        db, expr_types, typecheck_result.call_targets(db), &statements, Some(&func_param_types),
+        db, expr_types, typecheck_result.call_targets(db), &body.statements, Some(&func_param_types),
         auto_adapt_mode,
     );
 
@@ -161,7 +162,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_mode(
-        db, expr_types, typecheck_result.call_targets(db), &statements, auto_adapt_mode,
+        db, expr_types, typecheck_result.call_targets(db), body, auto_adapt_mode,
         dead_externals, external_consts,
     );
 
@@ -223,7 +224,7 @@ pub fn analyze_script_fragment_tracked<'db>(
 pub fn analyze_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
-    expr: datalove_datafun_ast::ast::ExprFun<'db>,
+    parsed: ParsedExpr<'db>,
     auto_adapt_mode: AutoAdaptMode,
     dead_externals: Vec<String>,
     external_consts: Vec<String>,
@@ -231,7 +232,7 @@ pub fn analyze_script_expr_tracked<'db>(
     let expr_types = typecheck_result.expr_types(db);
 
     let analysis = ownership_analysis::analyze_expr_with_mode(
-        db, expr, expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
+        db, parsed.expr(db), expr_types, typecheck_result.call_targets(db), auto_adapt_mode,
         dead_externals, external_consts,
     );
 

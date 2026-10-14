@@ -105,10 +105,12 @@ fn parse_bracer_expr<'db>(
 ) -> ast::ParsedExpr<'db> {
     // Expressions don't have module context.
     let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
-    let expr = parser.parse_expr_full();
+    let root = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     let qualified_calls = each_once(parser.take_qualified_calls());
-    ast::ParsedExpr { expr, qualified_calls }
+    let arena = ast::ExprArena { module_id: None, fn_name: None, exprs: parser.take_exprs() };
+    let top = ast::TopLevel::new(db, ast::Body { statements: vec![], arena });
+    ast::ParsedExpr { top, root, qualified_calls }
 }
 
 /// Qualified calls as written, each pair kept at its first appearance.
@@ -146,9 +148,9 @@ fn parse_bracer<'db>(
     // Split into lines. A line break inside balanced braces is not one here,
     // since the bracer has already put it inside a branch.
     let lines = split::Lines::new(bracer.iter(db));
-    let (statements, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id, top_level);
+    let (body, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id, top_level);
     let parsed = ast::ParsedStatements {
-        statements: std::sync::Arc::new(statements),
+        top: ast::TopLevel::new(db, body),
         qualified_calls: each_once(qualified_calls),
     };
     ast::ParseResult {
@@ -189,8 +191,9 @@ fn parse_statements<'db>(
     source_text: bct::input::Source,
     module_id: Option<ModuleId<'db>>,
     top_level: TopLevel,
-) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
+) -> (ast::Body<'db>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
     let mut statements = vec![];
+    let mut exprs = vec![];
     let mut qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)> = vec![];
     let mut all_expr_spans = vec![];
     let mut all_break_spans = vec![];
@@ -215,6 +218,7 @@ fn parse_statements<'db>(
         let statement = parser.parse_statement(&mut line_iter);
         counters = parser.script_counters();
         statements.push(statement);
+        exprs.extend(parser.take_exprs());
         all_expr_spans.extend(parser.take_expr_spans());
         all_break_spans.extend(parser.take_break_spans());
         all_continue_spans.extend(parser.take_continue_spans());
@@ -240,7 +244,12 @@ fn parse_statements<'db>(
         require_spans: all_require_spans,
         alias_spans: all_alias_spans,
     };
-    (statements, spans, qualified_calls)
+    debug_assert_eq!(exprs.len(), counters.expr as usize);
+    let body = ast::Body {
+        statements,
+        arena: ast::ExprArena { module_id, fn_name: None, exprs },
+    };
+    (body, spans, qualified_calls)
 }
 
 /// Tracked wrapper for parser tests that only need the ParsedStatements.

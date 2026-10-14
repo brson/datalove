@@ -52,6 +52,8 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         data_files,
     );
 
+    ctx.arena = Some(expr.arena());
+
     // Pre-populate const bindings from previously resolved values.
     ctx.const_bindings = resolved_consts.clone();
 
@@ -163,7 +165,7 @@ pub fn lower_const_binding<'db>(
     }
 
     // Check for const references - substitute with already-evaluated values.
-    if let ExprFunKind::Place(ref place) = expr.expr(db) {
+    if let ExprFunKind::Place(place) = expr.kind() {
         if place.steps.is_empty() {
             let name_str = place.root.text(db);
             if let Some((_, value)) = resolved_consts.get(name_str) {
@@ -195,7 +197,7 @@ pub fn try_extract_literal<'db>(
     ir_type: &IrType,
     data_files: &DataFiles,
 ) -> Option<Arc<ConstValue>> {
-    let value = match expr.expr(db) {
+    let value = match expr.kind() {
         ExprFunKind::DataFile(file) => {
             let source = *data_files.get(&file.path(db))
                 .expect("the typechecker found the data file");

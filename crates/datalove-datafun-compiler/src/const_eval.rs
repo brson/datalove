@@ -11,7 +11,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 
-use datalove_datafun_ast::ast::{ExprFun, ExprFunKind, ExprKey, Statement, StmtFun};
+use datalove_datafun_ast::ast::{Body, ExprFun, ExprFunKind, Statement, StmtFun};
 use datalove_datafun_const::evaluate_const_unit;
 use datalove_datafun_ir::{
     CodeRef, ConstValue, CtfeError, CtfeEvaluator, FuncId, IrCodeUnit, IrType,
@@ -92,19 +92,20 @@ impl fmt::Display for NamedConstError {
 /// check has no value, as an evaluated one would not.
 pub fn data_consts<'db>(
     db: &'db dyn salsa::Database,
-    statements: &[Statement<'db>],
+    body: &'db Body<'db>,
     expr_types: &ExprTypes<'db>,
     data_files: &lower::DataFiles,
 ) -> HashMap<String, (IrType, Arc<ConstValue>)> {
-    statements.iter()
+    body.statements.iter()
         .filter_map(|statement| {
             let Statement::Const(binding) = statement else { return None };
-            if !matches!(binding.value.expr(db), ExprFunKind::DataFile(_)) {
+            let value = body.arena.get(binding.value);
+            if !matches!(value.kind(), ExprFunKind::DataFile(_)) {
                 return None;
             }
-            let ty = expr_types.get(&ExprKey::of(db, binding.value))?;
+            let ty = expr_types.get(&value.key())?;
             let ty = IrType::from_tycheck(db, ty);
-            let value = lower::try_extract_literal(db, binding.value, &ty, data_files)
+            let value = lower::try_extract_literal(db, value, &ty, data_files)
                 .expect("a data file is a literal");
             Some((binding.name.text(db).to_owned(), (ty, value)))
         })
@@ -113,7 +114,7 @@ pub fn data_consts<'db>(
 
 /// The type the typechecker gave a const's initializer.
 pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> Result<IrType, ConstError> {
-    env.expr_types.get(&ExprKey::of(env.db, init))
+    env.expr_types.get(&init.key())
         .map(|ty| IrType::from_tycheck(env.db, ty))
         .ok_or(ConstError::MissingType)
 }
@@ -180,11 +181,13 @@ pub fn evaluate_body_consts<'db>(
     let func_return_type = func_stmt.return_type(db).map(|ty| IrType::from_type_hint(db, &ty));
     let mut consts = Vec::new();
     let mut errors = Vec::new();
-    for stmt in func_stmt.body(db).iter() {
+    let body = func_stmt.body(db);
+    for stmt in &body.statements {
         let Statement::Const(const_stmt) = stmt else { continue };
         let name = const_stmt.name.text(db).to_string();
-        let evaluated = const_type(env, const_stmt.value).and_then(|ty| {
-            evaluate_const(env, const_stmt.value, &ty, &scope, func_return_type.clone(), &deferred)
+        let value = body.arena.get(const_stmt.value);
+        let evaluated = const_type(env, value).and_then(|ty| {
+            evaluate_const(env, value, &ty, &scope, func_return_type.clone(), &deferred)
                 .map(|value| value.map(|value| (ty, value)))
         });
         match evaluated {

@@ -179,7 +179,7 @@ fn unordered_binding_error<'db>(
     let fun = ctx.enclosing_fun
         .expect("a type parameter is only in scope inside a function body");
     let site = match at {
-        Some(value) => crate::ErrorSite::Expr(ExprKey::of(db, value)),
+        Some(value) => crate::ErrorSite::Expr(value.key()),
         None => crate::ErrorSite::Fun(fun.local_index(db)),
     };
     let param = param.as_str(db);
@@ -207,13 +207,13 @@ pub fn check_statement<'db>(
 
     match statement {
         Statement::Let(stmt) => {
-            check_variable_decl(ctx, &stmt.binding, stmt.value, stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &stmt.binding, ctx.expr(stmt.value), stmt.type_hint.clone(), false);
         }
 
         Statement::Var(stmt) => {
             match stmt.value {
                 Some(value) => {
-                    check_variable_decl(ctx, &stmt.binding, value, stmt.type_hint.clone(), true);
+                    check_variable_decl(ctx, &stmt.binding, ctx.expr(value), stmt.type_hint.clone(), true);
                 }
                 None => {
                     // Uninitialized var - type hint is required (parser enforces this).
@@ -258,7 +258,7 @@ pub fn check_statement<'db>(
             }
 
             // Walk the place steps to determine the target type.
-            match typecheck_place_for_set(ctx, stmt, place, value) {
+            match typecheck_place_for_set(ctx, stmt, place, ctx.expr(value)) {
                 Ok(()) => {}
                 Err(e) => ctx.add_error(e),
             }
@@ -380,9 +380,11 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             ctx.is_void_function = stmt.return_type(db).is_none();
 
             // Check function body.
-            for stmt in body {
+            let saved_arena = ctx.arena.replace(&body.arena);
+            for stmt in &body.statements {
                 check_statement(ctx, stmt);
             }
+            ctx.arena = saved_arena;
 
             // A function that owes a value has to have returned one by every
             // way out, and the end of the body is a way out. Lowering adds the
@@ -390,7 +392,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // handed the caller a zeroed value of the return type: `0` for an
             // integer, and for a string a null buffer that prints as empty.
             if stmt.return_type(db).is_some()
-                && datalove_datafun_ast::reachable::body_completes(body)
+                && datalove_datafun_ast::reachable::body_completes(&body.statements)
             {
                 ctx.report_missing_return(stmt.local_index(db), name);
             }
@@ -419,7 +421,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                         ctx.add_error(err);
                     } else {
                         // Non-void function with value - check type.
-                        if let Err(e) = check_expr(ctx, value, &expected_ret_ty) {
+                        if let Err(e) = check_expr(ctx, ctx.expr(value), &expected_ret_ty) {
                             ctx.add_error(e);
                         }
                     }
@@ -459,7 +461,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // If there's a binding, this is destructuring syntax.
             if let Some(binding_name) = then_binding {
                 // Synthesize the condition type.
-                let condition_ty = match ctx.synthesize_expr(condition) {
+                let condition_ty = match ctx.synthesize_expr(ctx.expr(condition)) {
                     Ok(ty) => ty,
                     Err(e) => {
                         ctx.add_error(e);
@@ -475,7 +477,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     Type::Datalit(datalit::tycheck::Type::Result(ref res)) => {
                         // F046: Result destructuring requires error-binding else branch.
                         if else_body.is_none() || else_binding.is_none() {
-                            let err = ctx.error_result_requires_binding(condition);
+                            let err = ctx.error_result_requires_binding(ctx.expr(condition));
                             ctx.add_error(err);
                             return;
                         }
@@ -484,7 +486,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     _ => {
                         // F016: only an option or a result has a value to bind.
                         let err = ctx.error_type_mismatch(
-                            condition,
+                            ctx.expr(condition),
                             "Option or Result",
                             &type_to_string(db, &condition_ty),
                             "expected Option or Result type for destructuring"
@@ -514,7 +516,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                             } else {
                                 let actual_type = type_to_string(db, &condition_ty);
                                 let err = ctx.error_type_mismatch(
-                                    condition,
+                                    ctx.expr(condition),
                                     "Result",
                                     &actual_type,
                                     "else binding requires Result type"
@@ -533,7 +535,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 let bool_type = Type::Datalit(datalit::tycheck::Type::Bool,
                 );
 
-                if let Err(e) = check_expr(ctx, condition, &bool_type) {
+                if let Err(e) = check_expr(ctx, ctx.expr(condition), &bool_type) {
                     ctx.add_error(e);
                 }
 
@@ -563,7 +565,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             if let Some(condition) = stmt.condition {
                 let bool_type = Type::Datalit(datalit::tycheck::Type::Bool,
                 );
-                if let Err(e) = check_expr(ctx, condition, &bool_type) {
+                if let Err(e) = check_expr(ctx, ctx.expr(condition), &bool_type) {
                     ctx.add_error(e);
                 }
             }
@@ -600,7 +602,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // Set ref_context since debuglog borrows its argument (doesn't consume).
             let old_ref_context = ctx.ref_context;
             ctx.ref_context = true;
-            if let Err(e) = ctx.synthesize_expr(value) {
+            if let Err(e) = ctx.synthesize_expr(ctx.expr(value)) {
                 ctx.add_error(e);
             }
             ctx.ref_context = old_ref_context;
@@ -627,7 +629,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // during lowering.
             let saved_in_const_expr = ctx.in_const_expr;
             ctx.in_const_expr = true;
-            check_variable_decl(ctx, &Binding::Name(stmt.name), stmt.value, stmt.type_hint.clone(), false);
+            check_variable_decl(ctx, &Binding::Name(stmt.name), ctx.expr(stmt.value), stmt.type_hint.clone(), false);
             ctx.in_const_expr = saved_in_const_expr;
             // Track this as a const binding for comptime arg validation.
             ctx.add_const_binding(stmt.name);
@@ -635,7 +637,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
 
         Statement::Match(stmt) => {
             // Synthesize input type - must be Enum.
-            let input_ty = match ctx.synthesize_expr(stmt.input) {
+            let input_ty = match ctx.synthesize_expr(ctx.expr(stmt.input)) {
                 Ok(ty) => ty,
                 Err(e) => {
                     ctx.add_error(e);
@@ -648,7 +650,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 _ => {
                     let actual_str = type_to_string(db, &input_ty);
                     let err = ctx.error_type_mismatch(
-                        stmt.input,
+                        ctx.expr(stmt.input),
                         "enum",
                         &actual_str,
                         "match input must be an enum type"
@@ -670,7 +672,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 // Check for duplicate case.
                 if covered.iter().any(|n| *n == variant_name) {
                     let err = ctx.error_type_mismatch(
-                        stmt.input,
+                        ctx.expr(stmt.input),
                         "unique case",
                         &format!("duplicate case '{}'", variant_name.as_str(db)),
                         "duplicate match case"
@@ -685,7 +687,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     (MatchCaseKind::Atom { name }, Some(v)) => {
                         if v.payload.is_some() {
                             let err = ctx.error_type_mismatch(
-                                stmt.input,
+                                ctx.expr(stmt.input),
                                 "atom case",
                                 &format!("variant '{}' has a payload", name.as_str(db)),
                                 "use 'case term' to destructure payload"
@@ -709,7 +711,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                             }
                             None => {
                                 let err = ctx.error_type_mismatch(
-                                    stmt.input,
+                                    ctx.expr(stmt.input),
                                     "term case",
                                     &format!("variant '{}' has no payload", name.as_str(db)),
                                     "use 'case atom' for payloadless variants"
@@ -721,7 +723,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     }
                     (_, None) => {
                         let err = ctx.error_type_mismatch(
-                            stmt.input,
+                            ctx.expr(stmt.input),
                             "valid variant",
                             &format!("unknown variant '{}'", variant_name.as_str(db)),
                             "variant not found in enum type"
@@ -754,7 +756,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                     .collect();
                 if !uncovered.is_empty() {
                     let err = ctx.error_type_mismatch(
-                        stmt.input,
+                        ctx.expr(stmt.input),
                         "exhaustive match",
                         &format!("missing variants: {}", uncovered.join(", ")),
                         "non-exhaustive match"
@@ -767,12 +769,12 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
         Statement::ExprStatement(stmt) => {
             let expr = stmt.expr;
             let unit_type = Type::Datalit(datalit::tycheck::unit_type());
-            match ctx.synthesize_expr(expr) {
+            match ctx.synthesize_expr(ctx.expr(expr)) {
                 Ok(ty) => {
                     if ty != unit_type {
                         let actual_str = type_to_string(db, &ty);
                         let err = ctx.error_type_mismatch(
-                            expr,
+                            ctx.expr(expr),
                             "unit",
                             &actual_str,
                             "function call statement must return unit"
@@ -923,12 +925,12 @@ fn typecheck_index_step<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtSet<'db>,
     base_ty: &Type<'db>,
-    idx: &PlaceIndex<'db>,
+    idx: &PlaceIndex,
 ) -> Result<Type<'db>, TypeError> {
     let (element_ty, index_type) = crate::synthesize::resolve_index_types(ctx.db, base_ty)
         .map_err(|msg| report_unindexable(ctx, stmt, msg))?;
 
-    if let Err(e) = check_expr(ctx, idx.index, &index_type) {
+    if let Err(e) = check_expr(ctx, ctx.expr(idx.index), &index_type) {
         ctx.add_error(e);
     }
 
@@ -940,7 +942,7 @@ fn typecheck_set_index<'db>(
     ctx: &mut TypeContext<'db>,
     stmt: &StmtSet<'db>,
     base_ty: &Type<'db>,
-    idx_step: &PlaceIndex<'db>,
+    idx_step: &PlaceIndex,
     value: ExprFun<'db>,
 ) {
     let db = ctx.db;
@@ -963,7 +965,7 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
                 Type::Datalit(datalit::tycheck::Type::Map(map)) => {
                     let key_type = Type::Datalit(*map.key_type.clone());
                     let value_type = Type::Datalit(*map.value_type.clone());
-                    if let Err(e) = check_expr(ctx, idx_step.index, &key_type) {
+                    if let Err(e) = check_expr(ctx, ctx.expr(idx_step.index), &key_type) {
                         ctx.add_error(e);
                     }
                     if let Err(e) = check_expr(ctx, value, &value_type) {
@@ -1001,7 +1003,7 @@ Write `[k]?` or `[k]!` to update an element that is already there."),
                 ctx.add_error(err);
                 return;
             }
-            if let Err(e) = check_expr(ctx, idx_step.index, &index_type) {
+            if let Err(e) = check_expr(ctx, ctx.expr(idx_step.index), &index_type) {
                 ctx.add_error(e);
             }
             check_set_value(ctx, stmt, value, &element_ty);
@@ -1075,14 +1077,14 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
     let db = ctx.db;
     let iteratee = stmt.iteratee;
     let coded = |ctx: &mut TypeContext<'db>, message: String, label: &str| {
-        let site = crate::ErrorSite::Expr(crate::ExprKey::of(db, iteratee));
+        let site = crate::ErrorSite::Expr(ctx.expr(iteratee).key());
         ctx.push_coded(site, "F087", message.C(), label.S(), None);
         ctx.add_error(datalove_datafun_common::TypeError::ForWalk { message });
     };
 
     // A temporary would have to live to the loop's end and be dropped on
     // every way out of it, `ret` and `?` included; nothing wants that yet.
-    if !is_place(db, iteratee) {
+    if !is_place(db, ctx.expr(iteratee)) {
         coded(ctx, S("a `for` walks a collection that is already somewhere"),
             "name a variable, a parameter, or a field or element of one");
         return;
@@ -1090,7 +1092,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
 
     let old_ref_context = ctx.ref_context;
     ctx.ref_context = true;
-    let iteratee_ty = ctx.synthesize_expr(iteratee);
+    let iteratee_ty = ctx.synthesize_expr(ctx.expr(iteratee));
     ctx.ref_context = old_ref_context;
     let iteratee_ty = match iteratee_ty {
         Ok(ty) => ty,
@@ -1158,9 +1160,9 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
 /// field or element steps, or a field of one. A field of anything else is a
 /// field of a temporary.
 fn is_place<'db>(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> bool {
-    match expr.expr(db) {
+    match expr.kind() {
         ExprFunKind::Place(_) => true,
-        ExprFunKind::FieldProj(proj) => is_place(db, proj.base),
+        ExprFunKind::FieldProj(proj) => is_place(db, expr.at(proj.base)),
         _ => false,
     }
 }

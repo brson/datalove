@@ -123,9 +123,9 @@ pub struct TypeContext<'db> {
     pub(crate) errors: Vec<TypeError>,
     /// Pending diagnostics for post-hoc span enrichment.
     pub(crate) pending_diagnostics: Vec<PendingDiagnostic<'db>>,
-    /// Expression types, indexed by ExprFun ID.
+    /// Expression types, keyed by `ExprKey`.
     pub(crate) expr_types: ExprTypes<'db>,
-    /// Resolved call targets, indexed by ExprFunctionCall ID.
+    /// Resolved call targets, keyed by `ExprKey::of_call`.
     pub(crate) call_targets: CallTargets<'db>,
     /// What this unit's qualified calls name.
     pub(crate) qualified: crate::QualifiedScope<'db>,
@@ -157,6 +157,9 @@ pub struct TypeContext<'db> {
     /// A const expression may only name other consts, since it is evaluated
     /// before anything a parameter or a let could be bound to exists.
     pub(crate) in_const_expr: bool,
+    /// The expressions of the body being checked: a function's, or the code
+    /// outside any function.
+    pub(crate) arena: Option<&'db ExprArena<'db>>,
 }
 
 /// Record of an auto-adaptation that was applied.
@@ -226,7 +229,13 @@ impl<'db> TypeContext<'db> {
             auto_adapt_mode,
             auto_adaptations: Vec::new(),
             in_const_expr: false,
+            arena: None,
         }
+    }
+
+    /// The expression at `id` in the body being checked.
+    pub(crate) fn expr(&self, id: ExprId) -> ExprFun<'db> {
+        self.arena.expect("an expression is checked inside a body").get(id)
     }
 
     /// Get the auto-adapt mode.
@@ -386,7 +395,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// F001: Undefined variable.
     pub fn error_undefined_variable(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedVariable {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             name,
         });
@@ -436,7 +445,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// F002: Undefined function.
     pub fn error_undefined_function(&mut self, expr: ExprFun<'db>, name: InternedText<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::UndefinedFunction {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             name,
         });
@@ -467,7 +476,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
 
     pub fn error_cannot_synthesize(&mut self, expr: ExprFun<'db>, message: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::CannotSynthesize {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             message: InternedText::new(self.db, message.S()),
         });
@@ -477,7 +486,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// F016: Type mismatch (simple version without recovery hint).
     pub fn error_type_mismatch(&mut self, expr: ExprFun<'db>, expected: &str, actual: &str, label: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected.S()),
             actual: InternedText::new(self.db, actual.S()),
@@ -510,7 +519,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         if can_adapt && self.auto_adapt_mode.is_enabled() {
             // Auto-adapt: record the adaptation and store the expected type.
             self.auto_adaptations.push(AutoAdaptation {
-                expr_key: ExprKey::of(self.db, expr),
+                expr_key: expr.key(),
                 from_type: actual.clone(),
                 to_type: expected.clone(),
             });
@@ -560,7 +569,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         };
 
         self.pending_diagnostics.push(PendingDiagnostic::TypeMismatch {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected_str.C()),
             actual: InternedText::new(self.db, actual_str.C()),
@@ -587,7 +596,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
             .unwrap_or((0, None));
 
         self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
-            call_expr_key: ExprKey::of(self.db, expr),
+            call_expr_key: expr.key(),
             call_module_id: self.current_module_id,
             func_name,
             func_local_index,
@@ -603,7 +612,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// Reported at the value, since a pattern has no span of its own.
     pub fn error_pattern_mismatch(&mut self, value: ExprFun<'db>, message: String, label: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::PatternMismatch {
-            expr_key: ExprKey::of(self.db, value),
+            expr_key: value.key(),
             module_id: self.current_module_id,
             message: InternedText::new(self.db, message.C()),
             label: InternedText::new(self.db, label.S()),
@@ -614,7 +623,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// F046: Result destructuring requires error binding.
     pub fn error_result_requires_binding(&mut self, expr: ExprFun<'db>) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::ResultRequiresBinding {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
         });
         TypeError::ResultRequiresErrorBinding
@@ -773,7 +782,7 @@ replace the view rather than the elements it shows. Index down to single element
         if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
             return Ok(*found);
         }
-        let site = ErrorSite::Expr(ExprKey::of(self.db, expr));
+        let site = ErrorSite::Expr(expr.key());
         let module = alias.as_str(self.db);
         let item = name.as_str(self.db);
         if self.qualified.aliases.contains(&alias) {
@@ -834,7 +843,7 @@ replace the view rather than the elements it shows. Index down to single element
             (fmt!("integer literal out of range for type {ty_str}"), int_type_range_info(ty))
         };
         self.pending_diagnostics.push(PendingDiagnostic::LiteralOutOfRange {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             message: InternedText::new(self.db, message),
             note: InternedText::new(self.db, note.S()),
@@ -855,7 +864,7 @@ replace the view rather than the elements it shows. Index down to single element
         note: Option<&str>,
     ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::InvalidOperandType {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             op: InternedText::new(self.db, op.S()),
             ty: InternedText::new(self.db, ty.S()),
@@ -870,7 +879,7 @@ replace the view rather than the elements it shows. Index down to single element
     /// F048: Try operator type mismatch.
     pub fn error_try_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryTypeMismatch {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
             expected: InternedText::new(self.db, expected.S()),
@@ -885,7 +894,7 @@ replace the view rather than the elements it shows. Index down to single element
     /// F049: Try operator return type mismatch.
     pub fn error_try_return_type_mismatch(&mut self, expr: ExprFun<'db>, operator: &str, expected: &str, actual: &str) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::TryReturnTypeMismatch {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             operator: InternedText::new(self.db, operator.S()),
             expected: InternedText::new(self.db, expected.S()),
@@ -899,7 +908,7 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Look up span for a datafun expression.
     pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan> {
-        self.spans.lookup(self.db, expr)
+        self.spans.lookup(expr)
     }
 
     /// Emit all pending diagnostics using local spans.
@@ -973,7 +982,7 @@ replace the view rather than the elements it shows. Index down to single element
         name: InternedText<'db>,
     ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::NonConstInConstExpr {
-            expr_key: ExprKey::of(self.db, expr),
+            expr_key: expr.key(),
             module_id: self.current_module_id,
             name,
         });
@@ -989,7 +998,7 @@ replace the view rather than the elements it shows. Index down to single element
         found: &str,
     ) -> TypeError {
         self.pending_diagnostics.push(PendingDiagnostic::ArgumentModeMismatch {
-            expr_key: ExprKey::of(self.db, arg),
+            expr_key: arg.key(),
             module_id: self.current_module_id,
             expected: InternedText::new(self.db, expected.S()),
             found: InternedText::new(self.db, found.S()),
@@ -1131,7 +1140,7 @@ replace the view rather than the elements it shows. Index down to single element
     /// Store resolved call target for a function call expression.
     pub fn store_call_target(
         &mut self,
-        call: ExprFunctionCall<'db>,
+        call: ExprKey<'db>,
         func: StmtFun<'db>,
         module_id: Option<ModuleId<'db>>,
         type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
@@ -1142,14 +1151,14 @@ replace the view rather than the elements it shows. Index down to single element
             self.inline_calls.push((caller, func));
         }
         self.call_targets.insert(
-            ExprKey::of_call(self.db, call),
+            call,
             ResolvedCallTarget::new(self.db, func, module_id, type_args),
         );
     }
 
     /// Store the type for an expression.
     pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &Type<'db>) {
-        self.expr_types.insert(ExprKey::of(self.db, expr), ty.clone());
+        self.expr_types.insert(expr.key(), ty.clone());
     }
 
     /// Synthesize the type of an expression.
@@ -1176,12 +1185,12 @@ replace the view rather than the elements it shows. Index down to single element
     /// one measured fixture - and the index alone drops the generation that
     /// tells two expressions in a reused slot apart.
     pub fn store_intrinsic_target(&mut self, expr: ExprFun<'db>, intrinsic: IntrinsicId) {
-        self.intrinsic_targets.insert(ExprKey::of(self.db, expr), intrinsic);
+        self.intrinsic_targets.insert(expr.key(), intrinsic);
     }
 
     /// Get resolved intrinsic target for an expression.
     pub fn get_intrinsic_target(&self, expr: ExprFun<'db>) -> Option<IntrinsicId> {
-        self.intrinsic_targets.get(&ExprKey::of(self.db, expr)).copied()
+        self.intrinsic_targets.get(&expr.key()).copied()
     }
 
     // ========================================================================

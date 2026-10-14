@@ -22,7 +22,7 @@ fn is_self_assignment<'db>(
     value_expr: ExprFun<'db>,
 ) -> bool {
     // Check if the value expression is just a name reference.
-    if let ExprFunKind::Place(ref place) = value_expr.expr(ctx.db) {
+    if let ExprFunKind::Place(place) = value_expr.kind() {
         if !place.steps.is_empty() {
             return false;
         }
@@ -98,9 +98,9 @@ pub(super) fn lower_var<'db>(
         return Ok(vec![(name, slot)]);
     };
 
-    let value_id = lower_expression(ctx, init_expr)?;
+    let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
     let mut slots = vec![];
-    for (name, value_id, slot_type) in lower_destructure(ctx, &var_stmt.binding, init_expr, value_id) {
+    for (name, value_id, slot_type) in lower_destructure(ctx, &var_stmt.binding, ctx.expr(init_expr), value_id) {
         let is_copy = slot_type.is_copy();
         let slot = ctx.fresh_slot(slot_type);
         let operand = Operand::Slot(slot);
@@ -172,8 +172,8 @@ fn lower_statement_with_id<'db>(
     match stmt {
         Statement::Let(let_stmt) => {
             let init_expr = let_stmt.value;
-            let value_id = lower_expression(ctx, init_expr)?;
-            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, init_expr, value_id) {
+            let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
+            for (name, value_id, _) in lower_destructure(ctx, &let_stmt.binding, ctx.expr(init_expr), value_id) {
                 let operand = Operand::Value(value_id);
                 ctx.bind_var(&name, operand);
                 // Record binding operand for drop schedule.
@@ -190,7 +190,7 @@ fn lower_statement_with_id<'db>(
         }
         Statement::Ret(ret_stmt) => {
             let value = if let Some(expr) = ret_stmt.value {
-                let value_id = lower_expression(ctx, expr)?;
+                let value_id = lower_expression(ctx, ctx.expr(expr))?;
                 // A function whose return type is unit returns nothing, even
                 // where the source wrote something for it to return. `()` is
                 // that type, so `ret ()` names a value of no size and a
@@ -261,7 +261,7 @@ fn lower_statement_with_id<'db>(
         Statement::DebugLog(stmt) => {
             // Use lower_expression_for_ref to handle field projections with GetFieldRef.
             // This borrows the value instead of copying, avoiding shallow-copy issues.
-            let operand = lower_expression_for_ref(ctx, stmt.value)?;
+            let operand = lower_expression_for_ref(ctx, ctx.expr(stmt.value))?;
             // If the operand is a ref, dereference it for reading.
             let operand = ctx.deref_if_ref(operand);
             ctx.emit(Instruction::DebugLog { operand });
@@ -278,7 +278,7 @@ fn lower_statement_with_id<'db>(
             // The const inlining pass runs later to replace with literal values.
             let name = const_stmt.name.text(ctx.db).to_string();
             let init_expr = const_stmt.value;
-            let value_id = lower_expression(ctx, init_expr)?;
+            let value_id = lower_expression(ctx, ctx.expr(init_expr))?;
             let operand = Operand::Value(value_id);
             ctx.bind_var(&name, operand);
             ctx.record_binding_operand(operand);
@@ -294,7 +294,7 @@ fn lower_statement_with_id<'db>(
         }
         Statement::ExprStatement(stmt) => {
             // Lower the function call expression and discard the unit result.
-            lower_expression(ctx, stmt.expr)?;
+            lower_expression(ctx, ctx.expr(stmt.expr))?;
             ctx.emit_expr_temp_drops();
             Ok(())
         }
@@ -318,12 +318,12 @@ pub fn lower_if<'db>(
     let condition = if_stmt.condition;
     let then_binding = if_stmt.then_binding;
     let else_binding = if_stmt.else_binding;
-    let cond_type = ctx.expr_type(condition);
+    let cond_type = ctx.expr_type(ctx.expr(condition));
 
     match (&cond_type, then_binding) {
         // Option destructuring: if opt_value |x| ... end if
         (IrType::Option(inner_type), Some(binding_name)) => {
-            lower_if_option(ctx, if_stmt, condition, inner_type, binding_name, stmt_idx)
+            lower_if_option(ctx, if_stmt, ctx.expr(condition), inner_type, binding_name, stmt_idx)
         }
 
         // Result destructuring: if result_value |ok_val| else |err_val| ... end if
@@ -331,12 +331,12 @@ pub fn lower_if<'db>(
             // Typechecker enforces else_binding for Result (F046).
             let err_binding = else_binding
                 .unwrap_or_else(|| panic!("Result if-binding without else binding - typechecker F046 should catch this"));
-            lower_if_result(ctx, if_stmt, condition, ok_type, binding_name, err_binding, stmt_idx)
+            lower_if_result(ctx, if_stmt, ctx.expr(condition), ok_type, binding_name, err_binding, stmt_idx)
         }
 
         // Boolean condition (no binding).
         (IrType::Bool, None) => {
-            lower_if_bool(ctx, if_stmt, condition, stmt_idx)
+            lower_if_bool(ctx, if_stmt, ctx.expr(condition), stmt_idx)
         }
 
         // Invalid combinations - typechecker should catch these.
@@ -629,7 +629,7 @@ pub fn lower_loop<'db>(
         let body_block = ctx.fresh_block();
 
         // Lower the condition expression.
-        let cond_value = lower_expression(ctx, cond_expr)?;
+        let cond_value = lower_expression(ctx, ctx.expr(cond_expr))?;
 
         ctx.finish_block(Terminator::Branch {
             cond: Operand::Value(cond_value),
@@ -697,7 +697,7 @@ fn lower_set<'db>(
 
     if set_stmt.op.is_none() && place.steps.is_empty() {
         let root_name_str = place.root.text(ctx.db).to_string();
-        if is_self_assignment(ctx, &root_name_str, value_expr) {
+        if is_self_assignment(ctx, &root_name_str, ctx.expr(value_expr)) {
             return Ok(());
         }
     }
@@ -707,10 +707,10 @@ fn lower_set<'db>(
     // which a failed lookup on the way to the place drops.
     let expr_temp_mark = ctx.expr_temps_mark();
     let value = match set_stmt.op {
-        Some(_) => lower_operand(ctx, value_expr)?,
+        Some(_) => lower_operand(ctx, ctx.expr(value_expr))?,
         None => {
-            let value_id = lower_expression(ctx, value_expr)?;
-            ctx.record_expr_temp(value_id, ctx.expr_type(value_expr));
+            let value_id = lower_expression(ctx, ctx.expr(value_expr))?;
+            ctx.record_expr_temp(value_id, ctx.expr_type(ctx.expr(value_expr)));
             Operand::Value(value_id)
         }
     };
@@ -1058,10 +1058,10 @@ fn lower_place_keys<'db>(
     for step in &place.steps {
         let ast::PlaceStep::Index(idx) = step else { continue };
         let key = match idx.error_mode {
-            Some(_) => lower_operand(ctx, idx.index)?,
+            Some(_) => lower_operand(ctx, ctx.expr(idx.index))?,
             None => {
-                let key_id = lower_expression(ctx, idx.index)?;
-                ctx.record_expr_temp(key_id, ctx.expr_type(idx.index));
+                let key_id = lower_expression(ctx, ctx.expr(idx.index))?;
+                ctx.record_expr_temp(key_id, ctx.expr_type(ctx.expr(idx.index)));
                 Operand::Value(key_id)
             }
         };
@@ -1191,8 +1191,8 @@ pub fn lower_match<'db>(
     stmt_idx: usize,
 ) -> Result<(), LowerError> {
     // Lower the input expression.
-    let input_id = lower_expression(ctx, match_stmt.input)?;
-    let input_type = ctx.expr_type(match_stmt.input);
+    let input_id = lower_expression(ctx, ctx.expr(match_stmt.input))?;
+    let input_type = ctx.expr_type(ctx.expr(match_stmt.input));
 
     let variants = match &input_type {
         IrType::Enum(v) => v,
@@ -1387,11 +1387,11 @@ pub fn lower_for<'db>(
     // into the collection rather than at a key, so they go now, before the
     // walk, rather than having to be let go of on every way out of it.
     let mark = ctx.expr_temps_mark();
-    let coll = lower_expression_for_ref(ctx, stmt.iteratee)?;
+    let coll = lower_expression_for_ref(ctx, ctx.expr(stmt.iteratee))?;
     ctx.emit_expr_temp_drops_since(mark);
     let coll = ctx.deref_if_ref(coll);
 
-    let coll_ty = ctx.expr_type(stmt.iteratee);
+    let coll_ty = ctx.expr_type(ctx.expr(stmt.iteratee));
     let kind = CursorKind::of(&coll_ty).expect("the typechecker admits only collections to `for`");
     let elem_ty = CursorKind::elem_type(&coll_ty);
     let value_ty = match &coll_ty {

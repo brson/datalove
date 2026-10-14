@@ -88,6 +88,13 @@ pub(super) struct StatementCounters {
 /// in and out instead; see `Parser::sub_parser` and `Parser::merge_spans_from`.
 #[derive(Default)]
 struct Filed<'db> {
+    /// The expressions of the body being parsed, the last numbered one less
+    /// than the parser's `expr_counter`.
+    ///
+    /// A script's top level is parsed a line at a time, each line's parser
+    /// starting its own, so this may hold only the latest of a body's
+    /// expressions; they are concatenated in the order they were numbered.
+    exprs: Vec<ast::ExprFunKind<'db>>,
     /// Accumulated expression spans (side table pattern).
     expr_spans: Vec<ast::ParseTextSpan<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
@@ -113,7 +120,7 @@ struct Filed<'db> {
 
 impl<'db> Filed<'db> {
     fn is_empty(&self) -> bool {
-        self.expr_spans.is_empty() && self.break_spans.is_empty() && self.continue_spans.is_empty()
+        self.exprs.is_empty() && self.expr_spans.is_empty() && self.break_spans.is_empty() && self.continue_spans.is_empty()
             && self.ret_spans.is_empty() && self.set_spans.is_empty() && self.fun_spans.is_empty()
             && self.type_alias_spans.is_empty() && self.import_spans.is_empty()
             && self.require_spans.is_empty() && self.alias_spans.is_empty()
@@ -121,6 +128,7 @@ impl<'db> Filed<'db> {
     }
 
     fn append(&mut self, other: &mut Self) {
+        self.exprs.append(&mut other.exprs);
         self.expr_spans.append(&mut other.expr_spans);
         self.break_spans.append(&mut other.break_spans);
         self.continue_spans.append(&mut other.continue_spans);
@@ -169,6 +177,9 @@ pub(super) struct Parser<'db> {
     call_counter: u32,
     /// Script-level call counter, saved while inside a function.
     script_call_counter: u32,
+    /// The script-level expressions filed so far, set aside while inside a
+    /// function.
+    script_exprs: Vec<ast::ExprFunKind<'db>>,
 }
 
 /// A sub-parser dropped holding its parent's tables would take everything
@@ -205,6 +216,7 @@ impl<'db> Parser<'db> {
             script_expr_counter: counters.expr,
             call_counter: counters.call,
             script_call_counter: counters.call,
+            script_exprs: vec![],
         }
     }
 
@@ -267,6 +279,7 @@ impl<'db> Parser<'db> {
             script_expr_counter: 0,
             call_counter: 0,
             script_call_counter: 0,
+            script_exprs: vec![],
         }
     }
 
@@ -294,6 +307,7 @@ impl<'db> Parser<'db> {
             script_expr_counter: self.script_expr_counter,
             call_counter: self.call_counter,
             script_call_counter: self.script_call_counter,
+            script_exprs: vec![],
         }
     }
 
@@ -325,11 +339,6 @@ impl<'db> Parser<'db> {
         self.module_id
     }
 
-    /// Get current function name for expression identity.
-    pub(super) fn current_fn_name(&self) -> Option<InternedText<'db>> {
-        self.current_fn_name
-    }
-
     /// Peek at the next token after the current one (lookahead of 2).
     pub(super) fn peek_next(&self) -> Option<&TreeToken<'db>> {
         self.source.buffer[1].as_ref()
@@ -339,16 +348,25 @@ impl<'db> Parser<'db> {
     pub(super) fn enter_function(&mut self, name: InternedText<'db>) {
         self.script_expr_counter = self.expr_counter;
         self.script_call_counter = self.call_counter;
+        self.script_exprs = rmx::std::mem::take(&mut self.filed.exprs);
         self.current_fn_name = Some(name);
         self.expr_counter = 0;
         self.call_counter = 0;
     }
 
-    /// Exit function context, restoring the script-level counters.
-    pub(super) fn exit_function(&mut self) {
+    /// Exit function context, restoring the script-level counters, and give
+    /// back the function's expressions.
+    pub(super) fn exit_function(&mut self) -> ast::ExprArena<'db> {
+        debug_assert_eq!(self.filed.exprs.len(), self.expr_counter as usize);
+        let arena = ast::ExprArena {
+            module_id: self.module_id,
+            fn_name: self.current_fn_name,
+            exprs: rmx::std::mem::replace(&mut self.filed.exprs, rmx::std::mem::take(&mut self.script_exprs)),
+        };
         self.current_fn_name = None;
         self.expr_counter = self.script_expr_counter;
         self.call_counter = self.script_call_counter;
+        arena
     }
 
     /// Get next expression index and increment counter.
@@ -397,7 +415,7 @@ impl<'db> Parser<'db> {
         message: &str,
         code: &str,
         label: &str,
-    ) -> ast::ExprFun<'db> {
+    ) -> ast::ExprId {
         self.had_error = true;
         let message_text = InternedText::new(self.db, message.S());
         let mut builder = DiagnosticBuilder::error(self.db, message)
@@ -407,13 +425,7 @@ impl<'db> Parser<'db> {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
-        ast::ExprFun::new(
-            self.db,
-            self.module_id,
-            self.current_fn_name,
-            self.next_expr_index(),
-            ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span, message: message_text })
-        )
+        self.push_expr(ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span, message: message_text }))
     }
 
     /// Check if looking at a colon type hint.
@@ -494,12 +506,12 @@ impl<'db> Parser<'db> {
     }
 
     /// Where an expression this parser created begins.
-    pub(super) fn expr_span_start(&self, expr: ast::ExprFun<'db>) -> usize {
+    pub(super) fn expr_span_start(&self, expr: ast::ExprId) -> usize {
         // A parse error carries its own span rather than filing one.
-        if let ast::ExprFunKind::ParseError(error) = expr.expr(self.db) {
+        if let ast::ExprFunKind::ParseError(error) = self.expr_kind(expr) {
             return error.span.start;
         }
-        let key = ast::ExprKey::of(self.db, expr);
+        let key = ast::ExprKey::new(self.module_id, self.current_fn_name, expr.0);
         self.filed.expr_spans.iter().rev()
             .find(|entry| entry.expr_key == key)
             .map(|entry| entry.span.start)
@@ -507,20 +519,30 @@ impl<'db> Parser<'db> {
     }
 
     /// Create an expression and record its span in the side table.
-    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprFun<'db> {
-        let expr = ast::ExprFun::new(
-            self.db,
-            self.module_id,
-            self.current_fn_name,
-            self.next_expr_index(),
-            kind,
-        );
+    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprId {
+        let expr = self.push_expr(kind);
         self.filed.expr_spans.push(ast::ParseTextSpan::new(
-            ast::ExprKey::of(self.db, expr),
+            ast::ExprKey::new(self.module_id, self.current_fn_name, expr.0),
             ts.source,
             ts.span,
         ));
         expr
+    }
+
+    fn push_expr(&mut self, kind: ast::ExprFunKind<'db>) -> ast::ExprId {
+        self.filed.exprs.push(kind);
+        ast::ExprId(self.next_expr_index())
+    }
+
+    /// An expression this parser created, in the body it is parsing.
+    pub(super) fn expr_kind(&self, expr: ast::ExprId) -> &ast::ExprFunKind<'db> {
+        let back = (self.expr_counter - expr.0) as usize;
+        &self.filed.exprs[self.filed.exprs.len() - back]
+    }
+
+    /// Take the accumulated expressions (consumes them).
+    pub(super) fn take_exprs(&mut self) -> Vec<ast::ExprFunKind<'db>> {
+        rmx::std::mem::take(&mut self.filed.exprs)
     }
 
     /// Take the accumulated expression spans (consumes them).

@@ -146,7 +146,8 @@ pub fn lower_function_body<'db>(
 
     // Lower the function body with statement indices.
     let body = func.body(ctx.db);
-    for (idx, stmt) in body.iter().enumerate() {
+    let saved_arena = ctx.arena.replace(&body.arena);
+    for (idx, stmt) in body.statements.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
         lower_statement(ctx, stmt)?;
     }
@@ -171,6 +172,7 @@ pub fn lower_function_body<'db>(
     // Restore saved context.
     ctx.return_type = saved_return_type;
     ctx.is_script_unit = saved_is_script_unit;
+    ctx.arena = saved_arena;
 
     let mut unit = IrCodeUnit {
         id: CodeUnitId(func_id.0),

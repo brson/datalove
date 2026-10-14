@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use datalove_datafun::package_load_worldfile::{self, WorldfileSection};
 use datalove_datafun_ast::ast::{
-    BinOp, ExprFun, ExprFunKind, ParamMode, Statement, UnaryOp,
+    BinOp, ExprArena, ExprFun, ExprFunKind, ExprId, ParamMode, Statement, UnaryOp,
 };
 use datalove_datalit::ast::TypeHint;
 use datalove_worldgen::{gen_worldfile_seeded, WorldGenConfig};
@@ -223,10 +223,10 @@ fn walk_expr<'db>(
     params: &TypeParams,
     cov: &mut Coverage,
 ) {
-    let kind = expr.expr(db);
-    cov.hit("expr", expr_name(&kind));
+    let kind = expr.kind();
+    cov.hit("expr", expr_name(kind));
 
-    let sub = |e: ExprFun<'db>, cov: &mut Coverage| walk_expr(db, e, params, cov);
+    let sub = |e: ExprId, cov: &mut Coverage| walk_expr(db, expr.at(e), params, cov);
 
     match kind {
         ExprFunKind::BinOp(e) => {
@@ -239,10 +239,10 @@ fn walk_expr<'db>(
             sub(e.operand, cov);
         }
         ExprFunKind::FunctionCall(e) => {
-            for mode in e.args(db).iter().zip(e.arg_modes(db).iter()).filter_map(|(_, m)| m.as_ref()) {
+            for mode in e.args.iter().zip(e.arg_modes.iter()).filter_map(|(_, m)| m.as_ref()) {
                 cov.hit("param_mode", param_mode_name(mode));
             }
-            for arg in e.args(db).iter() {
+            for arg in e.args.iter() {
                 sub(*arg, cov);
             }
         }
@@ -343,6 +343,7 @@ fn walk_expr<'db>(
 
 fn walk_statements<'db>(
     db: &'db dyn salsa::Database,
+    arena: &'db ExprArena<'db>,
     statements: &[Statement<'db>],
     params: &TypeParams,
     cov: &mut Coverage,
@@ -352,19 +353,19 @@ fn walk_statements<'db>(
         match statement {
             Statement::Let(s) => {
                 walk_opt_type(db, &s.type_hint, params, cov);
-                walk_expr(db, s.value, params, cov);
+                walk_expr(db, arena.get(s.value), params, cov);
             }
             Statement::Var(s) => {
                 walk_opt_type(db, &s.type_hint, params, cov);
                 if let Some(value) = s.value {
-                    walk_expr(db, value, params, cov);
+                    walk_expr(db, arena.get(value), params, cov);
                 }
             }
             Statement::Const(s) => {
                 walk_opt_type(db, &s.type_hint, params, cov);
-                walk_expr(db, s.value, params, cov);
+                walk_expr(db, arena.get(s.value), params, cov);
             }
-            Statement::Set(s) => walk_expr(db, s.value, params, cov),
+            Statement::Set(s) => walk_expr(db, arena.get(s.value), params, cov),
             Statement::Fun(s) => {
                 cov.hit(
                     "shape",
@@ -390,11 +391,12 @@ fn walk_statements<'db>(
                     walk_type(db, &param.type_hint, params, cov);
                 }
                 walk_opt_type(db, &s.return_type(db), params, cov);
-                walk_statements(db, s.body(db), params, cov);
+                let body = s.body(db);
+                walk_statements(db, &body.arena, &body.statements, params, cov);
             }
             Statement::Ret(s) => {
                 if let Some(value) = s.value {
-                    walk_expr(db, value, params, cov);
+                    walk_expr(db, arena.get(value), params, cov);
                 }
             }
             Statement::If(s) => {
@@ -408,10 +410,10 @@ fn walk_statements<'db>(
                 if s.else_binding.is_some() {
                     cov.hit("shape", "if with an error binding");
                 }
-                walk_expr(db, s.condition, params, cov);
-                walk_statements(db, &s.then_body, params, cov);
+                walk_expr(db, arena.get(s.condition), params, cov);
+                walk_statements(db, arena, &s.then_body, params, cov);
                 if let Some(else_body) = &s.else_body {
-                    walk_statements(db, else_body, params, cov);
+                    walk_statements(db, arena, else_body, params, cov);
                 }
             }
             Statement::Loop(s) => {
@@ -420,26 +422,26 @@ fn walk_statements<'db>(
                     if s.condition.is_some() { "loop while" } else { "bare loop" },
                 );
                 if let Some(condition) = s.condition {
-                    walk_expr(db, condition, params, cov);
+                    walk_expr(db, arena.get(condition), params, cov);
                 }
-                walk_statements(db, &s.body, params, cov);
+                walk_statements(db, arena, &s.body, params, cov);
             }
             Statement::For(s) => {
-                walk_expr(db, s.iteratee, params, cov);
-                walk_statements(db, &s.body, params, cov);
+                walk_expr(db, arena.get(s.iteratee), params, cov);
+                walk_statements(db, arena, &s.body, params, cov);
             }
-            Statement::DebugLog(s) => walk_expr(db, s.value, params, cov),
+            Statement::DebugLog(s) => walk_expr(db, arena.get(s.value), params, cov),
             Statement::TypeAlias(s) => walk_type(db, &s.type_hint, params, cov),
             Statement::Match(s) => {
-                walk_expr(db, s.input, params, cov);
+                walk_expr(db, arena.get(s.input), params, cov);
                 for case in s.cases.iter() {
-                    walk_statements(db, &case.body, params, cov);
+                    walk_statements(db, arena, &case.body, params, cov);
                 }
                 if let Some(default_body) = &s.default_body {
-                    walk_statements(db, default_body, params, cov);
+                    walk_statements(db, arena, default_body, params, cov);
                 }
             }
-            Statement::ExprStatement(s) => walk_expr(db, s.expr, params, cov),
+            Statement::ExprStatement(s) => walk_expr(db, arena.get(s.expr), params, cov),
             Statement::NativeFun(_)
             | Statement::Require(_)
             | Statement::Import(_)
@@ -470,7 +472,7 @@ fn measure(seeds: u64) -> Coverage {
             };
             let source = bct::input::Source::new(&db, source_text);
             let parsed = datalove_datafun_parser::parse_integration_test(&db, source);
-            walk_statements(&db, &parsed.statements, &TypeParams::default(), &mut cov);
+            walk_statements(&db, &parsed.body(&db).arena, parsed.statements(&db), &TypeParams::default(), &mut cov);
         }
     }
 

@@ -183,10 +183,9 @@ fn typecheck_sections_with_mode(
             // Run ownership analysis if no type errors (ownership requires successful typecheck).
             if tycheck_result.errors(&db).is_empty() {
                 // Use tracked ownership analysis function (same as ScriptCompiler uses).
-                let stmts: Vec<_> = script.statements.iter().cloned().collect();
                 // Each fixture is a single unit, so nothing arrives dead and no const arrives from earlier.
                 let ownership_result = analyze_script_fragment_tracked(
-                    &db, tycheck_result, stmts, mode, Vec::new(), Vec::new(),
+                    &db, tycheck_result, script.top, mode, Vec::new(), Vec::new(),
                 );
                 for err in ownership_result.errors(&db) {
                     all_errors.push(err.clone());
