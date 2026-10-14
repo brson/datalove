@@ -22,6 +22,8 @@ a loop induction variable of type [`index`](../datafun.md#user-content-collectio
 incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element,
 and that this is a problem to be solved soon.
+A simple solution is relatively straightforword
+but is slightly complexified by the limitations of Datalove's simple type system.
 
 Here's how it has been done prior to this work in `list.contains`:
 
@@ -85,11 +87,8 @@ So it's no longer just a bounds check and some pointer math per element.
 Reaching element `i` costs O(i),
 which makes a loop over the whole set O(n²).
 Maps are the same, through `map.key_at` and `map.value_at`.
-
-The clone causes its own trouble too.
-`is_subset_of` can't return as soon as it finds an element `other` lacks,
-because returning from inside `if get(...) |elem|` would dispose of `elem`
-on that path and not the other.
+Those algorithmically-abhorrent accessor APIs are waiting on
+some way to iterate over collections before they can be retired.
 
 The indexing is a performance hazard,
 but also the wrapping math is a
@@ -101,14 +100,15 @@ like Python's `for x in xs` or Rust's `for x in &xs`.
 A simple design for this is obvious
 so I'll go ahead and do it now!
 
-We have some constraints.
+We have some constraints:
 Datalove has a linear type system where values are neither garbage-collected nor reference-counted,
-but inline value types.
+but are inline value types.
 So copying can be expensive, but we want to iterate cheaply.
 Datalove also [does not have first-class references](../datafun.md#user-content-borrows-are-second-class),
-so in the surface language we can't take pointers directly into collections and treat them as first-class values
+so in the surface language we can't take pointers directly into collections and treat them as values
 that can be moved between bindings, returned from functions, etc.
 That's going to heavily limit our expressivity.
+But working within limitations is fun, so let's have fun.
 
 
 
