@@ -114,7 +114,8 @@ What is left is constant factors at every layer, none above about 3%:
 
 Doing much better is a different parser: one cursor over the flat token array
 with each bracket's match index precomputed, and no token trees or
-sub-parsers.
+sub-parsers. See [the plan for it](plan-parser.md), which also has where the
+allocation is: 35,726 allocations and 12MB to parse `sys/std`.
 
 ## What was fixed
 

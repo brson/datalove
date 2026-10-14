@@ -47,6 +47,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [Immutable Cursors for the Collections](plan-cursors.md)
 - [Generics by Reference](plan-fat-generics.md)
 - [Organizing the IR Passes](plan-ir-passes.md)
+- [A Parser That Reads Tokens in Place](plan-parser.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
