@@ -48,7 +48,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
         db,
         expr_types,
         Some(call_targets),
-        module_func_id_map,
+        module_func_id_map.map(|m| m as &'db dyn crate::FuncIds<'db>),
         data_files,
     );
 

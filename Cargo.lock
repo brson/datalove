@@ -1530,6 +1530,7 @@ name = "datalove-datafun-const"
 version = "0.1.0"
 dependencies = [
  "datalove-datafun-ir",
+ "rustc-hash",
 ]
 
 [[package]]

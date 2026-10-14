@@ -8,14 +8,13 @@
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast;
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, FunctionContext,
-    Operand, FuncId, IrModuleId, Terminator, ParamMode, ParamId, SymbolTable, ConstValue,
+    Operand, FuncId, Terminator, ParamMode, ParamId, SymbolTable, ConstValue,
 };
 use datalove_datafun_sema::FunctionAnalysis;
-use super::context::{DataFiles, LowerCtx};
+use super::context::{DataFiles, FuncIds, LowerCtx};
 use super::stmt::lower_statement;
 use super::LowerError;
 use super::ir_ext::IrTypeExt;
@@ -38,7 +37,7 @@ pub fn lower_function_for_module<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db dyn FuncIds<'db>,
     func: ast::StmtFun<'db>,
     func_id: FuncId,
     analysis: FunctionAnalysis<'db>,

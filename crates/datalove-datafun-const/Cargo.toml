@@ -12,3 +12,4 @@ index-64 = ["datalove-datafun-ir/index-64"]
 
 [dependencies]
 datalove-datafun-ir.workspace = true
+rustc-hash.workspace = true

@@ -727,6 +727,13 @@ impl ScriptCommand {
         // Cleanup.
         executor.destroy_live_values();
 
+        // The interpreters check for leaks as they drop, so they go as usual.
+        // The database is most of what the process allocated, and freeing it
+        // table by table was about 5% of a run requiring all of `sys/std`; the
+        // process exits next, which frees it at once.
+        drop((_natives, executor, compiler, compiled, natives, pipeline));
+        std::mem::forget(db);
+
         Ok(())
     }
 }

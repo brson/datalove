@@ -5,7 +5,7 @@
 //! incremental recompilation and parallel execution.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, HashMap};
+use rmx::std::collections::{BTreeMap, HashMap, HashSet};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{ParsedStatements, Statement};
@@ -208,20 +208,21 @@ pub fn compute_func_id_map<'db>(
         }
     }
 
-    // Add rider functions, under the ids assigned above.
+    // Add rider functions, under the ids assigned above, once for each rider
+    // however many modules require it.
+    let mut riders_added: HashSet<ModuleId<'db>> = HashSet::new();
     for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
         for (_alias, rider) in riders {
             let synthetic_module_id = rider.module_id;
+            if !riders_added.insert(synthetic_module_id) {
+                continue;
+            }
             let rider_ir_module_id = *module_ids.get(&synthetic_module_id)
                 .expect("every required rider is numbered");
 
             for (func_idx, (func_name, _func_type)) in rider.functions.iter().enumerate() {
                 let name = func_name.text(db).S();
-                let key = (synthetic_module_id, name);
-                // Avoid duplicates if the same rider is required by multiple modules.
-                if !entries.iter().any(|(k, _)| *k == key) {
-                    entries.push((key, (rider_ir_module_id, FuncId(func_idx as u32))));
-                }
+                entries.push(((synthetic_module_id, name), (rider_ir_module_id, FuncId(func_idx as u32))));
             }
         }
     }
@@ -409,24 +410,14 @@ pub fn lower_module<'db>(
 
     let expr_types = typecheck_result.expr_types(db);
     let call_targets = typecheck_result.call_targets(db);
-
-    let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
-        func_ids.entries(db).iter().cloned().collect();
+    let reachable = func_ids;
 
     // Get pre-computed ownership analysis results.
     let function_analyses = ownership_analysis.function_analyses(db);
 
-    // Build maps of function name -> resolved types from exports.
-    // This is needed to resolve type aliases in function parameters and return types.
-    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
-    let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
-    for (name, func_type) in typecheck_result.exports(db) {
-        let param_types = func_type.param_types(db).clone();
-        func_param_types.insert(name.text(db).S(), param_types);
-
-        let return_type = func_type.return_type(db);
-        func_return_types.insert(name.text(db).S(), return_type);
-    }
+    // The resolved signatures, which have the type aliases in parameter and
+    // return types resolved.
+    let signatures = export_signatures(db, typecheck_result);
 
     let mut functions;
     let mut errors = Vec::new();
@@ -469,8 +460,9 @@ pub fn lower_module<'db>(
                 func_idx += 1;
 
                 // Get resolved types for this function.
-                let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
-                let resolved_return = func_return_types.get(&func_name).cloned();
+                let signature = signatures.get(&func.name(db));
+                let resolved_params = signature.map(|f| f.param_types(db).as_slice());
+                let resolved_return = signature.map(|f| f.return_type(db));
 
                 // Get pre-computed ownership analysis for this function.
                 let Some(single_analysis) = function_analyses.get(&func_name) else {
@@ -492,7 +484,7 @@ pub fn lower_module<'db>(
                     db,
                     expr_types,
                     call_targets,
-                    &func_id_hashmap,
+                    reachable.entries(db),
                     *func,
                     func_id,
                     analysis,
@@ -563,6 +555,14 @@ pub fn lower_module<'db>(
         func_ids,
         consts,
     )
+}
+
+/// A module's resolved function signatures, by name.
+fn export_signatures<'db>(
+    db: &'db dyn salsa::Database,
+    typecheck: SingleModuleTypecheckResult<'db>,
+) -> HashMap<bct::text::InternedText<'db>, datalove_datafun_tycheck::TypeFunction<'db>> {
+    typecheck.exports(db).iter().copied().collect()
 }
 
 /// Lowered functions for a single module.
@@ -801,28 +801,20 @@ pub fn lower_module_functions<'db>(
     log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
 
     let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
-    let func_id_hashmap: HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> =
-        func_ids.entries(db).iter().cloned().collect();
     let module_consts: HashMap<String, (IrType, Arc<ConstValue>)> =
         module_consts.into_iter().map(|(name, (ty, value))| (name, (ty, value.0))).collect();
     let restricting = restrict.is_some();
     let restrict = restrict.as_ref();
-    let func_id_hashmap = &func_id_hashmap;
+    let func_id_entries = func_ids.entries(db);
     let module_consts = &module_consts;
 
     let expr_types = single_typecheck.expr_types(db);
     let call_targets = single_typecheck.call_targets(db);
     let function_analyses = single_ownership.function_analyses(db);
 
-    // Build maps of function name -> resolved types from exports.
-    let mut func_param_types: HashMap<String, Vec<datalove_datafun_tycheck::Type<'db>>> = HashMap::new();
-    let mut func_return_types: HashMap<String, datalove_datafun_tycheck::Type<'db>> = HashMap::new();
-    for (name, func_type) in single_typecheck.exports(db) {
-        let param_types = func_type.param_types(db).clone();
-        func_param_types.insert(name.text(db).S(), param_types);
-        let return_type = func_type.return_type(db);
-        func_return_types.insert(name.text(db).S(), return_type);
-    }
+    // The resolved signatures, which have the type aliases in parameter and
+    // return types resolved.
+    let signatures = export_signatures(db, single_typecheck);
 
     let mut functions = Vec::new();
     let mut func_name_to_id = Vec::new();
@@ -851,8 +843,9 @@ pub fn lower_module_functions<'db>(
             }
 
             // Get resolved param and return types for this function.
-            let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
-            let resolved_return = func_return_types.get(&func_name).cloned();
+            let signature = signatures.get(&func.name(db));
+            let resolved_params = signature.map(|f| f.param_types(db).as_slice());
+            let resolved_return = signature.map(|f| f.return_type(db));
 
             // Get pre-computed ownership analysis for this function.
             let Some(single_analysis) = function_analyses.get(&func_name) else {
@@ -868,7 +861,7 @@ pub fn lower_module_functions<'db>(
                 db,
                 expr_types,
                 call_targets,
-                func_id_hashmap,
+                func_id_entries,
                 *func,
                 func_id,
                 analysis,

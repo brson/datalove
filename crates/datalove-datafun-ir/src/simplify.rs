@@ -22,7 +22,7 @@
 //! Then the blocks are put in reverse postorder and those nothing reaches are
 //! dropped. Dead instructions are dead code elimination's.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::params::{map_operands_in_instruction, map_operands_in_terminator};
 use crate::*;
@@ -55,8 +55,8 @@ fn unchanging(unit: &IrCodeUnit, op: &Operand) -> bool {
 
 /// Values named through a reference somewhere -- as `ValueRef`, or as what a
 /// `DropViaRef` drops through -- which only a value can stand in for.
-fn named_by_reference(unit: &IrCodeUnit) -> HashSet<ValueId> {
-    let mut named = HashSet::new();
+fn named_by_reference(unit: &IrCodeUnit) -> FxHashSet<ValueId> {
+    let mut named = FxHashSet::default();
     let mut note = |op: &Operand| {
         if let Operand::ValueRef(v) = op {
             named.insert(*v);
@@ -75,7 +75,7 @@ fn named_by_reference(unit: &IrCodeUnit) -> HashSet<ValueId> {
 }
 
 /// Replace each value in `subst` by what it maps to, through chains.
-fn substitute(unit: &mut IrCodeUnit, subst: &HashMap<ValueId, Operand>) {
+fn substitute(unit: &mut IrCodeUnit, subst: &FxHashMap<ValueId, Operand>) {
     if subst.is_empty() {
         return;
     }
@@ -113,7 +113,7 @@ fn substitute(unit: &mut IrCodeUnit, subst: &HashMap<ValueId, Operand>) {
 /// any were.
 fn forward_copies(unit: &mut IrCodeUnit) -> bool {
     let named = named_by_reference(unit);
-    let mut subst = HashMap::new();
+    let mut subst = FxHashMap::default();
     for block in &unit.blocks {
         for instr in &block.instructions {
             if let Instruction::Copy { dest, src } = instr
@@ -178,7 +178,7 @@ fn edge_args_mut(term: &mut Terminator, target: BlockId) -> Option<&mut Vec<Oper
 fn substitute_block_params(unit: &mut IrCodeUnit) -> bool {
     let preds = predecessors(unit);
     let named = named_by_reference(unit);
-    let mut subst = HashMap::new();
+    let mut subst = FxHashMap::default();
     for b in 1..unit.blocks.len() {
         if preds[b] != 1 || unit.blocks[b].params.is_empty() {
             continue;
@@ -210,8 +210,8 @@ fn substitute_block_params(unit: &mut IrCodeUnit) -> bool {
 }
 
 /// The instruction defining each value, by block and position.
-fn definitions(unit: &IrCodeUnit) -> HashMap<ValueId, (usize, usize)> {
-    let mut defs = HashMap::new();
+fn definitions(unit: &IrCodeUnit) -> FxHashMap<ValueId, (usize, usize)> {
+    let mut defs = FxHashMap::default();
     for (b, block) in unit.blocks.iter().enumerate() {
         for (i, instr) in block.instructions.iter().enumerate() {
             for v in instr.dests() {
@@ -223,8 +223,8 @@ fn definitions(unit: &IrCodeUnit) -> HashMap<ValueId, (usize, usize)> {
 }
 
 /// How many times each value is read.
-fn uses(unit: &IrCodeUnit) -> HashMap<ValueId, usize> {
-    let mut uses = HashMap::new();
+fn uses(unit: &IrCodeUnit) -> FxHashMap<ValueId, usize> {
+    let mut uses = FxHashMap::default();
     let mut note = |op: &Operand| {
         if let Operand::Value(v) | Operand::ValueRef(v) = op {
             *uses.entry(*v).or_insert(0) += 1;

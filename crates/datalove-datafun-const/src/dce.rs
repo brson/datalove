@@ -6,7 +6,7 @@
 //!
 //! These passes are used after const inlining to clean up orphaned code.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use datalove_datafun_ir::{
     BlockId, ExportBinding, Instruction, IrBlock, IrCodeUnit, IrType,
     Operand, Terminator, ValueId,
@@ -51,7 +51,7 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
     }
 
     // Find all reachable blocks starting from block 0 (entry).
-    let mut reachable: HashSet<BlockId> = HashSet::new();
+    let mut reachable: FxHashSet<BlockId> = FxHashSet::default();
     let mut worklist: Vec<BlockId> = vec![BlockId(0)];
 
     while let Some(block_id) = worklist.pop() {
@@ -93,7 +93,7 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
 
     // Build mapping from old block IDs to new IDs.
     // New IDs are assigned in order: 0, 1, 2, ...
-    let mut old_to_new: HashMap<BlockId, BlockId> = HashMap::new();
+    let mut old_to_new: FxHashMap<BlockId, BlockId> = FxHashMap::default();
     let mut new_id = 0u32;
     for block in &func.blocks {
         if reachable.contains(&block.id) {
@@ -133,8 +133,8 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
 }
 
 /// Collect all ValueIds that are used in the unit.
-fn collect_used_values(unit: &IrCodeUnit) -> HashSet<ValueId> {
-    let mut used = HashSet::new();
+fn collect_used_values(unit: &IrCodeUnit) -> FxHashSet<ValueId> {
+    let mut used = FxHashSet::default();
 
     // Access script context if this is a script unit.
     if let Some(script_ctx) = unit.script_context() {
@@ -166,7 +166,7 @@ fn collect_used_values(unit: &IrCodeUnit) -> HashSet<ValueId> {
 }
 
 /// Add a ValueId from an operand if it's a local value.
-fn add_operand_value(op: &Operand, used: &mut HashSet<ValueId>) {
+fn add_operand_value(op: &Operand, used: &mut FxHashSet<ValueId>) {
     match op {
         Operand::Value(vid) | Operand::ValueRef(vid) => {
             used.insert(*vid);
@@ -177,7 +177,7 @@ fn add_operand_value(op: &Operand, used: &mut HashSet<ValueId>) {
 }
 
 /// Collect used ValueIds from a block's instructions and terminator.
-fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
+fn collect_block_used_values(block: &IrBlock, used: &mut FxHashSet<ValueId>) {
     // Collect from instructions.
     for instr in &block.instructions {
         collect_instruction_operands(instr, used);
@@ -216,7 +216,7 @@ fn collect_block_used_values(block: &IrBlock, used: &mut HashSet<ValueId>) {
 }
 
 /// Collect all ValueIds used as operands in an instruction.
-fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>) {
+fn collect_instruction_operands(instr: &Instruction, used: &mut FxHashSet<ValueId>) {
 
     match instr {
         // No operands.
@@ -442,10 +442,10 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut HashSet<ValueId>
 /// A slot or a parameter it consumed keeps the instruction instead.
 ///
 /// Returns true if any instructions were removed.
-fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &HashSet<ValueId>) -> bool {
+fn remove_dead_instructions(unit: &mut IrCodeUnit, used: &FxHashSet<ValueId>) -> bool {
     let mut changed = false;
     let param_types = unit.function_context().map(|c| c.param_types.clone());
-    let pure_defined: HashSet<ValueId> = unit.blocks.iter()
+    let pure_defined: FxHashSet<ValueId> = unit.blocks.iter()
         .flat_map(|b| &b.instructions)
         .filter(|i| !has_side_effects(i))
         .flat_map(Instruction::dests)
