@@ -40,7 +40,11 @@ fn chunk_lex_heap_size<'db>(fields: &(Chunk<'db>, Vec<Token>)) -> usize {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct Token {
-    pub span: Range<usize>,
+    /// Where the token is in its chunk, as `u32`s: a chunk is a source file,
+    /// and halving a token is a third less memory for everything that reads
+    /// one.
+    start: u32,
+    end: u32,
     pub kind: TokenKind,
     /// Whether whitespace between this token and the one before it held a
     /// newline. A newline inside a block comment does not count.
@@ -186,9 +190,12 @@ pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
     chunk: Chunk<'db>,
 ) -> ChunkLex<'db> {
-    let mut tokens = Vec::new();
     let chunk_text = chunk.text(db);
     let chunk_str = chunk_text.as_str(db);
+    // About one token for every four or five bytes of source, so a guess at
+    // that saves the vector growing by doubling, which copied every token a
+    // couple of times over.
+    let mut tokens = Vec::with_capacity(chunk_str.len() / 4);
     // Carried across ranges, since a comment can come between a newline and
     // the token it goes on.
     let mut newline_before = false;
@@ -198,14 +205,16 @@ pub fn lex_chunk<'db>(
             (_, RangeKind::Comment) => {}
             (range, RangeKind::String) => {
                 tokens.push(Token {
-                    span: range,
+                    start: u32::try_from(range.start).X(),
+                    end: u32::try_from(range.end).X(),
                     kind: TokenKind::String,
                     newline_before: mem::take(&mut newline_before),
                 });
             }
             (range, RangeKind::Error) => {
                 tokens.push(Token {
-                    span: range,
+                    start: u32::try_from(range.start).X(),
+                    end: u32::try_from(range.end).X(),
                     kind: TokenKind::Error,
                     newline_before: mem::take(&mut newline_before),
                 });
@@ -289,7 +298,8 @@ pub fn lex_chunk<'db>(
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
-                span,
+                start: u32::try_from(span.start).X(),
+                end: u32::try_from(span.end).X(),
                 kind: TokenKind::Word,
                 newline_before: false,
             }
@@ -314,7 +324,8 @@ pub fn lex_chunk<'db>(
                     self.range.start = range_start.checked_add(sigil_str.len()).X();
                     let span = range_start .. self.range.start;
                     return Token {
-                        span,
+                        start: u32::try_from(span.start).X(),
+                        end: u32::try_from(span.end).X(),
                         kind: TokenKind::Sigil(sigil),
                         newline_before: false,
                     }
@@ -363,7 +374,8 @@ pub fn lex_chunk<'db>(
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
-                span,
+                start: u32::try_from(span.start).X(),
+                end: u32::try_from(span.end).X(),
                 kind: TokenKind::Error,
                 newline_before: false,
             }
@@ -441,11 +453,8 @@ impl<'db> ChunkLex<'db> {
 
 impl Token {
     /// The token's span in its chunk.
-    ///
-    /// `Range` is not `Copy`, so the field is cloned rather than borrowed; a
-    /// span is two words and every caller wants it by value.
     pub fn span(&self) -> Range<usize> {
-        self.span.clone()
+        self.start as usize..self.end as usize
     }
 
     #[cfg(test)]

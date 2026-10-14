@@ -2,7 +2,7 @@
 
 A plan for rewriting how the datafun and datalit parsers get their tokens, so
 that a parse allocates for the AST it returns rather than for the tokens it
-reads. Written October 2026, and phases 1 to 5 implemented the same month,
+reads. Written October 2026, and implemented the same month,
 with the departures and the results in [What was built](#user-content-what-was-built).
 The measurements behind it are in [Where Compile Time Goes](compile-time.md).
 
@@ -238,6 +238,16 @@ a vector's first growth reserves four; argument and mode vectors and number
 strings make most of the small allocations; and salsa's pages for the
 `ExprFun` structs are 1.6MB. What is left of parsing's instructions is
 spread thin, the lexer the largest at 5.9% of the run.
+
+**Phase 6**, each measured on its own against 192.0M:
+
+- The lexer reserves a token for every four bytes of source rather than
+  growing its vector by doubling: 191.6M.
+- Tokens are 12 bytes, their span two `u32`s: instructions flat, 120 fewer
+  page faults, about 480KB less touched. Kept.
+- A per-parse cache of interned names, as datalit has, made it worse: 193.2M.
+  Looking a name up in a map of its text costs what salsa's own lookup does,
+  and sharing the map with every sub-parser costs more. Not kept.
 
 ## Open questions
 
