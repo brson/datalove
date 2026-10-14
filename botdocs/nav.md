@@ -31,6 +31,7 @@
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Immutable Cursors for the Collections](plan-cursors.md)
 - [Generics by Reference](plan-fat-generics.md)
+- [Organizing the IR Passes](plan-ir-passes.md)
 - [Carry/Bring](carry-bring.md)
 
 ---

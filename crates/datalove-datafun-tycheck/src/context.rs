@@ -72,6 +72,11 @@ pub struct TypeContext<'db> {
     /// now that a miss falls through to the earlier units, the body has to say
     /// so.
     pub(crate) in_function_body: bool,
+    /// The `inline` function whose body is being checked, if it is one.
+    pub(crate) checking_inline: Option<StmtFun<'db>>,
+    /// Each call from an `inline` function to an `inline` function, caller
+    /// first, in the order they were checked; see `report_inline_cycles`.
+    pub(crate) inline_calls: Vec<(StmtFun<'db>, StmtFun<'db>)>,
     /// Pre-computed spans for error reporting.
     pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
@@ -191,6 +196,8 @@ impl<'db> TypeContext<'db> {
             db,
             inherited: None,
             in_function_body: false,
+            checking_inline: None,
+            inline_calls: Vec::new(),
             spans,
             current_module_id: module_id,
             variables: HashMap::new(),
@@ -241,6 +248,77 @@ impl<'db> TypeContext<'db> {
 
     pub fn add_error(&mut self, error: TypeError) {
         self.errors.push(error);
+    }
+
+    /// F085: Each cycle of `inline` functions calling each other, at the
+    /// first of them to be checked.
+    ///
+    /// Called once every function of a module or script unit is checked. A
+    /// cycle cannot leave one: modules do not require each other in a cycle,
+    /// and a script unit's functions are not called by anything before it. So
+    /// a call to a function checked elsewhere has no calls recorded here and
+    /// closes nothing. Inlining expands each call it is given, so this is what
+    /// makes it finish; refused here, a cycle is refused before any lowering.
+    pub fn report_inline_cycles(&mut self) {
+        let mut reported: HashSet<StmtFun<'db>> = HashSet::new();
+        let callers: Vec<StmtFun<'db>> = self.inline_calls.iter()
+            .map(|(caller, _)| *caller)
+            .fold(Vec::new(), |mut seen, caller| {
+                if !seen.contains(&caller) {
+                    seen.push(caller);
+                }
+                seen
+            });
+        for start in callers {
+            if reported.contains(&start) {
+                continue;
+            }
+            let Some(cycle) = self.inline_cycle_from(start) else { continue };
+            reported.extend(cycle.iter().copied());
+            let names: Vec<String> = cycle.iter()
+                .chain(std::iter::once(&start))
+                .map(|f| f.name(self.db).as_str(self.db).to_string())
+                .collect();
+            let path = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(" calls ");
+            self.push_coded(
+                crate::ErrorSite::Fun(start.local_index(self.db)),
+                "F085",
+                format!("inline function `{}` is recursive ({path})", names[0]),
+                S("an inline function cannot be"),
+                Some(S("every call to an inline function is replaced by its body, so a cycle of them \
+would be replaced for ever. Drop `inline` from one function of the cycle.")),
+            );
+            self.add_error(TypeError::InlineCycle { names });
+        }
+    }
+
+    /// A path of inline calls from `start` back to it, `start` first, by depth
+    /// first search in the order the calls were checked.
+    fn inline_cycle_from(&self, start: StmtFun<'db>) -> Option<Vec<StmtFun<'db>>> {
+        let mut path = vec![start];
+        let mut visited: HashSet<StmtFun<'db>> = HashSet::from([start]);
+        let mut next: Vec<usize> = vec![0];
+        while let Some(&at) = path.last() {
+            let from = next.last_mut().expect("one cursor per path entry");
+            let edge = self.inline_calls[*from..].iter()
+                .position(|(caller, _)| *caller == at)
+                .map(|i| *from + i);
+            let Some(edge) = edge else {
+                path.pop();
+                next.pop();
+                continue;
+            };
+            *from = edge + 1;
+            let callee = self.inline_calls[edge].1;
+            if callee == start {
+                return Some(path);
+            }
+            if visited.insert(callee) {
+                path.push(callee);
+                next.push(0);
+            }
+        }
+        None
     }
 
     /// Report a function that can reach the end of its body owing a value.
@@ -1042,6 +1120,11 @@ replace the view rather than the elements it shows. Index down to single element
         module_id: Option<ModuleId<'db>>,
         type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
     ) {
+        if let Some(caller) = self.checking_inline
+            && func.signature(self.db).inline
+        {
+            self.inline_calls.push((caller, func));
+        }
         self.call_targets.insert(
             ExprKey::of_call(self.db, call),
             ResolvedCallTarget::new(self.db, func, module_id, type_args),

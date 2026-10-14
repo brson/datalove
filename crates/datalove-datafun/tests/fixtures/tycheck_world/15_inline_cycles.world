@@ -1,0 +1,59 @@
+----------
+module local/test/cycles
+----------
+
+// Inline functions may call each other in a chain.
+fun leaf(x: u32): u32
+    inline
+    ret x
+end fun
+
+fun chain(x: u32): u32
+    inline
+    ret leaf(x)
+end fun
+
+// But not in a cycle, which is reported once, at the first of it.
+fun ping(n: u32): u32
+    inline
+    if n == 0
+        ret 0
+    end if
+    ret pong(icall sub_wrapping_u32(n, : u32 / 1))
+end fun
+
+fun pong(n: u32): u32
+    inline
+    ret ping(n)
+end fun
+
+// A call to itself is a cycle too.
+fun spin(n: u32): u32
+    inline
+    ret spin(n)
+end fun
+
+// A cycle through a function that is not inline is ordinary recursion.
+fun outer(n: u32): u32
+    inline
+    ret plain(n)
+end fun
+
+fun plain(n: u32): u32
+    if n == 0
+        ret 0
+    end if
+    ret outer(icall sub_wrapping_u32(n, : u32 / 1))
+end fun
+
+----------
+module local/test/user
+----------
+require module local/test/cycles
+import cycles.chain
+
+// A call into another module's inline functions closes no cycle here.
+fun twice(x: u32): u32
+    inline
+    ret chain(chain(x))
+end fun

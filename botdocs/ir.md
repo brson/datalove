@@ -869,7 +869,8 @@ its own, a `ref` or `mut` one is the argument, and an `out` one is a tracked
 slot moved into the argument's place at the continuation. A generic callee's
 types take the call's bindings. The result is simplified, which also puts the
 blocks in reverse postorder, the order the compiled backends need to meet a
-definition before its uses. A cycle of inline functions is an error.
+definition before its uses. A cycle of inline functions is refused by
+typecheck (F085), so expansion always finishes, and inlining cannot fail.
 
 **Simplification** (`ir::simplify`) runs after inlining, on each function it
 changed, and removes what splices leave: a `Copy` of a value that cannot

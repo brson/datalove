@@ -544,11 +544,7 @@ pub fn lower_module<'db>(
     };
     let mut inliner = Inliner::new(&resolve);
     for func in &mut functions {
-        if let Err(e) = crate::optimize::finish_shared(func, &mut inliner, !skip_const_inlining)
-            && !errors.contains(&e)
-        {
-            errors.push(e);
-        }
+        crate::optimize::finish_shared(func, &mut inliner, !skip_const_inlining);
     }
 
     log_query("lower", module_path, QueryPhase::End);

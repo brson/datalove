@@ -35,25 +35,6 @@ use std::sync::Arc;
 use crate::params::{map_operands_in_instruction, map_operands_in_terminator};
 use crate::*;
 
-/// Why a function's calls could not be inlined.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InlineError {
-    /// Inline functions calling each other in a cycle, by name, from the first
-    /// back to it again.
-    Recursion(Vec<String>),
-}
-
-impl std::fmt::Display for InlineError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InlineError::Recursion(names) => {
-                let cycle = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(" calls ");
-                write!(f, "inline function `{}` is recursive ({cycle}), and an inline function cannot be", names[0])
-            }
-        }
-    }
-}
-
 /// `callee`, with its calls to its own unit's functions named so that they
 /// still reach them from code in a later unit.
 ///
@@ -81,10 +62,13 @@ pub fn with_calls_into_unit(callee: &IrCodeUnit, unit: u32) -> IrCodeUnit {
 /// `resolve` finds a call's callee as code in `unit` names it if it is
 /// inline, with its own calls named as they are from `unit`
 /// (`with_calls_into_unit`), and none otherwise.
+///
+/// Inline functions calling each other in a cycle are refused by typecheck
+/// (F085), so expanding one always finishes; meeting a cycle here panics.
 pub fn inline_calls(
     unit: &mut IrCodeUnit,
     resolve: &dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>,
-) -> Result<bool, InlineError> {
+) -> bool {
     Inliner::new(resolve).inline(unit)
 }
 
@@ -107,7 +91,7 @@ pub struct Inliner<'r> {
     /// Each callee met, expanded if it is inline, none if it is not.
     callees: HashMap<CodeRef, Option<Arc<IrCodeUnit>>>,
     /// The inline functions being expanded, outermost first.
-    stack: Vec<(CodeRef, String)>,
+    stack: Vec<CodeRef>,
 }
 
 impl<'r> Inliner<'r> {
@@ -124,75 +108,63 @@ impl<'r> Inliner<'r> {
     /// Replace every call in function body `unit` to an inline function by
     /// the function's body, and simplify what that leaves. Whether there was
     /// one.
-    pub fn inline(&mut self, unit: &mut IrCodeUnit) -> Result<bool, InlineError> {
-        if !self.expand(unit)? {
-            return Ok(false);
+    pub fn inline(&mut self, unit: &mut IrCodeUnit) -> bool {
+        if !self.expand(unit) {
+            return false;
         }
         crate::simplify::simplify(unit);
         let table = descriptor_table(unit);
         if let CodeUnitContext::Function(ctx) = &mut unit.context {
             ctx.descriptor_table = table;
         }
-        Ok(true)
+        true
     }
 
     /// Splice every call to an inline function in `unit`. Whether there was one.
-    fn expand(&mut self, unit: &mut IrCodeUnit) -> Result<bool, InlineError> {
+    fn expand(&mut self, unit: &mut IrCodeUnit) -> bool {
         let mut spliced = false;
         // A splice ends the block at the call and puts what followed it in a
         // new block at the end, which this comes to in turn.
         let mut b = 0;
         while b < unit.blocks.len() {
-            if let Some((i, callee)) = self.first_inline_call(unit, b)? {
+            if let Some((i, callee)) = self.first_inline_call(unit, b) {
                 splice(unit, b, i, &callee);
                 spliced = true;
             }
             b += 1;
         }
-        Ok(spliced)
+        spliced
     }
 
     /// The first call in block `b` to an inline function, and the function
     /// expanded.
-    fn first_inline_call(&mut self, unit: &IrCodeUnit, b: usize) -> Result<Option<(usize, Arc<IrCodeUnit>)>, InlineError> {
-        for (i, instr) in unit.blocks[b].instructions.iter().enumerate() {
-            if let Instruction::Call { func, .. } = instr
-                && let Some(callee) = self.inline_callee(func)?
-            {
-                return Ok(Some((i, callee)));
-            }
-        }
-        Ok(None)
+    fn first_inline_call(&mut self, unit: &IrCodeUnit, b: usize) -> Option<(usize, Arc<IrCodeUnit>)> {
+        unit.blocks[b].instructions.iter().enumerate().find_map(|(i, instr)| match instr {
+            Instruction::Call { func, .. } => Some((i, self.inline_callee(func)?)),
+            _ => None,
+        })
     }
 
     /// The callee of a call if it is inline, with its own inline calls
     /// expanded.
-    fn inline_callee(&mut self, func: &CodeRef) -> Result<Option<Arc<IrCodeUnit>>, InlineError> {
+    fn inline_callee(&mut self, func: &CodeRef) -> Option<Arc<IrCodeUnit>> {
         if let Some(callee) = self.callees.get(func) {
-            return Ok(callee.clone());
+            return callee.clone();
         }
         let Some(callee) = (self.resolve)(func) else {
             self.callees.insert(func.clone(), None);
-            return Ok(None);
+            return None;
         };
         debug_assert!(is_inline(&callee), "`resolve` found {}, which is not inline", callee.name);
-        if let Some(at) = self.stack.iter().position(|(r, _)| r == func) {
-            // The cycle from its alphabetically first function, so that every
-            // function reaching it reports the same one.
-            let mut names: Vec<String> = self.stack[at..].iter().map(|(_, n)| n.clone()).collect();
-            let first = (0..names.len()).min_by_key(|&k| &names[k]).expect("a cycle has a function");
-            names.rotate_left(first);
-            names.push(names[0].clone());
-            return Err(InlineError::Recursion(names));
-        }
-        self.stack.push((func.clone(), callee.name.clone()));
+        assert!(!self.stack.contains(func),
+            "inline function {} is recursive, which typecheck refuses (F085)", callee.name);
+        self.stack.push(func.clone());
         let mut body = (*callee).clone();
-        let expanded = self.expand(&mut body);
+        self.expand(&mut body);
         self.stack.pop();
-        expanded?;
         let body = Arc::new(body);
         self.callees.insert(func.clone(), Some(Arc::clone(&body)));
-        Ok(Some(body))
+        Some(body)
     }
 }
 

@@ -1,4 +1,4 @@
-# Organizing the IR passes
+# Organizing the IR Passes
 
 A plan for running datafun's IR passes in one order, per function, memoized,
 and for the compile time they cost. Written October 2026, after `inline` and
@@ -82,8 +82,12 @@ module rather than once per call.
 Scripts run the same steps through the same function (`optimize::finish`),
 over the module registry's finished functions for a module callee.
 
-The inline recursion check stays where it is, in the inliner, since a cycle
-can only be met by expanding it.
+A cycle of inline functions is refused by typecheck (F085), from the calls it
+resolved, so that no step here can fail: lowering a function, inlining
+included, reports nothing that analysis did not. That matters for lowering on
+demand, below, where a failure would surface at the first call. A cycle
+cannot cross modules, since modules do not require each other in a cycle, so
+the check is per module.
 
 ## Later: per-function queries
 

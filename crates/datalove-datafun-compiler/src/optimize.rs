@@ -17,22 +17,21 @@ use datalove_datafun_ir::IrCodeUnit;
 /// what that leaves simplified and its dead code removed, and, where consts
 /// were inlined, the function's consts promoted to statics.
 ///
-/// An error is a cycle of inline functions.
-pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) -> Result<(), String> {
-    if calls_inline(func, inliner.resolver()) && inliner.inline(func).map_err(|e| e.to_string())? {
+/// Nothing here can fail: a cycle of inline functions, the one thing inlining
+/// cannot do, is refused by typecheck (F085).
+pub fn finish(func: &mut IrCodeUnit, inliner: &mut Inliner<'_>, promote: bool) {
+    if calls_inline(func, inliner.resolver()) && inliner.inline(func) {
         eliminate_dead_code_unit(func);
     }
     if promote && !func.const_values.is_empty() {
         promote_function_consts(func);
     }
-    Ok(())
 }
 
 /// `finish` for a function behind a handle, which stays shared where nothing
 /// changes it.
-pub fn finish_shared(unit: &mut Arc<IrCodeUnit>, inliner: &mut Inliner<'_>, promote: bool) -> Result<(), String> {
+pub fn finish_shared(unit: &mut Arc<IrCodeUnit>, inliner: &mut Inliner<'_>, promote: bool) {
     if calls_inline(unit, inliner.resolver()) || promote && !unit.const_values.is_empty() {
-        finish(Arc::make_mut(unit), inliner, promote)?;
+        finish(Arc::make_mut(unit), inliner, promote);
     }
-    Ok(())
 }

@@ -1222,7 +1222,7 @@ end fun
 The calls are gone from the compiled program, in every engine; what the
 function does, its parameters' modes and its ownership are as they were. An
 inline function may call other inline functions, but not in a cycle, which is
-an error. `inline` anywhere else is an error (P076). Calls in a script's
+an error (F085), at the first function of the cycle. `inline` anywhere else is an error (P076). Calls in a script's
 top-level code are not inlined, only those in function bodies. This is a
 stand-in for an inliner that decides for itself, and will go.
 

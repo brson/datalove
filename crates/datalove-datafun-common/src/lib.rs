@@ -417,6 +417,9 @@ pub enum TypeError {
         func_name: String,
         param_name: String,
     },
+    /// F085: Inline functions calling each other in a cycle, by name, from
+    /// the first back to it again.
+    InlineCycle { names: Vec<String> },
 }
 
 impl From<datalove_datalit::tycheck::TypeError> for TypeError {

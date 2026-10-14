@@ -242,6 +242,12 @@ fn error_to_json(error: &datalove_datafun_tycheck::TypeError) -> rmx::serde_json
                 "reason": reason
             })
         }
+        TypeError::InlineCycle { names } => {
+            json!({
+                "kind": "InlineCycle",
+                "names": names
+            })
+        }
         TypeError::ComptimeParamOfGenericType { func_name, param_name } => {
             json!({
                 "kind": "ComptimeParamOfGenericType",

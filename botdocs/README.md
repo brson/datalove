@@ -45,6 +45,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
 - [Immutable Cursors for the Collections](plan-cursors.md)
 - [Generics by Reference](plan-fat-generics.md)
+- [Organizing the IR Passes](plan-ir-passes.md)
 - [Carry/Bring](carry-bring.md)
 
 ---

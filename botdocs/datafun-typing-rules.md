@@ -718,6 +718,9 @@ Fields and elements read out of an aggregate, and the targets of `set`.
 - **F055**: `set` on an immutable variable
 - **F063**: A function that can reach the end of its body without returning a
   value
+- **F085**: `inline` functions calling each other in a cycle, a function
+  calling itself included; reported once per cycle, at the first function of
+  it
 
 ### Declaration Errors
 - **F059**: A name imported twice

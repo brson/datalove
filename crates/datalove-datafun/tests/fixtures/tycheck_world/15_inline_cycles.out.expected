@@ -1,0 +1,116 @@
+{
+  "diagnostics": [
+    {
+      "code": "F085",
+      "labels": [
+        {
+          "message": "an inline function cannot be",
+          "span": [
+            231,
+            234
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "inline function `ping` is recursive (`ping` calls `pong` calls `ping`)"
+    },
+    {
+      "code": "F085",
+      "labels": [
+        {
+          "message": "an inline function cannot be",
+          "span": [
+            457,
+            460
+          ],
+          "text": "fun"
+        }
+      ],
+      "message": "inline function `spin` is recursive (`spin` calls `spin`)"
+    }
+  ],
+  "modules": {
+    "cycles": {
+      "errors": [
+        {
+          "kind": "InlineCycle",
+          "names": [
+            "ping",
+            "pong",
+            "ping"
+          ]
+        },
+        {
+          "kind": "InlineCycle",
+          "names": [
+            "spin",
+            "spin"
+          ]
+        }
+      ],
+      "functions": [
+        {
+          "name": "leaf",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "chain",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "ping",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "pong",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "spin",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "outer",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        },
+        {
+          "name": "plain",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    },
+    "user": {
+      "errors": [],
+      "functions": [
+        {
+          "name": "twice",
+          "params": [
+            "u32"
+          ],
+          "return_type": "u32"
+        }
+      ]
+    }
+  }
+}

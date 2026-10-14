@@ -405,6 +405,7 @@ pub fn typecheck_script_unit<'db>(
             for statement in parsed.statements.iter() {
                 check_statement(&mut ctx, &statement);
             }
+            ctx.report_inline_cycles();
 
             // Extract new bindings for subsequent units.
             for stmt in parsed.statements.iter() {
@@ -639,6 +640,7 @@ pub fn typecheck_module<'db>(
             check_statement(&mut ctx, &statement);
         }
     }
+    ctx.report_inline_cycles();
 
     // Use exports from name resolution (already computed).
     let exports = name_resolution.functions(db).clone();

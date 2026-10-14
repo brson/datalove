@@ -313,8 +313,10 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // `variables` afterwards also takes back the consts the body bound.
             let saved_variables = ctx.variables.C();
             let saved_in_function_body = ctx.in_function_body;
+            let saved_checking_inline = ctx.checking_inline;
             ctx.variables.retain(|_, binding| binding.is_const);
             ctx.in_function_body = true;
+            ctx.checking_inline = stmt.signature(db).inline.then_some(*stmt);
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
             // `var x: T` and `let pair: (T, T)` name a type the function has,
@@ -368,6 +370,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // Restore context.
             ctx.variables = saved_variables;
             ctx.in_function_body = saved_in_function_body;
+            ctx.checking_inline = saved_checking_inline;
             ctx.type_aliases = saved_type_aliases;
             ctx.type_param_bounds = saved_type_param_bounds;
             ctx.expected_return_type = saved_return_type;

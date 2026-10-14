@@ -989,10 +989,7 @@ impl<'db> ScriptCompiler<'db> {
         // that a specialized copy is inlined too, and consts promoted, after
         // specialization, which reads const arguments out of the `Const`
         // instructions promotion replaces. See `optimize::finish`.
-        let ir_unit = match self.phase_finish(ir_unit) {
-            Ok(ir) => ir,
-            Err(result) => return result,
-        };
+        let ir_unit = self.phase_finish(ir_unit);
 
         self.record_unit(index, &ir_unit, &typecheck, &ownership, &consts);
 
@@ -1704,7 +1701,7 @@ impl<'db> ScriptCompiler<'db> {
     /// The unit's own code is left calling: it names earlier units' bindings,
     /// which a function body cannot, and a splice cannot record the moves of
     /// those it passes.
-    fn phase_finish(&self, mut ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
+    fn phase_finish(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
         use datalove_datafun_compiler::optimize;
         use datalove_datafun_ir::inline::{is_inline, with_calls_into_unit, Inliner};
         use datalove_datafun_ir::CodeRef;
@@ -1728,23 +1725,10 @@ impl<'db> ScriptCompiler<'db> {
         };
 
         let mut inliner = Inliner::new(&resolve);
-        let mut errors = Vec::new();
         for func in &mut ir_unit.nested_units {
-            if let Err(e) = optimize::finish(func, &mut inliner, !self.skip_const_inlining)
-                && !errors.contains(&e)
-            {
-                errors.push(e);
-            }
+            optimize::finish(func, &mut inliner, !self.skip_const_inlining);
         }
-        if !errors.is_empty() {
-            return Err(ScriptCompilationResult {
-                typecheck: TypecheckResult::Success,
-                ownership: OwnershipResult::Success,
-                lowering: LoweringResult::Error { message: errors.join("; ") },
-                ir_unit: None,
-            });
-        }
-        Ok(ir_unit)
+        ir_unit
     }
 
     // ========================================================================
