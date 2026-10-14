@@ -1082,7 +1082,7 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
 
     // A temporary would have to live to the loop's end and be dropped on
     // every way out of it, `ret` and `?` included; nothing wants that yet.
-    if !matches!(iteratee.expr(db), ExprFunKind::Place(_) | ExprFunKind::FieldProj(_)) {
+    if !is_place(db, iteratee) {
         coded(ctx, S("a `for` walks a collection that is already somewhere"),
             "name a variable, a parameter, or a field or element of one");
         return;
@@ -1152,4 +1152,15 @@ fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
         }
     });
     ctx.loop_depth -= 1;
+}
+
+/// Whether an expression names somewhere a value already is: a name with
+/// field or element steps, or a field of one. A field of anything else is a
+/// field of a temporary.
+fn is_place<'db>(db: &'db dyn salsa::Database, expr: ExprFun<'db>) -> bool {
+    match expr.expr(db) {
+        ExprFunKind::Place(_) => true,
+        ExprFunKind::FieldProj(proj) => is_place(db, proj.base),
+        _ => false,
+    }
 }

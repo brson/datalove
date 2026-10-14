@@ -134,10 +134,20 @@ struct AnalysisCtx<'a, 'db> {
     /// `break` and `continue` carry no label, so both always belong to the
     /// innermost loop and this is a plain stack.
     loop_exits: Vec<LoopExits>,
-    /// The bindings whose collections the `for` loops being analyzed walk,
-    /// innermost last. Each is frozen for its loop's body: its cursor and its
-    /// element bindings point into it.
-    walked: Vec<BindingId>,
+    /// The collections the `for` loops being analyzed walk, innermost last.
+    /// Each is frozen for its loop's body: its cursor and its element bindings
+    /// point into it.
+    walked: Vec<Walked>,
+}
+
+/// The root of a collection a `for` walks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Walked {
+    /// A binding this analysis has.
+    Binding(BindingId),
+    /// A binding an earlier script unit made, which this one names but has
+    /// no binding for.
+    Earlier(String),
 }
 
 /// The states a loop's `break`s and `continue`s left behind.
@@ -150,6 +160,8 @@ struct AnalysisCtx<'a, 'db> {
 #[derive(Default)]
 struct LoopExits {
     breaks: Vec<BTreeMap<BindingId, BindingState>>,
+    /// Which out parameters each `break` left with a value, beside `breaks`.
+    break_inits: Vec<HashMap<BindingId, OutParamInitState>>,
     continues: Vec<BTreeMap<BindingId, BindingState>>,
 }
 
@@ -509,12 +521,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let state = self.scope_stack.last()
             .map(|frame| frame.current_state.C())
             .unwrap_or_default();
+        let inits = self.scope_stack.last()
+            .map(|frame| frame.out_param_init.C())
+            .unwrap_or_default();
         let exits = self.loop_exits.last_mut()
             .expect("a `break` or `continue` outside a loop is F050/F051, which typecheck refuses");
         if is_continue {
             exits.continues.push(state);
         } else {
             exits.breaks.push(state);
+            exits.break_inits.push(inits);
         }
     }
 
@@ -548,30 +564,48 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         self.name_to_binding.get(name).copied()
     }
 
-    /// The binding a place is rooted in: a name, or the name a field or
-    /// element projection starts from.
-    fn place_root(&self, expr: ExprFun<'db>) -> Option<BindingId> {
+    /// What a place is rooted in: the binding of the name it starts from,
+    /// or that name, where an earlier script unit made the binding.
+    fn place_root(&self, expr: ExprFun<'db>) -> Option<Walked> {
         match expr.expr(self.db) {
-            ExprFunKind::Place(place) => self.lookup(place.root.text(self.db)),
+            ExprFunKind::Place(place) => Some(self.walked_root(place.root.text(self.db))),
             ExprFunKind::FieldProj(proj) => self.place_root(proj.base),
             _ => None,
         }
     }
 
-    /// Refuse a change to a binding a `for` is walking, saying whether it was
-    /// one.
-    fn check_not_walked(&mut self, id: BindingId, expr_key: ExprKey<'db>) -> bool {
-        if !self.walked.contains(&id) {
-            return false;
+    /// What a name a place starts from is, as a `for` would walk it.
+    fn walked_root(&self, name: &str) -> Walked {
+        match self.lookup(name) {
+            Some(id) => Walked::Binding(id),
+            None => Walked::Earlier(name.S()),
         }
-        let name = self.bindings[id.0 as usize].name.C();
+    }
+
+    /// Refuse a change to a collection a `for` is walking, saying whether it
+    /// was one.
+    fn check_not_walked(&mut self, root: Walked, expr_key: ExprKey<'db>) -> bool {
+        let Some(name) = self.walked_name(root) else {
+            return false;
+        };
         self.errors.push(AnalysisError::WalkedCollectionChanged { expr_key, name });
         true
     }
 
+    /// The name of a collection a `for` is walking, or none if it is not one.
+    fn walked_name(&self, root: Walked) -> Option<String> {
+        if !self.walked.contains(&root) {
+            return None;
+        }
+        Some(match root {
+            Walked::Binding(id) => self.bindings[id.0 as usize].name.C(),
+            Walked::Earlier(name) => name,
+        })
+    }
+
     /// Mark a binding as moved at the given expression.
     fn mark_moved(&mut self, id: BindingId, expr_key: ExprKey<'db>) {
-        if self.check_not_walked(id, expr_key) {
+        if self.check_not_walked(Walked::Binding(id), expr_key) {
             return;
         }
         // Borrowed params (Ref/Mut) cannot be moved - caller retains ownership.
@@ -629,8 +663,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             for &id in &frame.bindings {
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
                     let info = &self.bindings[id.0 as usize];
-                    // Skip Copy types.
-                    if !info.ty.is_copy() {
+                    // A copy owns nothing, and a borrowed binding -- a `ref`
+                    // parameter, a `for`'s element -- is someone else's to drop.
+                    if !info.ty.is_copy() && !info.is_borrowed() {
                         result.push(id);
                     }
                 }
@@ -747,16 +782,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     fn check_mutable_argument(&mut self, arg: ExprFun<'db>) {
         let expr_key = ExprKey::of(self.db, arg);
 
-        if !matches!(arg.expr(self.db), ExprFunKind::Place(_)) {
+        let ExprFunKind::Place(place) = arg.expr(self.db) else {
             self.errors.push(AnalysisError::CannotMutateTemporary { expr_key });
+            return;
+        };
+        if self.check_not_walked(self.walked_root(place.root.text(self.db)), expr_key) {
             return;
         }
         let Some(root) = self.expr_to_place_root(arg) else {
             return;
         };
-        if self.check_not_walked(root, expr_key) {
-            return;
-        }
         if self.binding_is_mutable(root) {
             return;
         }
@@ -1726,8 +1761,8 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
 
     // Assigning to a collection a `for` walks, or to any part of it, would
     // free or move what the walk points at.
-    if let Some(id) = ctx.lookup(place.root.text(ctx.db)) {
-        ctx.check_not_walked(id, ExprKey::of(ctx.db, expr));
+    if let Some(name) = ctx.walked_name(ctx.walked_root(place.root.text(ctx.db))) {
+        ctx.errors.push(AnalysisError::WalkedCollectionAssigned { set_index: stmt.local_index, name });
     }
 
     // The value comes first. A plain `set` moves it into the place; a compound
@@ -2294,7 +2329,7 @@ fn analyze_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLoop<'db>, stmt_
         ctx.schedule.loop_body_end.insert(stmt_idx, loop_drops);
     }
 
-    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry.state_before, &adapted);
+    merge_loop_exits(ctx, stmt.condition.is_some(), stmt_idx, &exits, &entry, &adapted);
 }
 
 /// Analyze a `for`: a loop that binds references into a collection, and so
@@ -2308,6 +2343,10 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     // the way to it -- `for x in ref xss[i]?` -- can leave the function before
     // the walk starts.
     analyze_read_before_loop(ctx, stmt.iteratee, stmt_idx);
+
+    // What the walk freezes, found before the loop's own names can shadow
+    // it: in `for xs in ref xs`, it is the outer `xs`.
+    let walked = ctx.place_root(stmt.iteratee);
 
     let entry = LoopEntry::of(ctx);
     ctx.loop_exits.push(LoopExits::default());
@@ -2324,8 +2363,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
         ctx.alloc_binding(name.text(ctx.db).S(), ty, false, by_ref.then_some(ParamMode::Ref));
     }
 
-    let walked = ctx.place_root(stmt.iteratee);
-    ctx.walked.extend(walked);
+    ctx.walked.extend(walked.clone());
     analyze_statements(ctx, &stmt.body);
     if walked.is_some() {
         ctx.walked.pop();
@@ -2340,7 +2378,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
     }
 
     // A walk can always run out of elements, on the first look included.
-    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry.state_before, &adapted);
+    merge_loop_exits(ctx, true, stmt_idx, &exits, &entry, &adapted);
 }
 
 /// Analyze what a loop reads before its body: a `loop while` condition, or
@@ -2366,6 +2404,9 @@ struct LoopEntry {
     /// Outer-scope non-copy bindings live on entry. If one is moved in the
     /// body, that's an error, because the body can run more than once.
     outer_live: Vec<BindingId>,
+    /// Which out parameters have a value on entry, which is also which have
+    /// one when the loop ends before its body runs.
+    inits_before: HashMap<BindingId, OutParamInitState>,
 }
 
 impl LoopEntry {
@@ -2379,7 +2420,10 @@ impl LoopEntry {
             })
             .map(|(id, _)| *id)
             .collect();
-        LoopEntry { state_before, outer_live }
+        let inits_before = ctx.scope_stack.last()
+            .map(|frame| frame.out_param_init.C())
+            .unwrap_or_default();
+        LoopEntry { state_before, outer_live, inits_before }
     }
 }
 
@@ -2452,9 +2496,10 @@ fn merge_loop_exits<'db>(
     can_run_out: bool,
     stmt_idx: usize,
     exits: &LoopExits,
-    state_before: &BTreeMap<BindingId, BindingState>,
+    entry: &LoopEntry,
     adapted: &[BindingId],
 ) {
+    let state_before = &entry.state_before;
     let mut exit_states: Vec<&BTreeMap<BindingId, BindingState>> = exits.breaks.iter().collect();
     if can_run_out {
         exit_states.push(state_before);
@@ -2464,6 +2509,19 @@ fn merge_loop_exits<'db>(
     // there is nothing after it for this to describe.
     if exit_states.is_empty() {
         return;
+    }
+
+    // An out parameter has a value after the loop only if every way out left
+    // it one: a body that may not run, or a `break` before the `set`, does not.
+    let mut exit_inits: Vec<&HashMap<BindingId, OutParamInitState>> = exits.break_inits.iter().collect();
+    if can_run_out {
+        exit_inits.push(&entry.inits_before);
+    }
+    for &id in entry.inits_before.keys() {
+        let initialized = exit_inits.iter()
+            .all(|inits| inits.get(&id) == Some(&OutParamInitState::Initialized));
+        let state = if initialized { OutParamInitState::Initialized } else { OutParamInitState::Uninitialized };
+        ctx.set_out_param_init(id, state);
     }
 
     for &id in state_before.keys() {

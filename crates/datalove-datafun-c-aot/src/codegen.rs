@@ -3387,7 +3387,9 @@ impl<'a> FunctionCodegenContext<'a> {
                     offset_of!(rtdt::StrideCursor, stride),
                     offset_of!(rtdt::StrideCursor, remaining),
                 );
-                writeln!(out, "    *(uint8_t**)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").unwrap();
+                // On the integer, since after the last element it points past the
+                // buffer, where C does not define pointer arithmetic.
+                writeln!(out, "    *(uintptr_t*)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").unwrap();
                 writeln!(out, "    *(index_t*)({at} + {remaining}) -= 1;").unwrap();
             }
             CursorKind::Row => {
@@ -3414,10 +3416,10 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    {{ uint8_t* __c = (uint8_t*){at}; uint32_t __next = *(uint32_t*)(__c + {slot}) + 1;").unwrap();
                 writeln!(out, "      if (__next < *(uint32_t*)(*(uint8_t**)(__c + {leaf}) + {len})) {{").unwrap();
                 writeln!(out, "        *(uint32_t*)(__c + {slot}) = __next;").unwrap();
-                writeln!(out, "        *(uint8_t**)(__c + {elem}) += {key_size};").unwrap();
+                writeln!(out, "        *(uintptr_t*)(__c + {elem}) += {key_size};").unwrap();
                 if let Some(value_ty) = value_ty {
                     let value_size = self.size_expr(&value_ty);
-                    writeln!(out, "        *(uint8_t**)(__c + {value}) += {value_size};").unwrap();
+                    writeln!(out, "        *(uintptr_t*)(__c + {value}) += {value_size};").unwrap();
                 }
                 let coll_tydesc = self.operand_tydesc(coll);
                 writeln!(out, "      }} else {{").unwrap();

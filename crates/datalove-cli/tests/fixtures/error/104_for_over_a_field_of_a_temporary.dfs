@@ -1,0 +1,8 @@
+// A field of a temporary is a temporary too: nothing would keep the struct
+// `make` returns alive for the walk, or let it go after.
+fun make(): { items: [string] }
+  ret { items = ["a", "b"] }
+end fun
+for x in ref make().items
+  debuglog x
+end for

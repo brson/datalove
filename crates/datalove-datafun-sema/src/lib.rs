@@ -318,6 +318,13 @@ pub enum AnalysisError<'db> {
         expr_key: ExprKey<'db>,
         name: String,
     },
+    /// The same, by a `set` to the collection or through it, reported at its
+    /// target: the `set` statement's span index.
+    /// D015
+    WalkedCollectionAssigned {
+        set_index: u32,
+        name: String,
+    },
     /// Attempting to pass a ref param to a mut param.
     /// D004
     CannotMutFromRef {
@@ -457,7 +464,8 @@ fn format_single_error(error: &AnalysisError) -> String {
         AnalysisError::CannotMutFromRef { expr_key: _, name } => {
             format!("error[D004]: cannot get mutable reference from immutable: `{}`", name)
         }
-        AnalysisError::WalkedCollectionChanged { expr_key: _, name } => {
+        AnalysisError::WalkedCollectionChanged { expr_key: _, name }
+        | AnalysisError::WalkedCollectionAssigned { set_index: _, name } => {
             format!("error[D015]: cannot change `{}` while a `for` walks it", name)
         }
         AnalysisError::ReadUninitialized { expr_key: _, name } => {

@@ -1271,9 +1271,14 @@ statements that run belong in a function or a script")
     /// The names a `for` binds and what it walks, after the `for`.
     fn parse_for_header(&mut self) -> Result<(Vec<InternedText<'db>>, ast::ExprFun<'db>), ast::Statement<'db>> {
         let mut bindings = vec![];
+        let mut seen = datalit::parser_util::SeenNames::default();
         loop {
+            let ts = self.peek_text_span();
             match self.eat_declared_name(NameKind::Value) {
-                Some(name) => bindings.push(name),
+                Some(name) => {
+                    self.declare_pattern_name(name, ts, &mut seen);
+                    bindings.push(name);
+                }
                 None => {
                     let ts = self.peek_text_span();
                     return Err(self.emit_stmt_error(ts,

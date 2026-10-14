@@ -1,0 +1,33 @@
+----------
+module local/test/main
+----------
+
+fun clobber(mut xs: [string])
+  set xs = ["zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"]
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.clobber
+var xs = ["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "b", "c"]
+
+----------
+scriptunit-fragment
+----------
+
+// A unit walking a collection an earlier unit made freezes it as it would
+// one of its own, so passing it `mut` to be replaced under the cursor is
+// refused (D015).
+for x in ref xs
+  call clobber(mut xs)
+  debuglog x
+end for
+
+----------
+scriptunit-expr
+----------
+
+xs

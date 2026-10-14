@@ -1,0 +1,62 @@
+----------
+module local/test/main
+----------
+
+// Leaving a walk early lets go of what the body made and nothing else: the
+// element bindings are the collection's, so `break` and `continue` once
+// dropped them in place and left the collection holding freed strings.
+
+fun key(): string
+  ret "a key long enough to be on the heap rather than inline"
+end fun
+
+fun leave(ref xss: [[string]], ref m: %{string = [string]}, ref grid: [|int, 2|]): int
+  var seen = 0
+  for xs in ref xss
+    let made = "built in the body, and dropped on the way out"
+    if seen == 1
+      break
+    end if
+    set seen = seen + 1
+    continue
+  end for
+  for k, v in ref m
+    break
+  end for
+  for row in ref grid
+    continue
+  end for
+  ret seen
+end fun
+
+// An element step whose key is built for the lookup, which is let go of once
+// the reference is had, before the walk.
+fun keyed(ref m: %{string = [string]}): !(index, index)
+  var a: index = : index / 0
+  for x in ref m["a key long enough to be on the heap rather than inline"]!
+    set a = icall add_wrapping_index(a, : index / 1)
+  end for
+  var b: index = : index / 0
+  for x in ref m[key()]!
+    set b = icall add_wrapping_index(b, : index / 1)
+  end for
+  ret ok (a, b)
+end fun
+
+fun main(): !(int, [[string]], %{string = [string]}, [|int, 2|], (index, index))
+  let xss = [["first, long enough to be on the heap"], ["second, long enough to be on the heap"]]
+  let m = %{"a key long enough to be on the heap rather than inline" = ["value, long enough to be on the heap", "b"]}
+  let grid = [| 1 2, 3 4 |]
+  let seen = leave(ref xss, ref m, ref grid)
+  let counts = keyed(ref m)!
+  ret ok (seen, xss, m, grid, counts)
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/main
+import main.main
+
+debuglog main()

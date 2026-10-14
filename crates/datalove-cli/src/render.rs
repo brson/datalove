@@ -221,6 +221,16 @@ fn ownership_diagnostic<'db>(
                     .build(),
             )
         }
+        AnalysisError::WalkedCollectionAssigned { set_index, name } => {
+            let ts = spans.lookup_set(*set_index)?;
+            Some(
+                DiagnosticBuilder::error(db, &fmt!("cannot change `{name}` while a `for` walks it"))
+                    .code("D015")
+                    .primary_label(ts.C(), "assigns to the collection being walked")
+                    .note("a `for` holds references into its collection until it ends")
+                    .build(),
+            )
+        }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
             let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(

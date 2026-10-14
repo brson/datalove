@@ -89,7 +89,6 @@ Analysis(
                         drop v5
                         branch v6, block5, block6
                     block5:
-                        drop *v4
                         goto block9
                     block6:
                         goto block7

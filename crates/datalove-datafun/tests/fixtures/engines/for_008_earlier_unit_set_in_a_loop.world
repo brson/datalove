@@ -1,0 +1,29 @@
+----------
+scriptunit-fragment
+----------
+
+var xs = ["a"]
+var n = 0
+
+----------
+scriptunit-fragment
+----------
+
+// Assigning an earlier unit's binding inside a loop's body, which is lowered
+// as a block rather than as the unit's top level: it found no slot of its own
+// for the name, and panicked.
+loop
+  set xs = ["b"]
+  set n = n + 1
+  break
+end loop
+let ys = [1, 2]
+for y in ref ys
+  set n = n + y
+end for
+
+----------
+scriptunit-expr
+----------
+
+(xs, n)

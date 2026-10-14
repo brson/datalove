@@ -82,7 +82,6 @@ Analysis(
                         v3 = ge *v2, p1
                         branch v3, block3, block4
                     block3:
-                        drop *v2
                         goto block10
                     block4:
                         goto block5
@@ -96,7 +95,6 @@ Analysis(
                         v8 = logic_or v5, v7
                         branch v8, block6, block7
                     block6:
-                        drop *v2
                         goto block9
                     block7:
                         goto block8

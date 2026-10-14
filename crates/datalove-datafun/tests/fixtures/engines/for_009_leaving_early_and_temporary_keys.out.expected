@@ -1,0 +1,207 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/main"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn key():
+                    block0:
+                        v0 = const "a key long enough to be on the heap rather than inline"
+                        return v0
+                    
+                    fn leave(p0, p1, p2):
+                    block0:
+                        v0 = const 0int
+                        store.move.tracked s0, v0
+                        cursorbegin s1, p0
+                        goto block1
+                    block1:
+                        v1 = cursordone s1
+                        branch v1, block7, block2
+                    block2:
+                        v2 = cursorelem s1
+                        v3 = const "built in the body, and dropped on the way out"
+                        v4 = const 1int
+                        v5 = eq s0, v4
+                        drop v4
+                        branch v5, block3, block4
+                    block3:
+                        drop v3
+                        goto block7
+                    block4:
+                        goto block5
+                    block5:
+                        v6 = const 1int
+                        v7 = add s0, v6
+                        drop v6
+                        drop.tracked s0
+                        store.move.tracked s0, v7
+                        drop v3
+                        goto block6
+                    block6:
+                        cursoradvance s1, p0
+                        goto block1
+                    block7:
+                        cursorbegin s2, p1
+                        goto block8
+                    block8:
+                        v8 = cursordone s2
+                        branch v8, block11, block9
+                    block9:
+                        v9 = cursorelem s2
+                        v10 = cursorvalue s2
+                        goto block11
+                    block10:
+                        cursoradvance s2, p1
+                        goto block8
+                    block11:
+                        cursorbegin s3, p2
+                        goto block12
+                    block12:
+                        v11 = cursordone s3
+                        branch v11, block15, block13
+                    block13:
+                        v12 = cursorelem s3
+                        goto block14
+                    block14:
+                        cursoradvance s3, p2
+                        goto block12
+                    block15:
+                        v13 = load.move.tracked s0
+                        return v13
+                    
+                    fn keyed(p0):
+                    block0:
+                        v0 = const 0index
+                        store.copy s0, v0
+                        v1 = const "a key long enough to be on the heap rather than inline"
+                        v2 = mapcontainskey p0[v1]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = const "key not found"
+                        v4 = error_from v3
+                        v5 = err v4
+                        drop v1
+                        return v5
+                    block2:
+                        v6 = mapvalueref p0[v1]
+                        drop v1
+                        cursorbegin s1, *v6
+                        goto block3
+                    block3:
+                        v7 = cursordone s1
+                        branch v7, block6, block4
+                    block4:
+                        v8 = cursorelem s1
+                        v9 = const 1index
+                        v10 = intrinsic AddWrappingIndex(s0, v9)
+                        store.copy s0, v10
+                        goto block5
+                    block5:
+                        cursoradvance s1, *v6
+                        goto block3
+                    block6:
+                        v11 = const 0index
+                        store.copy s2, v11
+                        v12 = call m0.u0()
+                        v13 = mapcontainskey p0[v12]
+                        branch v13, block8, block7
+                    block7:
+                        v14 = const "key not found"
+                        v15 = error_from v14
+                        v16 = err v15
+                        drop v12
+                        return v16
+                    block8:
+                        v17 = mapvalueref p0[v12]
+                        drop v12
+                        cursorbegin s3, *v17
+                        goto block9
+                    block9:
+                        v18 = cursordone s3
+                        branch v18, block12, block10
+                    block10:
+                        v19 = cursorelem s3
+                        v20 = const 1index
+                        v21 = intrinsic AddWrappingIndex(s2, v20)
+                        store.copy s2, v21
+                        goto block11
+                    block11:
+                        cursoradvance s3, *v17
+                        goto block9
+                    block12:
+                        v22 = load.copy s0
+                        v23 = load.copy s2
+                        v24 = pack Tuple2 {v22, v23}
+                        v25 = ok v24
+                        return v25
+                    
+                    fn main():
+                    block0:
+                        v0 = const "first, long enough to be on the heap"
+                        v1 = list [v0]
+                        v2 = const "second, long enough to be on the heap"
+                        v3 = list [v2]
+                        v4 = list [v1, v3]
+                        v5 = const "a key long enough to be on the heap rather than inline"
+                        v6 = const "value, long enough to be on the heap"
+                        v7 = const "b"
+                        v8 = list [v6, v7]
+                        v9 = %{v5: v8}
+                        v10 = const 1int
+                        v11 = const 2int
+                        v12 = const 3int
+                        v13 = const 4int
+                        v14 = [| v10 v11, v12 v13 |]
+                        v15 = call m0.u1(v4, v9, v14)
+                        v16 = call m0.u2(v9)
+                        v17, v18, v19 = unwrap_result v16
+                        branch v19, block2, block1
+                    block1:
+                        v20 = err v18
+                        drop v4
+                        drop v9
+                        drop v14
+                        drop v15
+                        return v20
+                    block2:
+                        v21 = pack Tuple5 {v15, v4, v9, v14, v17}
+                        v22 = ok v21
+                        return v22
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = call m0.u3()
+                        debuglog v0
+                        drop v0
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok (1, [[\"first, long enough to be on the heap\"], [\"second, long enough to be on the heap\"]], %{\"a key long enough to be on the heap rather than inline\" = [\"value, long enough to be on the heap\", \"b\"]}, [| 1 2, 3 4 |], (2, 2))\n"),
+        ),
+    ],
+)

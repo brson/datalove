@@ -1,0 +1,5 @@
+// A `for` names each binding once, as a pattern does.
+let m = %{"a" = 1}
+for x, x in ref m
+  debuglog x
+end for

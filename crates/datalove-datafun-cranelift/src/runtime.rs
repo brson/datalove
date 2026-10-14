@@ -133,23 +133,15 @@ pub struct RuntimeImports {
     /// `dtlv_rti_dyn_unop(rt, op, value, value_td, out, out_td)`
     pub dyn_unop: FuncId,
 
-    // Cursors, the whole of a `for` loop's walk: see `dtlv_rti_*_cursor_*`.
-    pub list_cursor_begin: FuncId,
+    // The parts of a `for` loop's walk compiled code calls rather than
+    // open-codes: starting one over a tensor or a tree, and a tree's advance
+    // to its next leaf. See `codegen/cursors.rs`.
     pub tensor_cursor_begin: FuncId,
-    pub stride_cursor_done: FuncId,
-    pub stride_cursor_elem: FuncId,
-    pub stride_cursor_advance: FuncId,
     pub tensor_row_cursor_begin: FuncId,
-    pub row_cursor_done: FuncId,
-    pub row_cursor_elem: FuncId,
-    pub row_cursor_advance: FuncId,
     pub set_cursor_begin: FuncId,
     pub map_cursor_begin: FuncId,
     pub set_cursor_advance: FuncId,
     pub map_cursor_advance: FuncId,
-    pub tree_cursor_done: FuncId,
-    pub tree_cursor_elem: FuncId,
-    pub tree_cursor_value: FuncId,
 }
 
 impl RuntimeImports {
@@ -795,27 +787,16 @@ impl RuntimeImports {
                     format!("declare dtlv_rti_tensor_set_local: {}", e)))?
         };
 
-        // Cursors. Begin and the trees' advance take the handle and the
-        // collection's descriptor and return a status; the rest take only the
-        // cursor.
+        // Cursors. Each takes the handle and the collection's descriptor and
+        // returns a status.
         let status = Some(cl_types::I8);
         let begin = |module: &mut M, name: &str| declare_import(module, call_conv, name, 4, status);
-        let list_cursor_begin = begin(module, "dtlv_rti_list_cursor_begin_local")?;
         let tensor_cursor_begin = begin(module, "dtlv_rti_tensor_cursor_begin_local")?;
         let tensor_row_cursor_begin = begin(module, "dtlv_rti_tensor_row_cursor_begin_local")?;
         let set_cursor_begin = begin(module, "dtlv_rti_btreeset_cursor_begin_local")?;
         let map_cursor_begin = begin(module, "dtlv_rti_btreemap_cursor_begin_local")?;
         let set_cursor_advance = declare_import(module, call_conv, "dtlv_rti_btreeset_cursor_advance_local", 3, status)?;
         let map_cursor_advance = declare_import(module, call_conv, "dtlv_rti_btreemap_cursor_advance_local", 3, status)?;
-        let stride_cursor_done = declare_import(module, call_conv, "dtlv_rti_stride_cursor_done", 1, Some(cl_types::I8))?;
-        let row_cursor_done = declare_import(module, call_conv, "dtlv_rti_row_cursor_done", 1, Some(cl_types::I8))?;
-        let tree_cursor_done = declare_import(module, call_conv, "dtlv_rti_tree_cursor_done", 1, Some(cl_types::I8))?;
-        let stride_cursor_elem = declare_import(module, call_conv, "dtlv_rti_stride_cursor_elem", 1, Some(PTR_TYPE))?;
-        let row_cursor_elem = declare_import(module, call_conv, "dtlv_rti_row_cursor_elem", 1, Some(PTR_TYPE))?;
-        let tree_cursor_elem = declare_import(module, call_conv, "dtlv_rti_tree_cursor_elem", 1, Some(PTR_TYPE))?;
-        let tree_cursor_value = declare_import(module, call_conv, "dtlv_rti_tree_cursor_value", 1, Some(PTR_TYPE))?;
-        let stride_cursor_advance = declare_import(module, call_conv, "dtlv_rti_stride_cursor_advance", 1, None)?;
-        let row_cursor_advance = declare_import(module, call_conv, "dtlv_rti_row_cursor_advance", 1, None)?;
 
         Ok(Self {
             init,
@@ -872,22 +853,12 @@ impl RuntimeImports {
             dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
-            list_cursor_begin,
             tensor_cursor_begin,
-            stride_cursor_done,
-            stride_cursor_elem,
-            stride_cursor_advance,
             tensor_row_cursor_begin,
-            row_cursor_done,
-            row_cursor_elem,
-            row_cursor_advance,
             set_cursor_begin,
             map_cursor_begin,
             set_cursor_advance,
             map_cursor_advance,
-            tree_cursor_done,
-            tree_cursor_elem,
-            tree_cursor_value,
         })
     }
     /// Every import, for a backend that resolves them itself.
@@ -947,22 +918,12 @@ impl RuntimeImports {
             dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
-            list_cursor_begin,
             tensor_cursor_begin,
-            stride_cursor_done,
-            stride_cursor_elem,
-            stride_cursor_advance,
             tensor_row_cursor_begin,
-            row_cursor_done,
-            row_cursor_elem,
-            row_cursor_advance,
             set_cursor_begin,
             map_cursor_begin,
             set_cursor_advance,
             map_cursor_advance,
-            tree_cursor_done,
-            tree_cursor_elem,
-            tree_cursor_value,
         } = self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
@@ -980,22 +941,12 @@ impl RuntimeImports {
             dyn_binop, dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
-            list_cursor_begin,
             tensor_cursor_begin,
-            stride_cursor_done,
-            stride_cursor_elem,
-            stride_cursor_advance,
             tensor_row_cursor_begin,
-            row_cursor_done,
-            row_cursor_elem,
-            row_cursor_advance,
             set_cursor_begin,
             map_cursor_begin,
             set_cursor_advance,
             map_cursor_advance,
-            tree_cursor_done,
-            tree_cursor_elem,
-            tree_cursor_value,
         ]
     }
 }

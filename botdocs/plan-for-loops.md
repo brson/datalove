@@ -241,8 +241,8 @@ body:
     v = cursorvalue s_c               // maps only
     i = slotload.copy s_i             // indexed form only
     ...                               // item is *r
-    goto latch
-latch:                                // continue jumps here
+    goto next
+next:                                 // continue jumps here
     cursoradvance s_c, v_coll
     slotstore.copy s_i, (add i, 1)    // indexed form only
     goto head
@@ -338,7 +338,7 @@ Where the statement threads through:
 | `sema/src/lib.rs` | a new `StmtKey` kind (18) |
 | `tycheck/src/statement.rs` | the iteratee's type gives the bindings' types; arity by kind; `loop_depth` |
 | `ownership/src/lib.rs` | see [Ownership](#user-content-ownership) |
-| `lower/src/stmt.rs`, `script.rs`, `context.rs` | the loop shape; `LoopLowerContext` gains a `continue_target`, which is the header for `loop` and the latch for `for` |
+| `lower/src/stmt.rs`, `script.rs`, `context.rs` | the loop shape; `LoopLowerContext` gains `next`, where `continue` goes: the header for `loop`, the advance for `for` |
 | `worldgen` | the shape in `ALL_SHAPES` and the generator |
 | `datalove-mode.el`, the four `datalove-prism.js` copies | keyword and indentation |
 
@@ -350,18 +350,22 @@ panics for a slot with no binding.
 
 ## Ownership
 
-- **The bindings** are allocated as `alloc_const_param` allocates a const
-  parameter: `param_mode: Some(ParamMode::Ref)`, so a move is D003, a
-  `mut`/`out` argument D004, and nothing drops them.
-- **Freezing.** A stack of frozen root `BindingId`s on `AnalysisCtx`, pushed
-  for the body, checked in `mark_moved` and the zero-step place consume path,
+- **The bindings** are allocated with `param_mode: Some(ParamMode::Ref)`, as
+  a `ref` parameter is, so a move is D003, a `mut`/`out` argument D004, and
+  nothing drops them: not at the body's end, and not at a `break` or
+  `continue` either.
+- **Freezing.** A stack of walked roots on `AnalysisCtx`, pushed for the
+  body: a binding, or the name of one an earlier script unit made, which has
+  no binding here. The root is found before the loop's own names are bound,
+  so `for xs in ref xs` freezes the outer `xs`. It is checked in `mark_moved`,
   in `analyze_set` against the place's root (whole, indexed, field and
-  compound), and in `check_mutable_argument`. Each refusal is a new error
-  code. A nested loop over the outer binding's row freezes the same root
-  again, harmlessly.
-- **Exits.** `merge_loop_exits` merges `state_before` only for
-  `loop while`. A `for` can always run out of elements, so it merges it too.
-  It is typed on `StmtLoop` and needs to take either.
+  compound), and in `check_mutable_argument`. Every refusal is D015, at the
+  `set`'s target or at the expression. A nested loop over the outer binding's
+  row freezes the same root again, harmlessly.
+- **Exits.** `merge_loop_exits` merges `state_before` for a loop that can end
+  without running its body, `loop while` and `for`, and the state at each
+  `break`. Out parameters are settled the same way: one is written after the
+  loop only if every way out wrote it.
 - **Moves in the body** of an outer binding are D007 as for any loop.
 
 ## Backends
@@ -430,6 +434,26 @@ description of a cursor's layout to drift from the runtime's.
   `borrow_from_left_internal` shifted the node's children only when it had
   keys, so a node down to none lost its one child. Only a bulk-built map,
   whose internal nodes can start below the minimum, reached it.
+- **Fixed, found in review:**
+  - `break` and `continue` dropped a `for`'s element bindings, freeing them
+    inside the collection: `live_bindings_in_scopes`, unlike every other drop
+    point, did not skip a borrowed binding, and none had lived in a loop
+    before. Fixture `engines/for_009`.
+  - A walk over an element whose key is built for the lookup, `m["k"]!` or
+    `m[key()]!`, tripped an assertion that a place leaves no temporaries. The
+    key goes once the reference is had, before the walk.
+  - A field of a temporary, `make().items`, was taken for a place, and the
+    struct leaked (F087, `error/104`).
+  - A collection an earlier script unit made was not frozen, the walked root
+    being looked up only among this unit's bindings (`engines/for_007`).
+  - `for x, x` was accepted (D038, `error/105`).
+  - An out parameter written only in a loop's body counted as written after
+    a loop that can end before its body runs, `loop while` as well as `for`
+    (D006, `error/106`).
+  - Assigning an earlier unit's binding inside any loop's body panicked in
+    lowering, which found no slot for it (`engines/for_008`).
+  - C AOT advanced a strided cursor past its buffer as a pointer, which C
+    does not define; it adds to the integer now.
 - **A missing prototype.** C AOT emits
   `dtlv_rti_tensor_hyperplane_clone_local` with no `extern` prototype, so it
   compiles as an implicit declaration.

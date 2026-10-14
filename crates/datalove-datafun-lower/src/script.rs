@@ -442,17 +442,7 @@ fn lower_statement_for_script<'db>(
                         Ok(())
                     }
                     Operand::ExternalSlot { unit, slot } => {
-                        let is_copy = ctx.external_slot_type(&root_name_str).map(|t| t.is_copy()).unwrap_or(false);
-                        if !is_copy {
-                            ctx.emit(Instruction::DropTracked {
-                                operand: Operand::ExternalSlot { unit, slot },
-                            });
-                        }
-                        if is_copy {
-                            ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                        } else {
-                            ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
-                        }
+                        super::stmt::store_external_slot(ctx, &root_name_str, unit, slot, value_id);
                         Ok(())
                     }
                     _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),

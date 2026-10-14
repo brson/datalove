@@ -1,0 +1,9 @@
+// A loop that may end before its body runs -- a `for` over an empty list --
+// does not write an out parameter its body writes.
+fun last(out o: string, ref xs: [string])
+  for x in ref xs
+    set o = x@
+  end for
+end fun
+var s = ""
+call last(out s, ref [])

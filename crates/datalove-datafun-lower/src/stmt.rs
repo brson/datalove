@@ -764,7 +764,25 @@ fn lower_set_simple<'db>(
                 panic!("assignment to immutable param '{}' - typechecker should catch this", root_name_str)
             }
         }
+        // A binding an earlier script unit made, assigned inside a block, a
+        // loop's body included, which this lowering is for.
+        Some(Operand::ExternalSlot { unit, slot }) => {
+            store_external_slot(ctx, &root_name_str, unit, slot, value_id);
+            Ok(())
+        }
         _ => panic!("assignment to immutable variable '{}' - typechecker should catch this", root_name_str),
+    }
+}
+
+/// Replace what a binding an earlier script unit made holds with `value_id`,
+/// dropping what it held.
+pub(crate) fn store_external_slot<'db>(ctx: &mut LowerCtx<'db>, name: &str, unit: u32, slot: SlotId, value_id: ValueId) {
+    let is_copy = ctx.external_slot_type(name).map(|t| t.is_copy()).unwrap_or(false);
+    if is_copy {
+        ctx.emit_slot_store_copy(SlotDest::External { unit, slot }, Operand::Value(value_id));
+    } else {
+        ctx.emit(Instruction::DropTracked { operand: Operand::ExternalSlot { unit, slot } });
+        ctx.emit_slot_store_move(SlotDest::External { unit, slot }, Operand::Value(value_id));
     }
 }
 
@@ -1363,11 +1381,14 @@ pub fn lower_for<'db>(
 ) -> Result<(), LowerError> {
     use super::context::LoopLowerContext;
 
-    // The collection is a place, borrowed as a `ref` argument is. A place
-    // leaves no temporary behind: a const built fresh is a copy type.
+    // The collection is a place, borrowed as a `ref` argument is. Its root is
+    // a name, so what lowering it leaves behind is the keys of its element
+    // steps, built for the lookup: `m["k"]`, `m[key()]`. The reference points
+    // into the collection rather than at a key, so they go now, before the
+    // walk, rather than having to be let go of on every way out of it.
     let mark = ctx.expr_temps_mark();
     let coll = lower_expression_for_ref(ctx, stmt.iteratee)?;
-    assert_eq!(ctx.expr_temps_mark(), mark, "a place leaves no temporaries to drop");
+    ctx.emit_expr_temp_drops_since(mark);
     let coll = ctx.deref_if_ref(coll);
 
     let coll_ty = ctx.expr_type(stmt.iteratee);
