@@ -59,6 +59,8 @@ pub struct Package {
     pub data: BTreeMap<String, PackageModule>,
     /// Source text of `rider/rider.dli` if present in the package.
     pub rider_source: Option<String>,
+    /// Where `rider_source` was read from, for diagnostics.
+    pub rider_path: Option<PathBuf>,
     /// What the manifest calls the rider's crate, and which version of it.
     ///
     /// Present whenever `rider_source` is: a package declaring a rider has to
@@ -170,6 +172,7 @@ pub async fn package_from_source_files(
     } else {
         None
     };
+    let rider_path = rider_source.is_some().then_some(rider_path);
     let rider_crate_dir = {
         let crate_dir = dir.join("rider");
         if crate_dir.join("Cargo.toml").is_file() {
@@ -213,6 +216,7 @@ pub async fn package_from_source_files(
         modules,
         data,
         rider_source,
+        rider_path,
         rider_crate,
         rider_crate_dir,
     })

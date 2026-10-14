@@ -58,3 +58,8 @@ harness = false
 name = "workspace_tests"
 path = "tests/workspace_tests.rs"
 harness = false
+
+[[test]]
+name = "rider_interface_tests"
+path = "tests/rider_interface_tests.rs"
+harness = false

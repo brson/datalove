@@ -1,0 +1,5 @@
+# A rider whose interface is wrong. The crate is never built: the compile
+# stops at the interface.
+[rider]
+name = "datalove-test-rider-broken"
+version = "0.1.0"

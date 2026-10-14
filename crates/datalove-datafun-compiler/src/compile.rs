@@ -53,6 +53,9 @@ pub struct ModuleCompilationOutput<'db> {
     pub typecheck_errors: BTreeMap<String, Vec<String>>,
     /// Ownership analysis errors by module path.
     pub ownership_errors: BTreeMap<String, Vec<String>>,
+    /// The rider interfaces compiled against, by rider name, whose own
+    /// diagnostics are asked of `rider_interface_diagnostics`.
+    pub rider_sources: Vec<(String, bct::input::Source)>,
 }
 
 impl<'db> ModuleCompilationOutput<'db> {
@@ -81,7 +84,7 @@ impl<'db> ModuleCompilationOutput<'db> {
 pub fn compile_modules<'db>(
     db: &'db dyn DbClone,
     input: ModuleCompilationInput<'db>,
-    rider_sources: Vec<(String, String)>,
+    rider_sources: Vec<(String, bct::input::Source)>,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db> {
     // Phase 1: Parse
@@ -92,7 +95,7 @@ pub fn compile_modules<'db>(
         db,
         input.graph.clone(),
         input.resolved_requires,
-        rider_sources,
+        rider_sources.clone(),
         mode,
     );
 
@@ -111,7 +114,22 @@ pub fn compile_modules<'db>(
     // Phase 4: Ownership Analysis
     let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode, AutoAdaptMode::Disabled);
 
-    collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis)
+    let mut output = collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis);
+
+    // A rider interface that does not parse or resolve stops the compile as a
+    // module would: its natives are what it failed to say.
+    for (name, source) in &rider_sources {
+        let (parse, types) = crate::module_graph::rider_interface_diagnostics(db.as_salsa_db(), *source);
+        let messages: Vec<String> = parse.iter().map(|d| d.to_diagnostic(db.as_salsa_db()).message)
+            .chain(types.iter().map(|d| d.to_diagnostic(db.as_salsa_db()).message))
+            .map(|message| message.as_str(db.as_salsa_db()).S())
+            .collect();
+        if !messages.is_empty() {
+            output.parse_errors.insert(fmt!("@rider/{name}"), messages);
+        }
+    }
+    output.rider_sources = rider_sources;
+    output
 }
 
 /// Collect all analysis results into the output structure.
@@ -185,5 +203,6 @@ fn collect_results<'db>(
         parse_errors,
         typecheck_errors,
         ownership_errors,
+        rider_sources: Vec::new(),
     }
 }

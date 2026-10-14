@@ -438,6 +438,7 @@ fn package_entry<'a>(
             modules: BTreeMap::new(),
             data: BTreeMap::new(),
             rider_source: None,
+            rider_path: None,
             // A worldfile carries module text and nothing else, so a package
             // out of one has no rider to name.
             rider_crate: None,

@@ -776,6 +776,7 @@ pub use api::{
     typecheck_script_unit,
     unit_ast,
     unit_provides,
+    report_interface_resolution_errors,
 };
 
 // The script itself, which the per-unit queries are keyed on.

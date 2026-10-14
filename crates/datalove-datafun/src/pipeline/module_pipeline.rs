@@ -56,6 +56,12 @@ pub struct ModuleCompilationPipeline {
     /// Rider interfaces parsed from worldfile rider sections.
     /// Maps rider name to source text for deferred parsing.
     rider_sources: Vec<(String, String)>,
+    /// Each rider interface's text as a source, by rider name.
+    ///
+    /// Kept from one compile to the next and replaced only when the text
+    /// changes, so an unchanged interface is the same input, and what it
+    /// reported can be found again and framed against its file.
+    rider_inputs: BTreeMap<String, bct::input::Source>,
     /// Rider crate directories discovered from package loading.
     /// Which of the world's modules to compile.
     ///
@@ -81,6 +87,7 @@ impl ModuleCompilationPipeline {
             world: IncrementalModuleWorld::new(),
             options,
             rider_sources: Vec::new(),
+            rider_inputs: BTreeMap::new(),
             roots: Roots::All,
             natives: None,
             const_cache: ConstCache::default(),
@@ -245,6 +252,26 @@ impl ModuleCompilationPipeline {
 
 
     /// Set rider interface sources (replaces any existing).
+    /// The source a rider's interface was last compiled from, if it was.
+    pub fn rider_source(&self, name: &str) -> Option<bct::input::Source> {
+        self.rider_inputs.get(name).copied()
+    }
+
+    /// The rider interfaces as sources, made or kept to match their text.
+    fn rider_inputs(&mut self, db: &dyn salsa::Database) -> Vec<(String, bct::input::Source)> {
+        let mut inputs = BTreeMap::new();
+        let riders = self.rider_sources.iter().map(|(name, text)| {
+            let source = match self.rider_inputs.get(name) {
+                Some(source) if source.text(db) == text => *source,
+                _ => bct::input::Source::new(db, text.clone()),
+            };
+            inputs.insert(name.clone(), source);
+            (name.clone(), source)
+        }).collect();
+        self.rider_inputs = inputs;
+        riders
+    }
+
     pub fn set_rider_sources(&mut self, sources: Vec<(String, String)>) {
         self.rider_sources = sources;
     }
@@ -466,7 +493,8 @@ impl ModuleCompilationPipeline {
             graph: module_graph,
             resolved_requires,
         };
-        let output = compiler_compile_modules(db, input, self.rider_sources.clone(), mode);
+        let riders = self.rider_inputs(db.as_salsa_db());
+        let output = compiler_compile_modules(db, input, riders, mode);
 
         // The riders are the part of the world a module's closure does not
         // cover, so a change to any of them empties the const cache.
@@ -586,6 +614,7 @@ impl ModuleCompilationPipeline {
             lowering_errors,
             module_ir_dumps,
             natives: self.natives.clone(),
+            rider_sources: output.rider_sources,
         }
     }
 }

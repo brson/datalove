@@ -1479,3 +1479,19 @@ fn defined_function_names<'db>(
         })
         .collect()
 }
+
+/// Report what name resolution found wrong in a rider interface.
+///
+/// An interface is not typechecked, there being no bodies in it, but its
+/// signatures are resolved as a module's are, and what does not resolve is
+/// reported the same way: an unknown type (F064), a native declared twice
+/// (F086), a set over an unordered parameter (F061).
+pub fn report_interface_resolution_errors<'db>(
+    db: &'db dyn crate::Db,
+    collected: &datalove_datafun_common::CollectedNames<'db>,
+    spans: datalove_datafun_ast::spans::DatafunSpans<'db>,
+) {
+    let mut ctx = TypeContext::new(db, spans);
+    ctx.seed_from_collected_names(collected, None);
+    ctx.emit_pending_diagnostics();
+}

@@ -119,6 +119,10 @@ pub struct RiderDescriptor {
     /// Interface source text (.dli content).
     pub interface_source: Arc<str>,
 
+    /// The `.dli` file the interface was read from, if it was.
+    /// Used for diagnostics, not compilation.
+    pub origin: Option<PathBuf>,
+
     /// What the package's manifest calls the crate, and which version.
     ///
     /// `(name, version)`. None for a rider with no manifest behind it: an
@@ -347,6 +351,7 @@ impl WorkspaceDescriptor {
                 WorldfileSection::Rider { name, source } => {
                     riders.push((name.clone(), RiderDescriptor {
                         interface_source: Arc::from(source.as_str()),
+                        origin: None,
                         crate_spec: None,
                         crate_dir: None,
                     }));
@@ -516,6 +521,23 @@ impl WorkspaceDescriptor {
                     .unwrap_or_else(|| PathBuf::from(fmt!("{path}.dfm")));
                 (path, file)
             })
+            .collect()
+    }
+
+    /// The file each rider interface is read from, by rider name, for
+    /// diagnostics.
+    ///
+    /// Named the way [`module_files`](Self::module_files) names one with no
+    /// file on disk, as the system library's riders, compiled in, have none.
+    pub fn rider_files(&self) -> BTreeMap<String, PathBuf> {
+        self.libraries()
+            .flat_map(|lib| lib.packages.values().filter_map(move |pkg| {
+                let rider = pkg.rider.as_ref()?;
+                let file = rider.origin.clone().unwrap_or_else(|| {
+                    PathBuf::from(fmt!("{}/{}/rider/rider.dli", lib.name, pkg.name))
+                });
+                Some((pkg.name.clone(), file))
+            }))
             .collect()
     }
 
@@ -719,11 +741,13 @@ fn package_library_from_map(
         let rider = match (&pkg.rider_source, &pkg.rider_crate_dir) {
             (Some(source), crate_dir) => Some(RiderDescriptor {
                 interface_source: Arc::from(source.as_str()),
+                origin: pkg.rider_path.clone(),
                 crate_spec,
                 crate_dir: crate_dir.clone(),
             }),
             (None, Some(crate_dir)) => Some(RiderDescriptor {
                 interface_source: Arc::from(""),
+                origin: None,
                 crate_spec,
                 crate_dir: Some(crate_dir.clone()),
             }),
@@ -864,6 +888,7 @@ mod tests {
             data: BTreeMap::new(),
             rider: rider.map(|interface| RiderDescriptor {
                 interface_source: Arc::from(interface),
+                origin: None,
                 crate_spec: None,
                 crate_dir: None,
             }),
@@ -1048,6 +1073,7 @@ mod local_library_tests {
                 data: BTreeMap::new(),
                 rider: Some(RiderDescriptor {
                     interface_source: Arc::from(""),
+                    origin: None,
                     crate_spec: Some(("r".S(), "0.1.0".S())),
                     crate_dir: None,
                 }),

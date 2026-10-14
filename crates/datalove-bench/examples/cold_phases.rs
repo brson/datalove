@@ -61,7 +61,9 @@ fn one_cold_compile(
     let output = compile_modules(
         &db,
         ModuleCompilationInput { graph, resolved_requires },
-        rider_sources.to_vec(),
+        rider_sources.iter()
+            .map(|(name, text)| (name.clone(), bct::input::Source::new(&db, text.clone())))
+            .collect(),
         ParallelMode::Sequential,
     );
     assert!(output.is_successful(), "{:?} {:?}", output.typecheck_errors, output.ownership_errors);

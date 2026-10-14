@@ -106,7 +106,9 @@ fn source_files(
         .filter_map(|(path, file)| Some((pipeline.module_source(&path)?, file)));
     let data = descriptor.data_files().into_iter()
         .filter_map(|(path, file)| Some((pipeline.data_source(&path)?, file)));
-    modules.chain(data).collect()
+    let riders = descriptor.rider_files().into_iter()
+        .filter_map(|(name, file)| Some((pipeline.rider_source(&name)?, file)));
+    modules.chain(data).chain(riders).collect()
 }
 
 /// Report a script's type errors, each against the file its text came from:

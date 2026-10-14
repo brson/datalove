@@ -45,10 +45,44 @@ pub fn parse_with_module_id<'db>(
     source: Source,
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
+    let top_level = if module_id.is_some() { TopLevel::Module } else { TopLevel::Script };
+    parse_source(db, source, module_id, top_level)
+}
+
+/// Parse a rider interface, a `rider.dli`.
+///
+/// An interface declares what a rider's crate implements, so it holds
+/// `native fun` and `type` and nothing else (P084). Parsed on its own so that
+/// what it reports can be asked of it, as a module's can.
+#[salsa::tracked(returns(ref))]
+pub fn parse_rider_interface<'db>(
+    db: &'db dyn Db,
+    source: Source,
+) -> ast::ParseResult<'db> {
+    parse_source(db, source, None, TopLevel::Interface)
+}
+
+/// What a source's top level may hold.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum TopLevel {
+    /// Anything: a script runs its statements from top to bottom.
+    Script,
+    /// Declarations only (P077).
+    Module,
+    /// `native fun` and `type` only (P084).
+    Interface,
+}
+
+fn parse_source<'db>(
+    db: &'db dyn Db,
+    source: Source,
+    module_id: Option<ModuleId<'db>>,
+    top_level: TopLevel,
+) -> ast::ParseResult<'db> {
     let bracer = bracer::bracer(db, lexer::lex(db, source));
     datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
     emit_non_ascii_name_errors(db, bracer, source);
-    parse_bracer(db, bracer, source, module_id)
+    parse_bracer(db, bracer, source, module_id, top_level)
 }
 
 /// Parse a Source as a single expression.
@@ -107,11 +141,12 @@ fn parse_bracer<'db>(
     bracer: Bracer<'db>,
     source_text: Source,
     module_id: Option<ModuleId<'db>>,
+    top_level: TopLevel,
 ) -> ast::ParseResult<'db> {
     // Split into lines. A line break inside balanced braces is not one here,
     // since the bracer has already put it inside a branch.
     let lines = split::Lines::new(bracer.iter(db));
-    let (statements, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id);
+    let (statements, spans, qualified_calls) = parse_statements(db, lines, source_text, module_id, top_level);
     let parsed = ast::ParsedStatements {
         statements: std::sync::Arc::new(statements),
         qualified_calls: each_once(qualified_calls),
@@ -153,6 +188,7 @@ fn parse_statements<'db>(
     lines: impl Iterator<Item = Cursor<'db>>,
     source_text: bct::input::Source,
     module_id: Option<ModuleId<'db>>,
+    top_level: TopLevel,
 ) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
     let mut statements = vec![];
     let mut qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)> = vec![];
@@ -171,8 +207,10 @@ fn parse_statements<'db>(
 
     while let Some((_line_num, line)) = line_iter.next() {
         let mut parser = Parser::new(db, line, source_text, module_id, counters);
-        if module_id.is_some() {
-            parser.refuse_at_module_top_level();
+        match top_level {
+            TopLevel::Script => {}
+            TopLevel::Module => parser.refuse_at_module_top_level(),
+            TopLevel::Interface => parser.refuse_at_interface_top_level(),
         }
         let statement = parser.parse_statement(&mut line_iter);
         counters = parser.script_counters();
@@ -302,7 +340,11 @@ pub fn module_spans<'db>(
     db: &'db dyn Db,
     module: bct::module_graph::Module<'db>,
 ) -> DatafunSpans<'db> {
-    let full = parse_module_full(db, module);
+    parse_result_spans(parse_module_full(db, module))
+}
+
+/// The spans of one parse, in the form diagnostics look things up in.
+pub fn parse_result_spans<'db>(full: &ast::ParseResult<'db>) -> DatafunSpans<'db> {
     DatafunSpans::with_stmt_spans(
         full.expr_spans.iter().map(|e| SpanMapEntry {
             expr_key: e.expr_key,

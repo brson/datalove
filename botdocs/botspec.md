@@ -1810,6 +1810,14 @@ native fun string_contains(ref haystack: string, ref needle: string): bool
 native fun list_push<T>(mut self: [T], elem: T)
 ```
 
+Anything else in an interface is P084. Every package's interface is checked
+whenever a program is compiled, whether or not anything requires its rider,
+and what is wrong with one stops the compile as a module's errors do, reported
+against the `rider.dli` it came from: a parse error, P084, a type name that
+does not resolve (F064), a native declared twice (F086). A parameter's name is
+a parameter's name here too, so `out` and the other mode words are refused
+(P064) though nothing calls a native by its parameters' names.
+
 A native function may take type parameters. Nothing is converted at one:
 because every parameter arrives as a pointer and a descriptor, the value goes
 across as it stands whatever the mode, where an ordinary function converts an

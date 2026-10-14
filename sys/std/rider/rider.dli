@@ -129,9 +129,9 @@ native fun map_add<K, V>(mut self: %{K = V}, ref key: K, amount: V): bool with {
 native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
 // The whole map read out in one walk, onto the end of a list. The list is the
 // caller's, so a walk can append to one it already has.
-native fun map_keys_into<K, V>(ref self: %{K = V}, mut out: [K]) with { K is ord, }
-native fun map_values_into<K, V>(ref self: %{K = V}, mut out: [V]) with { K is ord, }
-native fun map_entries_into<K, V>(ref self: %{K = V}, mut out: [(K, V)]) with { K is ord, }
+native fun map_keys_into<K, V>(ref self: %{K = V}, mut list: [K]) with { K is ord, }
+native fun map_values_into<K, V>(ref self: %{K = V}, mut list: [V]) with { K is ord, }
+native fun map_entries_into<K, V>(ref self: %{K = V}, mut list: [(K, V)]) with { K is ord, }
 
 // Tensors. The rank is part of the type rather than a parameter, so these are
 // written at rank 1 -- the shape a list-like walk wants. What they need that a
@@ -145,7 +145,7 @@ native fun set_clear<T>(mut self: #{T}) with { T is ord, }
 native fun set_contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
 native fun set_insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
 native fun set_remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
-native fun set_into_list<T>(ref self: #{T}, mut out: [T]) with { T is ord, }
+native fun set_into_list<T>(ref self: #{T}, mut list: [T]) with { T is ord, }
 
 // Floating point math, from the platform's libm. These are the operations
 // that have no machine instruction behind them, which is why they are here

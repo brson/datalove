@@ -42,7 +42,7 @@ pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph<'db>,
     resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
-    rider_sources: Vec<(String, String)>,
+    rider_sources: Vec<(String, bct::input::Source)>,
 ) -> ParsedModuleGraph<'db> {
     // Sequential implementation for salsa tracking.
     //
@@ -83,7 +83,7 @@ pub fn parse_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     graph: ModuleGraph<'db>,
     resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
-    rider_sources: Vec<(String, String)>,
+    rider_sources: Vec<(String, bct::input::Source)>,
 ) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
 
@@ -117,7 +117,7 @@ pub fn parse_module_graph_with_mode<'db>(
     db: &'db dyn DbClone,
     graph: ModuleGraph<'db>,
     resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
-    rider_sources: Vec<(String, String)>,
+    rider_sources: Vec<(String, bct::input::Source)>,
     mode: ParallelMode,
 ) -> ParsedModuleGraph<'db> {
     match mode {
@@ -179,7 +179,7 @@ fn generic_natives<'db>(
 /// resolving to nothing.
 fn build_resolved_riders_from_sources<'db>(
     db: &'db dyn salsa::Database,
-    rider_sources: &[(String, String)],
+    rider_sources: &[(String, bct::input::Source)],
     statements: &[(ModuleId<'db>, ParsedStatements<'db>)],
 ) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
     use datalove_datafun_ast::ast::{Statement, StmtRequire};
@@ -216,7 +216,7 @@ fn build_resolved_riders_from_sources<'db>(
 #[salsa::interned]
 pub struct RiderSources<'db> {
     #[returns(ref)]
-    pub sources: Vec<(String, String)>,
+    pub sources: Vec<(String, bct::input::Source)>,
 }
 
 /// Each rider's interface, parsed from its source.
@@ -236,9 +236,8 @@ fn rider_interfaces<'db>(
 
     let mut interfaces: HashMap<String, RiderInterface<'db>> = HashMap::new();
     for (name, source) in rider_sources.sources(db) {
-        let source_input = bct::input::Source::new(db, source.clone());
-        let parse_result = datalove_datafun_parser::parse(db, source_input);
-        let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
+        let parse_result = datalove_datafun_parser::parse_rider_interface(db, *source);
+        let collected = check_rider_interface(db, *source);
         let rider_name = InternedText::new(db, name.clone());
         let rider_path = format!("@rider/{}", name);
         let module_id = ModuleId::new(db, rider_path);
@@ -259,6 +258,36 @@ fn rider_interfaces<'db>(
         });
     }
     interfaces
+}
+
+/// Resolve a rider interface's signatures, reporting what does not resolve.
+///
+/// A query of its own, keyed on the interface's source, so that what an
+/// interface reports -- its parse errors and these -- is the one thing to ask
+/// of it: `check_rider_interface::accumulated`, as a module's are asked of
+/// `parse_module_full`. See `rider_interface_diagnostics`.
+#[salsa::tracked(returns(clone))]
+pub fn check_rider_interface<'db>(
+    db: &'db dyn salsa::Database,
+    source: bct::input::Source,
+) -> datalove_datafun_common::CollectedNames<'db> {
+    let parse_result = datalove_datafun_parser::parse_rider_interface(db, source);
+    let collected = datalove_datafun_resolve::resolve_names_impl(db, &parse_result.parsed.statements);
+    datalove_datafun_tycheck::report_interface_resolution_errors(
+        db, &collected, datalove_datafun_parser::parse_result_spans(parse_result));
+    collected
+}
+
+/// Everything a rider interface reports: how it parsed, and what in its
+/// signatures did not resolve.
+pub fn rider_interface_diagnostics<'db>(
+    db: &'db dyn salsa::Database,
+    source: bct::input::Source,
+) -> (Vec<&'db datalove_diagnostic::ParseDiagnostic>, Vec<&'db datalove_diagnostic::TypeDiagnostic>) {
+    (
+        check_rider_interface::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, source),
+        check_rider_interface::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, source),
+    )
 }
 
 /// The statement a native stands behind.

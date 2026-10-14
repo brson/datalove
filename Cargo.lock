@@ -1835,6 +1835,7 @@ dependencies = [
 name = "datalove-sys-packages"
 version = "0.1.0"
 dependencies = [
+ "bcts",
  "datalove-datafun",
  "datalove-pkg-manifest",
  "datalove-rider-sys-std",

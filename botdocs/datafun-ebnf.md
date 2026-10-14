@@ -49,6 +49,8 @@ The parser's sources are cited by file: `statement.rs`, `expr.rs`,
 (* ===== Top level  (lib.rs:147-259) ===== *)
 script        = [ EOLS ], [ top_stmt, { EOLS, top_stmt }, [ EOLS ] ] ;
 module        = script ;            (* but see P077 below *)
+interface     = [ EOLS ], [ iface_stmt, { EOLS, iface_stmt }, [ EOLS ] ] ;
+iface_stmt    = native_fun | type_alias ;  (* a rider.dli; anything else: P084 *)
 top_stmt      = decl_stmt | stmt ;
 decl_stmt     = fun_def | native_fun | type_alias | require_stmt | import_stmt ;
 stmt          = let_stmt | var_stmt | const_stmt | set_stmt | call_stmt
@@ -219,6 +221,11 @@ string_lit, digit_run, hex_run, comment, newline
   so that what is wrong inside it is reported too.
 - In a module the top level holds declarations and `const` only; any other
   statement is P077 ([spec Section 9.1](botspec.md#user-content-91-hierarchy)).
+  A rider interface holds `native fun` and `type` only; anything else is P084
+  ([spec Section 9.5](botspec.md#user-content-95-native-riders)). Each is
+  parsed by its own query, `parse_rider_interface`, and checked by
+  `check_rider_interface` in `datalove-datafun-compiler`, whose accumulated
+  diagnostics are the interface's.
 
 **Spacing.** The glue test decides fixity
 ([spec Section 2.4](botspec.md#user-content-24-spacing)):
@@ -330,8 +337,3 @@ Places the parser and [the spec](botspec.md) disagree, left as they are.
   `parse_arg_mode`): `call f(out)` is P081. The reserved words are there to keep
   parsing simple, and this can be disambiguated some other way when it
   matters.
-- **Rider interfaces are not checked.** A `.dli` file is parsed by the script
-  parser in `rider_interfaces` (`datalove-datafun-compiler/src/module_graph.rs`),
-  and what that parse reports is collected by nothing: a syntax error in an
-  interface, or a statement Section 9.5 does not allow there, surfaces only as
-  a native symbol missing when the rider is loaded.

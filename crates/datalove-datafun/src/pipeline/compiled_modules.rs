@@ -50,6 +50,8 @@ pub struct CompiledModules<'db> {
     pub module_ir_dumps: BTreeMap<String, Vec<String>>,
     /// Where the modules' consts found their natives, and a script's will.
     pub natives: Option<Arc<dyn NativeResolver>>,
+    /// The rider interfaces compiled against, by rider name.
+    pub rider_sources: Vec<(String, bct::input::Source)>,
 }
 
 impl<'db> CompiledModules<'db> {
@@ -151,10 +153,13 @@ impl<'db> CompiledModules<'db> {
     /// Get module parse diagnostics with spans for rendering.
     pub fn get_module_parse_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::ParseDiagnostic> {
         let graph = self.shared.parsed_graph.graph(db);
+        let riders = self.rider_sources.iter()
+            .flat_map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source).0);
         graph.iter_modules(db)
             .flat_map(|module| {
                 datalove_datafun_parser::parse_module_full::accumulated::<datalove_diagnostic::ParseDiagnostic>(db, module)
             })
+            .chain(riders)
             .collect()
     }
 
@@ -162,6 +167,11 @@ impl<'db> CompiledModules<'db> {
     pub fn get_module_type_diagnostics(&self, db: &'db dyn salsa::Database) -> Vec<&'db datalove_diagnostic::TypeDiagnostic> {
         // Recompute resolve results (memoized, will be cache hits).
         let all_names = resolve_all_names(db, self.shared.parsed_graph);
+        let riders = self.rider_sources.iter()
+            .flat_map(|(_, source)| datalove_datafun_compiler::module_graph::rider_interface_diagnostics(db, *source).1);
         typecheck_module_graph::accumulated::<datalove_diagnostic::TypeDiagnostic>(db, self.shared.parsed_graph, all_names, AutoAdaptMode::Disabled)
+            .into_iter()
+            .chain(riders)
+            .collect()
     }
 }

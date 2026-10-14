@@ -30,3 +30,6 @@ datalove-rider-sys-std.workspace = true
 
 [build-dependencies]
 datalove-pkg-manifest.workspace = true
+
+[dev-dependencies]
+bct.workspace = true

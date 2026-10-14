@@ -71,9 +71,37 @@ fn descriptor(package: &EmbeddedPackage) -> PackageDescriptor {
         data: embedded(package.data),
         rider: package.rider_interface.map(|source| RiderDescriptor {
             interface_source: Arc::from(source),
+            // Compiled in, so not read from a file; `rider_files` names it.
+            origin: None,
             crate_spec: package.rider_crate
                 .map(|(name, version)| (name.S(), version.S())),
             crate_dir: package.rider_crate_dir.map(PathBuf::from),
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every rider interface the binary carries parses and resolves cleanly.
+    ///
+    /// An interface's diagnostics stop a compile, and the system library's
+    /// are in every compile, so one here would stop them all. They were not
+    /// reported at all until interfaces were checked, which is how four
+    /// parameters named `out` sat in `std`'s for as long as they did.
+    #[test]
+    fn rider_interfaces_report_nothing() {
+        let db = datalove_datafun::Database::default();
+        for package in system_library().library.packages.values() {
+            let Some(rider) = &package.rider else { continue };
+            let source = bct::input::Source::new(&db, rider.interface_source.to_string());
+            let (parse, types) = datalove_datafun::module_graph::rider_interface_diagnostics(&db, source);
+            let messages: Vec<String> = parse.iter().map(|d| d.to_diagnostic(&db).message)
+                .chain(types.iter().map(|d| d.to_diagnostic(&db).message))
+                .map(|message| message.as_str(&db).S())
+                .collect();
+            assert!(messages.is_empty(), "{}'s rider interface: {messages:?}", package.name);
+        }
     }
 }

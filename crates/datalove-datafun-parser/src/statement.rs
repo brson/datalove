@@ -123,6 +123,29 @@ statements that run belong in a function or a script")
             .emit_parse();
     }
 
+    /// Refuse anything in a rider interface but a `native fun` or a `type`
+    /// (P084).
+    ///
+    /// An interface says what a rider's crate implements and nothing runs in
+    /// it, so a function with a body, a binding or a `require` there has no
+    /// meaning. The statement is still parsed, so what is wrong inside it is
+    /// reported too.
+    pub(super) fn refuse_at_interface_top_level(&mut self) {
+        let Some(word) = self.peek_word() else {
+            return;
+        };
+        if matches!(word, "native" | "type") {
+            return;
+        }
+        self.had_error = true;
+        let ts = self.peek_text_span();
+        DiagnosticBuilder::error(self.db, &fmt!("`{word}` in a rider interface"))
+            .code("P084")
+            .primary_label(ts, "an interface declares natives and types")
+            .help("a rider interface holds `native fun` declarations and `type` aliases only")
+            .emit_parse();
+    }
+
     /// Consume an `end <keyword>` line, complaining about anything after it.
     ///
     /// A block's terminator is a whole line, so a word left over on it was

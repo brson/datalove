@@ -1,0 +1,5 @@
+// What is wrong with a rider's interface is reported against its file, and
+// stops the compile, rather than surfacing as a native that will not load.
+require module local/broken/ops
+
+debuglog ops.call_it(: i64 / 1)

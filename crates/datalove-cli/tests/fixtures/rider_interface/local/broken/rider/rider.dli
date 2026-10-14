@@ -1,0 +1,5 @@
+native fun fine(x: i64): i64
+let x = 1
+native fun unknown_type(x: Nope): i64
+native fun fine(y: i64): i64
+native fun unclosed(x: i64
