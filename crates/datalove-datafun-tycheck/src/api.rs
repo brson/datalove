@@ -910,10 +910,11 @@ pub fn resolve_module_imports<'db>(
 
     log_query("resolve_imports", module_path, QueryPhase::Start);
 
-    // This module's own statements, asked for per module. Finding them in the
-    // graph's gathered `statements_only` instead is one dependency edge on
-    // every module's AST, which is the rest of the world by another route.
-    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
+    // This module's own requires and imports, asked for per module. Finding
+    // them in the graph's gathered `statements_only` instead is one dependency
+    // edge on every module's AST, which is the rest of the world by another
+    // route.
+    let items = datalove_datafun_parser::module_uses(db, module);
 
     // The exports and function ASTs of the modules this one requires. The graph
     // is interned, so looking a module up in it costs nothing and depends on
@@ -934,13 +935,13 @@ pub fn resolve_module_imports<'db>(
     let (imports, errors, qualified) = resolve_module_imports_internal(
         db,
         module_id,
-        parsed,
+        items,
         &parsed_graph,
         &dep_exports,
         &dep_function_asts,
     );
 
-    let require_errors = check_module_requires(db, module_id, parsed, &parsed_graph);
+    let require_errors = check_module_requires(db, module_id, items, &parsed_graph);
 
     log_query("resolve_imports", module_path, QueryPhase::End);
 
@@ -956,7 +957,7 @@ pub fn resolve_module_imports<'db>(
 fn check_module_requires<'db>(
     db: &'db dyn crate::Db,
     module_id: ModuleId<'db>,
-    parsed: &ParsedStatements<'db>,
+    items: &Items<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
 ) -> Vec<crate::RequireError> {
     use crate::{RequireError, RequireErrorKind as Kind};
@@ -967,8 +968,8 @@ fn check_module_requires<'db>(
 
     let mut errors = Vec::new();
     let mut seen = RequireScope::default();
-    for statement in parsed.statements(db).iter() {
-        let Statement::Require(require) = statement else {
+    for item in &items.items {
+        let Item::Require(require) = item else {
             continue;
         };
         match require {
@@ -1087,7 +1088,7 @@ impl RequireScope {
 fn resolve_module_imports_internal<'db>(
     db: &'db dyn crate::Db,
     module_id: ModuleId<'db>,
-    parsed: &ParsedStatements<'db>,
+    items: &Items<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
     module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>>,
@@ -1108,8 +1109,8 @@ fn resolve_module_imports_internal<'db>(
     let mut resolved_imports = Vec::new();
     let mut import_errors = Vec::new();
 
-    for statement in parsed.statements(db).iter() {
-        if let Statement::Import(import) = statement {
+    for item in &items.items {
+        if let Item::Import(import) = item {
             let module_name = import.module_name;
             let item_name = import.item_name;
 
@@ -1177,7 +1178,7 @@ fn resolve_module_imports_internal<'db>(
         }
     }
 
-    let qualified = resolve_qualified_calls(&parsed.qualified_calls, |alias, name| {
+    let qualified = resolve_qualified_calls(&items.qualified_calls, |alias, name| {
         if let Some(&module_id) = alias_map.get(&alias) {
             let func = all_exports.get(&module_id)
                 .and_then(|exports| exports.iter().find(|(n, _)| *n == name))
@@ -1282,9 +1283,8 @@ fn script_modules_by_path<'db>(
 /// whole-world value in a per-unit key, which this was the sixth of.
 ///
 /// **Only the declarations, which is what makes a body edit free.**
-/// `parse_module_ast` compares equal across a body edit -- a `StmtFun`'s body
-/// rides a tracked field -- so `resolve_script_names` does not re-run and this
-/// backdates. A unit's typecheck cannot depend on a body in any case:
+/// `module_items` compares equal across a body edit, so this does not re-run.
+/// A unit's typecheck cannot depend on a body in any case:
 /// `synthesize` reads a looked-up function's `type_params` and `type_bounds`,
 /// which are signature, and comptime evaluation of one happens in lowering.
 /// This used to return a whole `ModuleSpec`, whose `spans` move with a body, so
@@ -1295,8 +1295,7 @@ pub fn script_module_names<'db>(
     db: &'db dyn crate::Db,
     module: Module<'db>,
 ) -> CollectedNames<'db> {
-    let parsed = datalove_datafun_parser::parse_module_ast(db, module).clone();
-    datalove_datafun_resolve::resolve_script_names(db, module.source(db), parsed)
+    datalove_datafun_resolve::resolve_names_impl(db, &datalove_datafun_parser::module_items(db, module).items)
 }
 
 /// The signature and AST of the function a module exports under `name`.

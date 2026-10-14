@@ -111,6 +111,46 @@ impl<'db> ParsedStatements<'db> {
     }
 }
 
+/// What a source declares, as name resolution and its importers see it.
+///
+/// The statements with their bodies left out: an edit inside a function body
+/// leaves this equal, so what reads only this does not re-run for one.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct Items<'db> {
+    pub items: Vec<Item<'db>>,
+    /// As [`ParsedStatements::qualified_calls`].
+    pub qualified_calls: QualifiedCalls<'db>,
+}
+
+/// One declaration, in the order written.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub enum Item<'db> {
+    Require(StmtRequire<'db>),
+    Import(StmtImport<'db>),
+    TypeAlias(StmtTypeAlias<'db>),
+    Fun(FunHead<'db>),
+    NativeFun(StmtNativeFun<'db>),
+}
+
+impl<'db> Items<'db> {
+    /// The declarations among a source's statements.
+    pub fn of(db: &'db dyn salsa::Database, parsed: &ParsedStatements<'db>) -> Self {
+        let items = parsed.statements(db).iter()
+            .filter_map(|statement| match statement {
+                Statement::Require(s) => Some(Item::Require(s.clone())),
+                Statement::Import(s) => Some(Item::Import(s.clone())),
+                Statement::TypeAlias(s) => Some(Item::TypeAlias(s.clone())),
+                Statement::Fun(s) => Some(Item::Fun(s.head(db))),
+                Statement::NativeFun(s) => Some(Item::NativeFun(s.clone())),
+                _ => None,
+            })
+            .collect();
+        Items { items, qualified_calls: parsed.qualified_calls.clone() }
+    }
+}
+
 /// The `(alias, function)` pairs a source's qualified calls name.
 pub type QualifiedCalls<'db> = std::sync::Arc<Vec<(InternedText<'db>, InternedText<'db>)>>;
 

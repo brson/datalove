@@ -273,6 +273,16 @@ incremental tests did not change. `FunKey` is the `Copy` part (module, name,
 `local_index`), and the inline-cycle check keys on it. Rider natives stopped
 being minted as `StmtFun`s with empty bodies.
 
+**Phase 2's second half** added `module_items(module)`, an `Items` of the
+module's requires, imports, type aliases, `FunHead`s and natives, with its
+qualified calls. Name resolution, exports, `module_function_asts` and
+`script_module_names` read it. Import resolution reads `module_uses`, which is
+the same less the declarations. Reading `module_items` there made a signature
+edit re-resolve the edited module's own imports, which `edit_reach_tests`
+caught. Consts are not in it yet: what reads them, the const kinds and the
+graph-level passes, is phase 3's. The census gained the two queries cold
+(566 to 616) and nothing per edit.
+
 ## Verifying each phase
 
 - **Parse snapshots**, against a baseline written before the phase: identical,

@@ -41,7 +41,7 @@ pub use datalove_datafun_ast::spans::DatafunSpans;
 /// to functions defined later in the same compilation unit.
 pub fn resolve_names_impl<'db>(
     db: &'db dyn Db,
-    statements: &[Statement<'db>],
+    items: &[Item<'db>],
 ) -> CollectedNames<'db> {
     let mut errors = Vec::new();
 
@@ -49,8 +49,8 @@ pub fn resolve_names_impl<'db>(
     let mut type_aliases_map: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
     let mut type_aliases_vec = Vec::new();
 
-    for statement in statements {
-        if let Statement::TypeAlias(stmt) = statement {
+    for item in items {
+        if let Item::TypeAlias(stmt) = item {
             let name = stmt.name;
             let name_str = name.as_str(db);
 
@@ -81,14 +81,14 @@ pub fn resolve_names_impl<'db>(
     let mut function_asts = Vec::new();
     let mut defined = std::collections::HashSet::new();
 
-    for statement in statements {
+    for item in items {
         // Extract function signature from either regular or native fun.
-        let (name, type_params, type_bounds, params, return_type, func_ast, local_index) = match statement {
-            Statement::Fun(stmt) => {
-                (stmt.name(db), stmt.type_params(db).clone(), stmt.type_bounds(db).clone(),
-                 stmt.params(db).clone(), stmt.return_type(db), Some(*stmt), stmt.local_index(db))
+        let (name, type_params, type_bounds, params, return_type, func_ast, local_index) = match item {
+            Item::Fun(head) => {
+                (head.name, head.type_params().clone(), head.type_bounds().clone(),
+                 head.params().clone(), head.return_type(), Some(head), head.local_index)
             }
-            Statement::NativeFun(stmt) => {
+            Item::NativeFun(stmt) => {
                 (stmt.name, stmt.type_params.clone(), stmt.type_bounds.clone(),
                  stmt.params.clone(), stmt.return_type.clone(), None, stmt.local_index)
             }
@@ -116,7 +116,7 @@ pub fn resolve_names_impl<'db>(
         // Where the signature is, for a diagnostic to point at. A native's
         // interface has no span table, and a native is exempt from the check
         // below anyway.
-        let fun_local_index = func_ast.map_or(0, |stmt| stmt.local_index(db));
+        let fun_local_index = func_ast.map_or(0, |head| head.local_index);
 
         // A type parameter resolves like a named type, so it goes in the alias
         // map for the length of this signature. Nothing else can see it, which
@@ -191,7 +191,7 @@ pub fn resolve_names_impl<'db>(
         let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
         functions.push((name, func_type));
         if let Some(ast) = func_ast {
-            function_asts.push((name, ast.head(db)));
+            function_asts.push((name, ast.clone()));
         }
     }
 
@@ -213,9 +213,8 @@ pub fn resolve_names_impl<'db>(
 /// These are resolved before typechecking and seeded into the TypeContext.
 /// Keyed on the module alone. Taking the statements as a second argument made
 /// salsa intern the pair to key on, one entry per module, and left it unable to
-/// name the module in the event it reports for this query. Fetching the
-/// statements instead says the same thing as a dependency, which is what was
-/// meant, and drops the interned pair.
+/// name the module in the event it reports for this query. It reads the
+/// module's `module_items`, which an edit inside a body leaves equal.
 #[salsa::tracked(returns(copy))]
 pub fn resolve_module_names<'db>(
     db: &'db dyn Db,
@@ -226,10 +225,8 @@ pub fn resolve_module_names<'db>(
 
     log_query("resolve_names", module_path, QueryPhase::Start);
 
-    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-
     // Resolve names: collect type aliases and function signatures.
-    let collected = resolve_names_impl(db, parsed.statements(db));
+    let collected = resolve_names_impl(db, &datalove_datafun_parser::module_items(db, module).items);
 
     log_query("resolve_names", module_path, QueryPhase::End);
 
@@ -335,7 +332,7 @@ pub fn resolve_script_names<'db>(
     parsed: ParsedStatements<'db>,
 ) -> CollectedNames<'db> {
     let _ = source; // Used as memoization key.
-    resolve_names_impl(db, parsed.statements(db))
+    resolve_names_impl(db, &Items::of(db, &parsed).items)
 }
 
 // ============================================================================
@@ -357,8 +354,7 @@ pub fn resolve_module_exports<'db>(
     db: &'db dyn Db,
     module: Module<'db>,
 ) -> Vec<(InternedText<'db>, TypeFunction<'db>)> {
-    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-    resolve_names_impl(db, parsed.statements(db)).functions
+    resolve_names_impl(db, &datalove_datafun_parser::module_items(db, module).items).functions
 }
 
 /// The functions one module declares, by name, as an importer sees them.
@@ -370,10 +366,9 @@ pub fn module_function_asts<'db>(
     db: &'db dyn Db,
     module: Module<'db>,
 ) -> Vec<(InternedText<'db>, FunHead<'db>)> {
-    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
-    parsed.statements(db).iter()
-        .filter_map(|statement| match statement {
-            Statement::Fun(func) => Some((func.name(db), func.head(db))),
+    datalove_datafun_parser::module_items(db, module).items.iter()
+        .filter_map(|item| match item {
+            Item::Fun(head) => Some((head.name, head.clone())),
             _ => None,
         })
         .collect()

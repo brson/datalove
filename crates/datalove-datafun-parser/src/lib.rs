@@ -338,6 +338,39 @@ pub fn parse_module_ast<'db>(
     parse_module_full(db, module).parsed.clone()
 }
 
+/// What a module declares, its function bodies left out.
+///
+/// Name resolution and import resolution read this rather than the statements,
+/// so an edit inside a body, which changes the statements, leaves them be.
+#[salsa::tracked(returns(ref))]
+pub fn module_items<'db>(
+    db: &'db dyn Db,
+    module: bct::module_graph::Module<'db>,
+) -> ast::Items<'db> {
+    ast::Items::of(db, parse_module_ast(db, module))
+}
+
+/// What a module requires, imports and calls through an alias: its
+/// `module_items` without the declarations.
+///
+/// What import resolution reads. A signature edit changes `module_items`, and
+/// with them the module's exports, which reach the importers that way; the
+/// module's own imports are unaffected, and this keeps them from re-resolving.
+#[salsa::tracked(returns(ref))]
+pub fn module_uses<'db>(
+    db: &'db dyn Db,
+    module: bct::module_graph::Module<'db>,
+) -> ast::Items<'db> {
+    let items = module_items(db, module);
+    ast::Items {
+        items: items.items.iter()
+            .filter(|item| matches!(item, ast::Item::Require(_) | ast::Item::Import(_)))
+            .cloned()
+            .collect(),
+        qualified_calls: items.qualified_calls.clone(),
+    }
+}
+
 /// The spans of one module, in the form diagnostics look things up in.
 ///
 /// `parse_module_full` returns the side tables as the parser filled them;

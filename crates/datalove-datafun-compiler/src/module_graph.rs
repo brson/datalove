@@ -272,7 +272,8 @@ pub fn check_rider_interface<'db>(
     source: bct::input::Source,
 ) -> datalove_datafun_common::CollectedNames<'db> {
     let parse_result = datalove_datafun_parser::parse_rider_interface(db, source);
-    let collected = datalove_datafun_resolve::resolve_names_impl(db, parse_result.parsed.statements(db));
+    let collected = datalove_datafun_resolve::resolve_names_impl(
+        db, &datalove_datafun_ast::ast::Items::of(db, &parse_result.parsed).items);
     datalove_datafun_tycheck::report_interface_resolution_errors(
         db, &collected, datalove_datafun_parser::parse_result_spans(parse_result));
     collected
