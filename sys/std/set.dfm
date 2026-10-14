@@ -9,7 +9,6 @@ import std.set_clear
 import std.set_contains
 import std.set_insert
 import std.set_remove
-import std.set_get
 import std.set_into_list
 import std.list_pop
 
@@ -46,16 +45,6 @@ end fun
 // Drop every element.
 fun clear<T>(mut self: #{T}) with { T is ord, }
   call set_clear(mut self)
-end fun
-
-// The element at a position in sort order, or none past the end.
-//
-// A set is a tree, so this walks to the position rather than jumping to it, and
-// reaching every element in turn this way costs the square of the length. A
-// `for` reaches each element once.
-fun get<T>(ref self: #{T}, i: index): ?T with { T is ord, }
-  inline
-  ret set_get(ref self, i)
 end fun
 
 // Every element, in sort order.

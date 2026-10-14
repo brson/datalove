@@ -1136,52 +1136,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_remove_local(
     }
 }
 
-/// The key of the entry at `index` in sort order, or none past the end.
-///
-/// See `btreemap_key_at_impl`.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_key_at_local(
-    rt: LocalRtHandle,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::btreemap::btreemap_key_at_impl(
-            rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
-    }
-}
-
-/// The value of the entry at `index` in sort order, or none past the end.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_value_at_local(
-    rt: LocalRtHandle,
-    btreemap_value_ref: *const u8,
-    btreemap_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!btreemap_value_ref.is_null(), "btreemap_value_ref is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::btreemap::btreemap_value_at_impl(
-            rt_ref, btreemap_value_ref, rtdt::TyDescRef::from_ptr(btreemap_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
-        )
-    }
-}
-
 /// Every key of a map, in sort order, onto the end of a list.
 ///
 /// Appended to the list, which is the caller's: a generic one makes it with a
@@ -1279,28 +1233,6 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_into_list_local(
         crate::c::impls::set::btreeset_to_list_impl(
             rt_ref, set_value_ref, rtdt::TyDescRef::from_ptr(set_tydesc),
             list_value_mut, rtdt::TyDescRef::from_ptr(list_tydesc),
-        )
-    }
-}
-
-/// The element at `index` in sort order, or none past the end.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_get_at_local(
-    rt: LocalRtHandle,
-    set_value_ref: *const u8,
-    set_tydesc: *const rtdt::TyDesc,
-    index: rtdt::IndexRepr,
-    option_value_out: *mut u8,
-    option_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!rt.is_null(), "rt is null");
-    debug_assert!(!set_value_ref.is_null(), "set_value_ref is null");
-    debug_assert!(!option_value_out.is_null(), "option_value_out is null");
-    unsafe {
-        let rt_ref = &mut *(rt as *mut rt_local::RtLocal);
-        crate::c::impls::set::btreeset_get_at_impl(
-            rt_ref, set_value_ref, rtdt::TyDescRef::from_ptr(set_tydesc),
-            index, option_value_out, rtdt::TyDescRef::from_ptr(option_tydesc),
         )
     }
 }

@@ -1396,60 +1396,6 @@ pub extern "C-unwind" fn dlr_std__set_clear(
     }
 }
 
-/// The element at a position in sort order.
-#[no_mangle]
-pub extern "C-unwind" fn dlr_std__set_get(
-    rt: *mut u8,
-    set_ptr: *const u8, set_td: *const u8,
-    index_ptr: *const u8, _index_td: *const u8,
-    out: *mut u8, out_td: *const u8,
-) -> u8 {
-    let index = unsafe { *(index_ptr as *const rtdt::Index) };
-    let set_ty = unsafe { rtdt::TyDescRef::from_ptr(set_td as *const rtdt::TyDesc) };
-    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    unsafe {
-        datalove_rti::call::dtlv_rti_btreeset_get_at_local(
-            rt, set_ptr, set_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-        ) as u8
-    }
-}
-
-/// The key of the entry at a position in sort order.
-#[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_key_at(
-    rt: *mut u8,
-    map_ptr: *const u8, map_td: *const u8,
-    index_ptr: *const u8, _index_td: *const u8,
-    out: *mut u8, out_td: *const u8,
-) -> u8 {
-    let index = unsafe { *(index_ptr as *const rtdt::Index) };
-    let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
-    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    unsafe {
-        datalove_rti::call::dtlv_rti_btreemap_key_at_local(
-            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-        ) as u8
-    }
-}
-
-/// The value of the entry at a position in sort order.
-#[no_mangle]
-pub extern "C-unwind" fn dlr_std__map_value_at(
-    rt: *mut u8,
-    map_ptr: *const u8, map_td: *const u8,
-    index_ptr: *const u8, _index_td: *const u8,
-    out: *mut u8, out_td: *const u8,
-) -> u8 {
-    let index = unsafe { *(index_ptr as *const rtdt::Index) };
-    let map_ty = unsafe { rtdt::TyDescRef::from_ptr(map_td as *const rtdt::TyDesc) };
-    let out_ty = unsafe { rtdt::TyDescRef::from_ptr(out_td as *const rtdt::TyDesc) };
-    unsafe {
-        datalove_rti::call::dtlv_rti_btreemap_value_at_local(
-            rt, map_ptr, map_ty.as_ptr(), index.0, out, out_ty.as_ptr(),
-        ) as u8
-    }
-}
-
 /// Every key, value or entry of a map, or element of a set, read out in one
 /// walk onto the end of the caller's list. See `dtlv_rti_btreemap_keys_into_local`.
 #[no_mangle]

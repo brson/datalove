@@ -1,22 +1,23 @@
 require module sys/std/map
 
-import map.key_at
-import map.value_at
 import map.keys
 import map.values
 import map.len
 
-// A map reached by position, for the same reason a set is.
+// A map walked, and read out whole.
 //
-// The key and the value are reached separately rather than as a pair, which
-// gives `keys` and `values` directly.
+// A `for` visits the entries in their keys' order, each key beside its own
+// value; `keys` and `values` read the two out as lists in the same order.
 
 let scores = %{"c" = 3, "a" = 1, "b" = 2}
 let by_number = %{7 = "seven", 1 = "one"}
 
-// The same position gives a key and its own value.
-let paired = (key_at(ref scores, : index / 1), value_at(ref scores, : index / 1))
-let past_end = (key_at(ref scores, : index / 9), value_at(ref scores, : index / 9))
+var paired = ""
+var total = 0
+for name, score in ref scores
+  set paired = name@
+  set total = total + score
+end for
 
 let all_keys = keys(ref scores)
 let all_values = values(ref scores)
@@ -26,5 +27,5 @@ let numeric_values = values(ref by_number)
 let empty: %{string = u32} = %{}
 let empty_keys = keys(ref empty)
 
-let output = (paired, past_end, all_keys, all_values,
+let output = ((paired, total), all_keys, all_values,
               numeric_keys, numeric_values, empty_keys, len(ref scores))

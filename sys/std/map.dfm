@@ -12,8 +12,6 @@ import std.map_get
 import std.map_insert
 import std.map_add
 import std.map_remove
-import std.map_key_at
-import std.map_value_at
 import std.map_keys_into
 import std.map_values_into
 import std.map_entries_into
@@ -98,26 +96,6 @@ fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool with { K 
     call insert(mut self, key, value)
     ret true
   end if
-end fun
-
-// The key of the entry at a position in sort order, or none past the end.
-//
-// A map is a tree, so this walks to the position rather than jumping to it, and
-// reaching every entry in turn costs more than it does for a list. It is here
-// so that anything written as a loop over `len` and an index -- which is how
-// everything over a collection is written -- can be written over a map too.
-//
-// The key and the value are reached separately because a position is what the
-// tree walk gives; `entries` puts them back together.
-fun key_at<K, V>(ref self: %{K = V}, i: index): ?K with { K is ord, }
-  inline
-  ret map_key_at(ref self, i)
-end fun
-
-// The value of the entry at a position in sort order.
-fun value_at<K, V>(ref self: %{K = V}, i: index): ?V with { K is ord, }
-  inline
-  ret map_value_at(ref self, i)
 end fun
 
 // Every key, in sort order.

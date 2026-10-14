@@ -547,9 +547,10 @@ All five are done.
 - **Temporaries as the iteratee.** `for x in ref f()` needs the temporary held
   to the loop's end and dropped on every exit, `ret` and `?` included. Places
   only, until something wants it.
-- **Whether `set.get`, `map.key_at` and `map.value_at` stay.** They exist so
-  that a set or map could be walked by index. Once `for` does that, they are
-  quadratic traps with no callers.
+- **Settled: `set.get`, `map.key_at` and `map.value_at` are gone**, with the
+  natives and the runtime entry points behind them. They existed so that a set
+  or a map could be walked by index, quadratically; `for` walks one linearly,
+  and nothing else used a position in a tree.
 - **A mutable `for`.** `for mut x in mut xs` over a list, tensor, or a map's
   values. The cursors' `elem` and `value` would become writable places,
   never a set element or a map key, since changing one moves where it

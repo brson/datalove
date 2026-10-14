@@ -21,7 +21,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// share one: `list.get` and `map.get` both compile to `get`. Declaring
     /// both in one module is a collision, and it goes one of two ways. Where
     /// the arities differ -- they do here, because `map.get` takes descriptors
-    /// for two type parameters and `set.get` for one -- the second declaration
+    /// for two type parameters and `list.get` for one -- the second declaration
     /// is refused outright. Where they agree it is accepted, and every call
     /// meant for one of them reaches the other.
     ///
