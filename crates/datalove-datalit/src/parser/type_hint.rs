@@ -97,7 +97,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = stream.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected name after 'atom'",
-                        "D030",
+                        "D051",
                         "expected atom name"
                     );
                 }
@@ -112,7 +112,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = stream.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected name after 'term'",
-                        "D031",
+                        "D052",
                         "expected term name"
                     );
                 }
@@ -180,7 +180,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     let ts = sub_parser.peek_text_span();
                     return stream.type_hint_error(ts,
                         "expected '=' between map key and value types",
-                        "D005",
+                        "D044",
                         "expected '=' between key and value types"
                     );
                 }
@@ -210,7 +210,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                     Err((
                         sub_parser.peek_text_span(),
                         "expected comma between tensor element type and rank",
-                        "D009",
+                        "D047",
                         "expected ',' after element type",
                     ))
                 } else {
@@ -226,7 +226,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                         None => Err((
                             ts,
                             "expected rank (positive integer)",
-                            "D008",
+                            "D045",
                             "expected rank",
                         )),
                     }
@@ -245,8 +245,11 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                         stream.type_hint_error(ts, message, code, label)
                     }
                 }
-            } else if let Some(word) = stream.peek_word() {
-                // A name: an alias, or a type parameter. Whether one of that
+            } else if let Some(word) = stream.peek_word()
+                .filter(|word| !word.starts_with(|c: char| c.is_ascii_digit()))
+            {
+                // A name: an alias, or a type parameter. A word beginning
+                // with a digit is not a name, as it is nowhere. Whether one of that
                 // name exists is not known here, so what a misspelled or
                 // miscased name was meant as is said where it fails to
                 // resolve, not here, where it might be an alias of that name.
@@ -257,9 +260,15 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
                 ast::TypeHint::Alias(ast::TypeHintAlias { name, local_index })
             } else {
                 let ts = stream.peek_text_span();
+                // A word written where the type goes is taken, so that what
+                // follows is not blamed for it. A sigil is left: it is more
+                // likely what follows a type that was never written.
+                if stream.peek_word().is_some() {
+                    stream.next();
+                }
                 stream.type_hint_error(ts,
                     "unexpected token in type hint",
-                    "D008",
+                    "D046",
                     "unexpected token in type hint"
                 )
             }
@@ -320,7 +329,7 @@ impl<'db> Parser<'db> {
                     }
                     None => {
                         let ts = self.peek_text_span();
-                        self.emit_type_hint_error(ts, "expected name after 'atom'", "D030", "expected atom name");
+                        self.emit_type_hint_error(ts, "expected name after 'atom'", "D051", "expected atom name");
                         use rmx::prelude::*;
                         InternedText::new(self.db, "<error>".S())
                     }
@@ -339,7 +348,7 @@ impl<'db> Parser<'db> {
                     }
                     None => {
                         let ts = self.peek_text_span();
-                        self.emit_type_hint_error(ts, "expected name after 'term'", "D031", "expected term name");
+                        self.emit_type_hint_error(ts, "expected name after 'term'", "D052", "expected term name");
                         use rmx::prelude::*;
                         InternedText::new(self.db, "<error>".S())
                     }
@@ -349,7 +358,7 @@ impl<'db> Parser<'db> {
             }
             _ => {
                 let ts = self.peek_text_span();
-                self.emit_type_hint_error(ts, "expected 'atom' or 'term' in enum variant", "D032", "expected 'atom' or 'term'");
+                self.emit_type_hint_error(ts, "expected 'atom' or 'term' in enum variant", "D053", "expected 'atom' or 'term'");
                 use rmx::prelude::*;
                 let name = InternedText::new(self.db, "<error>".S());
                 ast::TypeHintEnumVariant { name, payload: None }
@@ -375,7 +384,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_hint = self.emit_type_hint_error(ts.clone(),
                     "expected field name in struct definition",
-                    "D010",
+                    "D048",
                     "expected field name"
                 );
                 // Create a placeholder name for the error field.
@@ -388,7 +397,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_hint = self.emit_type_hint_error(ts,
                 "expected ':' after field name in struct definition",
-                "D010",
+                "D048",
                 "expected ':' after field name"
             );
             return ast::TypeHintNamedField { name, type_hint: Box::new(error_hint) };

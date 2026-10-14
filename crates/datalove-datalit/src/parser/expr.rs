@@ -41,7 +41,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
                     "expected '/' after type hint",
-                    "D012",
+                    "D049",
                     "expected '/' separator between type hint and expression"
                 );
                 ast::ExprFull::new(Some(local_index), Some(type_hint), error_expr)
@@ -116,13 +116,13 @@ impl<'db> Parser<'db> {
                 self.next();
                 return self.emit_expr_error(ts,
                     "a hex literal takes no sign",
-                    "D013",
+                    "D050",
                     "a hex literal is an unsigned bit pattern; write a negative number in decimal"
                 );
             }
             return self.emit_expr_error(ts,
                 "unexpected minus sign",
-                "D013",
+                "D050",
                 "unexpected '-' not followed by number"
             );
         }

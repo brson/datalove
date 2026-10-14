@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "expr": {
+      "Atom": {
+        "name": "A"
+      }
+    },
+    "type_hint": {
+      "Enum": {
+        "variants": [
+          {
+            "name": "A",
+            "payload": null
+          },
+          {
+            "name": "<error>",
+            "payload": null
+          }
+        ]
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D053",
+      "labels": [
+        {
+          "message": "expected 'atom' or 'term'",
+          "span": [
+            17,
+            18
+          ],
+          "text": "B"
+        }
+      ],
+      "message": "expected 'atom' or 'term' in enum variant"
+    }
+  ]
+}

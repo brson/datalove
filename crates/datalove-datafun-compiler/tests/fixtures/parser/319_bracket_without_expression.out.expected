@@ -1,0 +1,58 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected expression"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected expression"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P081",
+      "labels": [
+        {
+          "message": "this bracket starts no expression",
+          "span": [
+            80,
+            87
+          ],
+          "text": "(| 1 |)"
+        }
+      ],
+      "message": "expected expression"
+    },
+    {
+      "code": "P081",
+      "labels": [
+        {
+          "message": "this bracket starts no expression",
+          "span": [
+            96,
+            99
+          ],
+          "text": "<a>"
+        }
+      ],
+      "message": "expected expression"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Place",
+                "root": "a",
+                "steps": []
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": false,
+            "mode": "In",
+            "name": "a",
+            "type_hint": {
+              "Alias": "T"
+            }
+          }
+        ],
+        "return_type": {
+          "Alias": "T"
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P078",
+      "labels": [
+        {
+          "message": "a type parameter takes one bound",
+          "span": [
+            72,
+            73
+          ],
+          "text": "T"
+        }
+      ],
+      "message": "`T` is bounded twice"
+    }
+  ]
+}

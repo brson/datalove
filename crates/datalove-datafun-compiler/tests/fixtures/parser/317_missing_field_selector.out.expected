@@ -1,0 +1,100 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Place",
+            "root": "t",
+            "steps": [
+              {
+                "name": "<error>",
+                "variant": "Name"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "args": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "FunctionCall",
+            "name": "<error>",
+            "qualifier": "t"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P079",
+      "labels": [
+        {
+          "message": "not a field name, nor a tuple index that fits a `u32`",
+          "span": [
+            84,
+            84
+          ],
+          "text": ""
+        }
+      ],
+      "message": "expected a field name or a tuple index after `.`"
+    },
+    {
+      "code": "P079",
+      "labels": [
+        {
+          "message": "not a field name, nor a tuple index that fits a `u32`",
+          "span": [
+            95,
+            98
+          ],
+          "text": "(1)"
+        }
+      ],
+      "message": "expected a field name or a tuple index after `.`"
+    }
+  ]
+}

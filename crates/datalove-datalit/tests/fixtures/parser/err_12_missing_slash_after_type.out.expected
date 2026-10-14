@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D012",
+      "code": "D049",
       "labels": [
         {
           "message": "expected '/' separator between type hint and expression",

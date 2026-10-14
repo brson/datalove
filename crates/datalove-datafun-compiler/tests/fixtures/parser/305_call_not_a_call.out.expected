@@ -30,10 +30,10 @@
         {
           "message": "not a function call",
           "span": [
-            16,
+            15,
             16
           ],
-          "text": ""
+          "text": "x"
         }
       ],
       "message": "`call` takes a function call"
@@ -44,10 +44,10 @@
         {
           "message": "not a function call",
           "span": [
-            27,
+            22,
             27
           ],
-          "text": ""
+          "text": "1 + 2"
         }
       ],
       "message": "`call` takes a function call"

@@ -1,0 +1,7 @@
+// The steps of a `set` target are written against what they step from, as
+// the same postfix operators are in an expression.
+var p = {a = 1}
+set p .a = 2
+var xs = [1]
+set xs [0]? = 2
+set xs[0] ? = 2

@@ -1,0 +1,30 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected name after 'atom'"
+      }
+    },
+    "type_hint": {
+      "ParseError": {
+        "message": "expected name after 'atom'"
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "D051",
+      "labels": [
+        {
+          "message": "expected atom name",
+          "span": [
+            7,
+            8
+          ],
+          "text": "/"
+        }
+      ],
+      "message": "expected name after 'atom'"
+    }
+  ]
+}

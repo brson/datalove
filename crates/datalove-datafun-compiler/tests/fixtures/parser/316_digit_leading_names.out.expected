@@ -1,0 +1,201 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected name after 'atom'"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected name after 'term'"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "ParseError",
+            "message": "expected intrinsic name after 'icall'"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              }
+            ],
+            "kind": "Tuple"
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Place",
+            "root": "t",
+            "steps": [
+              {
+                "name": "<error>",
+                "variant": "Name"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "Place",
+            "root": "t",
+            "steps": [
+              {
+                "name": "<error>",
+                "variant": "Name"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "f",
+        "type_hint": {
+          "ParseError": {
+            "message": "unexpected token in type hint"
+          }
+        },
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "1"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P042",
+      "labels": [
+        {
+          "message": "expected atom name",
+          "span": [
+            72,
+            76
+          ],
+          "text": "atom"
+        }
+      ],
+      "message": "expected name after 'atom'"
+    },
+    {
+      "code": "P043",
+      "labels": [
+        {
+          "message": "expected term name",
+          "span": [
+            87,
+            91
+          ],
+          "text": "term"
+        }
+      ],
+      "message": "expected name after 'term'"
+    },
+    {
+      "code": "P040",
+      "labels": [
+        {
+          "message": "expected intrinsic name",
+          "span": [
+            104,
+            109
+          ],
+          "text": "icall"
+        }
+      ],
+      "message": "expected intrinsic name after 'icall'"
+    },
+    {
+      "code": "P079",
+      "labels": [
+        {
+          "message": "not a field name, nor a tuple index that fits a `u32`",
+          "span": [
+            140,
+            143
+          ],
+          "text": "0x1"
+        }
+      ],
+      "message": "expected a field name or a tuple index after `.`"
+    },
+    {
+      "code": "P079",
+      "labels": [
+        {
+          "message": "not a field name, nor a tuple index that fits a `u32`",
+          "span": [
+            154,
+            165
+          ],
+          "text": "99999999999"
+        }
+      ],
+      "message": "expected a field name or a tuple index after `.`"
+    },
+    {
+      "code": "D046",
+      "labels": [
+        {
+          "message": "unexpected token in type hint",
+          "span": [
+            173,
+            174
+          ],
+          "text": "5"
+        }
+      ],
+      "message": "unexpected token in type hint"
+    }
+  ]
+}

@@ -13,6 +13,7 @@
 - [REPL Architecture](repl-architecture.md)
 - [The Responsive Scripting Environment](script-reactivity-architecture.md)
 - [Datalit Grammar (EBNF)](datalit-ebnf.md)
+- [Datafun Grammar (EBNF)](datafun-ebnf.md)
 - [Datalit Typing Rules](datalit-typing-rules.md)
 - [Datafun Typing Rules](datafun-typing-rules.md)
 - [Sigil Assignments](sigil-assignments.md)

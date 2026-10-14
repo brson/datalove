@@ -1,0 +1,2 @@
+// An intrinsic's arguments are written against its name, as any call's are.
+let x = icall bitnot_u32 (: u32 / 1)

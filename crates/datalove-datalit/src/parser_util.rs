@@ -207,3 +207,40 @@ pub fn tensor_body_complaint(
 pub fn tensor_needs_header(shape: &[u32]) -> bool {
     shape.len() > 1 && (shape[0] == 1 || shape.contains(&0))
 }
+
+/// Report the brackets the bracer could not match: a close with no open, as
+/// `stray_code`, and an open never closed, as `unclosed_code`.
+///
+/// Both parsers call this with codes of their own. The bracer has already
+/// recovered, so parsing goes on over its tree either way.
+pub fn emit_bracer_errors<'db>(
+    db: &'db dyn salsa::Database,
+    bracer: bct::bracer::Bracer<'db>,
+    source: bct::input::Source,
+    stray_code: &str,
+    unclosed_code: &str,
+) {
+    use bct::diagnostic::DiagnosticBuilder;
+    use datalove_diagnostic::DiagnosticBuilderExt;
+    let tokens = bracer.lexed(db).tokens(db);
+
+    for (token_range, sigil) in bracer.errors(db) {
+        // A stray close is reported as its own one-token range. An unclosed
+        // open runs to wherever it ended, which is one token too where the
+        // open is the last token of the source, so the token says which.
+        let Some(token) = tokens.get(token_range.start) else { continue };
+        let ts = TextSpan::new(source, token.span());
+        if token.is_close_sigil() {
+            DiagnosticBuilder::error(db, &rmx::std::format!("unmatched '{}'", sigil.as_str()))
+                .code(stray_code)
+                .primary_label(ts, &rmx::std::format!("this '{}' has no matching '{}'",
+                    sigil.as_str(), sigil.open_sigil().as_str()))
+                .emit_parse();
+        } else {
+            DiagnosticBuilder::error(db, &rmx::std::format!("unclosed '{}'", sigil.as_str()))
+                .code(unclosed_code)
+                .primary_label(ts, &rmx::std::format!("this '{}' is never closed", sigil.as_str()))
+                .emit_parse();
+        }
+    }
+}

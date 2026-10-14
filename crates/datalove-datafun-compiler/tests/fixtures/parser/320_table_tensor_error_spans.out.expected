@@ -1,0 +1,143 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "t",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "header": [
+              "x",
+              "y"
+            ],
+            "kind": "Table",
+            "rows": [
+              {
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "1"
+                    }
+                  },
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "2"
+                    }
+                  }
+                ]
+              },
+              {
+                "elements": [
+                  {
+                    "expr": {
+                      "kind": "Int",
+                      "type_hint": null,
+                      "value": "3"
+                    }
+                  }
+                ]
+              }
+            ],
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "u",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "2"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "3"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "4"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "5"
+                }
+              },
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "6"
+                }
+              }
+            ],
+            "header": false,
+            "kind": "Tensor",
+            "shape": [
+              2,
+              2,
+              2
+            ],
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "D030",
+      "labels": [
+        {
+          "message": "column count mismatch",
+          "span": [
+            114,
+            115
+          ],
+          "text": "3"
+        }
+      ],
+      "message": "row 2 has 1 columns but header has 2"
+    },
+    {
+      "code": "D023",
+      "labels": [
+        {
+          "message": "shape mismatch",
+          "span": [
+            141,
+            144
+          ],
+          "text": "5 6"
+        }
+      ],
+      "message": "inconsistent tensor shape at group 1: expected [2, 2] but got [1, 2]"
+    }
+  ]
+}

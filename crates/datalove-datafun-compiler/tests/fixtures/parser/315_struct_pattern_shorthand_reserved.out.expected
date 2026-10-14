@@ -1,0 +1,53 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "pattern": {
+          "fields": [
+            {
+              "binding": "some",
+              "field": "some"
+            }
+          ],
+          "kind": "Struct"
+        },
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "some",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P064",
+      "labels": [
+        {
+          "message": "`some` is reserved, since it starts an expression",
+          "span": [
+            83,
+            87
+          ],
+          "text": "some"
+        }
+      ],
+      "message": "`some` cannot be declared here"
+    }
+  ]
+}

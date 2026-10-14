@@ -182,7 +182,7 @@ statements that run belong in a function or a script")
             let ts = self.peek_text_span();
             return self.emit_stmt_error(ts,
                 "expected '=' after let binding",
-                "D023",
+                "P083",
                 "expected '='"
             );
         }
@@ -245,6 +245,9 @@ statements that run belong in a function or a script")
                 } else {
                     // A field named twice has been reported once already.
                     if fresh_field {
+                        // The shorthand binds the field's name, so that name
+                        // is declared, and is held to what a value's name is.
+                        p.report_reserved_name(field, field_ts.clone(), NameKind::Value);
                         p.declare_pattern_name(field, field_ts, &mut seen);
                     }
                     field
@@ -478,9 +481,18 @@ statements that run belong in a function or a script")
     }
 
     /// Parse place steps for set targets (e.g., `.x.0.y`, `[i]?`).
+    ///
+    /// Each step is written against what it steps from, as the same postfix
+    /// operators are in an expression. One written apart is reported and read
+    /// anyway, so that the rest of the statement is still checked.
     fn parse_place_steps(&mut self) -> Vec<ast::PlaceStep<'db>> {
         let mut steps = Vec::new();
         loop {
+            let is_step = self.peek_sigil(Sigil::Dot)
+                || matches!(self.peek(), Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }));
+            if is_step && !self.glued_left() {
+                self.report_spaced_postfix();
+            }
             if self.peek_sigil(Sigil::Dot) {
                 self.next(); // consume .
                 let field = self.parse_field_selector();
@@ -492,6 +504,11 @@ statements that run belong in a function or a script")
                 sub.error_if_not_exhausted();
                 self.merge_from_sub(&mut sub);
                 // Optional ? or ! suffix. Bare index means upsert for maps.
+                if (self.peek_sigil(Sigil::Question) || self.peek_sigil(Sigil::Exclamation))
+                    && !self.glued_left()
+                {
+                    self.report_spaced_postfix();
+                }
                 let error_mode = if self.eat_sigil(Sigil::Question) {
                     Some(ast::IndexErrorMode::Option)
                 } else if self.eat_sigil(Sigil::Exclamation) {
@@ -671,6 +688,14 @@ statements that run belong in a function or a script")
 
         for (name, bound, ts) in clauses.into_iter().flatten() {
             match type_params.iter().position(|p| *p == name) {
+                Some(i) if bounds[i].is_some() => {
+                    self.had_error = true;
+                    DiagnosticBuilder::error(self.db, &format!(
+                        "`{}` is bounded twice", name.text(self.db)))
+                        .code("P078")
+                        .primary_label(ts, "a type parameter takes one bound")
+                        .emit_parse();
+                }
                 Some(i) => bounds[i] = Some(bound),
                 None => {
                     self.had_error = true;
@@ -767,7 +792,7 @@ statements that run belong in a function or a script")
             self.had_error = true;
             let ts = self.peek_text_span();
             DiagnosticBuilder::error(self.db, "const parameter cannot be 'ref', 'out' or 'mut'")
-                .code("P013")
+                .code("P082")
                 .primary_label(ts, "invalid combination")
                 .emit_parse();
         }
@@ -1236,7 +1261,8 @@ statements that run belong in a function or a script")
                 ast::Statement::ExprStatement(ast::StmtExprStatement { expr })
             }
             _ => {
-                let ts = self.peek_text_span();
+                let ts = TextSpan::new(self.source_text(),
+                    self.expr_span_start(expr)..self.last_byte_end());
                 self.emit_stmt_error(ts,
                     "`call` takes a function call",
                     "P031",

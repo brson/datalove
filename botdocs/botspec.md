@@ -50,6 +50,12 @@ In syntax descriptions, the following conventions apply:
 - `[...]` denotes optional elements
 - `...` denotes repetition
 
+The complete grammars, as EBNF checked against the parsers, are
+[Datalit Grammar](datalit-ebnf.md) and [Datafun Grammar](datafun-ebnf.md),
+and the type systems are [Datalit Typing Rules](datalit-typing-rules.md) and
+[Datafun Typing Rules](datafun-typing-rules.md). Where those documents and
+this one disagree, they say so.
+
 ## 2. Lexical Conventions
 
 ### 2.1 Reserved Words
@@ -112,8 +118,12 @@ patterns. It does not check against a signed fixed-width type or `offset`.
 A hex literal takes no sign. A `-` before one is the negation operator, as it
 would be before a name, so `-0x10` is the `int` -16 and, bare `-` not being
 defined on fixed-width integers, no `i32` or `u32`. A decimal literal does take
-its sign: `let x: i32 = -5` is an `i32`. Datalit, having no operators, reads
-`-0x10` as an error.
+its sign: `let x: i32 = -5` is an `i32`, and `-128` fits an `i8`. Datafun
+parses `-5` as the negation of `5`, except right after a hint, and the type
+checker reads a negated literal where a fixed-width integer is expected as the
+signed literal, so the two are one value (`Check-NegLit` in
+[Datafun Typing Rules](datafun-typing-rules.md)). Datalit, having no
+operators, reads `-0x10` as an error.
 
 Underscores may group digits, and say nothing about the value:
 
@@ -543,8 +553,11 @@ Examples:
 : enum { atom Red, atom Blue } / atom Red
 ```
 
-The expression may be any expression, not only a literal, and the hint is what
-it is checked against:
+The expression need not be a literal, and the hint is what it is checked
+against. It is a primary -- a literal, a name, a call, a constructor, a
+parenthesized expression -- with any postfix operators written on it, so a
+binary operator after it applies to the hinted expression: `: u32 / x + 1` is
+`(: u32 / x) + 1`, and `: u32 / (x + 1)` hints the sum.
 
 ```datalove
 let n: u32 = 1
@@ -562,7 +575,10 @@ checks hints the same way.
 
 Postfix lands on the expression under the hint, as it does on the payload of
 `some` and its fellows: `: u32 / o?` hints what the `?` produces, not the
-option it unwraps. A hint takes nothing of its own, so the expression under it
+option it unwraps. A literal is the exception, because the hint is what makes
+it a value of that type: after a number, a string, a constructor, a collection
+or a parenthesized expression the hint stays on that literal and postfix comes
+after it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints `o`. A hint takes nothing of its own, so the expression under it
 moves what it would have moved written without one.
 
 A bare name in type position is a type alias (Section 3.7), or, within a generic
@@ -612,7 +628,7 @@ Operators listed from highest to lowest precedence:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `()` | Grouping |
-| 2 | `-` `-?` `-!` `not` `some` `ok` `er` `data` `error` | Unary prefix |
+| 2 | `-` `-?` `-!` `not` | Unary prefix |
 | 3 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
@@ -687,6 +703,10 @@ the dividend, or use `int.rem_checked`.
 
 All comparison operators return `bool`, and both operands must have the same
 type; there is no implicit widening.
+
+Less-than and greater-than are spelled `.<` and `.>` because `<` and `>` alone
+are brackets, matched in pairs before an expression is read, as they are around
+a function's type parameters. `a < b` is an unclosed `<` (P051).
 
 The ordering operators `.<`, `.>`, `<=` and `>=` take numeric operands only.
 Order strings with `string.cmp`, and anything else with `sys/std/ord`.
@@ -1636,8 +1656,10 @@ A function called for its effect is written after `call`:
 call bump(mut v)
 ```
 
-`call` takes only a function call. Anything else after it is P031, since a
-value computed and discarded is more likely a mistake than an intention. A
+`call` takes only a function call, plain or qualified, and nothing written on
+it: `call f(x)!`, `call f(x)@` and `call icall g()` are P031 as surely as
+`call x`, since a value computed and discarded is more likely a mistake than an
+intention. A
 line that begins with no statement keyword at all is P001.
 
 ## 9. Module System
@@ -1942,6 +1964,8 @@ values.
 | D010 | AliasedMutableArgument | Two arguments alias, one is `mut`/`out` |
 | D011 | CannotMutateImmutable | Immutable binding passed as `mut`/`out` |
 | D012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
+| D013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
+| D014 | InconsistentLoopExit | Moving a value on one way out of a loop and not another |
 
 ### 11.2 Mutable Arguments
 

@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D023",
+      "code": "P083",
       "labels": [
         {
           "message": "expected '='",

@@ -1,0 +1,164 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Var",
+        "name": "p",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "fields": [
+              {
+                "name": "a",
+                "value": {
+                  "expr": {
+                    "kind": "Int",
+                    "type_hint": null,
+                    "value": "1"
+                  }
+                }
+              }
+            ],
+            "kind": "AnonStruct",
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Set",
+        "target": {
+          "root": "p",
+          "steps": [
+            {
+              "name": "a",
+              "variant": "Name"
+            }
+          ]
+        },
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      },
+      {
+        "kind": "Var",
+        "name": "xs",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "elements": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "List",
+            "type_hint": null
+          }
+        }
+      },
+      {
+        "kind": "Set",
+        "target": {
+          "root": "xs",
+          "steps": [
+            {
+              "error_mode": "Option",
+              "index": {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "0"
+                }
+              },
+              "variant": "Index"
+            }
+          ]
+        },
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      },
+      {
+        "kind": "Set",
+        "target": {
+          "root": "xs",
+          "steps": [
+            {
+              "error_mode": "Option",
+              "index": {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": null,
+                  "value": "0"
+                }
+              },
+              "variant": "Index"
+            }
+          ]
+        },
+        "value": {
+          "expr": {
+            "kind": "Int",
+            "type_hint": null,
+            "value": "2"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "a postfix operator is written against the expression before it",
+          "span": [
+            149,
+            150
+          ],
+          "text": "."
+        }
+      ],
+      "message": "this `.` is written apart from what it applies to"
+    },
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "a postfix operator is written against the expression before it",
+          "span": [
+            176,
+            179
+          ],
+          "text": "[0]"
+        }
+      ],
+      "message": "this `[0]` is written apart from what it applies to"
+    },
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "a postfix operator is written against the expression before it",
+          "span": [
+            195,
+            196
+          ],
+          "text": "?"
+        }
+      ],
+      "message": "this `?` is written apart from what it applies to"
+    }
+  ]
+}

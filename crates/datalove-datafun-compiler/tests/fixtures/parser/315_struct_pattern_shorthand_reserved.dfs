@@ -1,0 +1,2 @@
+// The shorthand `{some}` binds `some`, which is reserved for a value's name.
+let {some} = {some = 1}

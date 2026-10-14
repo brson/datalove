@@ -85,7 +85,7 @@ T ::= bool | u8 | u16 | u32 | u64 | i8 | i16 | i32 | i64
     | {| ℓ₁: T₁, ..., ℓₙ: Tₙ |}        table
     | atom a                           atom
     | term a T                         term
-    | enum {v₁, ..., vₙ}               enum, n ≥ 1
+    | enum {v₁, ..., vₙ}               enum; enum {} is legal and has no values
 
 v ::= atom a | term a T                enum variant
 ```
@@ -455,7 +455,13 @@ Some properties follow from the rules and are worth stating outright.
   integer type it fits but synthesizes `int`, so `[: u8 / 1, 2]` fails (T018:
   the second element is an `int`) while `: [u8] / [1, 2]` succeeds.
 - **Empty collections.** `[]` checks against every list type and synthesizes
-  `[()]`; the same holds for sets, maps, tables and tensors.
+  `[()]`; the same holds for sets and maps. An empty table or tensor still
+  has a shape the syntax fixes: a table's header names its columns and a
+  tensor's shape gives its rank, so `: {| x: int |} / {||}` is T054 and
+  `: [|u8, 2|] / [||]` is T048. Only the element type is free.
+- **Enum literals parse more than check.** The grammar takes any expression
+  inside `enum { }`; only an atom or term passes `Check-Enum`, so
+  `enum { 1 }` is T032.
 - **A tensor's shape is the parser's business.** The parser refuses a body
   that does not fill its shape (D041), so the element-count premises of
   `Syn-Tensor` and `Check-Tensor` (T051, T049) only guard ASTs built some

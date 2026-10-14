@@ -294,31 +294,33 @@ impl<'db> Parser<'db> {
         self.create_expr(ast::ExprFunKind::FunctionCall(call), callee)
     }
 
+    /// Parse what follows a `.`: a field's name, or a tuple's index.
+    ///
+    /// An index is digits that fit a `u32`; a name is a name. Anything else
+    /// is reported (P079) and stands in as a field no type has.
     pub(super) fn parse_field_selector(&mut self) -> ast::FieldSelector<'db> {
-        match self.peek_word() {
-            Some(word) => {
-                self.next(); // consume word
-                // Check if all digits (tuple index).
-                if word.chars().all(|c| c.is_ascii_digit()) && !word.is_empty() {
-                    match word.parse::<u32>() {
-                        Ok(idx) => ast::FieldSelector::Index(idx),
-                        Err(_) => {
-                            // Too large for u32, treat as name.
-                            let name = InternedText::new(self.db, word.S());
-                            ast::FieldSelector::Name(name)
-                        }
-                    }
-                } else {
-                    let name = InternedText::new(self.db, word.S());
-                    ast::FieldSelector::Name(name)
+        use datalove_diagnostic::DiagnosticBuilderExt;
+        let ts = self.error_span();
+        if let Some(word) = self.peek_word() {
+            if word.chars().all(|c| c.is_ascii_digit()) {
+                if let Ok(idx) = word.parse::<u32>() {
+                    self.next();
+                    return ast::FieldSelector::Index(idx);
                 }
-            }
-            None => {
-                // No valid field selector - create error name.
-                let name = InternedText::new(self.db, "<error>".S());
-                ast::FieldSelector::Name(name)
+            } else if let Some(name) = self.eat_name() {
+                return ast::FieldSelector::Name(name);
             }
         }
+        self.had_error = true;
+        bct::diagnostic::DiagnosticBuilder::error(self.db, "expected a field name or a tuple index after `.`")
+            .code("P079")
+            .primary_label(ts, "not a field name, nor a tuple index that fits a `u32`")
+            .emit_parse();
+        // A word that is neither is taken, so it is not reported again.
+        if self.peek_word().is_some() {
+            self.next();
+        }
+        ast::FieldSelector::Name(InternedText::new(self.db, "<error>".S()))
     }
 
     /// Get operator precedence (higher number = higher precedence).
@@ -583,12 +585,8 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                 "atom" => {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume "atom"
-                                    let name = match self.peek_word() {
-                                        Some(w) => {
-                                            let n = InternedText::new(self.db, w.S());
-                                            self.next();
-                                            n
-                                        }
+                                    let name = match self.eat_name() {
+                                        Some(n) => n,
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'atom'",
@@ -606,12 +604,8 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                 "term" => {
                                     let ts = self.peek_text_span();
                                     self.next(); // consume "term"
-                                    let name = match self.peek_word() {
-                                        Some(w) => {
-                                            let n = InternedText::new(self.db, w.S());
-                                            self.next();
-                                            n
-                                        }
+                                    let name = match self.eat_name() {
+                                        Some(n) => n,
                                         None => {
                                             return self.emit_expr_error(ts,
                                                 "expected name after 'term'",
@@ -655,13 +649,9 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                     self.next(); // consume "icall"
 
                                     // Parse intrinsic name.
-                                    let intrinsic_name = match self.peek() {
-                                        Some(TreeToken::Token(tok)) if tok.kind == TokenKind::Word => {
-                                            let name = tok.word_str(self.text()).unwrap_or("");
-                                            self.next(); // consume the name
-                                            InternedText::new(self.db, name.to_string())
-                                        }
-                                        _ => {
+                                    let intrinsic_name = match self.eat_name() {
+                                        Some(name) => name,
+                                        None => {
                                             return self.emit_expr_error(ts,
                                                 "expected intrinsic name after 'icall'",
                                                 "P040",
@@ -670,7 +660,12 @@ operation in the payload, or the whole constructor to apply it to what is built"
                                         }
                                     };
 
-                                    // Parse arguments in parentheses.
+                                    // Parse arguments in parentheses, written against the
+                                    // name as any call's are. Spaced apart, they are
+                                    // reported and read anyway.
+                                    if self.peek_sigil(Sigil::ParenOpen) && !self.glued_left() {
+                                        self.report_spaced_postfix();
+                                    }
                                     let (args, intrinsic_arg_modes) = match self.peek() {
                                         Some(TreeToken::Branch { sigil: Sigil::ParenOpen, .. }) => {
                                             let (args_iter, open_span) = match self.next() {
@@ -756,7 +751,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                             self.next();
                             self.emit_expr_error(ts,
                                 "unexpected token in expression",
-                                "P007",
+                                "P080",
                                 "unexpected token"
                             )
                         }
@@ -788,7 +783,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                         self.next();
                         self.emit_expr_error(ts,
                             "unexpected token in expression",
-                            "P010",
+                            "P080",
                             "unexpected token"
                         )
                     }
@@ -810,7 +805,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 let ts = self.peek_text_span();
                 self.emit_expr_error(ts,
                     "expected expression",
-                    "P008",
+                    "P081",
                     "expected expression"
                 )
             }

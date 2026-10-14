@@ -1,0 +1,42 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "x",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "args": [
+              {
+                "expr": {
+                  "kind": "Int",
+                  "type_hint": "U32",
+                  "value": "1"
+                }
+              }
+            ],
+            "kind": "IntrinsicCall",
+            "name": "bitnot_u32"
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P021",
+      "labels": [
+        {
+          "message": "a postfix operator is written against the expression before it",
+          "span": [
+            102,
+            113
+          ],
+          "text": "(: u32 / 1)"
+        }
+      ],
+      "message": "this `(: u32 / 1)` is written apart from what it applies to"
+    }
+  ]
+}

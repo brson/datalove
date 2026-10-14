@@ -15,14 +15,12 @@ use bct::{
     bracer::{Bracer, Cursor},
     parser_util,
     split,
-    text::TextSpan,
     lexer,
     bracer,
 };
 
 use datalove_datafun_ast::ast;
 use bct::text::InternedText;
-use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use state::{Parser, ScriptCounters};
 
@@ -48,7 +46,7 @@ pub fn parse_with_module_id<'db>(
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    emit_bracer_errors(db, bracer, source);
+    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
     emit_non_ascii_name_errors(db, bracer, source);
     parse_bracer(db, bracer, source, module_id)
 }
@@ -60,7 +58,7 @@ pub fn parse_expr<'db>(
     source: Source,
 ) -> ast::ParsedExpr<'db> {
     let bracer = bracer::bracer(db, lexer::lex(db, source));
-    emit_bracer_errors(db, bracer, source);
+    datalove_datalit::parser_util::emit_bracer_errors(db, bracer, source, "P050", "P051");
     emit_non_ascii_name_errors(db, bracer, source);
     // Expressions don't have module context.
     parse_bracer_expr(db, bracer, source)
@@ -88,46 +86,6 @@ fn each_once<'db>(calls: Vec<(InternedText<'db>, InternedText<'db>)>) -> ast::Qu
         }
     }
     std::sync::Arc::new(once)
-}
-
-/// Emit parse diagnostics for bracer errors (unclosed, mismatched, or stray braces).
-fn emit_bracer_errors<'db>(
-    db: &'db dyn Db,
-    bracer: Bracer<'db>,
-    source_text: Source,
-) {
-    let tokens = bracer.lexed(db).tokens(db);
-
-    for (token_range, sigil) in bracer.errors(db) {
-        // A stray close is reported as its own one-token range. An unclosed
-        // open runs to wherever it ended, which is one token too where the
-        // open is the last token of the source, so the token says which.
-        let is_stray_close = tokens.get(token_range.start).is_some_and(|t| t.is_close_sigil());
-
-        if is_stray_close {
-            // Stray closing brace - no matching open.
-            if let Some(token) = tokens.get(token_range.start) {
-                let span = token.span();
-                let ts = TextSpan::new(source_text, span);
-                DiagnosticBuilder::error(db, &format!("unmatched '{}'", sigil.as_str()))
-                    .code("P050")
-                    .primary_label(ts, &format!("this '{}' has no matching '{}'",
-                        sigil.as_str(), sigil.open_sigil().as_str()))
-                    .emit_parse();
-            }
-        } else {
-            // Unclosed opening brace.
-            if let Some(open_token) = tokens.get(token_range.start) {
-                let span = open_token.span();
-                let ts = TextSpan::new(source_text, span);
-                DiagnosticBuilder::error(db, &format!("unclosed '{}'", sigil.as_str()))
-                    .code("P051")
-                    .primary_label(ts, &format!("this '{}' is never closed",
-                        sigil.as_str()))
-                    .emit_parse();
-            }
-        }
-    }
 }
 
 /// Emit parse diagnostics for names written outside ASCII.

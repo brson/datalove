@@ -34,7 +34,7 @@
   },
   "diagnostics": [
     {
-      "code": "D010",
+      "code": "D048",
       "labels": [
         {
           "message": "expected field name",

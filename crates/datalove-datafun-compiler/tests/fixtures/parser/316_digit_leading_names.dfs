@@ -1,0 +1,8 @@
+// A name does not begin with a digit, wherever a name is read.
+let a = atom 5
+let b = term 5 1
+let c = icall 5(1)
+let t = (1, 2)
+let d = t.0x1
+let e = t.99999999999
+let f: 5 = 1

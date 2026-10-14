@@ -225,7 +225,7 @@ reading.
 
 The last two come from `lopsided_operator` in the datafun parser's `expr.rs`.
 Datalit has no operators to misplace, and a `-` there that no number follows is
-D013, "unexpected minus sign".
+D050, "unexpected minus sign".
 
 ### Phase 5: IR Lowering Detail
 
@@ -1444,10 +1444,12 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D011 | `CannotMutateImmutable` | `let` binding or `in` param passed as `mut`/`out` |
 | D012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
 | D013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
+| D014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
 
 D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`;
-auto-adapt can apply the first three, not D013. The `D0xx` codes in `datalove-datalit`'s parser are a
-separate namespace and unrelated.
+auto-adapt can apply the first three, not D013. The parsers' own `D0xx` codes
+start at D017 and do not reuse any of these; see
+[Datalit Grammar](datalit-ebnf.md#user-content-diagnostics).
 
 ### Drop Schedule
 

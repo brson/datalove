@@ -45,7 +45,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 return self.emit_expr_error(ts,
                     "expected '/' after type hint in `: type / expr` pattern",
-                    "D021",
+                    "D049",
                     "expected '/'"
                 );
             }
@@ -124,11 +124,8 @@ impl<'db> Parser<'db> {
         if self.peek_sigil(Sigil::Minus) {
             let ts = self.peek_text_span();
             self.next();
-            return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                source: ts.source,
-                span: ts.span.C(),
-                message: InternedText::new(self.db, "unexpected minus sign".S()),
-            });
+            return self.lit_error(ts, "unexpected minus sign", "P080",
+                "a sign is written against the number it signs");
         }
 
         // Check for keywords.
@@ -230,11 +227,8 @@ impl<'db> Parser<'db> {
                         let word = token.word_str(self.text()).X();
                         let ts = self.peek_text_span();
                         self.next();
-                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            source: ts.source,
-                            span: ts.span.C(),
-                            message: InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
-                        });
+                        return self.lit_error(ts, &format!("unexpected identifier '{}'", word),
+                            "P080", "not a literal");
                     }
                     TokenKind::String => {
                         let raw = token.text(self.text());
@@ -249,11 +243,9 @@ impl<'db> Parser<'db> {
                     }
                     _ => {
                         let ts = self.peek_text_span();
-                        return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            source: ts.source,
-                            span: ts.span.C(),
-                            message: InternedText::new(self.db, "unexpected token".S()),
-                        });
+                        self.next();
+                        return self.lit_error(ts, "unexpected token in expression", "P080",
+                            "unexpected token");
                     }
                 }
             }
@@ -304,12 +296,12 @@ impl<'db> Parser<'db> {
                 return self.parse_lit_tensor_multicomma(type_hint, inner);
             }
             _ => {
-                let ts = self.peek_text_span();
-                return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    source: ts.source,
-                    span: ts.span.C(),
-                    message: InternedText::new(self.db, "expected expression".S()),
-                });
+                // A bracket with no expression of its own, as `(| |)` and
+                // `<a>` are; taken whole, so that it is reported once.
+                let ts = self.error_span();
+                self.next();
+                return self.lit_error(ts, "expected expression", "P081",
+                    "this bracket starts no expression");
             }
         }
     }
@@ -522,7 +514,7 @@ impl<'db> Parser<'db> {
                 None => inner_shape = Some(sub_shape),
                 Some(expected) => {
                     if *expected != sub_shape {
-                        let ts = self.peek_text_span();
+                        let ts = self.extract_group_text_span(group);
                         DiagnosticBuilder::error(self.db,
                             &format!("inconsistent tensor shape at group {}: expected {:?} but got {:?}",
                                 group_idx, expected, sub_shape))
@@ -572,7 +564,7 @@ impl<'db> Parser<'db> {
         for (row_idx, &row_tokens) in rows.iter().skip(1).enumerate() {
             let elements = self.parse_table_data_row(row_tokens);
             if elements.len() != num_columns && !elements.is_empty() {
-                let ts = self.peek_text_span();
+                let ts = self.extract_group_text_span(row_tokens);
                 DiagnosticBuilder::error(self.db,
                     &format!("row {} has {} columns but header has {}",
                         row_idx + 1, elements.len(), num_columns))
@@ -687,7 +679,7 @@ impl<'db> Parser<'db> {
                 let ts = self.peek_text_span();
                 let error_expr = self.emit_expr_error(ts,
                     "expected field name in struct",
-                    "D021",
+                    "D018",
                     "expected field name"
                 );
                 let error_name = InternedText::new(self.db, "<error>".S());
@@ -699,7 +691,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_expr = self.emit_expr_error(ts,
                 "expected '=' after field name in struct",
-                "D022",
+                "D018",
                 "expected '='"
             );
             return ast::ExprStructField { name, value: error_expr };
@@ -726,7 +718,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             let error_value = self.emit_expr_error(ts,
                 "expected '=' between map key and value",
-                "D023",
+                "D017",
                 "expected '='"
             );
             return ast::ExprMapEntry { key, value: error_value };

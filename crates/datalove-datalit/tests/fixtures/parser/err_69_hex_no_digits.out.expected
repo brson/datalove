@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "expected the digits of a hex literal"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D019",
+      "labels": [
+        {
+          "message": "a hex literal has at least one digit after `0x`",
+          "span": [
+            0,
+            2
+          ],
+          "text": "0x"
+        }
+      ],
+      "message": "expected the digits of a hex literal"
+    }
+  ]
+}

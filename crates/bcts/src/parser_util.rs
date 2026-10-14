@@ -274,6 +274,8 @@ pub enum Radix {
 pub enum NumberError {
     /// Digits that are not a run, as in `1_`.
     Digits,
+    /// A hex prefix with no digits after it, as in `0x`.
+    HexMissing,
     /// A float with a space written into it, as in `1 . 5`.
     FloatSpaced,
     /// A `.` against the digits with no fraction after it.
@@ -318,6 +320,7 @@ impl Number {
         let error = self.error.C()?;
         let message = match error {
             NumberError::Digits => S("a separator goes between two digits"),
+            NumberError::HexMissing => S("expected the digits of a hex literal"),
             NumberError::FloatSpaced => S("a float is written without spaces in it"),
             NumberError::FractionMissing => S("expected the digits of a float"),
             NumberError::ExponentSpaced => S("an exponent is written without spaces in it"),
@@ -325,6 +328,7 @@ impl Number {
         };
         let label = match error {
             NumberError::Digits => S("not a run of digits"),
+            NumberError::HexMissing => S("a hex literal has at least one digit after `0x`"),
             NumberError::FloatSpaced | NumberError::ExponentSpaced => {
                 fmt!("write it as `{}`", self.text())
             }
@@ -407,7 +411,9 @@ fn read_number_tail<'db, S: TokenStreamExt<'db>>(
         number.radix = Radix::Hex;
         number.digits = fmt!("{}{}", &word[..2], digits);
         number.suffix = suffix;
-        if !is_digit_run(digits, |c| c.is_ascii_hexdigit()) {
+        if digits.is_empty() {
+            number.error = Some(NumberError::HexMissing);
+        } else if !is_digit_run(digits, |c| c.is_ascii_hexdigit()) {
             number.error = Some(NumberError::Digits);
         }
         // A hex literal has no fraction, so `0x1.2` is a hex and then a dot.

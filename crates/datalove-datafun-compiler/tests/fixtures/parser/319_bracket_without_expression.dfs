@@ -1,0 +1,3 @@
+// A bracket that starts no expression is reported where it is written.
+let a = (| 1 |)
+let b = <a>

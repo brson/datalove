@@ -1,0 +1,4 @@
+// A const parameter is passed as a const is, so it takes no mode.
+fun f(const ref n: int): int
+    ret 1
+end fun

@@ -43,6 +43,14 @@ pub fn process_escape_sequences(s: &str) -> Result<String, EscapeError> {
                                 return Err(EscapeError::UnterminatedUnicodeEscape { position: pos });
                             }
 
+                            // Hex digits only: `from_str_radix` would also
+                            // take a leading `+`, as in `\u{+41}`.
+                            if !hex_str.chars().all(|c| c.is_ascii_hexdigit()) {
+                                return Err(EscapeError::InvalidUnicodeEscape {
+                                    position: pos,
+                                    reason: format!("invalid hex digits: {}", hex_str),
+                                });
+                            }
                             if hex_str.is_empty() || hex_str.len() > 6 {
                                 return Err(EscapeError::InvalidUnicodeEscape {
                                     position: pos,

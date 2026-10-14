@@ -13,7 +13,7 @@
   },
   "diagnostics": [
     {
-      "code": "D008",
+      "code": "D045",
       "labels": [
         {
           "message": "expected rank",

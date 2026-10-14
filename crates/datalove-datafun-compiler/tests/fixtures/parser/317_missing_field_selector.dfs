@@ -1,0 +1,4 @@
+// A `.` is followed by a field's name or a tuple's index.
+let t = (1, 2)
+let a = t.
+let b = t.(1)

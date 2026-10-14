@@ -5,6 +5,9 @@ inference rules. This is a reference: it states what the checker in
 `crates/datalove-datafun-tycheck` accepts. Revised October 2026 against that
 code. It extends [Datalit Typing Rules](datalit-typing-rules.md), whose
 notation, type equivalence and literal rules it assumes; read that first.
+The concrete syntax the rules are written over is in
+[Datafun Grammar](datafun-ebnf.md), which also maps each production to the
+rules that type it.
 
 ## Contents
 

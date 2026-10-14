@@ -13,7 +13,7 @@
   },
   "diagnostics": [
     {
-      "code": "D008",
+      "code": "D046",
       "labels": [
         {
           "message": "unexpected token in type hint",

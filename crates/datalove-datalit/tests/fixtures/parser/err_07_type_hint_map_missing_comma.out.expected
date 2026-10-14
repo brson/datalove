@@ -13,7 +13,7 @@
   },
   "diagnostics": [
     {
-      "code": "D005",
+      "code": "D044",
       "labels": [
         {
           "message": "expected '=' between key and value types",

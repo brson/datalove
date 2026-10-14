@@ -1,0 +1,43 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D054",
+      "labels": [
+        {
+          "message": "this ']' has no matching '['",
+          "span": [
+            6,
+            7
+          ],
+          "text": "]"
+        }
+      ],
+      "message": "unmatched ']'"
+    }
+  ]
+}

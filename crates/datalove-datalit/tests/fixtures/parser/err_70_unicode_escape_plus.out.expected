@@ -1,0 +1,26 @@
+{
+  "ast": {
+    "expr": {
+      "ParseError": {
+        "message": "invalid escape in string literal"
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "D039",
+      "labels": [
+        {
+          "message": "invalid hex digits: +41; the escapes are \\\" \\\\ \\n \\r \\t \\0 and \\u{...}",
+          "span": [
+            0,
+            9
+          ],
+          "text": "\"\\u{+41}\""
+        }
+      ],
+      "message": "invalid escape in string literal"
+    }
+  ]
+}

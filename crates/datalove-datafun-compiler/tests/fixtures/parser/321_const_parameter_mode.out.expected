@@ -1,0 +1,47 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "body": [
+          {
+            "kind": "Ret",
+            "value": {
+              "expr": {
+                "kind": "Int",
+                "type_hint": null,
+                "value": "1"
+              }
+            }
+          }
+        ],
+        "kind": "Fun",
+        "name": "f",
+        "params": [
+          {
+            "is_comptime": true,
+            "mode": "Ref",
+            "name": "n",
+            "type_hint": "Int"
+          }
+        ],
+        "return_type": "Int"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P082",
+      "labels": [
+        {
+          "message": "invalid combination",
+          "span": [
+            83,
+            84
+          ],
+          "text": "n"
+        }
+      ],
+      "message": "const parameter cannot be 'ref', 'out' or 'mut'"
+    }
+  ]
+}

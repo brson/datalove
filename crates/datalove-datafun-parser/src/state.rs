@@ -458,9 +458,20 @@ impl<'db> Parser<'db> {
         &mut self,
         kind: datalove_datalit::parser_util::NameKind,
     ) -> Option<InternedText<'db>> {
-        use datalove_datalit::parser_util::{reserved_complaint, reserved_for};
         let ts = self.peek_text_span();
         let name = self.eat_name()?;
+        self.report_reserved_name(name, ts, kind);
+        Some(name)
+    }
+
+    /// Report a declared name reserved for this kind of declaration (P064).
+    pub(super) fn report_reserved_name(
+        &mut self,
+        name: InternedText<'db>,
+        ts: TextSpan,
+        kind: datalove_datalit::parser_util::NameKind,
+    ) {
+        use datalove_datalit::parser_util::{reserved_complaint, reserved_for};
         if let Some(reason) = reserved_for(name.as_str(self.db), kind) {
             self.had_error = true;
             let (message, label) = reserved_complaint(name.as_str(self.db), reason);
@@ -469,7 +480,17 @@ impl<'db> Parser<'db> {
                 .primary_label(ts, &label)
                 .emit_parse();
         }
-        Some(name)
+    }
+
+    /// Report a postfix operator written apart from what it applies to (P021).
+    pub(super) fn report_spaced_postfix(&mut self) {
+        self.had_error = true;
+        let ts = self.peek_text_span();
+        let text = self.text()[ts.span.clone()].to_string();
+        DiagnosticBuilder::error(self.db, &fmt!("this `{text}` is written apart from what it applies to"))
+            .code("P021")
+            .primary_label(ts, "a postfix operator is written against the expression before it")
+            .emit_parse();
     }
 
     /// Where an expression this parser created begins.

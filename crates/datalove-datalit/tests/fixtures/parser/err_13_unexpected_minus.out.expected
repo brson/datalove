@@ -9,7 +9,7 @@
   },
   "diagnostics": [
     {
-      "code": "D013",
+      "code": "D050",
       "labels": [
         {
           "message": "unexpected '-' not followed by number",
