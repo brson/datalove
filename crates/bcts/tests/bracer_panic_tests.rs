@@ -1,12 +1,10 @@
 //! Test cases for bcts bracer handling of unmatched brackets.
 //!
-//! These inputs previously triggered bug!() panics at:
-//! - bracer.rs:147 when next_token_index > next_removed_close.0
-//! - bracer.rs:203 when there's a branch but no token
-//!
-//! The problem occurred when unmatched closing brackets appeared in
-//! conjunction with other bracket structures. The fix skips removed_closes
-//! that fall behind the iterator position after exiting a branch.
+//! These inputs once made the bracer's output panic as it was read: the
+//! bracer recorded branches, inserted and removed closes in lists, and a walk
+//! merged the four, with cases it took to be impossible. It matches in one
+//! pass now and has no such cases, and these stay to say so, with every level
+//! of every input read to the end and random bracket soup besides.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -18,9 +16,7 @@ fn dbglex(s: &str) -> Result<usize, String> {
         let chunk = bcts::source_map::basic_source_map(&db, source);
         let chunk_lex = bcts::lexer::lex_chunk(&db, chunk);
         let bracer = bcts::bracer::bracer(&db, chunk_lex);
-        // Consume the iterator to trigger any panics.
-        let tokens: Vec<_> = bracer.iter(&db).collect();
-        tokens.len()
+        count(bracer.iter(&db))
     }));
 
     result.map_err(|e| {
@@ -32,6 +28,40 @@ fn dbglex(s: &str) -> Result<usize, String> {
             "unknown panic".to_string()
         }
     })
+}
+
+/// Every token of a level and of every bracket inside it.
+fn count(level: bcts::bracer::Cursor<'_>) -> usize {
+    level.map(|token| match token {
+        bcts::bracer::TreeToken::Token(_) => 1,
+        bcts::bracer::TreeToken::Branch { inner, .. } => 1 + count(inner),
+    }).sum()
+}
+
+/// A stray close before a bracket that runs on unclosed, whose contents are
+/// stray closes too. A fifth of random bracket soup panicked the walk once it
+/// read every bracket rather than only those a parser opened.
+#[test]
+fn test_stray_closes_inside_an_unclosed_bracket() {
+    assert!(dbglex("> a a |] [| } }").is_ok());
+}
+
+#[test]
+fn test_random_bracket_soup() {
+    let pieces = ["(", ")", "{", "}", "[", "]", "<", ">", "(|", "|)", "{|", "|}", "[|", "|]",
+        "<|", "|>", "%{", "#{", "a", "\n"];
+    let mut seed: u64 = 0x9e3779b97f4a7c15;
+    for case in 0..20_000 {
+        let mut text = String::new();
+        for _ in 0..case % 13 + 1 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            text.push_str(pieces[(seed % pieces.len() as u64) as usize]);
+            text.push(' ');
+        }
+        assert!(dbglex(&text).is_ok(), "panicked on {text:?}");
+    }
 }
 
 #[test]
