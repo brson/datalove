@@ -92,7 +92,9 @@ level has `newline_before`, or at a `;`; a newline inside brackets is already
 inside a branch, which the cursor steps over. A `Lines` iterator yields one
 cursor per line by scanning forward at its level, so the stray-delimiter check
 (P032) is part of the scan rather than a pass over collected groups.
-Statement parsers that consume the lines after their own -- a function body,
+A script is parsed this way too: the counters it carries from one line to the
+next (`ScriptCounters`) live within one parse, so with one parser they are
+simply its own. Statement parsers that consume the lines after their own -- a function body,
 an `if`'s arms, a `match`'s cases -- take the `Lines` iterator by `&mut`
 where they take `remaining_lines` now. Comma-separated contents are found the
 same way, by a `Commas` iterator.
@@ -200,10 +202,6 @@ bytes during parsing (a counting allocator, as in
   re-run together on any edit, so as separate queries they are two memos for
   one piece of work. Folding them saves a memo and a pass, and makes the
   lexer responsible for recovery, which it is not now.
-- **Does the REPL's line-at-a-time parsing fit `Lines`?** A script unit is
-  parsed a line at a time with counters carried between lines
-  (`ScriptCounters`). One parser per parse should make that simpler, but the
-  script path is the one most likely to depend on how the current one splits.
 - **Is the AST's own allocation worth attacking next?** After this, statement
   and argument vectors are most of what is left. Small-vector storage for
   argument lists, or the expression arena above, would be the next step, and
