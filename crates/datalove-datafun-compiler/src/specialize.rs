@@ -48,7 +48,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use datalove_datafun_const::inline_function_consts;
+use datalove_datafun_const::{eliminate_dead_code_unit, inline_function_consts};
 use datalove_datafun_ir::{
     CodeRef, CodeUnitContext, CodeUnitId, ConstValue, FunctionContext, Instruction,
     IrBlock, IrCodeUnit, IrModuleId, IrType, Operand, ParamId, ValueId,
@@ -285,7 +285,8 @@ pub fn monomorphize_function(
 /// Point each comptime call whose instantiation was built at the copy built for it.
 ///
 /// A call the plan has nothing for is left as it is. It names the original
-/// function, which is still there and still takes the const argument.
+/// function, which is still there and still takes the const argument. Where a
+/// call is rewritten, the code that only built its const arguments goes.
 pub fn rewrite_comptime_calls(
     unit: &IrCodeUnit,
     plan: &MonomorphizationPlan,
@@ -293,6 +294,7 @@ pub fn rewrite_comptime_calls(
 ) -> IrCodeUnit {
     let consts = const_value_map(unit);
     let mut blocks = Vec::with_capacity(unit.blocks.len());
+    let mut rewrote = false;
 
     for block in &unit.blocks {
         let mut instructions = Vec::with_capacity(block.instructions.len());
@@ -324,6 +326,7 @@ pub fn rewrite_comptime_calls(
                 .map(|(_, arg)| arg.clone())
                 .collect();
 
+            rewrote = true;
             instructions.push(Instruction::Call {
                 dest: *dest,
                 func: copy_ref,
@@ -342,10 +345,14 @@ pub fn rewrite_comptime_calls(
         });
     }
 
-    IrCodeUnit {
+    let mut rewritten = IrCodeUnit {
         blocks,
         ..unit.clone()
+    };
+    if rewrote {
+        eliminate_dead_code_unit(&mut rewritten);
     }
+    rewritten
 }
 
 /// Specialize the comptime calls a script unit makes.

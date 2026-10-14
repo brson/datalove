@@ -85,7 +85,6 @@ Analysis(
                     
                     fn twice__ct0(p0):
                     block0:
-                        v2 = staticref 5int
                         v0 = call u2(p0)
                         v1 = call u2(v0)
                         return v1

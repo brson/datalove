@@ -33,6 +33,9 @@ pub mod compile;
 // Comptime argument specialization.
 pub mod specialize;
 
+// The passes that finish a function, in one order for every pipeline.
+pub mod optimize;
+
 // Evaluating const bindings, for both pipelines.
 pub mod const_eval;
 

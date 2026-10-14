@@ -229,7 +229,7 @@ D013, "unexpected minus sign".
 
 ### Phase 5: IR Lowering Detail
 
-Lowering has four internal phases that handle const evaluation correctly:
+Lowering has five internal phases that handle const evaluation correctly:
 
 ```
 Phase 5a: Lower all functions
@@ -243,22 +243,27 @@ Phase 5b: Evaluate consts
     |   Function-level consts qualified as "func_name::const_name"
     v   Output: HashMap<ModuleId, ModulePreResolvedConsts>
     |
+Phase 5b': Inline evaluated const values
+    |   const_inlined_module [tracked], per module
+    |   Then the branches, blocks and code that leaves dead
+    v   Output: the lowered IR, consts as `Const` instructions
+    |
 Phase 5c: Specialize comptime functions
     |   specialize_comptime_functions (non-tracked)
     |   One copy of a callee per instantiation; see below
     v   Output: the lowered IR, with the copies in it
     |
-Phase 5c': Inline calls to `inline` functions
-    |   inline_module_graph (non-tracked)
-    |   Each call replaced by the callee's body; see ir::inline
-    v   Output: the lowered IR, without those calls
-    |
-Phase 5d: Assemble modules
+Phase 5d: Assemble and finish modules
     |   lower_module [tracked]
     |   Reuses pre-lowered functions
-    |   Inlines evaluated const values
+    |   optimize::finish per function: inline calls, dead code, promotion
     v   Output: ModuleGraphLoweringResult
 ```
+
+The passes run in one order in both pipelines -- const inlining,
+specialization, inlining, dead code, promotion -- and the script compiler runs
+the last three through the same `optimize::finish`. See
+[the plan for the passes](plan-ir-passes.md).
 
 Why this structure:
 - Functions are lowered once and reused - const expressions can call functions via CTFE
@@ -290,7 +295,8 @@ around a tenth of an unchanged recompile.
 ```
 lower_module_functions [tracked]  ->  ModuleLowered per module
 merge_module_strata [tracked]     ->  one ModuleLowered from the two strata
-specialized_module [tracked]      ->  ModuleLowered for phase 5c's rewrite
+const_inlined_module [tracked]    ->  ModuleLowered for phase 5b' to rewrite
+specialized_module [tracked]      ->  ModuleLowered for phase 5c to rewrite
 lower_module [tracked]            ->  takes the handle, not the IR
 ```
 
@@ -379,10 +385,14 @@ so it needs the evaluator too. `module_has_comptime_calls` gates it rather than
 memoizing it, so a program that does specialize re-specializes on every
 compile.
 
-Phase 5c' is the exception, and a temporary one, as `inline` is: inlining
-needs other modules' bodies. It does nothing unless some function is
-`inline`, and then gives a new handle only to a module whose functions call
-one, so the other modules still assemble from their memos.
+Inlining needs other modules' bodies, and gets them in phase 5d rather than
+in a pass over the graph: `lower_module` is given `InlineModules`, the handles
+of the modules that define an `inline` function, interned so that an unchanged
+set is the same key. A module's inline functions are picked out once per
+compile, by `inline_functions`, a query on its handle, and one `Inliner`
+serves a whole module, so a callee is expanded once per module. Every module
+is keyed on the set, so an edit to a module defining an inline function
+assembles every module again; a key per function is the plan's next step.
 
 #### Why nothing between 5a and 5d is graph-wide
 
@@ -394,7 +404,7 @@ the work of making edits cheap went into keeping it from re-running; with
 generics by reference it is gone. Each function's descriptor table is
 computed from its own unit when it is lowered (`descriptor_table`).
 
-The `skip_const_inlining` flag skips phase 5b and the inlining phase 5d does after it,
+The `skip_const_inlining` flag skips phases 5b and 5b', and the promotion in 5d,
 lowering const bindings as let bindings. Phase 5a still runs: a module-level const is
 resolved where its reference is lowered rather than by a later pass, so there is nothing
 there for the flag to skip. Used for testing CTFE accuracy. Callers of the high-level

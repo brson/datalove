@@ -850,6 +850,10 @@ the one now running, since a unit is added once it has finished.
 
 Everything here transforms `IrCodeUnit` in place or produces a new one.
 
+Both pipelines run them in one order: const inlining, specialization,
+inlining with simplification, dead code, const promotion. The last three are
+`compiler::optimize::finish`, per function.
+
 **Const inlining and DCE** (`datalove-datafun-const`) evaluates a const
 binding's pre-lowered IR to a `ConstValue`, replaces the expression with a
 `Const` instruction, and then eliminates the instructions and blocks that leaves

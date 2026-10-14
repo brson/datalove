@@ -84,16 +84,8 @@ pub fn with_calls_into_unit(callee: &IrCodeUnit, unit: u32) -> IrCodeUnit {
 pub fn inline_calls(
     unit: &mut IrCodeUnit,
     resolve: &dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>,
-) -> Result<(), InlineError> {
-    let mut inliner = Inliner { resolve, callees: HashMap::new(), stack: Vec::new() };
-    if inliner.expand(unit)? {
-        crate::simplify::simplify(unit);
-        let table = descriptor_table(unit);
-        if let CodeUnitContext::Function(ctx) = &mut unit.context {
-            ctx.descriptor_table = table;
-        }
-    }
-    Ok(())
+) -> Result<bool, InlineError> {
+    Inliner::new(resolve).inline(unit)
 }
 
 /// Whether `unit` has a call to an inline function, as `resolve` finds them:
@@ -108,7 +100,9 @@ pub fn is_inline(unit: &IrCodeUnit) -> bool {
     unit.function_context().is_some_and(|ctx| ctx.inline)
 }
 
-struct Inliner<'r> {
+/// Inlining for any number of functions that see their callees the same way,
+/// each callee expanded once for all of them.
+pub struct Inliner<'r> {
     resolve: &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>,
     /// Each callee met, expanded if it is inline, none if it is not.
     callees: HashMap<CodeRef, Option<Arc<IrCodeUnit>>>,
@@ -116,7 +110,32 @@ struct Inliner<'r> {
     stack: Vec<(CodeRef, String)>,
 }
 
-impl Inliner<'_> {
+impl<'r> Inliner<'r> {
+    /// An inliner finding callees with `resolve`; see `inline_calls`.
+    pub fn new(resolve: &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>) -> Self {
+        Inliner { resolve, callees: HashMap::new(), stack: Vec::new() }
+    }
+
+    /// How this inliner finds callees.
+    pub fn resolver(&self) -> &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>> {
+        self.resolve
+    }
+
+    /// Replace every call in function body `unit` to an inline function by
+    /// the function's body, and simplify what that leaves. Whether there was
+    /// one.
+    pub fn inline(&mut self, unit: &mut IrCodeUnit) -> Result<bool, InlineError> {
+        if !self.expand(unit)? {
+            return Ok(false);
+        }
+        crate::simplify::simplify(unit);
+        let table = descriptor_table(unit);
+        if let CodeUnitContext::Function(ctx) = &mut unit.context {
+            ctx.descriptor_table = table;
+        }
+        Ok(true)
+    }
+
     /// Splice every call to an inline function in `unit`. Whether there was one.
     fn expand(&mut self, unit: &mut IrCodeUnit) -> Result<bool, InlineError> {
         let mut spliced = false;

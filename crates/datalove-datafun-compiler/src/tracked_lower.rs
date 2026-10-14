@@ -19,7 +19,7 @@ use datalove_datafun_tycheck::{
 };
 
 use datalove_datafun_const::{
-    inline_function_consts, inline_module_functions, promote_function_consts,
+    inline_function_consts, inline_module_functions,
 };
 use crate::const_cache::ConstCache;
 use crate::const_eval::{
@@ -375,8 +375,12 @@ impl<'db> ModuleGraphLoweringResult<'db> {
 /// const inlining (when `skip_const_inlining` is false).
 ///
 /// If `lowered` is provided, those functions are reused instead of being
-/// re-lowered from the AST. It arrives as a handle rather than as the IR, so
-/// this query's memo key holds a word rather than a module's instructions.
+/// re-lowered from the AST, and have had their consts inlined already, in
+/// phase 5b'. It arrives as a handle rather than as the IR, so this query's
+/// memo key holds a word rather than a module's instructions.
+///
+/// Every function is finished here, with the bodies of its `inline` callees
+/// found in `inline_modules`; see `optimize::finish`.
 ///
 /// Requires pre-computed ownership analysis results. Functions with ownership analysis
 /// errors are skipped (but those errors are already captured in the ownership
@@ -391,9 +395,13 @@ pub fn lower_module<'db>(
     ownership_analysis: SingleModuleAnalysis<'db>,
     func_ids: ReachableFuncIds<'db>,
     pre_resolved_consts: Option<ModulePreResolvedConsts<'db>>,
+    inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
     lowered: Option<ModuleLowered<'db>>,
 ) -> SingleModuleLoweringResult<'db> {
+    use datalove_datafun_ir::inline::Inliner;
+    use datalove_datafun_ir::CodeRef;
+
     let module_id = module.id(db);
     let module_path = module_id.path(db);
 
@@ -446,6 +454,7 @@ pub fn lower_module<'db>(
         .unwrap_or_default();
 
     // If lowered functions are provided, use them directly.
+    let from_scratch = lowered.is_none();
     if let Some(lowered) = lowered {
         functions = lowered.functions(db).functions.clone();
         // func_ids was already computed above, and should match lf.func_name_to_id.
@@ -518,12 +527,27 @@ pub fn lower_module<'db>(
                 .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
                 .collect();
             // Inline const values directly into the functions.
-            inline_module_functions(&mut functions, &const_values);
+            if from_scratch {
+                inline_module_functions(&mut functions, &const_values);
+            }
         }
-        // A function's consts, and a specialized copy's const parameters, are
-        // built once and borrowed rather than built at every call.
-        for func in &mut functions {
-            promote_function_consts(Arc::make_mut(func));
+    }
+
+    let resolve = |func: &CodeRef| match func {
+        CodeRef::Module { module, id } => {
+            let (_, lowered) = inline_modules?.modules(db).iter().find(|(m, _)| m == module)?;
+            let inline = inline_functions(db, *lowered);
+            let found = inline.binary_search_by_key(&id.0, |unit| unit.id.0).ok()?;
+            Some(Arc::clone(&inline[found]))
+        }
+        CodeRef::Local(_) | CodeRef::External { .. } => None,
+    };
+    let mut inliner = Inliner::new(&resolve);
+    for func in &mut functions {
+        if let Err(e) = crate::optimize::finish_shared(func, &mut inliner, !skip_const_inlining)
+            && !errors.contains(&e)
+        {
+            errors.push(e);
         }
     }
 
@@ -1389,6 +1413,22 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // name it were never written.
     let mut resolved_consts = resolved_consts;
 
+    // Phase 5b': each module's consts replaced by their values, and the
+    // branches and code that leaves dead removed, before specialization reads
+    // const arguments out of the `Const` instructions this makes. What CTFE
+    // calls stays as lowered, so specialization's registry is the one 5b built.
+    let callable_modules = lowered_modules.clone();
+    let lowered_modules: LoweredModules<'db> = if skip_const_inlining {
+        lowered_modules
+    } else {
+        lowered_modules.into_iter()
+            .map(|(module_id, lowered)| match resolved_consts.get(&module_id) {
+                Some(consts) => (module_id, const_inlined_module(db_salsa, lowered, consts.clone())),
+                None => (module_id, lowered),
+            })
+            .collect()
+    };
+
     // Phase 5c: Specialize const parameter functions by monomorphization. Each
     // function with const parameters gains a copy per instantiation, and the
     // call sites that named one are pointed at it.
@@ -1397,22 +1437,14 @@ pub fn lower_module_graph_with_evaluator<'db>(
     } else {
         specialize_module_graph(
             db_salsa, parsed_graph, typecheck_result, evaluator, func_id_map,
-            &module_consts, lowered_modules,
+            &module_consts, callable_modules, lowered_modules,
         )
     };
 
-    // Phase 5c': Every call to an `inline` function replaced by its body,
-    // after specialization so that a specialized copy is inlined too.
-    let (lowered_modules, inline_errors) = inline_module_graph(db_salsa, func_id_map, lowered_modules);
-
     // Module const failures have to reach the lowering result, or a module
     // whose const could not be evaluated compiles as though the functions that
-    // name it were never written. Specialization and inlining failures travel
-    // the same way.
-    for (module_id, errors) in module_const_errors.into_iter()
-        .chain(specialize_errors)
-        .chain(inline_errors)
-    {
+    // name it were never written. Specialization failures travel the same way.
+    for (module_id, errors) in module_const_errors.into_iter().chain(specialize_errors) {
         resolved_consts
             .entry(module_id)
             .or_insert_with(|| ModulePreResolvedConsts::new(module_id, Vec::new()))
@@ -1421,8 +1453,14 @@ pub fn lower_module_graph_with_evaluator<'db>(
     }
     let resolved_consts = resolved_consts;
 
-    // Phase 5d: Assemble modules with lowered functions, then inline consts.
-    // CTFE errors from resolved_consts are included in lower_module via pre_resolved_consts.errors.
+    // Where phase 5d finds the bodies of `inline` callees, as const inlining
+    // and specialization left them.
+    let inline_modules = find_inline_modules(db_salsa, parsed_graph, &lowered_modules);
+
+    // Phase 5d: Assemble modules with lowered functions, and finish each
+    // function: inlining, the dead code it leaves, const promotion; see
+    // `optimize::finish`. CTFE errors from resolved_consts are included in
+    // lower_module via pre_resolved_consts.errors.
     //
     // `lower_module` is tracked, so it takes its arguments by value. The IR
     // travels as a `ModuleLowered` handle, so neither the parallel path's work
@@ -1432,10 +1470,10 @@ pub fn lower_module_graph_with_evaluator<'db>(
         lowered_modules.into_iter().collect();
     match mode {
         ParallelMode::Sequential => {
-            assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, skip_const_inlining)
+            assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, inline_modules, skip_const_inlining)
         }
         ParallelMode::Parallel => {
-            assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, skip_const_inlining)
+            assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, inline_modules, skip_const_inlining)
         }
     }
 }
@@ -1536,71 +1574,57 @@ fn specialized_module<'db>(
     ModuleLowered::new(db, module_id, functions)
 }
 
-/// Phase 5c' over the whole graph: in every module, each call to an `inline`
-/// function replaced by its body; see `datalove_datafun_ir::inline`.
-///
-/// A module whose functions call nothing inline keeps its handle. Returns the
-/// errors, per module, of calls that could not be inlined.
-fn inline_module_graph<'db>(
+/// One module's IR with its declared consts replaced by their values, and the
+/// branches, blocks and code that leaves dead removed; phase 5b'.
+#[salsa::tracked(returns(copy))]
+fn const_inlined_module<'db>(
     db: &'db dyn salsa::Database,
-    func_id_map: FuncIdMap<'db>,
-    modules: LoweredModules<'db>,
-) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
-    use datalove_datafun_ir::inline::{calls_inline, inline_calls, is_inline};
-    use datalove_datafun_ir::CodeRef;
+    lowered: ModuleLowered<'db>,
+    consts: ModulePreResolvedConsts<'db>,
+) -> ModuleLowered<'db> {
+    let const_values: HashMap<String, Arc<ConstValue>> = consts.consts.iter()
+        .map(|(name, _ir_type, value)| (name.clone(), Arc::clone(value)))
+        .collect();
+    let mut functions = lowered.functions(db).as_ref().clone();
+    inline_module_functions(&mut functions.functions, &const_values);
+    ModuleLowered::new(db, lowered.module_id(db), Arc::new(functions))
+}
 
-    let ir = ir_map(db, &modules);
-    // `CodeRef::Module` names a module by its IR id.
-    let ir_ids: HashMap<ModuleId<'db>, IrModuleId> = func_id_map.entries(db).iter()
-        .map(|((module, _), (ir_id, _))| (*module, *ir_id))
-        .collect();
-    let inline: HashMap<(IrModuleId, CodeUnitId), Arc<IrCodeUnit>> = ir.iter()
-        .filter_map(|(module, funcs)| Some((ir_ids.get(module)?, funcs)))
-        .flat_map(|(ir_id, funcs)| funcs.functions.iter()
-            .filter(|unit| is_inline(unit))
-            .map(move |unit| ((*ir_id, unit.id), Arc::clone(unit))))
-        .collect();
-    if inline.is_empty() {
-        return (modules, Vec::new());
-    }
-    let resolve = |func: &CodeRef| match func {
-        CodeRef::Module { module, id } => inline.get(&(*module, *id)).cloned(),
-        CodeRef::Local(_) | CodeRef::External { .. } => None,
-    };
+/// The modules that define an `inline` function, by the id a call names them
+/// with.
+///
+/// Interned, so an unchanged set is the same key to every module's phase 5d.
+#[salsa::interned]
+pub struct InlineModules<'db> {
+    #[returns(ref)]
+    pub modules: Vec<(IrModuleId, ModuleLowered<'db>)>,
+}
 
-    let mut errors = Vec::new();
-    let inlined = modules.iter()
-        .map(|(module_id, lowered)| {
-            let funcs = &ir[module_id];
-            if !funcs.functions.iter().any(|unit| calls_inline(unit, &resolve)) {
-                return (*module_id, *lowered);
-            }
-            let mut module_errors = Vec::new();
-            let functions = funcs.functions.iter()
-                .map(|unit| {
-                    if !calls_inline(unit, &resolve) {
-                        return Arc::clone(unit);
-                    }
-                    let mut unit = (**unit).clone();
-                    if let Err(e) = inline_calls(&mut unit, &resolve)
-                        && !module_errors.contains(&e.to_string())
-                    {
-                        module_errors.push(e.to_string());
-                    }
-                    Arc::new(unit)
-                })
-                .collect();
-            if !module_errors.is_empty() {
-                errors.push((*module_id, module_errors));
-            }
-            let ir = Arc::new(ModuleLoweredFunctions {
-                functions,
-                func_name_to_id: funcs.func_name_to_id.clone(),
-            });
-            (*module_id, specialized_module(db, *module_id, ir))
-        })
+/// One module's `inline` functions, by id.
+#[salsa::tracked(returns(ref))]
+fn inline_functions<'db>(
+    db: &'db dyn salsa::Database,
+    lowered: ModuleLowered<'db>,
+) -> Vec<Arc<IrCodeUnit>> {
+    let mut inline: Vec<Arc<IrCodeUnit>> = lowered.functions(db).functions.iter()
+        .filter(|unit| datalove_datafun_ir::inline::is_inline(unit))
+        .cloned()
         .collect();
-    (inlined, errors)
+    inline.sort_by_key(|unit| unit.id.0);
+    inline
+}
+
+fn find_inline_modules<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    modules: &LoweredModules<'db>,
+) -> Option<InlineModules<'db>> {
+    let ir_ids = ir_module_ids(db, parsed_graph);
+    let defining: Vec<(IrModuleId, ModuleLowered<'db>)> = modules.iter()
+        .filter(|(_, lowered)| !inline_functions(db, *lowered).is_empty())
+        .map(|(module_id, lowered)| (ir_ids[module_id], *lowered))
+        .collect();
+    (!defining.is_empty()).then(|| InlineModules::new(db, defining))
 }
 
 /// Phase 5c over the whole graph, in and out under handles.
@@ -1611,6 +1635,7 @@ fn specialize_module_graph<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     func_id_map: FuncIdMap<'db>,
     module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    callable_modules: LoweredModules<'db>,
     modules: LoweredModules<'db>,
 ) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
     if !modules.iter().any(|(_, lowered)| module_has_comptime_calls(db, *lowered)) {
@@ -1619,7 +1644,7 @@ fn specialize_module_graph<'db>(
 
     // What the instantiations' consts can call. The same memo phase 5b asked
     // for, when it ran, and given to the evaluator in case it did not.
-    let callable = ctfe_module_registry(db, parsed_graph, modules.clone(), func_id_map);
+    let callable = ctfe_module_registry(db, parsed_graph, callable_modules, func_id_map);
     evaluator.set_module_registry(Arc::clone(callable));
 
     let (lowered_functions, errors) = specialize_comptime_functions(
@@ -1823,6 +1848,7 @@ fn assemble_module_graph<'db>(
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
     lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
+    inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     let graph = parsed_graph.graph(db);
@@ -1880,6 +1906,7 @@ fn assemble_module_graph<'db>(
             single_ownership_analysis,
             reachable_func_ids(db, graph, func_id_map, *module_id),
             module_consts,
+            inline_modules,
             skip_const_inlining,
             module_funcs,
         );
@@ -1906,6 +1933,7 @@ fn assemble_module_graph_parallel<'db>(
     ownership_analysis: ModuleGraphAnalysis<'db>,
     resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
     lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
+    inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
 ) -> ModuleGraphLoweringResult<'db> {
     use rmx::rayon::prelude::*;
@@ -1958,6 +1986,7 @@ fn assemble_module_graph_parallel<'db>(
                 single_ownership_analysis,
                 reachable_func_ids(db_salsa, graph, func_id_map, *module_id),
                 module_consts,
+                inline_modules,
                 skip_const_inlining,
                 module_funcs,
             ))
@@ -1965,7 +1994,7 @@ fn assemble_module_graph_parallel<'db>(
         .collect();
 
     // Assemble modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, func_ids, module_consts, skip_const_inlining, module_funcs)| {
+    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, parsed, single_typecheck, single_ownership_analysis, func_ids, module_consts, inline_modules, skip_const_inlining, module_funcs)| {
         let db_s = db_clone.as_salsa_db();
 
         // This populates the cache.
@@ -1978,6 +2007,7 @@ fn assemble_module_graph_parallel<'db>(
             single_ownership_analysis,
             func_ids,
             module_consts,
+            inline_modules,
             skip_const_inlining,
             module_funcs,
         );
@@ -1985,7 +2015,7 @@ fn assemble_module_graph_parallel<'db>(
 
     // Delegate to sequential function which aggregates results.
     // All lower_module calls will be cache hits from the parallel phase.
-    assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_modules, skip_const_inlining)
+    assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_modules, inline_modules, skip_const_inlining)
 }
 
 #[cfg(test)]

@@ -984,22 +984,15 @@ impl<'db> ScriptCompiler<'db> {
             Err(result) => return result,
         };
 
-        // Phase 5b: Every call to an `inline` function replaced by its body,
-        // after specialization so that a specialized copy is inlined too.
-        let mut ir_unit = match self.phase_inline(ir_unit) {
+        // Phase 6: Every function finished, as a module's are: calls to
+        // `inline` functions replaced by their bodies, after specialization so
+        // that a specialized copy is inlined too, and consts promoted, after
+        // specialization, which reads const arguments out of the `Const`
+        // instructions promotion replaces. See `optimize::finish`.
+        let ir_unit = match self.phase_finish(ir_unit) {
             Ok(ir) => ir,
             Err(result) => return result,
         };
-
-        // Phase 6: A function's consts, and a specialized copy's const
-        // parameters, are built once and borrowed rather than built at every
-        // call. After specialization, which reads const arguments out of the
-        // `Const` instructions this replaces.
-        if !self.skip_const_inlining {
-            for func in &mut ir_unit.nested_units {
-                datalove_datafun_const::promote_function_consts(func);
-            }
-        }
 
         self.record_unit(index, &ir_unit, &typecheck, &ownership, &consts);
 
@@ -1703,14 +1696,17 @@ impl<'db> ScriptCompiler<'db> {
         Ok(ir_unit)
     }
 
-    /// Replace every call to an `inline` function in the unit's functions by
-    /// the function's body; see `datalove_datafun_ir::inline`.
+    /// Finish the unit's functions; see `optimize::finish`.
+    ///
+    /// An `inline` callee is found among the unit's functions, an earlier
+    /// unit's, or a module's, as each was before being finished.
     ///
     /// The unit's own code is left calling: it names earlier units' bindings,
     /// which a function body cannot, and a splice cannot record the moves of
     /// those it passes.
-    fn phase_inline(&self, mut ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
-        use datalove_datafun_ir::inline::{calls_inline, inline_calls, is_inline, with_calls_into_unit};
+    fn phase_finish(&self, mut ir_unit: IrCodeUnit) -> Result<IrCodeUnit, ScriptCompilationResult> {
+        use datalove_datafun_compiler::optimize;
+        use datalove_datafun_ir::inline::{is_inline, with_calls_into_unit, Inliner};
         use datalove_datafun_ir::CodeRef;
 
         let registry = &self.shared_context.module_registry;
@@ -1731,17 +1727,13 @@ impl<'db> ScriptCompiler<'db> {
             }
         };
 
+        let mut inliner = Inliner::new(&resolve);
         let mut errors = Vec::new();
         for func in &mut ir_unit.nested_units {
-            if !calls_inline(func, &resolve) {
-                continue;
-            }
-            match inline_calls(func, &resolve) {
-                // What the splices left unread goes, as phase 4's dead code
-                // elimination did for everything before them.
-                Ok(()) => datalove_datafun_const::eliminate_dead_code_unit(func),
-                Err(e) if !errors.contains(&e.to_string()) => errors.push(e.to_string()),
-                Err(_) => {}
+            if let Err(e) = optimize::finish(func, &mut inliner, !self.skip_const_inlining)
+                && !errors.contains(&e)
+            {
+                errors.push(e);
             }
         }
         if !errors.is_empty() {
