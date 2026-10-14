@@ -105,7 +105,8 @@ What is left is constant factors at every layer, none above about 3%:
 - An expression was a salsa tracked struct, created with an identity hash and
   a disambiguation, and `create_expr` was 3.1% of the run. Expressions are now
   in a per-function arena, which took the whole compile from 178M instructions
-  to 159M; see [plan-plain-ast.md](plan-plain-ast.md).
+  to 159M, and functions are plain data since, which took it to 151M; see
+  [plan-plain-ast.md](plan-plain-ast.md).
 - Every name is interned as it is read.
 - Every bracket starts a sub-parser, a struct of a few hundred bytes, and
   every line one more.

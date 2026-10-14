@@ -316,9 +316,12 @@ summary to read instead, the same measurement got 32% slower and 62MB larger
 (salsa-patterns.md).
 
 `TopLevel` stays a tracked struct for now. Its identity is a hash of the whole
-top level, functions included, made once per parse; removing it means giving
-the script-side queries that take it (`analyze_script_fragment_tracked`,
-`collect_const_graph`) the script unit as their key instead.
+top level, functions included, made once per parse, and making it is 0.24% of
+the `sys/std` compile, so there is little to win by removing it. Removing it
+means giving the script-side queries that take it
+(`analyze_script_fragment_tracked`, `collect_const_graph`) the script unit as
+their key instead, and the borrows of a `ParsedStatements` held by value
+somewhere other than a memo then live only as long as that copy.
 
 ## Verifying each phase
 
