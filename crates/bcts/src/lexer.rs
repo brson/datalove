@@ -147,6 +147,9 @@ pub enum Sigil {
 struct SigilTable {
     /// Whether any sigil begins with this byte.
     starts: [bool; 256],
+    /// What an ASCII byte begins, so the tokenizer classifies one with a
+    /// lookup rather than asking `char` about it; see `Class`.
+    class: [Class; 256],
     /// The sigils beginning with this byte, and their spellings, in
     /// declaration order. The spelling is kept beside the sigil because asking
     /// `as_str` for it, once per candidate per sigil lexed, was still 1.4% of
@@ -170,13 +173,39 @@ impl SigilTable {
             starts[first as usize] = true;
             by_first_byte[first as usize].push((sigil, spelling));
         }
-        Self { starts, by_first_byte }
+        let class = std::array::from_fn(|byte| {
+            let byte = byte as u8;
+            let ch = byte as char;
+            match () {
+                _ if !byte.is_ascii() => Class::NonAscii,
+                _ if byte == b'\n' => Class::Newline,
+                _ if ch.is_whitespace() => Class::Space,
+                _ if ch.is_ascii_alphanumeric() || byte == b'_' => Class::Word,
+                _ if starts[byte as usize] => Class::Sigil,
+                _ => Class::Other,
+            }
+        });
+        Self { starts, class, by_first_byte }
     }
 
     /// The sigils that could begin with `byte`, longest first.
     fn starting_with(&self, byte: u8) -> &[(Sigil, &'static str)] {
         &self.by_first_byte[byte as usize]
     }
+}
+
+/// What a byte begins.
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum Class {
+    Space,
+    Newline,
+    Word,
+    Sigil,
+    /// An ASCII byte that begins nothing, so an error token.
+    Other,
+    /// The first byte of a character outside ASCII, which is asked about
+    /// whole.
+    NonAscii,
 }
 
 /// The table, built once.
@@ -224,6 +253,7 @@ pub fn lex_chunk<'db>(
                     text: chunk_str,
                     range,
                     newline_before: &mut newline_before,
+                    table: sigil_table(),
                 };
 
                 tokens.extend(
@@ -244,6 +274,7 @@ pub fn lex_chunk<'db>(
         text: &'db str,
         range: Range<usize>,
         newline_before: &'a mut bool,
+        table: &'static SigilTable,
     }
 
     #[derive(Eq, PartialEq, Debug, Copy, Clone)]
@@ -256,17 +287,37 @@ pub fn lex_chunk<'db>(
 
     impl<'db> Tokenizer<'db, '_> {
         fn next(&mut self) -> Option<Token> {
+            let bytes = self.text.as_bytes();
             loop {
-                let mut token = match self.peek_token()? {
-                    NextToken::Whitespace => {
-                        if self.eat_whitespace() {
-                            *self.newline_before = true;
-                        }
+                if self.range.is_empty() {
+                    return None;
+                }
+                // An ASCII byte is classified by the table; anything else
+                // goes the way of a whole character.
+                let mut token = match self.table.class[bytes[self.range.start] as usize] {
+                    Class::Space => {
+                        self.range.start += 1;
                         continue;
                     }
-                    NextToken::Word => self.eat_word(),
-                    NextToken::Sigil => self.eat_sigil(),
-                    NextToken::Error => self.eat_error(),
+                    Class::Newline => {
+                        self.range.start += 1;
+                        *self.newline_before = true;
+                        continue;
+                    }
+                    Class::Word => self.eat_word(),
+                    Class::Sigil => self.eat_sigil(),
+                    Class::Other => self.eat_error(),
+                    Class::NonAscii => match self.peek_token()? {
+                        NextToken::Whitespace => {
+                            if self.eat_whitespace() {
+                                *self.newline_before = true;
+                            }
+                            continue;
+                        }
+                        NextToken::Word => self.eat_word(),
+                        NextToken::Sigil => self.eat_sigil(),
+                        NextToken::Error => self.eat_error(),
+                    },
                 };
                 token.newline_before = mem::take(self.newline_before);
                 return Some(token);
@@ -294,7 +345,17 @@ pub fn lex_chunk<'db>(
             debug_assert_eq!(self.peek_token(), Some(NextToken::Word));
 
             let start = self.range.start;
-            self.range.start = self.scan(start, Self::is_word_start);
+            let bytes = self.text.as_bytes();
+            let mut at = start;
+            while at < self.range.end && self.table.class[bytes[at] as usize] == Class::Word {
+                at += 1;
+            }
+            // A letter or digit outside ASCII carries a word on.
+            self.range.start = if at < self.range.end && !bytes[at].is_ascii() {
+                self.scan(at, Self::is_word_start)
+            } else {
+                at
+            };
             assert!(start < self.range.start);
             let span = start .. self.range.start;
             Token {
@@ -318,7 +379,7 @@ pub fn lex_chunk<'db>(
             let text = &self.text[self.range.C()];
 
             // Only the sigils that could start here, rather than all of them.
-            for &(sigil, sigil_str) in sigil_table().starting_with(text.as_bytes()[0]) {
+            for &(sigil, sigil_str) in self.table.starting_with(text.as_bytes()[0]) {
                 if text.starts_with(sigil_str) {
                     let range_start = self.range.start;
                     self.range.start = range_start.checked_add(sigil_str.len()).X();

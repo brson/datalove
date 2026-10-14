@@ -2,8 +2,9 @@
 
 What a cold compile of the system library costs, phase by phase, and how to
 measure it. Written October 2026, after a pass that took a script requiring
-every `sys/std` module from 273M to 197M user instructions, and 192M after the
-parser read its tokens in place.
+every `sys/std` module from 273M to 197M user instructions, 192M after the
+parser read its tokens in place, and 184M after the bracer and lexer were
+reworked; see [the parser plan](plan-parser.md).
 
 ## Contents
 

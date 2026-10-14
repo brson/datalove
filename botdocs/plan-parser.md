@@ -252,6 +252,23 @@ spread thin, the lexer the largest at 5.9% of the run.
   Looking a name up in a map of its text costs what salsa's own lookup does,
   and sharing the map with every sub-parser costs more. Not kept.
 
+**After it.** The bracer then matched in one pass, writing the layout as it
+went, which removed the old walk and a crash it brought with the layout
+(below): 191.6M to 188.8M. The lexer classifies an ASCII byte with a table
+and scans words and whitespace a byte at a time: 183.8M.
+
+The walk had cases it took to be impossible. While it ran lazily a parser
+rarely opened the brackets that reached them, but filling the layout read
+every bracket, and a fifth of random bracket soup panicked it --
+`> a a |] [| } }`, for one. `bracer_panic_tests` reads every level of every
+input now, and random soup besides.
+
+Still open: the source map copies a source's whole text into a `Text` and
+hashes it, since the text is one of `Text`'s identity fields; about 0.8% of
+the run. A `Text` named by its source and a byte range would neither copy nor
+hash it, but would change what an edit backdates, and `chunks.rs` makes
+`Text`s whose text is not their source's, so it wants its own look.
+
 ## Open questions
 
 - **Should the bracer fold into the lexer?** Both run once per source and
