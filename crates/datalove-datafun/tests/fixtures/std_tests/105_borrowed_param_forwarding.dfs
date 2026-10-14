@@ -17,11 +17,11 @@ import set.contains
 // value's first bytes as a wrapper's two pointers, so the descriptor handed
 // to the rider was whatever those bytes happened to be.
 
-fun has_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
+fun has_key<K, V>(ref self: %{K = V}, ref key: K): bool where { K is ord, }
   ret contains_key(ref self, ref key)
 end fun
 
-fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V with { K is ord, }
+fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V where { K is ord, }
   if get(ref self, ref key) |value|
     ret value
   else
@@ -31,11 +31,11 @@ end fun
 
 // Two hops, so the second call forwards a descriptor that reached it through
 // the first rather than one a concrete call site supplied.
-fun has_key_twice<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
+fun has_key_twice<K, V>(ref self: %{K = V}, ref key: K): bool where { K is ord, }
   ret has_key(ref self, ref key)
 end fun
 
-fun set_has<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
+fun set_has<T>(ref self: #{T}, ref elem: T): bool where { T is ord, }
   ret contains(ref self, ref elem)
 end fun
 

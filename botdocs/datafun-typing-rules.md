@@ -675,7 +675,7 @@ followed by anything but a call is P031.
 
 ### Functions
 
-For `fun f<ᾱ>(m₁ x₁: T₁, ..., mₙ xₙ: Tₙ): R with {α :: b, ...}`, with
+For `fun f<ᾱ>(m₁ x₁: T₁, ..., mₙ xₙ: Tₙ): R where {α :: b, ...}`, with
 `Σ(f)` as collected:
 
 ```

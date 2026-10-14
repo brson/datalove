@@ -22,7 +22,7 @@ fun put_tensor<T>(mut t: [|T, 1|], i: index, v: T): ?index
   ret some i
 end fun
 
-fun put_map<K, V>(mut m: %{K = V}, k: K, v: V): ?index with { K is ord, }
+fun put_map<K, V>(mut m: %{K = V}, k: K, v: V): ?index where { K is ord, }
   set m[k]? = v
   ret some (: index / 0)
 end fun

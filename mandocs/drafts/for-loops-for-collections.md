@@ -28,7 +28,7 @@ but is slightly complexified by the limitations of Datalove's simple type system
 Here's how it has been done prior to this work in `list.contains`:
 
 ```datalove
-fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
+fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
   var found = false
   let n = list_len(ref self)
   var i: index = : index / 0
@@ -44,7 +44,7 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
   ret found
 end fun
 
-fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool with { T is ord }
+fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool where { T is ord }
   ret some equal(ref self[i]?, ref elem)
 end fun
 ```
@@ -60,7 +60,7 @@ The indexing hazard gets _much worse_ when we look at how sets and maps are iter
 Here's `set.is_subset_of`:
 
 ```datalove
-fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord, }
   var all_present: bool = true
   let n = len(ref self)
   var i: index = : index / 0
@@ -120,7 +120,7 @@ But working within limitations is fun, so let's have fun.
 I want to write the previous `contains` function like the following.
 
 ```datalove
-fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord }
+fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
   var found = false
   for item in ref self
     if equal(ref item, ref elem)
@@ -183,7 +183,7 @@ once every time through the loop. Here the `list.index_of` function
 needs to hold onto that index and return it:
 
 ```datalove
-fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
+fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord }
   var at: ?index = none
   let n = list_len(ref self)
   var i: index = : index / 0
@@ -207,7 +207,7 @@ Go and Zig and probably others do this with another form of `for` that adds anot
 the loop header to represent the index. So I guess I'll just do that too!
 
 ```datalove
-fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord }
+fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord }
   var at: ?index = none
   for i, item in ref self
     if equal(ref item, ref elem)

@@ -15,17 +15,17 @@ fun take<T>(ref x: T): ?T
   ret some (x@)
 end fun
 
-fun map_at<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
+fun map_at<K, V>(ref m: %{K = V}, k: K): ?V where { K is ord, }
   ret some (m[k]?@)
 end fun
 
-fun map_borrow<K, V>(ref m: %{K = V}, k: K): ?V with { K is ord, }
+fun map_borrow<K, V>(ref m: %{K = V}, k: K): ?V where { K is ord, }
   ret take(ref m[k]?)
 end fun
 
 // A map reached through a field of a borrowed generic aggregate, so the
 // descriptor is narrowed for the field and then asked what it holds.
-fun map_in_field<K, V>(ref p: {m: %{K = V}, n: u32}, k: K): ?V with { K is ord, }
+fun map_in_field<K, V>(ref p: {m: %{K = V}, n: u32}, k: K): ?V where { K is ord, }
   ret some (p.m[k]?@)
 end fun
 

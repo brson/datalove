@@ -81,16 +81,16 @@ assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
 
 (* ===== Functions  (statement.rs:515-801) ===== *)
 fun_def       = "fun", value_name, [ type_params ], param_list, [ ":", type ],
-                [ with_clause ], EOLS,
+                [ where_clause ], EOLS,
                 [ "inline", EOLS ],            (* elsewhere: P076 *)
                 block, end_line("fun") ;
 native_fun    = "native", "fun", value_name, [ type_params ], param_list,
-                [ ":", type ], [ with_clause ] ;   (* P028, P029, P030 *)
+                [ ":", type ], [ where_clause ] ;   (* P028, P029, P030 *)
 type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;
 param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;  (* P002 *)
 param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;
                 (* const with a mode: P082; no name: P011; no ":": P012 *)
-with_clause   = "with", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
+where_clause  = "where", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
 bound         = NAME, "is", ( "ord" | "float" | "fixedint" ) ;
                 (* P063, P060; a parameter bounded twice: P078 *)
 type_alias    = "type", type_name, ":", type ;  (* P022, P023 *)
@@ -271,7 +271,7 @@ string_lit, digit_run, hex_run, comment, newline
 - A binding `if` takes no part in an `else if` chain on either side (P073),
   and `else |e|` cannot be followed by `if` (P066).
 - A line before the first `case` of a `match` is P048.
-- The `with` clause is on the signature's line; on the next one it is P001.
+- The `where` clause is on the signature's line; on the next one it is P001.
 - Every declared name is checked against the reserved words (P064),
   including the name a struct pattern's `{f}` shorthand binds.
 

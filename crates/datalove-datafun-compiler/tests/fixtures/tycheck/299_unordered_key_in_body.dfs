@@ -8,6 +8,6 @@ fun without_value<T>(a: T)
     var s: #{T}
 end fun
 
-fun ordered<T>(a: T) with { T is ord, }
+fun ordered<T>(a: T) where { T is ord, }
     var s: #{T}
 end fun

@@ -118,20 +118,20 @@ native fun list_reserve<T>(mut self: [T], n: index)
 // Maps and sets. Generic over their key, value or element type, which the
 // implementation reads off the container's descriptor. A key or element being
 // looked up is borrowed, so it arrives as itself.
-native fun map_len<K, V>(ref self: %{K = V}): index with { K is ord, }
-native fun map_clear<K, V>(mut self: %{K = V}) with { K is ord, }
-native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
-native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
-native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
+native fun map_len<K, V>(ref self: %{K = V}): index where { K is ord, }
+native fun map_clear<K, V>(mut self: %{K = V}) where { K is ord, }
+native fun map_contains_key<K, V>(ref self: %{K = V}, ref key: K): bool where { K is ord, }
+native fun map_get<K, V>(ref self: %{K = V}, ref key: K): ?V where { K is ord, }
+native fun map_insert<K, V>(mut self: %{K = V}, key: K, value: V) where { K is ord, }
 // Add to the value under a key, from zero if it's absent, in one lookup. False
 // if the sum overflowed, which leaves the map as it was.
-native fun map_add<K, V>(mut self: %{K = V}, ref key: K, amount: V): bool with { K is ord, V is fixedint, }
-native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) with { K is ord, }
+native fun map_add<K, V>(mut self: %{K = V}, ref key: K, amount: V): bool where { K is ord, V is fixedint, }
+native fun map_remove<K, V>(mut self: %{K = V}, ref key: K) where { K is ord, }
 // The whole map read out in one walk, onto the end of a list. The list is the
 // caller's, so a walk can append to one it already has.
-native fun map_keys_into<K, V>(ref self: %{K = V}, mut list: [K]) with { K is ord, }
-native fun map_values_into<K, V>(ref self: %{K = V}, mut list: [V]) with { K is ord, }
-native fun map_entries_into<K, V>(ref self: %{K = V}, mut list: [(K, V)]) with { K is ord, }
+native fun map_keys_into<K, V>(ref self: %{K = V}, mut list: [K]) where { K is ord, }
+native fun map_values_into<K, V>(ref self: %{K = V}, mut list: [V]) where { K is ord, }
+native fun map_entries_into<K, V>(ref self: %{K = V}, mut list: [(K, V)]) where { K is ord, }
 
 // Tensors. The rank is part of the type rather than a parameter, so these are
 // written at rank 1 -- the shape a list-like walk wants. What they need that a
@@ -140,12 +140,12 @@ native fun map_entries_into<K, V>(ref self: %{K = V}, mut list: [(K, V)]) with {
 native fun tensor_len<T>(ref self: [|T, 1|]): index
 native fun tensor_rank<T>(ref self: [|T, 1|]): index
 
-native fun set_len<T>(ref self: #{T}): index with { T is ord, }
-native fun set_clear<T>(mut self: #{T}) with { T is ord, }
-native fun set_contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
-native fun set_insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
-native fun set_remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
-native fun set_into_list<T>(ref self: #{T}, mut list: [T]) with { T is ord, }
+native fun set_len<T>(ref self: #{T}): index where { T is ord, }
+native fun set_clear<T>(mut self: #{T}) where { T is ord, }
+native fun set_contains<T>(ref self: #{T}, ref elem: T): bool where { T is ord, }
+native fun set_insert<T>(mut self: #{T}, elem: T): bool where { T is ord, }
+native fun set_remove<T>(mut self: #{T}, ref elem: T): bool where { T is ord, }
+native fun set_into_list<T>(ref self: #{T}, mut list: [T]) where { T is ord, }
 
 // Floating point math, from the platform's libm. These are the operations
 // that have no machine instruction behind them, which is why they are here
@@ -220,16 +220,16 @@ native fun string_parse_f64(ref self: string): ?f64
 // One-operand operations on a type parameter bounded to `float`. The
 // implementation reads the width off the descriptor, so there is one of each
 // for both floats rather than one per width.
-native fun float_abs<T>(self: T): T with { T is float, }
-native fun float_sqrt<T>(self: T): T with { T is float, }
-native fun float_floor<T>(self: T): T with { T is float, }
-native fun float_ceil<T>(self: T): T with { T is float, }
-native fun float_round<T>(self: T): T with { T is float, }
-native fun float_trunc<T>(self: T): T with { T is float, }
-native fun float_fract<T>(self: T): T with { T is float, }
-native fun float_recip<T>(self: T): T with { T is float, }
-native fun float_signum<T>(self: T): T with { T is float, }
-native fun float_neg<T>(self: T): T with { T is float, }
+native fun float_abs<T>(self: T): T where { T is float, }
+native fun float_sqrt<T>(self: T): T where { T is float, }
+native fun float_floor<T>(self: T): T where { T is float, }
+native fun float_ceil<T>(self: T): T where { T is float, }
+native fun float_round<T>(self: T): T where { T is float, }
+native fun float_trunc<T>(self: T): T where { T is float, }
+native fun float_fract<T>(self: T): T where { T is float, }
+native fun float_recip<T>(self: T): T where { T is float, }
+native fun float_signum<T>(self: T): T where { T is float, }
+native fun float_neg<T>(self: T): T where { T is float, }
 
 // Constants of a type parameter bounded to `fixedint`.
 //
@@ -238,10 +238,10 @@ native fun float_neg<T>(self: T): T with { T is float, }
 // site hands over -- the type parameter appears only in the return, so no
 // argument brings it and the call site passes one after the out parameter.
 // See `botdocs/native-abi.md`.
-native fun fixedint_zero<T>(): T with { T is fixedint, }
-native fun fixedint_one<T>(): T with { T is fixedint, }
-native fun fixedint_min_value<T>(): T with { T is fixedint, }
-native fun fixedint_max_value<T>(): T with { T is fixedint, }
+native fun fixedint_zero<T>(): T where { T is fixedint, }
+native fun fixedint_one<T>(): T where { T is fixedint, }
+native fun fixedint_min_value<T>(): T where { T is fixedint, }
+native fun fixedint_max_value<T>(): T where { T is fixedint, }
 
 // The total order every value has.
 //
@@ -251,7 +251,7 @@ native fun fixedint_max_value<T>(): T with { T is fixedint, }
 // so differs from `.<` over NaN and signed zero. See `sys/std/ord`.
 //
 // Borrows its operands, so comparing clones nothing.
-native fun ord_compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
+native fun ord_compare<T>(ref self: T, ref other: T): i8 where { T is ord, }
 
 // Constants of a type parameter bounded to `float`.
 //
@@ -260,14 +260,14 @@ native fun ord_compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
 // what nobody has picked yet. The type parameter appears only in the return,
 // so the call site hands a descriptor over after the out parameter. See
 // `botdocs/native-abi.md`.
-native fun float_zero<T>(): T with { T is float, }
-native fun float_one<T>(): T with { T is float, }
-native fun float_nan<T>(): T with { T is float, }
-native fun float_infinity<T>(): T with { T is float, }
-native fun float_neg_infinity<T>(): T with { T is float, }
-native fun float_min_value<T>(): T with { T is float, }
-native fun float_max_value<T>(): T with { T is float, }
-native fun float_min_positive<T>(): T with { T is float, }
-native fun float_epsilon<T>(): T with { T is float, }
-native fun float_pi<T>(): T with { T is float, }
-native fun float_e<T>(): T with { T is float, }
+native fun float_zero<T>(): T where { T is float, }
+native fun float_one<T>(): T where { T is float, }
+native fun float_nan<T>(): T where { T is float, }
+native fun float_infinity<T>(): T where { T is float, }
+native fun float_neg_infinity<T>(): T where { T is float, }
+native fun float_min_value<T>(): T where { T is float, }
+native fun float_max_value<T>(): T where { T is float, }
+native fun float_min_positive<T>(): T where { T is float, }
+native fun float_epsilon<T>(): T where { T is float, }
+native fun float_pi<T>(): T where { T is float, }
+native fun float_e<T>(): T where { T is float, }

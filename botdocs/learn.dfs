@@ -565,19 +565,19 @@ fun pair_up<T>(a: T, b: T): [T]
 end fun
 
 // A bound says which types a parameter may be, and in exchange the body may
-// do what all of them have in common. Bounds go in a `with` clause after the
+// do what all of them have in common. Bounds go in a `where` clause after the
 // signature, so a signature reads as a signature.
 //
 //   ord       - every type; says the total order may be used
 //   fixedint  - the ten fixed-width integers
 //   float     - f32 and f64
-fun smaller<T>(a: T, b: T): T with { T is ord, }
+fun smaller<T>(a: T, b: T): T where { T is ord, }
   ret min(a, b)
 end fun
 
 // A set or a map over a type parameter needs that parameter ordered, because
 // that is how it keeps its keys. A list does not.
-fun set_of<T>(a: T, b: T): #{T} with { T is ord, }
+fun set_of<T>(a: T, b: T): #{T} where { T is ord, }
   ret #{a, b}
 end fun
 

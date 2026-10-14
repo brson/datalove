@@ -610,8 +610,8 @@ statements that run belong in a function or a script")
             None
         };
 
-        // Bounds, if the signature ends with `with { T is float, }`.
-        let type_bounds = self.parse_with_clause(&type_params, type_bounds);
+        // Bounds, if the signature ends with `where { T is float, }`.
+        let type_bounds = self.parse_where_clause(&type_params, type_bounds);
 
         // Enter function context for expression identity tracking.
         self.enter_function(name);
@@ -663,7 +663,7 @@ statements that run belong in a function or a script")
 
     /// Parse the type parameter names inside `<...>` on a function signature.
     ///
-    /// The bounds come separately, from the `with` clause at the end of the
+    /// The bounds come separately, from the `where` clause at the end of the
     /// signature, so this gives an empty bound for each name and the clause
     /// fills them in.
     fn parse_type_params(
@@ -680,24 +680,24 @@ statements that run belong in a function or a script")
         (names, bounds)
     }
 
-    /// Parse `with { T is float, }` after a signature, if it is there.
+    /// Parse `where { T is float, }` after a signature, if it is there.
     ///
     /// A bound says which types its parameter may be, and in exchange the body
     /// may do what all of them have in common. Written apart from the name so
     /// that a signature reads as a signature and the constraints sit together
     /// underneath it.
-    fn parse_with_clause(
+    fn parse_where_clause(
         &mut self,
         type_params: &[InternedText<'db>],
         mut bounds: Vec<Option<ast::TypeBound>>,
     ) -> Vec<Option<ast::TypeBound>> {
-        if self.peek_word() != Some("with") {
+        if self.peek_word() != Some("where") {
             return bounds;
         }
-        self.eat_word("with");
+        self.eat_word("where");
         let Some(inner) = self.eat_branch(Sigil::BraceOpen) else {
             self.had_error = true;
-            DiagnosticBuilder::error(self.db, "expected `{` after `with`")
+            DiagnosticBuilder::error(self.db, "expected `{` after `where`")
                 .code("P061")
                 .primary_label(self.peek_text_span(), "the bounds go in braces")
                 .emit_parse();
@@ -735,7 +735,7 @@ statements that run belong in a function or a script")
         bounds
     }
 
-    /// One line of a `with` clause: `T is float`.
+    /// One line of a `where` clause: `T is float`.
     fn parse_one_bound(
         &mut self,
     ) -> Option<(InternedText<'db>, ast::TypeBound, TextSpan)> {
@@ -1481,7 +1481,7 @@ statements that run belong in a function or a script")
             None
         };
 
-        let type_bounds = self.parse_with_clause(&type_params, type_bounds);
+        let type_bounds = self.parse_where_clause(&type_params, type_bounds);
 
         ast::Statement::NativeFun(ast::StmtNativeFun {
             name,
@@ -1667,7 +1667,7 @@ statements that run belong in a function or a script")
     ///
     /// It reads straight out of this parser, so it consumes the type and
     /// nothing else: the `=` of a `let`, the `,` between two parameters and
-    /// the `with` opening a bounds clause are all still here afterwards, for
+    /// the `where` opening a bounds clause are all still here afterwards, for
     /// whichever caller wanted one to say so itself.
     pub(super) fn parse_type_hint(&mut self) -> datalit::ast::TypeHint<'db> {
         datalit::parser::parse_type_hint(self)

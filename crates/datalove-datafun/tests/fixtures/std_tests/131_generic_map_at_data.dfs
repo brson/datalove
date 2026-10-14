@@ -12,11 +12,11 @@ import map.len
 // that entry went nowhere and everything in it was leaked -- silently, because
 // a map nobody counts looks much the same empty.
 
-fun pair<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+fun pair<K, V>(k: K, v: V): %{K = V} where { K is ord, }
   ret %{k = v}
 end fun
 
-fun size<K, V>(ref m: %{K = V}): index with { K is ord, }
+fun size<K, V>(ref m: %{K = V}): index where { K is ord, }
   ret len(ref m)
 end fun
 

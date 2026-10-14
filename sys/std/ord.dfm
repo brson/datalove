@@ -28,43 +28,43 @@ import std.list_insert
 
 // Negative when self sorts before other, zero when they sort together,
 // positive when it sorts after.
-fun compare<T>(ref self: T, ref other: T): i8 with { T is ord, }
+fun compare<T>(ref self: T, ref other: T): i8 where { T is ord, }
   inline
   ret ord_compare(ref self, ref other)
 end fun
 
-fun equal<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) == : i8 / 0
 end fun
 
-fun not_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun not_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) != : i8 / 0
 end fun
 
-fun less<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun less<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) .< : i8 / 0
 end fun
 
-fun less_or_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun less_or_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) <= : i8 / 0
 end fun
 
-fun greater<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun greater<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) .> : i8 / 0
 end fun
 
-fun greater_or_equal<T>(ref self: T, ref other: T): bool with { T is ord, }
+fun greater_or_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
   ret ord_compare(ref self, ref other) >= : i8 / 0
 end fun
 
 // The smaller of two, or self when they sort together.
-fun min<T>(self: T, other: T): T with { T is ord, }
+fun min<T>(self: T, other: T): T where { T is ord, }
   if less_or_equal(ref self, ref other)
     let unwanted = other
     ret self
@@ -75,7 +75,7 @@ fun min<T>(self: T, other: T): T with { T is ord, }
 end fun
 
 // The larger of two, or self when they sort together.
-fun max<T>(self: T, other: T): T with { T is ord, }
+fun max<T>(self: T, other: T): T where { T is ord, }
   if greater_or_equal(ref self, ref other)
     let unwanted = other
     ret self
@@ -86,7 +86,7 @@ fun max<T>(self: T, other: T): T with { T is ord, }
 end fun
 
 // Self brought inside the range, which is low below and high above.
-fun clamp<T>(self: T, low: T, high: T): T with { T is ord, }
+fun clamp<T>(self: T, low: T, high: T): T where { T is ord, }
   if less(ref self, ref low)
     let unwanted_self = self
     let unwanted_high = high
@@ -105,7 +105,7 @@ fun clamp<T>(self: T, low: T, high: T): T with { T is ord, }
 end fun
 
 // The two in order, the one that sorts first leading.
-fun sorted_pair<T>(self: T, other: T): (T, T) with { T is ord, }
+fun sorted_pair<T>(self: T, other: T): (T, T) where { T is ord, }
   if less_or_equal(ref self, ref other)
     ret (self, other)
   else
@@ -114,7 +114,7 @@ fun sorted_pair<T>(self: T, other: T): (T, T) with { T is ord, }
 end fun
 
 // Whether the list holds an element that sorts together with this one.
-fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord, }
+fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord, }
   for item in ref self
     if equal(ref item, ref elem)
       ret true
@@ -124,7 +124,7 @@ fun contains<T>(ref self: [T], ref elem: T): bool with { T is ord, }
 end fun
 
 // Where the first such element is, or none when there is none.
-fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
+fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord, }
   for i, item in ref self
     if equal(ref item, ref elem)
       ret some i
@@ -134,7 +134,7 @@ fun index_of<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
 end fun
 
 // How many elements sort together with this one.
-fun count_of<T>(ref self: [T], ref elem: T): index with { T is ord, }
+fun count_of<T>(ref self: [T], ref elem: T): index where { T is ord, }
   var seen: index = : index / 0
   for item in ref self
     if equal(ref item, ref elem)
@@ -148,7 +148,7 @@ end fun
 //
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
-fun least<T>(ref self: [T]): ?T with { T is ord, }
+fun least<T>(ref self: [T]): ?T where { T is ord, }
   var best: index = : index / 0
   for i, item in ref self
     if less(ref item, ref self[best]?)
@@ -162,7 +162,7 @@ end fun
 //
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
-fun greatest<T>(ref self: [T]): ?T with { T is ord, }
+fun greatest<T>(ref self: [T]): ?T where { T is ord, }
   var best: index = : index / 0
   for i, item in ref self
     if greater(ref item, ref self[best]?)
@@ -175,7 +175,7 @@ end fun
 // Whether no element sorts before the one in front of it.
 //
 // An empty list and a list of one are sorted, having nothing out of order.
-fun is_sorted<T>(ref self: [T]): bool with { T is ord, }
+fun is_sorted<T>(ref self: [T]): bool where { T is ord, }
   var ordered = true
   let n = list_len(ref self)
   var i: index = : index / 1
@@ -200,7 +200,7 @@ end fun
 // comparisons. It was an insertion sort, whose n squared over two -- with every
 // comparison cloning both sides -- was a second and a half for four thousand
 // strings.
-fun sorted<T>(ref self: [T]): [T] with { T is ord, }
+fun sorted<T>(ref self: [T]): [T] where { T is ord, }
   let n = list_len(ref self)
   var src: [T] = self@
   var width: index = : index / 1
@@ -246,14 +246,14 @@ end fun
 //
 // Compares the two in place, which reading each out with `list_get` would not:
 // that clones.
-fun greater_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
+fun greater_at<T>(ref self: [T], i: index, j: index): ?bool where { T is ord, }
   inline
   ret some greater(ref self[i]?, ref self[j]?)
 end fun
 
 // Whether `self[i]` sorts together with `self[j]`; none when either is out of
 // bounds.
-fun equal_at<T>(ref self: [T], i: index, j: index): ?bool with { T is ord, }
+fun equal_at<T>(ref self: [T], i: index, j: index): ?bool where { T is ord, }
   inline
   ret some equal(ref self[i]?, ref self[j]?)
 end fun
@@ -263,7 +263,7 @@ end fun
 // The list has to be sorted already; on one that is not, the answer says
 // nothing. Halves the range each round rather than walking it, which is what
 // having the order is worth.
-fun binary_search<T>(ref self: [T], ref elem: T): ?index with { T is ord, }
+fun binary_search<T>(ref self: [T], ref elem: T): ?index where { T is ord, }
   var found: ?index = none
   var low: index = : index / 0
   var high: index = list_len(ref self)
@@ -287,7 +287,7 @@ end fun
 // A new list with elements that sort together left in once.
 //
 // The list has to be sorted already, since only neighbours are compared.
-fun deduped<T>(ref self: [T]): [T] with { T is ord, }
+fun deduped<T>(ref self: [T]): [T] where { T is ord, }
   var out: [T] = []
   if list_get(ref self, : index / 0) |first|
     call list_push(mut out, first)

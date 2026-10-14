@@ -14,7 +14,7 @@ use super::state::Parser;
 /// A token stream a type hint can be read out of.
 ///
 /// Datafun reads one from the middle of a statement, where a type is followed
-/// by the `=` of a `let`, the `,` between two parameters, or the `with` that
+/// by the `=` of a `let`, the `,` between two parameters, or the `where` that
 /// opens a bounds clause. So the parser has to stop where the type stops and
 /// leave the rest where it found it. Cutting the tokens at a guessed boundary
 /// beforehand cannot do that: a caller that guessed wrong has already consumed

@@ -25,15 +25,15 @@ fun squares(n: u32): !%{u32 = string}
   ret ok out
 end fun
 
-fun generic_keys<K, V>(ref m: %{K = V}): [K] with { K is ord, }
+fun generic_keys<K, V>(ref m: %{K = V}): [K] where { K is ord, }
   ret map.keys(ref m)
 end fun
 
-fun generic_entries<K, V>(ref m: %{K = V}): [(K, V)] with { K is ord, }
+fun generic_entries<K, V>(ref m: %{K = V}): [(K, V)] where { K is ord, }
   ret map.entries(ref m)
 end fun
 
-fun generic_elements<T>(ref s: #{T}): [T] with { T is ord, }
+fun generic_elements<T>(ref s: #{T}): [T] where { T is ord, }
   ret set.to_list(ref s)
 end fun
 

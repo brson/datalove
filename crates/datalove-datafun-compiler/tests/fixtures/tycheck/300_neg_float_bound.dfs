@@ -1,6 +1,6 @@
 // Every type `float` admits has bare negation, so a parameter bounded to it
 // does too.
-fun negated<T>(a: T): T with { T is float, }
+fun negated<T>(a: T): T where { T is float, }
     ret -a
 end fun
 

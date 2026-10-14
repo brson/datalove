@@ -277,7 +277,7 @@ fn emit_single_diagnostic<'db>(
                     .code("F061")
                     .primary_label(ts, "this signature does not resolve, so calls to it are not found either")
                     .note("a set keeps its elements in order and a map keeps its keys in order, so a \
-collection written over a type parameter asks that parameter for an ordering. Say so with `with { \
+collection written over a type parameter asks that parameter for an ordering. Say so with `where { \
 <param> is ord, }`, which every type there is satisfies.")
                     .emit_type();
             }

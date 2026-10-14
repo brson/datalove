@@ -43,21 +43,21 @@ import float.e
 // So each of these is one function serving both widths, and the same call
 // written twice gives answers of two different types.
 
-fun scaled<T>(a: T, b: T): T with { T is float, }
+fun scaled<T>(a: T, b: T): T where { T is float, }
   ret a * b
 end fun
 
-fun span<T>(low: T, high: T): T with { T is float, }
+fun span<T>(low: T, high: T): T where { T is float, }
   ret high - low
 end fun
 
-fun ordered<T>(a: T, b: T): bool with { T is float, }
+fun ordered<T>(a: T, b: T): bool where { T is float, }
   ret a .< b
 end fun
 
 // A bounded generic handing its parameter to another one: the bound travels
 // with it, because whatever the outer call picked is what the inner gets.
-fun blend<T>(a: T, b: T, t: T): T with { T is float, }
+fun blend<T>(a: T, b: T, t: T): T where { T is float, }
   // Cloned because handing a value to a function moves it, and these are
   // wanted twice. Reading one as the operand of an operator does not move it,
   // which is why `lerp` below needs no clone.
@@ -67,7 +67,7 @@ end fun
 // A value of a bounded parameter is still linear, so using one twice asks for
 // a clone. Being a float does not make it copy here: what is copy is read off
 // the type, and a type parameter's type is not known where it is written.
-fun squared<T>(x: T): T with { T is float, }
+fun squared<T>(x: T): T where { T is float, }
   ret x@ * x
 end fun
 

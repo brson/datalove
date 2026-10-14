@@ -187,7 +187,7 @@ feature and leaves the data-side wants doing all the work.
 
 ## H1: a `table` bound
 
-`fun len<T>(ref t: T): index with { T is table, }`, joining `ord`, `float` and
+`fun len<T>(ref t: T): index where { T is table, }`, joining `ord`, `float` and
 `fixedint`.
 
 The bound machinery exists and the runtime dispatches on descriptors already, so
@@ -356,7 +356,7 @@ compilation. That is a large amount of type-system work traded for a language
 feature the codebase is already shaped for.
 
 Row *polymorphism* survives the trade too, as a comptime predicate rather than a
-constraint solver: `with { has_column(R, "x", u32), }`. Zig does exactly this,
+constraint solver: `where { has_column(R, "x", u32), }`. Zig does exactly this,
 and inherits exactly Zig's weakness -- the constraint is checked where the
 function is used, and the error is as good as the author made it.
 
@@ -450,7 +450,7 @@ inside the body, `t.x` *is* a `[u32]`, with no further step. The comptime versio
 is strictly worse:
 
 ```datalove
-fun total_x<R>(ref t: table R): u32 with { has_column(R, "x", u32), }
+fun total_x<R>(ref t: table R): u32 where { has_column(R, "x", u32), }
 ```
 
 The constraint is a boolean. Having checked it, the checker knows nothing it can

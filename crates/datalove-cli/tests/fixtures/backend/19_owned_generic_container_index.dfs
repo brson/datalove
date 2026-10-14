@@ -35,7 +35,7 @@ fun borrow_first<T>(xs: [T]): ?T
   ret take(ref xs[0]?)
 end fun
 
-fun map_at<K, V>(m: %{K = V}, k: K): ?V with { K is ord, }
+fun map_at<K, V>(m: %{K = V}, k: K): ?V where { K is ord, }
   ret some (m[k]?@)
 end fun
 

@@ -35,31 +35,31 @@ import std.fixedint_max_value
 // A literal has to be written at some type, and inside a generic the type is
 // what nobody has picked yet. So the constants come from the rider, which is
 // handed a descriptor by the call site and makes the value from that.
-fun zero<T>(): T with { T is fixedint, }
+fun zero<T>(): T where { T is fixedint, }
   inline
   ret fixedint_zero()
 end fun
 
 // One.
-fun one<T>(): T with { T is fixedint, }
+fun one<T>(): T where { T is fixedint, }
   inline
   ret fixedint_one()
 end fun
 
 // The smallest value the type can hold, which is zero when it is unsigned.
-fun min_value<T>(): T with { T is fixedint, }
+fun min_value<T>(): T where { T is fixedint, }
   inline
   ret fixedint_min_value()
 end fun
 
 // The largest value the type can hold.
-fun max_value<T>(): T with { T is fixedint, }
+fun max_value<T>(): T where { T is fixedint, }
   inline
   ret fixedint_max_value()
 end fun
 
 // Whether self is zero.
-fun is_zero<T>(self: T): bool with { T is fixedint, }
+fun is_zero<T>(self: T): bool where { T is fixedint, }
   let z: T = zero()
   ret self == z
 end fun
@@ -70,7 +70,7 @@ end fun
 // signed one has no room for the whole span: the distance from its most
 // negative value to its largest is one past the top of the range. Every
 // unsigned pair fits, and so does every signed pair that is not that wide.
-fun abs_diff<T>(self: T, other: T): ?T with { T is fixedint, }
+fun abs_diff<T>(self: T, other: T): ?T where { T is fixedint, }
   if self >= other
     ret some (self -? other)
   else
@@ -79,13 +79,13 @@ fun abs_diff<T>(self: T, other: T): ?T with { T is fixedint, }
 end fun
 
 // Whether self is positive, which no unsigned value but zero is.
-fun is_positive<T>(self: T): bool with { T is fixedint, }
+fun is_positive<T>(self: T): bool where { T is fixedint, }
   let z: T = zero()
   ret self .> z
 end fun
 
 // Whether self is negative, which no unsigned value is.
-fun is_negative<T>(self: T): bool with { T is fixedint, }
+fun is_negative<T>(self: T): bool where { T is fixedint, }
   let z: T = zero()
   ret self .< z
 end fun
@@ -94,32 +94,32 @@ end fun
 //
 // The bare operators early-return, which is what makes them worth having; a
 // caller that wants the answer as a value rather than as a return asks here.
-fun add_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+fun add_checked<T>(self: T, other: T): ?T where { T is fixedint, }
   inline
   ret some (self +? other)
 end fun
 
 // The difference, or none when it runs past the width.
-fun sub_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+fun sub_checked<T>(self: T, other: T): ?T where { T is fixedint, }
   inline
   ret some (self -? other)
 end fun
 
 // The product, or none when it runs past the width.
-fun mul_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+fun mul_checked<T>(self: T, other: T): ?T where { T is fixedint, }
   inline
   ret some (self *? other)
 end fun
 
 // The quotient, or none when the divisor is zero or the answer will not fit.
-fun div_checked<T>(self: T, other: T): ?T with { T is fixedint, }
+fun div_checked<T>(self: T, other: T): ?T where { T is fixedint, }
   inline
   ret some (self /? other)
 end fun
 
 // The negation, or none when the value has no counterpart: the most negative
 // signed value, and every unsigned one but zero.
-fun neg_checked<T>(self: T): ?T with { T is fixedint, }
+fun neg_checked<T>(self: T): ?T where { T is fixedint, }
   inline
   ret some (-? self)
 end fun
@@ -128,7 +128,7 @@ end fun
 //
 // Which end depends on the sign of what was added, and an unsigned type has
 // only the one it can reach.
-fun add_saturating<T>(self: T, other: T): T with { T is fixedint, }
+fun add_saturating<T>(self: T, other: T): T where { T is fixedint, }
   if add_checked(self, other@) |total|
     ret total
   else
@@ -141,7 +141,7 @@ fun add_saturating<T>(self: T, other: T): T with { T is fixedint, }
 end fun
 
 // The difference, stopped at the end of the range rather than running past it.
-fun sub_saturating<T>(self: T, other: T): T with { T is fixedint, }
+fun sub_saturating<T>(self: T, other: T): T where { T is fixedint, }
   if sub_checked(self, other@) |total|
     ret total
   else
@@ -157,7 +157,7 @@ end fun
 //
 // None comes back when the total runs past the width, which is what `+?`
 // reports.
-fun sum<T>(ref self: [T]): ?T with { T is fixedint, }
+fun sum<T>(ref self: [T]): ?T where { T is fixedint, }
   let start: T = zero()
   var total: ?T = some start
   for elem in ref self
@@ -175,7 +175,7 @@ end fun
 // Every element multiplied together, and one when there are none.
 //
 // None comes back when the product runs past the width, as `sum`'s does.
-fun product<T>(ref self: [T]): ?T with { T is fixedint, }
+fun product<T>(ref self: [T]): ?T where { T is fixedint, }
   let start: T = one()
   var running: ?T = some start
   for elem in ref self

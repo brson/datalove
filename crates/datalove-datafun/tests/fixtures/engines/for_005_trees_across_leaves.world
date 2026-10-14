@@ -28,7 +28,7 @@ fun map_sum(ref m: %{string = int}): (index, int, ?string)
   ret (n, total, last)
 end fun
 
-fun count_entries<K, V>(ref m: %{K = V}): (index, ?K, ?V) with { K is ord }
+fun count_entries<K, V>(ref m: %{K = V}): (index, ?K, ?V) where { K is ord }
   var n: index = : index / 0
   var last_key: ?K = none
   var last_value: ?V = none

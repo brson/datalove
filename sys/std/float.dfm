@@ -33,68 +33,68 @@ import std.float_pi
 import std.float_e
 
 // The magnitude, without its sign.
-fun abs<T>(self: T): T with { T is float, }
+fun abs<T>(self: T): T where { T is float, }
   inline
   ret float_abs(self)
 end fun
 
 // The square root.
-fun sqrt<T>(self: T): T with { T is float, }
+fun sqrt<T>(self: T): T where { T is float, }
   inline
   ret float_sqrt(self)
 end fun
 
 // The largest whole number no greater than self.
-fun floor<T>(self: T): T with { T is float, }
+fun floor<T>(self: T): T where { T is float, }
   inline
   ret float_floor(self)
 end fun
 
 // The smallest whole number no less than self.
-fun ceil<T>(self: T): T with { T is float, }
+fun ceil<T>(self: T): T where { T is float, }
   inline
   ret float_ceil(self)
 end fun
 
 // The nearest whole number, halves away from zero.
-fun round<T>(self: T): T with { T is float, }
+fun round<T>(self: T): T where { T is float, }
   inline
   ret float_round(self)
 end fun
 
 // The whole part, dropping the fraction.
-fun trunc<T>(self: T): T with { T is float, }
+fun trunc<T>(self: T): T where { T is float, }
   inline
   ret float_trunc(self)
 end fun
 
 // The fractional part, keeping the sign.
-fun fract<T>(self: T): T with { T is float, }
+fun fract<T>(self: T): T where { T is float, }
   inline
   ret float_fract(self)
 end fun
 
 // One divided by self.
-fun recip<T>(self: T): T with { T is float, }
+fun recip<T>(self: T): T where { T is float, }
   inline
   ret float_recip(self)
 end fun
 
 // 1, -1 or a nan, matching self's sign.
-fun signum<T>(self: T): T with { T is float, }
+fun signum<T>(self: T): T where { T is float, }
   inline
   ret float_signum(self)
 end fun
 
 // Self with its sign flipped.
-fun neg<T>(self: T): T with { T is float, }
+fun neg<T>(self: T): T where { T is float, }
   inline
   ret float_neg(self)
 end fun
 
 // The smaller of the two. A nan compares false against everything, so a nan
 // on the left gives the right.
-fun min<T>(self: T, other: T): T with { T is float, }
+fun min<T>(self: T, other: T): T where { T is float, }
   if self .< other
     ret self
   else
@@ -103,7 +103,7 @@ fun min<T>(self: T, other: T): T with { T is float, }
 end fun
 
 // The larger of the two.
-fun max<T>(self: T, other: T): T with { T is float, }
+fun max<T>(self: T, other: T): T where { T is float, }
   if self .> other
     ret self
   else
@@ -112,25 +112,25 @@ fun max<T>(self: T, other: T): T with { T is float, }
 end fun
 
 // Self held between two bounds.
-fun clamp<T>(self: T, low: T, high: T): T with { T is float, }
+fun clamp<T>(self: T, low: T, high: T): T where { T is float, }
   inline
   ret min(max(self, low), high)
 end fun
 
 // The point a fraction of the way from a to b.
-fun lerp<T>(a: T, b: T, t: T): T with { T is float, }
+fun lerp<T>(a: T, b: T, t: T): T where { T is float, }
   inline
   ret a + (b - a) * t
 end fun
 
 // True if self is a nan, which is the one value that is not equal to itself.
-fun is_nan<T>(self: T): bool with { T is float, }
+fun is_nan<T>(self: T): bool where { T is float, }
   inline
   ret self != self
 end fun
 
 // The difference between the two, without its sign.
-fun distance<T>(self: T, other: T): T with { T is float, }
+fun distance<T>(self: T, other: T): T where { T is float, }
   inline
   ret float_abs(self - other)
 end fun
@@ -144,67 +144,67 @@ end fun
 // to a name carrying the type.
 
 // Zero.
-fun zero<T>(): T with { T is float, }
+fun zero<T>(): T where { T is float, }
   inline
   ret float_zero()
 end fun
 
 // One.
-fun one<T>(): T with { T is float, }
+fun one<T>(): T where { T is float, }
   inline
   ret float_one()
 end fun
 
 // The value that is not equal to itself.
-fun nan<T>(): T with { T is float, }
+fun nan<T>(): T where { T is float, }
   inline
   ret float_nan()
 end fun
 
 // Positive infinity.
-fun infinity<T>(): T with { T is float, }
+fun infinity<T>(): T where { T is float, }
   inline
   ret float_infinity()
 end fun
 
 // Negative infinity.
-fun neg_infinity<T>(): T with { T is float, }
+fun neg_infinity<T>(): T where { T is float, }
   inline
   ret float_neg_infinity()
 end fun
 
 // The most negative finite value.
-fun min_value<T>(): T with { T is float, }
+fun min_value<T>(): T where { T is float, }
   inline
   ret float_min_value()
 end fun
 
 // The largest finite value.
-fun max_value<T>(): T with { T is float, }
+fun max_value<T>(): T where { T is float, }
   inline
   ret float_max_value()
 end fun
 
 // The smallest positive normal value.
-fun min_positive<T>(): T with { T is float, }
+fun min_positive<T>(): T where { T is float, }
   inline
   ret float_min_positive()
 end fun
 
 // The difference between one and the next value above it.
-fun epsilon<T>(): T with { T is float, }
+fun epsilon<T>(): T where { T is float, }
   inline
   ret float_epsilon()
 end fun
 
 // The ratio of a circle to its diameter.
-fun pi<T>(): T with { T is float, }
+fun pi<T>(): T where { T is float, }
   inline
   ret float_pi()
 end fun
 
 // The base of the natural logarithm.
-fun e<T>(): T with { T is float, }
+fun e<T>(): T where { T is float, }
   inline
   ret float_e()
 end fun

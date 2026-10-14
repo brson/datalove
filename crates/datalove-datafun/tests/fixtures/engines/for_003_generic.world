@@ -13,7 +13,7 @@ fun last<T>(ref xs: [T]): ?T
   ret found
 end fun
 
-fun keys<K, V>(ref m: %{K = V}): [K] with { K is ord }
+fun keys<K, V>(ref m: %{K = V}): [K] where { K is ord }
   var out: [K] = []
   for k, v in ref m
     set out = [k@]
@@ -21,7 +21,7 @@ fun keys<K, V>(ref m: %{K = V}): [K] with { K is ord }
   ret out
 end fun
 
-fun members<T>(ref s: #{T}): index with { T is ord }
+fun members<T>(ref s: #{T}): index where { T is ord }
   var n: index = : index / 0
   for x in ref s
     set n = icall add_wrapping_index(n, : index / 1)

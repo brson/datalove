@@ -1,4 +1,4 @@
 // A type parameter takes one bound.
-fun f<T>(a: T): T with { T is ord, T is float, }
+fun f<T>(a: T): T where { T is ord, T is float, }
     ret a
 end fun

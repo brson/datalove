@@ -3,7 +3,7 @@ module local/test/neg
 ----------
 
 // Bare negation of a parameter bounded to the floats, at both widths.
-fun negated<T>(a: T): T with { T is float, }
+fun negated<T>(a: T): T where { T is float, }
     ret -a
 end fun
 

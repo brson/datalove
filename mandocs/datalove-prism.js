@@ -22,7 +22,7 @@ Prism.languages.datalove = {
         alias: 'type-name'
     },
     'type-name': /\b(?:bool|u8|u16|u32|u64|i8|i16|i32|i64|index|offset|int|f32|f64|string|data|error|tuple|atom|term|enum)\b/,
-    'keyword': /\b(?:let|var|const|set|call|ret|require|module|import|rider|with|is|and|or|xor|not|icall|debuglog)\b/,
+    'keyword': /\b(?:let|var|const|set|call|ret|require|module|import|rider|where|is|and|or|xor|not|icall|debuglog)\b/,
     'binding-modifier': /\b(?:ref|mut|out)\b/,
     'item-keyword': /\b(?:type|native|fun|end\s+fun)\b/,
     'control-flow': /\b(?:if|else|end\s+if|loop|while|for|in|break|continue|end\s+loop|end\s+for|match|case|default|end\s+match)\b/,

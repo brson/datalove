@@ -36,46 +36,46 @@ import fixedint.sub_saturating
 // and the runtime reads which integer it is, exactly as a collection of a type
 // parameter has its elements walked by size read off a descriptor.
 
-fun total<T>(a: T, b: T): ?T with { T is fixedint, }
+fun total<T>(a: T, b: T): ?T where { T is fixedint, }
   ret some (a +? b)
 end fun
 
-fun difference<T>(a: T, b: T): !T with { T is fixedint, }
+fun difference<T>(a: T, b: T): !T where { T is fixedint, }
   ret ok (a -! b)
 end fun
 
-fun scaled<T>(a: T, b: T): ?T with { T is fixedint, }
+fun scaled<T>(a: T, b: T): ?T where { T is fixedint, }
   ret some (a *? b)
 end fun
 
-fun quotient<T>(a: T, b: T): ?T with { T is fixedint, }
+fun quotient<T>(a: T, b: T): ?T where { T is fixedint, }
   ret some (a /? b)
 end fun
 
 // Negation in both forms, which a parameter has as every fixed-width integer
 // does.
-fun negated<T>(a: T): !T with { T is fixedint, }
+fun negated<T>(a: T): !T where { T is fixedint, }
   ret ok (-! a)
 end fun
 
-fun negated_optional<T>(a: T): ?T with { T is fixedint, }
+fun negated_optional<T>(a: T): ?T where { T is fixedint, }
   ret some (-? a)
 end fun
 
-fun ordered<T>(a: T, b: T): bool with { T is fixedint, }
+fun ordered<T>(a: T, b: T): bool where { T is fixedint, }
   ret a .< b
 end fun
 
 // A bounded generic handing its parameter to another one: the bound travels
 // with it, because whatever the outer call picked is what the inner gets.
-fun bounded<T>(x: T, y: T): ?T with { T is fixedint, }
+fun bounded<T>(x: T, y: T): ?T where { T is fixedint, }
   ret add_checked(x, y)
 end fun
 
 // A value of a bounded parameter is still linear, so using one twice asks for
 // a clone. Being an integer does not make it copy here: what is copy is read
 // off the type, and a type parameter's type is not known where it is written.
-fun doubled<T>(x: T): ?T with { T is fixedint, }
+fun doubled<T>(x: T): ?T where { T is fixedint, }
   ret some (x@ +? x)
 end fun
 

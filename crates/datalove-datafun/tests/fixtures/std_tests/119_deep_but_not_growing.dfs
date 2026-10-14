@@ -12,12 +12,12 @@ import set.len
 // type nested twelve deep. This was once refused by a limit on nesting depth,
 // with a message claiming the type grew without end. There is no cycle here at
 // all.
-fun deep<T>(x: T): index with { T is ord, }
+fun deep<T>(x: T): index where { T is ord, }
   var built: [[[[[[[[[[[[T]]]]]]]]]]]] = []
   ret : index / 0
 end fun
 
-fun carry<T>(x: T): index with { T is ord, }
+fun carry<T>(x: T): index where { T is ord, }
   ret deep(x)
 end fun
 
@@ -27,7 +27,7 @@ end fun
 // `string` its descriptor describes a `#{string}` that appears in no value
 // type, no parameter and no return. The compiled backends once emitted
 // descriptors only for the types they could see, and saw none for this one.
-fun count_one<T>(x: T): index with { T is ord, }
+fun count_one<T>(x: T): index where { T is ord, }
   var seen: #{T} = #{}
   let added = insert(mut seen, x)
   ret len(ref seen)

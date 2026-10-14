@@ -43,9 +43,9 @@ impl Bound {
     fn clause(&self, param: &str) -> String {
         match self {
             Bound::None => String::new(),
-            Bound::Ord => format!(" with {{ {} is ord, }}", param),
-            Bound::FixedInt => format!(" with {{ {} is fixedint, }}", param),
-            Bound::Float => format!(" with {{ {} is float, }}", param),
+            Bound::Ord => format!(" where {{ {} is ord, }}", param),
+            Bound::FixedInt => format!(" where {{ {} is fixedint, }}", param),
+            Bound::Float => format!(" where {{ {} is float, }}", param),
         }
     }
 
@@ -108,13 +108,13 @@ pub enum Shape {
     /// `fun f<T>(ref x: [T]): bool` -- borrows a collection of a parameter,
     /// where nothing is converted and the descriptor comes from the argument.
     Borrow,
-    /// `fun f<T>(a: T, b: T): ?T with { T is fixedint, }` -- checked
+    /// `fun f<T>(a: T, b: T): ?T where { T is fixedint, }` -- checked
     /// arithmetic on a bounded parameter.
     AddChecked,
-    /// `fun f<T>(a: T, b: T): T with { T is float, }` -- bare arithmetic,
+    /// `fun f<T>(a: T, b: T): T where { T is float, }` -- bare arithmetic,
     /// which only a float has.
     Multiply,
-    /// `fun f<T>(a: T, b: T): bool with { T is fixedint, }` -- a comparison,
+    /// `fun f<T>(a: T, b: T): bool where { T is fixedint, }` -- a comparison,
     /// whose answer is not the parameter's type. One shape per operator: a
     /// generic body is where most comparisons in the corpus are written, and
     /// with `.<` alone the other five were left to the handful of places that

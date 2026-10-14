@@ -27,11 +27,11 @@ fun two_of<T>(x: T, y: T): [T]
   ret [x, y]
 end fun
 
-fun set_of<T>(x: T, y: T): #{T} with { T is ord, }
+fun set_of<T>(x: T, y: T): #{T} where { T is ord, }
   ret #{x, y}
 end fun
 
-fun map_of<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+fun map_of<K, V>(k: K, v: V): %{K = V} where { K is ord, }
   ret %{k = v}
 end fun
 

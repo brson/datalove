@@ -14,7 +14,7 @@
       ],
       "message": "`K` has not said it can be ordered, and parameter `m` puts it in a set or a map",
       "notes": [
-        "a set keeps its elements in order and a map keeps its keys in order, so a collection written over a type parameter asks that parameter for an ordering. Say so with `with { <param> is ord, }`, which every type there is satisfies."
+        "a set keeps its elements in order and a map keeps its keys in order, so a collection written over a type parameter asks that parameter for an ordering. Say so with `where { <param> is ord, }`, which every type there is satisfies."
       ]
     }
   ],

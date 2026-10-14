@@ -42,7 +42,7 @@ end fun
 // Bounded to `fixedint` rather than written at one width, because a zero can
 // be made at any of them: `sys/std/fixedint` asks the rider for one and the
 // call site's descriptor says which.
-fun unwrap_or_zero<T>(self: !T): T with { T is fixedint, }
+fun unwrap_or_zero<T>(self: !T): T where { T is fixedint, }
   if self |value|
     ret value
   else |failure|

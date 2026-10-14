@@ -13,49 +13,49 @@ import std.set_into_list
 import std.list_pop
 
 // The number of elements.
-fun len<T>(ref self: #{T}): index with { T is ord, }
+fun len<T>(ref self: #{T}): index where { T is ord, }
   inline
   ret set_len(ref self)
 end fun
 
 // True if there are no elements.
-fun is_empty<T>(ref self: #{T}): bool with { T is ord, }
+fun is_empty<T>(ref self: #{T}): bool where { T is ord, }
   inline
   ret set_len(ref self) == (: index / 0)
 end fun
 
 // True if the element is present.
-fun contains<T>(ref self: #{T}, ref elem: T): bool with { T is ord, }
+fun contains<T>(ref self: #{T}, ref elem: T): bool where { T is ord, }
   inline
   ret set_contains(ref self, ref elem)
 end fun
 
 // Add an element. False if it was already present.
-fun insert<T>(mut self: #{T}, elem: T): bool with { T is ord, }
+fun insert<T>(mut self: #{T}, elem: T): bool where { T is ord, }
   inline
   ret set_insert(mut self, elem)
 end fun
 
 // Remove an element. False if it was not present.
-fun remove<T>(mut self: #{T}, ref elem: T): bool with { T is ord, }
+fun remove<T>(mut self: #{T}, ref elem: T): bool where { T is ord, }
   inline
   ret set_remove(mut self, ref elem)
 end fun
 
 // Drop every element.
-fun clear<T>(mut self: #{T}) with { T is ord, }
+fun clear<T>(mut self: #{T}) where { T is ord, }
   call set_clear(mut self)
 end fun
 
 // Every element, in sort order.
-fun to_list<T>(ref self: #{T}): [T] with { T is ord, }
+fun to_list<T>(ref self: #{T}): [T] where { T is ord, }
   var built: [T] = []
   call set_into_list(ref self, mut built)
   ret built
 end fun
 
 // Every element of either.
-fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
+fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T} where { T is ord, }
   var built: #{T} = #{}
   for elem in ref self
     let added = insert(mut built, elem@)
@@ -67,7 +67,7 @@ fun union_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
 end fun
 
 // Every element of both.
-fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
+fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T} where { T is ord, }
   var built: #{T} = #{}
   for elem in ref self
     if contains(ref other, ref elem)
@@ -78,7 +78,7 @@ fun intersection_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord,
 end fun
 
 // Every element of self that other does not have.
-fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
+fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T} where { T is ord, }
   var built: #{T} = #{}
   for elem in ref self
     if not contains(ref other, ref elem)
@@ -89,7 +89,7 @@ fun difference_with<T>(ref self: #{T}, ref other: #{T}): #{T} with { T is ord, }
 end fun
 
 // True if every element of self is in other.
-fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool with { T is ord, }
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord, }
   for elem in ref self
     if not contains(ref other, ref elem)
       ret false
@@ -102,7 +102,7 @@ end fun
 //
 // The elements are moved rather than cloned: the list is taken by value and
 // emptied from the back.
-fun from_list<T>(items: [T]): #{T} with { T is ord, }
+fun from_list<T>(items: [T]): #{T} where { T is ord, }
   var out: #{T} = #{}
   var src: [T] = items
   loop

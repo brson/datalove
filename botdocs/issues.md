@@ -419,7 +419,7 @@ element *is* a type parameter -- `[|T, 1|]` -- even though its rank is not. See
 
 **Checked against the spec and the parser.** `data x` and `error x` wrap any
 value, and nothing in the language unwraps one: there is no type test, no cast,
-no type pattern in `match`. `is` parses only in a `with` bound. So a `data` can
+no type pattern in `match`. `is` parses only in a `where` bound. So a `data` can
 be moved, cloned, compared and printed, and an `error` can be printed, but code
 cannot recover what is inside.
 

@@ -39,7 +39,7 @@
     "if" "else" "end"
     "loop" "while" "for" "in" "break" "continue"
     "match" "case" "default"
-    "type" "with" "is"
+    "type" "where" "is"
     "atom" "term" "enum" "tuple"
     "ref" "mut" "out"
     "not" "and" "or" "xor"
@@ -66,7 +66,7 @@ face in both positions.")
 
 (defconst datalove-mode--bounds
   '("float" "fixedint" "ord")
-  "Bounds a type parameter can be given in a `with' clause.")
+  "Bounds a type parameter can be given in a `where' clause.")
 
 (defconst datalove-mode--name-re
   "[A-Za-z_][A-Za-z0-9_]*"
@@ -105,7 +105,7 @@ face in both positions.")
     (,(concat "\\_<\\(?:atom\\|term\\)[ \t]+\\(" datalove-mode--name-re "\\)")
      1 font-lock-type-face)
 
-    ;; The name a bound is given: `with { T is ord, }'.
+    ;; The name a bound is given: `where { T is ord, }'.
     (,(concat "\\_<is[ \t]+\\(" (regexp-opt datalove-mode--bounds) "\\)\\_>")
      1 font-lock-type-face)
 

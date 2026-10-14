@@ -1,3 +1,0 @@
-fun f<T>(a: T): T with { T is float }
-  ret a
-end fun

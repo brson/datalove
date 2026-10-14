@@ -78,7 +78,7 @@ that appears only in the return type has no such value, so nothing in the call
 would say what to build:
 
 ```
-native fun fixedint_zero<T>(): T with { T is fixedint, }
+native fun fixedint_zero<T>(): T where { T is fixedint, }
 ```
 
 For those, the call site hands over a descriptor explicitly, after the out
@@ -98,7 +98,7 @@ binding is concrete, and the caller's own descriptor-table entry where it was
 written over the caller's type parameters. So
 
 ```
-fun zero<T>(): T with { T is fixedint, }
+fun zero<T>(): T where { T is fixedint, }
   ret fixedint_zero()
 end fun
 
@@ -135,7 +135,7 @@ Three places have to agree, and all three derive from the same `.dli` line.
 1. **The interface**, in `sys/<package>/rider/rider.dli`:
 
    ```
-   native fun fixedint_zero<T>(): T with { T is fixedint, }
+   native fun fixedint_zero<T>(): T where { T is fixedint, }
    ```
 
 2. **The implementation**, in the rider crate:

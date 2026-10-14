@@ -57,12 +57,12 @@ fun count_words(ref xs: [string]): index
 end fun
 
 // Maps and sets declare shapes too, and a map declares one per side.
-fun one_entry<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+fun one_entry<K, V>(k: K, v: V): %{K = V} where { K is ord, }
   var m: %{K = V} = %{k = v}
   ret m
 end fun
 
-fun one_member<T>(x: T): #{T} with { T is ord, }
+fun one_member<T>(x: T): #{T} where { T is ord, }
   var s: #{T} = #{x}
   ret s
 end fun

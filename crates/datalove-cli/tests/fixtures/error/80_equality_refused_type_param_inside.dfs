@@ -1,5 +1,5 @@
 // A bound on `T` admits its operations on a bare `T`, not on a type holding
 // one, so `?T` cannot be compared even with `T` a float.
-fun same<T>(a: ?T, b: ?T): bool with { T is float, }
+fun same<T>(a: ?T, b: ?T): bool where { T is float, }
   ret a == b
 end fun

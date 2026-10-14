@@ -189,7 +189,7 @@ fn unordered_binding_error<'db>(
         fmt!("`{param}` has not said it can be ordered, and this binding puts it in a set or a map"),
         S("a set or map over a type parameter needs `is ord`"),
         Some(fmt!("a set keeps its elements in order and a map keeps its keys in order, so say so \
-with `with {{ {param} is ord, }}`, which every type there is satisfies")),
+with `where {{ {param} is ord, }}`, which every type there is satisfies")),
     );
     Some(TypeError::CollectionKeyNotOrdered {
         param: param.S(),

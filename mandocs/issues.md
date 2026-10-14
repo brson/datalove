@@ -1,7 +1,3 @@
-## 2026/10/11 `with` -> `where`
-
-Oops.
-
 ## 2026/10/08 can't call !() functions as statements
 
 ```

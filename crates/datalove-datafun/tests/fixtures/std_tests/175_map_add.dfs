@@ -41,7 +41,7 @@ let overflows = bump(mut small, ref "x", : u8 / 1)
 let new_key_at_max = bump(mut small, ref "y", : u8 / 255)
 
 // From a caller generic over the value, whose amount arrives boxed.
-fun tally<V>(mut totals: %{string = V}, ref key: string, amount: V): !() with { V is fixedint, }
+fun tally<V>(mut totals: %{string = V}, ref key: string, amount: V): !() where { V is fixedint, }
   ret add(mut totals, ref key, amount)
 end fun
 

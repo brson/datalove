@@ -1,6 +1,6 @@
 // Compound assignment on bounded type parameters, which take whichever
 // arithmetic every type the bound admits has.
-fun scaled<T>(a: T, b: T): T with { T is float, }
+fun scaled<T>(a: T, b: T): T where { T is float, }
   var x = a@
   set x += b
   set x *= b
@@ -9,7 +9,7 @@ fun scaled<T>(a: T, b: T): T with { T is float, }
   ret x
 end fun
 
-fun stepped<T>(a: T, b: T): !(T, T, T, T) with { T is fixedint, }
+fun stepped<T>(a: T, b: T): !(T, T, T, T) where { T is fixedint, }
   var sum = a@
   set sum +!= b
   var diff = a@
@@ -21,7 +21,7 @@ fun stepped<T>(a: T, b: T): !(T, T, T, T) with { T is fixedint, }
   ret ok (sum, diff, prod, quot)
 end fun
 
-fun stepped_optional<T>(a: T, b: T): ?(T, T, T, T) with { T is fixedint, }
+fun stepped_optional<T>(a: T, b: T): ?(T, T, T, T) where { T is fixedint, }
   var sum = a@
   set sum +?= b
   var diff = a@

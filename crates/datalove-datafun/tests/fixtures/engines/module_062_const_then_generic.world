@@ -19,7 +19,7 @@ module local/test/main
 
 const LIMIT: u32 = : u32 / 3
 
-fun setify<T>(x: T): #{T} with { T is ord, }
+fun setify<T>(x: T): #{T} where { T is ord, }
   ret #{x}
 end fun
 
@@ -27,7 +27,7 @@ fun listify<T>(x: T, y: T): [T]
   ret [x, y]
 end fun
 
-fun mapify<K, V>(k: K, v: V): %{K = V} with { K is ord, }
+fun mapify<K, V>(k: K, v: V): %{K = V} where { K is ord, }
   ret %{k = v}
 end fun
 

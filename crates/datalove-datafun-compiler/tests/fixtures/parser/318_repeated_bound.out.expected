@@ -39,8 +39,8 @@
         {
           "message": "a type parameter takes one bound",
           "span": [
-            72,
-            73
+            73,
+            74
           ],
           "text": "T"
         }

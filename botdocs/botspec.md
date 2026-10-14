@@ -83,7 +83,7 @@ included (`call`, Section 8.9), so no name is ever read at the start of a
 statement and the statement words are reserved for nothing. A new statement
 keyword therefore never takes a name away from existing code.
 `and`, `or` and `xor` are read only after an operand, and the words
-inside constructs (`else`, `end`, `case`, `default`, `with`, `is`, `while`
+inside constructs (`else`, `end`, `case`, `default`, `where`, `is`, `while`
 after `loop`, `in` and `ref` after a `for`'s names, `module` and `rider` after
 `require`) only where a name cannot be,
 so none of them is reserved.
@@ -1441,11 +1441,11 @@ fun or_option<T>(self: ?T, other: ?T): ?T
 end fun
 ```
 
-**Bounds.** A signature may end with a `with` clause, which bounds a type
+**Bounds.** A signature may end with a `where` clause, which bounds a type
 parameter:
 
 ```
-fun scaled<T>(a: T, b: T): T with { T is float, }
+fun scaled<T>(a: T, b: T): T where { T is float, }
   ret a * b
 end fun
 ```
@@ -1453,7 +1453,7 @@ end fun
 A bound says the parameter is one of a fixed set of types, and in exchange the
 body may do what all of them have in common. The bounds sit apart from the
 names so that the signature reads as a signature. The clause may be spread over
-several lines, but the `with` has to be on the signature's own line, because
+several lines, but the `where` has to be on the signature's own line, because
 that is where the signature ends.
 
 There are three bounds:

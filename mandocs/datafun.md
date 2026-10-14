@@ -1216,7 +1216,7 @@ Generics are described in [Generics](#user-content-generics).
 ```datalove
 require module sys/std/ord
 
-fun largest<T>(ref items: [T]): ?T with { T is ord }
+fun largest<T>(ref items: [T]): ?T where { T is ord }
   ret ord.greatest(ref items)
 end fun
 
@@ -1594,7 +1594,7 @@ since there is no way to know whether the type supports them.
 ### Bounds
 
 Other operations require bounds on the type parameters.
-Bounds are written in a `with` clause after the function's return type,
+Bounds are written in a `where` clause after the function's return type,
 on the same line as the signature.
 
 ```datalove
@@ -1602,7 +1602,7 @@ require module sys/std/fixedint
 
 import fixedint.zero
 
-fun unwrap_or_zero<T>(opt: ?T): T with { T is fixedint }
+fun unwrap_or_zero<T>(opt: ?T): T where { T is fixedint }
   if opt |value|
     ret value
   else
@@ -1651,7 +1651,7 @@ In `unwrap_or_zero` the return type provides it.
 ```datalove
 require module sys/std/float
 
-fun mean<T>(a: T, b: T): T with { T is float }
+fun mean<T>(a: T, b: T): T where { T is float }
   let one: T = float.one()
   let two = one@ + one
   ret (a + b) / two

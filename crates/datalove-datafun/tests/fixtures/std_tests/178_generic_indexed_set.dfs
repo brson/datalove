@@ -14,7 +14,7 @@ fun set_count<T>(xs: [{item: T, n: u32}], i: index, n: u32): ?[{item: T, n: u32}
     ret some ys
 end fun
 
-fun set_value<K, V>(m: %{K = V}, k: K, v: V): ?%{K = V} with { K is ord, }
+fun set_value<K, V>(m: %{K = V}, k: K, v: V): ?%{K = V} where { K is ord, }
     var n = m
     set n[k]? = v
     ret some n

@@ -18,31 +18,31 @@ import std.map_entries_into
 import std.list_pop
 
 // The number of entries.
-fun len<K, V>(ref self: %{K = V}): index with { K is ord, }
+fun len<K, V>(ref self: %{K = V}): index where { K is ord, }
   inline
   ret map_len(ref self)
 end fun
 
 // True if there are no entries.
-fun is_empty<K, V>(ref self: %{K = V}): bool with { K is ord, }
+fun is_empty<K, V>(ref self: %{K = V}): bool where { K is ord, }
   inline
   ret map_len(ref self) == (: index / 0)
 end fun
 
 // True if the key is present.
-fun contains_key<K, V>(ref self: %{K = V}, ref key: K): bool with { K is ord, }
+fun contains_key<K, V>(ref self: %{K = V}, ref key: K): bool where { K is ord, }
   inline
   ret map_contains_key(ref self, ref key)
 end fun
 
 // The value for a key, or none.
-fun get<K, V>(ref self: %{K = V}, ref key: K): ?V with { K is ord, }
+fun get<K, V>(ref self: %{K = V}, ref key: K): ?V where { K is ord, }
   inline
   ret map_get(ref self, ref key)
 end fun
 
 // Insert an entry, replacing any value already under the key.
-fun insert<K, V>(mut self: %{K = V}, key: K, value: V) with { K is ord, }
+fun insert<K, V>(mut self: %{K = V}, key: K, value: V) where { K is ord, }
   call map_insert(mut self, key, value)
 end fun
 
@@ -52,14 +52,14 @@ end fun
 // The value is read before the entry goes, which copies it. The tree destroys
 // what it held rather than handing it over, so the only way to keep a value
 // through a removal is to have made another first.
-fun remove<K, V>(mut self: %{K = V}, ref key: K): ?V with { K is ord, }
+fun remove<K, V>(mut self: %{K = V}, ref key: K): ?V where { K is ord, }
   let taken = map_get(ref self, ref key)
   call map_remove(mut self, ref key)
   ret taken
 end fun
 
 // Drop every entry.
-fun clear<K, V>(mut self: %{K = V}) with { K is ord, }
+fun clear<K, V>(mut self: %{K = V}) where { K is ord, }
   call map_clear(mut self)
 end fun
 
@@ -69,7 +69,7 @@ end fun
 // One lookup, where `get_or` and then `insert` take two, and the key is
 // borrowed: it's cloned only if it's new. A sum that overflows fails, leaving
 // the map as it was.
-fun add<K, V>(mut self: %{K = V}, ref key: K, amount: V): !() with { K is ord, V is fixedint, }
+fun add<K, V>(mut self: %{K = V}, ref key: K, amount: V): !() where { K is ord, V is fixedint, }
   if map_add(mut self, ref key, amount)
     ret ok ()
   end if
@@ -77,7 +77,7 @@ fun add<K, V>(mut self: %{K = V}, ref key: K, amount: V): !() with { K is ord, V
 end fun
 
 // The value under a key, or a default if there is none.
-fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V with { K is ord, }
+fun get_or<K, V>(ref self: %{K = V}, ref key: K, default: V): V where { K is ord, }
   if get(ref self, ref key) |value|
     ret value
   else
@@ -89,7 +89,7 @@ end fun
 //
 // Unlike `insert`, this hands back whether anything happened, which is what
 // `set.insert` already does for a set.
-fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool with { K is ord, }
+fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool where { K is ord, }
   if contains_key(ref self, ref key)
     ret false
   else
@@ -99,14 +99,14 @@ fun insert_if_absent<K, V>(mut self: %{K = V}, key: K, value: V): bool with { K 
 end fun
 
 // Every key, in sort order.
-fun keys<K, V>(ref self: %{K = V}): [K] with { K is ord, }
+fun keys<K, V>(ref self: %{K = V}): [K] where { K is ord, }
   var built: [K] = []
   call map_keys_into(ref self, mut built)
   ret built
 end fun
 
 // Every value, in the order of its key.
-fun values<K, V>(ref self: %{K = V}): [V] with { K is ord, }
+fun values<K, V>(ref self: %{K = V}): [V] where { K is ord, }
   var built: [V] = []
   call map_values_into(ref self, mut built)
   ret built
@@ -114,7 +114,7 @@ end fun
 
 // Every entry as a key and its value, in sort order. Both are cloned, since
 // the map keeps what it holds.
-fun entries<K, V>(ref self: %{K = V}): [(K, V)] with { K is ord, }
+fun entries<K, V>(ref self: %{K = V}): [(K, V)] where { K is ord, }
   var built: [(K, V)] = []
   call map_entries_into(ref self, mut built)
   ret built
@@ -124,7 +124,7 @@ end fun
 //
 // The entries are moved rather than cloned: the list is taken by value and
 // emptied from the back.
-fun from_entries<K, V>(entries: [(K, V)]): %{K = V} with { K is ord, }
+fun from_entries<K, V>(entries: [(K, V)]): %{K = V} where { K is ord, }
   var out: %{K = V} = %{}
   var src: [(K, V)] = entries
   loop

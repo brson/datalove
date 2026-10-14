@@ -33,12 +33,12 @@ fun next(mut seed: u32): u32
 end fun
 
 // Whether `h[i]` sorts before `h[j]`.
-fun less_at<T>(ref h: [T], i: index, j: index): !bool with { T is ord, }
+fun less_at<T>(ref h: [T], i: index, j: index): !bool where { T is ord, }
   ret ok ord.less(ref h[i]!, ref h[j]!)
 end fun
 
 // Add to a binary min-heap, sifting the new element up.
-fun heap_push<T>(mut h: [T], elem: T): !() with { T is ord, }
+fun heap_push<T>(mut h: [T], elem: T): !() where { T is ord, }
   call list.push(mut h, elem)
   var i = index.sub_wrapping(list.len(ref h), : index / 1)
   loop while i .> 0
@@ -54,7 +54,7 @@ end fun
 
 // Take the least element out of a binary min-heap, sifting the last one down
 // into its place.
-fun heap_pop<T>(mut h: [T]): !?T with { T is ord, }
+fun heap_pop<T>(mut h: [T]): !?T where { T is ord, }
   let n = list.len(ref h)
   if n == 0
     ret ok none
@@ -86,7 +86,7 @@ end fun
 
 // The elements in order, by pushing every one onto a heap and popping them
 // all off.
-fun heapsort<T>(elems: [T]): ![T] with { T is ord, }
+fun heapsort<T>(elems: [T]): ![T] where { T is ord, }
   var heap: [T] = []
   var rest = elems
   loop
@@ -109,7 +109,7 @@ end fun
 
 // How many elements sort before the one in front of them: zero for a sorted
 // list.
-fun out_of_order<T>(ref xs: [T]): !u32 with { T is ord, }
+fun out_of_order<T>(ref xs: [T]): !u32 where { T is ord, }
   var count: u32 = 0
   var i: index = : index / 1
   let n = list.len(ref xs)
@@ -124,7 +124,7 @@ end fun
 
 // The first position in a sorted list whose element does not sort before
 // `elem`.
-fun lower_bound<T>(ref xs: [T], ref elem: T): !index with { T is ord, }
+fun lower_bound<T>(ref xs: [T], ref elem: T): !index where { T is ord, }
   var low: index = : index / 0
   var high = list.len(ref xs)
   loop while low .< high
@@ -140,7 +140,7 @@ end fun
 
 // For each probe, its lower bound, plus one more where the element there sorts
 // together with it.
-fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 with { T is ord, }
+fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 where { T is ord, }
   var total: u32 = 0
   let n = list.len(ref xs)
   for probe in ref probes
@@ -158,7 +158,7 @@ fun search_all<T>(ref xs: [T], ref probes: [T]): !u32 with { T is ord, }
 end fun
 
 // How many elements of a sorted list differ from the one before.
-fun distinct<T>(ref xs: [T]): !u32 with { T is ord, }
+fun distinct<T>(ref xs: [T]): !u32 where { T is ord, }
   let n = list.len(ref xs)
   if n == 0
     ret ok 0
@@ -176,7 +176,7 @@ end fun
 
 // Sort `elems`, check the order, search it for `probes`, and count what is
 // distinct.
-fun checksum<T>(elems: [T], ref probes: [T]): !u32 with { T is ord, }
+fun checksum<T>(elems: [T], ref probes: [T]): !u32 where { T is ord, }
   let sorted = heapsort(elems)!
   let bad = out_of_order(ref sorted)!
   let found = search_all(ref sorted, ref probes)!

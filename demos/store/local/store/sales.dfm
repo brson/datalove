@@ -159,6 +159,6 @@ fun order_revenue(o: index): !u64
 end fun
 
 // Add to a running total under a key, starting it at nothing.
-fun add<K>(mut totals: %{K = u64}, ref key: K, amount: u64): !() with { K is ord, }
+fun add<K>(mut totals: %{K = u64}, ref key: K, amount: u64): !() where { K is ord, }
     ret map.add(mut totals, ref key, amount)
 end fun

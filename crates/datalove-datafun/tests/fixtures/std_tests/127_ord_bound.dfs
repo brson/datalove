@@ -89,7 +89,7 @@ let looking = (contains(ref strings, ref needle), contains(ref strings, ref miss
 
 // A set built over a type parameter orders its elements by the same relation,
 // so a signed element is where it used to come back in the wrong order.
-fun gather<T>(a: T, b: T, c: T): [T] with { T is ord, }
+fun gather<T>(a: T, b: T, c: T): [T] where { T is ord, }
   var held: #{T} = #{}
   let first = insert(mut held, a)
   let second = insert(mut held, b)
@@ -100,7 +100,7 @@ end fun
 // Borrowing a type parameter from one generic into another, which once meant
 // unpacking a narrow value from its wrapper first, there being no address to
 // lend.
-fun smallest_of<T>(a: T, b: T): T with { T is ord, }
+fun smallest_of<T>(a: T, b: T): T where { T is ord, }
   ret min(a, b)
 end fun
 
@@ -117,7 +117,7 @@ let forwarded = (smallest_of(: i8 / 3, : i8 / -3), smallest_of("b", "a"),
 // rather than copying out of it made the read and the write the same memory,
 // so the drop freed the element just stored and left the one it was given --
 // freeing one thing twice, once here and once at the end.
-fun adjacent_equal<T>(ref self: [T]): index with { T is ord, }
+fun adjacent_equal<T>(ref self: [T]): index where { T is ord, }
   var pairs: index = : index / 0
   var previous: ?T = none
   let n = len(ref self)
