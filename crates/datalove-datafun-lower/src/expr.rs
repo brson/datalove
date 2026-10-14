@@ -563,7 +563,7 @@ pub fn lower_expression<'db>(
             // A const argument is passed by reference, as the callee's const
             // parameter is lowered: see `lower_function_body`.
             let param_modes: Vec<ParamMode> = target
-                .map(|t| t.func(ctx.db).params(ctx.db).iter()
+                .map(|t| t.func(ctx.db).params().iter()
                     .map(|p| if p.is_comptime { ParamMode::Ref } else { p.mode })
                     .collect())
                 .unwrap_or_default();
@@ -573,7 +573,7 @@ pub fn lower_expression<'db>(
             // type parameters, and a parameter's type here is the callee's
             // written type with those substituted in.
             let type_params: Vec<bct::text::InternedText<'db>> = target
-                .map(|t| t.func(ctx.db).type_params(ctx.db).clone())
+                .map(|t| t.func(ctx.db).type_params().clone())
                 .unwrap_or_default();
             let bindings: Vec<IrType> = target
                 .map(|t| t.type_args(ctx.db).clone())
@@ -582,7 +582,7 @@ pub fn lower_expression<'db>(
                 .map(|ty| ctx.ir_type(ty))
                 .collect();
             let param_types: Vec<IrType> = target
-                .map(|t| t.func(ctx.db).params(ctx.db).iter()
+                .map(|t| t.func(ctx.db).params().iter()
                     .map(|p| IrType::from_type_hint_generic(ctx.db, &p.type_hint, &type_params)
                         .substitute(&bindings))
                     .collect())
@@ -616,7 +616,7 @@ pub fn lower_expression<'db>(
             // built for an instantiation takes the same descriptors.
             let comptime_param_indices: Vec<usize> = target
                 .map(|t| {
-                    t.func(ctx.db).params(ctx.db)
+                    t.func(ctx.db).params()
                         .iter()
                         .enumerate()
                         .filter_map(|(i, p)| if p.is_comptime { Some(i) } else { None })

@@ -7,7 +7,7 @@ use rmx::std::collections::{BTreeMap, HashMap};
 use rmx::std::hash::Hash;
 use rmx::rayon::prelude::*;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{Body, ExprArena, FunParam, FunSignature, ParsedStatements, StmtFun};
+use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature, ParsedStatements};
 use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
@@ -222,8 +222,8 @@ pub struct RiderSources<'db> {
 /// Each rider's interface, parsed from its source.
 ///
 /// **Keyed on the rider sources and nothing else.** A rider says nothing about
-/// the module graph, and this is where its `TypeFunction`s and the statement
-/// behind each native are minted -- so keying it on anything the module set
+/// the module graph, and this is where its `TypeFunction`s are minted -- so
+/// keying it on anything the module set
 /// moves would re-mint them under fresh ids whenever a module appeared or
 /// disappeared, and every module importing from a rider would re-typecheck,
 /// re-analyze and re-lower. It did, until `edit_reach_tests` asked.
@@ -290,21 +290,20 @@ pub fn rider_interface_diagnostics<'db>(
     )
 }
 
-/// The statement a native stands behind.
+/// What a caller knows of a native.
 ///
-/// Its identity is `(module_id, name, 0)`, where the module id is the rider's
-/// synthetic one, so it is stable as long as the query that mints it is. The
-/// parameters carry the declared modes, which is what the ownership checker
-/// reads them for; the type parameters come in declaration order, because that
-/// is the order a call site writes its type arguments and so how the descriptors
-/// a native wants are worked out. See `NativeGenerics`.
+/// Its module is the rider's synthetic one. The parameters carry the declared
+/// modes, which is what the ownership checker reads them for; the type
+/// parameters come in declaration order, because that is the order a call site
+/// writes its type arguments and so how the descriptors a native wants are
+/// worked out. See `NativeGenerics`.
 fn native_stub<'db>(
     db: &'db dyn salsa::Database,
     rider_module_id: ModuleId<'db>,
     name: InternedText<'db>,
     func_type: datalove_datafun_common::TypeFunction<'db>,
     generic_functions: &[(InternedText<'db>, datalove_datafun_common::NativeGenerics<'db>)],
-) -> StmtFun<'db> {
+) -> FunHead<'db> {
     let params: Vec<FunParam<'db>> = func_type.param_modes(db)
         .iter()
         .enumerate()
@@ -322,17 +321,12 @@ fn native_stub<'db>(
         .map(|(_, g)| (g.type_params.clone(), g.type_bounds.clone()))
         .unwrap_or_default();
 
-    StmtFun::new(
-        db,
-        Some(rider_module_id),
+    FunHead {
+        module_id: Some(rider_module_id),
         name,
-        FunSignature { type_params, type_bounds, params, return_type: None, inline: false },
-        Body {
-            statements: vec![],
-            arena: ExprArena { module_id: Some(rider_module_id), fn_name: Some(name), exprs: vec![] },
-        },
-        0,
-    )
+        local_index: 0,
+        signature: FunSignature { type_params, type_bounds, params, return_type: None, inline: false },
+    }
 }
 
 #[cfg(test)]

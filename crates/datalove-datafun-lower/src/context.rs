@@ -464,7 +464,7 @@ impl<'db> LowerCtx<'db> {
         match target.module_id(self.db) {
             Some(module_id) => {
                 // Module function - look up by (ModuleId<'db>, func_name).
-                let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                let resolved_func_name = target.func(self.db).name.text(self.db).to_string();
                 let (ir_mod, func_id) = self.func_id_map
                     .and_then(|m| m.func_id(module_id, &resolved_func_name))
                     .unwrap_or_else(|| panic!(
@@ -475,7 +475,7 @@ impl<'db> LowerCtx<'db> {
             }
             None => {
                 // Local function resolved by typechecker - use func_scope lookup.
-                let resolved_func_name = target.func(self.db).name(self.db).text(self.db).to_string();
+                let resolved_func_name = target.func(self.db).name.text(self.db).to_string();
                 self.lookup_func(&resolved_func_name)
                     .unwrap_or_else(|| panic!(
                         "local function '{}' not found - typechecker should catch this",

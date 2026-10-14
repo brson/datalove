@@ -73,12 +73,12 @@ pub struct TypeContext<'db> {
     /// so.
     pub(crate) in_function_body: bool,
     /// The `inline` function whose body is being checked, if it is one.
-    pub(crate) checking_inline: Option<StmtFun<'db>>,
+    pub(crate) checking_inline: Option<FunKey<'db>>,
     /// The function whose body is being checked, if any.
-    pub(crate) enclosing_fun: Option<StmtFun<'db>>,
+    pub(crate) enclosing_fun: Option<FunKey<'db>>,
     /// Each call from an `inline` function to an `inline` function, caller
     /// first, in the order they were checked; see `report_inline_cycles`.
-    pub(crate) inline_calls: Vec<(StmtFun<'db>, StmtFun<'db>)>,
+    pub(crate) inline_calls: Vec<(FunKey<'db>, FunKey<'db>)>,
     /// Pre-computed spans for error reporting.
     pub(crate) spans: DatafunSpans<'db>,
     /// Current module being typechecked (for pending diagnostics).
@@ -88,7 +88,7 @@ pub struct TypeContext<'db> {
     /// Function signatures (name -> function type).
     pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
-    pub(crate) function_asts: HashMap<InternedText<'db>, (StmtFun<'db>, Option<ModuleId<'db>>)>,
+    pub(crate) function_asts: HashMap<InternedText<'db>, (FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
     pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
     /// Every name this unit asked the environment about.
@@ -272,8 +272,8 @@ impl<'db> TypeContext<'db> {
     /// closes nothing. Inlining expands each call it is given, so this is what
     /// makes it finish; refused here, a cycle is refused before any lowering.
     pub fn report_inline_cycles(&mut self) {
-        let mut reported: HashSet<StmtFun<'db>> = HashSet::new();
-        let callers: Vec<StmtFun<'db>> = self.inline_calls.iter()
+        let mut reported: HashSet<FunKey<'db>> = HashSet::new();
+        let callers: Vec<FunKey<'db>> = self.inline_calls.iter()
             .map(|(caller, _)| *caller)
             .fold(Vec::new(), |mut seen, caller| {
                 if !seen.contains(&caller) {
@@ -289,11 +289,11 @@ impl<'db> TypeContext<'db> {
             reported.extend(cycle.iter().copied());
             let names: Vec<String> = cycle.iter()
                 .chain(std::iter::once(&start))
-                .map(|f| f.name(self.db).as_str(self.db).to_string())
+                .map(|f| f.name.as_str(self.db).to_string())
                 .collect();
             let path = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(" calls ");
             self.push_coded(
-                crate::ErrorSite::Fun(start.local_index(self.db)),
+                crate::ErrorSite::Fun(start.local_index),
                 "F085",
                 format!("inline function `{}` is recursive ({path})", names[0]),
                 S("an inline function cannot be"),
@@ -306,9 +306,9 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
 
     /// A path of inline calls from `start` back to it, `start` first, by depth
     /// first search in the order the calls were checked.
-    fn inline_cycle_from(&self, start: StmtFun<'db>) -> Option<Vec<StmtFun<'db>>> {
+    fn inline_cycle_from(&self, start: FunKey<'db>) -> Option<Vec<FunKey<'db>>> {
         let mut path = vec![start];
-        let mut visited: HashSet<StmtFun<'db>> = HashSet::from([start]);
+        let mut visited: HashSet<FunKey<'db>> = HashSet::from([start]);
         let mut next: Vec<usize> = vec![0];
         while let Some(&at) = path.last() {
             let from = next.last_mut().expect("one cursor per path entry");
@@ -587,12 +587,12 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
         &mut self,
         expr: ExprFun<'db>,
         func_name: InternedText<'db>,
-        func_ast: Option<(StmtFun<'db>, Option<ModuleId<'db>>)>,
+        func_ast: Option<(FunHead<'db>, Option<ModuleId<'db>>)>,
         expected: usize,
         actual: usize,
     ) -> TypeError {
         let (func_local_index, func_module_id) = func_ast
-            .map(|(func_ast, mod_id)| (func_ast.local_index(self.db), mod_id))
+            .map(|(func_ast, mod_id)| (func_ast.local_index, mod_id))
             .unwrap_or((0, None));
 
         self.pending_diagnostics.push(PendingDiagnostic::ArityMismatch {
@@ -780,7 +780,7 @@ replace the view rather than the elements it shows. Index down to single element
         name: InternedText<'db>,
     ) -> Result<crate::QualifiedFunction<'db>, TypeError> {
         if let Some(found) = self.qualified.functions.iter().find(|f| f.alias == alias && f.name == name) {
-            return Ok(*found);
+            return Ok(found.clone());
         }
         let site = ErrorSite::Expr(expr.key());
         let module = alias.as_str(self.db);
@@ -1030,7 +1030,7 @@ replace the view rather than the elements it shows. Index down to single element
         &mut self,
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
-        func_ast: StmtFun<'db>,
+        func_ast: FunHead<'db>,
         module_id: Option<ModuleId<'db>>,
     ) {
         self.functions.insert(name, func_type);
@@ -1042,7 +1042,7 @@ replace the view rather than the elements it shows. Index down to single element
         &mut self,
         name: InternedText<'db>,
         func_type: TypeFunction<'db>,
-        func_ast: StmtFun<'db>,
+        func_ast: FunHead<'db>,
         source_module_id: ModuleId<'db>,
     ) {
         self.functions.insert(name, func_type);
@@ -1129,10 +1129,10 @@ replace the view rather than the elements it shows. Index down to single element
     }
 
     /// Look up the resolved function AST by name.
-    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(StmtFun<'db>, Option<ModuleId<'db>>)> {
+    pub fn lookup_function_ast(&self, name: InternedText<'db>) -> Option<(FunHead<'db>, Option<ModuleId<'db>>)> {
         self.note_asked(name);
         match self.function_asts.get(&name) {
-            Some(found) => Some(*found),
+            Some(found) => Some(found.clone()),
             None => self.inherited(name).and_then(|binding| binding.func_ast),
         }
     }
@@ -1141,14 +1141,14 @@ replace the view rather than the elements it shows. Index down to single element
     pub fn store_call_target(
         &mut self,
         call: ExprKey<'db>,
-        func: StmtFun<'db>,
+        func: FunHead<'db>,
         module_id: Option<ModuleId<'db>>,
         type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
     ) {
         if let Some(caller) = self.checking_inline
-            && func.signature(self.db).inline
+            && func.inline()
         {
-            self.inline_calls.push((caller, func));
+            self.inline_calls.push((caller, func.key()));
         }
         self.call_targets.insert(
             call,
@@ -1239,13 +1239,13 @@ replace the view rather than the elements it shows. Index down to single element
 
         // Add function signatures with ASTs.
         // First build a map of ASTs for lookup.
-        let ast_map: HashMap<bct::text::InternedText<'db>, StmtFun<'db>> = name_resolution.function_asts(self.db)
+        let ast_map: HashMap<bct::text::InternedText<'db>, FunHead<'db>> = name_resolution.function_asts(self.db)
             .iter()
-            .map(|(name, ast)| (*name, *ast))
+            .map(|(name, ast)| (*name, ast.clone()))
             .collect();
 
         for (name, func_type) in name_resolution.functions(self.db) {
-            if let Some(&func_ast) = ast_map.get(name) {
+            if let Some(func_ast) = ast_map.get(name).cloned() {
                 self.add_function_with_ast(*name, *func_type, func_ast, module_id);
             } else {
                 self.add_function(*name, *func_type);
@@ -1318,13 +1318,13 @@ replace the view rather than the elements it shows. Index down to single element
         }
 
         // Add function signatures with ASTs.
-        let ast_map: HashMap<bct::text::InternedText<'db>, StmtFun<'db>> = collected.function_asts
+        let ast_map: HashMap<bct::text::InternedText<'db>, FunHead<'db>> = collected.function_asts
             .iter()
-            .map(|(name, ast)| (*name, *ast))
+            .map(|(name, ast)| (*name, ast.clone()))
             .collect();
 
         for (name, func_type) in &collected.functions {
-            if let Some(&func_ast) = ast_map.get(name) {
+            if let Some(func_ast) = ast_map.get(name).cloned() {
                 self.add_function_with_ast(*name, *func_type, func_ast, module_id);
             } else {
                 self.add_function(*name, *func_type);

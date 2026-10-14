@@ -191,7 +191,7 @@ pub fn resolve_names_impl<'db>(
         let func_type = TypeFunction::new(db, param_types, param_modes, param_comptime, ret_ty);
         functions.push((name, func_type));
         if let Some(ast) = func_ast {
-            function_asts.push((name, ast));
+            function_asts.push((name, ast.head(db)));
         }
     }
 
@@ -361,20 +361,19 @@ pub fn resolve_module_exports<'db>(
     resolve_names_impl(db, parsed.statements(db)).functions
 }
 
-/// The functions one module declares, by name, for an importer to inline.
+/// The functions one module declares, by name, as an importer sees them.
 ///
-/// `StmtFun`'s identity is `(module_id, name, local_index)` and its signature
-/// and body ride tracked fields, so this value stays equal across an edit to
-/// either. Keyed on the module for the same reason as the exports above.
+/// A `FunHead` holds no body, so this value stays equal across an edit to
+/// one. Keyed on the module for the same reason as the exports above.
 #[salsa::tracked(returns(ref))]
 pub fn module_function_asts<'db>(
     db: &'db dyn Db,
     module: Module<'db>,
-) -> Vec<(InternedText<'db>, StmtFun<'db>)> {
+) -> Vec<(InternedText<'db>, FunHead<'db>)> {
     let parsed = datalove_datafun_parser::parse_module_ast(db, module);
     parsed.statements(db).iter()
         .filter_map(|statement| match statement {
-            Statement::Fun(func) => Some((func.name(db), *func)),
+            Statement::Fun(func) => Some((func.name(db), func.head(db))),
             _ => None,
         })
         .collect()

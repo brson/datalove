@@ -993,7 +993,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // is the bare const name the typechecker required.
                 let target = self.call_targets.get(&ExprKey::of_call(expr, call))
                     .expect("ownership analysis runs only on a typechecked body, where every call is resolved");
-                let callee_comptime: Vec<bool> = target.func(self.db).params(self.db).iter()
+                let callee_comptime: Vec<bool> = target.func(self.db).params().iter()
                     .map(|p| p.is_comptime)
                     .collect();
 

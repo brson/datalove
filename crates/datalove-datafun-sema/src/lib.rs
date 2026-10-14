@@ -10,7 +10,7 @@
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{Binding, Statement, StmtFun, ParamMode, ExprKey};
+use datalove_datafun_ast::ast::{Binding, FunHead, Statement, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
 /// Types of expressions, keyed by the expression's identity.
@@ -39,9 +39,9 @@ pub type CallTargets<'db> = BTreeMap<ExprKey<'db>, ResolvedCallTarget<'db>>;
 /// eliminating the need for runtime name lookup.
 #[salsa::tracked]
 pub struct ResolvedCallTarget<'db> {
-    /// The resolved function AST.
-    #[returns(copy)]
-    pub func: StmtFun<'db>,
+    /// What the call site knows of the function it resolved to.
+    #[returns(ref)]
+    pub func: FunHead<'db>,
     /// The source module (None for script-local functions).
     #[returns(copy)]
     pub module_id: Option<ModuleId<'db>>,

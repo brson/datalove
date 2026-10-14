@@ -512,6 +512,71 @@ impl<'db> StmtFun<'db> {
     pub fn return_type(self, db: &'db dyn salsa::Database) -> Option<datalit::ast::TypeHint<'db>> {
         self.signature(db).return_type.clone()
     }
+
+    /// What a caller or an importer knows of this function.
+    pub fn head(self, db: &'db dyn salsa::Database) -> FunHead<'db> {
+        FunHead {
+            module_id: self.module_id(db),
+            name: self.name(db),
+            local_index: self.local_index(db),
+            signature: self.signature(db).clone(),
+        }
+    }
+}
+
+/// Which function: the module declaring it, its name, and where its span is
+/// filed, which tells apart two declarations of one name.
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct FunKey<'db> {
+    pub module_id: Option<ModuleId<'db>>,
+    pub name: InternedText<'db>,
+    pub local_index: u32,
+}
+
+/// What a caller or an importer knows of a function: where it is declared, and
+/// its signature.
+///
+/// Held wherever a function is named outside the parse that declared it, in
+/// place of its `StmtFun`. A `StmtFun` is a salsa struct owned by that parse,
+/// and nothing downstream of the parse should need one to stay alive; this is
+/// the part of it they read, by value. It compares equal across an edit to the
+/// function's body, as the `StmtFun`'s id did.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct FunHead<'db> {
+    /// The module declaring it, or None for a script's own function.
+    pub module_id: Option<ModuleId<'db>>,
+    pub name: InternedText<'db>,
+    /// Where its span is filed, in `DatafunSpans::fun_spans`.
+    pub local_index: u32,
+    pub signature: FunSignature<'db>,
+}
+
+impl<'db> FunHead<'db> {
+    pub fn key(&self) -> FunKey<'db> {
+        FunKey { module_id: self.module_id, name: self.name, local_index: self.local_index }
+    }
+
+    pub fn type_params(&self) -> &Vec<InternedText<'db>> {
+        &self.signature.type_params
+    }
+
+    pub fn type_bounds(&self) -> &Vec<Option<TypeBound>> {
+        &self.signature.type_bounds
+    }
+
+    pub fn params(&self) -> &Vec<FunParam<'db>> {
+        &self.signature.params
+    }
+
+    pub fn return_type(&self) -> Option<datalit::ast::TypeHint<'db>> {
+        self.signature.return_type.clone()
+    }
+
+    pub fn inline(&self) -> bool {
+        self.signature.inline
+    }
 }
 
 

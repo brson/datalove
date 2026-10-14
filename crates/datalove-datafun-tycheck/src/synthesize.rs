@@ -1053,9 +1053,9 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
     // Store resolved call target for interpreter.
     // A bound says which types its parameter may be, and this is where that is
     // settled: the call site is what picks one.
-    if let Some((func_ast, _)) = func_ast {
-        let bounds = func_ast.type_bounds(db);
-        for (i, param) in func_ast.type_params(db).iter().enumerate() {
+    if let Some((func_ast, _)) = &func_ast {
+        let bounds = func_ast.type_bounds();
+        for (i, param) in func_ast.type_params().iter().enumerate() {
             let Some(Some(bound)) = bounds.get(i) else { continue };
             let Some(bound_to) = bindings.get(param) else { continue };
             if !bound_admits(ctx, *bound, bound_to) {
@@ -1079,7 +1079,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
         // because standing in for it would hand the callee a descriptor for
         // `data` and it would build the wrong thing.
         let mut type_args = Vec::new();
-        for param in func_ast.type_params(db).iter() {
+        for param in func_ast.type_params().iter() {
             match bindings.get(param) {
                 Some(bound_to) => type_args.push(bound_to.clone()),
                 None => {

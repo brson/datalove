@@ -260,6 +260,19 @@ changed. It differs from the design above in four ways:
   entered and restored after. Statements hold `ExprId`s, and `ctx.expr(id)`
   makes a handle from one.
 
+**Phase 2's first half** replaced every stored `StmtFun` with a `FunHead`:
+the declaring module, the name, the `local_index` and the `FunSignature`, by
+value. That is where the design above said `FunKey`. A key needs a query to
+look the signature up by, and the readers -- lowering, ownership, the
+typechecker's arity and bound checks -- want only the signature, so carrying
+it is simpler than looking it up. A script's own function and a rider's native
+also have no module to look one up in. `FunHead` compares equal across a body
+edit, as the `StmtFun` id did, and changes with the signature, as the
+`TypeFunction` beside it already did, so nothing re-runs differently; the
+incremental tests did not change. `FunKey` is the `Copy` part (module, name,
+`local_index`), and the inline-cycle check keys on it. Rider natives stopped
+being minted as `StmtFun`s with empty bodies.
+
 ## Verifying each phase
 
 - **Parse snapshots**, against a baseline written before the phase: identical,

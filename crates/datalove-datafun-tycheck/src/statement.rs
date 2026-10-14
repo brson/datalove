@@ -180,7 +180,7 @@ fn unordered_binding_error<'db>(
         .expect("a type parameter is only in scope inside a function body");
     let site = match at {
         Some(value) => crate::ErrorSite::Expr(value.key()),
-        None => crate::ErrorSite::Fun(fun.local_index(db)),
+        None => crate::ErrorSite::Fun(fun.local_index),
     };
     let param = param.as_str(db);
     ctx.push_coded(
@@ -194,7 +194,7 @@ with `where {{ {param} is ord, }}`, which every type there is satisfies")),
     Some(TypeError::CollectionKeyNotOrdered {
         param: param.S(),
         position: S("a binding"),
-        fun_local_index: fun.local_index(db),
+        fun_local_index: fun.local_index,
     })
 }
 
@@ -277,7 +277,7 @@ pub fn check_statement<'db>(
             };
             // A second definition of the name was reported (F086) and the
             // signature is the first one's, which is no basis for its body.
-            if ctx.lookup_function_ast(name).is_some_and(|(ast, _)| ast != *stmt) {
+            if ctx.lookup_function_ast(name).is_some_and(|(ast, _)| ast.key() != stmt.head(db).key()) {
                 return;
             }
 
@@ -343,8 +343,9 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             let saved_enclosing_fun = ctx.enclosing_fun;
             ctx.variables.retain(|_, binding| binding.is_const);
             ctx.in_function_body = true;
-            ctx.checking_inline = stmt.signature(db).inline.then_some(*stmt);
-            ctx.enclosing_fun = Some(*stmt);
+            let key = stmt.head(db).key();
+            ctx.checking_inline = stmt.signature(db).inline.then_some(key);
+            ctx.enclosing_fun = Some(key);
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
             // `var x: T` and `let pair: (T, T)` name a type the function has,

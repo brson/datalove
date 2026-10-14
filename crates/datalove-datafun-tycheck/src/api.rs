@@ -56,7 +56,7 @@ pub struct UnitProvides<'db> {
     /// Variables: (name, type, is_mutable).
     pub vars: Vec<(InternedText<'db>, Type<'db>, bool)>,
     pub fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
-    pub fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>,
+    pub fn_asts: Vec<(InternedText<'db>, FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     pub module_aliases: Vec<(InternedText<'db>, String)>,
     /// Which of `vars` are consts rather than `let`/`var` bindings.
@@ -83,7 +83,7 @@ pub struct ScriptBinding<'db> {
     /// may name and what a const expression may name.
     pub is_const: bool,
     pub func: Option<TypeFunction<'db>>,
-    pub func_ast: Option<(StmtFun<'db>, Option<ModuleId<'db>>)>,
+    pub func_ast: Option<(FunHead<'db>, Option<ModuleId<'db>>)>,
 }
 
 impl<'db> ScriptBinding<'db> {
@@ -107,7 +107,7 @@ pub struct ScriptUnitTypecheckOutput<'db> {
     #[returns(ref)]
     pub new_fns: Vec<(InternedText<'db>, TypeFunction<'db>)>,
     #[returns(ref)]
-    pub new_fn_asts: Vec<(InternedText<'db>, StmtFun<'db>, Option<ModuleId<'db>>)>,
+    pub new_fn_asts: Vec<(InternedText<'db>, FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Module aliases from require statements: (alias, full path).
     #[returns(ref)]
     pub new_module_aliases: Vec<(InternedText<'db>, String)>,
@@ -230,7 +230,7 @@ pub fn binding_at<'db>(
             if let Some((_, ast, module_id)) =
                 provides.fn_asts.iter().rev().find(|(n, _, _)| *n == name)
             {
-                found.func_ast = Some((*ast, *module_id));
+                found.func_ast = Some((ast.clone(), *module_id));
             }
         }
         current = prefix.prev(db);
@@ -384,7 +384,7 @@ pub fn typecheck_script_unit<'db>(
                 }
                 bound.insert(item_name, source_module_id);
                 ctx.add_function(item_name, func_ty);
-                ctx.function_asts.insert(item_name, (func_ast, source_module_id));
+                ctx.function_asts.insert(item_name, (func_ast.clone(), source_module_id));
                 new_fns.push((item_name, func_ty));
                 new_fn_asts.push((item_name, func_ast, source_module_id));
             }
@@ -442,7 +442,7 @@ pub fn typecheck_script_unit<'db>(
                         let name = fun_stmt.name(db);
                         if let Some(func_ty) = ctx.functions.get(&name) {
                             new_fns.push((name, *func_ty));
-                            new_fn_asts.push((name, *fun_stmt, None));
+                            new_fn_asts.push((name, fun_stmt.head(db), None));
                         }
                     }
                     _ => {}
@@ -562,7 +562,7 @@ use bct::module_graph::Module;
 ///
 /// Contains: (local_name, func_type, func_ast, source_module)
 pub type ResolvedImportData<'db> =
-    (InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>, u32);
+    (InternedText<'db>, TypeFunction<'db>, Option<FunHead<'db>>, ModuleId<'db>, u32);
 
 /// Typecheck a single module with logging.
 ///
@@ -631,7 +631,7 @@ pub fn typecheck_module<'db>(
         }
         import_sources.insert(*local_name, source);
         if let Some(ast) = func_ast {
-            ctx.add_imported_function(*local_name, *func_type, *ast, *source_module);
+            ctx.add_imported_function(*local_name, *func_type, ast.clone(), *source_module);
         } else {
             ctx.add_function(*local_name, *func_type);
         }
@@ -921,7 +921,7 @@ pub fn resolve_module_imports<'db>(
     let graph = parsed_graph.graph(db);
     let mut dep_exports: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>> =
         BTreeMap::new();
-    let mut dep_function_asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>> =
+    let mut dep_function_asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>> =
         BTreeMap::new();
     for (_alias, target_id) in parsed_graph.get_requires(db, module_id) {
         let dep = graph.get_module(db, *target_id)
@@ -1090,7 +1090,7 @@ fn resolve_module_imports_internal<'db>(
     parsed: &ParsedStatements<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
     all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-    module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, StmtFun<'db>)>>,
+    module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>>,
 ) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>, crate::QualifiedScope<'db>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
@@ -1124,7 +1124,7 @@ fn resolve_module_imports_internal<'db>(
                         let func_ast = module_function_asts
                             .get(&source_module_id)
                             .and_then(|funcs| funcs.iter().find(|(n, _)| *n == item_name))
-                            .map(|(_, ast)| *ast);
+                            .map(|(_, ast)| ast.clone());
 
                         resolved_imports.push(
                             (item_name, func_type, func_ast, source_module_id, import.local_index),
@@ -1155,7 +1155,7 @@ fn resolve_module_imports_internal<'db>(
                     let synthetic_module_id = rider.module_id;
                     let synthetic_fun = rider.function_stubs.iter()
                         .find(|(n, _)| *n == item_name)
-                        .map(|(_, stub)| *stub)
+                        .map(|(_, stub)| stub.clone())
                         .expect("a rider function has a stub, both coming from its interface");
                     resolved_imports.push(
                         (item_name, func_type, Some(synthetic_fun), synthetic_module_id, import.local_index),
@@ -1185,7 +1185,7 @@ fn resolve_module_imports_internal<'db>(
             return Some(func.map(|func| {
                 let ast = module_function_asts.get(&module_id)
                     .and_then(|funcs| funcs.iter().find(|(n, _)| *n == name))
-                    .map(|(_, ast)| *ast)
+                    .map(|(_, ast)| ast.clone())
                     .expect("an exported function has an AST, both coming from its module");
                 (func, ast, module_id)
             }));
@@ -1197,7 +1197,7 @@ fn resolve_module_imports_internal<'db>(
         Some(func.map(|func| {
             let stub = rider.function_stubs.iter()
                 .find(|(n, _)| *n == name)
-                .map(|(_, stub)| *stub)
+                .map(|(_, stub)| stub.clone())
                 .expect("a rider function has a stub, both coming from its interface");
             (func, stub, rider.module_id)
         }))
@@ -1216,7 +1216,7 @@ fn resolve_qualified_calls<'db>(
     mut target: impl FnMut(
         InternedText<'db>,
         InternedText<'db>,
-    ) -> Option<Option<(TypeFunction<'db>, StmtFun<'db>, ModuleId<'db>)>>,
+    ) -> Option<Option<(TypeFunction<'db>, FunHead<'db>, ModuleId<'db>)>>,
 ) -> crate::QualifiedScope<'db> {
     let mut scope = crate::QualifiedScope::default();
     for &(alias, name) in calls {
@@ -1308,13 +1308,13 @@ pub fn script_module_names<'db>(
 fn module_function<'db>(
     collected: &CollectedNames<'db>,
     name: InternedText<'db>,
-) -> Option<(TypeFunction<'db>, StmtFun<'db>)> {
+) -> Option<(TypeFunction<'db>, FunHead<'db>)> {
     let func_ty = collected.functions.iter()
         .find(|(declared, _)| *declared == name)
         .map(|(_, func_ty)| *func_ty)?;
     let ast = collected.function_asts.iter()
         .find(|(declared, _)| *declared == name)
-        .map(|(_, ast)| *ast)?;
+        .map(|(_, ast)| ast.clone())?;
     Some((func_ty, ast))
 }
 
@@ -1413,7 +1413,7 @@ fn resolve_script_imports<'db>(
     inherited_alias: impl Fn(InternedText<'db>) -> Option<String>,
     modules_by_path: &HashMap<String, Module<'db>>,
 ) -> (
-    Vec<(InternedText<'db>, TypeFunction<'db>, StmtFun<'db>, Option<ModuleId<'db>>, u32)>,
+    Vec<(InternedText<'db>, TypeFunction<'db>, FunHead<'db>, Option<ModuleId<'db>>, u32)>,
     Vec<crate::UnresolvedImport>,
     Vec<String>,
 ) {

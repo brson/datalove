@@ -538,9 +538,9 @@ pub struct ResolvedImport<'db> {
     /// Type of the imported function.
     #[returns(copy)]
     pub func_type: TypeFunction<'db>,
-    /// AST of the imported function (for inlining).
-    #[returns(copy)]
-    pub func_ast: Option<StmtFun<'db>>,
+    /// What the importer knows of the imported function.
+    #[returns(ref)]
+    pub func_ast: Option<FunHead<'db>>,
     /// Module the function was imported from.
     #[returns(copy)]
     pub source_module: ModuleId<'db>,
@@ -559,7 +559,7 @@ pub struct ModuleImportResolution<'db> {
     /// Resolved imports: (local_name, func_type, func_ast, source_module_id,
     /// local_index), the last being where the import's span is filed.
     #[returns(ref)]
-    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<StmtFun<'db>>, ModuleId<'db>, u32)>,
+    pub imports: Vec<(InternedText<'db>, TypeFunction<'db>, Option<FunHead<'db>>, ModuleId<'db>, u32)>,
 
     /// Imports that name nothing.
     #[returns(ref)]
@@ -589,13 +589,13 @@ pub struct QualifiedScope<'db> {
 }
 
 /// A function a qualified call names, through the alias it was written with.
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct QualifiedFunction<'db> {
     pub alias: InternedText<'db>,
     pub name: InternedText<'db>,
     pub func: TypeFunction<'db>,
-    pub ast: StmtFun<'db>,
+    pub ast: FunHead<'db>,
     pub module_id: ModuleId<'db>,
 }
 
