@@ -118,7 +118,7 @@ fn render_script_type_diagnostics<'db>(
     script_path: &rmx::std::path::Path,
     cwd: &rmx::std::path::Path,
 ) {
-    let locate = |text: datalove::bct::text::Text<'db>| files.get(&text.source(db)).cloned();
+    let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
     render::render_module_diagnostics(db, &[], diagnostics, &locate, script_path, cwd);
 }
 
@@ -140,7 +140,7 @@ fn bail_on_module_errors<'db>(
     let cwd = rmx::std::env::current_dir().unwrap_or_default();
 
     let files = source_files(descriptor, pipeline);
-    let locate = |text: datalove::bct::text::Text<'db>| files.get(&text.source(db)).cloned();
+    let locate = |source: datalove::bct::input::Source| files.get(&source).cloned();
 
     let parse = compiled.get_module_parse_diagnostics(db);
     let types = compiled.get_module_type_diagnostics(db);

@@ -59,7 +59,7 @@ impl<'db> SeenNames<'db> {
         &mut self,
         db: &'db dyn salsa::Database,
         name: bct::text::InternedText<'db>,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         what: &str,
     ) -> bool {
         use datalove_diagnostic::DiagnosticBuilderExt;

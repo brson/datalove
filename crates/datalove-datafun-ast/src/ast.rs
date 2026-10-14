@@ -3,9 +3,9 @@ use rmx::prelude::*;
 use std::fmt;
 
 use bct::module_graph::ModuleId;
-use bct::text::{InternedText, Text};
+use bct::text::InternedText;
 use bct::text::ByteSpan;
-use bct::diagnostic::SpanEntry;
+use bct::text::TextSpan;
 use datalove_datalit as datalit;
 
 /// Stable identity of an expression.
@@ -70,15 +70,15 @@ impl<'db> ExprKey<'db> {
 /// Span entry for a parsed expression.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ParseSpanEntry<'db> {
+pub struct ParseTextSpan<'db> {
     pub expr_key: ExprKey<'db>,
     pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
-impl<'db> ParseSpanEntry<'db> {
+impl<'db> ParseTextSpan<'db> {
     pub fn new(expr_key: ExprKey<'db>, source: bct::input::Source, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_key, source, span }
+        ParseTextSpan { expr_key, source, span }
     }
 }
 
@@ -121,25 +121,25 @@ pub struct ParsedExpr<'db> {
 #[derive(salsa::SalsaValue)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
-    pub expr_spans: Vec<ParseSpanEntry<'db>>,
+    pub expr_spans: Vec<ParseTextSpan<'db>>,
     /// Break statement spans, indexed by local_index.
-    pub break_spans: Vec<SpanEntry>,
+    pub break_spans: Vec<TextSpan>,
     /// Continue statement spans, indexed by local_index.
-    pub continue_spans: Vec<SpanEntry>,
+    pub continue_spans: Vec<TextSpan>,
     /// Return statement spans, indexed by local_index.
-    pub ret_spans: Vec<SpanEntry>,
+    pub ret_spans: Vec<TextSpan>,
     /// Set statement spans, indexed by local_index.
-    pub set_spans: Vec<SpanEntry>,
+    pub set_spans: Vec<TextSpan>,
     /// Function definition spans, indexed by local_index.
-    pub fun_spans: Vec<SpanEntry>,
+    pub fun_spans: Vec<TextSpan>,
     /// Type alias spans, indexed by local_index.
-    pub type_alias_spans: Vec<SpanEntry>,
+    pub type_alias_spans: Vec<TextSpan>,
     /// Import statement spans, indexed by position among the imports.
-    pub import_spans: Vec<SpanEntry>,
+    pub import_spans: Vec<TextSpan>,
     /// Require statement spans, indexed by position among the requires.
-    pub require_spans: Vec<SpanEntry>,
+    pub require_spans: Vec<TextSpan>,
     /// Spans of bare names in type position, indexed by local_index.
-    pub alias_spans: Vec<SpanEntry>,
+    pub alias_spans: Vec<TextSpan>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]
@@ -616,7 +616,7 @@ pub enum MatchCaseKind<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct StmtParseError<'db> {
-    pub text: Text<'db>,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
 }
@@ -1080,7 +1080,7 @@ pub struct ExprTableRow<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprFunParseError<'db> {
-    pub text: Text<'db>,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
 }

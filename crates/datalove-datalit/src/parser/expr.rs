@@ -33,7 +33,7 @@ impl<'db> Parser<'db> {
                 // writer meant by it; a missing `/` would say the same thing
                 // twice.
                 let error_expr = ast::Expr::ParseError(ast::ExprParseError {
-                    text: e.text, span: e.span.C(), message: e.message,
+                    source: e.source, span: e.span.C(), message: e.message,
                 });
                 self.eat_sigil(Sigil::SlashForward);
                 ast::ExprFull::new(Some(local_index), Some(type_hint.C()), error_expr)
@@ -62,9 +62,9 @@ impl<'db> Parser<'db> {
         // Record span for this expression, from its hint if it has one to the
         // end of the expression.
         let end = self.prev_end().unwrap_or(ts.span.end).max(ts.span.end);
-        self.expr_spans.push(ast::ParseSpanEntry::new(
+        self.expr_spans.push(ast::ParseTextSpan::new(
             local_index,
-            ts.text.source(self.db),
+            ts.source,
             ts.span.start..end,
         ));
 

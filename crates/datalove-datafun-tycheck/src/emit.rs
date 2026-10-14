@@ -16,34 +16,34 @@ use crate::{DatafunSpans, ModuleId, ParsedModuleGraph, PendingDiagnostic, Recove
 /// (ParsedModuleGraph + ModuleId) so diagnostic emission can be shared.
 pub trait SpanLookup<'db> {
     /// Look up span for an expression by its stable key.
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>>;
+    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan>;
 
     /// Look up span for a break statement by local_index.
-    fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a continue statement by local_index.
-    fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a return statement by local_index.
-    fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a set statement by local_index.
-    fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a function definition by local_index.
-    fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for an import statement by local_index.
-    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a require statement by local_index.
-    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up the span of a bare name in type position by local_index.
-    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up the span of a type alias definition by local_index.
-    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>>;
+    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan>;
 
     /// Look up span for a function definition in a specific module.
     ///
@@ -55,7 +55,7 @@ pub trait SpanLookup<'db> {
         db: &'db dyn crate::Db,
         module_id: Option<ModuleId<'db>>,
         local_index: u32,
-    ) -> Option<TextSpan<'db>>;
+    ) -> Option<TextSpan>;
 }
 
 /// SpanLookup implementation for local spans (DatafunSpans).
@@ -70,74 +70,44 @@ impl<'a, 'db> LocalSpanLookup<'a, 'db> {
 }
 
 impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>> {
-        self.spans.lookup_key(expr_key).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_expr(&self, _db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan> {
+        self.spans.lookup_key(expr_key)
     }
 
-    fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_break(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_break(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_break(local_index).cloned()
     }
 
-    fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_continue(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_continue(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_continue(local_index).cloned()
     }
 
-    fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_ret(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_ret(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_ret(local_index).cloned()
     }
 
-    fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_set(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_set(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_set(local_index).cloned()
     }
 
-    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_import(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_import(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_import(local_index).cloned()
     }
 
-    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_require(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_require(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_require(local_index).cloned()
     }
 
-    fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_fun(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_fun(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_fun(local_index).cloned()
     }
 
-    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_alias(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_alias(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_alias(local_index).cloned()
     }
 
-    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
-        self.spans.lookup_type_alias(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+    fn lookup_type_alias(&self, _db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
+        self.spans.lookup_type_alias(local_index).cloned()
     }
 
     fn lookup_fun_in_module(
@@ -145,7 +115,7 @@ impl<'db> SpanLookup<'db> for LocalSpanLookup<'_, 'db> {
         db: &'db dyn crate::Db,
         _module_id: Option<ModuleId<'db>>,
         local_index: u32,
-    ) -> Option<TextSpan<'db>> {
+    ) -> Option<TextSpan> {
         // For local spans, ignore module_id and use local spans.
         self.lookup_fun(db, local_index)
     }
@@ -176,84 +146,54 @@ impl<'a, 'db> ModuleGraphSpanLookup<'a, 'db> {
 }
 
 impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
-    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan<'db>> {
+    fn lookup_expr(&self, db: &'db dyn crate::Db, expr_key: ExprKey<'db>) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_key(expr_key).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_key(expr_key)
     }
 
-    fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_break(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_break(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_break(local_index).cloned()
     }
 
-    fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_continue(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_continue(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_continue(local_index).cloned()
     }
 
-    fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_ret(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_ret(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_ret(local_index).cloned()
     }
 
-    fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_set(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_set(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_set(local_index).cloned()
     }
 
-    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_import(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_import(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_import(local_index).cloned()
     }
 
-    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_require(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_require(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_require(local_index).cloned()
     }
 
-    fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_fun(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_fun(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_fun(local_index).cloned()
     }
 
-    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_alias(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_alias(local_index).cloned()
     }
 
-    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan<'db>> {
+    fn lookup_type_alias(&self, db: &'db dyn crate::Db, local_index: u32) -> Option<TextSpan> {
         let spans = self.spans(db, self.module_id)?;
-        spans.lookup_type_alias(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_type_alias(local_index).cloned()
     }
 
     fn lookup_fun_in_module(
@@ -261,14 +201,11 @@ impl<'db> SpanLookup<'db> for ModuleGraphSpanLookup<'_, 'db> {
         db: &'db dyn crate::Db,
         module_id: Option<ModuleId<'db>>,
         local_index: u32,
-    ) -> Option<TextSpan<'db>> {
+    ) -> Option<TextSpan> {
         // For module graph, look up in the specified module if provided.
         let target_module = module_id.unwrap_or(self.module_id);
         let spans = self.spans(db, target_module)?;
-        spans.lookup_fun(local_index).map(|entry| {
-            let (text, span) = entry.to_text_and_span(db);
-            TextSpan::new(text, span)
-        })
+        spans.lookup_fun(local_index).cloned()
     }
 }
 
@@ -870,9 +807,9 @@ fn format_single_diagnostic<'db>(
 }
 
 /// Format a TextSpan as a location string (e.g., "line 10, col 5").
-fn format_location<'db>(db: &'db dyn crate::Db, ts: &bct::text::TextSpan<'db>) -> String {
+fn format_location<'db>(db: &'db dyn crate::Db, ts: &bct::text::TextSpan) -> String {
     let span = &ts.span;
-    let text = ts.text.text(db);
+    let text = ts.source.text(db);
 
     // Calculate line and column from byte offset.
     let start = span.start as usize;

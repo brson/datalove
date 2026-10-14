@@ -6,7 +6,8 @@ use rmx::std::path::Path;
 
 use datalove::bct::diagnostic::{Diagnostic, DiagnosticBuilder};
 use datalove::bct::render::{self, Renderer};
-use datalove::bct::text::{Text, TextSpan};
+use datalove::bct::input::Source;
+use datalove::bct::text::TextSpan;
 
 use datalove::datafun_ast::ast::ExprKey;
 use datalove::datafun_ast::spans::DatafunSpans;
@@ -57,7 +58,7 @@ pub fn render_module_diagnostics<'db>(
     db: &'db dyn datalove::datafun::Db,
     parse: &[&datalove::diagnostic::ParseDiagnostic],
     types: &[&datalove::diagnostic::TypeDiagnostic],
-    locate: &dyn Fn(Text<'db>) -> Option<rmx::std::path::PathBuf>,
+    locate: &dyn Fn(Source) -> Option<rmx::std::path::PathBuf>,
     file_path: &Path,
     cwd: &Path,
 ) {
@@ -103,11 +104,10 @@ pub fn render_ownership_errors_direct<'db>(
 
 /// Look up span for an expression by local_index.
 fn lookup_expr_span<'db>(
-    db: &'db dyn datalove::datafun::Db,
     spans: &DatafunSpans<'db>,
     expr_key: ExprKey<'db>,
-) -> Option<(Text<'db>, Range<usize>)> {
-    spans.lookup_key(expr_key).map(|entry| entry.to_text_and_span(db))
+) -> Option<(Source, Range<usize>)> {
+    spans.lookup_key(expr_key).map(|entry| (entry.source, entry.span.C()))
 }
 
 /// The help for an error a `@` would fix, showing the line as it would read.
@@ -134,7 +134,7 @@ fn ownership_diagnostic<'db>(
 ) -> Option<Diagnostic<'db>> {
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             let mut builder =
                 DiagnosticBuilder::error(db, &fmt!("`{name}` was given away by an earlier input"))
                     .code("D013")
@@ -145,7 +145,7 @@ fn ownership_diagnostic<'db>(
             Some(builder.build())
         }
         AnalysisError::UseAfterMove { expr_key, moved_at, name, recovery_hint } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             let mut builder = DiagnosticBuilder::error(db, &fmt!("use of moved value: `{name}`"))
                 .code("D001")
                 .primary_label(TextSpan::new(text, span.C()), "value used after move");
@@ -154,7 +154,7 @@ fn ownership_diagnostic<'db>(
             // where the `@` goes.
             let move_span = match moved_at == expr_key {
                 true => None,
-                false => lookup_expr_span(db, spans, *moved_at).map(|(_, span)| span),
+                false => lookup_expr_span(spans, *moved_at).map(|(_, span)| span),
             };
             if let Some(move_span) = &move_span {
                 builder = builder
@@ -169,14 +169,14 @@ fn ownership_diagnostic<'db>(
             Some(builder.build())
         }
         AnalysisError::DoubleMove { expr_key, moved_at, name, recovery_hint } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             let mut builder = DiagnosticBuilder::error(db, &fmt!("value moved twice: `{name}`"))
                 .code("D002")
                 .primary_label(TextSpan::new(text, span.C()), "second move here");
 
             let move_span = match moved_at == expr_key {
                 true => None,
-                false => lookup_expr_span(db, spans, *moved_at).map(|(_, span)| span),
+                false => lookup_expr_span(spans, *moved_at).map(|(_, span)| span),
             };
             if let Some(move_span) = &move_span {
                 builder = builder
@@ -191,7 +191,7 @@ fn ownership_diagnostic<'db>(
             Some(builder.build())
         }
         AnalysisError::CannotMoveBorrowed { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(db, &fmt!("cannot move borrowed value: `{name}`"))
                     .code("D003")
@@ -201,7 +201,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move out of const: `{name}`"))
                 .code("D003")
                 .primary_label(TextSpan::new(text, span.C()), "cannot move out of const")
@@ -212,7 +212,7 @@ fn ownership_diagnostic<'db>(
             Some(builder.build())
         }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(
                     db,
@@ -224,7 +224,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::AliasedMutableArgument { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(db, &fmt!("aliased mutable argument: `{name}`"))
                     .code("D010")
@@ -234,7 +234,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::CannotMutateImmutable { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(
                     db,
@@ -247,7 +247,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::CannotMutateTemporary { expr_key } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
                     .code("D012")
@@ -257,7 +257,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::ReadUninitialized { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(db, &fmt!("read of uninitialized binding: `{name}`"))
                     .code("D005")
@@ -266,7 +266,7 @@ fn ownership_diagnostic<'db>(
             )
         }
         AnalysisError::MoveInLoop { expr_key, name, recovery_hint } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             let mut builder = DiagnosticBuilder::error(db, &fmt!("cannot move `{name}` in loop"))
                 .code("D007")
                 .primary_label(TextSpan::new(text, span.C()), "value moved inside loop");
@@ -276,7 +276,7 @@ fn ownership_diagnostic<'db>(
             Some(builder.build())
         }
         AnalysisError::OutParamPartialWrite { expr_key, name } => {
-            let (text, span) = lookup_expr_span(db, spans, *expr_key)?;
+            let (text, span) = lookup_expr_span(spans, *expr_key)?;
             Some(
                 DiagnosticBuilder::error(
                     db,
@@ -297,7 +297,7 @@ fn ownership_diagnostic<'db>(
 
             // The branch's own move or `set` is what to look at; the condition
             // only says which `if` or `match` it was.
-            builder = match changed_at.and_then(|key| lookup_expr_span(db, spans, key)) {
+            builder = match changed_at.and_then(|key| lookup_expr_span(spans, key)) {
                 Some((text, span)) => {
                     let label = match gave_away {
                         true => "given away here",
@@ -306,11 +306,11 @@ fn ownership_diagnostic<'db>(
                     builder.primary_label(TextSpan::new(text, span), label)
                 }
                 None => {
-                    let (text, span) = lookup_expr_span(db, spans, *at)?;
+                    let (text, span) = lookup_expr_span(spans, *at)?;
                     builder.primary_label(TextSpan::new(text, span), "the branches of this disagree")
                 }
             };
-            if let Some((text, span)) = moved_before.and_then(|key| lookup_expr_span(db, spans, key)) {
+            if let Some((text, span)) = moved_before.and_then(|key| lookup_expr_span(spans, key)) {
                 builder = builder.secondary_label(
                     TextSpan::new(text, span),
                     &fmt!("`{name}` given away here, before the branches"),

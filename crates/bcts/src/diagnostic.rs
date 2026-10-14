@@ -8,32 +8,7 @@
 
 use rmx::prelude::*;
 use crate::input::Source;
-use crate::text::{Text, InternedText, TextSpan, ByteSpan};
-
-/// Single span entry for efficient lookup.
-///
-/// Names the source rather than the `Text` derived from it. A `Text` is a
-/// tracked struct and an `InternedText` is collectable, so an id held for
-/// either goes stale: salsa deletes the tracked slot when the query that made
-/// it runs again, and recycles an interned slot that has gone unread. Reading
-/// a stale id panics, or in a build without debug assertions hands back
-/// whatever now occupies the slot. A `Source` is an input, so its id is good
-/// for the life of the database.
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct SpanEntry {
-    pub source: Source,
-    pub span: ByteSpan,
-}
-
-impl SpanEntry {
-    pub fn new(source: Source, span: ByteSpan) -> Self {
-        SpanEntry { source, span }
-    }
-
-    pub fn to_text_and_span<'db>(&self, db: &'db dyn crate::Db) -> (Text<'db>, ByteSpan) {
-        (crate::source_map::basic_source_map(db, self.source).text(db), self.span.C())
-    }
-}
+use crate::text::{InternedText, TextSpan, ByteSpan};
 
 /// Diagnostic severity level.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -68,12 +43,11 @@ pub enum LabelStyle {
 
 /// A labeled span within a diagnostic.
 ///
-/// References a Text (salsa-tracked) + byte range.
-/// The outer driver maps Text to source metadata (path, line numbers).
+/// The outer driver maps the source to its metadata (path, line numbers).
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct DiagnosticLabel<'db> {
-    /// Which text this span is in.
-    pub text: Text<'db>,
+    /// Which source this span is in.
+    pub source: Source,
     /// Byte offset range within that text.
     pub span: ByteSpan,
     /// Optional label message.
@@ -84,13 +58,13 @@ pub struct DiagnosticLabel<'db> {
 
 impl<'db> DiagnosticLabel<'db> {
     pub fn new(
-        text: Text<'db>,
+        source: Source,
         span: ByteSpan,
         message: Option<InternedText<'db>>,
         style: LabelStyle,
     ) -> Self {
         DiagnosticLabel {
-            text,
+            source,
             span,
             message,
             style,
@@ -101,7 +75,7 @@ impl<'db> DiagnosticLabel<'db> {
 /// A code suggestion for a fix.
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Suggestion<'db> {
-    pub text: Text<'db>,
+    pub source: Source,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
     pub replacement: Option<InternedText<'db>>,
@@ -109,13 +83,13 @@ pub struct Suggestion<'db> {
 
 impl<'db> Suggestion<'db> {
     pub fn new(
-        text: Text<'db>,
+        source: Source,
         span: ByteSpan,
         message: InternedText<'db>,
         replacement: Option<InternedText<'db>>,
     ) -> Self {
         Suggestion {
-            text,
+            source,
             span,
             message,
             replacement,
@@ -175,7 +149,7 @@ impl<'db> Diagnostic<'db> {
             code: self.code.map(|c| c.as_str(db).to_string()),
             message: self.message.as_str(db).to_string(),
             labels: self.labels.iter().map(|l| StoredLabel {
-                source: l.text.source(db),
+                source: l.source,
                 span: l.span.C(),
                 message: l.message.map(|m| m.as_str(db).to_string()),
                 style: l.style,
@@ -194,7 +168,7 @@ impl StoredDiagnostic {
             code: self.code.as_ref().map(|c| InternedText::new(db, c.C())),
             message: InternedText::new(db, self.message.C()),
             labels: self.labels.iter().map(|l| DiagnosticLabel {
-                text: crate::source_map::basic_source_map(db, l.source).text(db),
+                source: l.source,
                 span: l.span.C(),
                 message: l.message.as_ref().map(|m| InternedText::new(db, m.C())),
                 style: l.style,
@@ -259,9 +233,9 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a primary label (the main error location).
-    pub fn primary_label(mut self, ts: TextSpan<'db>, msg: &str) -> Self {
+    pub fn primary_label(mut self, ts: TextSpan, msg: &str) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: Some(InternedText::new(self.db, msg.S())),
             style: LabelStyle::Primary,
@@ -270,9 +244,9 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a secondary label (a related location).
-    pub fn secondary_label(mut self, ts: TextSpan<'db>, msg: &str) -> Self {
+    pub fn secondary_label(mut self, ts: TextSpan, msg: &str) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: Some(InternedText::new(self.db, msg.S())),
             style: LabelStyle::Secondary,
@@ -281,9 +255,9 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a primary label without a message.
-    pub fn primary_span(mut self, ts: TextSpan<'db>) -> Self {
+    pub fn primary_span(mut self, ts: TextSpan) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: None,
             style: LabelStyle::Primary,
@@ -292,9 +266,9 @@ impl<'db> DiagnosticBuilder<'db> {
     }
 
     /// Add a secondary label without a message.
-    pub fn secondary_span(mut self, ts: TextSpan<'db>) -> Self {
+    pub fn secondary_span(mut self, ts: TextSpan) -> Self {
         self.diagnostic.labels.push(DiagnosticLabel {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: None,
             style: LabelStyle::Secondary,
@@ -332,12 +306,12 @@ impl<'db> DiagnosticBuilder<'db> {
     /// Add a suggestion with optional replacement text.
     pub fn suggestion(
         mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         msg: &str,
         replacement: Option<&str>,
     ) -> Self {
         self.diagnostic.suggestions.push(Suggestion {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: InternedText::new(self.db, msg.S()),
             replacement: replacement.map(|r| InternedText::new(self.db, r.S())),

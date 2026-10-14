@@ -289,7 +289,7 @@ statements that run belong in a function or a script")
     fn declare_pattern_name(
         &mut self,
         name: InternedText<'db>,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         seen: &mut datalit::parser_util::SeenNames<'db>,
     ) {
         if !seen.take(self.db, name, ts, "binding") {
@@ -689,7 +689,7 @@ statements that run belong in a function or a script")
     /// One line of a `with` clause: `T is float`.
     fn parse_one_bound(
         &mut self,
-    ) -> Option<(InternedText<'db>, ast::TypeBound, TextSpan<'db>)> {
+    ) -> Option<(InternedText<'db>, ast::TypeBound, TextSpan)> {
         let name_span = self.peek_text_span();
         let name = self.eat_name()?;
         if !self.eat_word("is") {
@@ -719,7 +719,7 @@ statements that run belong in a function or a script")
     fn parse_fun_params(
         &mut self,
         iter: Cursor<'db>,
-        context: Option<(TextSpan<'db>, &'static str)>,
+        context: Option<(TextSpan, &'static str)>,
     ) -> Vec<ast::FunParam<'db>> {
         let mut sub = Parser::from_branch_with_context(self.db, iter, self.source_text(), context, self.module_id());
         // A parameter list holds types and nothing else, so the alias

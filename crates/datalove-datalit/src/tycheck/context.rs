@@ -52,7 +52,7 @@ impl<'db> TypeContext<'db> {
     }
 
     /// Look up the source location for an expression (on-demand).
-    pub fn get_span(&self, expr: &ExprFull<'db>) -> Option<TextSpan<'db>> {
+    pub fn get_span(&self, expr: &ExprFull<'db>) -> Option<TextSpan> {
         let spans = crate::spans::datalit_spans(self.db, self.source);
         spans.get_text_span(self.db, expr)
     }

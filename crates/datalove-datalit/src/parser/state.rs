@@ -54,17 +54,17 @@ type Interned<'db> = Rc<RefCell<FxHashMap<&'db str, InternedText<'db>>>>;
 pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
     source: TokenSource<'db>,
-    pub(super) expr_spans: Vec<ast::ParseSpanEntry>,
+    pub(super) expr_spans: Vec<ast::ParseTextSpan>,
     /// Next position to hand out, shared with sub-parsers so that one parse
     /// numbers its expressions in a single sequence.
     pub(super) expr_counter: u32,
     /// The same for the bare names in type position, whose spans a branch's
     /// own parser collects on behalf of whatever stream asked for the type.
     pub(super) alias_counter: u32,
-    pub(super) alias_spans: Vec<bct::diagnostic::SpanEntry>,
+    pub(super) alias_spans: Vec<bct::text::TextSpan>,
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
-    source_text: bct::text::Text<'db>,
+    source_text: bct::input::Source,
     /// The same text as a string, which the tokens' spans index.
     text: &'db str,
     interned: Interned<'db>,
@@ -72,7 +72,7 @@ pub(super) struct Parser<'db> {
 
 impl<'db> Parser<'db> {
     /// Create a new parser with the given tokens (Vec-backed).
-    pub(super) fn new(db: &'db dyn crate::Db, tokens: Cursor<'db>, source_text: bct::text::Text<'db>) -> Self {
+    pub(super) fn new(db: &'db dyn crate::Db, tokens: Cursor<'db>, source_text: bct::input::Source) -> Self {
         Parser {
             db,
             source: TokenSource::new(tokens),
@@ -88,7 +88,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Create a new parser from a Cursor (iterator-backed, zero allocation).
-    pub(super) fn from_branch(db: &'db dyn crate::Db, iter: Cursor<'db>, source_text: bct::text::Text<'db>) -> Self {
+    pub(super) fn from_branch(db: &'db dyn crate::Db, iter: Cursor<'db>, source_text: bct::input::Source) -> Self {
         Self::from_branch_numbering_aliases(db, iter, source_text, 0)
     }
 
@@ -100,7 +100,7 @@ impl<'db> Parser<'db> {
     pub(super) fn from_branch_numbering_aliases(
         db: &'db dyn crate::Db,
         iter: Cursor<'db>,
-        source_text: bct::text::Text<'db>,
+        source_text: bct::input::Source,
         alias_base: u32,
     ) -> Self {
         Parser {
@@ -117,7 +117,7 @@ impl<'db> Parser<'db> {
         }
     }
 
-    pub(super) fn take_alias_spans(&mut self) -> Vec<bct::diagnostic::SpanEntry> {
+    pub(super) fn take_alias_spans(&mut self) -> Vec<bct::text::TextSpan> {
         rmx::std::mem::take(&mut self.alias_spans)
     }
 
@@ -154,14 +154,14 @@ impl<'db> Parser<'db> {
     }
 
     /// Take the accumulated expression spans.
-    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry> {
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseTextSpan> {
         std::mem::take(&mut self.expr_spans)
     }
 
     /// Emit both a diagnostic and create an ExprParseError node in one call.
     pub(super) fn emit_expr_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -172,13 +172,13 @@ impl<'db> Parser<'db> {
             .code(code)
             .primary_label(ts.clone(), label)
             .emit_parse();
-        ast::Expr::ParseError(ast::ExprParseError { text: ts.text, span: ts.span, message: message_text })
+        ast::Expr::ParseError(ast::ExprParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
     /// Emit both a diagnostic and create a TypeHintParseError node in one call.
     pub(super) fn emit_type_hint_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -189,7 +189,7 @@ impl<'db> Parser<'db> {
             .code(code)
             .primary_label(ts.clone(), label)
             .emit_parse();
-        ast::TypeHint::ParseError(ast::TypeHintParseError { text: ts.text, span: ts.span, message: message_text })
+        ast::TypeHint::ParseError(ast::TypeHintParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
     /// Parse a u32 literal from the current position.
@@ -261,7 +261,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
         self.source.next()
     }
 
-    fn source_text(&self) -> bct::text::Text<'db> {
+    fn source_text(&self) -> bct::input::Source {
         self.source_text
     }
 

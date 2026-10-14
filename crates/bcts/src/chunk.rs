@@ -3,12 +3,12 @@ use rmx::prelude::*;
 use rmx::std::ops::Range;
 use rmx::std::iter;
 
-use crate::text::Text;
+use crate::input::Source;
 
 #[salsa::tracked]
 pub struct Chunk<'db> {
     #[returns(copy)]
-    pub text: Text<'db>,
+    pub source: Source,
     #[returns(ref)]
     pub comments: Vec<Range<usize>>,
     #[returns(ref)]
@@ -31,7 +31,7 @@ impl<'db> Chunk<'db> {
 
         let next_known_range = known_ranges.next();
         let mut ranges = Ranges {
-            chunk_len: self.text(db).as_str(db).len(),
+            chunk_len: self.source(db).as_str(db).len(),
             known_ranges: Box::new(known_ranges),
             next_known_range,
             position: 0,

@@ -39,8 +39,7 @@ fn slices(src: &str) -> Vec<String> {
         .entries(&db)
         .iter()
         .map(|e| {
-            let (_, span) = e.entry.to_text_and_span(&db);
-            text[span.start..span.end].S()
+            text[e.entry.span.C()].S()
         })
         .collect();
     out.sort();

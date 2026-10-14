@@ -2,19 +2,28 @@ use rmx::prelude::*;
 
 use std::ops::Range;
 
+use crate::input::Source;
+
 /// Byte span type alias.
 pub type ByteSpan = Range<usize>;
 
-/// A span of a text, for use during parsing and error reporting.
-#[derive(Clone)]
-pub struct TextSpan<'db> {
-    pub text: Text<'db>,
+/// A span of a source.
+///
+/// Names the source by its `Source`, which is an input and so lives as long as
+/// the database: a span can be filed in a table, kept across a revision and
+/// read again afterwards. Spans used to name a `Text`, a tracked struct holding
+/// a copy of the source's text, which salsa deletes when the query that made
+/// it runs again, so a span that outlived its revision named nothing.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct TextSpan {
+    pub source: Source,
     pub span: ByteSpan,
 }
 
-impl<'db> TextSpan<'db> {
-    pub fn new(text: Text<'db>, span: ByteSpan) -> Self {
-        TextSpan { text, span }
+impl TextSpan {
+    pub fn new(source: Source, span: ByteSpan) -> Self {
+        TextSpan { source, span }
     }
 
     pub fn start(&self) -> usize {
@@ -26,27 +35,12 @@ impl<'db> TextSpan<'db> {
     }
 
     pub fn with_end(&self, end: usize) -> Self {
-        TextSpan { text: self.text, span: self.span.start..end }
+        TextSpan { source: self.source, span: self.span.start..end }
     }
 
     pub fn with_span(&self, span: ByteSpan) -> Self {
-        TextSpan { text: self.text, span }
+        TextSpan { source: self.source, span }
     }
-}
-
-/// The text of a source.
-///
-/// Carries the `Source` it came from as an identity field, so anything holding
-/// a `Text` can name that source. That matters because a `Text` is a tracked
-/// struct: salsa deletes it when the query that made it runs again, and an id
-/// held past that point is not safe to read. A `Source` is an input and lasts
-/// as long as the database, so it is what gets stored.
-#[salsa::tracked]
-pub struct Text<'db> {
-    #[returns(copy)]
-    pub source: crate::input::Source,
-    #[returns(ref)]
-    pub text: String,
 }
 
 #[salsa::interned]
@@ -54,12 +48,6 @@ pub struct Text<'db> {
 pub struct InternedText<'db> {
     #[returns(ref)]
     pub text: String,
-}
-
-impl<'db> Text<'db> {
-    pub fn as_str(&self, db: &'db dyn crate::Db) -> &'db str {
-        self.text(db).as_str()
-    }
 }
 
 impl<'db> InternedText<'db> {

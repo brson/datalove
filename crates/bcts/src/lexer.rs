@@ -219,7 +219,7 @@ pub fn lex_chunk<'db>(
     db: &'db dyn crate::Db,
     chunk: Chunk<'db>,
 ) -> ChunkLex<'db> {
-    let chunk_text = chunk.text(db);
+    let chunk_text = chunk.source(db);
     let chunk_str = chunk_text.as_str(db);
     // About one token for every four or five bytes of source, so a guess at
     // that saves the vector growing by doubling, which copied every token a
@@ -500,7 +500,7 @@ pub fn lex_chunk<'db>(
 impl<'db> ChunkLex<'db> {
     #[cfg(test)]
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
-        let chunk_text = self.chunk(db).text(db).as_str(db);
+        let chunk_text = self.chunk(db).source(db).as_str(db);
         #[allow(unstable_name_collisions)] // intersperse
         self.tokens(db).iter().map(|token| {
             if token.newline_before {

@@ -4,7 +4,6 @@ use std::ops::Range;
 use std::{fmt, hash, mem};
 
 use crate::input::Source;
-use crate::text::Text;
 use crate::chunk::Chunk;
 
 /// How far a comment or string extends, or `None` if one does not start here.
@@ -157,8 +156,7 @@ impl<'db> State<'db> {
 
         Chunk::new(
             self.db,
-            // fixme bad clone of full source
-            Text::new(self.db, self.source, S(text_all)),
+            self.source,
             mem::take(&mut self.chunk_wip.comments),
             mem::take(&mut self.chunk_wip.strings),
             mem::take(&mut self.chunk_wip.errors),
@@ -374,7 +372,7 @@ fn test_source_map() {
         let ex_chunk = ex_chunk.iter().zip(ex_positions);
         let ex_chunk = ex_chunk.collect::<Vec<_>>();
 
-        let a_text = a_chunk.text(db).as_str(db);
+        let a_text = a_chunk.source(db).as_str(db);
         assert_eq!(&ex_text, a_text);
         //eprintln!("at '{a_text}'");
 

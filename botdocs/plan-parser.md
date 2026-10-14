@@ -263,10 +263,11 @@ every bracket, and a fifth of random bracket soup panicked it --
 `> a a |] [| } }`, for one. `bracer_panic_tests` reads every level of every
 input now, and random soup besides.
 
-Still open: the source map copies a source's whole text into a `Text` and
-hashes it, since the text is one of `Text`'s identity fields; about 0.8% of
-the run. With chunking gone a `Text` is always its source's whole text, so a
-`Source` can stand in for it.
+With chunking gone, a `Text` -- a tracked struct holding a copy of a
+source's text -- was always its source's whole text, so `Source` replaced it,
+and `TextSpan` and `SpanEntry` became one type naming a `Source`. That ended
+the copy and the hash of every source, but saved memory (63 fewer page
+faults) rather than instructions: copying and hashing 216KB is cheap.
 
 ## Open questions
 

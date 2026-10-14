@@ -31,10 +31,10 @@ pub fn parse<'db>(
     source: Source,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.text(db);
+    let source_text = chunk.source(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
-    let chunk_text = chunk.text(db).as_str(db);
+    let chunk_text = chunk.source(db).as_str(db);
     for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
         parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
             .code("D043")
@@ -46,7 +46,7 @@ pub fn parse<'db>(
 fn parse_bracer<'db>(
     db: &'db dyn crate::Db,
     bracer: Bracer<'db>,
-    source_text: bct::text::Text<'db>,
+    source_text: bct::input::Source,
 ) -> ast::ParseResult<'db> {
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
     let expr = parser.parse_expr_full();

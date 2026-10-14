@@ -7,7 +7,6 @@ use bct::{
     text::InternedText,
 };
 
-use bct::diagnostic::SpanEntry;
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
 use super::state::Parser;
@@ -27,7 +26,7 @@ pub trait TypeHintStream<'db>: TokenStream<'db> {
     /// stream reports rather than the type hint parser.
     fn type_hint_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -38,7 +37,7 @@ pub trait TypeHintStream<'db>: TokenStream<'db> {
     /// Only the parser knows where its spans go, the same way it knows where
     /// its errors go. An alias is the one type a hint cannot resolve on its
     /// own, so it is the one a diagnostic has to be able to point at.
-    fn alias_index(&mut self, ts: TextSpan<'db>) -> u32;
+    fn alias_index(&mut self, ts: TextSpan) -> u32;
 
     /// The index the next alias filed against this stream would take.
     fn alias_base(&self) -> u32;
@@ -49,7 +48,7 @@ pub trait TypeHintStream<'db>: TokenStream<'db> {
     /// whatever the outer stream is, so the aliases in it are filed over
     /// there and have to be brought back for the outer stream's table to be
     /// the one the indices count into.
-    fn absorb_aliases(&mut self, spans: Vec<SpanEntry>, next: u32);
+    fn absorb_aliases(&mut self, spans: Vec<TextSpan>, next: u32);
 }
 
 /// Read one type hint, consuming exactly the tokens that are part of it.
@@ -271,7 +270,7 @@ pub fn parse_type_hint<'db, S: TypeHintStream<'db>>(stream: &mut S) -> ast::Type
 impl<'db> TypeHintStream<'db> for Parser<'db> {
     fn type_hint_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -284,10 +283,10 @@ impl<'db> TypeHintStream<'db> for Parser<'db> {
     /// Datalit resolves no aliases -- a bare name in a data literal's type is
     /// always an error, and the datafun layer above is what has a map to look
     /// one up in -- so there is nothing here that would point at one.
-    fn alias_index(&mut self, ts: TextSpan<'db>) -> u32 {
+    fn alias_index(&mut self, ts: TextSpan) -> u32 {
         let index = self.alias_counter;
         self.alias_counter += 1;
-        self.alias_spans.push(SpanEntry::new(ts.text.source(self.db), ts.span));
+        self.alias_spans.push(TextSpan::new(ts.source, ts.span));
         index
     }
 
@@ -295,7 +294,7 @@ impl<'db> TypeHintStream<'db> for Parser<'db> {
         self.alias_counter
     }
 
-    fn absorb_aliases(&mut self, spans: Vec<SpanEntry>, next: u32) {
+    fn absorb_aliases(&mut self, spans: Vec<TextSpan>, next: u32) {
         self.alias_spans.extend(spans);
         self.alias_counter = next;
     }

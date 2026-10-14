@@ -15,7 +15,7 @@ use bct::{
     bracer::{Bracer, Cursor},
     parser_util,
     split,
-    text::{Text, TextSpan},
+    text::TextSpan,
     source_map,
     lexer,
     bracer,
@@ -49,7 +49,7 @@ pub fn parse_with_module_id<'db>(
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
     let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.text(db);
+    let source_text = chunk.source(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
@@ -64,7 +64,7 @@ pub fn parse_expr<'db>(
     source: Source,
 ) -> ast::ParsedExpr<'db> {
     let chunk = source_map::basic_source_map(db, source);
-    let source_text = chunk.text(db);
+    let source_text = chunk.source(db);
     let chunk_lex = lexer::lex_chunk(db, chunk);
     let bracer = bracer::bracer(db, chunk_lex);
     emit_bracer_errors(db, bracer, source_text);
@@ -76,7 +76,7 @@ pub fn parse_expr<'db>(
 fn parse_bracer_expr<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
-    source_text: bct::text::Text<'db>,
+    source_text: bct::input::Source,
 ) -> ast::ParsedExpr<'db> {
     // Expressions don't have module context.
     let mut parser = Parser::from_branch_with_context(db, bracer.iter(db), source_text, None, None);
@@ -101,7 +101,7 @@ fn each_once<'db>(calls: Vec<(InternedText<'db>, InternedText<'db>)>) -> ast::Qu
 fn emit_bracer_errors<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
-    source_text: Text<'db>,
+    source_text: Source,
 ) {
     let chunk = bracer.chunk(db);
     let tokens = chunk.tokens(db);
@@ -142,10 +142,10 @@ fn emit_bracer_errors<'db>(
 fn emit_non_ascii_name_errors<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
-    source_text: Text<'db>,
+    source_text: Source,
 ) {
     let chunk_lex = bracer.chunk(db);
-    let chunk_text = chunk_lex.chunk(db).text(db).as_str(db);
+    let chunk_text = chunk_lex.chunk(db).source(db).as_str(db);
     for span in parser_util::non_ascii_names(chunk_lex.tokens(db), chunk_text) {
         parser_util::non_ascii_name_error(db, source_text, span, chunk_text)
             .code("P075")
@@ -156,7 +156,7 @@ fn emit_non_ascii_name_errors<'db>(
 fn parse_bracer<'db>(
     db: &'db dyn Db,
     bracer: Bracer<'db>,
-    source_text: Text<'db>,
+    source_text: Source,
     module_id: Option<ModuleId<'db>>,
 ) -> ast::ParseResult<'db> {
     // Split into lines. A newline inside balanced braces is not a line break,
@@ -195,16 +195,16 @@ fn parse_bracer<'db>(
 
 /// Parsed statement spans result.
 struct ParsedSpans<'db> {
-    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
-    break_spans: Vec<bct::diagnostic::SpanEntry>,
-    continue_spans: Vec<bct::diagnostic::SpanEntry>,
-    ret_spans: Vec<bct::diagnostic::SpanEntry>,
-    set_spans: Vec<bct::diagnostic::SpanEntry>,
-    fun_spans: Vec<bct::diagnostic::SpanEntry>,
-    type_alias_spans: Vec<bct::diagnostic::SpanEntry>,
-    import_spans: Vec<bct::diagnostic::SpanEntry>,
-    require_spans: Vec<bct::diagnostic::SpanEntry>,
-    alias_spans: Vec<bct::diagnostic::SpanEntry>,
+    expr_spans: Vec<ast::ParseTextSpan<'db>>,
+    break_spans: Vec<bct::text::TextSpan>,
+    continue_spans: Vec<bct::text::TextSpan>,
+    ret_spans: Vec<bct::text::TextSpan>,
+    set_spans: Vec<bct::text::TextSpan>,
+    fun_spans: Vec<bct::text::TextSpan>,
+    type_alias_spans: Vec<bct::text::TextSpan>,
+    import_spans: Vec<bct::text::TextSpan>,
+    require_spans: Vec<bct::text::TextSpan>,
+    alias_spans: Vec<bct::text::TextSpan>,
 }
 
 /// Parse statements from lines, creating a Parser for each line.
@@ -213,7 +213,7 @@ struct ParsedSpans<'db> {
 fn parse_statements<'db>(
     db: &'db dyn Db,
     lines: impl Iterator<Item = Cursor<'db>>,
-    source_text: bct::text::Text<'db>,
+    source_text: bct::input::Source,
     module_id: Option<ModuleId<'db>>,
 ) -> (Vec<ast::Statement<'db>>, ParsedSpans<'db>, Vec<(InternedText<'db>, InternedText<'db>)>) {
     let mut statements = vec![];
@@ -309,14 +309,14 @@ pub fn datafun_spans<'db>(
     db: &'db dyn Db,
     source: Source,
 ) -> DatafunSpans<'db> {
-    use bct::diagnostic::SpanEntry;
+    use bct::text::TextSpan;
 
     let parse_result = parse(db, source);
     let entries: Vec<SpanMapEntry> = parse_result.expr_spans
         .iter()
         .map(|e| SpanMapEntry {
             expr_key: e.expr_key,
-            entry: SpanEntry::new(e.source, e.span.C()),
+            entry: TextSpan::new(e.source, e.span.C()),
         })
         .collect();
 
@@ -368,7 +368,7 @@ pub fn module_spans<'db>(
     DatafunSpans::with_stmt_spans(
         full.expr_spans.iter().map(|e| SpanMapEntry {
             expr_key: e.expr_key,
-            entry: bct::diagnostic::SpanEntry::new(e.source, e.span.clone()),
+            entry: bct::text::TextSpan::new(e.source, e.span.clone()),
         }).collect(),
         full.break_spans.clone(),
         full.continue_spans.clone(),

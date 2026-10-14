@@ -36,7 +36,7 @@ impl<'db> Parser<'db> {
             // same thing twice.
             if let datalit::ast::TypeHint::ParseError(e) = &type_hint {
                 let kind = ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: e.text, span: e.span.C(), message: e.message,
+                    source: e.source, span: e.span.C(), message: e.message,
                 });
                 return self.create_expr(kind, ts);
             }
@@ -63,7 +63,7 @@ impl<'db> Parser<'db> {
                 let inner = self.parse_postfix_try_operators(inner);
                 ast::ExprFunKind::Hinted(ast::ExprHinted { type_hint, inner })
             };
-            let ts = TextSpan::new(ts.text, ts.span.start..self.last_byte_end());
+            let ts = TextSpan::new(ts.source, ts.span.start..self.last_byte_end());
             return self.create_expr(expr_kind, ts);
         }
 
@@ -125,7 +125,7 @@ impl<'db> Parser<'db> {
             let ts = self.peek_text_span();
             self.next();
             return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                text: ts.text,
+                source: ts.source,
                 span: ts.span.C(),
                 message: InternedText::new(self.db, "unexpected minus sign".S()),
             });
@@ -231,7 +231,7 @@ impl<'db> Parser<'db> {
                         let ts = self.peek_text_span();
                         self.next();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            text: ts.text,
+                            source: ts.source,
                             span: ts.span.C(),
                             message: InternedText::new(self.db, format!("unexpected identifier '{}'", word).S()),
                         });
@@ -250,7 +250,7 @@ impl<'db> Parser<'db> {
                     _ => {
                         let ts = self.peek_text_span();
                         return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                            text: ts.text,
+                            source: ts.source,
                             span: ts.span.C(),
                             message: InternedText::new(self.db, "unexpected token".S()),
                         });
@@ -306,7 +306,7 @@ impl<'db> Parser<'db> {
             _ => {
                 let ts = self.peek_text_span();
                 return ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-                    text: ts.text,
+                    source: ts.source,
                     span: ts.span.C(),
                     message: InternedText::new(self.db, "expected expression".S()),
                 });
@@ -342,7 +342,7 @@ impl<'db> Parser<'db> {
     /// Report how a literal was written, and stand in for it.
     fn lit_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -353,7 +353,7 @@ impl<'db> Parser<'db> {
             .primary_label(ts.C(), label)
             .emit_parse();
         ast::ExprFunKind::ParseError(ast::ExprFunParseError {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: InternedText::new(self.db, message.S()),
         })

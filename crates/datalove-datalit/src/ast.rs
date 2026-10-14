@@ -2,7 +2,7 @@ use rmx::prelude::*;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use bct::text::{InternedText, Text};
+use bct::text::InternedText;
 use bct::text::ByteSpan;
 
 /// Span entry for a parsed expression.
@@ -12,15 +12,15 @@ use bct::text::ByteSpan;
 /// stores one is correct only while the table and the ids in it are produced
 /// together; an index is ours and means the same thing whenever it is read.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ParseSpanEntry {
+pub struct ParseTextSpan {
     pub expr_index: u32,
     pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
-impl ParseSpanEntry {
+impl ParseTextSpan {
     pub fn new(expr_index: u32, source: bct::input::Source, span: ByteSpan) -> Self {
-        ParseSpanEntry { expr_index, source, span }
+        ParseTextSpan { expr_index, source, span }
     }
 }
 
@@ -30,7 +30,7 @@ pub struct ParseResult<'db> {
     #[returns(clone)]
     pub expr: ExprFull<'db>,
     #[returns(clone)]
-    pub expr_spans: Vec<ParseSpanEntry>,
+    pub expr_spans: Vec<ParseTextSpan>,
 }
 
 /// An expression, with its type hint and its position in the parse.
@@ -441,7 +441,7 @@ pub struct ExprEnum<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct TypeHintParseError<'db> {
-    pub text: Text<'db>,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
 }
@@ -449,7 +449,7 @@ pub struct TypeHintParseError<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprParseError<'db> {
-    pub text: Text<'db>,
+    pub source: bct::input::Source,
     pub span: ByteSpan,
     pub message: InternedText<'db>,
 }

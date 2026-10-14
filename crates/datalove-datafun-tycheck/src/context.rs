@@ -898,11 +898,8 @@ replace the view rather than the elements it shows. Index down to single element
     }
 
     /// Look up span for a datafun expression.
-    pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan<'db>> {
-        self.spans.lookup(self.db, expr).map(|entry| {
-            let (text, span) = entry.to_text_and_span(self.db);
-            TextSpan::new(text, span)
-        })
+    pub fn get_span(&self, expr: ExprFun<'db>) -> Option<TextSpan> {
+        self.spans.lookup(self.db, expr)
     }
 
     /// Emit all pending diagnostics using local spans.

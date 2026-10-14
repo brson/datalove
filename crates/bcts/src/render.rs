@@ -14,7 +14,6 @@ use rmx::std::path::{Path, PathBuf};
 use ariadne::{Cache, CharSet, Color, ColorGenerator, Config, IndexType, Label, Report, ReportKind, Source};
 
 use crate::diagnostic::{Diagnostic, DiagnosticLabel, LabelStyle, Severity};
-use crate::text::Text;
 
 /// A run of diagnostics printed together.
 ///
@@ -91,7 +90,7 @@ impl Renderer {
         db: &'db dyn crate::Db,
         diag: &Diagnostic<'db>,
         file_path: &Path,
-        locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
+        locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
         cwd: &Path,
     ) {
         render_one_multi_source(db, diag, file_path, locate, cwd, &mut self.colors);
@@ -135,7 +134,7 @@ pub fn render_located_diagnostics<'db>(
     db: &'db dyn crate::Db,
     diagnostics: impl IntoIterator<Item = Diagnostic<'db>>,
     file_path: &Path,
-    locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
+    locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
     cwd: &Path,
 ) {
     let mut renderer = Renderer::new();
@@ -292,7 +291,7 @@ fn render_one<'db>(
     }
 
     // Every label is in the one source here, so the first of them says which.
-    let source_text = diag.labels.first().map(|l| l.text.as_str(db)).unwrap_or("");
+    let source_text = diag.labels.first().map(|l| l.source.as_str(db)).unwrap_or("");
 
     sink.emit(builder.finish(), (&file_name, Source::from(source_text)));
 }
@@ -301,7 +300,7 @@ fn render_one_multi_source<'db>(
     db: &'db dyn crate::Db,
     diag: &Diagnostic<'db>,
     file_path: &Path,
-    locate: &dyn Fn(Text<'db>) -> Option<PathBuf>,
+    locate: &dyn Fn(crate::input::Source) -> Option<PathBuf>,
     cwd: &Path,
     colors: &mut ColorGenerator,
 ) {
@@ -315,9 +314,9 @@ fn render_one_multi_source<'db>(
     let mut unlocated = 0usize;
 
     for label in &diag.labels {
-        let source_text = label.text.as_str(db).S();
+        let source_text = label.source.as_str(db).S();
         if !source_to_id.contains_key(&source_text) {
-            let file_id = match locate(label.text) {
+            let file_id = match locate(label.source) {
                 Some(path) => display_path(&path, cwd),
                 None => {
                     let id = match unlocated {
@@ -339,7 +338,7 @@ fn render_one_multi_source<'db>(
     }
 
     let primary_file_id = diag.labels.first()
-        .map(|l| source_to_id.get(l.text.as_str(db)).X().C())
+        .map(|l| source_to_id.get(l.source.as_str(db)).X().C())
         .unwrap_or_else(|| base_file_name.C());
     let offset = diag.labels.first().map(|l| l.span.start).unwrap_or(0);
 
@@ -352,10 +351,10 @@ fn render_one_multi_source<'db>(
     }
 
     // Sources in the order they were first pointed into.
-    let source_index = |l: &DiagnosticLabel<'db>| source_order[l.text.as_str(db)];
+    let source_index = |l: &DiagnosticLabel<'db>| source_order[l.source.as_str(db)];
     let labels = in_reading_order(&diag.labels, colors, |l| (source_index(l), l.span.start));
     for (label, color) in labels {
-        let file_id = source_to_id.get(label.text.as_str(db)).X().C();
+        let file_id = source_to_id.get(label.source.as_str(db)).X().C();
         let mut ariadne_label = Label::new((file_id, label.span.C())).with_color(color);
         if let Some(message) = &label.message {
             ariadne_label = ariadne_label.with_message(message.as_str(db));
@@ -431,7 +430,7 @@ mod tests {
     fn rendered(src: &str, primary: Range<usize>, secondary: Option<Range<usize>>) -> String {
         let ref db = crate::Database::default();
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
 
         let mut b = DiagnosticBuilder::warning(db, "`w` is a length, and this adds an angle to one")
             .primary_label(TextSpan::new(text, primary), "an angle")
@@ -491,7 +490,7 @@ mod tests {
         let ref db = crate::Database::default();
         let src = "a\nb\nc\n";
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
         let diags: Vec<_> = (0..3)
             .map(|i| {
                 DiagnosticBuilder::error(db, &format!("problem {i}"))
@@ -516,7 +515,7 @@ mod tests {
         let ref db = crate::Database::default();
         let src = "radius = 15\n";
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
         let diag = DiagnosticBuilder::error(db, "not a length")
             .primary_span(TextSpan::new(text, 9..11))
             .build();
@@ -532,7 +531,7 @@ mod tests {
         let ref db = crate::Database::default();
         let src = "w = 10px + 5deg\n";
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
         let diag = DiagnosticBuilder::warning(db, "a length and an angle")
             .primary_label(TextSpan::new(text, 11..15), "an angle")
             .secondary_label(TextSpan::new(text, 4..8), "a length")
@@ -553,7 +552,7 @@ mod tests {
         let ref db = crate::Database::default();
         let src = "let b = a\nlet c = a\n";
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
         let suggestion = insertion_suggestion(src, &(8..9), "@").X();
         let diag = DiagnosticBuilder::error(db, "use of moved value")
             .primary_label(TextSpan::new(text, 18..19), "used after move")
@@ -580,7 +579,7 @@ mod tests {
         let ref db = crate::Database::default();
         let src = "albedo = #ff8a65\n";
         let source = Input::new(db, src.S());
-        let text = crate::source_map::basic_source_map(db, source).text(db);
+        let text = source;
         let diag = DiagnosticBuilder::warning(db, "brighter than any real surface")
             .primary_label(TextSpan::new(text, 9..16), "too bright")
             .note("the lightest hex that passes is #f38360")

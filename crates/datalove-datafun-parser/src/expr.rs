@@ -62,7 +62,7 @@ impl<'db> Parser<'db> {
             if is_comparison(op) && lhs_is_comparison {
                 use datalove_diagnostic::DiagnosticBuilderExt;
                 let ts = self.peek_text_span();
-                let op_text = ts.text.as_str(self.db)[ts.span.clone()].S();
+                let op_text = ts.source.as_str(self.db)[ts.span.clone()].S();
                 self.had_error = true;
                 bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op_text}` after a comparison"))
                     .code("P067")
@@ -116,7 +116,7 @@ impl<'db> Parser<'db> {
             }
             match self.peek() {
                 Some(TreeToken::Token(token)) => {
-                    let TextSpan { text, span: op_span } = self.extract_text_span(&TreeToken::Token(token.clone()));
+                    let TextSpan { source: text, span: op_span } = self.extract_text_span(&TreeToken::Token(token.clone()));
                     match token.kind {
                         TokenKind::Sigil(Sigil::Question) => {
                             self.next(); // consume ?
@@ -491,7 +491,7 @@ impl<'db> Parser<'db> {
         if self.peek_binop().is_some() {
             use datalove_diagnostic::DiagnosticBuilderExt;
             let ts = self.peek_text_span();
-            let op = ts.text.as_str(self.db)[ts.span.clone()].S();
+            let op = ts.source.as_str(self.db)[ts.span.clone()].S();
             self.had_error = true;
             bct::diagnostic::DiagnosticBuilder::error(self.db, &fmt!("`{op}` after a constructor's payload"))
                 .code("P065")
@@ -820,7 +820,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
     pub(super) fn parse_function_call_args(
         &mut self,
         iter: Cursor<'db>,
-        context: Option<(TextSpan<'db>, &'static str)>,
+        context: Option<(TextSpan, &'static str)>,
     ) -> (Vec<ast::ExprFun<'db>>, Vec<Option<ast::ParamMode>>) {
         let mut sub = self.sub_parser(iter, context);
         let args = sub.parse_comma_separated(|p| {
@@ -866,7 +866,7 @@ operation in the payload, or the whole constructor to apply it to what is built"
             }
             _ => unreachable!("caller must peek for ParenOpen before calling"),
         };
-        let tuple_ts = TextSpan::new(open_span.text, open_span.span.start..self.last_byte_end());
+        let tuple_ts = TextSpan::new(open_span.source, open_span.span.start..self.last_byte_end());
 
         let mut sub = self.sub_parser(iter, Some((open_span, "in this tuple")));
         let (elements, had_comma) = sub.parse_comma_separated_with_trailing(|p| p.parse_expr_full());

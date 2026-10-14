@@ -6,7 +6,6 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use bct::text::TextSpan;
 use datalove_datafun_ast::ast::{Statement, StmtFun};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
@@ -277,7 +276,7 @@ fn emit_single_ownership_diagnostic<'db>(
 ) {
     match error {
         AnalysisError::UseAfterMoveInEarlierUnit { expr_key, name, recovery_hint } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("`{}` was given away by an earlier input", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D013")
@@ -291,7 +290,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::UseAfterMove { expr_key, moved_at: _, name, recovery_hint } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("use of moved value: `{}`", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D001")
@@ -305,7 +304,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::DoubleMove { expr_key, moved_at: _, name, recovery_hint } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("value moved twice: `{}`", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D002")
@@ -319,7 +318,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::CannotMoveBorrowed { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot move borrowed value: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D003")
@@ -329,7 +328,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::CannotMoveConst { expr_key, name, recovery_hint } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot move out of const: `{}`", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D003")
@@ -344,7 +343,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::CannotMutFromRef { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot get mutable reference from immutable: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D004")
@@ -353,7 +352,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::AliasedMutableArgument { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("aliased mutable argument: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D010")
@@ -363,7 +362,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::CannotMutateImmutable { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot pass immutable binding as mutable: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D011")
@@ -373,7 +372,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::CannotMutateTemporary { expr_key } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 bct::diagnostic::DiagnosticBuilder::error(db, "cannot pass a temporary as mutable")
                     .code("D012")
                     .primary_label(ts, "passed to a `mut` or `out` parameter")
@@ -382,7 +381,7 @@ fn emit_single_ownership_diagnostic<'db>(
             }
         }
         AnalysisError::ReadUninitialized { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("read of uninitialized binding: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D005")
@@ -400,7 +399,7 @@ fn emit_single_ownership_diagnostic<'db>(
                 .emit_ownership();
         }
         AnalysisError::MoveInLoop { expr_key, name, recovery_hint } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot move `{}` in loop", name);
                 let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D007")
@@ -419,16 +418,16 @@ fn emit_single_ownership_diagnostic<'db>(
             let msg = datalove_datafun_sema::inconsistent_branch_message(error).expect("is D008");
             let mut builder = bct::diagnostic::DiagnosticBuilder::error(db, &msg).code("D008");
 
-            if let Some(ts) = changed_at.and_then(|key| lookup_expr_span(db, spans, key)) {
+            if let Some(ts) = changed_at.and_then(|key| spans.lookup_key(key)) {
                 let label = match gave_away {
                     true => "given away here",
                     false => "given a new value here",
                 };
                 builder = builder.primary_label(ts, label);
-            } else if let Some(ts) = lookup_expr_span(db, spans, *at) {
+            } else if let Some(ts) = spans.lookup_key(*at) {
                 builder = builder.primary_label(ts, "the branches of this disagree");
             }
-            if let Some(ts) = moved_before.and_then(|key| lookup_expr_span(db, spans, key)) {
+            if let Some(ts) = moved_before.and_then(|key| spans.lookup_key(key)) {
                 let label = format!("`{}` given away here, before the branches", name);
                 builder = builder.secondary_label(ts, &label);
             }
@@ -465,7 +464,7 @@ fn emit_single_ownership_diagnostic<'db>(
                 .emit_ownership();
         }
         AnalysisError::OutParamPartialWrite { expr_key, name } => {
-            if let Some(ts) = lookup_expr_span(db, spans, *expr_key) {
+            if let Some(ts) = spans.lookup_key(*expr_key) {
                 let msg = format!("cannot partially write to out parameter: `{}`", name);
                 bct::diagnostic::DiagnosticBuilder::error(db, &msg)
                     .code("D009")
@@ -477,14 +476,3 @@ fn emit_single_ownership_diagnostic<'db>(
     }
 }
 
-/// Look up span for an expression by local_index.
-fn lookup_expr_span<'db>(
-    db: &'db dyn salsa::Database,
-    spans: &DatafunSpans<'db>,
-    expr_key: datalove_datafun_ast::ast::ExprKey<'db>,
-) -> Option<TextSpan<'db>> {
-    spans.lookup_key(expr_key).map(|entry| {
-        let (text, span) = entry.to_text_and_span(db);
-        TextSpan::new(text, span)
-    })
-}

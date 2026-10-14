@@ -8,7 +8,7 @@ use datalove_datafun_tycheck::AutoAdaptMode;
 fn diagnostic_to_json(db: &dyn datalove_datafun::Db, diag: &bct::diagnostic::Diagnostic) -> rmx::serde_json::Value {
     let code = diag.code.map(|c| c.as_str(db).to_string());
     let labels: Vec<_> = diag.labels.iter().map(|label| {
-        let source_text = label.text.text(db);
+        let source_text = label.source.text(db);
         let text_slice = source_text.get(label.span.clone()).unwrap_or("");
         json!({
             "span": [label.span.start, label.span.end],

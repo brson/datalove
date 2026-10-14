@@ -14,7 +14,8 @@ use rmx::core::ops::Range;
 use crate::bracer::{Cursor, TreeToken};
 use crate::diagnostic::DiagnosticBuilder;
 use crate::lexer::{Sigil, TokenKind};
-use crate::text::{Text, TextSpan};
+use crate::input::Source;
+use crate::text::TextSpan;
 
 /// A run of tokens between two delimiters.
 #[derive(Clone)]
@@ -229,7 +230,7 @@ pub fn stray_delimiter(group: &TokenGroup<'_>) -> Option<Written> {
 /// the delimiter was meant to go between - rows, columns, statements.
 pub fn stray_delimiter_error<'db>(
     db: &'db dyn crate::Db,
-    text: Text<'db>,
+    text: Source,
     written: &Written,
     what: &str,
 ) -> DiagnosticBuilder<'db> {
@@ -261,7 +262,7 @@ pub fn trailing_delimiter<'db>(groups: &[TokenGroup<'db>]) -> Option<Written> {
 /// The diagnostic for a delimiter written with nothing after it.
 pub fn trailing_delimiter_error<'db>(
     db: &'db dyn crate::Db,
-    text: Text<'db>,
+    text: Source,
     written: &Written,
     what: &str,
 ) -> DiagnosticBuilder<'db> {

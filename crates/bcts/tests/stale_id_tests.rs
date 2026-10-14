@@ -14,7 +14,7 @@
 use rmx::prelude::*;
 use salsa::Setter as _;
 
-use bcts::diagnostic::{DiagnosticBuilder, SpanEntry};
+use bcts::diagnostic::DiagnosticBuilder;
 use bcts::input::Source;
 use bcts::text::{InternedText, TextSpan};
 
@@ -25,17 +25,15 @@ fn span_entry_survives_a_source_edit() {
     let source = Source::new(&db, "first version".to_string());
 
     // Record a span, the way a parser fills a span table.
-    let entry = SpanEntry::new(source, 0..5);
-    let (text, span) = entry.to_text_and_span(&db);
-    assert_eq!(&text.as_str(&db)[span], "first");
+    let entry = TextSpan::new(source, 0..5);
+    assert_eq!(&entry.source.as_str(&db)[entry.span.C()], "first");
 
-    // Edit the source. The `Text` recorded against it is a tracked struct and
-    // is gone; holding its id here used to panic on the next read.
+    // Edit the source. Spans once named a `Text`, a tracked struct that the
+    // edit deleted; holding its id here panicked on the next read.
     source.set_text(&mut db).to("second version".to_string());
 
-    let (text, span) = entry.to_text_and_span(&db);
     assert_eq!(
-        &text.as_str(&db)[span],
+        &entry.source.as_str(&db)[entry.span.C()],
         "secon",
         "the span should resolve against the source's current text",
     );
@@ -46,7 +44,7 @@ fn span_entry_survives_a_source_edit() {
 fn span_entry_survives_interning_churn() {
     let mut db = bcts::Database::default();
     let source = Source::new(&db, "the quick brown fox".to_string());
-    let entry = SpanEntry::new(source, 4..9);
+    let entry = TextSpan::new(source, 4..9);
 
     let churn = Source::new(&db, "churn-0".to_string());
     for revision in 1..12 {
@@ -56,8 +54,7 @@ fn span_entry_survives_interning_churn() {
         }
     }
 
-    let (text, span) = entry.to_text_and_span(&db);
-    assert_eq!(&text.as_str(&db)[span], "quick");
+    assert_eq!(&entry.source.as_str(&db)[entry.span.C()], "quick");
 }
 
 /// A stored diagnostic keeps its own words, whatever is interned after it.
@@ -65,11 +62,10 @@ fn span_entry_survives_interning_churn() {
 fn stored_diagnostic_survives_interning_churn() {
     let mut db = bcts::Database::default();
     let source = Source::new(&db, "let x = nope".to_string());
-    let text = bcts::source_map::basic_source_map(&db, source).text(&db);
 
     let stored = DiagnosticBuilder::error(&db, "undefined variable: nope")
         .code("F001")
-        .primary_label(TextSpan::new(text, 8..12), "not found in this scope")
+        .primary_label(TextSpan::new(source, 8..12), "not found in this scope")
         .note("check the spelling")
         .build_stored();
 
@@ -91,7 +87,7 @@ fn stored_diagnostic_survives_interning_churn() {
 
     let label = &diagnostic.labels[0];
     assert_eq!(label.message.X().as_str(&db), "not found in this scope");
-    assert_eq!(&label.text.as_str(&db)[label.span.C()], "nope");
+    assert_eq!(&label.source.as_str(&db)[label.span.C()], "nope");
 }
 
 /// A diagnostic still reads correctly after its source has been edited.
@@ -99,10 +95,9 @@ fn stored_diagnostic_survives_interning_churn() {
 fn stored_diagnostic_survives_a_source_edit() {
     let mut db = bcts::Database::default();
     let source = Source::new(&db, "let x = nope".to_string());
-    let text = bcts::source_map::basic_source_map(&db, source).text(&db);
 
     let stored = DiagnosticBuilder::error(&db, "undefined variable: nope")
-        .primary_label(TextSpan::new(text, 8..12), "not found in this scope")
+        .primary_label(TextSpan::new(source, 8..12), "not found in this scope")
         .build_stored();
 
     source.set_text(&mut db).to("let x = also".to_string());
@@ -114,7 +109,7 @@ fn stored_diagnostic_survives_a_source_edit() {
 
     // The label still resolves against the source rather than panicking.
     let label = &diagnostic.labels[0];
-    assert_eq!(&label.text.as_str(&db)[label.span.C()], "also");
+    assert_eq!(&label.source.as_str(&db)[label.span.C()], "also");
 }
 
 // ============================================================================

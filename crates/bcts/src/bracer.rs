@@ -268,8 +268,8 @@ impl<'db> TreeToken<'db> {
         }
     }
 
-    /// Get source Text and byte span for this token or branch.
-    pub fn text_span(&self, source_text: crate::text::Text<'db>) -> Option<crate::text::TextSpan<'db>> {
+    /// The span of this token or branch in its source.
+    pub fn text_span(&self, source_text: crate::input::Source) -> Option<crate::text::TextSpan> {
         Some(crate::text::TextSpan::new(source_text, self.span()))
     }
 
@@ -309,7 +309,7 @@ impl<'db> Bracer<'db> {
     fn debug_str(&self, db: &'db dyn crate::Db) -> String {
         let mut buf = Vec::<u8>::new();
         let iter = self.iter(db);
-        let text = self.chunk(db).chunk(db).text(db).as_str(db);
+        let text = self.chunk(db).chunk(db).source(db).as_str(db);
         Self::debug_write(iter, &mut buf, text).X();
         String::from_utf8(buf).X()
     }
@@ -484,12 +484,12 @@ fn test_text_span() {
         let chunk = crate::source_map::basic_source_map(db, source);
         let chunk_lex = crate::lexer::lex_chunk(db, chunk);
         let bracer = bracer(db, chunk_lex);
-        let source_text = chunk_lex.chunk(db).text(db);
+        let source_text = chunk_lex.chunk(db).source(db);
         // Find the first branch.
         for token in bracer.iter(db) {
             if let TreeToken::Branch { .. } = &token {
                 let ts = token.text_span(source_text)?;
-                let spanned = &ts.text.as_str(db)[ts.span.C()];
+                let spanned = &ts.source.as_str(db)[ts.span.C()];
                 return Some((ts.start(), ts.end(), spanned.S()));
             }
         }

@@ -12,7 +12,7 @@ use bct::{
 use datalove_datafun_ast::ast;
 use datalove_datalit as datalit;
 use datalove_datalit::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use bct::diagnostic::{DiagnosticBuilder, SpanEntry};
+use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 
 use super::Db;
@@ -89,24 +89,24 @@ pub(super) struct StatementCounters {
 #[derive(Default)]
 struct Filed<'db> {
     /// Accumulated expression spans (side table pattern).
-    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
+    expr_spans: Vec<ast::ParseTextSpan<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
-    break_spans: Vec<SpanEntry>,
+    break_spans: Vec<TextSpan>,
     /// Accumulated continue statement spans, indexed by local_index.
-    continue_spans: Vec<SpanEntry>,
+    continue_spans: Vec<TextSpan>,
     /// Accumulated return statement spans, indexed by local_index.
-    ret_spans: Vec<SpanEntry>,
+    ret_spans: Vec<TextSpan>,
     /// Accumulated set statement spans, indexed by local_index.
-    set_spans: Vec<SpanEntry>,
+    set_spans: Vec<TextSpan>,
     /// Accumulated function definition spans, indexed by local_index.
-    fun_spans: Vec<SpanEntry>,
+    fun_spans: Vec<TextSpan>,
     /// Accumulated type alias spans, indexed by local_index.
-    type_alias_spans: Vec<SpanEntry>,
-    import_spans: Vec<SpanEntry>,
+    type_alias_spans: Vec<TextSpan>,
+    import_spans: Vec<TextSpan>,
     /// Accumulated require statement spans, indexed by local_index.
-    require_spans: Vec<SpanEntry>,
+    require_spans: Vec<TextSpan>,
     /// Accumulated spans of bare names in type position, indexed by local_index.
-    alias_spans: Vec<SpanEntry>,
+    alias_spans: Vec<TextSpan>,
     /// Accumulated `(alias, function)` pairs of qualified calls, as written.
     qualified_calls: Vec<(InternedText<'db>, InternedText<'db>)>,
 }
@@ -141,7 +141,7 @@ pub(super) struct Parser<'db> {
     source: TokenSource<'db>,
     pub(super) had_error: bool,
     /// Source text for error reporting when no current token.
-    source_text: bct::text::Text<'db>,
+    source_text: bct::input::Source,
     /// The same text as a string, which the tokens' spans index.
     text: &'db str,
     /// Module ID for stable function identity (None for scripts).
@@ -153,7 +153,7 @@ pub(super) struct Parser<'db> {
     /// give back.
     owes_filed: bool,
     /// Optional context for error messages showing the enclosing branch's opening token.
-    branch_context: Option<(TextSpan<'db>, &'static str)>,
+    branch_context: Option<(TextSpan, &'static str)>,
     /// Current function name for expression identity (None for script-level).
     current_fn_name: Option<InternedText<'db>>,
     /// Counter for expressions within current function.
@@ -185,7 +185,7 @@ impl<'db> Parser<'db> {
     pub(super) fn new(
         db: &'db dyn Db,
         tokens: Cursor<'db>,
-        source_text: bct::text::Text<'db>,
+        source_text: bct::input::Source,
         module_id: Option<ModuleId<'db>>,
         counters: ScriptCounters,
     ) -> Self {
@@ -247,8 +247,8 @@ impl<'db> Parser<'db> {
     pub(super) fn from_branch_with_context(
         db: &'db dyn Db,
         iter: Cursor<'db>,
-        source_text: bct::text::Text<'db>,
-        context: Option<(TextSpan<'db>, &'static str)>,
+        source_text: bct::input::Source,
+        context: Option<(TextSpan, &'static str)>,
         module_id: Option<ModuleId<'db>>,
     ) -> Self {
         Parser {
@@ -276,7 +276,7 @@ impl<'db> Parser<'db> {
     pub(super) fn sub_parser(
         &mut self,
         iter: Cursor<'db>,
-        context: Option<(TextSpan<'db>, &'static str)>,
+        context: Option<(TextSpan, &'static str)>,
     ) -> Self {
         Parser {
             db: self.db,
@@ -366,14 +366,14 @@ impl<'db> Parser<'db> {
     }
 
     /// Get the source text for this parser.
-    pub(super) fn source_text(&self) -> bct::text::Text<'db> {
+    pub(super) fn source_text(&self) -> bct::input::Source {
         self.source_text
     }
 
     /// Emit both a diagnostic and create a StmtParseError node in one call.
     pub(super) fn emit_stmt_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -387,13 +387,13 @@ impl<'db> Parser<'db> {
             builder = builder.secondary_label(ctx_span.C(), ctx_msg);
         }
         builder.emit_parse();
-        ast::Statement::ParseError(ast::StmtParseError { text: ts.text, span: ts.span, message: message_text })
+        ast::Statement::ParseError(ast::StmtParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
     /// Emit both a diagnostic and create an ExprFun with ParseError kind in one call.
     pub(super) fn emit_expr_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -412,7 +412,7 @@ impl<'db> Parser<'db> {
             self.module_id,
             self.current_fn_name,
             self.next_expr_index(),
-            ast::ExprFunKind::ParseError(ast::ExprFunParseError { text: ts.text, span: ts.span, message: message_text })
+            ast::ExprFunKind::ParseError(ast::ExprFunParseError { source: ts.source, span: ts.span, message: message_text })
         )
     }
 
@@ -440,7 +440,7 @@ impl<'db> Parser<'db> {
     ///
     /// Prefers current peek token; falls back to end of last consumed token.
     /// Use this instead of `peek_text_span()` when the error might occur at EOF.
-    pub(super) fn error_span(&self) -> TextSpan<'db> {
+    pub(super) fn error_span(&self) -> TextSpan {
         if let Some(token) = self.peek() {
             return self.extract_text_span(token);
         }
@@ -486,7 +486,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Create an expression and record its span in the side table.
-    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan<'db>) -> ast::ExprFun<'db> {
+    pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprFun<'db> {
         let expr = ast::ExprFun::new(
             self.db,
             self.module_id,
@@ -494,50 +494,50 @@ impl<'db> Parser<'db> {
             self.next_expr_index(),
             kind,
         );
-        self.filed.expr_spans.push(ast::ParseSpanEntry::new(
+        self.filed.expr_spans.push(ast::ParseTextSpan::new(
             ast::ExprKey::of(self.db, expr),
-            ts.text.source(self.db),
+            ts.source,
             ts.span,
         ));
         expr
     }
 
     /// Take the accumulated expression spans (consumes them).
-    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry<'db>> {
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseTextSpan<'db>> {
         rmx::std::mem::take(&mut self.filed.expr_spans)
     }
 
     /// Take the accumulated break statement spans (consumes them).
-    pub(super) fn take_break_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_break_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.break_spans)
     }
 
     /// Take the accumulated continue statement spans (consumes them).
-    pub(super) fn take_continue_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_continue_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.continue_spans)
     }
 
     /// Take the accumulated return statement spans (consumes them).
-    pub(super) fn take_ret_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_ret_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.ret_spans)
     }
 
     /// Take the accumulated set statement spans (consumes them).
-    pub(super) fn take_set_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_set_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.set_spans)
     }
 
     /// Take the accumulated function definition spans (consumes them).
-    pub(super) fn take_fun_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_fun_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.fun_spans)
     }
 
     /// Take the accumulated type alias spans (consumes them).
-    pub(super) fn take_type_alias_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_type_alias_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.type_alias_spans)
     }
 
-    pub(super) fn take_alias_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_alias_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.alias_spans)
     }
 
@@ -578,49 +578,49 @@ impl<'db> Parser<'db> {
     }
 
     /// Record a break statement span and return its local_index.
-    pub(super) fn record_break_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_break_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.brk, |p| &mut p.filed.break_spans)
     }
 
     /// Record a continue statement span and return its local_index.
-    pub(super) fn record_continue_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_continue_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.cont, |p| &mut p.filed.continue_spans)
     }
 
     /// Record a return statement span and return its local_index.
-    pub(super) fn record_ret_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_ret_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.ret, |p| &mut p.filed.ret_spans)
     }
 
     /// Record a set statement span and return its local_index.
-    pub(super) fn record_set_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_set_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.set, |p| &mut p.filed.set_spans)
     }
 
     /// Record a function definition span and return its local_index.
-    pub(super) fn record_fun_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_fun_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.fun, |p| &mut p.filed.fun_spans)
     }
 
     /// Record a type alias span and return its local_index.
-    pub(super) fn record_type_alias_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_type_alias_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.type_alias, |p| &mut p.filed.type_alias_spans)
     }
 
     /// Record an import span and return its local_index.
-    pub(super) fn record_import_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_import_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.import, |p| &mut p.filed.import_spans)
     }
 
-    pub(super) fn take_import_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_import_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.import_spans)
     }
 
-    pub(super) fn record_require_span(&mut self, ts: TextSpan<'db>) -> u32 {
+    pub(super) fn record_require_span(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.require, |p| &mut p.filed.require_spans)
     }
 
-    pub(super) fn take_require_spans(&mut self) -> Vec<SpanEntry> {
+    pub(super) fn take_require_spans(&mut self) -> Vec<TextSpan> {
         rmx::std::mem::take(&mut self.filed.require_spans)
     }
 
@@ -631,14 +631,14 @@ impl<'db> Parser<'db> {
     /// diagnostic looks it up by.
     fn record_stmt_span(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         count: impl Fn(&mut StatementCounters) -> &mut u32,
-        spans: impl Fn(&mut Self) -> &mut Vec<SpanEntry>,
+        spans: impl Fn(&mut Self) -> &mut Vec<TextSpan>,
     ) -> u32 {
         let counter = count(&mut self.stmt_counters);
         let index = *counter;
         *counter += 1;
-        let entry = SpanEntry::new(ts.text.source(self.db), ts.span);
+        let entry = TextSpan::new(ts.source, ts.span);
         spans(self).push(entry);
         index
     }
@@ -679,7 +679,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
     ///
     /// Only this layer resolves one, so only this layer has anything to say
     /// when it cannot, and saying it needs the name's own span.
-    fn alias_index(&mut self, ts: TextSpan<'db>) -> u32 {
+    fn alias_index(&mut self, ts: TextSpan) -> u32 {
         self.record_stmt_span(ts, |c| &mut c.alias, |p| &mut p.filed.alias_spans)
     }
 
@@ -687,7 +687,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
         self.stmt_counters.alias
     }
 
-    fn absorb_aliases(&mut self, spans: Vec<SpanEntry>, next: u32) {
+    fn absorb_aliases(&mut self, spans: Vec<TextSpan>, next: u32) {
         self.filed.alias_spans.extend(spans);
         self.stmt_counters.alias = next;
     }
@@ -699,7 +699,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
     /// to point at, down to the branch it was found in.
     fn type_hint_error(
         &mut self,
-        ts: TextSpan<'db>,
+        ts: TextSpan,
         message: &str,
         code: &str,
         label: &str,
@@ -714,7 +714,7 @@ impl<'db> datalit::parser::TypeHintStream<'db> for Parser<'db> {
         }
         builder.emit_parse();
         datalit::ast::TypeHint::ParseError(datalit::ast::TypeHintParseError {
-            text: ts.text,
+            source: ts.source,
             span: ts.span,
             message: message_text,
         })
@@ -742,7 +742,7 @@ impl<'db> TokenStream<'db> for Parser<'db> {
         self.source.next()
     }
 
-    fn source_text(&self) -> bct::text::Text<'db> {
+    fn source_text(&self) -> bct::input::Source {
         self.source_text
     }
 

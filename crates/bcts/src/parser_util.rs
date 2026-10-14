@@ -6,7 +6,8 @@ use crate::{
     bracer::{Cursor, TreeToken},
     diagnostic::DiagnosticBuilder,
     lexer::{Sigil, Token, TokenKind},
-    text::{InternedText, Text, TextSpan},
+    input::Source,
+    text::{InternedText, TextSpan},
 };
 
 use rmx::std::ops::Range;
@@ -35,8 +36,8 @@ pub trait TokenStream<'db> {
     /// the token at the cursor was written against the one before it.
     fn prev_end(&self) -> Option<usize>;
 
-    /// Get the source Text for error reporting when no current token.
-    fn source_text(&self) -> crate::text::Text<'db>;
+    /// The source, for error reporting when there is no current token.
+    fn source_text(&self) -> crate::input::Source;
 
     /// The text of the chunk the tokens were lexed from, which their spans
     /// index.
@@ -162,24 +163,24 @@ pub trait TokenStreamExt<'db>: TokenStream<'db> {
     }
 
     /// Extract TextSpan from a token, using source_text for the text.
-    fn extract_text_span(&self, token: &TreeToken<'db>) -> TextSpan<'db> {
+    fn extract_text_span(&self, token: &TreeToken<'db>) -> TextSpan {
         token.text_span(self.source_text()).X()
     }
 
     /// Extract the TextSpan covering a nonempty run of tokens.
-    fn extract_group_text_span(&self, tokens: Cursor<'db>) -> TextSpan<'db> {
+    fn extract_group_text_span(&self, tokens: Cursor<'db>) -> TextSpan {
         let start = tokens.first().X().span().start;
         let end = tokens.last().X().span().end;
         TextSpan::new(self.source_text(), start..end)
     }
 
-    /// Get Text and ByteSpan from current position for error reporting.
+    /// The span at the current position, for error reporting.
     ///
     /// At the end of input this is an empty span just after the last token
     /// consumed, which is where the missing token would have gone. A run is
     /// usually a single line or bracket, so without that the error would point
     /// at the start of the file.
-    fn peek_text_span(&self) -> TextSpan<'db> {
+    fn peek_text_span(&self) -> TextSpan {
         match self.peek() {
             Some(token) => self.extract_text_span(token),
             None => {
@@ -561,7 +562,7 @@ pub fn non_ascii_names<'a>(
 /// [`crate::split::stray_delimiter_error`].
 pub fn non_ascii_name_error<'db>(
     db: &'db dyn crate::Db,
-    text: Text<'db>,
+    text: Source,
     span: Range<usize>,
     chunk_text: &str,
 ) -> DiagnosticBuilder<'db> {
@@ -731,14 +732,13 @@ mod tests {
     use crate::input::Source;
     use crate::lexer::lex_chunk;
     use crate::source_map::basic_source_map;
-    use crate::text::Text;
 
     /// A token stream over a whole source, for reading numbers off it.
     struct TestStream<'db> {
         db: &'db dyn crate::Db,
         tokens: Vec<TreeToken<'db>>,
         pos: usize,
-        text: Text<'db>,
+        text: Source,
     }
 
     impl<'db> TestStream<'db> {
@@ -748,7 +748,7 @@ mod tests {
             let tokens = bracer(db, lex_chunk(db, chunk))
                 .iter(db)
                 .collect();
-            TestStream { db, tokens, pos: 0, text: chunk.text(db) }
+            TestStream { db, tokens, pos: 0, text: chunk.source(db) }
         }
     }
 
@@ -777,7 +777,7 @@ mod tests {
             self.tokens.get(self.pos.checked_sub(1)?).map(|token| token.span().end)
         }
 
-        fn source_text(&self) -> Text<'db> {
+        fn source_text(&self) -> Source {
             self.text
         }
 
@@ -876,7 +876,7 @@ mod tests {
         let names = |text: &str| -> Vec<String> {
             let source = Source::new(db, text.S());
             let chunk = basic_source_map(db, source);
-            let chunk_text = chunk.text(db).as_str(db);
+            let chunk_text = chunk.source(db).as_str(db);
             let lexed = lex_chunk(db, chunk);
             non_ascii_names(lexed.tokens(db), chunk_text)
                 .map(|span| chunk_text[span].S())

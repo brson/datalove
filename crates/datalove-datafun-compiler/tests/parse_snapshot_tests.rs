@@ -182,7 +182,7 @@ fn diagnostics_json<'db>(
     }).collect()
 }
 
-fn spans_json(spans: &[bct::diagnostic::SpanEntry]) -> Value {
+fn spans_json(spans: &[bct::text::TextSpan]) -> Value {
     spans.iter().map(|s| json!([s.span.start, s.span.end])).collect()
 }
 
