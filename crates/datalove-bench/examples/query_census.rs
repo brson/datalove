@@ -35,7 +35,7 @@ fn report(label: &str, by_query: BTreeMap<String, usize>) {
     println!("\n=== {label}: {total} queries");
     let mut rows: Vec<_> = by_query.into_iter().collect();
     rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    for (query, count) in rows.iter().take(18) {
+    for (query, count) in rows.iter().take(30) {
         println!("  {count:>5}  {query}");
     }
 }

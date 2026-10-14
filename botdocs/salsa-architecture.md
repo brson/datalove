@@ -64,21 +64,20 @@ database of their own. Compiler work uses the datafun one, re-exported as
 |---|---|---|
 | `#[salsa::input]` | 1 | `Source`. A path's text, changed with `set_text`. The only thing that comes from outside. |
 | `#[salsa::interned]` | 11 | Deduplicated by content: `InternedText`, `ModuleId`, `Module`, `ModuleGraph`, `Package`, `PackageModule`, `PackageWorld`, `Script`, `ScriptUnit`, `ReachableFuncIds`, `RiderSources`. |
-| `#[salsa::tracked]` struct | 50 | Computed values with an identity. Three have a `#[tracked]` field; see below. |
-| `#[salsa::tracked]` fn | 120 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
+| `#[salsa::tracked]` struct | 49 | Computed values with an identity. Two have a `#[tracked]` field; see below. |
+| `#[salsa::tracked]` fn | 122 | Of which 43 keep a memo for a module compile; the rest are script, datalit and lexing paths. |
 
-### The three structs with a tracked field, and why
+### The two structs with a tracked field, and why
 
 A tracked struct's identity is a hash of its *untracked* fields. A `#[tracked]`
 field is read through an edge of its own, so it can change while the identity
 stays put -- and **every read of one is a dependency edge salsa must walk when
 it validates a memo**. That is the whole trade, and it is measured both ways in
-salsa-patterns.md. Only these three earn it:
+salsa-patterns.md. Only these two earn it:
 
 | struct | tracked fields | why |
 |---|---|---|
 | `ParsedModuleGraph` | 4 of 5 | Identity is the `ModuleGraph`, so a query that reads only the graph is not disturbed by a parse. This is what lets `graph_declares_consts` and friends walk the modules without depending on their statements. |
-| `StmtFun` | 2 of 5 | `FunSignature` and `body`, apart, because name resolution reads the signature and not the body. **That split is the parse firewall.** Folding them is 19% faster and makes a body edit re-typecheck every dependent module. |
 | `ModuleLowered` | 1 of 2 | Identity is the `ModuleId`; the IR rides behind the edge. This is the handle phase 5 passes around so a query keyed on one costs a word rather than a hash of every instruction. |
 
 `ExprFun`, `TypeFunction` and `ExprFunctionCall` used to be on this list and
@@ -86,7 +85,10 @@ are not: expressions, signatures and call sites are read whole by consumers
 that are keyed per module, so the fine grain cost edges and bought nothing.
 Untracking them was worth 2.6x, 12% and 12% of a 512-module edit. Expressions
 and call sites have since stopped being salsa structs at all: they live in a
-per-body arena, and an `ExprFun` is a handle into it. See
+per-body arena, and an `ExprFun` is a handle into it. `StmtFun` was on it too,
+its signature and body tracked apart so that name resolution could read one
+without the other; it is plain data now, and the parse firewall is
+`module_items`, a query that leaves the bodies out. See
 [plan-plain-ast.md](plan-plain-ast.md).
 
 The call site one needed a fixture with calls in it to see. The synthetic world

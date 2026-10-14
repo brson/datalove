@@ -121,8 +121,8 @@ pub fn lower_script_fragment_raw<'db>(
         // This must happen before lowering any function bodies.
         for stmt in stmts {
             if let Statement::Fun(fun_stmt) = stmt {
-                let func_name = fun_stmt.name(db).text(db).to_string();
-                let param_count = fun_stmt.params(db).len();
+                let func_name = fun_stmt.name().text(db).to_string();
+                let param_count = fun_stmt.params().len();
                 ctx.pre_register_func(&func_name, param_count);
             }
         }
@@ -232,8 +232,8 @@ pub fn lower_script_functions<'db>(
     // Pre-register all functions to enable forward references (mutual recursion).
     for stmt in stmts {
         if let Statement::Fun(fun_stmt) = stmt {
-            let func_name = fun_stmt.name(db).text(db).to_string();
-            let param_count = fun_stmt.params(db).len();
+            let func_name = fun_stmt.name().text(db).to_string();
+            let param_count = fun_stmt.params().len();
             ctx.pre_register_func(&func_name, param_count);
         }
     }
@@ -247,12 +247,12 @@ pub fn lower_script_functions<'db>(
     for stmt in stmts {
         if let Statement::Fun(fun_stmt) = stmt {
             // Look up pre-computed analysis.
-            let analysis = func_analyses.get(fun_stmt)
+            let analysis = func_analyses.get(&fun_stmt.key())
                 .expect("function analysis not found")
                 .clone();
 
-            let func_name = fun_stmt.name(db).text(db).to_string();
-            let param_count = fun_stmt.params(db).len();
+            let func_name = fun_stmt.name().text(db).to_string();
+            let param_count = fun_stmt.params().len();
             let func_id = ctx.define_func(&func_name, param_count);
 
             func_name_to_id.insert(func_name.clone(), func_id);
@@ -261,7 +261,7 @@ pub fn lower_script_functions<'db>(
             let saved = ctx.swap_body_state(FrameState::new());
 
             // Look up resolved types for this function.
-            let func_name_str = fun_stmt.name(db).text(db);
+            let func_name_str = fun_stmt.name().text(db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name_str))
                 .map(|v| v.as_slice());
@@ -271,7 +271,7 @@ pub fn lower_script_functions<'db>(
 
             // Lower the function body (returns IrCodeUnit).
             let lowered = lower_function_body(
-                &mut ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return);
+                &mut ctx, func_id, fun_stmt, analysis, resolved_params, resolved_return);
 
             // Restore parent state, whatever the body did, so the next function
             // starts from the unit's state rather than this body's.
@@ -377,7 +377,7 @@ fn shown_binding<'db>(ctx: &LowerCtx<'db>, expr: ExprFun<'db>) -> Option<String>
 /// and only the export should be emitted (body lowering is skipped).
 fn lower_statement_for_script<'db>(
     ctx: &mut LowerCtx<'db>,
-    stmt: &Statement<'db>,
+    stmt: &'db datalove_datafun_ast::ast::Statement<'db>,
     _stmt_idx: usize,
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
@@ -492,7 +492,7 @@ fn lower_statement_for_script<'db>(
             Ok(())
         }
         Statement::Fun(fun_stmt) => {
-            let func_name = fun_stmt.name(ctx.db).text(ctx.db).to_string();
+            let func_name = fun_stmt.name().text(ctx.db).to_string();
 
             // If this function was already lowered, just export it (body already in ctx.functions).
             if already_lowered_funcs.contains(&func_name) {
@@ -507,19 +507,19 @@ fn lower_statement_for_script<'db>(
             }
 
             // Look up pre-computed analysis.
-            let analysis = func_analyses.get(fun_stmt)
+            let analysis = func_analyses.get(&fun_stmt.key())
                 .expect("function analysis not found - caller must run analyze_script_functions first")
                 .clone();
 
             // Define the function in the symbol table first (allows recursion).
-            let param_count = fun_stmt.params(ctx.db).len();
+            let param_count = fun_stmt.params().len();
             let func_id = ctx.define_func(&func_name, param_count);
 
             // Swap in fresh state for function body.
             let saved = ctx.swap_body_state(FrameState::new());
 
             // Look up resolved types for this function.
-            let func_name_str = fun_stmt.name(ctx.db).text(ctx.db);
+            let func_name_str = fun_stmt.name().text(ctx.db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name_str))
                 .map(|v| v.as_slice());
@@ -528,7 +528,7 @@ fn lower_statement_for_script<'db>(
                 .cloned();
 
             // Lower the function body with resolved types for type alias support.
-            let unit = lower_function_body(ctx, func_id, *fun_stmt, analysis, resolved_params, resolved_return)?;
+            let unit = lower_function_body(ctx, func_id, fun_stmt, analysis, resolved_params, resolved_return)?;
 
             // Restore parent state.
             ctx.swap_body_state(saved);

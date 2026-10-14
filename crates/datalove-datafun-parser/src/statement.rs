@@ -648,14 +648,13 @@ statements that run belong in a function or a script")
             return self.unterminated_block("fun");
         }
 
-        ast::Statement::Fun(ast::StmtFun::new(
-            self.db,
-            self.module_id(),
+        ast::Statement::Fun(ast::StmtFun {
+            module_id: self.module_id(),
             name,
-            ast::FunSignature { type_params, type_bounds, params, return_type, inline },
-            ast::Body { statements: body, arena },
+            signature: std::sync::Arc::new(ast::FunSignature { type_params, type_bounds, params, return_type, inline }),
+            body: ast::Body { statements: body, arena },
             local_index,
-        ))
+        })
     }
 
     /// Parse the type parameter names inside `<...>` on a function signature.

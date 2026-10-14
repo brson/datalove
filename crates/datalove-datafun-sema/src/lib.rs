@@ -134,12 +134,12 @@ pub struct StmtKey {
 
 impl StmtKey {
     /// Extract a key from a statement.
-    pub fn from_stmt(db: &dyn salsa::Database, stmt: &Statement<'_>) -> Self {
+    pub fn from_stmt(stmt: &Statement<'_>) -> Self {
         let (kind, local_index) = match stmt {
             Statement::Let(_) => (0, None),
             Statement::Var(_) => (1, None),
             Statement::Set(s) => (2, Some(s.local_index)),
-            Statement::Fun(s) => (3, Some(s.local_index(db))),
+            Statement::Fun(s) => (3, Some(s.local_index())),
             Statement::Ret(s) => (4, Some(s.local_index)),
             Statement::Require(_) => (5, None),
             Statement::Import(_) => (6, None),

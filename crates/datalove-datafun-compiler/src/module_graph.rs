@@ -315,7 +315,7 @@ fn native_stub<'db>(
         module_id: Some(rider_module_id),
         name,
         local_index: 0,
-        signature: FunSignature { type_params, type_bounds, params, return_type: None, inline: false },
+        signature: std::sync::Arc::new(FunSignature { type_params, type_bounds, params, return_type: None, inline: false }),
     }
 }
 

@@ -173,15 +173,15 @@ pub fn evaluate_const<'db>(
 /// nothing.
 pub fn evaluate_body_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
-    func_stmt: &StmtFun<'db>,
+    func_stmt: &'db StmtFun<'db>,
     mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     mut deferred: BTreeSet<String>,
 ) -> (Vec<(String, IrType, Arc<ConstValue>)>, Vec<NamedConstError>) {
     let db = env.db;
-    let func_return_type = func_stmt.return_type(db).map(|ty| IrType::from_type_hint(db, &ty));
+    let func_return_type = func_stmt.return_type().map(|ty| IrType::from_type_hint(db, &ty));
     let mut consts = Vec::new();
     let mut errors = Vec::new();
-    let body = func_stmt.body(db);
+    let body = func_stmt.body();
     for stmt in &body.statements {
         let Statement::Const(const_stmt) = stmt else { continue };
         let name = const_stmt.name.text(db).to_string();
@@ -254,13 +254,13 @@ fn first_uncallable_target(
 /// `const_values` records them, and the errors, each naming the function.
 pub fn evaluate_instantiation_consts<'db>(
     env: &mut ConstEvalEnv<'_, 'db>,
-    func_stmt: &StmtFun<'db>,
+    func_stmt: &'db StmtFun<'db>,
     mut scope: HashMap<String, (IrType, Arc<ConstValue>)>,
     comptime_param_indices: &[usize],
     values: &[ConstValue],
 ) -> (HashMap<String, Arc<ConstValue>>, Vec<String>) {
     let db = env.db;
-    let params = func_stmt.params(db);
+    let params = func_stmt.params();
     for (&param_idx, value) in comptime_param_indices.iter().zip(values.iter()) {
         scope.insert(
             params[param_idx].name.text(db).to_string(),
@@ -268,7 +268,7 @@ pub fn evaluate_instantiation_consts<'db>(
         );
     }
     let (consts, errors) = evaluate_body_consts(env, func_stmt, scope, BTreeSet::new());
-    let func_name = func_stmt.name(db).text(db);
+    let func_name = func_stmt.name().text(db);
     (
         consts.into_iter().map(|(name, _, value)| (name, value)).collect(),
         errors.iter().map(|e| format!("{}::{}", func_name, e)).collect(),

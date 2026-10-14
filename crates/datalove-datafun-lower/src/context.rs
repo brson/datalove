@@ -1287,7 +1287,7 @@ impl<'db> LowerCtx<'db> {
         let id = self.body.next_stmt_id;
         #[cfg(debug_assertions)]
         {
-            let actual = StmtKey::from_stmt(self.db, stmt);
+            let actual = StmtKey::from_stmt(stmt);
             if let Some(expected) = self.body.drop_schedule.stmt_order.get(id) {
                 assert_eq!(
                     *expected, actual,

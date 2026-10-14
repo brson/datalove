@@ -402,9 +402,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 }
             }
             datalove_datafun_ast::ast::Statement::Fun(fun_stmt) => {
-                let name = fun_stmt.name(&db);
-                let params = fun_stmt.params(&db);
-                let return_type = fun_stmt.return_type(&db);
+                let name = fun_stmt.name();
+                let params = fun_stmt.params();
+                let return_type = fun_stmt.return_type();
 
                 let param_types: Vec<_> = params.iter().map(|p| {
                     json!({

@@ -369,11 +369,11 @@ fn walk_statements<'db>(
             Statement::Fun(s) => {
                 cov.hit(
                     "shape",
-                    if s.return_type(db).is_some() { "fun with a return" } else { "void fun" },
+                    if s.return_type().is_some() { "fun with a return" } else { "void fun" },
                 );
-                if !s.type_params(db).is_empty() {
+                if !s.type_params().is_empty() {
                     cov.hit("shape", "generic fun");
-                    if s.type_bounds(db).iter().any(|b| b.is_some()) {
+                    if s.type_bounds().iter().any(|b| b.is_some()) {
                         cov.hit("shape", "bounded generic fun");
                     }
                 }
@@ -381,17 +381,17 @@ fn walk_statements<'db>(
                 // a `T` in it is not counted as a reference to an alias.
                 let params = &TypeParams {
                     names: s
-                        .type_params(db)
+                        .type_params()
                         .iter()
                         .map(|name| name.text(db).to_string())
                         .collect(),
                 };
-                for param in s.params(db).iter() {
+                for param in s.params().iter() {
                     cov.hit("param_mode", param_mode_name(&param.mode));
                     walk_type(db, &param.type_hint, params, cov);
                 }
-                walk_opt_type(db, &s.return_type(db), params, cov);
-                let body = s.body(db);
+                walk_opt_type(db, &s.return_type(), params, cov);
+                let body = s.body();
                 walk_statements(db, &body.arena, &body.statements, params, cov);
             }
             Statement::Ret(s) => {

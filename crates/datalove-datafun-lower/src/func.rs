@@ -38,7 +38,7 @@ pub fn lower_function_for_module<'db>(
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
     func_id_map: &'db dyn FuncIds<'db>,
-    func: ast::StmtFun<'db>,
+    func: &'db ast::StmtFun<'db>,
     func_id: FuncId,
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
@@ -67,7 +67,7 @@ pub fn lower_function_for_module<'db>(
 pub fn lower_function_body<'db>(
     ctx: &mut LowerCtx<'db>,
     func_id: FuncId,
-    func: ast::StmtFun<'db>,
+    func: &'db ast::StmtFun<'db>,
     analysis: FunctionAnalysis<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
     resolved_return_type: Option<Type<'db>>,
@@ -79,7 +79,7 @@ pub fn lower_function_body<'db>(
         analysis.errors
     );
 
-    let name = func.name(ctx.db).text(ctx.db).to_string();
+    let name = func.name().text(ctx.db).to_string();
 
     // Set drop schedule and tracking for this function.
     ctx.body.drop_schedule = analysis.schedule;
@@ -99,21 +99,21 @@ pub fn lower_function_body<'db>(
     let saved_is_script_unit = ctx.is_script_unit;
     ctx.is_script_unit = false;
 
-    let type_params = func.type_params(ctx.db).clone();
+    let type_params = func.type_params().clone();
 
     // The signature's types are written over the function's own type
     // parameters, which the call site binds.
     let ir_type = |ty: &Type<'db>| IrType::from_tycheck_generic(ctx.db, ty, &type_params);
     ctx.return_type = match resolved_return_type {
         Some(ty) => Some(ir_type(&ty)),
-        None => func.return_type(ctx.db).map(|hint| IrType::from_type_hint_generic(ctx.db, &hint, &type_params)),
+        None => func.return_type().map(|hint| IrType::from_type_hint_generic(ctx.db, &hint, &type_params)),
     };
 
     // Allocate ParamIds for parameters with correct types and modes.
     // Record binding operands to match analysis order.
     let mut params: Vec<ParamId> = Vec::new();
     let mut param_modes = Vec::new();
-    let func_params = func.params(ctx.db);
+    let func_params = func.params();
     for (i, p) in func_params.iter().enumerate() {
         let param_name = p.name.text(ctx.db).to_string();
         // A const parameter is passed by reference: like any const it is
@@ -145,7 +145,7 @@ pub fn lower_function_body<'db>(
     ctx.body.type_params = type_params.clone();
 
     // Lower the function body with statement indices.
-    let body = func.body(ctx.db);
+    let body = func.body();
     let saved_arena = ctx.arena.replace(&body.arena);
     for (idx, stmt) in body.statements.iter().enumerate() {
         ctx.body.current_stmt_idx = Some(idx);
@@ -193,7 +193,7 @@ pub fn lower_function_body<'db>(
             tracked_params: ctx.compute_tracked_params(),
             type_param_count: type_params.len() as u32,
             descriptor_table: Vec::new(),
-            inline: func.signature(ctx.db).inline,
+            inline: func.signature().inline,
         }),
         nested_units: Vec::new(),
     };

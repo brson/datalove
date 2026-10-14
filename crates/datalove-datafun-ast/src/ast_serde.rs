@@ -623,13 +623,13 @@ impl Script {
 }
 
 impl Statement {
-    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &crate::ast::Statement<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, arena: &'db crate::ast::ExprArena<'db>, ast: &'db crate::ast::Statement<'db>) -> Self {
         match ast {
             crate::ast::Statement::Let(s) => Statement::Let(StmtLet::from_ast(db, arena, s)),
             crate::ast::Statement::Var(s) => Statement::Var(StmtVar::from_ast(db, arena, s)),
             crate::ast::Statement::Const(s) => Statement::Const(StmtConst::from_ast(db, arena, s)),
             crate::ast::Statement::Set(s) => Statement::Set(StmtSet::from_ast(db, arena, s)),
-            crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, *s)),
+            crate::ast::Statement::Fun(s) => Statement::Fun(StmtFun::from_ast(db, s)),
             crate::ast::Statement::Ret(s) => Statement::Ret(StmtRet::from_ast(db, arena, s)),
             crate::ast::Statement::Require(s) => Statement::Require(StmtRequire::from_ast(db, s)),
             crate::ast::Statement::Import(s) => Statement::Import(StmtImport::from_ast(db, s)),
@@ -769,16 +769,16 @@ impl FieldSelector {
 }
 
 impl StmtFun {
-    pub fn from_ast<'db>(db: &'db dyn Db, ast: crate::ast::StmtFun<'db>) -> Self {
+    pub fn from_ast<'db>(db: &'db dyn Db, ast: &'db crate::ast::StmtFun<'db>) -> Self {
         StmtFun {
-            name: ast.name(db).as_str(db).to_string(),
-            inline: ast.signature(db).inline,
-            type_params: ast.type_params(db).iter().map(|t| t.as_str(db).to_string()).collect(),
-            type_bounds: bounds(ast.type_bounds(db)),
-            params: ast.params(db).iter().map(|p| FunParam::from_ast(db, p)).collect(),
-            return_type: ast.return_type(db).map(|rt| datalove_datalit::ast_serde::TypeHint::from_ast(db, rt)),
+            name: ast.name().as_str(db).to_string(),
+            inline: ast.signature().inline,
+            type_params: ast.type_params().iter().map(|t| t.as_str(db).to_string()).collect(),
+            type_bounds: bounds(ast.type_bounds()),
+            params: ast.params().iter().map(|p| FunParam::from_ast(db, p)).collect(),
+            return_type: ast.return_type().map(|rt| datalove_datalit::ast_serde::TypeHint::from_ast(db, rt)),
             body: {
-                let body = ast.body(db);
+                let body = ast.body();
                 body.statements.iter().map(|s| Statement::from_ast(db, &body.arena, s)).collect()
             },
         }

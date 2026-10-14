@@ -56,11 +56,9 @@ pub fn module_import_demands<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
 ) -> Vec<ImportDemand> {
-    let parsed = &parser::parse_module_full(db, module).parsed;
-
-    parsed.statements(db).iter()
-        .filter_map(|statement| match statement {
-            ast::Statement::Require(ast::StmtRequire::Module(require)) => Some((
+    parser::module_uses(db, module).items.iter()
+        .filter_map(|item| match item {
+            ast::Item::Require(ast::StmtRequire::Module(require)) => Some((
                 require.import_space.as_str(db).S(),
                 require.package_alias.as_str(db).S(),
                 require.module_alias.as_str(db).S(),

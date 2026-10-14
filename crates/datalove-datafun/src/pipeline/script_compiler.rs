@@ -1394,10 +1394,10 @@ impl<'db> ScriptCompiler<'db> {
 
         for statement in statements {
             let Statement::Fun(func_stmt) = statement else { continue };
-            let func_name = func_stmt.name(self.db).text(self.db);
+            let func_name = func_stmt.name().text(self.db);
             // A function's const parameters have a value per instantiation
             // rather than one, so the consts naming them wait for the copies.
-            let const_params = func_stmt.params(self.db).iter()
+            let const_params = func_stmt.params().iter()
                 .filter(|p| p.is_comptime)
                 .map(|p| p.name.text(self.db).to_string())
                 .collect();
@@ -1563,7 +1563,7 @@ impl<'db> ScriptCompiler<'db> {
         func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
     ) -> (HashMap<String, Arc<ConstValue>>, Vec<String>) {
         let Some(func_stmt) = statements.iter().find_map(|stmt| match stmt {
-            Statement::Fun(f) if f.name(self.db).text(self.db) == func_name => Some(f),
+            Statement::Fun(f) if f.name().text(self.db) == func_name => Some(f),
             _ => None,
         }) else {
             return (HashMap::new(), Vec::new());

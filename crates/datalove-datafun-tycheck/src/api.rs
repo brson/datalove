@@ -355,7 +355,7 @@ pub fn typecheck_script_unit<'db>(
             // that one is answering. In a session the two arrive on separate
             // lines, which is exactly where the shadowing is hardest to see.
             let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = HashMap::new();
-            let defined = defined_function_names(db, parsed.statements(db));
+            let defined = defined_function_names(parsed.statements(db));
 
             for (item_name, func_ty, func_ast, source_module_id, local_index) in resolved_imports {
                 if defined.contains(&item_name) {
@@ -439,10 +439,10 @@ pub fn typecheck_script_unit<'db>(
                         }
                     }
                     Statement::Fun(fun_stmt) => {
-                        let name = fun_stmt.name(db);
+                        let name = fun_stmt.name();
                         if let Some(func_ty) = ctx.functions.get(&name) {
                             new_fns.push((name, *func_ty));
-                            new_fn_asts.push((name, fun_stmt.head(db), None));
+                            new_fn_asts.push((name, fun_stmt.head(), None));
                         }
                     }
                     _ => {}
@@ -616,7 +616,7 @@ pub fn typecheck_module<'db>(
     // is refused rather than allowed to take it over. The first stays, which
     // keeps the rest of the module resolving to what it was written against.
     let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
-    let defined = defined_function_names(db, parsed.statements(db));
+    let defined = defined_function_names(parsed.statements(db));
     for (local_name, func_type, func_ast, source_module, local_index) in &resolved_imports {
         if defined.contains(local_name) {
             let err = ctx.error_import_shadows_function(*local_index, *local_name);
@@ -1433,12 +1433,11 @@ fn resolve_script_imports<'db>(
 /// A name one of them takes is not free for an import, however its
 /// signature turned out.
 fn defined_function_names<'db>(
-    db: &'db dyn salsa::Database,
     statements: &[Statement<'db>],
 ) -> std::collections::HashSet<InternedText<'db>> {
     statements.iter()
         .filter_map(|statement| match statement {
-            Statement::Fun(stmt) => Some(stmt.name(db)),
+            Statement::Fun(stmt) => Some(stmt.name()),
             Statement::NativeFun(stmt) => Some(stmt.name),
             _ => None,
         })

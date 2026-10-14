@@ -109,14 +109,14 @@ pub fn analyze_module<'db>(
 
     for statement in parsed.statements(db).iter() {
         if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).S();
+            let func_name = func.name().text(db).S();
 
             // Get resolved param types for this function.
             let resolved_params = func_param_types.get(&func_name).map(|v| v.as_slice());
 
             // Run ownership analysis with auto-adapt mode.
             let analysis = ownership_analysis::analyze_function_with_mode(
-                db, *func, expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
+                db, func, expr_types, typecheck_result.call_targets(db), resolved_params, auto_adapt_mode
             );
 
             let (opt_analysis, errors) = if analysis.errors.is_empty() {

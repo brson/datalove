@@ -53,7 +53,7 @@
 //! - `literal`: Literal parsing (int, float, string constants)
 
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::StmtFun;
+use datalove_datafun_ast::ast::FunKey;
 use datalove_datafun_sema::FunctionAnalysis;
 
 mod context;
@@ -79,7 +79,7 @@ pub use const_expr::{
 pub use ir_ext::IrTypeExt;
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis<'db>>;
+pub type ScriptFunctionAnalyses<'db> = HashMap<FunKey<'db>, FunctionAnalysis<'db>>;
 
 /// Errors that can occur during lowering.
 ///

@@ -201,7 +201,7 @@ with `where {{ {param} is ord, }}`, which every type there is satisfies")),
 /// Check a statement.
 pub fn check_statement<'db>(
     ctx: &mut TypeContext<'db>,
-    statement: &Statement<'db>,
+    statement: &'db datalove_datafun_ast::ast::Statement<'db>,
 ) {
     let db = ctx.db;
 
@@ -265,9 +265,9 @@ pub fn check_statement<'db>(
         }
 
         Statement::Fun(stmt) => {
-            let name = stmt.name(db);
-            let params = stmt.params(db);
-            let body = stmt.body(db);
+            let name = stmt.name();
+            let params = stmt.params();
+            let body = stmt.body();
 
             // Name resolution skips functions whose signature types do not
             // resolve, having already reported the error. Skip the body too,
@@ -277,7 +277,7 @@ pub fn check_statement<'db>(
             };
             // A second definition of the name was reported (F086) and the
             // signature is the first one's, which is no basis for its body.
-            if ctx.lookup_function_ast(name).is_some_and(|(ast, _)| ast.key() != stmt.head(db).key()) {
+            if ctx.lookup_function_ast(name).is_some_and(|(ast, _)| ast.key() != stmt.head().key()) {
                 return;
             }
 
@@ -297,7 +297,7 @@ pub fn check_statement<'db>(
             // type in a generic function is fine, because the two vary a
             // function along different axes: one copy per const value serves
             // every binding of the type parameters.
-            if !stmt.type_params(db).is_empty() {
+            if !stmt.type_params().is_empty() {
                 for (i, param) in params.iter().enumerate().filter(|(_, p)| p.is_comptime) {
                     let generic = matches!(
                         param_types.get(i),
@@ -305,7 +305,7 @@ pub fn check_statement<'db>(
                             if datalove_datafun_common::generics::contains_type_param(ty));
                     if generic {
                         ctx.push_coded(
-                            crate::ErrorSite::Fun(stmt.local_index(db)),
+                            crate::ErrorSite::Fun(stmt.local_index()),
                             "F077",
                             fmt!("const parameter `{}` has a type that depends on a type parameter", param.name.as_str(db)),
                             S("a const parameter's type must be known before the function is specialized"),
@@ -343,8 +343,8 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             let saved_enclosing_fun = ctx.enclosing_fun;
             ctx.variables.retain(|_, binding| binding.is_const);
             ctx.in_function_body = true;
-            let key = stmt.head(db).key();
-            ctx.checking_inline = stmt.signature(db).inline.then_some(key);
+            let key = stmt.head().key();
+            ctx.checking_inline = stmt.signature().inline.then_some(key);
             ctx.enclosing_fun = Some(key);
             // A type parameter is in scope in the body as well as the
             // signature, so a binding there can be annotated with one:
@@ -352,8 +352,8 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // and without this they read as an unresolved alias.
             let saved_type_aliases = ctx.type_aliases.C();
             let saved_type_param_bounds = ctx.type_param_bounds.C();
-            let bounds = stmt.type_bounds(db);
-            for (i, name) in stmt.type_params(db).iter().enumerate() {
+            let bounds = stmt.type_bounds();
+            for (i, name) in stmt.type_params().iter().enumerate() {
                 ctx.type_aliases.insert(
                     *name,
                     Type::Datalit(datalove_datalit::tycheck::Type::Var(*name)),
@@ -378,7 +378,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             }
 
             ctx.expected_return_type = Some(ret_ty);
-            ctx.is_void_function = stmt.return_type(db).is_none();
+            ctx.is_void_function = stmt.return_type().is_none();
 
             // Check function body.
             let saved_arena = ctx.arena.replace(&body.arena);
@@ -392,10 +392,10 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // return there whatever the body did, so a body that simply ended
             // handed the caller a zeroed value of the return type: `0` for an
             // integer, and for a string a null buffer that prints as empty.
-            if stmt.return_type(db).is_some()
+            if stmt.return_type().is_some()
                 && datalove_datafun_ast::reachable::body_completes(&body.statements)
             {
-                ctx.report_missing_return(stmt.local_index(db), name);
+                ctx.report_missing_return(stmt.local_index(), name);
             }
 
             // Restore context.
@@ -1073,7 +1073,7 @@ fn report_unindexable<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtSet<'db>, msg:
 /// bindings theirs: an element, or an index and an element, of a list or a
 /// tensor, whose element is a row of one rank less above rank 1; an element
 /// of a set; a key and a value of a map.
-fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &StmtFor<'db>) {
+fn check_for<'db>(ctx: &mut TypeContext<'db>, stmt: &'db datalove_datafun_ast::ast::StmtFor<'db>) {
     use datalit::tycheck::Type as T;
     let db = ctx.db;
     let iteratee = stmt.iteratee;

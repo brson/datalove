@@ -85,7 +85,10 @@ alone -- which leaves `ParsedStatements` comparing equal, which is what spares
 name resolution. That is the firewall two sections down. Untracking it was tried:
 a 512-module edit went from 16.5ms to 21.8ms and the database grew by 62MB,
 because the statements then differ on every edit and a new set of structs is
-minted each time.
+minted each time. (It has since become plain data, with the firewall moved to
+a query of its own, `module_items`, that leaves the bodies out: nothing is
+minted per function, and a 512-module edit went from 3.1ms to 2.25ms. See
+[plan-plain-ast.md](plan-plain-ast.md).)
 
 So the test is not "how many fields are tracked" but:
 

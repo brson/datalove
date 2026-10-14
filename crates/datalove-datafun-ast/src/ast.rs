@@ -142,7 +142,7 @@ impl<'db> Items<'db> {
                 Statement::Require(s) => Some(Item::Require(s.clone())),
                 Statement::Import(s) => Some(Item::Import(s.clone())),
                 Statement::TypeAlias(s) => Some(Item::TypeAlias(s.clone())),
-                Statement::Fun(s) => Some(Item::Fun(s.head(db))),
+                Statement::Fun(s) => Some(Item::Fun(s.head())),
                 Statement::NativeFun(s) => Some(Item::NativeFun(s.clone())),
                 _ => None,
             })
@@ -478,19 +478,11 @@ pub enum IndexErrorMode {
 
 /// A function's signature: everything a caller has to know about it.
 ///
-/// One `#[tracked]` field rather than four, because a tracked field is a
-/// dependency edge per read and salsa walks every one of them when it
-/// validates a memo. Five edges per function is five where two will do, and on
-/// a 512-module world validating `StmtFun`'s was 19% of an edit.
-///
-/// Signature and body are kept apart, and that is the whole of the split that
-/// is left: name resolution and export collection read the signature and not
-/// the body, so a change to a body still leaves them alone. Folding the body in
-/// as well was tried and is 20% faster again, and it makes an edit to a body
-/// re-resolve that module's names and re-typecheck every module that depends on
-/// it. That is a cascade rather than a constant, so it loses at the scale this
-/// is all for. `parse_firewall_tests` and the `module_memo` `change_ast`
-/// fixtures both catch it.
+/// Kept apart from the body because what reads a function from outside it --
+/// name resolution, export collection, a caller -- reads this and not the body,
+/// through `FunHead` and `Items`, so a change to a body leaves them alone.
+/// `parse_firewall_tests` and the `module_memo` `change_ast` fixtures catch an
+/// edit to a body reaching them.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct FunSignature<'db> {
@@ -511,55 +503,75 @@ pub struct FunSignature<'db> {
     pub inline: bool,
 }
 
-#[salsa::tracked]
+/// A function: its signature and its body.
+///
+/// Plain data, held in its parse. What callers and importers see of it is its
+/// `FunHead`, and what name resolution sees is the parse's `Items`, so an edit
+/// to a body changes this and its module's statements and nothing they read.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct StmtFun<'db> {
-    /// Module this function belongs to (identity key).
-    /// None for script-local functions.
-    #[returns(copy)]
+    /// Module this function belongs to, or None for a script's own function.
     pub module_id: Option<ModuleId<'db>>,
-    /// Function name (identity key).
-    #[returns(copy)]
     pub name: InternedText<'db>,
-    /// What a caller has to know. Read through the accessors below.
-    #[tracked]
-    #[returns(ref)]
-    pub signature: FunSignature<'db>,
-    /// What it does, behind an edge of its own so that reading a signature is
-    /// not a reason to re-run when a body changes.
-    #[tracked]
-    #[returns(ref)]
+    /// Shared with every `FunHead` made of it, which callers and importers
+    /// hold copies of.
+    pub signature: std::sync::Arc<FunSignature<'db>>,
     pub body: Body<'db>,
     /// Index for span lookup in DatafunSpans.fun_spans.
-    #[returns(copy)]
     pub local_index: u32,
 }
 
 impl<'db> StmtFun<'db> {
+    pub fn module_id(&self) -> Option<ModuleId<'db>> {
+        self.module_id
+    }
+
+    pub fn name(&self) -> InternedText<'db> {
+        self.name
+    }
+
+    pub fn local_index(&self) -> u32 {
+        self.local_index
+    }
+
+    pub fn signature(&self) -> &FunSignature<'db> {
+        &self.signature
+    }
+
+    pub fn body(&self) -> &Body<'db> {
+        &self.body
+    }
+
     /// Type parameters, in declaration order.
-    pub fn type_params(self, db: &'db dyn salsa::Database) -> &'db Vec<InternedText<'db>> {
-        &self.signature(db).type_params
+    pub fn type_params(&self) -> &Vec<InternedText<'db>> {
+        &self.signature.type_params
     }
 
     /// The bound each type parameter was written with, by the same index.
-    pub fn type_bounds(self, db: &'db dyn salsa::Database) -> &'db Vec<Option<TypeBound>> {
-        &self.signature(db).type_bounds
+    pub fn type_bounds(&self) -> &Vec<Option<TypeBound>> {
+        &self.signature.type_bounds
     }
 
-    pub fn params(self, db: &'db dyn salsa::Database) -> &'db Vec<FunParam<'db>> {
-        &self.signature(db).params
+    pub fn params(&self) -> &Vec<FunParam<'db>> {
+        &self.signature.params
     }
 
-    pub fn return_type(self, db: &'db dyn salsa::Database) -> Option<datalit::ast::TypeHint<'db>> {
-        self.signature(db).return_type.clone()
+    pub fn return_type(&self) -> Option<datalit::ast::TypeHint<'db>> {
+        self.signature.return_type.clone()
+    }
+
+    pub fn key(&self) -> FunKey<'db> {
+        FunKey { module_id: self.module_id, name: self.name, local_index: self.local_index }
     }
 
     /// What a caller or an importer knows of this function.
-    pub fn head(self, db: &'db dyn salsa::Database) -> FunHead<'db> {
+    pub fn head(&self) -> FunHead<'db> {
         FunHead {
-            module_id: self.module_id(db),
-            name: self.name(db),
-            local_index: self.local_index(db),
-            signature: self.signature(db).clone(),
+            module_id: self.module_id,
+            name: self.name,
+            local_index: self.local_index,
+            signature: self.signature.clone(),
         }
     }
 }
@@ -590,7 +602,7 @@ pub struct FunHead<'db> {
     pub name: InternedText<'db>,
     /// Where its span is filed, in `DatafunSpans::fun_spans`.
     pub local_index: u32,
-    pub signature: FunSignature<'db>,
+    pub signature: std::sync::Arc<FunSignature<'db>>,
 }
 
 impl<'db> FunHead<'db> {

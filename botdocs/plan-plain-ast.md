@@ -5,7 +5,7 @@ ordinary data held by a memoized parse, the incremental boundary moves to an
 explicit summary of each module's items, and later phases name functions and
 expressions by stable keys rather than by salsa ids. Written October 2026,
 after the parser stopped copying tokens ([plan-parser.md](plan-parser.md)).
-Phases 0 and 1 are done; see [Progress](#user-content-progress).
+Phases 0 to 2 and most of 3 are done; see [Progress](#user-content-progress).
 
 ## Contents
 
@@ -295,6 +295,30 @@ up by its `IrModuleId` as an index into `statements_only`, which is wrong
 whenever a rider is numbered ahead of the modules; it looks the id up now.
 Three query-log tests in `module_graph.rs` counted parses through
 `parse_module_graph` and now parse each module themselves.
+
+**Phase 3's second step** made `StmtFun` plain data, held in its parse,
+with its signature behind an `Arc` that every `FunHead` made of it shares.
+The firewall changed hands here, from identity to `module_items`, and no
+incremental test changed. A body edit now runs 22 queries where it ran 19:
+`parse_module_ast` and `module_items` run and backdate, and the stratum of
+`lower_module_functions` that does not hold the edited function runs again,
+since a stratum now reads the whole parse rather than its functions' body
+fields. `module_import_demands` reads `module_uses`, and `module_const_kinds`
+and `lower_module_functions` read `parse_module_ast` rather than
+`parse_module_full`, so a span-only edit spares them.
+
+The `FunHead` step had cost 4% of the `sys/std` compile (158.7M to 164.8M
+instructions), every copy of a head cloning its signature; sharing the
+signature took it to 151.4M, with page faults back to phase 1's (3,720).
+A 512-module edit in `recompile_profile` went from 3.1ms to 2.25ms and peak
+memory from 224MB to 215MB. When `StmtFun` was untracked in place, without a
+summary to read instead, the same measurement got 32% slower and 62MB larger
+(salsa-patterns.md).
+
+`TopLevel` stays a tracked struct for now. Its identity is a hash of the whole
+top level, functions included, made once per parse; removing it means giving
+the script-side queries that take it (`analyze_script_fragment_tracked`,
+`collect_const_graph`) the script unit as their key instead.
 
 ## Verifying each phase
 

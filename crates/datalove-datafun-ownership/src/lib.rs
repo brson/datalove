@@ -41,7 +41,7 @@
 use rmx::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use datalove_datafun_ast::ast::{
-    Statement, StmtFun, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
+    Statement, StmtFun, FunKey, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
     ExprFun, ExprFunKind, BinOp, UnaryOp, ParamMode, ExprKey, ExprId, ExprArena, Body,
 };
@@ -70,7 +70,7 @@ pub use datalove_datafun_common::AutoAdaptMode;
 // ============================================================================
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<StmtFun<'db>, FunctionAnalysis<'db>>;
+pub type ScriptFunctionAnalyses<'db> = HashMap<FunKey<'db>, FunctionAnalysis<'db>>;
 
 /// State of a binding during analysis.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -656,7 +656,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
         let id = self.next_stmt_id;
         self.next_stmt_id += 1;
         #[cfg(debug_assertions)]
-        self.schedule.stmt_order.push(StmtKey::from_stmt(self.db, stmt));
+        self.schedule.stmt_order.push(StmtKey::from_stmt(stmt));
         id
     }
 
@@ -1247,7 +1247,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 /// than the resolved type.
 pub fn analyze_function<'db>(
     db: &'db dyn salsa::Database,
-    func: StmtFun<'db>,
+    func: &'db StmtFun<'db>,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
@@ -1258,7 +1258,7 @@ pub fn analyze_function<'db>(
 /// Analyze a function for ownership with configurable auto-adapt mode.
 pub fn analyze_function_with_mode<'db>(
     db: &'db dyn salsa::Database,
-    func: StmtFun<'db>,
+    func: &'db StmtFun<'db>,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
     resolved_param_types: Option<&[Type<'db>]>,
@@ -1268,13 +1268,13 @@ pub fn analyze_function_with_mode<'db>(
     let mut ctx = AnalysisCtx::new(
         db, expr_types, auto_adapt_mode, Vec::new(), OuterConsts::AllUnresolved, call_targets,
     );
-    ctx.type_params = func.type_params(db);
+    ctx.type_params = func.type_params();
 
     // Enter function scope.
     ctx.enter_scope(ScopeKind::Function);
 
     // Register parameters as bindings.
-    let params = func.params(db);
+    let params = func.params();
     for (i, param) in params.iter().enumerate() {
         let name = param.name.text(db).S();
         // Use resolved type if available, otherwise fall back to AST type hint.
@@ -1292,7 +1292,7 @@ pub fn analyze_function_with_mode<'db>(
     }
 
     // Analyze function body.
-    let body = func.body(db);
+    let body = func.body();
     ctx.arena = Some(&body.arena);
     analyze_statements(&mut ctx, &body.statements);
 
@@ -1334,7 +1334,7 @@ pub fn analyze_script_functions<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    stmts: &[Statement<'db>],
+    stmts: &'db [Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
     let mut analyses = HashMap::new();
@@ -1343,16 +1343,16 @@ pub fn analyze_script_functions<'db>(
     for stmt in stmts {
         if let Statement::Fun(func) = stmt {
             // Look up resolved param types if available.
-            let func_name = func.name(db).text(db);
+            let func_name = func.name().text(db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function(db, *func, expr_types, call_targets, resolved_params);
+            let analysis = analyze_function(db, func, expr_types, call_targets, resolved_params);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
-            analyses.insert(*func, analysis);
+            analyses.insert(func.key(), analysis);
         }
     }
 
@@ -1368,7 +1368,7 @@ pub fn analyze_script_functions_with_mode<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &ExprTypes<'db>,
     call_targets: &CallTargets<'db>,
-    stmts: &[Statement<'db>],
+    stmts: &'db [Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
@@ -1378,16 +1378,16 @@ pub fn analyze_script_functions_with_mode<'db>(
     for stmt in stmts {
         if let Statement::Fun(func) = stmt {
             // Look up resolved param types if available.
-            let func_name = func.name(db).text(db);
+            let func_name = func.name().text(db);
             let resolved_params = func_param_types
                 .and_then(|m| m.get(func_name))
                 .map(|v| v.as_slice());
 
-            let analysis = analyze_function_with_mode(db, *func, expr_types, call_targets, resolved_params, auto_adapt_mode);
+            let analysis = analyze_function_with_mode(db, func, expr_types, call_targets, resolved_params, auto_adapt_mode);
             if !analysis.errors.is_empty() {
                 errors.push((func_name.S(), analysis.errors.C()));
             }
-            analyses.insert(*func, analysis);
+            analyses.insert(func.key(), analysis);
         }
     }
 

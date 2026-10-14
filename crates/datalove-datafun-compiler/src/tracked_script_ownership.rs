@@ -6,7 +6,7 @@
 
 use rmx::prelude::*;
 use std::collections::HashMap;
-use datalove_datafun_ast::ast::{ParsedExpr, Statement, StmtFun, TopLevel};
+use datalove_datafun_ast::ast::{FunKey, ParsedExpr, Statement, TopLevel};
 use datalove_datafun_ast::spans::DatafunSpans;
 use datalove_datafun_tycheck::{UnitTypecheckResultTracked};
 use datalove_diagnostic::DiagnosticBuilderExt;
@@ -75,21 +75,21 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
     pub fn to_function_analyses_map(
         &self,
         db: &'db dyn salsa::Database,
-        stmts: &[Statement<'db>],
+        stmts: &'db [Statement<'db>],
     ) -> ScriptFunctionAnalyses<'db> {
         let analyses = self.function_analyses(db);
         let mut map = HashMap::new();
 
-        // Build name -> StmtFun lookup from statements.
-        let mut name_to_stmt: HashMap<&str, StmtFun<'db>> = HashMap::new();
+        // Build name -> function lookup from statements.
+        let mut name_to_stmt: HashMap<&str, FunKey<'db>> = HashMap::new();
         for stmt in stmts {
             if let Statement::Fun(func) = stmt {
-                let name = func.name(db).text(db);
-                name_to_stmt.insert(name, *func);
+                let name = func.name().text(db);
+                name_to_stmt.insert(name, func.key());
             }
         }
 
-        // Convert Vec<(String, FunctionAnalysisData)> back to HashMap<StmtFun, FunctionAnalysis>.
+        // Convert Vec<(String, FunctionAnalysisData)> back to a map by function.
         for (name, data) in analyses {
             if let Some(&func) = name_to_stmt.get(name.as_str()) {
                 let analysis = FunctionAnalysis {
@@ -185,7 +185,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     let func_analyses_data: Vec<(String, FunctionAnalysisData)> = func_analyses
         .into_iter()
         .map(|(stmt_fun, analysis)| {
-            let name = stmt_fun.name(db).text(db).S();
+            let name = stmt_fun.name.text(db).S();
             (name, FunctionAnalysisData::from(analysis))
         })
         .collect();

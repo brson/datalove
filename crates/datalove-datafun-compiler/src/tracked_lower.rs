@@ -467,12 +467,12 @@ pub fn lower_module<'db>(
         let parsed = datalove_datafun_parser::parse_module_ast(db, module);
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func) = statement {
-                let func_name = func.name(db).text(db).S();
+                let func_name = func.name().text(db).S();
                 let func_id = func_ids[func_idx].1;
                 func_idx += 1;
 
                 // Get resolved types for this function.
-                let signature = signatures.get(&func.name(db));
+                let signature = signatures.get(&func.name());
                 let resolved_params = signature.map(|f| f.param_types(db).as_slice());
                 let resolved_return = signature.map(|f| f.return_type(db));
 
@@ -497,7 +497,7 @@ pub fn lower_module<'db>(
                     expr_types,
                     call_targets,
                     reachable.entries(db),
-                    *func,
+                    func,
                     func_id,
                     analysis,
                     resolved_params,
@@ -812,7 +812,7 @@ pub fn lower_module_functions<'db>(
 ) -> ModuleLowerOutcome<'db> {
     log_query("lower_functions", module.id(db).path(db), QueryPhase::Start);
 
-    let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
     let module_consts: HashMap<String, (IrType, Arc<ConstValue>)> =
         module_consts.into_iter().map(|(name, (ty, value))| (name, (ty, value.0))).collect();
     let restricting = restrict.is_some();
@@ -836,7 +836,7 @@ pub fn lower_module_functions<'db>(
     let mut next_func_id: u32 = 0;
     for statement in parsed.statements(db).iter() {
         if let Statement::Fun(func) = statement {
-            let func_name = func.name(db).text(db).S();
+            let func_name = func.name().text(db).S();
             let func_id = FuncId(next_func_id);
             next_func_id += 1;
 
@@ -855,7 +855,7 @@ pub fn lower_module_functions<'db>(
             }
 
             // Get resolved param and return types for this function.
-            let signature = signatures.get(&func.name(db));
+            let signature = signatures.get(&func.name());
             let resolved_params = signature.map(|f| f.param_types(db).as_slice());
             let resolved_return = signature.map(|f| f.return_type(db));
 
@@ -874,7 +874,7 @@ pub fn lower_module_functions<'db>(
                 expr_types,
                 call_targets,
                 func_id_entries,
-                *func,
+                func,
                 func_id,
                 analysis,
                 resolved_params,
@@ -1092,8 +1092,8 @@ pub fn evaluate_all_module_consts<'db>(
         let mut body = Vec::new();
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
-                let func_name = func_stmt.name(db).text(db);
-                let const_params = func_stmt.params(db).iter()
+                let func_name = func_stmt.name().text(db);
+                let const_params = func_stmt.params().iter()
                     .filter(|p| p.is_comptime)
                     .map(|p| p.name.text(db).S())
                     .collect();
@@ -1152,7 +1152,7 @@ fn module_const_kinds<'db>(
     db: &'db dyn salsa::Database,
     module: Module<'db>,
 ) -> (bool, bool) {
-    let parsed = &crate::module_graph::parse_module_full(db, module).parsed;
+    let parsed = datalove_datafun_parser::parse_module_ast(db, module);
     let mut module_level = false;
     let mut anywhere = false;
     for statement in parsed.statements(db).iter() {
@@ -1162,7 +1162,7 @@ fn module_const_kinds<'db>(
                 anywhere = true;
             }
             Statement::Fun(func) => {
-                anywhere |= func.body(db).statements.iter().any(|s| matches!(s, Statement::Const(_)));
+                anywhere |= func.body().statements.iter().any(|s| matches!(s, Statement::Const(_)));
             }
             _ => {}
         }
@@ -1700,13 +1700,13 @@ fn specialize_comptime_functions<'db>(
 
     // The source of each comptime function, for evaluating its consts once the
     // instantiation is known.
-    let mut func_asts: HashMap<(ModuleId<'db>, String), datalove_datafun_ast::ast::StmtFun<'db>> =
+    let mut func_asts: HashMap<(ModuleId<'db>, String), &'db datalove_datafun_ast::ast::StmtFun<'db>> =
         HashMap::new();
     for (module_id, parsed) in module_statements(db, parsed_graph) {
         let module_id = &module_id;
         for statement in parsed.statements(db).iter() {
             if let Statement::Fun(func_stmt) = statement {
-                func_asts.insert((*module_id, func_stmt.name(db).text(db).S()), *func_stmt);
+                func_asts.insert((*module_id, func_stmt.name().text(db).S()), func_stmt);
             }
         }
     }
