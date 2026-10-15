@@ -16,7 +16,7 @@ Datalove is missing a basic language feature.
 The fix is simple,
 but the limits of Datalove's simple type system complexify it a bit.
 Without first-class references we can't make iterators a general-purpose library feature.
-Instead we have to build it directly into the language and runtime,
+Instead we have to build them into the language and runtime,
 teaching the compiler directly about every type that can be iterated.
 
 - [The situation with loops in Datalove](#user-content-the-situation-with-loops-in-datalove)
@@ -57,8 +57,8 @@ end fun
 ```
 
 This code has many problems,
-but here I care about one.
-The first is `self[i]?`, which does a bounds check every iteration.
+but here I care about one:
+`self[i]?`, which does a bounds check every iteration.
 (`equal_to_at` exists only to make room for the
 [early return that `?` does](../datafun.md#user-content-option-and-result-handling).)
 
@@ -96,8 +96,9 @@ Maps have the same problem with `map.key_at` and `map.value_at`.
 These algorithmically abhorrent APIs can't be retired
 until there's another way to iterate.
 
-Language-level iteration solves both problems,
-like Python's `for x in xs`.
+Language-level iteration,
+like Python's `for x in xs`,
+solves both problems.
 The simple design is obvious,
 so I'll just do it now!
 
@@ -372,9 +373,9 @@ Now they just bind both:
 
 ```datalove
 for category, r in ref revenue
-    let c = map.get_or(ref cost, ref category, 0)
-    let u = map.get_or(ref units, ref category, 0)
-    call list.push(mut rows, (r, category@, c, u))
+  let c = map.get_or(ref cost, ref category, 0)
+  let u = map.get_or(ref units, ref category, 0)
+  call list.push(mut rows, (r, category@, c, u))
 end for
 ```
 
