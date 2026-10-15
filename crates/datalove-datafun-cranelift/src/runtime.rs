@@ -862,7 +862,7 @@ impl RuntimeImports {
         })
     }
     /// Every import, for a backend that resolves them itself.
-    pub fn all_mut(&mut self) -> Vec<&mut FuncId> {
+    pub fn all(&self) -> Vec<FuncId> {
         let Self {
             init,
             shutdown,
@@ -924,7 +924,7 @@ impl RuntimeImports {
             map_cursor_begin,
             set_cursor_advance,
             map_cursor_advance,
-        } = self;
+        } = *self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
             payload_offset, payload_tydesc, tydesc_instantiate, shadow_alloc,

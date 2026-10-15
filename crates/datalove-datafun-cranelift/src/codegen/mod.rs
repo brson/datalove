@@ -159,6 +159,10 @@ pub struct FunctionCompiler<'a, M: Module> {
     external_funcs: HashMap<(u32, datalove_datafun_ir::CodeUnitId), LocalCallee>,
     /// Mapping from module function (IrModuleId, FuncId) to Cranelift FuncId.
     module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>,
+    /// The code cell of each callee declared as a stub that reads one: the
+    /// address of a word holding the callee's compiled code, zero until it
+    /// has some. The JIT's; see `set_code_cells`.
+    code_cells: HashMap<FuncId, usize>,
     /// Function registry for looking up module functions.
     registry: Option<&'a FunctionRegistry>,
     /// Where the frame is: values, slots and tracking bytes, as `layout` says.
@@ -268,6 +272,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             local_funcs: HashMap::new(),
             external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
+            code_cells: HashMap::new(),
             registry,
             frame_slot: None,
             runtime,
@@ -336,6 +341,17 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// Use this for three-pass compilation where all module functions are declared first.
     pub fn set_module_funcs(&mut self, module_funcs: HashMap<(IrModuleId, datalove_datafun_ir::CodeUnitId), FuncId>) {
         self.module_funcs = module_funcs;
+    }
+
+    /// Set the code cell of each callee whose declared function is a stub
+    /// that reads one.
+    ///
+    /// A call to such a callee reads the cell itself and calls the code
+    /// there, and calls the stub only while the cell is empty: the stub is a
+    /// function of its own, and going through it was a third of a call
+    /// between compiled functions.
+    pub fn set_code_cells(&mut self, code_cells: HashMap<FuncId, usize>) {
+        self.code_cells = code_cells;
     }
 
 }

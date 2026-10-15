@@ -598,9 +598,9 @@ JIT could not see a loop in a function called once, is fixed by OSR; see
 - **No inlining in Cranelift.** Nothing implements
   `cranelift_codegen::inline::Inline` or calls `Context::inline`, so neither the
   jit nor the cranelift AOT backend inlines. A call between two compiled
-  functions is an indirect call through the callee's stub, which reads the
-  callee's code cell (`JitCompiler::code_cells`); only a call to a function not
-  yet compiled reaches `__jit_dispatch_call`.
+  functions is an indirect call through the callee's code cell
+  (`JitCompiler::code_cells`), read at the call site; only a call to a function
+  not yet compiled reaches its stub and `__jit_dispatch_call`.
 - **The C backend runs `cc -std=c11 -O0 -g`** (`pipeline/c_aot.rs`, and the
   same in `engine_tests.rs`). `-O2` measured 8.4x on `loop_arith`, the largest
   number in the jit report. The work is whatever undefined behaviour `-O2` exposes

@@ -742,9 +742,8 @@ Execution:
     `-rdynamic` on ELF and has no equivalent on Windows at all.
 
   Both end at `register_native`, so the interpreter sees no difference. Both
-  also return the raw addresses, which the JIT needs: it calls natives through
-  a trampoline built from the address rather than through the interpreter's
-  table, so a driver must feed them to `JitEngine::register_native_symbol` as
+  also return the raw addresses, which the JIT needs: it calls a native as an
+  import of its address rather than through the interpreter's table, so a driver must feed them to `JitEngine::register_native_symbol` as
   well. Missing that is not a fallback to the interpreter but a panic inside
   JIT compilation, which aborts the process.
 
@@ -1511,8 +1510,8 @@ All of them consume `IrCodeUnit` and agree with `ir::layout`.
   `--jit-opt-level` sets Cranelift's `opt_level` (`speed` by default), and `--jit-stats` prints its `JitStats`: each function's
   codegen time and size and, counted only when asked for since it is a second
   table probe per call, the calls that crossed from the interpreter into
-  compiled code or back. Calls between compiled functions go stub to stub and
-  are not seen. See [Tuning the JIT](plan-jit-tuning.md).
+  compiled code or back. Calls between compiled functions go straight from one
+  to the other and are not seen. See [Tuning the JIT](plan-jit-tuning.md).
 - **Cranelift AOT** (`datalove-datafun-cranelift-aot`) compiles ahead of time.
 - **C AOT** (`datalove-datafun-c-aot`) emits C11 in one pass: type descriptors,
   then functions (module functions prefixed `__mod_N_`), then
@@ -1600,18 +1599,24 @@ worth keeping. Carrying a newline flag on `TokenKind::Whitespace`, so
 perhaps 1% and is open.
 
 **The JIT** is about 85x on a tight arithmetic loop and 2-3.5x on call-heavy code.
-It costs a fixed ~14ms of startup (`JitEngine::new`: arena, ISA, a trampoline for every
-runtime import) and compiles synchronously at `opt_level = "speed"` in the dispatch
-that crossed the threshold. Stubs and native trampolines are made once per
-callee and kept (`JitCompiler::stubs`), and Cranelift's IR verifier runs only
+It costs a fixed startup (`JitEngine::new`: arena, ISA) and compiles
+synchronously at `opt_level = "speed"` in the dispatch that crossed the
+threshold. Stubs and native imports are made once per callee and kept
+(`JitCompiler::stubs`), and Cranelift's IR verifier runs only
 with debug assertions; making them per caller, and verifying, had been about
 a third of codegen. A loop in a function called once is compiled by
 OSR: the bytecode counts iterations at the loop's header, and past
 `--jit-osr-threshold` (default 1000) the frame goes on in code compiled from the
-header, which runs the rest of the call. Compiled code calls each callee through a stub with the
-callee's signature, which calls the callee's code directly once it is compiled
-and goes through `__jit_dispatch_call` until then; going through the dispatcher
-every time had been over 80% of the time on recursive `fib`, 5x slower. The
+header, which runs the rest of the call. A call from compiled code reads the
+callee's code cell and calls its code directly once it is compiled, and until
+then calls a stub with the callee's signature that goes through
+`__jit_dispatch_call`; going through the dispatcher every time had been over
+80% of the time on recursive `fib`, 5x slower, and going through the stub to
+reach the code (a function of its own, called on every call) a further 19% of
+its instructions. Runtime functions and natives are imports, which
+cranelift-jit, never PIC, calls by loading the absolute address
+(`movabs`/`call reg`), so they reach anywhere without the indirect-call
+trampoline each once had, which cost sum, sieve and ordered 6-7%. The
 other direction, a call from the bytecode into compiled code, is planned at the
 call site like a call to a native (`Plan::Jit` in `bytecode/mod.rs`): the site asks
 the dispatcher once for a `SitePolicy` -- enter this code, count so many calls

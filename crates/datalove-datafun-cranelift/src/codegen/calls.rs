@@ -222,9 +222,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             call_args.push(value);
         }
 
-        // Declare callee in this function and emit call.
-        let callee_ref = self.module.declare_func_in_func(callee_func_id, builder.func);
-        builder.ins().call(callee_ref, &call_args);
+        self.emit_function_call(builder, callee_func_id, &call_args);
         self.return_if_abandoning(builder)?;
 
         self.mark_out_destinations_live(builder, code_ref, args);
@@ -243,6 +241,38 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         }
 
         Ok(())
+    }
+
+    /// Call a function compiled from IR, which returns nothing: through its
+    /// code cell when it has one, see `set_code_cells`, and otherwise as it
+    /// was declared.
+    fn emit_function_call(&mut self, builder: &mut FunctionBuilder, callee: FuncId, args: &[cl_ir::Value]) {
+        let callee_ref = self.module.declare_func_in_func(callee, builder.func);
+        let Some(&cell) = self.code_cells.get(&callee) else {
+            builder.ins().call(callee_ref, args);
+            return;
+        };
+        let cell_addr = builder.ins().iconst(PTR_TYPE, cell as i64);
+        let code = builder.ins().load(PTR_TYPE, MemFlagsData::trusted(), cell_addr, 0);
+        let direct = builder.create_block();
+        let via_stub = builder.create_block();
+        let done = builder.create_block();
+        builder.ins().brif(code, direct, &[], via_stub, &[]);
+
+        builder.switch_to_block(direct);
+        builder.seal_block(direct);
+        let sig = builder.func.dfg.ext_funcs[callee_ref].signature;
+        builder.ins().call_indirect(sig, code, args);
+        builder.ins().jump(done, &[]);
+
+        builder.set_cold_block(via_stub);
+        builder.switch_to_block(via_stub);
+        builder.seal_block(via_stub);
+        builder.ins().call(callee_ref, args);
+        builder.ins().jump(done, &[]);
+
+        builder.switch_to_block(done);
+        builder.seal_block(done);
     }
 
     /// In a function's entry, stop rather than overflow the stack if it is past

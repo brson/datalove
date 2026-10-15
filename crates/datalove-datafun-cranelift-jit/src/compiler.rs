@@ -104,22 +104,24 @@ pub struct JitCompiler {
     code_owners: Mutex<Vec<Arc<dyn Any + Send + Sync>>>,
     /// Where each function's compiled code is, once it has some.
     ///
-    /// A stub reads its callee's cell on every call and calls the code directly
-    /// when it is there, so that a call between compiled functions does not go
-    /// through `__jit_dispatch_call`; that round trip was over 80% of the
-    /// jit's time on call-heavy code. The cell's address is emitted into the
-    /// stub, so each is boxed to stay put and none is ever removed.
+    /// A call site reads its callee's cell and calls the code directly when it
+    /// is there, and the stub, which goes through `__jit_dispatch_call`, only
+    /// while it is not; see `FunctionCompiler::set_code_cells`. The dispatch's
+    /// round trip was over 80% of the jit's time on call-heavy code, and
+    /// going through the stub to reach the code a third of a call. The cell's
+    /// address is emitted into the code, so each is boxed to stay put and
+    /// none is ever removed.
     code_cells: rustc_hash::FxHashMap<FuncIdentity, Box<AtomicUsize>>,
     /// The stub for each callee, made by the first compilation to call it and
     /// called by every later one: a stub depends on nothing but its callee,
     /// and making one is a Cranelift compilation of its own.
     stubs: rustc_hash::FxHashMap<FuncIdentity, FuncId>,
-    /// The cells of functions forgotten since, kept because the stubs that
-    /// read them have their addresses.
+    /// The cells of functions forgotten since, kept because the code that
+    /// reads them has their addresses.
     retired_cells: Vec<Box<AtomicUsize>>,
-    /// The trampoline for each native rider function, by symbol and the
-    /// address it was registered at, likewise.
-    native_trampolines: HashMap<(String, u64), FuncId>,
+    /// The import for each native rider function, by symbol and the address
+    /// it was registered at, likewise.
+    native_imports: HashMap<(String, u64), FuncId>,
 }
 
 /// Wrapper for `*const u8` that implements `Send`.
@@ -171,6 +173,14 @@ impl JitCompiler {
         jit_builder.memory_provider(Box::new(arena));
 
         register_libcalls(&mut jit_builder);
+        // Compiled code calls the runtime and the dispatch function as
+        // imports, by these addresses: cranelift-jit is never PIC, so a call
+        // to an import loads its absolute address and calls through it, which
+        // reaches anywhere.
+        for (name, addr) in runtime_addresses() {
+            jit_builder.symbol(name, addr);
+        }
+        jit_builder.symbol("__jit_dispatch_call", trampoline::dispatch_fn_ptr());
 
         // Register a lookup function for dynamically-added native rider symbols.
         let native_symbols: Arc<Mutex<HashMap<String, SendPtr>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -183,8 +193,9 @@ impl JitCompiler {
 
         // Declare runtime imports.
         let call_conv = isa.default_call_conv();
-        let mut runtime = RuntimeImports::declare(&mut jit_module, call_conv)
+        let runtime = RuntimeImports::declare(&mut jit_module, call_conv)
             .map_err(|e| JitError::CompilationFailed(format!("runtime imports: {}", e)))?;
+        check_runtime_addresses(&jit_module, &runtime);
 
         // Declare the dispatch function signature.
         // __jit_dispatch_call(rt_handle, encoded_key, ret_dest, arg_count,
@@ -202,16 +213,6 @@ impl JitCompiler {
             .declare_function("__jit_dispatch_call", Linkage::Import, &dispatch_sig)
             .map_err(|e| JitError::CompilationFailed(format!("declare dispatch: {}", e)))?;
 
-        // Replace all imported FuncIds with local indirect-call trampolines.
-        // On x86_64, cranelift-jit uses 32-bit PC-relative relocations for
-        // imports, which overflow when the target is >2GB from JIT memory.
-        trampoline_all_runtime_imports(&mut jit_module, &mut runtime)?;
-        let dispatch_func_id = trampoline_import(
-            &mut jit_module,
-            dispatch_func_id,
-            trampoline::dispatch_fn_ptr() as u64,
-        )?;
-
         let tydesc_emitter = TyDescEmitter::new();
 
         Ok(Self {
@@ -225,7 +226,7 @@ impl JitCompiler {
             code_cells: Default::default(),
             stubs: Default::default(),
             retired_cells: Vec::new(),
-            native_trampolines: HashMap::new(),
+            native_imports: HashMap::new(),
         })
     }
 
@@ -273,8 +274,9 @@ impl JitCompiler {
 
     /// Compile a function to native code.
     ///
-    /// Each callee gets a stub that calls its compiled code once it has some
-    /// and goes through the trampoline to the interpreter until then. `ctx` is
+    /// A call reads the callee's code cell and calls its compiled code once it
+    /// has some, and until then calls the callee's stub, which goes through the
+    /// trampoline to the interpreter. `ctx` is
     /// the context the function runs in, which is where its callees are looked
     /// up.
     ///
@@ -319,15 +321,13 @@ impl JitCompiler {
         let mut local_funcs: HashMap<CodeUnitId, codegen::LocalCallee> = HashMap::new();
         let mut external_funcs: HashMap<(u32, CodeUnitId), codegen::LocalCallee> = HashMap::new();
         let mut module_funcs: HashMap<(IrModuleId, CodeUnitId), FuncId> = HashMap::new();
+        let mut code_cells: HashMap<FuncId, usize> = HashMap::new();
 
         for code_ref in callees {
             // Look up the callee's IR to get its signature.
             let callee_ir = ctx.get_unit(&code_ref, registry);
 
-            // Native rider functions: create local trampoline stubs that use
-            // indirect calls via absolute address. Direct imports would require
-            // 32-bit relative relocations which can overflow if the shared
-            // library is loaded >2GB from JIT code memory.
+            // A native rider function is called as an import, by its address.
             if let Some(native_ctx) = callee_ir.native_context() {
                 let sig = codegen::build_native_signature(native_ctx, self.isa.as_ref());
                 // A native with no symbol registered is one implemented in
@@ -338,11 +338,11 @@ impl JitCompiler {
                     .ok_or_else(|| JitError::Unsupported(format!(
                         "a call to native {}, which has no symbol registered", native_ctx.symbol())))?;
                 let cached = (native_ctx.symbol().to_owned(), addr);
-                let func_id = match self.native_trampolines.get(&cached) {
+                let func_id = match self.native_imports.get(&cached) {
                     Some(&id) => id,
                     None => {
-                        let id = self.create_native_trampoline(native_ctx.symbol(), &sig, addr)?;
-                        self.native_trampolines.insert(cached, id);
+                        let id = self.declare_native_import(native_ctx.symbol(), &sig, addr)?;
+                        self.native_imports.insert(cached, id);
                         id
                     }
                 };
@@ -362,6 +362,7 @@ impl JitCompiler {
                     id
                 }
             };
+            code_cells.insert(stub_id, self.code_cell(key) as usize);
 
             // Register in appropriate map.
             match &code_ref {
@@ -395,6 +396,7 @@ impl JitCompiler {
         compiler.set_local_funcs(local_funcs);
         compiler.set_external_funcs(external_funcs);
         compiler.set_module_funcs(module_funcs);
+        compiler.set_code_cells(code_cells);
         compiler.set_static_consts(static_consts_of(func, interp));
         compiler.abandon_on_interpreter_errors();
 
@@ -436,18 +438,22 @@ impl JitCompiler {
         targets
     }
 
-    /// Create a local trampoline for a native rider function.
+    /// Declare a native rider function as an import of the address it was
+    /// registered at.
     ///
-    /// Uses an indirect call with an absolute address to avoid 32-bit
-    /// relative relocation overflow when the shared library is far from
-    /// JIT code memory.
-    fn create_native_trampoline(
+    /// The name says the address too: cranelift-jit resolves a name once and
+    /// keeps what it found, and a rider loaded again registers its symbols at
+    /// new addresses.
+    fn declare_native_import(
         &mut self,
         symbol: &str,
         sig: &cl_ir::Signature,
         addr: u64,
     ) -> Result<FuncId, JitError> {
-        create_indirect_trampoline(&mut self.jit_module, symbol, sig, addr)
+        let name = format!("{symbol}@{addr:x}");
+        self.native_symbols.lock().unwrap().insert(name.clone(), SendPtr(addr as *const u8));
+        self.jit_module.declare_function(&name, Linkage::Import, sig)
+            .map_err(|e| jit_err("declare native import", e))
     }
 
     /// Create a stub function for a callee that dispatches through the trampoline.
@@ -631,97 +637,14 @@ impl JitCompiler {
     }
 }
 
-/// Create a local trampoline function that calls an external address indirectly.
-///
-/// On x86_64, cranelift-jit uses 32-bit PC-relative relocations for imported
-/// functions. When the target symbol is in the main binary or a shared library
-/// loaded >2GB from JIT code memory, these relocations overflow. This function
-/// creates a local trampoline in JIT memory that uses `call_indirect` with the
-/// absolute address, avoiding PC-relative relocations entirely.
-fn create_indirect_trampoline(
-    jit_module: &mut JITModule,
-    symbol: &str,
-    sig: &cl_ir::Signature,
-    addr: u64,
-) -> Result<FuncId, JitError> {
-    static TRAMP_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-    let num = TRAMP_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let tramp_name = format!("__jit_tramp_{}_{}", symbol, num);
-
-    // Declare as local so it lives in JIT memory.
-    let tramp_id = jit_module
-        .declare_function(&tramp_name, Linkage::Local, sig)
-        .map_err(|e| jit_err("declare trampoline", e))?;
-
-    // Build a function that loads the absolute address and does call_indirect.
-    let mut cl_func = cl_ir::Function::with_name_signature(
-        cl_ir::UserFuncName::user(0, tramp_id.as_u32()),
-        sig.clone(),
-    );
-
-    let mut fb_ctx = FunctionBuilderContext::new();
-    let mut builder = FunctionBuilder::new(&mut cl_func, &mut fb_ctx);
-
-    let entry_block = builder.create_block();
-    builder.append_block_params_for_function_params(entry_block);
-    builder.switch_to_block(entry_block);
-    builder.seal_block(entry_block);
-
-    let params: Vec<_> = builder.block_params(entry_block).to_vec();
-
-    // Load absolute address of the target function.
-    let addr_val = builder.ins().iconst(cl_types::I64, addr as i64);
-
-    // Declare the signature for the indirect call.
-    let sig_ref = builder.import_signature(sig.clone());
-
-    // Call indirectly through the absolute address.
-    let call = builder.ins().call_indirect(sig_ref, addr_val, &params);
-
-    // Return the result (if any).
-    let results: Vec<_> = builder.inst_results(call).to_vec();
-    builder.ins().return_(&results);
-
-    builder.finalize(jit_module.target_config());
-
-    // Define the function in the JIT module.
-    let mut ctx = cranelift_codegen::Context::for_function(cl_func);
-    jit_module.define_function(tramp_id, &mut ctx)
-        .map_err(|e| jit_err("define trampoline", e))?;
-
-    Ok(tramp_id)
-}
-
-/// Replace an imported FuncId with a local trampoline that calls the import indirectly.
-///
-/// Looks up the function's signature from the module declarations and creates
-/// a trampoline using the given absolute address.
-fn trampoline_import(
-    jit_module: &mut JITModule,
-    func_id: FuncId,
-    addr: u64,
-) -> Result<FuncId, JitError> {
-    let decl = jit_module.declarations().get_function_decl(func_id);
-    let name = decl.linkage_name(func_id).into_owned();
-    let sig = decl.signature.clone();
-    create_indirect_trampoline(jit_module, &name, &sig, addr)
-}
-
-/// Replace every runtime import with a local trampoline that calls the
-/// runtime function's absolute address.
-fn trampoline_all_runtime_imports(
-    jit_module: &mut JITModule,
-    runtime: &mut RuntimeImports,
-) -> Result<(), JitError> {
+/// Check that every runtime function compiled code may import has an
+/// address registered for it in `runtime_addresses`.
+fn check_runtime_addresses(jit_module: &JITModule, runtime: &RuntimeImports) {
     let addresses = runtime_addresses();
-    for func_id in runtime.all_mut() {
-        let decl = jit_module.declarations().get_function_decl(*func_id);
-        let name = decl.linkage_name(*func_id);
-        let addr = *addresses.get(name.as_ref())
-            .unwrap_or_else(|| panic!("no address for runtime import {name}"));
-        *func_id = trampoline_import(jit_module, *func_id, addr as u64)?;
+    for func_id in runtime.all() {
+        let name = jit_module.declarations().get_function_decl(func_id).linkage_name(func_id).into_owned();
+        assert!(addresses.contains_key(name.as_str()), "no address for runtime import {name}");
     }
-    Ok(())
 }
 
 /// The address of each runtime function compiled code may import, by symbol.
