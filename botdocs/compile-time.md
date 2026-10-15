@@ -60,11 +60,20 @@ profiles, inclusive:
 | CTFE registry, consts, the rest of phase 5 | 2% |
 | Process start and the empty script (5.2M) | 4% |
 
-Inference keeps its per-expression types and a generic call's parameter
-variables in SipHash `HashMap`s keyed by `ExprKey`, about 3% of the run in
-hashing alone; the `BodyTable` treatment would remove it. The typechecker
-also records every name it looks up in a `BTreeSet` (`note_asked`, 1.2%),
-which only script units read.
+Inference kept its per-expression types and a generic call's parameter
+variables in SipHash `HashMap`s keyed by `ExprKey`, and the typechecker
+recorded every name it looked up in a `BTreeSet` that only script units read.
+Both are fixed, and unification no longer copies the types it compares: the
+compile went from 132.9M instructions to 124.1M, and typecheck from 19% of it
+to 13%.
+
+The unifier itself -- union by rank with path compression, the algorithm
+the `ena` crate implements and rustc uses -- is under 1% of the run. What
+`ena` adds beyond that is snapshots, an undo log for rolling back speculative
+unification, and a persistent table, which nothing here needs: inference
+runs once, reports nothing, and is not tried and abandoned. So it would be a
+dependency for no gain. Snapshots are the piece to borrow if inference ever
+has to try something and take it back.
 
 Of the cycles, a fifth to a quarter are the kernel's, almost all page
 faults; see [Page faults](#user-content-page-faults). `malloc`, `free` and

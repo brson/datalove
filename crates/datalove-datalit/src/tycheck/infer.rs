@@ -158,16 +158,21 @@ impl<'db> Unifier<'db> {
 
     /// A type with its outermost variable, if any, replaced by what it is
     /// bound to.
-    fn prune(&mut self, ty: &PType<'db>) -> PType<'db> {
+    ///
+    /// A type with no variable at the top is handed back as it was, not
+    /// copied: most of what is unified is known on both sides, and copying
+    /// it to compare was a percent of a compile.
+    fn prune<'t>(&mut self, ty: &'t PType<'db>) -> std::borrow::Cow<'t, PType<'db>> {
+        use std::borrow::Cow;
         match ty {
             PType::Var(var) => {
                 let root = self.find(*var);
                 match &self.vars[root as usize] {
-                    VarState::Bound(bound) => bound.clone(),
-                    _ => PType::Var(root),
+                    VarState::Bound(bound) => Cow::Owned(bound.clone()),
+                    _ => Cow::Owned(PType::Var(root)),
                 }
             }
-            _ => ty.clone(),
+            _ => Cow::Borrowed(ty),
         }
     }
 
@@ -178,16 +183,24 @@ impl<'db> Unifier<'db> {
     pub fn unify(&mut self, a: &PType<'db>, b: &PType<'db>) {
         let a = self.prune(a);
         let b = self.prune(b);
-        match (a, b) {
-            (PType::Var(x), PType::Var(y)) => self.union(x, y),
-            (PType::Var(x), other) | (other, PType::Var(x)) => self.bind(x, other),
+        let var = |ty: &PType<'db>| match ty {
+            PType::Var(x) => Some(*x),
+            _ => None,
+        };
+        match (var(&a), var(&b)) {
+            (Some(x), Some(y)) => return self.union(x, y),
+            (Some(x), None) => return self.bind(x, b.into_owned()),
+            (None, Some(y)) => return self.bind(y, a.into_owned()),
+            (None, None) => {}
+        }
+        match (&*a, &*b) {
             (PType::Known(_), PType::Known(_)) => {}
             (PType::Known(known), other) | (other, PType::Known(known)) => {
-                if let Some(expanded) = expand(&known) {
-                    self.unify_parts(&expanded, &other);
+                if let Some(expanded) = expand(known) {
+                    self.unify_parts(&expanded, other);
                 }
             }
-            (a, b) => self.unify_parts(&a, &b),
+            (a, b) => self.unify_parts(a, b),
         }
     }
 
@@ -313,7 +326,7 @@ impl<'db> Unifier<'db> {
     /// is bound to and a known type opened up one level, for reading off what
     /// is inside: the payload of an option, a field of a struct.
     pub fn shallow(&mut self, ty: &PType<'db>) -> PType<'db> {
-        match self.prune(ty) {
+        match self.prune(ty).into_owned() {
             PType::Known(known) => expand(&known).unwrap_or(PType::Known(known)),
             other => other,
         }
@@ -322,7 +335,7 @@ impl<'db> Unifier<'db> {
     /// The type a variable-holding type comes to, with each variable nothing
     /// decided taking its default.
     pub fn resolve(&mut self, ty: &PType<'db>) -> Result<Type<'db>, Unresolved<'db>> {
-        Ok(match self.prune(ty) {
+        Ok(match self.prune(ty).into_owned() {
             PType::Known(known) => known,
             PType::Var(var) => {
                 let VarState::Free { class, origin, .. } = &self.vars[var as usize] else { unreachable!("a pruned variable is free") };
@@ -382,7 +395,7 @@ impl<'db> Unifier<'db> {
     /// The type as far as it is known, for an error message: `_` for a type
     /// nothing decides.
     pub fn describe(&mut self, db: &'db dyn crate::Db, ty: &PType<'db>) -> String {
-        match self.prune(ty) {
+        match self.prune(ty).into_owned() {
             PType::Var(var) => match self.resolve(&PType::Var(var)) {
                 Ok(resolved) => type_to_string(db, &resolved),
                 Err(_) => "_".to_string(),
