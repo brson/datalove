@@ -1,6 +1,14 @@
 # Future designs
 
 
+## 2026/10/15 - for loops like zig
+
+match and if already use zigs binding syntax, `|foo|`.
+probably makes sense to be consistent and take zig's syntax here too,
+which can iterate over multiple collections and ranges,
+incorporating zipping and enumeration naturally.
+
+
 ## 2026/09/30 - Locating and loading the runtime, sys packages, and sys riders
 
 Executing Datalove requires the runtime, the sys/ Datalove source library,

@@ -12,10 +12,9 @@ I noted that Datalove's system library walks collections in an awkward way.
 It keeps a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
 increments it each time around the loop, and indexes into the collection to get the element.
 Each index imposes a bounds check.
-Datalove is missing a basic language feature.
-The fix is simple,
-but the limits of Datalove's simple type system complexify it a bit.
-Without first-class references we can't make iterators a general-purpose library feature.
+Datalove is missing a basic language feature: the `for` loop.
+Adding one sounds simple,
+but without first-class references we can't make iterators a general-purpose library feature.
 Instead we have to build them into the language and runtime,
 teaching the compiler directly about every type that can be iterated.
 
@@ -55,6 +54,11 @@ fun equal_to_at<T>(
   ret some equal(ref self[i]?, ref elem)
 end fun
 ```
+
+(For readers new to Datalove:
+`: index / 0` is a zero of type `index`,
+`.<` is less-than,
+and `icall` calls a compiler intrinsic.)
 
 This code has many problems,
 but here I care about one:
@@ -98,7 +102,7 @@ until there's another way to iterate.
 
 Language-level iteration,
 like Python's `for x in xs`,
-solves both problems.
+gets rid of both the bounds checks and the quadratic walks.
 The simple design is obvious,
 so I'll just do it now!
 
@@ -138,7 +142,7 @@ a pointer straight into the container.
 So `item` can't be moved,
 and `self` can't be mutably referenced or mutated by index.
 This differs from [`match` and destructuring `if`](../datafun.md#user-content-data-types-and-destructuring),
-which fully destructure their operands.
+which move their operand into the new bindings.
 
 I don't plan to add by-value iteration soon.
 Still, the loop header should probably say `ref` somewhere.
@@ -157,13 +161,19 @@ A set binds a reference to each element.
 A map binds references to the key and the value.
 
 ```datalove
-fun top_checksum(ref counts: %{string = u32}): !u32
-  var ranked: [(u32, string)] = []
-  for word, seen in ref counts
-    call list.push(mut ranked, (u32.max_value() -! seen, word@))
+fun restock(ref stock: %{string = u32}, low: u32): [string]
+  var short: [string] = []
+  for name, count in ref stock
+    if count .< low
+      call list.push(mut short, name@)
+    end if
   end for
-  // ...
+  ret short
+end fun
 ```
+
+`name@` clones the key out of the map;
+`name` itself only points into it.
 
 _The bindings are not a tuple_:
 a `(K, V)` would be a new value built from the two,
@@ -202,13 +212,17 @@ end fun
 ```
 
 So iterating over the collection elements isn't enough.
-Without the index, users would keep their own counter in sync,
-and they'd likely repeat the wrapping math I want to remove.
+Without the index, users would keep their own counter in sync by hand,
+which is the code I'm trying to get rid of.
 The loop needs to provide the index too.
 Sets and maps don't support this form, since they aren't indexed by number.
 
-Go, Zig, and probably others add a second name to the loop header for the index.
-I'll do that too!
+Go adds a second name to the loop header for the index,
+as in `for i, x := range xs`.
+Zig goes further:
+`for (xs, ys, 0..) |x, y, i|` walks any number of slices and ranges in lockstep.
+I'll do the Go thing for now!
+(Though I already have Zig syntax elsewhere and it would make sense here as well).
 
 ```datalove
 fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord }
@@ -333,7 +347,6 @@ fn dtlv_rti_btreemap_cursor_advance_local(
 Much of this detail comes from Datalove's runtime API conventions.
 Every call takes a `LocalRtHandle` and returns an `RtStatus`.
 Results go in out-pointers.
-"Local" refers to the class of heap.
 Some functions are specific to one collection,
 and some are shared by every collection with that cursor type.
 Using a cursor goes like this:
@@ -348,6 +361,19 @@ Using a cursor goes like this:
 - Call an `advance` function to move forward.
 
 The cursors own nothing, so they need no destructor.
+They are just raw pointers into the collection,
+which is why the loop body can't mutate `self`.
+
+I love this for the compiler.
+Every backend knows exactly what a cursor looks like,
+so each can open-code the hot parts.
+The done check, the element read, and a strided advance
+are just loads and adds against the struct.
+A tree cursor moves along its leaf inline
+and calls the runtime only to cross to the next leaf.
+For hypothetical users, though, it's tough luck.
+They can't write an iterator,
+and only the collections the compiler knows about can be walked.
 
 
 
@@ -375,7 +401,7 @@ for category, r in ref revenue
 end for
 ```
 
-Performance is as expected.
+Whether `for` is fast depends on that open-coding.
 This benchmark sums a list of 100,000 `u32`s 200 times
 and a set of 5,000 elements 20 times.
 These are `hyperfine` means for a release build.
@@ -396,6 +422,8 @@ The index loop was already just a bounds check and an add.
 The set is the biggest win:
 linear instead of quadratic,
 8x faster on the interpreter and 38x under AOT, at only 5,000 elements.
+The old set loop runs about the same on every engine
+because nearly all its time is spent inside the runtime's `get`.
 
 Not every loop converted.
 Eight functions in the system library still count by hand.
@@ -406,7 +434,8 @@ Some functions jump around,
 like the merge in `sorted` and `binary_search`.
 No cursor helps there.
 `zip` walks two lists in lockstep,
-which would need two cursors in one loop header.
+which would need two cursors in one loop header,
+as Zig allows.
 
 And some come down to first-class references.
 `is_sorted` and `deduped` compare each element to the one before it.
