@@ -262,12 +262,18 @@ impl IrInterpreter {
     }
 }
 
-/// Whether a walk is over: no elements remaining, or no leaf.
+/// Whether a walk is over: the index at the length, or no leaf.
 pub(crate) unsafe fn cursor_done(kind: CursorKind, at: *const u8) -> bool {
     unsafe {
         match kind {
-            CursorKind::Stride => (*(at as *const rtdt::StrideCursor)).remaining == rtdt::Index::ZERO,
-            CursorKind::Row => (*(at as *const rtdt::RowCursor)).remaining == rtdt::Index::ZERO,
+            CursorKind::Stride => {
+                let cursor = &*(at as *const rtdt::StrideCursor);
+                cursor.index == cursor.len
+            }
+            CursorKind::Row => {
+                let cursor = &*(at as *const rtdt::RowCursor);
+                cursor.index == cursor.len
+            }
             CursorKind::Tree => (*(at as *const rtdt::TreeCursor)).leaf.is_null(),
         }
     }
@@ -282,6 +288,18 @@ pub(crate) unsafe fn cursor_elem(kind: CursorKind, at: *const u8) -> *const u8 {
             CursorKind::Stride => (*(at as *const rtdt::StrideCursor)).elem,
             CursorKind::Row => &raw const (*(at as *const rtdt::RowCursor)).view as *const u8,
             CursorKind::Tree => (*(at as *const rtdt::TreeCursor)).elem,
+        }
+    }
+}
+
+/// The position of the current element of a walk over a list or a tensor.
+pub(crate) unsafe fn cursor_index(kind: CursorKind, at: *const u8) -> rtdt::Index {
+    unsafe {
+        debug_assert!(!cursor_done(kind, at), "reading a cursor that is done");
+        match kind {
+            CursorKind::Stride => (*(at as *const rtdt::StrideCursor)).index,
+            CursorKind::Row => (*(at as *const rtdt::RowCursor)).index,
+            CursorKind::Tree => panic!("a tree cursor has no index"),
         }
     }
 }

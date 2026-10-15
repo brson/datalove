@@ -39,7 +39,8 @@ impl Op {
             | Op::ListElementRefRt { .. } | Op::CloneRt { .. }
             | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. } | Op::WrapErrRt { .. }
             | Op::UnwrapOptionRt { .. } | Op::UnwrapResultRt { .. } | Op::ErrorFromRt { .. }
-            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
+            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorIndex { .. } | Op::CursorValue { .. }
+            | Op::CursorAdvance { .. }
             | Op::WidenFixedRt { .. } | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. } | Op::Drop { .. } | Op::DropTracked { .. }
             | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. } | Op::Widen { .. } | Op::BinOpRt { .. }
@@ -145,6 +146,7 @@ impl Op {
             }
             Op::CursorDone { dst, cursor, kind } => { f(dst, 1); f(cursor, cursor_size(kind)) }
             Op::CursorElem { dst, cursor, kind } => { f(dst, 8); f(cursor, cursor_size(kind)) }
+            Op::CursorIndex { dst, cursor, kind } => { f(dst, I); f(cursor, cursor_size(kind)) }
             Op::CursorValue { dst, cursor } => { f(dst, 8); f(cursor, cursor_size(CursorKind::Tree)) }
             Op::CursorAdvance { cursor, kind } => f(cursor, cursor_size(kind)),
             Op::WrapSome { dst, src, at, len } | Op::WrapOk { dst, src, at, len } => { f(dst, at + len); f(src, len) }
@@ -213,7 +215,8 @@ impl Op {
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListCopyAt { .. } | Op::ListStoreAt { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
-            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
+            | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorIndex { .. } | Op::CursorValue { .. }
+            | Op::CursorAdvance { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
             | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. } | Op::WrapErrRt { .. }
             | Op::UnwrapOptionRt { .. } | Op::UnwrapResultRt { .. } | Op::ErrorFromRt { .. }

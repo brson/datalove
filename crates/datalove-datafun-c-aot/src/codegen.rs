@@ -293,6 +293,7 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::CursorBegin { .. }
         | Instruction::CursorDone { .. }
         | Instruction::CursorElem { .. }
+        | Instruction::CursorIndex { .. }
         | Instruction::CursorValue { .. }
         | Instruction::CursorAdvance { .. }
         | Instruction::Move { .. }
@@ -775,6 +776,11 @@ impl<'a> FunctionCodegenContext<'a> {
                 let dest_addr = self.value_addr(*dest);
                 let elem = self.cursor_elem(*cursor);
                 writeln!(out, "    *(const void**){dest_addr} = {elem};").unwrap();
+            }
+            Instruction::CursorIndex { dest, cursor } => {
+                let dest_addr = self.value_addr(*dest);
+                let index = self.cursor_index(*cursor);
+                writeln!(out, "    *(index_t*){dest_addr} = {index};").unwrap();
             }
             Instruction::CursorValue { dest, cursor } => {
                 let dest_addr = self.value_addr(*dest);
@@ -3320,17 +3326,28 @@ impl<'a> FunctionCodegenContext<'a> {
     // A cursor begins and advances through the runtime's protocol,
     // `dtlv_rti_*_cursor_*`, and is read through its `rtdt` fields. Most of
     // the protocol is open-coded on those layouts too, keeping the runtime's
-    // meanings field for field. What stays a
-    // call is starting a walk over a tensor or a tree, once a walk, and a
-    // tree's advance from one leaf to the next.
+    // meanings field for field. What stays a call is starting a walk over a
+    // tensor or a tree, once a walk, and a tree's advance from one leaf to the
+    // next.
 
-    /// Whether a walk is over: no elements remaining, or no leaf.
+    /// Whether a walk is over: the index at the length, or no leaf.
     fn cursor_done(&self, cursor: SlotId) -> String {
         let at = self.slot_addr(cursor);
+        let (index, len) = match self.cursor_kind(cursor) {
+            CursorKind::Stride => (offset_of!(rtdt::StrideCursor, index), offset_of!(rtdt::StrideCursor, len)),
+            CursorKind::Row => (offset_of!(rtdt::RowCursor, index), offset_of!(rtdt::RowCursor, len)),
+            CursorKind::Tree => return format!("(*(void**)({at} + {}) == NULL)", offset_of!(rtdt::TreeCursor, leaf)),
+        };
+        format!("(*(index_t*)({at} + {index}) == *(index_t*)({at} + {len}))")
+    }
+
+    /// The current element's position in a walk over a list or a tensor.
+    fn cursor_index(&self, cursor: SlotId) -> String {
+        let at = self.slot_addr(cursor);
         match self.cursor_kind(cursor) {
-            CursorKind::Stride => format!("(*(index_t*)({at} + {}) == 0)", offset_of!(rtdt::StrideCursor, remaining)),
-            CursorKind::Row => format!("(*(index_t*)({at} + {}) == 0)", offset_of!(rtdt::RowCursor, remaining)),
-            CursorKind::Tree => format!("(*(void**)({at} + {}) == NULL)", offset_of!(rtdt::TreeCursor, leaf)),
+            CursorKind::Stride => format!("*(index_t*)({at} + {})", offset_of!(rtdt::StrideCursor, index)),
+            CursorKind::Row => format!("*(index_t*)({at} + {})", offset_of!(rtdt::RowCursor, index)),
+            CursorKind::Tree => panic!("a tree cursor has no index"),
         }
     }
 
@@ -3350,7 +3367,7 @@ impl<'a> FunctionCodegenContext<'a> {
         format!("*(const void**)({} + {})", self.slot_addr(cursor), offset_of!(rtdt::TreeCursor, value))
     }
 
-    /// Start a walk. A list's is open-coded, being three loads.
+    /// Start a walk. A list's is open-coded, being three loads and a zero.
     fn emit_cursor_begin(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
         let coll_addr = self.operand_addr(coll);
         let cursor_addr = self.slot_addr(cursor);
@@ -3362,8 +3379,9 @@ impl<'a> FunctionCodegenContext<'a> {
                     offset_of!(rtdt::StrideCursor, elem), offset_of!(rtdt::List, data)).unwrap();
                 writeln!(out, "      *(uintptr_t*)(__c + {}) = (uintptr_t){stride};",
                     offset_of!(rtdt::StrideCursor, stride)).unwrap();
+                writeln!(out, "      *(index_t*)(__c + {}) = 0;", offset_of!(rtdt::StrideCursor, index)).unwrap();
                 writeln!(out, "      *(index_t*)(__c + {}) = *(index_t*)(__l + {}); }}",
-                    offset_of!(rtdt::StrideCursor, remaining), offset_of!(rtdt::List, size)).unwrap();
+                    offset_of!(rtdt::StrideCursor, len), offset_of!(rtdt::List, size)).unwrap();
                 return;
             }
             (CursorKind::Stride, IrType::Tensor(..)) => "dtlv_rti_tensor_cursor_begin_local",
@@ -3383,21 +3401,21 @@ impl<'a> FunctionCodegenContext<'a> {
         let at = self.slot_addr(cursor);
         match self.cursor_kind(cursor) {
             CursorKind::Stride => {
-                let (elem, stride, remaining) = (
+                let (elem, stride, index) = (
                     offset_of!(rtdt::StrideCursor, elem),
                     offset_of!(rtdt::StrideCursor, stride),
-                    offset_of!(rtdt::StrideCursor, remaining),
+                    offset_of!(rtdt::StrideCursor, index),
                 );
                 // On the integer, since after the last element it points past the
                 // buffer, where C does not define pointer arithmetic.
                 writeln!(out, "    *(uintptr_t*)({at} + {elem}) += *(uintptr_t*)({at} + {stride});").unwrap();
-                writeln!(out, "    *(index_t*)({at} + {remaining}) -= 1;").unwrap();
+                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").unwrap();
             }
             CursorKind::Row => {
                 let offset = offset_of!(rtdt::RowCursor, view) + offset_of!(rtdt::Tensor, offset_elems);
-                let (stride, remaining) = (offset_of!(rtdt::RowCursor, stride), offset_of!(rtdt::RowCursor, remaining));
+                let (stride, index) = (offset_of!(rtdt::RowCursor, stride), offset_of!(rtdt::RowCursor, index));
                 writeln!(out, "    *(index_t*)({at} + {offset}) += *(index_t*)({at} + {stride});").unwrap();
-                writeln!(out, "    *(index_t*)({at} + {remaining}) -= 1;").unwrap();
+                writeln!(out, "    *(index_t*)({at} + {index}) += 1;").unwrap();
             }
             CursorKind::Tree => {
                 let coll_ty = self.operand_type(coll).clone();

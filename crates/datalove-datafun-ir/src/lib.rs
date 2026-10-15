@@ -1922,6 +1922,12 @@ pub enum Instruction {
     /// **Ownership:** Reads the cursor slot, produces `dest` (Ref type).
     CursorElem { dest: ValueId, cursor: SlotId },
 
+    /// The position of the current element of a walk over a list or a
+    /// tensor, counting from zero. The walk is not done.
+    ///
+    /// **Ownership:** Reads the cursor slot, produces `dest` (Index).
+    CursorIndex { dest: ValueId, cursor: SlotId },
+
     /// A reference to the current value of a walk over a map. The walk is not
     /// done.
     ///
@@ -2041,7 +2047,7 @@ impl Instruction {
             }
             Instruction::CursorBegin { cursor, .. } | Instruction::CursorAdvance { cursor, .. } => slot(cursor),
             Instruction::CursorDone { dest, cursor } | Instruction::CursorElem { dest, cursor }
-            | Instruction::CursorValue { dest, cursor } => {
+            | Instruction::CursorIndex { dest, cursor } | Instruction::CursorValue { dest, cursor } => {
                 value(dest);
                 slot(cursor);
             }
@@ -2177,6 +2183,7 @@ impl Instruction {
             Instruction::CursorBegin { .. } => vec![],
             Instruction::CursorDone { dest, .. } => vec![*dest],
             Instruction::CursorElem { dest, .. } => vec![*dest],
+            Instruction::CursorIndex { dest, .. } => vec![*dest],
             Instruction::CursorValue { dest, .. } => vec![*dest],
             Instruction::CursorAdvance { .. } => vec![],
 
@@ -2290,7 +2297,8 @@ impl Instruction {
                 f(&Operand::Slot(*cursor));
                 f(coll);
             }
-            I::CursorDone { cursor, .. } | I::CursorElem { cursor, .. } | I::CursorValue { cursor, .. } => {
+            I::CursorDone { cursor, .. } | I::CursorElem { cursor, .. } | I::CursorIndex { cursor, .. }
+            | I::CursorValue { cursor, .. } => {
                 f(&Operand::Slot(*cursor))
             }
         }

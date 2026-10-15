@@ -677,8 +677,8 @@ impl IrInterpreter {
                 debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "starting a cursor cannot fail");
                 frame.mark_slot_live(*cursor);
             }
-            // Done, elem and value read the cursor's own fields, which begin
-            // and advance keep current.
+            // Done, elem, index and value read the cursor's own fields, which
+            // begin and advance keep current.
             Instruction::CursorDone { dest, cursor } => {
                 let at = frame.slot(*cursor).ptr;
                 let out = frame.value_dest(*dest).ptr;
@@ -689,6 +689,12 @@ impl IrInterpreter {
                 let at = frame.slot(*cursor).ptr;
                 let out = frame.value_dest(*dest).ptr as *mut *const u8;
                 unsafe { *out = crate::collections::cursor_elem(frame.cursor_kind(*cursor), at) };
+                frame.mark_value_live(*dest);
+            }
+            Instruction::CursorIndex { dest, cursor } => {
+                let at = frame.slot(*cursor).ptr;
+                let out = frame.value_dest(*dest).ptr as *mut rtdt::Index;
+                unsafe { *out = crate::collections::cursor_index(frame.cursor_kind(*cursor), at) };
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorValue { dest, cursor } => {
@@ -765,6 +771,7 @@ impl IrInterpreter {
             | Instruction::CursorBegin { .. }
             | Instruction::CursorDone { .. }
             | Instruction::CursorElem { .. }
+            | Instruction::CursorIndex { .. }
             | Instruction::CursorValue { .. }
             | Instruction::CursorAdvance { .. }
             | Instruction::Nop => {

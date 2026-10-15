@@ -735,8 +735,9 @@ pub struct SliceRange {
 
 /// A walk over a list or a rank-1 tensor.
 ///
-/// It counts the elements left rather than comparing against an end pointer:
-/// a zero-sized element has its end pointer equal to its start.
+/// It counts elements rather than comparing against an end pointer: a
+/// zero-sized element has its end pointer equal to its start. The count is
+/// the current element's position, which an indexed `for` binds.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct StrideCursor {
@@ -745,8 +746,10 @@ pub struct StrideCursor {
     /// Bytes from one element to the next. A tensor's stride may stand for a
     /// negative one, so it is added with wrapping.
     pub stride: usize,
-    /// Elements from the current one to the end; zero is done.
-    pub remaining: Index,
+    /// The current element's position; equal to `len` is done.
+    pub index: Index,
+    /// How many elements the walk visits.
+    pub len: Index,
 }
 
 /// A walk over the rows of a tensor of rank above 1.
@@ -760,8 +763,10 @@ pub struct RowCursor {
     pub view: Tensor,
     /// Elements from one row to the next: the parent's first stride.
     pub stride: Index,
-    /// Rows from the current one to the end; zero is done.
-    pub remaining: Index,
+    /// The current row's position; equal to `len` is done.
+    pub index: Index,
+    /// How many rows the walk visits.
+    pub len: Index,
 }
 
 /// A walk over a set's elements or a map's entries, in order.

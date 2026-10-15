@@ -273,11 +273,12 @@ impl<'a> Lowering<'a> {
                 // its descriptor.
                 let call = matches!(instr, Instruction::Call { .. });
                 // A cursor's operations touch only the cursor, and write a
-                // pointer or a flag.
+                // pointer, an index or a flag.
                 let through = call || matches!(instr,
                     Instruction::ListBoundsCheck { .. } | Instruction::ListElementRef { .. }
                     | Instruction::CursorDone { .. } | Instruction::CursorElem { .. }
-                    | Instruction::CursorValue { .. } | Instruction::CursorAdvance { .. });
+                    | Instruction::CursorIndex { .. } | Instruction::CursorValue { .. }
+                    | Instruction::CursorAdvance { .. });
                 let lowered = if let Some(op) = self.lower_dynamic_move(instr) {
                     self.emit(op);
                     true
@@ -547,6 +548,11 @@ impl<'a> Lowering<'a> {
             Instruction::CursorElem { dest, cursor } => {
                 let (c, kind) = self.cursor(*cursor);
                 self.emit(Op::CursorElem { dst: self.value_loc(*dest), cursor: c, kind });
+                true
+            }
+            Instruction::CursorIndex { dest, cursor } => {
+                let (c, kind) = self.cursor(*cursor);
+                self.emit(Op::CursorIndex { dst: self.value_loc(*dest), cursor: c, kind });
                 true
             }
             Instruction::CursorValue { dest, cursor } => {

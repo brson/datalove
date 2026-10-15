@@ -25,12 +25,14 @@ const LIST_SIZE: i32 = offset_of!(rtdt::List, size) as i32;
 
 const STRIDE_ELEM: i32 = offset_of!(rtdt::StrideCursor, elem) as i32;
 const STRIDE_STRIDE: i32 = offset_of!(rtdt::StrideCursor, stride) as i32;
-const STRIDE_REMAINING: i32 = offset_of!(rtdt::StrideCursor, remaining) as i32;
+const STRIDE_INDEX: i32 = offset_of!(rtdt::StrideCursor, index) as i32;
+const STRIDE_LEN: i32 = offset_of!(rtdt::StrideCursor, len) as i32;
 
 const ROW_VIEW: i32 = offset_of!(rtdt::RowCursor, view) as i32;
 const ROW_OFFSET: i32 = ROW_VIEW + offset_of!(rtdt::Tensor, offset_elems) as i32;
 const ROW_STRIDE: i32 = offset_of!(rtdt::RowCursor, stride) as i32;
-const ROW_REMAINING: i32 = offset_of!(rtdt::RowCursor, remaining) as i32;
+const ROW_INDEX: i32 = offset_of!(rtdt::RowCursor, index) as i32;
+const ROW_LEN: i32 = offset_of!(rtdt::RowCursor, len) as i32;
 
 const TREE_LEAF: i32 = offset_of!(rtdt::TreeCursor, leaf) as i32;
 const TREE_ELEM: i32 = offset_of!(rtdt::TreeCursor, elem) as i32;
@@ -83,8 +85,8 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         Ok(())
     }
 
-    /// Start a walk. A list's is open-coded, being three loads; a tensor's or
-    /// a tree's is a call, once a walk.
+    /// Start a walk. A list's is open-coded, being three loads and a zero; a
+    /// tensor's or a tree's is a call, once a walk.
     pub(super) fn compile_cursor_begin(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -102,7 +104,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let at = self.cursor_ptr(builder, cursor)?;
                 builder.ins().store(flags, data, at, STRIDE_ELEM);
                 builder.ins().store(flags, stride, at, STRIDE_STRIDE);
-                builder.ins().store(flags, size, at, STRIDE_REMAINING);
+                let zero = builder.ins().iconst(INDEX_TYPE, 0);
+                builder.ins().store(flags, zero, at, STRIDE_INDEX);
+                builder.ins().store(flags, size, at, STRIDE_LEN);
                 return Ok(());
             }
             (CursorKind::Stride, IrType::Tensor(..)) => self.runtime.tensor_cursor_begin,
@@ -114,7 +118,7 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         self.call_cursor_with_coll(builder, func, cursor, coll, true, "CursorBegin")
     }
 
-    /// Whether a walk is over: no elements remaining, or no leaf.
+    /// Whether a walk is over: the index at the length, or no leaf.
     pub(super) fn compile_cursor_done(
         &mut self,
         builder: &mut FunctionBuilder,
@@ -125,12 +129,13 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
         let at = self.cursor_ptr(builder, cursor)?;
         let done = match self.cursor_kind(cursor) {
             CursorKind::Stride | CursorKind::Row => {
-                let remaining_at = match self.cursor_kind(cursor) {
-                    CursorKind::Stride => STRIDE_REMAINING,
-                    _ => ROW_REMAINING,
+                let (index_at, len_at) = match self.cursor_kind(cursor) {
+                    CursorKind::Stride => (STRIDE_INDEX, STRIDE_LEN),
+                    _ => (ROW_INDEX, ROW_LEN),
                 };
-                let remaining = builder.ins().load(INDEX_TYPE, flags, at, remaining_at);
-                builder.ins().icmp_imm_u(IntCC::Equal, remaining, 0)
+                let index = builder.ins().load(INDEX_TYPE, flags, at, index_at);
+                let len = builder.ins().load(INDEX_TYPE, flags, at, len_at);
+                builder.ins().icmp(IntCC::Equal, index, len)
             }
             CursorKind::Tree => {
                 let leaf = builder.ins().load(PTR_TYPE, flags, at, TREE_LEAF);
@@ -157,6 +162,24 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CursorKind::Tree => builder.ins().load(PTR_TYPE, flags, at, TREE_ELEM),
         };
         self.values.insert(dest, elem);
+        Ok(())
+    }
+
+    /// The current element's position in a walk over a list or a tensor.
+    pub(super) fn compile_cursor_index(
+        &mut self,
+        builder: &mut FunctionBuilder,
+        dest: ValueId,
+        cursor: SlotId,
+    ) -> Result<(), CraneliftError> {
+        let index_at = match self.cursor_kind(cursor) {
+            CursorKind::Stride => STRIDE_INDEX,
+            CursorKind::Row => ROW_INDEX,
+            CursorKind::Tree => panic!("a tree cursor has no index"),
+        };
+        let at = self.cursor_ptr(builder, cursor)?;
+        let index = builder.ins().load(INDEX_TYPE, MemFlagsData::new(), at, index_at);
+        self.values.insert(dest, index);
         Ok(())
     }
 
@@ -191,18 +214,18 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
                 let stride = builder.ins().load(PTR_TYPE, flags, at, STRIDE_STRIDE);
                 let next = builder.ins().iadd(elem, stride);
                 builder.ins().store(flags, next, at, STRIDE_ELEM);
-                let remaining = builder.ins().load(INDEX_TYPE, flags, at, STRIDE_REMAINING);
-                let left = builder.ins().iadd_imm_s(remaining, -1);
-                builder.ins().store(flags, left, at, STRIDE_REMAINING);
+                let index = builder.ins().load(INDEX_TYPE, flags, at, STRIDE_INDEX);
+                let following = builder.ins().iadd_imm_s(index, 1);
+                builder.ins().store(flags, following, at, STRIDE_INDEX);
             }
             CursorKind::Row => {
                 let offset = builder.ins().load(INDEX_TYPE, flags, at, ROW_OFFSET);
                 let stride = builder.ins().load(INDEX_TYPE, flags, at, ROW_STRIDE);
                 let next = builder.ins().iadd(offset, stride);
                 builder.ins().store(flags, next, at, ROW_OFFSET);
-                let remaining = builder.ins().load(INDEX_TYPE, flags, at, ROW_REMAINING);
-                let left = builder.ins().iadd_imm_s(remaining, -1);
-                builder.ins().store(flags, left, at, ROW_REMAINING);
+                let index = builder.ins().load(INDEX_TYPE, flags, at, ROW_INDEX);
+                let following = builder.ins().iadd_imm_s(index, 1);
+                builder.ins().store(flags, following, at, ROW_INDEX);
             }
             CursorKind::Tree => {
                 let coll_ty = self.get_operand_type(coll)?;

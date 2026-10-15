@@ -120,11 +120,13 @@ unsafe fn step<C>(rt: &Rt, f: unsafe extern "C-unwind" fn(LocalRtHandle, *mut C)
     assert_eq!(unsafe { f(rt.0, cursor) }, RtStatus::Ok);
 }
 
-/// Every element a list or rank-1 tensor walk visits.
+/// Every element a list or rank-1 tensor walk visits, checking each one's
+/// index is its position.
 unsafe fn walk_stride(rt: &Rt, cursor: &mut rtdt::StrideCursor) -> Vec<*const u8> {
     unsafe {
         let mut seen = Vec::new();
-        while cursor.remaining != rtdt::Index::ZERO {
+        while cursor.index != cursor.len {
+            assert_eq!(cursor.index.0 as usize, seen.len());
             seen.push(cursor.elem);
             step(rt, c::dtlv_rti_stride_cursor_advance_local, cursor);
         }
@@ -169,7 +171,10 @@ unsafe fn walk_tensor_nested(
         assert_eq!(status, RtStatus::Ok);
         let cursor = cursor.assume_init_mut();
         let mut all = Vec::new();
-        while cursor.remaining != rtdt::Index::ZERO {
+        let mut rows = 0;
+        while cursor.index != cursor.len {
+            assert_eq!(cursor.index.0 as usize, rows);
+            rows += 1;
             let row = &raw const cursor.view;
             assert_eq!((*row).capacity_elems, rtdt::Index::ZERO, "a row is a view");
             all.extend(walk_tensor_nested(rt, row, rank - 1, tds));

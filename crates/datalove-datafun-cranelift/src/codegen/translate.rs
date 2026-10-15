@@ -362,6 +362,9 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             Instruction::CursorElem { dest, cursor } => {
                 self.compile_cursor_elem(builder, *dest, *cursor)?;
             }
+            Instruction::CursorIndex { dest, cursor } => {
+                self.compile_cursor_index(builder, *dest, *cursor)?;
+            }
             Instruction::CursorValue { dest, cursor } => {
                 self.compile_cursor_value(builder, *dest, *cursor)?;
             }

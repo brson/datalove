@@ -682,6 +682,9 @@ impl fmt::Display for Instruction {
             Instruction::CursorElem { dest, cursor } => {
                 write!(f, "{} = cursorelem {}", dest, cursor)
             }
+            Instruction::CursorIndex { dest, cursor } => {
+                write!(f, "{} = cursorindex {}", dest, cursor)
+            }
             Instruction::CursorValue { dest, cursor } => {
                 write!(f, "{} = cursorvalue {}", dest, cursor)
             }

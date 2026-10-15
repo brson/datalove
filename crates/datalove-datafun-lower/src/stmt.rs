@@ -5,7 +5,7 @@
 
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
-use datalove_datafun_ir::{ConstValue, CursorKind, IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
+use datalove_datafun_ir::{CursorKind, IrType, Operand, ValueId, SlotId, Instruction, Terminator, SlotDest, ParamMode};
 use datalove_datafun_sema::Destructure;
 use super::context::LowerCtx;
 use super::expr::{lower_expression, lower_expression_for_ref, lower_operand, operand_type, field_type_from_base};
@@ -1352,7 +1352,6 @@ pub fn lower_match<'db>(
 ///
 /// ```text
 ///     cursorbegin s_c, coll
-///     slotstore.copy s_i, 0             // indexed form only
 ///     goto head
 /// head:
 ///     d = cursordone s_c
@@ -1360,20 +1359,18 @@ pub fn lower_match<'db>(
 /// body:
 ///     r = cursorelem s_c                // the element, or a map's key
 ///     v = cursorvalue s_c               // a map's value
-///     i = slotload.copy s_i             // indexed form only
+///     i = cursorindex s_c               // indexed form only
 ///     ...
 ///     goto next
 /// next:                                 // `continue` goes here
 ///     cursoradvance s_c, coll
-///     slotstore.copy s_i, i + 1         // indexed form only
 ///     goto head
 /// exit:
 /// ```
 ///
 /// Each element binding is a reference made once per iteration, which every
-/// use in the body reads through; an index binding is the counter's value
-/// for the iteration. Neither can be assigned. The counter never passes the
-/// collection's length, so its increment cannot overflow.
+/// use in the body reads through; an index binding is the cursor's position
+/// for the iteration. Neither can be assigned.
 pub fn lower_for<'db>(
     ctx: &mut LowerCtx<'db>,
     stmt: &ast::StmtFor<'db>,
@@ -1402,13 +1399,6 @@ pub fn lower_for<'db>(
 
     let cursor = ctx.fresh_slot(IrType::Cursor(kind));
     ctx.emit(Instruction::CursorBegin { cursor, coll });
-    let counter = indexed.then(|| {
-        let counter = ctx.fresh_slot(IrType::Index);
-        let zero = ctx.fresh_value(IrType::Index);
-        ctx.emit(Instruction::Const { dest: zero, value: ConstValue::Index(0) });
-        ctx.emit(Instruction::SlotStoreCopy { dest: SlotDest::Local(counter), value: Operand::Value(zero) });
-        counter
-    });
 
     let head = ctx.fresh_block();
     let body = ctx.fresh_block();
@@ -1436,9 +1426,9 @@ pub fn lower_for<'db>(
     let elem = ctx.fresh_value(IrType::Ref(Box::new(elem_ty)));
     ctx.emit(Instruction::CursorElem { dest: elem, cursor });
     let mut operands = Vec::new();
-    if let Some(counter) = counter {
+    if indexed {
         let index = ctx.fresh_value(IrType::Index);
-        ctx.emit(Instruction::SlotLoadCopy { dest: index, slot: counter });
+        ctx.emit(Instruction::CursorIndex { dest: index, cursor });
         operands.push(Operand::Value(index));
     }
     operands.push(Operand::ValueRef(elem));
@@ -1465,19 +1455,6 @@ pub fn lower_for<'db>(
 
     ctx.start_block(next);
     ctx.emit(Instruction::CursorAdvance { cursor, coll });
-    if let Some(counter) = counter {
-        let index = ctx.fresh_value(IrType::Index);
-        ctx.emit(Instruction::SlotLoadCopy { dest: index, slot: counter });
-        let one = ctx.fresh_value(IrType::Index);
-        ctx.emit(Instruction::Const { dest: one, value: ConstValue::Index(1) });
-        let following = ctx.fresh_value(IrType::Index);
-        ctx.emit(Instruction::Intrinsic {
-            dest: following,
-            intrinsic: datalove_datafun_intrinsics::IntrinsicId::AddWrappingIndex,
-            args: vec![Operand::Value(index), Operand::Value(one)],
-        });
-        ctx.emit(Instruction::SlotStoreCopy { dest: SlotDest::Local(counter), value: Operand::Value(following) });
-    }
     ctx.finish_block(Terminator::Goto { target: head, args: Vec::new() });
 
     ctx.start_block(exit);

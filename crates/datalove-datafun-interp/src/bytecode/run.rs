@@ -363,6 +363,9 @@ impl IrInterpreter {
                     Op::CursorElem { dst, cursor, kind } => {
                         wr(base, dst, crate::collections::cursor_elem(kind, cursor.at(base)));
                     }
+                    Op::CursorIndex { dst, cursor, kind } => {
+                        wr(base, dst, crate::collections::cursor_index(kind, cursor.at(base)));
+                    }
                     Op::CursorValue { dst, cursor } => {
                         wr(base, dst, crate::collections::cursor_value(cursor.at(base)));
                     }

@@ -479,6 +479,13 @@ What the plan says, with these differences:
   with the walk's logic, nine in all; every engine, the interpreter
   included, reads done, the element and a map's value straight off the
   `rtdt` cursor fields. The IR instructions remain.
+- **Strided and row cursors count up.** In place of `remaining` they hold
+  `index` and `len`: begin sets `index = 0` and `len` to what `remaining`
+  was, advance does `index += 1`, and done is `index == len`. The indexed
+  form reads its binding off the cursor with `CursorIndex` rather than
+  keeping a counter of its own, which was a second induction variable, a
+  slot loaded, added to and stored every iteration beside the cursor's own
+  count. Counting up still counts, so zero-sized elements still walk.
 - **Errors.** P078 (a `for` header that does not parse), P079 (no `ref`),
   F087 (a temporary, a value that is not a collection, or the wrong number of
   names for it), D015 (changing the collection being walked).

@@ -470,6 +470,7 @@ fn supports_dynamic(instr: &Instruction) -> bool {
         | Instruction::CursorBegin { .. }
         | Instruction::CursorDone { .. }
         | Instruction::CursorElem { .. }
+        | Instruction::CursorIndex { .. }
         | Instruction::CursorValue { .. }
         | Instruction::CursorAdvance { .. }
         | Instruction::Move { .. }

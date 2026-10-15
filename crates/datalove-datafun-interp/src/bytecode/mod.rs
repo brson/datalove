@@ -366,13 +366,14 @@ pub(crate) enum Op {
     /// which value `dest` records what it points at by: `rt[at]` holds the
     /// destination, the list and the index.
     ListElementRefRt { dest: u32, at: u32 },
-    /// A walk's protocol, `dtlv_rti_*_cursor_*`, each function called as it is:
-    /// whether the walk at `cursor` is over, a reference to its current element
-    /// and to a map's current value, and moving a list's, a tensor's or a
-    /// row walk on. Starting a walk, and moving a tree's, take a descriptor and
-    /// run on the walker.
+    /// A walk at `cursor`: whether it is over, a reference to its current
+    /// element, its position, and a map's current value, all read off the
+    /// cursor's fields; and moving a list's, a tensor's or a row walk on,
+    /// through the runtime's `dtlv_rti_*_cursor_advance_*`. Starting a walk,
+    /// and moving a tree's, take a descriptor and run on the walker.
     CursorDone { dst: Loc, cursor: Loc, kind: CursorKind },
     CursorElem { dst: Loc, cursor: Loc, kind: CursorKind },
+    CursorIndex { dst: Loc, cursor: Loc, kind: CursorKind },
     CursorValue { dst: Loc, cursor: Loc },
     CursorAdvance { cursor: Loc, kind: CursorKind },
     /// IR walker routines on resolved operands: `rt[at]` holds the

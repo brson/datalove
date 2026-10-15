@@ -638,11 +638,13 @@ map (`CursorKind::of`).
 | `CursorBegin { cursor, coll }` | `cursorbegin s0, v1` | Borrows `coll` for the walk; writes the cursor |
 | `CursorDone { dest, cursor }` | `v0 = cursordone s0` | Reads the cursor; `dest` is `Bool` |
 | `CursorElem { dest, cursor }` | `v0 = cursorelem s0` | A `Ref` to the current element, a map's key, or a tensor's row; not done |
+| `CursorIndex { dest, cursor }` | `v0 = cursorindex s0` | The current element's position, an `Index`; strided and row cursors only; not done |
 | `CursorValue { dest, cursor }` | `v0 = cursorvalue s0` | A `Ref` to a map's current value; not done |
 | `CursorAdvance { cursor, coll }` | `cursoradvance s0, v1` | Moves to the next element or to done; not done; `coll` is the one begun on |
 
-Each is one function of the runtime's protocol (`dtlv_rti_*_cursor_*`). A
-backend may open-code them, but only on the runtime's layouts and with its
+Begin and advance are the runtime's functions (`dtlv_rti_*_cursor_*`); done,
+elem, index and value read the cursor's `rtdt` fields. A backend may open-code
+begin and advance too, but only on the runtime's layouts and with its
 meanings, since OSR continues a walk the interpreter began. A cursor's
 references are into a collection the language keeps frozen until the loop
 ends, so nothing between them checks anything. How `for` lowers onto these is

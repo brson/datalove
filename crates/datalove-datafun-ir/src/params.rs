@@ -413,6 +413,7 @@ pub fn map_operands_in_instruction(
         | Instruction::DropViaRef { .. }
         | Instruction::CursorDone { .. }
         | Instruction::CursorElem { .. }
+        | Instruction::CursorIndex { .. }
         | Instruction::CursorValue { .. }
         | Instruction::Nop => instr.clone(),
         Instruction::ListGet { dest, is_valid, list, index } => Instruction::ListGet {

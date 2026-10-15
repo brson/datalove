@@ -20,7 +20,8 @@ pub unsafe fn list_cursor_begin_impl(
         cursor_out.write(StrideCursor {
             elem: list.data,
             stride: list_tydesc.list_element_ty().size() as usize,
-            remaining: list.size,
+            index: rtdt::Index::ZERO,
+            len: list.size,
         });
     }
 }
@@ -38,7 +39,8 @@ pub unsafe fn tensor_cursor_begin_impl(
         cursor_out.write(StrideCursor {
             elem: tensor.ptr_base.wrapping_add(tensor.offset_elems.0 as usize * size),
             stride: ((*tensor.strides).0 as usize).wrapping_mul(size),
-            remaining: *tensor.shape,
+            index: rtdt::Index::ZERO,
+            len: *tensor.shape,
         });
     }
 }
@@ -48,9 +50,9 @@ pub unsafe fn tensor_cursor_begin_impl(
 pub unsafe fn stride_cursor_advance_impl(cursor_mut: *mut StrideCursor) {
     unsafe {
         let cursor = &mut *cursor_mut;
-        debug_assert!(cursor.remaining != rtdt::Index::ZERO, "advancing a stride cursor that is done");
+        debug_assert!(cursor.index != cursor.len, "advancing a stride cursor that is done");
         cursor.elem = cursor.elem.wrapping_add(cursor.stride);
-        cursor.remaining -= rtdt::Index::ONE;
+        cursor.index += rtdt::Index::ONE;
     }
 }
 
@@ -73,7 +75,8 @@ pub unsafe fn tensor_row_cursor_begin_impl(
                 layout: tensor.layout,
             },
             stride: *tensor.strides,
-            remaining: *tensor.shape,
+            index: rtdt::Index::ZERO,
+            len: *tensor.shape,
         });
     }
 }
@@ -82,8 +85,8 @@ pub unsafe fn tensor_row_cursor_begin_impl(
 pub unsafe fn row_cursor_advance_impl(cursor_mut: *mut RowCursor) {
     unsafe {
         let cursor = &mut *cursor_mut;
-        debug_assert!(cursor.remaining != rtdt::Index::ZERO, "advancing a row cursor that is done");
+        debug_assert!(cursor.index != cursor.len, "advancing a row cursor that is done");
         cursor.view.offset_elems = rtdt::Index(cursor.view.offset_elems.0.wrapping_add(cursor.stride.0));
-        cursor.remaining -= rtdt::Index::ONE;
+        cursor.index += rtdt::Index::ONE;
     }
 }

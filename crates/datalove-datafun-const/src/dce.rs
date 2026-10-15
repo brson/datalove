@@ -432,7 +432,8 @@ fn collect_instruction_operands(instr: &Instruction, used: &mut ValueSet) {
         Instruction::CursorBegin { coll, .. } | Instruction::CursorAdvance { coll, .. } => {
             add_operand_value(coll, used);
         }
-        Instruction::CursorDone { .. } | Instruction::CursorElem { .. } | Instruction::CursorValue { .. } => {}
+        Instruction::CursorDone { .. } | Instruction::CursorElem { .. } | Instruction::CursorIndex { .. }
+        | Instruction::CursorValue { .. } => {}
     }
 }
 
