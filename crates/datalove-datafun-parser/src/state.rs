@@ -96,7 +96,7 @@ struct Filed<'db> {
     /// expressions; they are concatenated in the order they were numbered.
     exprs: Vec<ast::ExprFunKind<'db>>,
     /// Accumulated expression spans (side table pattern).
-    expr_spans: Vec<ast::ParseTextSpan<'db>>,
+    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     /// Accumulated break statement spans, indexed by local_index.
     break_spans: Vec<TextSpan>,
     /// Accumulated continue statement spans, indexed by local_index.
@@ -521,7 +521,7 @@ impl<'db> Parser<'db> {
     /// Create an expression and record its span in the side table.
     pub(super) fn create_expr(&mut self, kind: ast::ExprFunKind<'db>, ts: TextSpan) -> ast::ExprId {
         let expr = self.push_expr(kind);
-        self.filed.expr_spans.push(ast::ParseTextSpan::new(
+        self.filed.expr_spans.push(ast::ParseSpanEntry::new(
             ast::ExprKey::new(self.module_id, self.current_fn_name, expr.0),
             ts.source,
             ts.span,
@@ -546,7 +546,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Take the accumulated expression spans (consumes them).
-    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseTextSpan<'db>> {
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry<'db>> {
         rmx::std::mem::take(&mut self.filed.expr_spans)
     }
 

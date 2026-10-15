@@ -62,7 +62,7 @@ impl<'db> Parser<'db> {
         // Record span for this expression, from its hint if it has one to the
         // end of the expression.
         let end = self.prev_end().unwrap_or(ts.span.end).max(ts.span.end);
-        self.expr_spans.push(ast::ParseTextSpan::new(
+        self.expr_spans.push(ast::ParseSpanEntry::new(
             local_index,
             ts.source,
             ts.span.start..end,

@@ -67,15 +67,15 @@ impl<'db> ExprKey<'db> {
 /// Span entry for a parsed expression.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
-pub struct ParseTextSpan<'db> {
+pub struct ParseSpanEntry<'db> {
     pub expr_key: ExprKey<'db>,
     pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
-impl<'db> ParseTextSpan<'db> {
+impl<'db> ParseSpanEntry<'db> {
     pub fn new(expr_key: ExprKey<'db>, source: bct::input::Source, span: ByteSpan) -> Self {
-        ParseTextSpan { expr_key, source, span }
+        ParseSpanEntry { expr_key, source, span }
     }
 }
 
@@ -292,7 +292,7 @@ impl fmt::Debug for ExprFun<'_> {
 #[derive(salsa::SalsaValue)]
 pub struct ParseResult<'db> {
     pub parsed: ParsedStatements<'db>,
-    pub expr_spans: Vec<ParseTextSpan<'db>>,
+    pub expr_spans: Vec<ParseSpanEntry<'db>>,
     /// Break statement spans, indexed by local_index.
     pub break_spans: Vec<TextSpan>,
     /// Continue statement spans, indexed by local_index.

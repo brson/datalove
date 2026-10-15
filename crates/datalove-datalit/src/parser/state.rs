@@ -54,7 +54,7 @@ type Interned<'db> = Rc<RefCell<FxHashMap<&'db str, InternedText<'db>>>>;
 pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
     source: TokenSource<'db>,
-    pub(super) expr_spans: Vec<ast::ParseTextSpan>,
+    pub(super) expr_spans: Vec<ast::ParseSpanEntry>,
     /// Next position to hand out, shared with sub-parsers so that one parse
     /// numbers its expressions in a single sequence.
     pub(super) expr_counter: u32,
@@ -154,7 +154,7 @@ impl<'db> Parser<'db> {
     }
 
     /// Take the accumulated expression spans.
-    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseTextSpan> {
+    pub(super) fn take_expr_spans(&mut self) -> Vec<ast::ParseSpanEntry> {
         std::mem::take(&mut self.expr_spans)
     }
 

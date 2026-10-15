@@ -170,7 +170,7 @@ fn parse_bracer<'db>(
 
 /// Parsed statement spans result.
 struct ParsedSpans<'db> {
-    expr_spans: Vec<ast::ParseTextSpan<'db>>,
+    expr_spans: Vec<ast::ParseSpanEntry<'db>>,
     break_spans: Vec<bct::text::TextSpan>,
     continue_spans: Vec<bct::text::TextSpan>,
     ret_spans: Vec<bct::text::TextSpan>,

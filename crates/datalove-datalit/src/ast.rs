@@ -12,15 +12,15 @@ use bct::text::ByteSpan;
 /// stores one is correct only while the table and the ids in it are produced
 /// together; an index is ours and means the same thing whenever it is read.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
-pub struct ParseTextSpan {
+pub struct ParseSpanEntry {
     pub expr_index: u32,
     pub source: bct::input::Source,
     pub span: ByteSpan,
 }
 
-impl ParseTextSpan {
+impl ParseSpanEntry {
     pub fn new(expr_index: u32, source: bct::input::Source, span: ByteSpan) -> Self {
-        ParseTextSpan { expr_index, source, span }
+        ParseSpanEntry { expr_index, source, span }
     }
 }
 
@@ -30,7 +30,7 @@ pub struct ParseResult<'db> {
     #[returns(clone)]
     pub expr: ExprFull<'db>,
     #[returns(clone)]
-    pub expr_spans: Vec<ParseTextSpan>,
+    pub expr_spans: Vec<ParseSpanEntry>,
 }
 
 /// An expression, with its type hint and its position in the parse.
