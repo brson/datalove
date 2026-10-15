@@ -8,6 +8,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+pub mod dense;
 pub mod display;
 pub mod frame_layout;
 pub mod inline;

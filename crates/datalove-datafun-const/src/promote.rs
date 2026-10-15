@@ -16,19 +16,19 @@
 //! unspecialized original is an ordinary binding, and so is every const when
 //! const inlining is skipped.
 
-use std::collections::HashSet;
+use datalove_datafun_ir::dense::ValueSet;
 use std::sync::Arc;
 
 use datalove_datafun_ir::{
     map_operands_in_instruction, map_operands_in_terminator, Instruction, IrCodeUnit, IrType,
-    Operand, ValueId,
+    Operand,
 };
 
 /// Promote a function's const bindings of non-copy types to statics.
 pub fn promote_function_consts(func: &mut IrCodeUnit) {
-    let consts: HashSet<ValueId> = func.const_values.iter().map(|(_, v)| *v).collect();
+    let consts: ValueSet = func.const_values.iter().map(|(_, v)| *v).collect();
 
-    let mut promoted: HashSet<ValueId> = HashSet::new();
+    let mut promoted = ValueSet::default();
     for block in &mut func.blocks {
         for instr in &mut block.instructions {
             let Instruction::Const { dest, value } = instr else { continue };
@@ -45,7 +45,7 @@ pub fn promote_function_consts(func: &mut IrCodeUnit) {
         return;
     }
 
-    for v in &promoted {
+    for v in promoted.iter() {
         let ty = &mut func.value_types[v.0 as usize];
         *ty = IrType::Ref(Box::new(std::mem::replace(ty, IrType::Unit)));
     }

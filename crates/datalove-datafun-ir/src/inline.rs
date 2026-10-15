@@ -29,7 +29,7 @@
 //! (`simplify`), which also puts the blocks back in an order the compiled
 //! backends can translate.
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use std::sync::Arc;
 
 use crate::params::{map_operands_in_instruction, map_operands_in_terminator};
@@ -97,7 +97,7 @@ pub struct Inliner<'r> {
 impl<'r> Inliner<'r> {
     /// An inliner finding callees with `resolve`; see `inline_calls`.
     pub fn new(resolve: &'r dyn Fn(&CodeRef) -> Option<Arc<IrCodeUnit>>) -> Self {
-        Inliner { resolve, callees: HashMap::new(), stack: Vec::new() }
+        Inliner { resolve, callees: HashMap::default(), stack: Vec::new() }
     }
 
     /// How this inliner finds callees.
@@ -194,9 +194,9 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
 
     // What each parameter becomes: in the callee's numbering for one bound to
     // something the splice adds, in the caller's for one that is the argument.
-    let mut in_callee: HashMap<ParamId, Operand> = HashMap::new();
-    let mut in_caller: HashMap<ParamId, Operand> = HashMap::new();
-    let mut out_slots: HashMap<ParamId, SlotId> = HashMap::new();
+    let mut in_callee: HashMap<ParamId, Operand> = HashMap::default();
+    let mut in_caller: HashMap<ParamId, Operand> = HashMap::default();
+    let mut out_slots: HashMap<ParamId, SlotId> = HashMap::default();
     let mut bind: Vec<Instruction> = Vec::new();
     let mut write_back: Vec<Instruction> = Vec::new();
     // The parameters of a copy type, whose stores copy.
