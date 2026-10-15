@@ -45,21 +45,26 @@ copy and the inclusive view is unreadable.
 
 ## The breakdown
 
-Measured October 2026 at 128.0M user instructions, after the plain-data AST
-and the map work ([plan-plain-ast.md](plan-plain-ast.md)); averaged over 15
+Measured October 2026 at 132.9M user instructions, after the typechecker
+began unifying the types of expressions that must agree; averaged over 15
 profiles, inclusive:
 
 | Phase | Share |
 |---|---:|
-| Parse, including the lexer (4.7%) and bracer | 26% |
+| Parse, including the lexer (4.6%) and bracer | 25% |
 | Name resolution and building the parsed graph | 6% |
-| Typecheck | 11% |
+| Typecheck, of which inference 8% | 19% |
 | Ownership analysis | 10% |
-| Lowering every function, in two strata | 18% |
-| Assembly: inlining, of which `simplify` 11% | 20% |
-| `reachable_func_ids` (since fixed; see below) | 4% |
+| Lowering every function, in two strata | 14% |
+| Assembly: inlining, of which `simplify` 9% | 18% |
 | CTFE registry, consts, the rest of phase 5 | 2% |
-| Process start and the empty script (5.3M) | 4% |
+| Process start and the empty script (5.2M) | 4% |
+
+Inference keeps its per-expression types and a generic call's parameter
+variables in SipHash `HashMap`s keyed by `ExprKey`, about 3% of the run in
+hashing alone; the `BodyTable` treatment would remove it. The typechecker
+also records every name it looks up in a `BTreeSet` (`note_asked`, 1.2%),
+which only script units read.
 
 Of the cycles, a fifth to a quarter are the kernel's, almost all page
 faults; see [Page faults](#user-content-page-faults). `malloc`, `free` and
