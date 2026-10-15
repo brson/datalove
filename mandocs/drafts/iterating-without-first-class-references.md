@@ -1,7 +1,7 @@
 ---
 title: "Iterating collections without first-class references"
 category: design
-summary: "Language-integrated iteration over collections faces compromises when you don't have reference types"
+summary: "Iterating over collections can't be satisfyingly abstract without first-class references, but here's a way to do it anyway."
 ---
 
 
@@ -10,11 +10,14 @@ summary: "Language-integrated iteration over collections faces compromises when 
 In my [previous round of benchmarking](../posts/20261009a-compound-assignment.md)
 I noted that Datalove's system library walks collections in an awkward way.
 It keeps a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
-increments it with wrapping math,
-and indexes into the collection on each pass to get the element.
+increments it each time around the loop, and indexes into the collection to get the element.
+Each index imposes a bounds check.
 Datalove is missing a basic language feature.
 The fix is simple,
 but the limits of Datalove's simple type system complexify it a bit.
+Without first-class references we can't make iterators a general-purpose library feature.
+Instead we have to build it directly into the language and runtime,
+teaching the compiler directly about every type that can be iterated.
 
 - [The situation with loops in Datalove](#user-content-the-situation-with-loops-in-datalove)
 - [A simple design for `for` loops](#user-content-a-simple-design-for-for-loops)
@@ -54,11 +57,10 @@ end fun
 ```
 
 This code has many problems,
-but here I care about two.
+but here I care about one.
 The first is `self[i]?`, which does a bounds check every iteration.
 (`equal_to_at` exists only to make room for the
 [early return that `?` does](../datafun.md#user-content-option-and-result-handling).)
-The second is the intrinsic call to `add_wrapping_index`.
 
 Indexing gets _much worse_ for sets and maps.
 Here's `set.is_subset_of`:
@@ -93,13 +95,6 @@ so a loop over the whole set costs O(n²).
 Maps have the same problem with `map.key_at` and `map.value_at`.
 These algorithmically abhorrent APIs can't be retired
 until there's another way to iterate.
-
-The indexing hurts performance.
-The wrapping math hurts maintenance.
-Every time I see wrapping math I have to stop and think hard about the invariants.
-Checked math with a debug assert would also work,
-but Datalove doesn't have asserts yet.
-Anyway, the wrap can't happen, and it's going away soon.
 
 Language-level iteration solves both problems,
 like Python's `for x in xs`.
@@ -213,6 +208,7 @@ So iterating over the collection elements isn't enough.
 Without the index, users would keep their own counter in sync,
 and they'd likely repeat the wrapping math I want to remove.
 The loop needs to provide the index too.
+Sets and maps don't support this form, since they aren't indexed by number.
 
 Go, Zig, and probably others add a second name to the loop header for the index.
 I'll do that too!
@@ -241,16 +237,18 @@ I don't intend Datalove's language integration to be very expressive.
 So for now I'll accept this compromise
 to make `for` useful in the most common case.
 
-Sets and maps don't support this form, since they aren't indexed by number.
-
 
 
 
 ## A protocol for iterating over collections
 
-Datalove's runtime defines the data layouts and APIs of its collections.
-Both compiled code and native code link to Datalove packages call them.
-So iteration needs a clear ABI and API.
+Datalove can't express an iterator abstraction in the language.
+So the runtime gets an iterator protocol, and that _is_ the abstraction.
+The runtime defines the binary layout of Datalove's types.
+It also defines functions that operate on those types.
+It is called by compiler-emitted code and by
+native code linked to Datalove packages.
+So iteration needs a clear ABI.
 In practice most backends won't call the runtime for every step.
 Calling a native function per element would be slow
 when the compiler can just bump a pointer.
@@ -354,19 +352,6 @@ Using a cursor goes like this:
 
 The cursors own nothing, so they need no destructor.
 
-Datalove can't express an iterator in the language,
-so the cursor protocol _is_ the abstraction.
-It lives in the runtime ABI, not in something like a trait.
-I love this for the compiler.
-Every backend knows exactly what a cursor looks like,
-so each can open-code the hot parts.
-The done check, the element read, and a strided advance
-are just loads and adds against the struct.
-Meanwhile the IR interpreter calls the real runtime functions,
-which gives the fast backends something to check against.
-For hypothetical users, though, it's tough luck.
-They can't write an iterator.
-
 
 
 
@@ -377,8 +362,7 @@ I converted 25 `loop while` loops to `for` loops.
 Fifteen were in the system library,
 seven in the "store demo" I use to prove features and performance,
 and three in the benchmarks.
-All 25 explicit induction variables are gone,
-along with their wrapping increments.
+All 25 explicit induction variables are gone.
 
 The demo loops were a special kind of ugly.
 With no way to walk a map,
@@ -419,42 +403,8 @@ linear instead of quadratic,
 Not every loop converted.
 Eight functions in the system library still count by hand.
 
-`repeated` builds a list `n` long and has nothing to walk.
-
-```datalove
-// A list of n clones of one element.
-fun repeated<T>(ref elem: T, n: index): [T]
-  var built: [T] = []
-  call list_reserve(mut built, n)
-  var i: index = : index / 0
-  loop while i .< n
-    call push(mut built, elem@)
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret built
-end fun
-```
-
-`skip` walks the tail part of a list.
-An indexed `for` with a `break` or `continue` could do it,
-but what it really wants is a slice.
-
-```datalove
-// Everything after the first n elements.
-fun skip<T>(ref self: [T], n: index): [T]
-  var built: [T] = []
-  let total = len(ref self)
-  var i: index = n
-  loop while i .< total
-    if get(ref self, i) |elem|
-      call push(mut built, elem)
-    end if
-    set i = icall add_wrapping_index(i, : index / 1)
-  end loop
-  ret built
-end fun
-```
-
+Some iterate only a sub-collection,
+where the `for` loop doesn't quite fit the problem.
 Some functions jump around,
 like the merge in `sorted` and `binary_search`.
 No cursor helps there.
