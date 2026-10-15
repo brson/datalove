@@ -288,19 +288,70 @@ But we do need to give every collection type its own suite of functions,
 all part of the runtime API:
 
 ```rust
-dtlv_rti_list_cursor_begin_local(rt, list_ref, list_tydesc, cursor_out) -> RtStatus
-dtlv_rti_tensor_cursor_begin_local(rt, tensor_ref, tensor_tydesc, cursor_out) -> RtStatus
-dtlv_rti_stride_cursor_done(cursor_ref) -> bool
-dtlv_rti_stride_cursor_elem(cursor_ref) -> *const u8
-dtlv_rti_stride_cursor_advance(cursor_mut)
+fn dtlv_rti_list_cursor_begin_local(
+    rt: LocalRtHandle,
+    list_ref: *const u8,
+    list_tydesc: *const TyDesc,
+    cursor_out: *mut StrideCursor,
+) -> RtStatus;
+fn dtlv_rti_tensor_cursor_begin_local(
+    rt: LocalRtHandle,
+    tensor_ref: *const u8,
+    tensor_tydesc: *const TyDesc,
+    cursor_out: *mut StrideCursor,
+) -> RtStatus;
+fn dtlv_rti_stride_cursor_done_local(
+    rt: LocalRtHandle,
+    cursor_ref: *const StrideCursor,
+    done_out: *mut u8,
+) -> RtStatus;
+fn dtlv_rti_stride_cursor_elem_local(
+    rt: LocalRtHandle,
+    cursor_ref: *const StrideCursor,
+    elem_out: *mut *const u8,
+) -> RtStatus;
+fn dtlv_rti_stride_cursor_advance_local(
+    rt: LocalRtHandle,
+    cursor_mut: *mut StrideCursor,
+) -> RtStatus;
 
-dtlv_rti_btreeset_cursor_begin_local(rt, set_ref, set_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreemap_cursor_begin_local(rt, map_ref, map_tydesc, cursor_out) -> RtStatus
-dtlv_rti_btreeset_cursor_advance_local(rt, cursor_mut, set_tydesc) -> RtStatus
-dtlv_rti_btreemap_cursor_advance_local(rt, cursor_mut, map_tydesc) -> RtStatus
-dtlv_rti_tree_cursor_done(cursor_ref) -> bool
-dtlv_rti_tree_cursor_elem(cursor_ref) -> *const u8
-dtlv_rti_tree_cursor_value(cursor_ref) -> *const u8
+fn dtlv_rti_btreeset_cursor_begin_local(
+    rt: LocalRtHandle,
+    set_ref: *const u8,
+    set_tydesc: *const TyDesc,
+    cursor_out: *mut TreeCursor,
+) -> RtStatus;
+fn dtlv_rti_btreemap_cursor_begin_local(
+    rt: LocalRtHandle,
+    map_ref: *const u8,
+    map_tydesc: *const TyDesc,
+    cursor_out: *mut TreeCursor,
+) -> RtStatus;
+fn dtlv_rti_btreeset_cursor_advance_local(
+    rt: LocalRtHandle,
+    cursor_mut: *mut TreeCursor,
+    set_tydesc: *const TyDesc,
+) -> RtStatus;
+fn dtlv_rti_btreemap_cursor_advance_local(
+    rt: LocalRtHandle,
+    cursor_mut: *mut TreeCursor,
+    map_tydesc: *const TyDesc,
+) -> RtStatus;
+fn dtlv_rti_tree_cursor_done_local(
+    rt: LocalRtHandle,
+    cursor_ref: *const TreeCursor,
+    done_out: *mut u8,
+) -> RtStatus;
+fn dtlv_rti_tree_cursor_elem_local(
+    rt: LocalRtHandle,
+    cursor_ref: *const TreeCursor,
+    elem_out: *mut *const u8,
+) -> RtStatus;
+fn dtlv_rti_tree_cursor_value_local(
+    rt: LocalRtHandle,
+    cursor_ref: *const TreeCursor,
+    value_out: *mut *const u8,
+) -> RtStatus;
 ```
 
 There are pros and cons of Datalove not having any capability to express abstractions such as iterators itself.
