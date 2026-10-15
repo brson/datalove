@@ -61,7 +61,8 @@ impl<'db, T> BodyTable<'db, T> {
     }
 
     pub fn insert(&mut self, expr: ExprFun<'db>, value: T) {
-        self.insert_at(expr.arena(), expr.local_index(), value)
+        let exprs = expr.arena().exprs.len();
+        self.insert_at(expr.arena(), expr.local_index(), exprs, value)
     }
 
     /// The value for `call`, which `expr` is; calls are numbered apart from
@@ -71,7 +72,7 @@ impl<'db, T> BodyTable<'db, T> {
     }
 
     pub fn insert_call(&mut self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>, value: T) {
-        self.insert_at(expr.arena(), call.local_index, value)
+        self.insert_at(expr.arena(), call.local_index, 0, value)
     }
 
     fn get_at(&self, arena: &ExprArena<'db>, index: u32) -> Option<&T> {
@@ -82,19 +83,21 @@ impl<'db, T> BodyTable<'db, T> {
         self.bodies.get(arena.body as usize)?.get(index as usize)?.as_ref()
     }
 
-    fn insert_at(&mut self, arena: &ExprArena<'db>, index: u32, value: T) {
+    /// `slots` is how many the body will have, if known: the arena's length
+    /// for its expressions.
+    fn insert_at(&mut self, arena: &ExprArena<'db>, index: u32, slots: usize, value: T) {
         let module_id = *self.module_id.get_or_insert(arena.module_id);
         assert_eq!(module_id, arena.module_id, "one table holds one module's expressions");
         let body = arena.body as usize;
         if self.bodies.len() <= body {
             self.bodies.resize_with(body + 1, Vec::new);
         }
-        let slots = &mut self.bodies[body];
+        let body = &mut self.bodies[body];
         let index = index as usize;
-        if slots.len() <= index {
-            slots.resize_with(index + 1, || None);
+        if body.len() <= index {
+            body.resize_with(slots.max(index + 1), || None);
         }
-        slots[index] = Some(value);
+        body[index] = Some(value);
     }
 
     /// How many expressions have a value.

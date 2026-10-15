@@ -20,6 +20,14 @@ impl<T> Default for ValueMap<T> {
 }
 
 impl<T> ValueMap<T> {
+    /// A map with room for values numbered below `values`, as a unit's
+    /// `value_count` says.
+    pub fn with_capacity(values: u32) -> Self {
+        let mut slots = Vec::with_capacity(values as usize);
+        slots.resize_with(values as usize, || None);
+        ValueMap { slots, len: 0 }
+    }
+
     pub fn get(&self, v: &ValueId) -> Option<&T> {
         self.slots.get(v.0 as usize)?.as_ref()
     }
@@ -82,6 +90,11 @@ pub struct ValueSet {
 }
 
 impl ValueSet {
+    /// A set with room for values numbered below `values`.
+    pub fn with_capacity(values: u32) -> Self {
+        ValueSet { members: vec![false; values as usize], len: 0 }
+    }
+
     /// Add `v`, saying whether it was not there already.
     pub fn insert(&mut self, v: ValueId) -> bool {
         let index = v.0 as usize;

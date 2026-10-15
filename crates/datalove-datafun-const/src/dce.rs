@@ -135,7 +135,7 @@ pub fn eliminate_dead_blocks_func(func: &mut IrCodeUnit) {
 
 /// Collect all ValueIds that are used in the unit.
 fn collect_used_values(unit: &IrCodeUnit) -> ValueSet {
-    let mut used = ValueSet::default();
+    let mut used = ValueSet::with_capacity(unit.value_count);
 
     // Access script context if this is a script unit.
     if let Some(script_ctx) = unit.script_context() {

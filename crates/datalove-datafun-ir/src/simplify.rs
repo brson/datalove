@@ -56,7 +56,7 @@ fn unchanging(unit: &IrCodeUnit, op: &Operand) -> bool {
 /// Values named through a reference somewhere -- as `ValueRef`, or as what a
 /// `DropViaRef` drops through -- which only a value can stand in for.
 fn named_by_reference(unit: &IrCodeUnit) -> ValueSet {
-    let mut named = ValueSet::default();
+    let mut named = ValueSet::with_capacity(unit.value_count);
     let mut note = |op: &Operand| {
         if let Operand::ValueRef(v) = op {
             named.insert(*v);
@@ -113,7 +113,7 @@ fn substitute(unit: &mut IrCodeUnit, subst: &ValueMap<Operand>) {
 /// any were.
 fn forward_copies(unit: &mut IrCodeUnit) -> bool {
     let named = named_by_reference(unit);
-    let mut subst = ValueMap::default();
+    let mut subst = ValueMap::with_capacity(unit.value_count);
     for block in &unit.blocks {
         for instr in &block.instructions {
             if let Instruction::Copy { dest, src } = instr
@@ -178,7 +178,7 @@ fn edge_args_mut(term: &mut Terminator, target: BlockId) -> Option<&mut Vec<Oper
 fn substitute_block_params(unit: &mut IrCodeUnit) -> bool {
     let preds = predecessors(unit);
     let named = named_by_reference(unit);
-    let mut subst = ValueMap::default();
+    let mut subst = ValueMap::with_capacity(unit.value_count);
     for b in 1..unit.blocks.len() {
         if preds[b] != 1 || unit.blocks[b].params.is_empty() {
             continue;
@@ -211,7 +211,7 @@ fn substitute_block_params(unit: &mut IrCodeUnit) -> bool {
 
 /// The instruction defining each value, by block and position.
 fn definitions(unit: &IrCodeUnit) -> ValueMap<(usize, usize)> {
-    let mut defs = ValueMap::default();
+    let mut defs = ValueMap::with_capacity(unit.value_count);
     for (b, block) in unit.blocks.iter().enumerate() {
         for (i, instr) in block.instructions.iter().enumerate() {
             for v in instr.dests() {
@@ -224,7 +224,7 @@ fn definitions(unit: &IrCodeUnit) -> ValueMap<(usize, usize)> {
 
 /// How many times each value is read.
 fn uses(unit: &IrCodeUnit) -> ValueMap<usize> {
-    let mut uses = ValueMap::default();
+    let mut uses = ValueMap::with_capacity(unit.value_count);
     let mut note = |op: &Operand| {
         if let Operand::Value(v) | Operand::ValueRef(v) = op {
             *uses.get_or_insert_with(*v, || 0) += 1;

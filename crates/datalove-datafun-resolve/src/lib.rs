@@ -132,9 +132,9 @@ pub fn resolve_names_impl<'db>(
         };
 
         // Convert parameter types and collect modes/comptime flags.
-        let mut param_types = Vec::new();
-        let mut param_modes = Vec::new();
-        let mut param_comptime = Vec::new();
+        let mut param_types = Vec::with_capacity(params.len());
+        let mut param_modes = Vec::with_capacity(params.len());
+        let mut param_comptime = Vec::with_capacity(params.len());
         let mut has_error = false;
         for param in &params {
             match convert_type_hint_with_aliases(db, param.type_hint.clone(), &type_aliases_map) {

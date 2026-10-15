@@ -28,7 +28,7 @@ use datalove_datafun_ir::{
 pub fn promote_function_consts(func: &mut IrCodeUnit) {
     let consts: ValueSet = func.const_values.iter().map(|(_, v)| *v).collect();
 
-    let mut promoted = ValueSet::default();
+    let mut promoted = ValueSet::with_capacity(func.value_count);
     for block in &mut func.blocks {
         for instr in &mut block.instructions {
             let Instruction::Const { dest, value } = instr else { continue };

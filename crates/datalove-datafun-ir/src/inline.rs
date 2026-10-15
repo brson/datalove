@@ -188,16 +188,21 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
     let slot_base = caller.slot_count;
     let block_base = caller.blocks.len() as u32;
     let continuation = BlockId(block_base + callee.blocks.len() as u32);
-    let mut values: Vec<IrType> = callee.value_types.iter().map(subst).collect();
-    let mut slots: Vec<IrType> = callee.slot_types.iter().map(subst).collect();
-    let mut tracked: Vec<SlotId> = callee.tracked_slots.clone();
+    // Each parameter adds at most a value and a slot.
+    let params = ctx.params.len();
+    let mut values: Vec<IrType> = Vec::with_capacity(callee.value_types.len() + params);
+    values.extend(callee.value_types.iter().map(subst));
+    let mut slots: Vec<IrType> = Vec::with_capacity(callee.slot_types.len() + params);
+    slots.extend(callee.slot_types.iter().map(subst));
+    let mut tracked: Vec<SlotId> = Vec::with_capacity(callee.tracked_slots.len() + params);
+    tracked.extend_from_slice(&callee.tracked_slots);
 
     // What each parameter becomes: in the callee's numbering for one bound to
     // something the splice adds, in the caller's for one that is the argument.
     let mut in_callee: HashMap<ParamId, Operand> = HashMap::default();
     let mut in_caller: HashMap<ParamId, Operand> = HashMap::default();
     let mut out_slots: HashMap<ParamId, SlotId> = HashMap::default();
-    let mut bind: Vec<Instruction> = Vec::new();
+    let mut bind: Vec<Instruction> = Vec::with_capacity(params);
     let mut write_back: Vec<Instruction> = Vec::new();
     // The parameters of a copy type, whose stores copy.
     let copy_params: HashSet<ParamId> = ctx.params.iter().copied()
@@ -319,6 +324,7 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
     });
     let unit_result = subst(&ctx.return_type) == IrType::Unit;
     let mut cont_instructions = write_back;
+    cont_instructions.reserve(after.len() + 1);
     if unit_result {
         cont_instructions.push(Instruction::Const { dest, value: ConstValue::Unit });
     }
