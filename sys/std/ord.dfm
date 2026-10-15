@@ -180,7 +180,8 @@ fun is_sorted<T>(ref self: [T]): bool where { T is ord, }
   let n = list_len(ref self)
   var i: index = : index / 1
   loop while i .< n
-    if greater_at(ref self, icall sub_wrapping_index(i, : index / 1), i) |out_of_order|
+    let i_prev = icall sub_wrapping_index(i, : index / 1)
+    if greater_at(ref self, i_prev, i) |out_of_order|
       if out_of_order
         set ordered = false
         break

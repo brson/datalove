@@ -4,32 +4,24 @@ category: design
 summary: "Language-integrated iteration over collections faces compromises when you don't have reference types"
 ---
 
-<!--
-
-Audience: programming language hackers.
-Problem: Language-integrated iteration over collections faces compromises
-when you don't have reference types.
-
--->
 
 
-
-<!-- the problem -->
 
 In my [previous round of benchmarking](../posts/20261009a-compound-assignment.md)
 I noted that Datalove's system library iterates over collections by maintaining
 a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
 incrementing it with wrapping math,
-and indexing into the collection on each iteration to access the element,
-and that this is a problem to be solved soon.
+and indexing into the collection on each iteration to access the element.
+This is a problem of missing basic language features.
 A simple solution is relatively straightforword
 but is slightly complexified by the limitations of Datalove's simple type system.
 
-- [The situation with loops in Datalove](#user-content-the-situation-with-loops-ind-datalove)
+- [The situation with loops in Datalove](#user-content-the-situation-with-loops-in-datalove)
 - [A simple design for `for` loops](#user-content-a-simple-design-for-for-loops)
 - [Getting at that loop induction variable](#user-content-getting-at-that-loop-induction-variable)
 - [A protocol for iterating over collections](#user-content-a-protocol-for-iterating-over-collections)
-- [Results](#user-content-results)
+- [What worked and what remains to be solved](#user-content-what-worked-and-what-remains-to-be-solved)
+
 
 
 
@@ -253,8 +245,6 @@ Sets and maps won't support this form since they don't index by number.
 
 
 
-<!-- the payoff? -->
-
 ## A protocol for iterating over collections
 
 Datalove's collection's data layouts and APIs are defined in the runtime,
@@ -379,9 +369,7 @@ tough luck, you can't write an iterator.
 
 
 
-<!-- the results -->
-
-## Results
+## What worked and what remains to be solved
 
 After implementing the cursor protocol I was able
 to convert 25 `loop while` loops to `for` loops &mdash;
