@@ -94,8 +94,11 @@ The indexing is a performance hazard,
 but also the wrapping math is a
 cognitive/maintainability hazard:
 every time I see wrapping math I must stop and think hard about the invariants.
+This math could also be reasonably done as checked math with a debug assert,
+but Datalove doesn't yet have any kind of assert,
+and the wrapping is impossible to hit and will be eliminated shortly.
 
-Both of these are solvable with language-level container iteration,
+Both of these problems are solvable with language-level container iteration,
 like Python's `for x in xs` or Rust's `for x in &xs`.
 A simple design for this is obvious
 so I'll go ahead and do it now!
@@ -259,7 +262,7 @@ Between array-like collections
 and tree-like collections
 (sets and maps)
 we have two
-fundamentally methods of iteration:
+fundamentally different methods of iteration:
 array-like collections want to just bump a pointer against their buffer according to some fixed stride;
 tree-like collections instead want to follow pointers between heap-allocated nodes.
 Rank-2+ tensors have some additional considerations not detailed here.
@@ -355,12 +358,22 @@ There are pros and cons of Datalove not having any capability to express abstrac
 Pro: we don't have to come up with a single abstraction facility that can express iteration over all types of collections;
 Con: we do have to define explicit runtime APIs for the collections we do support and commit to them.
 
+<!-- todo thats weak -->
 
 
 
 
 
 <!-- the results -->
+
+After implementing the cursor protocol I was able
+to convert TODO unconditional or `while` loops to `for` loops
+and eliminate TODO explicit loop induction variables and their wrapping arithmetic.
+
+todo what about performance?
+
+todo what about cases that weren't convertable or left induction variables around?
+
 
 <!--
 

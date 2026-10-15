@@ -1,5 +1,6 @@
 ## Blog topic pipeline
 
+- blog-driven development and dogfooding
 - The impact of inlining on bytecode performance
 - Why I continue to love braced-matched lexing and token trees
 - Testing every backend against the IR reference
