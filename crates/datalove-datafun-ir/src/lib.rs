@@ -1935,8 +1935,9 @@ pub enum Instruction {
     CursorValue { dest: ValueId, cursor: SlotId },
 
     /// Move a walk to the next element, or to done after the last. The walk
-    /// is not done. `coll` is the collection begun on, which a tree's advance
-    /// reads its layout from.
+    /// is not done. `coll` is the collection begun on. Advancing reads only the
+    /// cursor, but naming `coll` keeps the walk's borrow of it in view until
+    /// the loop's last advance.
     ///
     /// **Ownership:** Borrows `coll`; writes the cursor slot.
     CursorAdvance { cursor: SlotId, coll: Operand },

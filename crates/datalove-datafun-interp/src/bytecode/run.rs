@@ -374,7 +374,7 @@ impl IrInterpreter {
                         let status = match kind {
                             CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance_local(rt, at as *mut rtdt::StrideCursor),
                             CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance_local(rt, at as *mut rtdt::RowCursor),
-                            CursorKind::Tree => unreachable!("a tree's advance runs on the walker"),
+                            CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_advance_local(rt, at as *mut rtdt::TreeCursor),
                         };
                         debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");
                     }

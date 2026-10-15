@@ -189,10 +189,16 @@ the cursor, so there is no scratch for a backend to reserve.
 ```rust
 #[repr(C)]
 pub struct TreeCursor {
-    pub leaf: *const u8,     // The current leaf; null is done.
-    pub elem: *const u8,     // The current key; a set's element.
-    pub value: *const u8,    // A map's current value; null for a set.
-    pub slot: u32,           // The current key's slot within the leaf.
+    pub leaf: *const u8,       // The current leaf; null is done.
+    pub elem: *const u8,       // The current key; a set's element.
+    pub value: *const u8,      // A map's current value; null for a set.
+    pub elem_stride: usize,    // Bytes from one key to the next.
+    pub value_stride: usize,   // Bytes from one value to the next; 0 for a set.
+    pub slot: u32,             // The current key's slot within the leaf.
+    pub leaf_len: u32,         // How many keys the current leaf holds.
+    pub next_leaf_offset: u32, // Where a leaf keeps its next pointer.
+    pub keys_offset: u32,      // Where a leaf's keys start.
+    pub values_offset: u32,    // Where a leaf's values start; 0 for a set.
 }
 ```
 
@@ -200,12 +206,16 @@ There is no count. The end is the leaf chain's end: the last leaf's
 `next_leaf` is null, and an empty collection's root is null.
 
 - **begin:** a null root gives a null `leaf`. Otherwise it descends the left
-  spine (`leftmost_leaf`) and takes slot 0.
-- **advance:** `slot += 1`. If `slot == leaf.len`, it moves to `next_leaf`
-  and slot 0, and a null `next_leaf` leaves the cursor done. `elem` and
-  `value` are recomputed from the leaf's layout (`set_leaf_layout`,
-  `map_leaf_layout`) and the key and value sizes, which is why advance takes
-  the descriptor.
+  spine (`leftmost_leaf`) and takes slot 0. Either way it fills in the
+  strides and the leaf offsets from the descriptor (`set_leaf_layout`,
+  `map_leaf_layout`).
+- **advance:** `slot += 1`. While `slot < leaf_len` it steps `elem` and
+  `value` by the strides. At the end of the leaf it follows the pointer at
+  `next_leaf_offset`, takes slot 0, reads the new leaf's `len` from its
+  header (`TREE_NODE_LEN_OFFSET`, the same for both trees), and points `elem`
+  and `value` at its keys and values; a null next leaf leaves the cursor
+  done. It reads nothing but the cursor and the chain, so one function,
+  `tree_cursor_advance_impl`, serves sets and maps and takes no descriptor.
 - **done:** `leaf` is null. **elem**, **value:** the fields.
 
 **No leaf is empty.** Both trees rebalance on removal (`fix_underflow`,
@@ -379,8 +389,8 @@ panics for a slot with no binding.
 | | Calls the protocol | Open-coded |
 |---|---|---|
 | IR walker | every operation | nothing |
-| Bytecode | every operation: done, elem, value and a strided or row advance as their own ops (`Op::Cursor*`), begin and a tree's advance on the walker | nothing |
-| Cranelift | begin over a tensor or tree; a tree's advance across leaves | a list's begin; every done, elem and value; a strided or row advance; a tree's advance within a leaf |
+| Bytecode | every operation: done, elem, value and every advance as their own ops (`Op::Cursor*`), begin on the walker | nothing |
+| Cranelift | every begin | every done, elem and value; every advance, a tree's across leaves included |
 | C AOT | as Cranelift | as Cranelift |
 
 The bytecode's ops call the runtime's functions, which thin LTO inlines into
@@ -471,12 +481,21 @@ What the plan says, with these differences:
 - **The bytecode has its own cursor ops** rather than running every cursor
   instruction on the walker. They call the protocol, so the interpreter still
   open-codes nothing.
-- **Begin over a tensor or a tree stays a call** in the compiled backends; it
-  runs once a walk.
+- **Begin stays a call** in the compiled backends; it runs once a walk.
+- **Advance reads only the cursor.** At first a tree's advance took the
+  descriptor, and the compiled backends worked its strides out from the key
+  and value types themselves and called the runtime to cross leaves, while
+  they open-coded a list's begin, computing its stride. Now begin fills in
+  every stride and offset the walk needs, every advance reads only the cursor
+  (and, for a tree, the chain it points into), the two tree advances are one,
+  `dtlv_rti_tree_cursor_advance_local`, and the compiled backends call every
+  begin and open-code every advance on the cursor's fields. The runtime's
+  functions are the reference, and `cursor_tests` checks a tree cursor's
+  bookkeeping against the leaf it is on at every step.
 - **Done, elem and value are not runtime functions.** They were exported at
   first, but each only read a field that begin and advance had already
   written. The runtime now exports only begin and advance, the functions
-  with the walk's logic, nine in all; every engine, the interpreter
+  with the walk's logic, now eight in all; every engine, the interpreter
   included, reads done, the element and a map's value straight off the
   `rtdt` cursor fields. The IR instructions remain.
 - **Strided and row cursors count up.** In place of `remaining` they hold
@@ -495,7 +514,8 @@ What the plan says, with these differences:
 - **Not done:** the C AOT `static` view and the missing prototype, below in
   [Bugs](#user-content-bugs-found-on-the-way), which `for` no longer reaches.
 
-Fixtures: `engines/for_001` to `for_006`, `std_tests/179_for_over_a_shrunk_set`,
+Fixtures: `engines/for_001` to `for_009`,
+`std_tests/179_for_over_a_shrunk_set`, `std_tests/182_for_cursor_bookkeeping`,
 `error/96` to `103`, and `datalove-rt-tests/tests/cursor_tests.rs` for the
 protocol alone, transposed and sliced tensors included, which no program can
 build yet.
@@ -530,6 +550,19 @@ rather than quadratic.
 `wordfreq` stops building a map's keys and values as lists to walk them.
 `ordered` spends its time in binary searches, and its one converted walk is
 in the noise.
+
+Advance reading only the cursor, before and after, on a set of 5,000 `u32`s
+summed 2,000 times, wall time with startup included:
+
+| | interp | JIT | Cranelift AOT | C AOT |
+|---|---:|---:|---:|---:|
+| tree advance takes the descriptor | 183 ms | 16.8 ms | 13.2 ms | 27.1 ms |
+| tree advance reads only the cursor | 119 ms | 15.5 ms | 11.5 ms | 27.9 ms |
+
+The interpreter's gain is the bytecode running a tree's advance as its own op
+rather than handing it to the walker. The compiled backends no longer call the
+runtime at the end of each leaf. A list's begin becoming a call made no
+difference on a list of 100,000 summed 200 times.
 
 ## Phases
 

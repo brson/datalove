@@ -728,10 +728,15 @@ pub struct SliceRange {
 // done. Each is plain data owning nothing, and holds pointers into the
 // collection's storage, which the language keeps frozen for the walk. The
 // runtime's `*_cursor_*` functions begin and advance a walk; whether it is
-// done and its current element are read off these fields directly. Compiled
-// code may open-code begin and advance too, but only on these layouts and with
-// these meanings, since a cursor the interpreter built can be continued by
-// compiled code.
+// done and its current element are read off these fields directly.
+//
+// Begin is where a walk reads the collection and its descriptor, and it puts
+// in the cursor everything the rest of the walk needs. Advance reads only the
+// cursor, and a tree's advance the leaf chain through offsets the cursor
+// carries. Compiled code may open-code advance, but only as the runtime's
+// advance does it, on these fields and with these meanings, since a cursor the
+// interpreter built can be continued by compiled code. The runtime's functions
+// are the reference for what each step does.
 
 /// A walk over a list or a rank-1 tensor.
 ///
@@ -772,7 +777,11 @@ pub struct RowCursor {
 /// A walk over a set's elements or a map's entries, in order.
 ///
 /// It follows the chain through the leaves, and is done when the chain
-/// ends; an empty collection has no root and is done from the start.
+/// ends; an empty collection has no root and is done from the start. Begin
+/// fills in the strides and the leaf offsets from the descriptor, so advance
+/// needs nothing but the cursor: within a leaf it steps by the strides, and at
+/// the end of one it follows `next_leaf_offset` to the next, reading that
+/// leaf's `len` from its header.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TreeCursor {
@@ -780,11 +789,30 @@ pub struct TreeCursor {
     pub leaf: *const u8,
     /// The current key; a set's element.
     pub elem: *const u8,
-    /// A map's current value; null for a set.
+    /// A map's current value; null for a set, and it stays null.
     pub value: *const u8,
+    /// Bytes from one key to the next within a leaf.
+    pub elem_stride: usize,
+    /// Bytes from one value to the next within a leaf; zero for a set.
+    pub value_stride: usize,
     /// The current key's slot within the leaf.
     pub slot: u32,
+    /// How many keys the current leaf holds.
+    pub leaf_len: u32,
+    /// Where a leaf keeps its pointer to the next leaf.
+    pub next_leaf_offset: u32,
+    /// Where a leaf's keys start.
+    pub keys_offset: u32,
+    /// Where a leaf's values start; zero for a set.
+    pub values_offset: u32,
 }
+
+// A tree cursor's advance reads a leaf's `len` at one offset for sets and maps
+// alike.
+const _: () = assert!(std::mem::offset_of!(SetNode, len) == std::mem::offset_of!(MapNode, len));
+
+/// Where a set or map node keeps its `len`.
+pub const TREE_NODE_LEN_OFFSET: usize = std::mem::offset_of!(SetNode, len);
 
 
 

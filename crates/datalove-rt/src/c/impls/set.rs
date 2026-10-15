@@ -1817,52 +1817,27 @@ pub unsafe fn btreeset_cursor_begin_impl(
     cursor_out: *mut rtdt::TreeCursor,
 ) {
     unsafe {
-        let ty = SetTy::of(rtdt::TyDescRef::from_ptr(set_tydesc));
+        let set_ty = rtdt::TyDescRef::from_ptr(set_tydesc);
+        let ty = SetTy::of(set_ty);
+        let layout = set_ty.set_leaf_layout();
         let root = (*(set_ref as *const Set)).root as *mut SetNode;
-        let (leaf, elem) = if root.is_null() {
-            (std::ptr::null_mut(), std::ptr::null_mut())
+        let (leaf, elem, leaf_len) = if root.is_null() {
+            (std::ptr::null_mut(), std::ptr::null_mut(), 0)
         } else {
             let leaf = leftmost_leaf(root, ty);
-            (leaf, leaf_keys_ptr(leaf, ty))
+            (leaf, leaf_keys_ptr(leaf, ty), read_node_len(leaf))
         };
         cursor_out.write(rtdt::TreeCursor {
             leaf: leaf as *const u8,
             elem,
             value: std::ptr::null(),
+            elem_stride: set_ty.set_element_ty().size() as usize,
+            value_stride: 0,
             slot: 0,
+            leaf_len,
+            next_leaf_offset: layout.next_leaf_offset,
+            keys_offset: layout.keys_offset,
+            values_offset: 0,
         });
-    }
-}
-
-/// Moves a walk over a set to the next element, or to done after the last.
-///
-/// Every leaf in the chain holds an element, removal rebalancing as it does,
-/// so the next leaf's first slot is always the next element.
-pub unsafe fn btreeset_cursor_advance_impl(
-    cursor_mut: *mut rtdt::TreeCursor,
-    set_tydesc: *const TyDesc,
-) {
-    unsafe {
-        let cursor = &mut *cursor_mut;
-        debug_assert!(!cursor.leaf.is_null(), "advancing a set cursor that is done");
-        let set_ty = rtdt::TyDescRef::from_ptr(set_tydesc);
-        let layout = set_ty.set_leaf_layout();
-        let leaf = cursor.leaf as *mut SetNode;
-
-        cursor.slot += 1;
-        if cursor.slot < read_node_len(leaf) {
-            cursor.elem = cursor.elem.add(set_ty.set_element_ty().size() as usize);
-            return;
-        }
-
-        let next = *((leaf as *const u8).add(layout.next_leaf_offset as usize) as *const *const u8);
-        cursor.leaf = next;
-        cursor.slot = 0;
-        cursor.elem = if next.is_null() {
-            std::ptr::null()
-        } else {
-            debug_assert!(read_node_len(next as *const SetNode) > 0, "an empty leaf in a set's chain");
-            next.add(layout.keys_offset as usize)
-        };
     }
 }

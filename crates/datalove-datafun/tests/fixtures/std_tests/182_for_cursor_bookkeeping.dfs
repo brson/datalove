@@ -1,0 +1,99 @@
+require module sys/std/set
+require module sys/std/map
+
+// Walks over trees of many leaves, which the OSR run enters partway, so that
+// compiled code carries on a walk the interpreter began. The cursor carries
+// its own strides and leaf offsets, so these vary what those are: values
+// more aligned than their keys, values of no size, leaves left part full by
+// removals, and a walk nested in another over the same set.
+
+// Multiples of three, inserted from the top down.
+fun build_set(n: u32): !#{u32}
+  var s: #{u32} = #{}
+  var i: u32 = n
+  loop while i .> 0
+    set i = i -! 1
+    let ignored = set.insert(mut s, i *! 3)
+  end loop
+  ret ok s
+end fun
+
+fun sum_set(ref s: #{u32}): !(u32, u32)
+  var n: u32 = 0
+  var total: u32 = 0
+  for x in ref s
+    set n = n +! 1
+    set total = total +! x
+  end for
+  ret ok (n, total)
+end fun
+
+fun wide_values(n: u32): !(u32, u64)
+  var m: %{u32 = u64} = %{}
+  var i: u32 = 0
+  loop while i .< n
+    call map.insert(mut m, i, : u64 / 1000000007 *! i@)
+    set i = i +! 1
+  end loop
+  var count: u32 = 0
+  var total: u64 = 0
+  for k, v in ref m
+    set count = count +! 1
+    set total = total +! v
+  end for
+  ret ok (count, total)
+end fun
+
+fun unit_values(n: u32): !(u32, u32)
+  var m: %{u32 = ()} = %{}
+  var i: u32 = 0
+  loop while i .< n
+    call map.insert(mut m, i, ())
+    set i = i +! 1
+  end loop
+  var count: u32 = 0
+  var total: u32 = 0
+  for k, v in ref m
+    set count = count +! 1
+    set total = total +! k
+  end for
+  ret ok (count, total)
+end fun
+
+fun after_removals(n: u32): !(u32, u32)
+  var s = build_set(n)!
+  var i: u32 = 0
+  var phase: u32 = 0
+  loop while i .< n
+    if phase != 0
+      let gone = i *! 3
+      let ignored = set.remove(mut s, ref gone)
+    end if
+    if phase == 2
+      set phase = 0
+    else
+      set phase = phase +! 1
+    end if
+    set i = i +! 1
+  end loop
+  ret sum_set(ref s)
+end fun
+
+fun pairs_below(ref s: #{u32}): !u32
+  var count: u32 = 0
+  for a in ref s
+    for b in ref s
+      if b .< a
+        set count = count +! 1
+      end if
+    end for
+  end for
+  ret ok count
+end fun
+
+fun run(): !((u32, u32), (u32, u64), (u32, u32), (u32, u32), u32)
+  let s = build_set(101)!
+  ret ok (sum_set(ref s)!, wide_values(40)!, unit_values(40)!, after_removals(101)!, pairs_below(ref s)!)
+end fun
+
+let output = run()

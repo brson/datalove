@@ -368,9 +368,9 @@ pub(crate) enum Op {
     ListElementRefRt { dest: u32, at: u32 },
     /// A walk at `cursor`: whether it is over, a reference to its current
     /// element, its position, and a map's current value, all read off the
-    /// cursor's fields; and moving a list's, a tensor's or a row walk on,
-    /// through the runtime's `dtlv_rti_*_cursor_advance_*`. Starting a walk,
-    /// and moving a tree's, take a descriptor and run on the walker.
+    /// cursor's fields; and moving any walk on, through the runtime's
+    /// `dtlv_rti_*_cursor_advance_*`, which read only the cursor. Starting a
+    /// walk takes a descriptor and runs on the walker.
     CursorDone { dst: Loc, cursor: Loc, kind: CursorKind },
     CursorElem { dst: Loc, cursor: Loc, kind: CursorKind },
     CursorIndex { dst: Loc, cursor: Loc, kind: CursorKind },

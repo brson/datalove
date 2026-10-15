@@ -704,23 +704,14 @@ impl IrInterpreter {
                 unsafe { *out = crate::collections::cursor_value(at) };
                 frame.mark_value_live(*dest);
             }
-            Instruction::CursorAdvance { cursor, coll } => {
+            Instruction::CursorAdvance { cursor, .. } => {
                 let at = frame.slot_dest(*cursor).ptr;
                 let rt = self.runtime.handle();
                 let status = unsafe {
                     match frame.cursor_kind(*cursor) {
                         CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_advance_local(rt, at as *mut rtdt::StrideCursor),
                         CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_advance_local(rt, at as *mut rtdt::RowCursor),
-                        CursorKind::Tree => {
-                            let coll_val = self.read_operand(coll, frame, frames);
-                            match (*coll_val.tydesc).type_tag {
-                                rtdt::TyTag::Set => datalove_rt::c::dtlv_rti_btreeset_cursor_advance_local(
-                                    rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
-                                rtdt::TyTag::Map => datalove_rt::c::dtlv_rti_btreemap_cursor_advance_local(
-                                    rt, at as *mut rtdt::TreeCursor, coll_val.tydesc),
-                                tag => unreachable!("a tree cursor over a {tag:?}"),
-                            }
-                        }
+                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_advance_local(rt, at as *mut rtdt::TreeCursor),
                     }
                 };
                 debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "advancing a cursor cannot fail");

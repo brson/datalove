@@ -139,14 +139,13 @@ pub static TABLE: RtiTable = RtiTable {
     dtlv_rti_row_cursor_advance_local: c::dtlv_rti_row_cursor_advance_local,
     dtlv_rti_btreeset_cursor_begin_local: c::dtlv_rti_btreeset_cursor_begin_local,
     dtlv_rti_btreemap_cursor_begin_local: c::dtlv_rti_btreemap_cursor_begin_local,
-    dtlv_rti_btreeset_cursor_advance_local: c::dtlv_rti_btreeset_cursor_advance_local,
-    dtlv_rti_btreemap_cursor_advance_local: c::dtlv_rti_btreemap_cursor_advance_local,
+    dtlv_rti_tree_cursor_advance_local: c::dtlv_rti_tree_cursor_advance_local,
 };
 
 /// The declarations must cover every export, not merely agree with the ones
 /// they name. A function added to `c/mod.rs` without regenerating leaves the
 /// counts apart.
 const _: () = assert!(
-    datalove_rti::table::EXPORTED == 123,
+    datalove_rti::table::EXPORTED == 122,
     "datalove-rti describes a different number of functions than datalove-rt exports",
 );

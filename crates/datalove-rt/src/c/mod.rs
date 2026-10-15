@@ -2981,30 +2981,13 @@ pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_cursor_begin_local(
     RtStatus::Ok
 }
 
-/// Moves a walk over a set to the next element.
+/// Moves a walk over a set or a map to the next element or entry.
 #[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreeset_cursor_advance_local(
+pub unsafe extern "C-unwind" fn dtlv_rti_tree_cursor_advance_local(
     _rt: LocalRtHandle,
     cursor_mut: *mut rtdt::TreeCursor,
-    set_tydesc: *const rtdt::TyDesc,
 ) -> RtStatus {
     debug_assert!(!cursor_mut.is_null(), "cursor_mut is null");
-    debug_assert!(!set_tydesc.is_null(), "set_tydesc is null");
-    unsafe { crate::c::impls::set::btreeset_cursor_advance_impl(cursor_mut, set_tydesc) };
-    RtStatus::Ok
-}
-
-/// Moves a walk over a map to the next entry.
-#[unsafe(no_mangle)]
-pub unsafe extern "C-unwind" fn dtlv_rti_btreemap_cursor_advance_local(
-    _rt: LocalRtHandle,
-    cursor_mut: *mut rtdt::TreeCursor,
-    map_tydesc: *const rtdt::TyDesc,
-) -> RtStatus {
-    debug_assert!(!cursor_mut.is_null(), "cursor_mut is null");
-    debug_assert!(!map_tydesc.is_null(), "map_tydesc is null");
-    unsafe {
-        crate::c::impls::btreemap::btreemap_cursor_advance_impl(cursor_mut, rtdt::TyDescRef::from_ptr(map_tydesc));
-    }
+    unsafe { crate::c::impls::cursor::tree_cursor_advance_impl(cursor_mut) };
     RtStatus::Ok
 }

@@ -640,12 +640,14 @@ map (`CursorKind::of`).
 | `CursorElem { dest, cursor }` | `v0 = cursorelem s0` | A `Ref` to the current element, a map's key, or a tensor's row; not done |
 | `CursorIndex { dest, cursor }` | `v0 = cursorindex s0` | The current element's position, an `Index`; strided and row cursors only; not done |
 | `CursorValue { dest, cursor }` | `v0 = cursorvalue s0` | A `Ref` to a map's current value; not done |
-| `CursorAdvance { cursor, coll }` | `cursoradvance s0, v1` | Moves to the next element or to done; not done; `coll` is the one begun on |
+| `CursorAdvance { cursor, coll }` | `cursoradvance s0, v1` | Moves to the next element or to done; not done; reads only the cursor, and `coll` is the one begun on |
 
 Begin and advance are the runtime's functions (`dtlv_rti_*_cursor_*`); done,
-elem, index and value read the cursor's `rtdt` fields. A backend may open-code
-begin and advance too, but only on the runtime's layouts and with its
-meanings, since OSR continues a walk the interpreter began. A cursor's
+elem, index and value read the cursor's `rtdt` fields. Begin reads the
+collection and its descriptor and puts everything the walk needs in the
+cursor; advance reads only the cursor. A backend open-codes advance, but only
+as the runtime's does it, on the cursor's fields and with their meanings,
+since OSR continues a walk the interpreter began. A cursor's
 references are into a collection the language keeps frozen until the loop
 ends, so nothing between them checks anything. How `for` lowers onto these is
 [`for` Loops over the Collections](plan-for-loops.md).

@@ -2560,53 +2560,25 @@ pub unsafe fn btreemap_cursor_begin_impl(
 ) {
     unsafe {
         let ty = MapTy::of(map_tydesc);
+        let layout = map_tydesc.map_leaf_layout();
         let root = (*(map_ref as *const Map)).root as *mut MapNode;
-        let (leaf, elem, value) = if root.is_null() {
-            (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut())
+        let (leaf, elem, value, leaf_len) = if root.is_null() {
+            (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut(), 0)
         } else {
             let leaf = leftmost_leaf(root, ty);
-            (leaf, leaf_keys_ptr(leaf, ty), leaf_values_ptr(leaf, ty))
+            (leaf, leaf_keys_ptr(leaf, ty), leaf_values_ptr(leaf, ty), read_node_len(leaf))
         };
         cursor_out.write(rtdt::TreeCursor {
             leaf: leaf as *const u8,
             elem,
             value,
+            elem_stride: map_tydesc.map_key_ty().size() as usize,
+            value_stride: map_tydesc.map_value_ty().size() as usize,
             slot: 0,
+            leaf_len,
+            next_leaf_offset: layout.next_leaf_offset,
+            keys_offset: layout.keys_offset,
+            values_offset: layout.values_offset,
         });
-    }
-}
-
-/// Moves a walk over a map to the next entry, or to done after the last.
-///
-/// Every leaf in the chain holds an entry, removal rebalancing as it does,
-/// so the next leaf's first slot is always the next entry.
-pub unsafe fn btreemap_cursor_advance_impl(
-    cursor_mut: *mut rtdt::TreeCursor,
-    map_tydesc: rtdt::TyDescRef,
-) {
-    unsafe {
-        let cursor = &mut *cursor_mut;
-        debug_assert!(!cursor.leaf.is_null(), "advancing a map cursor that is done");
-        let layout = map_tydesc.map_leaf_layout();
-        let leaf = cursor.leaf as *mut MapNode;
-
-        cursor.slot += 1;
-        if cursor.slot < read_node_len(leaf) {
-            cursor.elem = cursor.elem.add(map_tydesc.map_key_ty().size() as usize);
-            cursor.value = cursor.value.add(map_tydesc.map_value_ty().size() as usize);
-            return;
-        }
-
-        let next = *((leaf as *const u8).add(layout.next_leaf_offset as usize) as *const *const u8);
-        cursor.leaf = next;
-        cursor.slot = 0;
-        if next.is_null() {
-            cursor.elem = std::ptr::null();
-            cursor.value = std::ptr::null();
-        } else {
-            debug_assert!(read_node_len(next as *const MapNode) > 0, "an empty leaf in a map's chain");
-            cursor.elem = next.add(layout.keys_offset as usize);
-            cursor.value = next.add(layout.values_offset as usize);
-        }
     }
 }

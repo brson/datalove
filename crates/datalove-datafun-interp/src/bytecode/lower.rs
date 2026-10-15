@@ -560,13 +560,8 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::CursorValue { dst: self.value_loc(*dest), cursor: c });
                 true
             }
-            // A tree's advance reads its layout off the collection's
-            // descriptor, which the walker has.
             Instruction::CursorAdvance { cursor, .. } => {
                 let (c, kind) = self.cursor(*cursor);
-                if kind == CursorKind::Tree {
-                    return false;
-                }
                 self.emit(Op::CursorAdvance { cursor: c, kind });
                 true
             }

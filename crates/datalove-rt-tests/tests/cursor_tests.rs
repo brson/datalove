@@ -36,6 +36,16 @@ impl TyDescArena {
         })
     }
 
+    fn u64(&self) -> *const rtdt::TyDesc {
+        self.alloc(rtdt::TyDesc {
+            type_tag: rtdt::TyTag::U64,
+            flags: rtdt::TyDesc::PLAIN,
+            size: 8,
+            align: 8,
+            type_info: rtdt::TyInfo { nothing: rtdt::TyInfoNothing { unused: 0 } },
+        })
+    }
+
     /// `()`, which is zero-sized.
     fn unit(&self) -> *const rtdt::TyDesc {
         self.alloc(rtdt::TyDesc {
@@ -184,36 +194,65 @@ unsafe fn walk_tensor_nested(
     }
 }
 
-unsafe fn walk_set_u32(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) -> Vec<u32> {
+/// Every element or entry a set or map walk visits, as key and value
+/// pointers.
+///
+/// Before each step it checks the cursor's bookkeeping against the leaf it is
+/// on, since compiled code advances on that bookkeeping alone: the current
+/// leaf's length, and the key and value at the slot's offset into it.
+unsafe fn walk_tree(rt: &Rt, cursor: &mut rtdt::TreeCursor) -> Vec<(*const u8, *const u8)> {
+    unsafe {
+        let is_map = !cursor.value.is_null() || cursor.values_offset != 0;
+        let mut seen = Vec::new();
+        while !cursor.leaf.is_null() {
+            let leaf_len = *(cursor.leaf.add(rtdt::TREE_NODE_LEN_OFFSET) as *const u32);
+            assert_eq!(cursor.leaf_len, leaf_len, "the cursor's leaf length is the leaf's");
+            assert!(cursor.slot < cursor.leaf_len);
+            let slot = cursor.slot as usize;
+            assert_eq!(cursor.elem, cursor.leaf.add(cursor.keys_offset as usize + slot * cursor.elem_stride));
+            if is_map {
+                assert_eq!(cursor.value, cursor.leaf.add(cursor.values_offset as usize + slot * cursor.value_stride));
+            } else {
+                assert!(cursor.value.is_null(), "a set's walk has no values");
+            }
+            seen.push((cursor.elem, cursor.value));
+            step(rt, c::dtlv_rti_tree_cursor_advance_local, cursor);
+        }
+        assert!(cursor.elem.is_null(), "a done cursor points at nothing");
+        assert!(cursor.value.is_null(), "a done cursor points at nothing");
+        seen
+    }
+}
+
+unsafe fn begin_set(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) -> rtdt::TreeCursor {
     unsafe {
         let mut cursor = MaybeUninit::uninit();
         let status = c::dtlv_rti_btreeset_cursor_begin_local(rt.0, set as *const rtdt::Set as *const u8, set_td, cursor.as_mut_ptr());
         assert_eq!(status, RtStatus::Ok);
-        let cursor = cursor.assume_init_mut();
-        let mut seen = Vec::new();
-        while !cursor.leaf.is_null() {
-            seen.push(*(cursor.elem as *const u32));
-            assert_eq!(c::dtlv_rti_btreeset_cursor_advance_local(rt.0, cursor, set_td), RtStatus::Ok);
-        }
-        assert!(cursor.elem.is_null(), "a done cursor points at nothing");
-        seen
+        cursor.assume_init()
+    }
+}
+
+unsafe fn begin_map(rt: &Rt, map: &rtdt::Map, map_td: *const rtdt::TyDesc) -> rtdt::TreeCursor {
+    unsafe {
+        let mut cursor = MaybeUninit::uninit();
+        let status = c::dtlv_rti_btreemap_cursor_begin_local(rt.0, map as *const rtdt::Map as *const u8, map_td, cursor.as_mut_ptr());
+        assert_eq!(status, RtStatus::Ok);
+        cursor.assume_init()
+    }
+}
+
+unsafe fn walk_set_u32(rt: &Rt, set: &rtdt::Set, set_td: *const rtdt::TyDesc) -> Vec<u32> {
+    unsafe {
+        let mut cursor = begin_set(rt, set, set_td);
+        walk_tree(rt, &mut cursor).into_iter().map(|(k, _)| *(k as *const u32)).collect()
     }
 }
 
 unsafe fn walk_map_u32(rt: &Rt, map: &rtdt::Map, map_td: *const rtdt::TyDesc) -> Vec<(u32, u32)> {
     unsafe {
-        let mut cursor = MaybeUninit::uninit();
-        let status = c::dtlv_rti_btreemap_cursor_begin_local(rt.0, map as *const rtdt::Map as *const u8, map_td, cursor.as_mut_ptr());
-        assert_eq!(status, RtStatus::Ok);
-        let cursor = cursor.assume_init_mut();
-        let mut seen = Vec::new();
-        while !cursor.leaf.is_null() {
-            let k = *(cursor.elem as *const u32);
-            let v = *(cursor.value as *const u32);
-            seen.push((k, v));
-            assert_eq!(c::dtlv_rti_btreemap_cursor_advance_local(rt.0, cursor, map_td), RtStatus::Ok);
-        }
-        seen
+        let mut cursor = begin_map(rt, map, map_td);
+        walk_tree(rt, &mut cursor).into_iter().map(|(k, v)| (*(k as *const u32), *(v as *const u32))).collect()
     }
 }
 
@@ -299,6 +338,29 @@ unsafe fn map_by_inserting(rt: &Rt, keys: impl IntoIterator<Item = u32>, map_td:
             let status = c::dtlv_rti_btreemap_insert_local(
                 rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td,
                 &mut k as *mut u32 as *mut u8, u32_td, &mut v as *mut u32 as *mut u8, u32_td,
+            );
+            assert_eq!(status, RtStatus::Ok);
+        }
+        map
+    }
+}
+
+/// A map from each key to a value of any plain type.
+unsafe fn map_of<V: Copy>(
+    rt: &Rt,
+    entries: impl IntoIterator<Item = (u32, V)>,
+    map_td: *const rtdt::TyDesc,
+    u32_td: *const rtdt::TyDesc,
+    value_td: *const rtdt::TyDesc,
+) -> rtdt::Map {
+    unsafe {
+        let mut map = rtdt::Map { root: ptr::null(), len: rtdt::Index::ZERO };
+        assert_eq!(c::dtlv_rti_btreemap_create_local(rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td), RtStatus::Ok);
+        for (k, v) in entries {
+            let (mut k, mut v) = (k, v);
+            let status = c::dtlv_rti_btreemap_insert_local(
+                rt.0, &mut map as *mut rtdt::Map as *mut u8, map_td,
+                &mut k as *mut u32 as *mut u8, u32_td, &mut v as *mut V as *mut u8, value_td,
             );
             assert_eq!(status, RtStatus::Ok);
         }
@@ -477,7 +539,7 @@ fn test_tree_cursor_walks_in_order() -> AnyResult<()> {
     let u32_td = arena.u32();
     let set_td = arena.set(u32_td);
     let map_td = arena.map(u32_td, u32_td);
-    for n in [1u32, 11, 12, 200, 5000] {
+    for n in [1u32, 2, 11, 12, 22, 23, 200, 5000] {
         let mut set = unsafe { set_by_inserting(&rt, shuffled(n, n as u64), set_td, u32_td) };
         assert_eq!(unsafe { walk_set_u32(&rt, &set, set_td) }, (0..n).collect::<Vec<_>>());
         unsafe { destroy_set(&rt, &mut set, set_td) };
@@ -556,5 +618,71 @@ fn test_tree_cursor_walks_bulk_built_trees() -> AnyResult<()> {
         assert_eq!(unsafe { walk_map_u32(&rt, &map, map_td) }, (0..n).map(|k| (k, k * 10)).collect::<Vec<_>>());
         unsafe { destroy_map(&rt, &mut map, map_td) };
     }
+    Ok(())
+}
+
+/// Zero-sized values step by nothing within a leaf, and still move to each
+/// new leaf's values, so the value pointer stays on the leaf it belongs to.
+#[test]
+fn test_tree_cursor_walks_zero_sized_values() -> AnyResult<()> {
+    let rt = Rt::new();
+    let arena = TyDescArena::new();
+    let u32_td = arena.u32();
+    let unit_td = arena.unit();
+    let map_td = arena.map(u32_td, unit_td);
+    for n in [1u32, 11, 12, 23, 500] {
+        let mut map = unsafe { map_of(&rt, shuffled(n, 3).into_iter().map(|k| (k, ())), map_td, u32_td, unit_td) };
+        let mut cursor = unsafe { begin_map(&rt, &map, map_td) };
+        assert_eq!(cursor.value_stride, 0);
+        let keys: Vec<u32> = unsafe { walk_tree(&rt, &mut cursor) }.into_iter().map(|(k, _)| unsafe { *(k as *const u32) }).collect();
+        assert_eq!(keys, (0..n).collect::<Vec<_>>());
+        unsafe { destroy_map(&rt, &mut map, map_td) };
+    }
+    Ok(())
+}
+
+/// Values more aligned than the keys sit after padding in the leaf, which the
+/// cursor's `values_offset` accounts for.
+#[test]
+fn test_tree_cursor_walks_over_aligned_values() -> AnyResult<()> {
+    let rt = Rt::new();
+    let arena = TyDescArena::new();
+    let u32_td = arena.u32();
+    let u64_td = arena.u64();
+    let map_td = arena.map(u32_td, u64_td);
+    for n in [1u32, 12, 23, 500] {
+        let mut map = unsafe { map_of(&rt, shuffled(n, 4).into_iter().map(|k| (k, k as u64 * 1_000_000_007)), map_td, u32_td, u64_td) };
+        let mut cursor = unsafe { begin_map(&rt, &map, map_td) };
+        assert_eq!(cursor.value_stride, 8);
+        let entries: Vec<(u32, u64)> = unsafe { walk_tree(&rt, &mut cursor) }
+            .into_iter()
+            .map(|(k, v)| unsafe { (*(k as *const u32), *(v as *const u64)) })
+            .collect();
+        assert_eq!(entries, (0..n).map(|k| (k, k as u64 * 1_000_000_007)).collect::<Vec<_>>());
+        unsafe { destroy_map(&rt, &mut map, map_td) };
+    }
+    Ok(())
+}
+
+/// A cursor is plain data: a copy taken mid-walk carries on from where the
+/// original was, with no descriptor, as compiled code does with a walk the
+/// interpreter began.
+#[test]
+fn test_tree_cursor_copied_mid_walk_carries_on() -> AnyResult<()> {
+    let rt = Rt::new();
+    let arena = TyDescArena::new();
+    let u32_td = arena.u32();
+    let set_td = arena.set(u32_td);
+    let mut set = unsafe { set_by_inserting(&rt, shuffled(100, 5), set_td, u32_td) };
+    for split in [0usize, 10, 11, 12, 50, 99] {
+        let mut cursor = unsafe { begin_set(&rt, &set, set_td) };
+        for _ in 0..split {
+            unsafe { step(&rt, c::dtlv_rti_tree_cursor_advance_local, &mut cursor) };
+        }
+        let mut copy = cursor;
+        let rest: Vec<u32> = unsafe { walk_tree(&rt, &mut copy) }.into_iter().map(|(k, _)| unsafe { *(k as *const u32) }).collect();
+        assert_eq!(rest, (split as u32..100).collect::<Vec<_>>());
+    }
+    unsafe { destroy_set(&rt, &mut set, set_td) };
     Ok(())
 }

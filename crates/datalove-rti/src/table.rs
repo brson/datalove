@@ -16,7 +16,7 @@ use datalove_rtdt as rtdt;
 use crate::{DebugOutputMode, LocalRtHandle, RtEq, RtOrdering, RtStatus};
 
 /// How many functions the runtime exports.
-pub const EXPORTED: usize = 123;
+pub const EXPORTED: usize = 122;
 
 /// A hash of every field's name and type, in order.
 ///
@@ -24,7 +24,7 @@ pub const EXPORTED: usize = 123;
 /// runtime are checked against each other on. Anything that changes what a
 /// caller must pass changes this, order included: a field is reached by
 /// offset, so moving one breaks a caller as surely as changing its arguments.
-pub const TABLE_SHAPE: u64 = 0xfd0092772698a907;
+pub const TABLE_SHAPE: u64 = 0x7d3915aa792d5a27;
 
 /// Every function the runtime exports, by pointer.
 #[repr(C)]
@@ -150,6 +150,5 @@ pub struct RtiTable {
     pub dtlv_rti_row_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::RowCursor) -> RtStatus,
     pub dtlv_rti_btreeset_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::TreeCursor) -> RtStatus,
     pub dtlv_rti_btreemap_cursor_begin_local: unsafe extern "C-unwind" fn(LocalRtHandle, *const u8, *const rtdt::TyDesc, *mut rtdt::TreeCursor) -> RtStatus,
-    pub dtlv_rti_btreeset_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::TreeCursor, *const rtdt::TyDesc) -> RtStatus,
-    pub dtlv_rti_btreemap_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::TreeCursor, *const rtdt::TyDesc) -> RtStatus,
+    pub dtlv_rti_tree_cursor_advance_local: unsafe extern "C-unwind" fn(LocalRtHandle, *mut rtdt::TreeCursor) -> RtStatus,
 }

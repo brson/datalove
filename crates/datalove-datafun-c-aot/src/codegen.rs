@@ -3368,22 +3368,13 @@ impl<'a> FunctionCodegenContext<'a> {
     }
 
     /// Start a walk. A list's is open-coded, being three loads and a zero.
+    /// Start a walk, with a call to the collection's begin, which fills in
+    /// everything the walk needs.
     fn emit_cursor_begin(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
         let coll_addr = self.operand_addr(coll);
         let cursor_addr = self.slot_addr(cursor);
         let func = match (self.cursor_kind(cursor), self.operand_type(coll).clone()) {
-            (CursorKind::Stride, IrType::List(elem)) => {
-                let stride = self.size_expr(&elem);
-                writeln!(out, "    {{ uint8_t* __l = (uint8_t*){coll_addr}; uint8_t* __c = (uint8_t*){cursor_addr};").unwrap();
-                writeln!(out, "      *(void**)(__c + {}) = *(void**)(__l + {});",
-                    offset_of!(rtdt::StrideCursor, elem), offset_of!(rtdt::List, data)).unwrap();
-                writeln!(out, "      *(uintptr_t*)(__c + {}) = (uintptr_t){stride};",
-                    offset_of!(rtdt::StrideCursor, stride)).unwrap();
-                writeln!(out, "      *(index_t*)(__c + {}) = 0;", offset_of!(rtdt::StrideCursor, index)).unwrap();
-                writeln!(out, "      *(index_t*)(__c + {}) = *(index_t*)(__l + {}); }}",
-                    offset_of!(rtdt::StrideCursor, len), offset_of!(rtdt::List, size)).unwrap();
-                return;
-            }
+            (CursorKind::Stride, IrType::List(_)) => "dtlv_rti_list_cursor_begin_local",
             (CursorKind::Stride, IrType::Tensor(..)) => "dtlv_rti_tensor_cursor_begin_local",
             (CursorKind::Row, IrType::Tensor(..)) => "dtlv_rti_tensor_row_cursor_begin_local",
             (CursorKind::Tree, IrType::Set(_)) => "dtlv_rti_btreeset_cursor_begin_local",
@@ -3394,9 +3385,10 @@ impl<'a> FunctionCodegenContext<'a> {
         writeln!(out, "    {func}(rt, {coll_addr}, {coll_tydesc}, {cursor_addr});").unwrap();
     }
 
-    /// Move a walk on. A list's or a tensor's is a pointer or an offset and a
-    /// count; a tree's moves along its leaf inline and calls the runtime only
-    /// to cross to the next one.
+    /// Move a walk on, as the runtime's advance does, on the cursor's fields
+    /// alone. A list's or a tensor's is a pointer or an offset and a count; a
+    /// tree's steps along its leaf by the strides, and at the end of one
+    /// follows the chain to the next.
     fn emit_cursor_advance(&mut self, out: &mut String, cursor: SlotId, coll: &Operand) {
         let at = self.slot_addr(cursor);
         match self.cursor_kind(cursor) {
@@ -3418,31 +3410,52 @@ impl<'a> FunctionCodegenContext<'a> {
                 writeln!(out, "    *(index_t*)({at} + {index}) += 1;").unwrap();
             }
             CursorKind::Tree => {
-                let coll_ty = self.operand_type(coll).clone();
-                let (func, key_ty, value_ty) = match &coll_ty {
-                    IrType::Set(elem) => ("dtlv_rti_btreeset_cursor_advance_local", (**elem).clone(), None),
-                    IrType::Map(key, value) => ("dtlv_rti_btreemap_cursor_advance_local", (**key).clone(), Some((**value).clone())),
+                let is_map = match self.operand_type(coll) {
+                    IrType::Set(_) => false,
+                    IrType::Map(..) => true,
                     ty => panic!("a tree cursor over a {ty}"),
                 };
-                let (leaf, elem, value, slot) = (
+                let (leaf, elem, value) = (
                     offset_of!(rtdt::TreeCursor, leaf),
                     offset_of!(rtdt::TreeCursor, elem),
                     offset_of!(rtdt::TreeCursor, value),
-                    offset_of!(rtdt::TreeCursor, slot),
                 );
-                let len = offset_of!(rtdt::SetNode, len);
-                let key_size = self.size_expr(&key_ty);
+                let (elem_stride, value_stride) = (
+                    offset_of!(rtdt::TreeCursor, elem_stride),
+                    offset_of!(rtdt::TreeCursor, value_stride),
+                );
+                let (slot, leaf_len) = (offset_of!(rtdt::TreeCursor, slot), offset_of!(rtdt::TreeCursor, leaf_len));
+                let (next_leaf_offset, keys_offset, values_offset) = (
+                    offset_of!(rtdt::TreeCursor, next_leaf_offset),
+                    offset_of!(rtdt::TreeCursor, keys_offset),
+                    offset_of!(rtdt::TreeCursor, values_offset),
+                );
+                let node_len = rtdt::TREE_NODE_LEN_OFFSET;
                 writeln!(out, "    {{ uint8_t* __c = (uint8_t*){at}; uint32_t __next = *(uint32_t*)(__c + {slot}) + 1;").unwrap();
-                writeln!(out, "      if (__next < *(uint32_t*)(*(uint8_t**)(__c + {leaf}) + {len})) {{").unwrap();
+                writeln!(out, "      if (__next < *(uint32_t*)(__c + {leaf_len})) {{").unwrap();
                 writeln!(out, "        *(uint32_t*)(__c + {slot}) = __next;").unwrap();
-                writeln!(out, "        *(uintptr_t*)(__c + {elem}) += {key_size};").unwrap();
-                if let Some(value_ty) = value_ty {
-                    let value_size = self.size_expr(&value_ty);
-                    writeln!(out, "        *(uintptr_t*)(__c + {value}) += {value_size};").unwrap();
+                writeln!(out, "        *(uintptr_t*)(__c + {elem}) += *(uintptr_t*)(__c + {elem_stride});").unwrap();
+                if is_map {
+                    writeln!(out, "        *(uintptr_t*)(__c + {value}) += *(uintptr_t*)(__c + {value_stride});").unwrap();
                 }
-                let coll_tydesc = self.operand_tydesc(coll);
                 writeln!(out, "      }} else {{").unwrap();
-                writeln!(out, "        {func}(rt, __c, {coll_tydesc});").unwrap();
+                writeln!(out, "        uint8_t* __leaf = *(uint8_t**)(__c + {leaf});").unwrap();
+                writeln!(out, "        uint8_t* __n = *(uint8_t**)(__leaf + *(uint32_t*)(__c + {next_leaf_offset}));").unwrap();
+                writeln!(out, "        *(uint8_t**)(__c + {leaf}) = __n;").unwrap();
+                writeln!(out, "        *(uint32_t*)(__c + {slot}) = 0;").unwrap();
+                writeln!(out, "        if (__n) {{").unwrap();
+                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = *(uint32_t*)(__n + {node_len});").unwrap();
+                writeln!(out, "          *(uint8_t**)(__c + {elem}) = __n + *(uint32_t*)(__c + {keys_offset});").unwrap();
+                if is_map {
+                    writeln!(out, "          *(uint8_t**)(__c + {value}) = __n + *(uint32_t*)(__c + {values_offset});").unwrap();
+                }
+                writeln!(out, "        }} else {{").unwrap();
+                writeln!(out, "          *(uint32_t*)(__c + {leaf_len}) = 0;").unwrap();
+                writeln!(out, "          *(uint8_t**)(__c + {elem}) = NULL;").unwrap();
+                if is_map {
+                    writeln!(out, "          *(uint8_t**)(__c + {value}) = NULL;").unwrap();
+                }
+                writeln!(out, "        }}").unwrap();
                 writeln!(out, "      }} }}").unwrap();
             }
         }

@@ -133,15 +133,13 @@ pub struct RuntimeImports {
     /// `dtlv_rti_dyn_unop(rt, op, value, value_td, out, out_td)`
     pub dyn_unop: FuncId,
 
-    // The parts of a `for` loop's walk compiled code calls rather than
-    // open-codes: starting one over a tensor or a tree, and a tree's advance
-    // to its next leaf. See `codegen/cursors.rs`.
+    // The part of a `for` loop's walk compiled code calls rather than
+    // open-codes: starting one. See `codegen/cursors.rs`.
+    pub list_cursor_begin: FuncId,
     pub tensor_cursor_begin: FuncId,
     pub tensor_row_cursor_begin: FuncId,
     pub set_cursor_begin: FuncId,
     pub map_cursor_begin: FuncId,
-    pub set_cursor_advance: FuncId,
-    pub map_cursor_advance: FuncId,
 }
 
 impl RuntimeImports {
@@ -791,12 +789,11 @@ impl RuntimeImports {
         // returns a status.
         let status = Some(cl_types::I8);
         let begin = |module: &mut M, name: &str| declare_import(module, call_conv, name, 4, status);
+        let list_cursor_begin = begin(module, "dtlv_rti_list_cursor_begin_local")?;
         let tensor_cursor_begin = begin(module, "dtlv_rti_tensor_cursor_begin_local")?;
         let tensor_row_cursor_begin = begin(module, "dtlv_rti_tensor_row_cursor_begin_local")?;
         let set_cursor_begin = begin(module, "dtlv_rti_btreeset_cursor_begin_local")?;
         let map_cursor_begin = begin(module, "dtlv_rti_btreemap_cursor_begin_local")?;
-        let set_cursor_advance = declare_import(module, call_conv, "dtlv_rti_btreeset_cursor_advance_local", 3, status)?;
-        let map_cursor_advance = declare_import(module, call_conv, "dtlv_rti_btreemap_cursor_advance_local", 3, status)?;
 
         Ok(Self {
             init,
@@ -853,12 +850,11 @@ impl RuntimeImports {
             dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
+            list_cursor_begin,
             tensor_cursor_begin,
             tensor_row_cursor_begin,
             set_cursor_begin,
             map_cursor_begin,
-            set_cursor_advance,
-            map_cursor_advance,
         })
     }
     /// Every import, for a backend that resolves them itself.
@@ -918,12 +914,11 @@ impl RuntimeImports {
             dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
+            list_cursor_begin,
             tensor_cursor_begin,
             tensor_row_cursor_begin,
             set_cursor_begin,
             map_cursor_begin,
-            set_cursor_advance,
-            map_cursor_advance,
         } = *self;
         vec![
             init, shutdown, set_debug_mode, stack_overflow, debuglog_local, destroy_local, field_offset,
@@ -941,12 +936,11 @@ impl RuntimeImports {
             dyn_binop, dyn_binop_checked,
             dyn_neg_checked,
             dyn_unop,
+            list_cursor_begin,
             tensor_cursor_begin,
             tensor_row_cursor_begin,
             set_cursor_begin,
             map_cursor_begin,
-            set_cursor_advance,
-            map_cursor_advance,
         ]
     }
 }
