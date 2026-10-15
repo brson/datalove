@@ -35,7 +35,7 @@ Here's how `ord.contains` worked before:
 fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
   var found = false
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     if equal_to_at(ref self, i, ref elem) |same|
       if same
@@ -43,7 +43,7 @@ fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
         break
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret found
 end fun
@@ -56,7 +56,6 @@ end fun
 ```
 
 (For readers new to Datalove:
-`: index / 0` is a zero of type `index`,
 `.<` is less-than,
 and `icall` calls a compiler intrinsic.)
 
@@ -71,9 +70,9 @@ Here's `set.is_subset_of`:
 
 ```datalove
 fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord }
-  var all_present: bool = true
+  var all_present = true
   let n = len(ref self)
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     if get(ref self, i) |elem|
       if contains(ref other, ref elem)
@@ -81,7 +80,7 @@ fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord }
         set all_present = false
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret all_present
 end fun
@@ -199,13 +198,13 @@ for more than indexing the collection.
 fun index_of<T>(ref self: [T], ref elem: T): ?index where { T is ord }
   var at: ?index = none
   let n = list_len(ref self)
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     if equal(ref self[i]?, ref elem)
       set at = some i
       break
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret at
 end fun
@@ -459,16 +458,16 @@ across iterations.
 fun is_sorted<T>(ref self: [T]): bool where { T is ord }
   var ordered = true
   let n = list_len(ref self)
-  var i: index = : index / 1
+  var i: index = 1
   loop while i .< n
-    let i_prev = icall sub_wrapping_index(i, : index / 1)
+    let i_prev = icall sub_wrapping_index(i, 1)
     if greater_at(ref self, i_prev, i) |out_of_order|
       if out_of_order
         set ordered = false
         break
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret ordered
 end fun
@@ -484,7 +483,7 @@ so they keep its index and re-index the list on every comparison:
 
 ```datalove
 fun least<T>(ref self: [T]): ?T where { T is ord }
-  var best: index = : index / 0
+  var best: index = 0
   for i, item in ref self
     if less(ref item, ref self[best]?)
       set best = i
