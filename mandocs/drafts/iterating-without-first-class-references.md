@@ -231,7 +231,7 @@ end fun
 ```
 
 **This [smells](https://en.wikipedia.org/wiki/Code_smell)
-a bit to me. Smells like a big special case.**
+a bit to me, like a big special case.**
 I'm used to Rust and its many iterator adapters,
 which do this and much more.
 (What about reverse iteration? Seems important...)
@@ -287,7 +287,7 @@ pub struct TreeCursor {
 }
 ```
 
-These are part of a public API and ABI that the compiler knows directly,
+These are part of a public ABI that the compiler knows directly,
 so it's convenient to share them rather than give each collection its own type.
 But each collection still needs its own functions in the runtime API:
 
@@ -412,7 +412,7 @@ Calling into the runtime for every step cost two to four times as much as the ol
 Open-coded, a list's `for` beats its index loop on every engine,
 though not by much.
 The index loop was already just a bounds check and an add.
-The set is the real win:
+The set is the biggest win:
 linear instead of quadratic,
 8x faster on the interpreter and 38x under AOT, at only 5,000 elements.
 

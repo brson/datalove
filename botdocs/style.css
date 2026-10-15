@@ -401,6 +401,14 @@ th {
 .token.type-colon { color: var(--syn-type-colon); }
 .token.type-hint-slash { color: var(--syn-type-hint-slash); }
 .token.punctuation { color: var(--syn-punctuation); }
+/* Tokens from Prism's own grammars, such as Rust. */
+.token.char { color: var(--syn-string); }
+.token.class-name { color: var(--syn-type-name); }
+.token.macro { color: var(--syn-function); }
+.token.attribute { color: var(--syn-variant); }
+.token.lifetime-annotation { color: var(--syn-binding-modifier); }
+.token.constant { color: var(--syn-number); }
+.token.operator { color: var(--syn-op-arith); }
 
 /* Admonition boxes */
 .note, .warning, .tip {
