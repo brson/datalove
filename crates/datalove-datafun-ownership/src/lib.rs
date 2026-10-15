@@ -110,7 +110,7 @@ struct AnalysisCtx<'a, 'db> {
     /// All bindings (indexed by BindingId).
     bindings: Vec<BindingInfo>,
     /// Name to binding ID mapping (current scope).
-    name_to_binding: HashMap<String, BindingId>,
+    name_to_binding: rustc_hash::FxHashMap<String, BindingId>,
     /// Stack of scopes. Each scope records bindings created in it.
     scope_stack: Vec<ScopeFrame<'db>>,
     /// Uses that auto-adapt turns into clones.
@@ -253,7 +253,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             next_binding: 0,
             next_stmt_id: 0,
             bindings: Vec::new(),
-            name_to_binding: HashMap::new(),
+            name_to_binding: Default::default(),
             scope_stack: Vec::new(),
             adapt_sites: AdaptSites::default(),
             dead_externals,

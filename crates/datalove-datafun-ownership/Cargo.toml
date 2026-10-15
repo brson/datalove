@@ -11,6 +11,7 @@ repository.workspace = true
 index-64 = ["datalove-rtdt/index-64", "datalove-datafun-ir/index-64", "datalove-datafun-common/index-64", "datalove-datafun-sema/index-64"]
 
 [dependencies]
+rustc-hash.workspace = true
 rmx.workspace = true
 bct.workspace = true
 salsa.workspace = true

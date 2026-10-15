@@ -18,7 +18,7 @@ use crate::ir_ext::IrTypeExt;
 
 /// The data files of a world, by path.
 pub type DataFiles = BTreeMap<String, bct::input::Source>;
-use datalove_datafun_sema::{BindingId, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
+use datalove_datafun_sema::{BindingId, BindingMap, DropSchedule, BindingInfo, TrackingCategory, StmtKey, AdaptSites, ExprTypes, CallTargets};
 
 /// Compile-time state for building a function's IR.
 ///
@@ -46,7 +46,7 @@ pub struct FrameState<'db> {
     /// Next ParamId to allocate.
     pub next_param: u32,
     /// Mapping from variable names to their operands.
-    pub variables: HashMap<String, Operand>,
+    pub variables: rustc_hash::FxHashMap<String, Operand>,
     /// Stack of open name scopes, innermost last.
     ///
     /// A block body -- an `if` branch, a loop body, a match arm -- opens one,
@@ -64,9 +64,9 @@ pub struct FrameState<'db> {
     ///
     /// Ordered, because `compute_tracked_slots` walks it to decide the order
     /// tracking bytes are assigned in, and that reaches the emitted code.
-    pub binding_to_operand: BTreeMap<BindingId, Operand>,
+    pub binding_to_operand: BindingMap<Operand>,
     /// Reverse mapping from Operand to BindingId (for tracking lookups).
-    pub operand_to_binding: HashMap<Operand, BindingId>,
+    pub operand_to_binding: rustc_hash::FxHashMap<Operand, BindingId>,
     /// Next BindingId to allocate (must match analysis traversal order).
     pub next_binding_id: u32,
     /// Type for each ParamId.
@@ -129,10 +129,10 @@ impl<'db> FrameState<'db> {
             next_value: 0,
             next_slot: 0,
             next_param: 0,
-            variables: HashMap::new(),
+            variables: Default::default(),
             variable_scopes: Vec::new(),
-            binding_to_operand: BTreeMap::new(),
-            operand_to_binding: HashMap::new(),
+            binding_to_operand: BindingMap::new(),
+            operand_to_binding: Default::default(),
             next_binding_id: 0,
             param_types: Vec::new(),
             param_modes: Vec::new(),
@@ -353,7 +353,7 @@ impl<'db> LowerCtx<'db> {
         script_ctx: ScriptLowerContext,
     ) -> Self {
         // Seed variables with external bindings from previous units.
-        let mut variables = HashMap::new();
+        let mut variables = rustc_hash::FxHashMap::default();
         for (name, (unit, value)) in &script_ctx.values {
             variables.insert(name.clone(), Operand::ExternalValue {
                 unit: *unit,
@@ -1228,7 +1228,7 @@ impl<'db> LowerCtx<'db> {
         let mut added: std::collections::HashSet<SlotId> = std::collections::HashSet::new();
 
         for (id, &operand) in &self.body.binding_to_operand {
-            if self.is_binding_tracked(*id) {
+            if self.is_binding_tracked(id) {
                 if let Operand::Slot(slot_id) = operand {
                     if added.insert(slot_id) {
                         result.push(slot_id);

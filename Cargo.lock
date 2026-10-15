@@ -1627,6 +1627,7 @@ dependencies = [
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-rtdt",
+ "rustc-hash",
  "rustmax",
  "salsa",
 ]
@@ -1641,6 +1642,7 @@ dependencies = [
  "datalove-datafun-ir",
  "datalove-datafun-sema",
  "datalove-rtdt",
+ "rustc-hash",
  "rustmax",
  "salsa",
 ]
@@ -1710,6 +1712,7 @@ dependencies = [
  "datalove-datafun-sema",
  "datalove-datalit",
  "datalove-diagnostic",
+ "rustc-hash",
  "rustmax",
  "salsa",
 ]

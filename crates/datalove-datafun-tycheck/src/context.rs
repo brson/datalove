@@ -83,11 +83,11 @@ pub struct TypeContext<'db> {
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId<'db>>,
     /// Variable bindings, by name.
-    pub(crate) variables: HashMap<InternedText<'db>, VarBinding<'db>>,
+    pub(crate) variables: rustc_hash::FxHashMap<InternedText<'db>, VarBinding<'db>>,
     /// Function signatures (name -> function type).
-    pub(crate) functions: HashMap<InternedText<'db>, TypeFunction<'db>>,
+    pub(crate) functions: rustc_hash::FxHashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
-    pub(crate) function_asts: HashMap<InternedText<'db>, (FunHead<'db>, Option<ModuleId<'db>>)>,
+    pub(crate) function_asts: rustc_hash::FxHashMap<InternedText<'db>, (FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
     pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
     /// Every name this unit asked the environment about.
@@ -203,10 +203,10 @@ impl<'db> TypeContext<'db> {
             inline_calls: Vec::new(),
             spans,
             current_module_id: module_id,
-            variables: HashMap::new(),
-            functions: HashMap::new(),
+            variables: Default::default(),
+            functions: Default::default(),
             asked_names: RefCell::new(BTreeSet::new()),
-            function_asts: HashMap::new(),
+            function_asts: Default::default(),
             type_aliases: HashMap::new(),
             type_param_bounds: HashMap::new(),
             expected_return_type: None,

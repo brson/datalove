@@ -344,6 +344,11 @@ impl<T> BindingMap<T> {
         self.len
     }
 
+    pub fn clear(&mut self) {
+        self.slots.clear();
+        self.len = 0;
+    }
+
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }

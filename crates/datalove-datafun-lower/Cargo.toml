@@ -17,6 +17,7 @@ index-64 = [
 ]
 
 [dependencies]
+rustc-hash.workspace = true
 rmx.workspace = true
 salsa.workspace = true
 bct.workspace = true
