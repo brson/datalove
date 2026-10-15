@@ -16,7 +16,7 @@ seems like a lot of them should be ref
 
 ## 2026/10/08 runtime rtstatus results are mostly ignored
 
-probably need to trigger an abort
+probably need to trigger a runtime abort and reset
 
 
 ## 2026/10/06 const arguments probably should require `const` annotation

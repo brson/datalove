@@ -65,30 +65,6 @@ Focus on ergonomic scripting experience and the REPL.
 
 
 
-## Backburner
-
-- tensor std features
-- assert and using it in favor of hacks in test harnesses
-- closures
-- table row polymorphism, column projections etc
-- doc generator and std docs
-- simple multithreading
-- testable docs
-- tree-sitter
-- 128-bit ints
-- fix rt error/alloc semantics
-- inline/jit tuning
-- allocation statistics
-- jit statistics
-- sourceless parsing
-- lsp - needs a project/workspace concept
-- deterministic builds - compiler pipeline is already deterministic
-- wasm-component backend
-- improve runtime implementation unsafety
-
-
-
-
 ### Retired checkpoints
 
 
