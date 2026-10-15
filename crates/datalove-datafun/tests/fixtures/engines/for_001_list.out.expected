@@ -39,34 +39,28 @@ Analysis(
                     fn index_of(p0, p1):
                     block0:
                         cursorbegin s0, p0
-                        v0 = const 0index
-                        store.copy s1, v0
                         goto block1
                     block1:
-                        v1 = cursordone s0
-                        branch v1, block7, block2
+                        v0 = cursordone s0
+                        branch v0, block7, block2
                     block2:
-                        v2 = cursorelem s0
-                        v3 = load.copy s1
-                        v4 = eq *v2, p1
-                        branch v4, block3, block4
+                        v1 = cursorelem s0
+                        v2 = cursorindex s0
+                        v3 = eq *v1, p1
+                        branch v3, block3, block4
                     block3:
-                        v5 = some v3
-                        return v5
+                        v4 = some v2
+                        return v4
                     block4:
                         goto block5
                     block5:
                         goto block6
                     block6:
                         cursoradvance s0, p0
-                        v6 = load.copy s1
-                        v7 = const 1index
-                        v8 = intrinsic AddWrappingIndex(v6, v7)
-                        store.copy s1, v8
                         goto block1
                     block7:
-                        v9 = none
-                        return v9
+                        v5 = none
+                        return v5
                     
                     fn odd_sum_below(p0, p1):
                     block0:
