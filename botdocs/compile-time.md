@@ -45,19 +45,25 @@ copy and the inclusive view is unreadable.
 
 ## The breakdown
 
-Shares of a run, inclusive, after the fixes below:
+Measured October 2026 at 128.0M user instructions, after the plain-data AST
+and the map work ([plan-plain-ast.md](plan-plain-ast.md)); averaged over 15
+profiles, inclusive:
 
 | Phase | Share |
 |---|---:|
-| Parse, including lexing (5.6%) | 27% |
-| Phase 5a, lowering every function | 17% |
-| Phase 5d, of which inlining and `simplify` 9% | 13% |
+| Parse, including the lexer (4.7%) and bracer | 26% |
+| Name resolution and building the parsed graph | 6% |
 | Typecheck | 11% |
 | Ownership analysis | 10% |
-| Process start, the sys packages, the script | the rest |
+| Lowering every function, in two strata | 18% |
+| Assembly: inlining, of which `simplify` 11% | 20% |
+| `reachable_func_ids` | 4% |
+| CTFE registry, consts, the rest of phase 5 | 2% |
+| Process start and the empty script (5.3M) | 4% |
 
-An empty script takes 3.7ms and 767 page faults; the library is everything
-above that.
+Of the cycles, a fifth to a quarter are the kernel's, almost all page
+faults; see [Page faults](#user-content-page-faults). `malloc`, `free` and
+`realloc` are 8% of the user instructions between them.
 
 Parsing has no hot spot; see [Parsing](#user-content-parsing). Typecheck and ownership analysis kept their
 per-expression tables in `BTreeMap`s keyed by `ExprKey`, and inserting into
