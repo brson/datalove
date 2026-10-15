@@ -20,7 +20,7 @@ use crate::types::*;
 
 pub use crate::{Type, TypeError, is_copy_type};
 use datalove_datafun_common::generics::{
-    bind_type_params, contains_type_param, substitute_type_params, TypeParamBindings,
+    substitute_type_params, TypeParamBindings,
 };
 
 // ============================================================================
@@ -155,7 +155,75 @@ pub fn synthesize_expr<'db>(
         ctx.store_expr_type(expr, &expected);
         return Ok(expected);
     }
+    // A literal, or a value built of parts, has the type its parts are
+    // inferred to have together, and is checked against it.
+    if is_construction(expr.kind()) {
+        let ty = inferred_type(ctx, expr)?;
+        check_expr(ctx, expr, &ty)?;
+        return Ok(ty);
+    }
     synthesize_unhinted(ctx, expr)
+}
+
+/// Whether an expression is a literal or builds a value from parts, and so
+/// takes its type from what inference finds for its parts together.
+fn is_construction(kind: &ExprFunKind<'_>) -> bool {
+    matches!(
+        kind,
+        ExprFunKind::True(_)
+            | ExprFunKind::False(_)
+            | ExprFunKind::None(_)
+            | ExprFunKind::Int(_)
+            | ExprFunKind::Float(_)
+            | ExprFunKind::Hex(_)
+            | ExprFunKind::String(_)
+            | ExprFunKind::List(_)
+            | ExprFunKind::Set(_)
+            | ExprFunKind::Map(_)
+            | ExprFunKind::Tensor(_)
+            | ExprFunKind::Table(_)
+            | ExprFunKind::Tuple(_)
+            | ExprFunKind::AnonTuple(_)
+            | ExprFunKind::AnonStruct(_)
+            | ExprFunKind::Some(_)
+            | ExprFunKind::Ok(_)
+            | ExprFunKind::Er(_)
+            | ExprFunKind::Atom(_)
+            | ExprFunKind::Term(_)
+            | ExprFunKind::EnumLiteral(_)
+    )
+}
+
+/// The type inference found for an expression.
+///
+/// An expression that leaves a type open with nothing to decide it is
+/// reported. Where inference could not read something, synthesis of the
+/// expression is what reports it.
+pub(crate) fn inferred_type<'db>(
+    ctx: &mut TypeContext<'db>,
+    expr: ExprFun<'db>,
+) -> Result<Type<'db>, TypeError> {
+    match crate::infer::resolve(ctx, expr) {
+        Ok(ty) => Ok(ty),
+        Err(crate::infer::Undecided::Open(open)) => Err(report_open(ctx, open)),
+        Err(crate::infer::Undecided::Unknown) => synthesize_unhinted(ctx, expr),
+    }
+}
+
+/// Report an expression that leaves a type open with nothing to decide it.
+fn report_open<'db>(ctx: &mut TypeContext<'db>, open: ExprFun<'db>) -> TypeError {
+    let message = match open.kind() {
+        ExprFunKind::None(_) => "cannot infer type for None value",
+        ExprFunKind::Er(_) => "cannot infer type for Er value",
+        ExprFunKind::EnumLiteral(_) => "enum literal requires type context",
+        ExprFunKind::List(_) => "cannot infer type for empty list",
+        ExprFunKind::Set(_) => "cannot infer type for empty set",
+        ExprFunKind::Map(_) => "cannot infer type for empty map",
+        ExprFunKind::Tensor(_) => "cannot infer type for empty tensor",
+        ExprFunKind::Table(_) => "cannot infer type for table with no rows",
+        _ => unreachable!("no other expression leaves a type open"),
+    };
+    ctx.error_cannot_synthesize(open, message)
 }
 
 /// Whether an expression builds a value out of the expressions inside it.
@@ -444,72 +512,8 @@ pub fn synthesize_unhinted<'db>(
 // Operator Synthesis
 // ============================================================================
 
-/// Synthesize type for binary operation.
-/// True if an expression is a numeric literal carrying no type of its own.
-///
-/// Such a literal synthesizes `int` by default, so its type is a fallback
-/// rather than information. A negated literal counts, since the sign does not
-/// constrain the width either. A hinted one does not: `: u8 / 1` says what it
-/// is as plainly as a `u8` variable does.
-fn is_bare_numeric_literal<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    let kind = expr.kind();
-    if kind.type_hint().is_some() {
-        return false;
-    }
-    match kind {
-        ExprFunKind::Int(_) | ExprFunKind::Hex(_) | ExprFunKind::Float(_) => true,
-        ExprFunKind::UnaryOp(unary) => {
-            matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
-                && is_bare_numeric_literal(ctx, ctx.expr(unary.operand))
-        }
-        _ => false,
-    }
-}
 
-/// True if this operand would rather be told its type than pick one.
-///
-/// `@` is the case. Left to itself it clones, which gives back the type it
-/// was taken from and no widening -- but widening is most of what it is for,
-/// and an operator returning bool passes nothing down, so the other operand
-/// is the only thing that can ask for one: `a@ .< b` widens `a` to `b`'s
-/// type. This is stronger than being a bare numeric literal, which has a type
-/// of its own, `int`, and merely prefers the other operand's instead.
-///
-/// With one on each side there is nothing to draw on and each clones.
-fn operand_has_no_type<'db>(ctx: &TypeContext<'db>, expr: ExprFun<'db>) -> bool {
-    match expr.kind() {
-        ExprFunKind::CloneCoerce(_) => true,
-        ExprFunKind::UnaryOp(unary) => {
-            matches!(unary.op, UnaryOp::Neg | UnaryOp::NegOptional | UnaryOp::NegResult)
-                && operand_has_no_type(ctx, ctx.expr(unary.operand))
-        }
-        _ => false,
-    }
-}
 
-/// True if an expression constructs a value whose type it can only guess at.
-///
-/// `none` has no type at all, and `some 1`, `(1, 2)` and `atom A` each
-/// synthesize one that is a default rather than information: `?int` where a
-/// `?u32` was meant, or an atom where an enum was. Beside an operand that has
-/// a type of its own, they take that one instead.
-fn is_untyped_construction(expr: ExprFun<'_>) -> bool {
-    let kind = expr.kind();
-    if kind.type_hint().is_some() {
-        return false;
-    }
-    matches!(
-        kind,
-        ExprFunKind::None(_)
-            | ExprFunKind::Some(_)
-            | ExprFunKind::Tuple(_)
-            | ExprFunKind::AnonTuple(_)
-            | ExprFunKind::AnonStruct(_)
-            | ExprFunKind::Atom(_)
-            | ExprFunKind::Term(_)
-            | ExprFunKind::EnumLiteral(_)
-    )
-}
 
 /// The part of a type that keeps `==` from comparing it, if any.
 ///
@@ -598,81 +602,24 @@ fn synthesize_binop<'db>(
     let lhs = binop.lhs;
     let rhs = binop.rhs;
 
-    // Synthesize types for operands in ref context.
-    // All binops treat their operands as ref (they don't move).
+    // The operands are typed together, as a list's elements are: a literal
+    // takes the type of the operand beside it, so `n == 0` with `n: u32`
+    // compares two `u32`s, and with literals on both sides they take their
+    // default, so `1 == 2` compares two `int`s. Each operand is then checked
+    // against the type they share, which is what reads a literal as that type.
     //
-    // Reaching here means no expected type flowed in from the surrounding
-    // expression, so a bare numeric literal would otherwise synthesize `int`
-    // and then mismatch a fixed-width operand: `n == 0` against a `u32` is the
-    // common case. When exactly one side is such a literal, the other side's
-    // type is the only information available, so check the literal against it.
-    // With a literal on both sides there is nothing to propagate and both
-    // synthesize `int`, so `1 == 2` is a bigint comparison as before.
-    let old_ref_context = ctx.ref_context;
-    ctx.ref_context = true;
-    let lhs_bare = is_bare_numeric_literal(ctx, ctx.expr(lhs));
-    let rhs_bare = is_bare_numeric_literal(ctx, ctx.expr(rhs));
-    let lhs_untyped = operand_has_no_type(ctx, ctx.expr(lhs));
-    let rhs_untyped = operand_has_no_type(ctx, ctx.expr(rhs));
-    let lhs_construction = is_untyped_construction(ctx.expr(lhs));
-    let rhs_construction = is_untyped_construction(ctx.expr(rhs));
-    let result: Result<(Type<'db>, Type<'db>), TypeError> = (|ctx: &mut TypeContext<'db>| {
-        // An operand with no type of its own takes the other one's, whatever
-        // that is, so `a@ == b` works for any type and `a@ .< 0` takes the
-        // literal's int. With one on each side there is nothing to draw on and
-        // both report that they needed a type context.
-        if lhs_untyped && !rhs_untyped {
-            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
-            check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
-            return Ok((rhs_ty.clone(), rhs_ty));
-        }
-        if rhs_untyped && !lhs_untyped {
-            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
-            check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
-            return Ok((lhs_ty.clone(), lhs_ty));
-        }
+    // Operands are borrowed, not moved, so they are checked in ref context.
+    crate::infer::infer(ctx, expr);
+    let lhs_ty = inferred_operand_type(ctx, expr.at(lhs))?;
+    let rhs_ty = inferred_operand_type(ctx, expr.at(rhs))?;
+    if types_equivalent(db, &lhs_ty, &rhs_ty) {
+        let old_ref_context = ctx.ref_context;
+        ctx.ref_context = true;
+        let checked = check_expr(ctx, expr.at(lhs), &lhs_ty).and_then(|()| check_expr(ctx, expr.at(rhs), &rhs_ty));
+        ctx.ref_context = old_ref_context;
+        checked?;
+    }
 
-        // A construction beside an operand with a type of its own is checked
-        // against that type, so `x == none` and `x == some 1` work for an
-        // `x: ?u32`. With constructions on both sides each picks its own.
-        if rhs_construction && !lhs_construction && !lhs_bare {
-            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
-            check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
-            return Ok((lhs_ty.clone(), lhs_ty));
-        }
-        if lhs_construction && !rhs_construction && !rhs_bare {
-            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
-            check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
-            return Ok((rhs_ty.clone(), rhs_ty));
-        }
-
-        // Only a numeric type can inform a numeric literal. Against anything
-        // else the operands are simply incompatible, and saying so is clearer
-        // than reporting that the literal failed to be a string.
-        if rhs_bare && !lhs_bare {
-            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
-            if is_numeric_type(&lhs_ty) {
-                check_expr(ctx, ctx.expr(rhs), &lhs_ty)?;
-                return Ok((lhs_ty.clone(), lhs_ty));
-            }
-            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
-            Ok((lhs_ty, rhs_ty))
-        } else if lhs_bare && !rhs_bare {
-            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
-            if is_numeric_type(&rhs_ty) {
-                check_expr(ctx, ctx.expr(lhs), &rhs_ty)?;
-                return Ok((rhs_ty.clone(), rhs_ty));
-            }
-            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
-            Ok((lhs_ty, rhs_ty))
-        } else {
-            let lhs_ty = ctx.synthesize_expr(ctx.expr(lhs))?;
-            let rhs_ty = ctx.synthesize_expr(ctx.expr(rhs))?;
-            Ok((lhs_ty, rhs_ty))
-        }
-    })(ctx);
-    ctx.ref_context = old_ref_context;
-    let (lhs_ty, rhs_ty) = result?;
 
     // Check that operands have the same type.
     if !types_equivalent(db, &lhs_ty, &rhs_ty) {
@@ -783,6 +730,22 @@ fn synthesize_binop<'db>(
     Ok(result_ty)
 }
 
+/// The type inferred for an operand, synthesizing it to report what
+/// inference could not read.
+fn inferred_operand_type<'db>(ctx: &mut TypeContext<'db>, operand: ExprFun<'db>) -> Result<Type<'db>, TypeError> {
+    match crate::infer::resolve(ctx, operand) {
+        Ok(ty) => Ok(ty),
+        Err(crate::infer::Undecided::Open(open)) => Err(report_open(ctx, open)),
+        Err(crate::infer::Undecided::Unknown) => {
+            let old_ref_context = ctx.ref_context;
+            ctx.ref_context = true;
+            let ty = ctx.synthesize_expr(operand);
+            ctx.ref_context = old_ref_context;
+            ty
+        }
+    }
+}
+
 /// Synthesize type for unary operation.
 fn synthesize_unaryop<'db>(
     ctx: &mut TypeContext<'db>,
@@ -885,31 +848,6 @@ fn synthesize_unaryop<'db>(
 // Call Synthesis
 // ============================================================================
 
-/// Synthesize type for function call.
-/// Whether a type mentions a type parameter that is not one of the enclosing
-/// function's.
-///
-/// The enclosing function's own parameters stand for something the caller
-/// already chose, so a type mentioning one is forwarding it. Anything else is a
-/// parameter still waiting to be fixed, and reading a binding out of it would
-/// fix the callee's to a placeholder.
-fn has_undetermined_type_param<'db>(
-    ctx: &TypeContext<'db>,
-    ty: &datalove_datalit::tycheck::Type<'db>,
-) -> bool {
-    if !contains_type_param(ty) {
-        return false;
-    }
-    let mut in_scope: TypeParamBindings<'db> = TypeParamBindings::new();
-    for (name, aliased) in ctx.type_aliases.iter() {
-        if matches!(aliased,
-            Type::Datalit(datalove_datalit::tycheck::Type::Var(v)) if v == name)
-        {
-            in_scope.insert(*name, datalove_datalit::tycheck::Type::Data);
-        }
-    }
-    contains_type_param(&substitute_type_params(ty, &in_scope))
-}
 
 fn synthesize_function_call<'db>(
     ctx: &mut TypeContext<'db>,
@@ -985,53 +923,26 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
         ctx.add_error(err);
     }
 
-    // Bind the type parameters from the arguments standing in their positions.
-    //
-    // A parameter's type is walked against the argument's, and wherever the
-    // signature wrote a type parameter, whatever the argument has in that
-    // position is what the parameter stands for. The first argument reaching a
-    // given parameter fixes it and later ones are matched against what it
-    // fixed, so `swap(a, b)` on two different types is a mismatch rather than a
-    // silent reinterpretation.
-    let mut bindings: TypeParamBindings<'db> = TypeParamBindings::new();
-    for (arg, param_ty) in args.iter().zip(param_types.iter()) {
-        let Type::Datalit(param_dt) = param_ty else { continue };
-        if !contains_type_param(param_dt) {
-            continue;
-        }
-        // An argument that cannot say what it is on its own, such as a bare
-        // `none`, binds nothing. Another argument may still fix the parameter,
-        // and this one is checked against the result below, so the failure of
-        // this attempt is not the reader's business.
-        let arg_ty = ctx.try_check(|ctx| {
-            let old_ref_context = ctx.ref_context;
-            ctx.ref_context = true;
-            let arg_ty = ctx.synthesize_expr(*arg);
-            ctx.ref_context = old_ref_context;
-            arg_ty.ok()
-        });
-        let Some(Type::Datalit(arg_dt)) = arg_ty else { continue };
-        // An argument whose own type still carries a type parameter nobody has
-        // fixed says nothing about the callee's, so it binds nothing and
-        // something else gets to decide. Forwarding the caller's own type
-        // parameter does say something, and the two are told apart by whether
-        // the parameter is one this function declared.
-        if has_undetermined_type_param(ctx, &arg_dt) {
-            continue;
-        }
-        bind_type_params(db, param_dt, &arg_dt, &mut bindings);
-    }
-
-    // Whatever the arguments did not fix, the expected result may. Arguments
-    // are bound first and win, because `bind_type_params` keeps a binding that
-    // is already there; this only fills what is still open. It is what lets
-    // `let x: ?u32 = nothing()` say which `T` it wanted, where nothing in the
-    // argument list could.
+    // The type parameters are what inference made of them: each is a variable
+    // unified with the arguments in its positions and with what the call site
+    // expects of the result, so it does not matter which argument says what
+    // a parameter is, and an argument that says nothing, such as `none`, takes
+    // the type the others give it. Arguments are unified first, so where they
+    // and the expected result disagree the arguments are what is checked.
     if let Some(expected) = expected {
-        if let (Type::Datalit(ret_dt), Type::Datalit(expected_dt)) = (&return_type, expected) {
-            if contains_type_param(ret_dt) {
-                bind_type_params(db, ret_dt, expected_dt, &mut bindings);
+        crate::infer::expect(ctx, expr, expected);
+    }
+    let mut bindings: TypeParamBindings<'db> = TypeParamBindings::new();
+    for (param, bound_to) in crate::infer::call_type_args(ctx, expr) {
+        match bound_to {
+            Ok(bound_to) => {
+                bindings.insert(param, bound_to);
             }
+            // An argument such as `[]` that leaves the parameter open is
+            // what needs a type, and is where to say so.
+            Err(crate::infer::Undecided::Open(open)) => return Err(report_open(ctx, open)),
+            // Nothing mentions the parameter, which is reported below.
+            Err(crate::infer::Undecided::Unknown) => {}
         }
     }
 
@@ -1266,19 +1177,11 @@ fn synthesize_intrinsic_call<'db>(
         ));
     }
 
-    // Check argument types.
+    // Each argument is checked against its parameter, as a call's is, so a
+    // literal takes the parameter's type.
     for (arg, expected_intrinsic_ty) in args.iter().zip(intrinsic_def.params.iter()) {
-        let arg_ty = ctx.synthesize_expr(ctx.expr(*arg))?;
         let expected_datafun_ty = intrinsic_type_to_datafun(db, *expected_intrinsic_ty);
-
-        if !types_equivalent(db, &arg_ty, &expected_datafun_ty) {
-            return Err(ctx.error_type_mismatch(
-                expr,
-                &type_to_string(db, &expected_datafun_ty),
-                &type_to_string(db, &arg_ty),
-                &format!("argument to intrinsic {}", name_str)
-            ));
-        }
+        check_expr(ctx, ctx.expr(*arg), &expected_datafun_ty)?;
     }
 
     // Return the intrinsic's return type.
@@ -1286,7 +1189,7 @@ fn synthesize_intrinsic_call<'db>(
 }
 
 /// Convert intrinsic type to datafun type.
-fn intrinsic_type_to_datafun<'db>(_db: &'db dyn crate::Db, ty: datalove_datafun_intrinsics::IntrinsicType) -> Type<'db> {
+pub(crate) fn intrinsic_type_to_datafun<'db>(_db: &'db dyn crate::Db, ty: datalove_datafun_intrinsics::IntrinsicType) -> Type<'db> {
     use datalove_datafun_intrinsics::IntrinsicType;
 
     let datalit_ty = match ty {
@@ -1727,8 +1630,7 @@ fn synthesize_inline_list<'db>(
     let elements = &list_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_list_type());
-        return Ok(ty);
+        return Err(report_open(ctx, _expr));
     }
 
     // Synthesize type of first element.
@@ -1759,8 +1661,7 @@ fn synthesize_inline_set<'db>(
     let elements = &set_expr.elements;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_set_type());
-        return Ok(ty);
+        return Err(report_open(ctx, _expr));
     }
 
     let first_ty = ctx.synthesize_expr(ctx.expr(elements[0]))?;
@@ -1790,8 +1691,7 @@ fn synthesize_inline_map<'db>(
     let entries = &map_expr.entries;
 
     if entries.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_map_type());
-        return Ok(ty);
+        return Err(report_open(ctx, _expr));
     }
 
     let first_key_ty = ctx.synthesize_expr(ctx.expr(entries[0].key))?;
@@ -1832,8 +1732,7 @@ fn synthesize_inline_tensor<'db>(
     let rank = shape.len() as u32;
 
     if elements.is_empty() {
-        let ty = Type::Datalit(datalit::tycheck::empty_tensor_type(rank));
-        return Ok(ty);
+        return Err(report_open(ctx, _expr));
     }
 
     let first_ty = ctx.synthesize_expr(ctx.expr(elements[0]))?;
@@ -1862,8 +1761,8 @@ fn synthesize_inline_tensor<'db>(
 /// type at all, so it could be written nowhere a type was not already known --
 /// not inside a `data`, not as a term's payload.
 ///
-/// A table with no rows says only its column names, and they get `()`, the way
-/// an empty list's elements do.
+/// A table with no rows says only its column names, and leaves their types
+/// open, as an empty list leaves its elements' type.
 fn synthesize_inline_table<'db>(
     ctx: &mut TypeContext<'db>,
     expr: ExprFun<'db>,
@@ -1888,11 +1787,8 @@ fn synthesize_inline_table<'db>(
                 column_types.push(ty);
             }
         }
-        None => {
-            for _ in header {
-                column_types.push(Type::Datalit(datalit::tycheck::unit_type()));
-            }
-        }
+        None if header.is_empty() => {}
+        None => return Err(report_open(ctx, expr)),
     }
 
     for row in rows.iter().skip(1) {

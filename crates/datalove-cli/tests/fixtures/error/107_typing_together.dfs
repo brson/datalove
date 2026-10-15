@@ -1,0 +1,16 @@
+// Expressions typed together that cannot agree, or that nothing decides.
+require module sys/std/list
+
+// Nothing says what the list holds.
+let xs = []
+let options = [none, none]
+
+// Two types fixed for one position.
+let two = [: u8 / 1, : u16 / 2]
+
+// A literal goes along with the operand beside it, and does not fit it.
+let small: u8 = 3
+let too_big = small == 300
+
+// A generic call whose parameter nothing decides.
+let n = list.len(ref [])

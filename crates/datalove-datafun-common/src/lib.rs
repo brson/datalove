@@ -521,48 +521,9 @@ pub fn is_signed_fixed_int_type(ty: &Type<'_>) -> bool {
 ///
 /// This function returns true if the conversion is valid.
 pub fn can_clone_coerce_to<'db>(from: &Type<'db>, to: &Type<'db>, db: &'db dyn Db) -> bool {
-    // Same type: always valid (clone for linear, no-op for copy)
-    if types_equivalent(db, from, to) {
-        return true;
-    }
-
-    // Extract datalit types
-    let (from_dt, to_dt) = match (from, to) {
-        (Type::Datalit(from_dt), Type::Datalit(to_dt)) => (from_dt, to_dt),
-        _ => return false,
-    };
-
-    // Check standard widening
-    if datalit::tycheck::can_widen_to(from_dt, to_dt) {
-        return true;
-    }
-
-    // Check cross-sign widening (unsigned to larger signed)
-    // u8 -> i16, i32, i64, int
-    // u16 -> i32, i64, int
-    // u32 -> i64, int
-    use datalit::tycheck::Type as DT;
-    match (from_dt, to_dt) {
-        (DT::U8, DT::I16 | DT::I32 | DT::I64 | DT::Int) => true,
-        (DT::U16, DT::I32 | DT::I64 | DT::Int) => true,
-        (DT::U32, DT::I64 | DT::Int) => true,
-        // Every f32 is exactly an f64. This is not in `can_widen_to`, which
-        // datalit also uses for implicit coercion, and floats only widen by `@`.
-        (DT::F32, DT::F64) => true,
-        // Atom -> Enum: atom is a variant of the enum (no payload).
-        (DT::Atom(a), DT::Enum(e)) => {
-            e.variants.iter().any(|v| v.name == a.name && v.payload.is_none())
-        }
-        // Term -> Enum: term is a variant of the enum (with matching payload type).
-        (DT::Term(t), DT::Enum(e)) => {
-            e.variants.iter().any(|v| {
-                v.name == t.name
-                    && v.payload.as_ref().map_or(false, |p| {
-                        datalit::tycheck::types_equivalent(db, &t.payload, p)
-                    })
-            })
-        }
-        _ => false,
+    match (from, to) {
+        (Type::Datalit(from_dt), Type::Datalit(to_dt)) => datalit::tycheck::can_adapt_to(db, from_dt, to_dt),
+        _ => types_equivalent(db, from, to),
     }
 }
 

@@ -11,25 +11,26 @@
     },
     "type_hint": null
   },
-  "diagnostics": [],
-  "errors": [],
-  "root_type": {
-    "columns": [
-      {
-        "name": "x",
-        "type": {
-          "fields": [],
-          "kind": "AnonTuple"
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            12
+          ],
+          "text": "{|\n  x, y\n|}"
         }
-      },
-      {
-        "name": "y",
-        "type": {
-          "fields": [],
-          "kind": "AnonTuple"
-        }
-      }
-    ],
-    "kind": "Table"
-  }
+      ],
+      "message": "cannot infer type for table with no rows"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

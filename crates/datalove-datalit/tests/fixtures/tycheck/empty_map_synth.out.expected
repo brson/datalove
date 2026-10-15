@@ -7,17 +7,26 @@
     },
     "type_hint": null
   },
-  "diagnostics": [],
-  "errors": [],
-  "root_type": {
-    "key_type": {
-      "fields": [],
-      "kind": "AnonTuple"
-    },
-    "kind": "Map",
-    "value_type": {
-      "fields": [],
-      "kind": "AnonTuple"
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            3
+          ],
+          "text": "%{}"
+        }
+      ],
+      "message": "cannot infer type for empty map"
     }
-  }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

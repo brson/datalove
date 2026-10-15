@@ -1512,9 +1512,13 @@ not just receive them.
 
 Type parameters are always inferred.
 There is no syntax for the caller to name them.
-The arguments are matched against the parameters in order,
-and the first argument to reach a type parameter decides it.
-The arguments after it are checked against that type.
+A type parameter is worked out from all the arguments together,
+and from what the call's result is expected to be,
+the way a list's elements are typed together:
+an argument with a definite type decides it,
+and literals, and arguments like `none` that say nothing about it,
+go along with that.
+Two arguments that decide it differently are a mismatch.
 In the example above `none` says nothing about its payload,
 so `T` is decided by `"other"`.
 
@@ -1531,13 +1535,15 @@ end fun
 debuglog unwrap_or(some "this", 1)
 ```
 
-A literal argument after the deciding one takes the decided type,
+A literal argument takes the decided type wherever it is,
 as literals take their type from context anywhere.
-In `unwrap_or(some (: u32 / 1), 99)` the `99` is a `u32`.
+In `unwrap_or(some 99, : u32 / 1)` the `99` is a `u32`.
 
 When a type parameter appears only in the return type,
 no argument can decide it,
-so the result must be bound to a name with a type annotation.
+so what the result is expected to be has to:
+bind it to a name with a type annotation,
+or pass it where a type is expected.
 
 ```datalove
 fun empty<T>(): [T]

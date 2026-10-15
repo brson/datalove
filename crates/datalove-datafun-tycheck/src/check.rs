@@ -136,9 +136,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -154,9 +153,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -172,9 +170,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -190,9 +187,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -208,9 +204,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -226,9 +221,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -244,9 +238,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -262,9 +255,8 @@ pub fn check_expr<'db>(
                     Ok(())
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -298,9 +290,8 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -343,9 +334,8 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -414,79 +404,18 @@ pub fn check_expr<'db>(
             Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "@ operator cannot convert between these types"))
         }
 
-        // Handle binary operations - bidirectional type propagation for arithmetic.
+        // An operator whose result has its operands' type passes what is
+        // expected of the result to each operand. This is what lets `@` appear
+        // in an operand, which needs a target to know what it widens to:
+        // `let s: int = a@ + b@` widens both to `int`, even where `a` and `b`
+        // differ and so could not have agreed on a type by themselves. A
+        // comparison's result is a `bool`, which says nothing about its
+        // operands, so it passes nothing on.
         ExprFunKind::BinOp(binop) => {
-            let op = binop.op;
-            let is_checked = matches!(op,
-                BinOp::AddChecked | BinOp::SubChecked | BinOp::MulChecked | BinOp::DivChecked);
-            let is_optional = matches!(op,
-                BinOp::AddOptional | BinOp::SubOptional | BinOp::MulOptional | BinOp::DivOptional);
-
-            // For checked/optional ops, verify the function's return type is compatible.
-            // Checked ops require Result return type, optional ops require Option return type.
-            // If this check fails, fall through to synthesis which will produce the proper error.
-            let return_type_ok = if is_checked {
-                matches!(
-                    ctx.expected_return_type,
-                    Some(Type::Datalit(datalit::tycheck::Type::Result(_)))
-                )
-            } else if is_optional {
-                matches!(
-                    ctx.expected_return_type,
-                    Some(Type::Datalit(datalit::tycheck::Type::Option(_)))
-                )
-            } else {
-                true
-            };
-
-            // Propagate the expected type into both operands, for every
-            // operator whose operands have the same type as its result. This is
-            // what lets `@` appear in an operand: it needs a target to know
-            // whether it clones or which type it widens to, and it has no other
-            // source for one. Comparisons are absent because their result is
-            // bool, which says nothing about the operands; those pair the
-            // operands off against each other in synthesis instead.
-            //
-            // This has to admit exactly what synthesis admits, because it
-            // returns without consulting it. Propagating to a type the operator
-            // does not have would accept the operator for that type: checking
-            // `a@ + b@` against u32 leaves both operands u32, where `@` is a
-            // no-op and bare + is not allowed, and checking `a@ / b@` against
-            // int leaves a bare bigint division the backends do not implement.
-            // Against int, + - and * widen their operands and do exist, which
-            // is the idiom the spec gives for arithmetic on fixed ints.
-            let propagates = if is_checked || is_optional {
-                return_type_ok
-                    && (is_fixed_int_type(expected)
-                        || (matches!(op, BinOp::DivChecked | BinOp::DivOptional)
-                            && is_bigint_type(expected)))
-            } else {
-                match op {
-                    BinOp::Add | BinOp::Sub | BinOp::Mul => {
-                        is_float_type(expected) || is_bigint_type(expected)
-                    }
-                    BinOp::Div => is_float_type(expected),
-                    BinOp::And | BinOp::Or | BinOp::Xor => is_bool_type(expected),
-                    _ => false,
-                }
-            };
-
-            // On failure fall through to synthesis, which reports against the
-            // operands' own types. What this attempt had to say about them is
-            // dropped, since it describes a path not taken.
-            if propagates {
-                let propagated = ctx.try_check(|ctx| {
-                    let lhs_ok = check_expr(ctx, ctx.expr(binop.lhs), expected).is_ok();
-                    let rhs_ok = check_expr(ctx, ctx.expr(binop.rhs), expected).is_ok();
-                    (lhs_ok && rhs_ok).then_some(())
-                });
-                if propagated.is_some() {
-                    ctx.store_expr_type(expr, expected);
-                    return Ok(());
-                }
+            if crate::infer::yields_operand_type(binop.op) {
+                crate::infer::expect(ctx, expr.at(binop.lhs), expected);
+                crate::infer::expect(ctx, expr.at(binop.rhs), expected);
             }
-
-            // Fall through to default synthesis behavior.
             // Note: Bare arithmetic on fixed ints is a type error - they must use
             // @ to widen first, or use checked/optional operators (+!, +?, etc.).
             let synthesized = ctx.synthesize_unhinted(expr)?;
@@ -525,9 +454,8 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }
@@ -576,9 +504,8 @@ pub fn check_expr<'db>(
                     }
                 }
                 _ => {
-                    let synthesized = ctx.synthesize_unhinted(expr)?;
                     let expected_str = type_to_string(db, expected);
-                    let actual_str = type_to_string(db, &synthesized);
+                    let actual_str = crate::infer::describe_unhinted(ctx, expr);
                     Err(ctx.error_type_mismatch(expr, &expected_str, &actual_str, "type mismatch"))
                 }
             }

@@ -34,7 +34,7 @@
   },
   "diagnostics": [
     {
-      "code": "T019",
+      "code": "T022",
       "labels": [
         {
           "message": "expected `int`, found `string`",
@@ -45,7 +45,7 @@
           "text": "\"three\""
         }
       ],
-      "message": "mismatched types in set"
+      "message": "mismatched types"
     }
   ],
   "errors": [

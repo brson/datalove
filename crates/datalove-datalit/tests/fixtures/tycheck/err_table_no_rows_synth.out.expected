@@ -1,0 +1,36 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [
+          "x",
+          "y"
+        ],
+        "rows": []
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            10
+          ],
+          "text": "{| x, y |}"
+        }
+      ],
+      "message": "cannot infer type for table with no rows"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

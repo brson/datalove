@@ -1,0 +1,8 @@
+// Generic calls nested deep, each argument a call whose type parameter
+// the next one out has to be told. Each is inferred once, so this is
+// quick; it was once exponential in the depth.
+require module sys/std/list
+
+let nested = list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(list.of(1))))))))))))))))))))))))))))))))))))))))
+
+let output = list.len(ref nested)

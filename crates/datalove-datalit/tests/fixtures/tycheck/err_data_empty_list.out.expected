@@ -1,0 +1,39 @@
+{
+  "ast": {
+    "expr": {
+      "Data": {
+        "value": {
+          "expr": {
+            "List": {
+              "elements": []
+            }
+          },
+          "type_hint": null
+        }
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            5,
+            7
+          ],
+          "text": "[]"
+        }
+      ],
+      "message": "cannot infer type for empty list"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

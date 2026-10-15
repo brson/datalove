@@ -46,7 +46,7 @@
   },
   "diagnostics": [
     {
-      "code": "T021",
+      "code": "T032",
       "labels": [
         {
           "message": "expected `string`, found `int`",
@@ -57,7 +57,7 @@
           "text": "42"
         }
       ],
-      "message": "mismatched value types in map"
+      "message": "mismatched types"
     }
   ],
   "errors": [

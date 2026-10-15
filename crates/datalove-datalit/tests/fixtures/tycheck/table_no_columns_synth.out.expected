@@ -1,0 +1,17 @@
+{
+  "ast": {
+    "expr": {
+      "Table": {
+        "header": [],
+        "rows": []
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "columns": [],
+    "kind": "Table"
+  }
+}

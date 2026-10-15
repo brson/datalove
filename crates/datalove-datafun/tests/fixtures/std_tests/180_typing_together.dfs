@@ -1,0 +1,26 @@
+// Expressions that must share a type are typed together: a literal goes
+// along with whatever beside it has a type of its own, wherever that is.
+require module sys/std/list
+require module sys/std/option
+
+// A collection's elements, in any order.
+let hinted_last = [1, : u8 / 2]
+let some_then_none = [none, some 1]
+let empty_inside = [[], [: u16 / 1]]
+let part_by_part = [(1, : u8 / 1), (: u8 / 2, 2)]
+
+// An operator's operands, on either side.
+let n: u32 = 5
+let compared = (n == 5, 5 == n, n .< 300)
+
+// A generic call's arguments, whichever says what the parameter is.
+let ys: [u32] = [1, 2]
+let joined_left = list.concat(ref [], ref ys)
+let joined_right = list.concat(ref ys, ref [])
+let picked = option.unwrap_or(none, : u8 / 7)
+
+// What the result is expected to be decides a parameter too.
+let wrapped: [u64] = list.of(9)
+
+let output = (hinted_last, some_then_none, empty_inside, part_by_part, compared,
+    joined_left, joined_right, picked, wrapped)

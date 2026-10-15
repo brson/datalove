@@ -45,6 +45,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [Tuning the JIT](plan-jit-tuning.md)
 - [Consts Built Once](plan-static-consts.md)
 - [A Runtime Datalit Loader](plan-datalit-loader.md)
+- [One Rule for Literals That Share a Type](plan-literal-typing.md)
 - [`for` Loops over the Collections](plan-for-loops.md)
 - [Generics by Reference](plan-fat-generics.md)
 - [Organizing the IR Passes](plan-ir-passes.md)

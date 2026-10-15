@@ -1,0 +1,60 @@
+{
+  "ast": {
+    "expr": {
+      "Map": {
+        "entries": [
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "1"
+                }
+              },
+              "type_hint": null
+            },
+            "value": {
+              "expr": "None",
+              "type_hint": null
+            }
+          },
+          {
+            "key": {
+              "expr": {
+                "Int": {
+                  "value": "2"
+                }
+              },
+              "type_hint": "U8"
+            },
+            "value": {
+              "expr": {
+                "Some": {
+                  "payload": {
+                    "expr": {
+                      "String": {
+                        "value": "\"x\""
+                      }
+                    },
+                    "type_hint": null
+                  }
+                }
+              },
+              "type_hint": null
+            }
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "key_type": "u8",
+    "kind": "Map",
+    "value_type": {
+      "inner_type": "string",
+      "kind": "Option"
+    }
+  }
+}

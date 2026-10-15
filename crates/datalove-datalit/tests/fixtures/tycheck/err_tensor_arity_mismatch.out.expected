@@ -39,7 +39,7 @@
   },
   "diagnostics": [
     {
-      "code": "T051",
+      "code": "T049",
       "labels": [
         {
           "message": "expected 4 element(s), found 3",

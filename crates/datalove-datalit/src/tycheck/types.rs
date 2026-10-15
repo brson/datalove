@@ -7,8 +7,8 @@
 //! 4. Type equivalence - comparing types
 //! 5. Type hint conversion - AST to types
 //! 6. Type to string - types to strings for errors
-//! 7. Unit and empty collection helpers - type constructors
-//! 8. Element compatibility - collection element checking
+//! 7. Unit and shape helpers - type constructors
+//! 8. Coercion - checking a type against an expected one
 //! 9. Integer range checking - literal validation
 //! 10. Diagnostic helpers - error message helpers
 
@@ -343,6 +343,35 @@ pub fn can_widen_to<'db>(from: &Type<'db>, to: &Type<'db>) -> bool {
     }
 }
 
+/// Whether `@` converts a value of one type to another.
+///
+/// It clones a value to its own type, widens an integer to one that holds
+/// every value of it, widens `f32` to `f64`, and makes an atom or term a value
+/// of an enum that lists it. Nothing else: no narrowing, and no enum adapts to
+/// another.
+pub fn can_adapt_to<'db>(db: &'db dyn crate::Db, from: &Type<'db>, to: &Type<'db>) -> bool {
+    if types_equivalent(db, from, to) || can_widen_to(from, to) {
+        return true;
+    }
+    match (from, to) {
+        // An unsigned integer widens to any wider signed one.
+        (Type::U8, Type::I16 | Type::I32 | Type::I64 | Type::Int) => true,
+        (Type::U16, Type::I32 | Type::I64 | Type::Int) => true,
+        (Type::U32, Type::I64 | Type::Int) => true,
+        // Every f32 is exactly an f64. This is not in `can_widen_to`, which
+        // datalit also uses for implicit coercion, and floats only widen by `@`.
+        (Type::F32, Type::F64) => true,
+        (Type::Atom(a), Type::Enum(e)) => {
+            e.variants.iter().any(|v| v.name == a.name && v.payload.is_none())
+        }
+        (Type::Term(t), Type::Enum(e)) => e.variants.iter().any(|v| {
+            v.name == t.name
+                && v.payload.as_ref().is_some_and(|p| types_equivalent(db, &t.payload, p))
+        }),
+        _ => false,
+    }
+}
+
 // ============================================================================
 // Type Hint Conversion
 // ============================================================================
@@ -572,39 +601,12 @@ pub fn type_to_string<'db>(db: &'db dyn crate::Db, ty: &Type<'db>) -> String {
 }
 
 // ============================================================================
-// Unit and Empty Collection Helpers
+// Unit and Shape Helpers
 // ============================================================================
 
 /// Create the unit type `()` (empty anonymous tuple).
 pub fn unit_type<'db>() -> Type<'db> {
     Type::AnonTuple(TypeAnonTuple { fields: vec![] })
-}
-
-/// Create an empty list type `List<()>`.
-pub fn empty_list_type<'db>() -> Type<'db> {
-    Type::List(TypeList { element_type: Box::new(unit_type()) })
-}
-
-/// Create an empty set type `Set<()>`.
-pub fn empty_set_type<'db>() -> Type<'db> {
-    Type::Set(TypeSet { element_type: Box::new(unit_type()) })
-}
-
-/// Create an empty map type `Map<(), ()>`.
-pub fn empty_map_type<'db>() -> Type<'db> {
-    let elem_ty = unit_type();
-    Type::Map(TypeMap {
-        key_type: Box::new(elem_ty.clone()),
-        value_type: Box::new(elem_ty),
-    })
-}
-
-/// Create an empty tensor type `Tensor<(), rank>`.
-pub fn empty_tensor_type<'db>(rank: u32) -> Type<'db> {
-    Type::Tensor(TypeTensor {
-        element_type: Box::new(unit_type()),
-        rank,
-    })
 }
 
 /// Check that tensor element count matches the shape product.
@@ -617,40 +619,8 @@ pub fn check_tensor_element_count(shape: &[u32], actual: usize) -> Result<(), Ty
 }
 
 // ============================================================================
-// Element Compatibility
+// Coercion
 // ============================================================================
-
-/// Check that an element type is compatible with the expected element type.
-///
-/// Used for homogeneous collections (list, set, tensor) to verify all elements
-/// have the same type.
-pub fn check_element_compatible<'db>(
-    db: &'db dyn crate::Db,
-    expected: &Type<'db>,
-    actual: &Type<'db>,
-) -> Result<(), TypeError> {
-    if !types_equivalent(db, expected, actual) {
-        return Err(TypeError::TypeMismatch {
-            expected: type_to_string(db, expected),
-            actual: type_to_string(db, actual),
-        });
-    }
-
-    Ok(())
-}
-
-/// Check that a key-value pair is compatible with expected key and value types.
-pub fn check_map_entry_compatible<'db>(
-    db: &'db dyn crate::Db,
-    expected_key: &Type<'db>,
-    expected_value: &Type<'db>,
-    actual_key: &Type<'db>,
-    actual_value: &Type<'db>,
-) -> Result<(), TypeError> {
-    check_element_compatible(db, expected_key, actual_key)?;
-    check_element_compatible(db, expected_value, actual_value)?;
-    Ok(())
-}
 
 /// Check if a type can be coerced to an expected type.
 ///

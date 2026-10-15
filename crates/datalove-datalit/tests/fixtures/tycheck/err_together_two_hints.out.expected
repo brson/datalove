@@ -1,0 +1,51 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Int": {
+                "value": "1"
+              }
+            },
+            "type_hint": "U8"
+          },
+          {
+            "expr": {
+              "Int": {
+                "value": "2"
+              }
+            },
+            "type_hint": "U16"
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T040",
+      "labels": [
+        {
+          "message": "expected `u8`, found `u16`",
+          "span": [
+            11,
+            20
+          ],
+          "text": ": u16 / 2"
+        }
+      ],
+      "message": "mismatched types"
+    }
+  ],
+  "errors": [
+    {
+      "actual": "u16",
+      "expected": "u8",
+      "kind": "TypeMismatch"
+    }
+  ],
+  "root_type": null
+}

@@ -13,6 +13,7 @@ extend these.
 - [Syntax](#user-content-syntax)
 - [Type equivalence](#user-content-type-equivalence)
 - [Synthesis](#user-content-synthesis)
+- [Inference](#user-content-inference)
 - [Checking](#user-content-checking)
 - [Rule selection](#user-content-rule-selection)
 - [Consequences](#user-content-consequences)
@@ -143,24 +144,7 @@ Everything else is positional and exact:
 
 ## Synthesis
 
-### Literals
-
-```
----------------- (Syn-Bool)        ---------------- (Syn-Bool)
-⊢ true ⇒ bool                      ⊢ false ⇒ bool
-
----------------- (Syn-Int)         ---------------- (Syn-Hex)
-⊢ n ⇒ int                          ⊢ h ⇒ int
-
----------------- (Syn-Float)       ---------------- (Syn-String)
-⊢ r ⇒ f64                          ⊢ s ⇒ string
-```
-
-An unannotated number gets the type that keeps what was written: `int` for
-integer and hex literals, `f64` for floats. Any other width is had by
-checking (a hint, or in datafun an expected type).
-
-### Annotation
+A hinted expression synthesizes its hint:
 
 ```
 ⊢ e ⇐ T
@@ -172,96 +156,145 @@ This is the annotation rule. It is how a term with no synthesizable type,
 such as `none`, gets one, and how a literal gets a width other than its
 default.
 
-### Tuples and structs
+Any other expression synthesizes in three steps: infer a type for it with
+variables where its parts must agree ([Inference](#user-content-inference)),
+give each variable nothing decided its default, and check the expression
+against the type that results:
 
 ```
-⊢ eᵢ ⇒ Tᵢ
-------------------------------------- (Syn-AnonTuple)
-⊢ (e₁, ..., eₙ) ⇒ (T₁, ..., Tₙ)
-
-⊢ eᵢ ⇒ Tᵢ
-------------------------------------------------- (Syn-AnonStruct)
-⊢ {ℓ₁ = e₁, ..., ℓₙ = eₙ} ⇒ {ℓ₁: T₁, ..., ℓₙ: Tₙ}
+⊢ e ⇝ τ    T = default(τ)    ⊢ e ⇐ T
+------------------------------------- (Syn-Infer)
+⊢ e ⇒ T
 ```
 
-### Collections
+`default(τ)` is undefined when a variable with no default is left, from a
+`none`, `er e`, `enum {e}` or empty collection that nothing decided, and the
+expression does not synthesize (T016, at the expression that left it open).
 
-A non-empty collection takes its element type from its first element; every
-later element must synthesize an equivalent type. An empty one synthesizes
-unit as its element type.
+The check is what reads each literal as the type it was inferred to have, and
+what reports a disagreement: inference never fails, it only leaves undecided
+what it could not decide. So synthesis and checking report the same faults
+with the same diagnostics.
 
-```
-n ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
------------------------------------------ (Syn-List)        ------------- (Syn-List)
-⊢ [e₁, ..., eₙ] ⇒ [T]                                       ⊢ [] ⇒ [()]
+Some consequences, by example:
 
-n ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
------------------------------------------ (Syn-Set)         --------------- (Syn-Set)
-⊢ #{e₁, ..., eₙ} ⇒ #{T}                                     ⊢ #{} ⇒ #{()}
-
-n ≥ 1    ⊢ e₁ ⇒ K    ⊢ e₁' ⇒ V    ⊢ eᵢ ⇒ Kᵢ    ⊢ eᵢ' ⇒ Vᵢ    Kᵢ ≡ K    Vᵢ ≡ V
------------------------------------------------------------------------------- (Syn-Map)
-⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇒ %{K = V}
-
--------------------------- (Syn-Map)
-⊢ %{} ⇒ %{() = ()}
-```
-
-### Tensors and tables
-
-```
-m = d₁ × ... × dₖ    m ≥ 1    ⊢ e₁ ⇒ T    ⊢ eᵢ ⇒ Tᵢ    Tᵢ ≡ T
-------------------------------------------------------------- (Syn-Tensor)
-⊢ [| d₁ ... dₖ | e₁ ... eₘ |] ⇒ [|T, k|]
-
-------------------------------------------- (Syn-Tensor)
-⊢ [| d₁ ... dₖ | |] ⇒ [|(), k|]
-```
-
-The rank `k` is the number of extents in the shape. A tensor with elements
-has exactly `d₁ × ... × dₖ` of them; one with none, whose shape has a zero
-extent, synthesizes unit as its element type.
-
-```
-m ≥ 1    |ēⱼ| = n    ⊢ e₁ᵢ ⇒ Tᵢ    ⊢ eⱼᵢ ⇒ Tⱼᵢ    Tⱼᵢ ≡ Tᵢ
---------------------------------------------------------------- (Syn-Table)
-⊢ {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |} ⇒ {| ℓ₁: T₁, ..., ℓₙ: Tₙ |}
-
-------------------------------------------------------- (Syn-Table)
-⊢ {| ℓ₁, ..., ℓₙ |} ⇒ {| ℓ₁: (), ..., ℓₙ: () |}
-```
-
-Every row has one element per column. Each column takes its type from the
-first row, as a list's element type comes from its first element.
-
-### Constructors
-
-```
-⊢ e ⇒ T                       ⊢ e ⇒ T
------------------- (Syn-Some)   ---------------- (Syn-Ok)
-⊢ some e ⇒ ?T                   ⊢ ok e ⇒ !T
-
-⊢ e ⇒ T                       ⊢ e ⇒ T
------------------- (Syn-Data)   ---------------------- (Syn-Error)
-⊢ data e ⇒ data                 ⊢ error e ⇒ error
-```
-
-`data` and `error` are existential packages: the payload's type is forgotten
-in the result's type, but the payload must still have one of its own. So
-`data none` is an error and `data : ?u32 / none` is not.
-
-```
------------------------- (Syn-Atom)       ⊢ e ⇒ T
-⊢ atom a ⇒ atom a                         -------------------------- (Syn-Term)
-                                          ⊢ term a e ⇒ term a T
-```
+| Expression | Synthesizes |
+|---|---|
+| `5`, `0x10`, `1.5` | `int`, `int`, `f64` |
+| `[1, 2]` | `[int]` |
+| `[1, : u8 / 2]`, `[: u8 / 1, 2]` | `[u8]` |
+| `[some 1, none]` | `[?int]` |
+| `[[], [1]]` | `[[int]]` |
+| `[(1, : u8 / 1), (: u8 / 2, 2)]` | `[(u8, u8)]` |
+| `{| x; 1; : u8 / 2 |}` | `{| x: u8 |}` |
+| `atom A`, `term A 1` | `atom A`, `term A int` |
+| `data e`, `error e` | `data`, `error`, with `e` synthesized on its own |
+| `[]`, `none`, `er e`, `enum {e}`, `{| x |}`, `[none]` | nothing (T016) |
+| `{| |}` | `{| |}`: no columns, so nothing open |
 
 An atom or term literal synthesizes its own singleton type, not an enum.
+`data` and `error` are existential packages: the payload's type is forgotten
+in the result's type, but the payload must still synthesize one of its own.
+So `data none` and `data []` are errors and `data : ?u32 / none` is not.
 
-`none`, `er e` and `enum {e}` have no synthesis rule. Each is a value of many
-types (any option, any result, any enum listing the variant), so it needs an
-expected type, from a hint or from its position. Synthesizing one is T016.
+## Inference
 
+`⊢ e ⇝ τ` infers for `e` a type `τ` that may hold type variables `α`. Each
+variable carries a class, which says what it stands for and what type it takes
+if nothing decides:
+
+| Class | From | Admits | Default |
+|---|---|---|---|
+| `open` | `none`, `er`, `enum {e}`, an empty collection | any type | none |
+| `int` | an integer literal | integer types | `int` |
+| `hex` | a hex literal | unsigned integers, `index`, `int`, `f32`, `f64` | `int` |
+| `float` | a float literal | `f32`, `f64` | `f64` |
+| `atom a` | `atom a` | `atom a`, any enum | `atom a` |
+| `term a τ` | `term a e` | `term a T`, any enum | `term a default(τ)` |
+
+"Admits" is by the type's head; whether the value is in range, or the variant
+in the enum, is for the check that follows to say.
+
+The rules, with `α:c` a fresh variable of class `c`:
+
+```
+--------------- (Inf-Bool)         ------------------ (Inf-String)
+⊢ true ⇝ bool                      ⊢ s ⇝ string
+
+α:int            α:hex            α:float
+------- (Inf-Int)   ------- (Inf-Hex)   ------- (Inf-Float)
+⊢ n ⇝ α          ⊢ h ⇝ α          ⊢ r ⇝ α
+
+------------------ (Inf-TypedExpr)
+⊢ (: T / e) ⇝ T
+
+⊢ eᵢ ⇝ τᵢ                                  ⊢ eᵢ ⇝ τᵢ
+------------------------------- (Inf-Tuple)   ----------------------------------------------- (Inf-Struct)
+⊢ (e₁, ..., eₙ) ⇝ (τ₁, ..., τₙ)              ⊢ {ℓ₁ = e₁, ..., ℓₙ = eₙ} ⇝ {ℓ₁: τ₁, ..., ℓₙ: τₙ}
+
+α    ⊢ eᵢ ⇝ τᵢ    α ≐ τᵢ                   α    ⊢ eᵢ ⇝ τᵢ    α ≐ τᵢ
+------------------------- (Inf-List)       --------------------------- (Inf-Set)
+⊢ [e₁, ..., eₙ] ⇝ [α]                      ⊢ #{e₁, ..., eₙ} ⇝ #{α}
+
+α    β    ⊢ eᵢ ⇝ κᵢ    ⊢ eᵢ' ⇝ νᵢ    α ≐ κᵢ    β ≐ νᵢ
+------------------------------------------------------ (Inf-Map)
+⊢ %{e₁ = e₁', ..., eₙ = eₙ'} ⇝ %{α = β}
+
+α    ⊢ eᵢ ⇝ τᵢ    α ≐ τᵢ
+------------------------------------------ (Inf-Tensor)
+⊢ [| d₁ ... dₖ | e₁ ... eₘ |] ⇝ [|α, k|]
+
+αᵢ    ⊢ eⱼᵢ ⇝ τⱼᵢ    αᵢ ≐ τⱼᵢ
+--------------------------------------------------------- (Inf-Table)
+⊢ {| ℓ₁, ..., ℓₙ; ē₁; ...; ēₘ |} ⇝ {| ℓ₁: α₁, ..., ℓₙ: αₙ |}
+
+⊢ e ⇝ τ                 ⊢ e ⇝ τ                α:open             α:open
+--------------- (Inf-Some) ------------- (Inf-Ok) -------------- (Inf-None) --------------- (Inf-Er)
+⊢ some e ⇝ ?τ           ⊢ ok e ⇝ !τ            ⊢ none ⇝ ?α        ⊢ er e ⇝ !α
+
+------------------ (Inf-Data)      ---------------------- (Inf-Error)
+⊢ data e ⇝ data                    ⊢ error e ⇝ error
+
+α:atom a              ⊢ e ⇝ τ    α:term a τ          α:open
+------------ (Inf-Atom)   ------------------ (Inf-Term)   --------------- (Inf-Enum)
+⊢ atom a ⇝ α          ⊢ term a e ⇝ α                 ⊢ enum {e} ⇝ α
+```
+
+The shared variable of an empty collection, or of an empty table's columns,
+is `open`; with elements it is decided by them. The variable is what the
+elements are unified through, so `[]` names the list as needing a type and
+`[none]` names the `none`. A hinted expression, and the payload of `data` and
+`error`, is not looked into: checking against the hint, or synthesizing the
+payload on its own, types what is inside.
+
+**Unification.** `τ ≐ τ'` is first-order unification, structurally on the
+type formers, with an enum's variants matched by name. A variable binds to a
+type only if its class admits the type, and two variables merge only if some
+type could be of both classes:
+
+| Classes | Merged |
+|---|---|
+| `open` and `c` | `c` |
+| `int` and `hex` | `int` |
+| the same literal class | that class |
+| `atom a` and `atom a` | `atom a` |
+| `term a τ` and `term a τ'` | `term a τ`, with `τ ≐ τ'` |
+| anything else | not merged |
+
+Binding a `term a τ` variable to `term a T`, or to an enum whose variant `a`
+has payload `T`, also unifies `τ ≐ T`.
+
+A constraint that cannot hold is not an error here. The two sides are left
+as they are and each goes on to its own type, the first in source order
+keeping the variable it shares with what came before. Checking then finds the
+later one does not fit: in `[1, 2, "three"]` the list is a `[int]`, and
+`"three"` is reported against `int` (T022). Where the constraints do hold, the
+solution does not depend on order, so `[1, : u8 / 2]` and `[: u8 / 2, 1]` are
+both `[u8]`.
+
+Every node is inferred once and every unification is union-find, so inference
+is linear in the expression, up to the inverse-Ackermann factor and the size
+of the types unified. The check after it is one more linear walk.
 ## Checking
 
 ### Annotation
@@ -288,7 +321,9 @@ The mode switch: an expression that synthesizes can be checked against any
 equivalent type. Because `≡` is equality and not subtyping, this rule never
 converts anything. It is the fallback, used only when no rule below matches
 the pair of expression form and expected type (see
-[Rule selection](#user-content-rule-selection)).
+[Rule selection](#user-content-rule-selection)). Every form but `true`,
+`false` and a string has a rule below for each type head it can have, so for
+those forms the fallback is reached only on a head mismatch, and fails.
 
 ### Numeric literals
 
@@ -439,7 +474,9 @@ The checker (`check` in `check.rs`) decides which in this order:
    element against `u8`.
 3. `none` or `er e` against anything but an option or result is T032.
 4. Otherwise `Check-Subsume` applies. For `true`, `false` and string
-   literals its failure is reported as T022, and for anything else as T032.
+   literals its failure is reported as T022. For anything else it always
+   fails, reported as T032 with the expression's inferred type, `_` standing
+   for what is undecided: `: int / [none]` finds `[?_]`.
 
 A derivation is therefore unique when it exists, and the checker either
 finds it or reports the first premise that fails.
@@ -451,22 +488,27 @@ Some properties follow from the rules and are worth stating outright.
 - **No implicit widening.** No rule relates two different numeric types, so a
   `u8` is never accepted where a `u16` is. Datalit has no operators and so no
   way to convert; datafun converts with `@`.
-- **Literals are polymorphic only under checking.** `42` checks against any
-  integer type it fits but synthesizes `int`, so `[: u8 / 1, 2]` fails (T018:
-  the second element is an `int`) while `: [u8] / [1, 2]` succeeds.
-- **Empty collections.** `[]` checks against every list type and synthesizes
-  `[()]`; the same holds for sets and maps. An empty table or tensor still
-  has a shape the syntax fixes: a table's header names its columns and a
-  tensor's shape gives its rank, so `: {| x: int |} / {||}` is T054 and
-  `: [|u8, 2|] / [||]` is T048. Only the element type is free.
+- **Literals are polymorphic, values are not.** `42` checks against any
+  integer type it fits and synthesizes `int`, and an atom literal checks
+  against any enum that lists it and synthesizes its singleton type. Neither
+  is subtyping: a literal is a value of every type that holds it.
+- **Parts that must agree are typed together.** A literal goes along with
+  whatever beside it has a type of its own, wherever that is, so
+  `[: u8 / 1, 2]` is a `[u8]`. With nothing to go along with, a literal takes
+  its default.
+- **Empty collections need a type.** `[]` checks against every list type and
+  synthesizes nothing; the same holds for sets, maps, tensors and tables with
+  no rows. An empty table or tensor still has a shape the syntax fixes: a
+  table's header names its columns and a tensor's shape gives its rank, so
+  `: {| x: int |} / {||}` is T054 and `: [|u8, 2|] / [||]` is T048. Only the
+  element type is free.
 - **Enum literals parse more than check.** The grammar takes any expression
   inside `enum { }`; only an atom or term passes `Check-Enum`, so
   `enum { 1 }` is T032.
 - **A tensor's shape is the parser's business.** The parser refuses a body
-  that does not fill its shape (D041), so the element-count premises of
-  `Syn-Tensor` and `Check-Tensor` (T051, T049) only guard ASTs built some
-  other way. An empty tensor such as `[| 0 3 | |]` is the one with no
-  elements.
+  that does not fill its shape (D041), so the element-count premise of
+  `Check-Tensor` (T049) only guards ASTs built some other way. An empty
+  tensor such as `[| 0 3 | |]` is the one with no elements.
 
 ## Diagnostics
 
@@ -476,12 +518,8 @@ Some properties follow from the rules and are worth stating outright.
 | T013 | check | Hex literal too wide for an `f32` bit pattern |
 | T014 | check | Hex literal too wide for an `f64` bit pattern |
 | T015 | check | Integer or hex literal out of range for `index` |
-| T016 | synth | No synthesis rule: `none`, `er e` or `enum {e}` with nothing expected |
+| T016 | synth | A type left open with nothing to decide it: by `none`, `er e`, `enum {e}` or an empty collection |
 | T017 | synth | Expression contains a parse error |
-| T018 | synth | List element differs from the first |
-| T019 | synth | Set element differs from the first |
-| T020 | synth | Map key differs from the first |
-| T021 | synth | Map value differs from the first |
 | T022 | check | `true`, `false` or a string literal against another type |
 | T032 | check | `Check-Subsume` failed, or `none` / `er` against a non-option / non-result |
 | T038 | check | Tuple length mismatch |
@@ -490,31 +528,33 @@ Some properties follow from the rules and are worth stating outright.
 | T042 | check | Struct field out of order or misnamed |
 | T048 | check | Tensor rank mismatch |
 | T049 | check | Tensor element count does not match the shape |
-| T051 | synth | Tensor element count does not match the shape |
-| T052 | synth | Tensor element differs from the first |
 | T054 | check | Table column count mismatch |
 | T055 | check | Table column name mismatch |
 | T056 | both | Table row with the wrong number of elements |
 | T057 | check | Atom or term is not the expected one, or not a variant of the expected enum |
 | T058 | check | Enum literal against a type that is not an enum |
 | T059 | hint | A bare name in a hint; datalit has no type aliases |
-| T060 | synth | Table element differs from its column's first row |
 | T061 | check | Integer literal out of range for `offset` |
 
 ## Implementation
 
-The checker is `synthesize` and `check` in
-`crates/datalove-datalit/src/tycheck/`, one function per judgment, with
-`synthesize_unhinted` for synthesis that ignores a hint the caller has
-already compared (`Check-Subsume` after `Check-Hinted`). `type_check` in
-`api.rs` synthesizes a root expression; `type_check_with_expected` checks it
-against a type the caller supplies, which is how datafun checks a
-`require data` file against its declared type.
+The checker is `synthesize`, `check` and `infer` in
+`crates/datalove-datalit/src/tycheck/`. `infer.rs` holds the inferred types
+(`PType`), the classes, and the `Unifier`, a union-find over the variables of
+one synthesis; datafun's inference
+(`crates/datalove-datafun-tycheck/src/infer.rs`) uses the same unifier.
+`type_check` in `api.rs` synthesizes a root expression;
+`type_check_with_expected` checks it against a type the caller supplies,
+which is how datafun checks a `require data` file against its declared type.
 
 `Type` in `types.rs` has one variant per type former above, plus `Var`, a
 type parameter of an enclosing datafun generic function. Datalit itself
 never produces a `Var`; `Var(a) ≡ Var(b)` iff `a = b`, and a `Var` is
 equivalent to nothing else.
+
+The diagnostic codes T018 to T021, T051, T052 and T060 were for elements that
+differed from the first under the first-element rule this replaces. They are
+retired: a disagreement is now reported by the check, with that check's code.
 
 ## References
 

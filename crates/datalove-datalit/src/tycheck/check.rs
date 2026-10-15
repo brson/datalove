@@ -7,7 +7,7 @@ use bct::diagnostic::DiagnosticBuilder;
 use datalove_diagnostic::DiagnosticBuilderExt;
 use crate::ast::*;
 use super::context::TypeContext;
-use super::synthesize::{synthesize, synthesize_unhinted};
+use super::synthesize::{describe_unhinted, synthesize};
 use super::types::*;
 
 /// Check an expression against an expected type.
@@ -66,9 +66,12 @@ pub fn check<'db>(
         (Expr::None, _) => Err(constructor_mismatch(ctx, expr, expected, "none")),
         (Expr::Er(_), _) => Err(constructor_mismatch(ctx, expr, expected, "er")),
 
-        // Rule: Check-Subsume - try synthesis first.
+        // Rule: Check-Subsume - a literal of a type with no other values.
         (Expr::True | Expr::False | Expr::String(_), _) => {
-            let synthesized = synthesize_unhinted(ctx, expr)?;
+            let synthesized = match expr_inner {
+                Expr::String(_) => Type::String,
+                _ => Type::Bool,
+            };
             if !types_equivalent(db, &synthesized, expected) {
                 if let Some(ts) = ctx.get_span(expr) {
                     DiagnosticBuilder::error(db, "mismatched types")
@@ -356,25 +359,22 @@ pub fn check<'db>(
         // Rule: Check-Error
         (Expr::Error(e), Type::Error) => synthesize(ctx, &e.value).map(|_| ()),
 
-        // Otherwise, try subsumption.
+        // Rule: Check-Subsume - every form has a rule above for each type it
+        // can have, so an expression that reaches here synthesizes a type of
+        // another head, and is a mismatch.
         _ => {
-            let synthesized = synthesize_unhinted(ctx, expr)?;
-            if types_equivalent(db, &synthesized, expected) {
-                Ok(())
-            } else {
-                if let Some(ts) = ctx.get_span(expr) {
-                    DiagnosticBuilder::error(db, "mismatched types")
-                        .code("T032")
-                        .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
-                            type_to_string(db, expected),
-                            type_to_string(db, &synthesized)))
-                        .emit_type();
-                }
-                Err(TypeError::TypeMismatch {
-                    expected: type_to_string(db, expected),
-                    actual: type_to_string(db, &synthesized),
-                })
+            let found = describe_unhinted(ctx, expr)?;
+            if let Some(ts) = ctx.get_span(expr) {
+                DiagnosticBuilder::error(db, "mismatched types")
+                    .code("T032")
+                    .primary_label(ts.clone(), &format!("expected `{}`, found `{}`",
+                        type_to_string(db, expected), found))
+                    .emit_type();
             }
+            Err(TypeError::TypeMismatch {
+                expected: type_to_string(db, expected),
+                actual: found,
+            })
         }
     }
 }

@@ -11,14 +11,26 @@
     },
     "type_hint": null
   },
-  "diagnostics": [],
-  "errors": [],
-  "root_type": {
-    "element_type": {
-      "fields": [],
-      "kind": "AnonTuple"
-    },
-    "kind": "Tensor",
-    "rank": 1
-  }
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            5
+          ],
+          "text": "[| |]"
+        }
+      ],
+      "message": "cannot infer type for empty tensor"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

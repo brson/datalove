@@ -285,7 +285,7 @@ sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 |---|---|
 | `hinted` | `Syn-TypedExpr`, `Check-Hinted` |
 | literals, collections, constructors | the datalit rules, [inherited](datafun-typing-rules.md#user-content-inherited-rules) |
-| `add_op`, `mul_op`, `cmp_op`, `and`, `or`, `xor` | `Pair-*`, `Syn-Arith`, `Syn-Ord`, `Syn-Eq`, `Syn-Logic`, `Check-BinOp` |
+| `add_op`, `mul_op`, `cmp_op`, `and`, `or`, `xor` | `Pair`, `Syn-Arith`, `Syn-Ord`, `Syn-Eq`, `Syn-Logic`, `Check-BinOp` |
 | `prefix_op` | `Syn-Neg`, `Syn-NegChecked`, `Syn-NegOptional`, `Syn-Not`, `Check-Neg`, `Check-NegLit` |
 | postfix `?`, `!` | `Syn-TryOption`, `Syn-TryResult` |
 | postfix `@` | `Syn-Adapt`, `Check-Adapt` |

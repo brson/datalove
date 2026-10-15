@@ -36,6 +36,7 @@ pub use datalove_datafun_sema::ResolvedCallTarget;
 mod api;
 mod check;
 mod datafile;
+mod infer;
 mod context;
 mod emit;
 pub mod statement;

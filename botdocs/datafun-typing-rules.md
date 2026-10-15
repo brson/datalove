@@ -21,6 +21,7 @@ rules that type it.
   - [Adapt](#user-content-adapt)
   - [Calls](#user-content-calls)
   - [Fields and indexes](#user-content-fields-and-indexes)
+  - [Inference](#user-content-inference)
   - [Rule selection](#user-content-rule-selection)
 - [Statements](#user-content-statements)
   - [Patterns](#user-content-patterns)
@@ -179,42 +180,26 @@ operands at one type:
 Γ ⊢ e₁ ~ e₂ ⇒ T        e₁ and e₂ both have type T
 ```
 
-The rules of `~` decide which operand, if either, gives its type to the
-other. They use three syntactic predicates:
-
-- `adapt(e)`: `e` is `e'@`, or `-e'`, `-?e'` or `-!e'` with `adapt(e')`.
-- `cons(e)`: `e` is an unhinted `none`, `some e'`, tuple, struct, atom,
-  term or enum literal: a construction whose synthesized type, if it has
-  one, is a guess.
-- `lit(e)`: `e` is an unhinted integer, hex or float literal, or a negation
-  of one. A hinted literal such as `: u8 / 1` has a type of its own.
-
-The rules are tried in this order, and each is shown for an operand on the
-left; each has a mirror image with the operands swapped.
+The operands are typed together, by datalit's inference
+([Datalit Typing Rules, Inference](datalit-typing-rules.md#user-content-inference))
+extended to datafun's expressions as described under
+[Inference](#user-content-inference) below:
 
 ```
-adapt(e₁)    ¬adapt(e₂)    Γ ⊢ e₂ ⇒ T    Γ ⊢ e₁ ⇐ T
----------------------------------------------------- (Pair-Adapt)
-Γ ⊢ e₁ ~ e₂ ⇒ T
-
-cons(e₁)    ¬cons(e₂)    ¬lit(e₂)    Γ ⊢ e₂ ⇒ T    Γ ⊢ e₁ ⇐ T
--------------------------------------------------------------- (Pair-Cons)
-Γ ⊢ e₁ ~ e₂ ⇒ T
-
-lit(e₁)    ¬lit(e₂)    Γ ⊢ e₂ ⇒ T    T ∈ Num    Γ ⊢ e₁ ⇐ T
------------------------------------------------------------ (Pair-Lit)
-Γ ⊢ e₁ ~ e₂ ⇒ T
-
-Γ ⊢ e₁ ⇒ T    Γ ⊢ e₂ ⇒ T'    T ≡ T'
------------------------------------ (Pair-Syn)
+Γ ⊢ e₁ ⇝ τ₁    Γ ⊢ e₂ ⇝ τ₂    τ₁ ≐ τ₂    T = default(τ₁) ≡ default(τ₂)    Γ ⊢ e₁ ⇐ T    Γ ⊢ e₂ ⇐ T
+--------------------------------------------------------------------------------------------------- (Pair)
 Γ ⊢ e₁ ~ e₂ ⇒ T
 ```
 
-So with `x : u32`, `x == 0` pairs at `u32` by `Pair-Lit`, `x == none` with
-`x : ?u32` by `Pair-Cons`, and `a@ .< b` takes `b`'s type by `Pair-Adapt`.
-`1 == 2` has a literal on each side, falls to `Pair-Syn`, and compares two
-`int`s. Operands that do not pair are F016, "operands must have the same
-type", reported before the operator is checked against the type.
+So with `x : u32`, `0 == x` and `x == 0` both compare `u32`s, `x == none`
+with `x : ?u32` compares options, `a@ .< b` takes `b`'s type, and
+`a@ .< 0` compares at `a`'s type, the literal going along with the `@`.
+`1 == 2` has nothing but literals and compares two `int`s. Operands whose
+types do not come to the same type, such as `1 == "a"` or `a@ .< b@` with
+`a : u32` and `b : u64`, are F016, "operands must have the same type",
+reported before the operator is checked against the type. Operands that come
+to one type but do not check against it are reported at the operand: with
+`x : u8`, `x == 300` is F065.
 
 Each arithmetic operator `⊕` admits a set of operand types, `Arith(⊕)`, and
 may require the enclosing function to return an option or a result:
@@ -261,37 +246,33 @@ Equality compares floats by IEEE 754 wherever they sit, so
 or `ord`-bounded one has none, and orders through `sys/std/ord` instead.
 
 In checking mode, an operator whose result type is its operand type passes
-the expected type down to both operands:
+the expected type down to both operands, by unifying each with it before the
+operands are paired:
 
 ```
-T ∈ Prop(⊕)    fits(⊕, Γ)    Γ ⊢ e₁ ⇐ T    Γ ⊢ e₂ ⇐ T
------------------------------------------------------ (Check-BinOp)
+⊕ yields its operand type    Γ ⊢ eᵢ ⇝ τᵢ    τᵢ ≐ T    Γ ⊢ e₁ ⊕ e₂ ⇒ T'    T' ≡ T
+------------------------------------------------------------------------------ (Check-BinOp)
 Γ ⊢ e₁ ⊕ e₂ ⇐ T
 ```
 
-| `⊕` | `Prop(⊕)` |
-|-----|-----------|
-| `+` `-` `*` | `Float ∪ {int}` |
-| `/` | `Float` |
-| `+!` `-!` `*!` `+?` `-?` `*?` | `Fix` |
-| `/!` `/?` | `Fix ∪ {int}` |
-| `and` `or` `xor` | `{bool}` |
-
-`Prop(⊕) ⊆ Arith(⊕)` for each operator, so `Check-BinOp` never accepts an
-operator at a type synthesis would refuse. It is how literals and `@` operands
-learn their type from context:
+The operators that yield their operand type are the arithmetic ones, checked
+and optional included. The rest yield `bool`, which says nothing about their
+operands. Passing the type down is how literals and `@` operands learn their
+type from context:
 
 ```datalove
 fun add(): !u32
     ret ok (1 +! 2)       // 1 and 2 are checked against u32
 end fun
 
-let c: int = a@ + b@      // with a, b : u32, both widen to int
+let c: int = a@ + b@      // with a : u32, b : u64, both widen to int
 ```
 
-`Check-BinOp` overlaps `Check-Subsume`. The checker tries `Check-BinOp`
-first and, if any premise fails, discards its diagnostics and uses
-`Check-Subsume` instead; see [Rule selection](#user-content-rule-selection).
+The premise `Γ ⊢ e₁ ⊕ e₂ ⇒ T'` still checks the operator against the
+operand type, so passing a type down never gives an operator a type it does
+not have: `let r: u32 = a@ + b@` leaves the operands `u32`, and bare `+` on
+`u32` is F026. A result that is not `T` is F016, with a note suggesting `@`
+where `Check-Adapt` would succeed. Nothing is tried and undone.
 
 Unary operators:
 
@@ -355,7 +336,7 @@ Nothing else adapts. There is no narrowing, and no enum adapts to another.
 With an expected type, `@` converts to it; with none, it clones and keeps
 its type. `Check-Adapt` failing is F016, "@ operator cannot convert". An
 expected type reaches `@` through any checking rule: an annotated `let`, a
-`ret`, a call argument, `Check-BinOp`, or the other operand by `Pair-Adapt`.
+`ret`, a call argument, `Check-BinOp`, or the other operand by `Pair`.
 
 ### Calls
 
@@ -383,53 +364,47 @@ the module or rider required as `M`. A qualifier no `require` introduced is
 F078; a function the module lacks is F002.
 
 **Generic calls.** For `Σ(f) = ∀ᾱ::b̄. (m₁ T₁, ..., mₙ Tₙ) → R`, the type
-arguments are not written. The checker finds a substitution `θ` for `ᾱ` by
-one-way matching, not unification:
-
-1. For each `i` in order such that `Tᵢ` mentions some `α`: if `eᵢ`
-   synthesizes a type `Uᵢ` that mentions no type parameter still to be
-   determined, match `Tᵢ` against `Uᵢ`, binding each `α` at its position in
-   `Tᵢ` to what `Uᵢ` has there. The first binding of an `α` wins.
-   An argument that does not synthesize (`none`, `er e`) binds nothing.
-2. In checking mode against `T'`, match `R` against `T'` to bind any `α`
-   still unbound. Arguments take precedence.
+arguments are not written. Inference gives each `α` a fresh variable `α'`,
+and unifies each argument's inferred type with its parameter's, and in
+checking mode the return type with the expected one; `θ` is what the
+variables come to:
 
 ```
-θ from step 1     dom θ = ᾱ    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    const-arg(mᵢ, eᵢ)
------------------------------------------------------------------------------- (Syn-GenericCall)
+Γ ⊢ eᵢ ⇝ τᵢ    [ᾱ'/ᾱ]Tᵢ ≐ τᵢ    θ = default(ᾱ')    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    const-arg(mᵢ, eᵢ)
+------------------------------------------------------------------------------------------------ (Syn-GenericCall)
 Γ ⊢ f(m₁ e₁, ..., mₙ eₙ) ⇒ θR
 
-θ from steps 1-2    dom θ = ᾱ    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    θR ≡ T'    const-arg(mᵢ, eᵢ)
---------------------------------------------------------------------------------------- (Check-GenericCall)
+Γ ⊢ eᵢ ⇝ τᵢ    [ᾱ'/ᾱ]Tᵢ ≐ τᵢ    [ᾱ'/ᾱ]R ≐ T'    θ = default(ᾱ')    θ(αⱼ) ∈ bⱼ    Γ ⊢ eᵢ ⇐ θTᵢ    θR ≡ T'    const-arg(mᵢ, eᵢ)
+------------------------------------------------------------------------------------------------------------------- (Check-GenericCall)
 Γ ⊢ f(m₁ e₁, ..., mₙ eₙ) ⇐ T'
 ```
 
 `θ(α) ∈ b` reads: `any` and `ord` admit every type, `float` admits `Float`,
-and `fixedint` admits `Fix`. A bound refused is F016; a parameter left unbound
-(`dom θ ≠ ᾱ`) is F011, "nothing here says what `T` is". Because
-`Syn-GenericCall` has no expected type to draw on, a call like
-`self == zero()` in operand position is refused for that reason.
+and `fixedint` admits `Fix`. A bound refused is F016. A parameter nothing
+decides is F011: at the argument that left it open, such as `[]` in
+`list.len(ref [])`, or, where no argument mentions it, at the call, "nothing
+here says what `T` is".
 
-Argument order matters, because the first argument to reach an `α` fixes
-it. With `pick_first<T>(a: T, b: T)`, `pick_first(99, : u32 / 1)` binds
-`T = int` from the bare literal and then fails on the `u32`, while
-`pick_first(: u32 / 1, 99)` binds `T = u32` and checks `99` against it.
-Likewise `let y: u32 = id(5)` is F016: the argument binds `T = int` before
-the expected type is consulted.
+The arguments are unified before the expected result, so where the two
+disagree the arguments are what is checked against. Order among the
+arguments does not matter: with `pick_first<T>(a: T, b: T)`,
+`pick_first(99, : u32 / 1)` and `pick_first(: u32 / 1, 99)` both make `T`
+`u32`, and `let y: u32 = id(5)` makes it `u32` from the expected result. A
+bound is checked after `θ` is found and does not take part in inference, so
+`lerp(0, 1, 0.5)` still makes `T` `int`, and `0.5` is refused against it.
 
 **Intrinsics.** `icall n(e₁, ..., eₙ)` calls a built-in with signature
-`(T₁, ..., Tₙ) → R`. Its arguments are synthesized and compared, not
-checked:
+`(T₁, ..., Tₙ) → R`. Its arguments are checked against the parameters, as a
+call's are:
 
 ```
-icall(n) = (T₁, ..., Tₙ) → R    Γ ⊢ eᵢ ⇒ Uᵢ    Uᵢ ≡ Tᵢ
-------------------------------------------------------- (Syn-Intrinsic)
+icall(n) = (T₁, ..., Tₙ) → R    Γ ⊢ eᵢ ⇐ Tᵢ
+-------------------------------------------- (Syn-Intrinsic)
 Γ ⊢ icall n(e₁, ..., eₙ) ⇒ R
 ```
 
-So `icall add_wrapping_u32(a, 2)` is F016, since `2` synthesizes `int`; write
-`: u32 / 2`. Arguments take no mode markers (F057). An unknown intrinsic or
-wrong argument count is F011.
+So in `icall add_wrapping_u32(a, 2)` the `2` is a `u32`. Arguments take no
+mode markers (F057). An unknown intrinsic or wrong argument count is F011.
 
 ### Fields and indexes
 
@@ -476,6 +451,36 @@ read only in a borrowed position carry the side condition
 `copy(T) ∨ borrowed`; it is left out of the rules above for brevity. A view
 (an element of a tensor of rank above 1) passed `mut` or `out` is F073.
 
+### Inference
+
+Datafun infers with datalit's inference and unifier, and adds rules for its
+own expressions. Each takes what it needs from the types of its parts and
+leaves a variable of class `open` where it cannot tell, which checking then
+reports:
+
+| Expression | Inferred type |
+|---|---|
+| a variable `x` | `Γ(x)` |
+| `e.i`, `e.ℓ`, `e[k]?`, `e[k]!` | the part of `e`'s inferred type, as the synthesis rules read it |
+| `e?`, `e!` | the payload of `e`'s option or result |
+| `-e`, `-?e`, `-!e` | `e`'s inferred type |
+| `not e`, a comparison, `and`, `or`, `xor` | `bool`, with the operands unified |
+| an arithmetic operator | its operands' type, with the operands unified |
+| `e@` | a variable of class `adapt T`, where `e` comes to `T` |
+| a call | its return type, with fresh variables for its type parameters, unified as under Generic calls |
+| `icall n(...)` | `n`'s return type |
+
+The class `adapt T` admits every type `T` adapts to (`T ⇝ U`) and defaults to
+`T`: with nothing to convert to, `@` clones. It merges with a class that
+admits `T`, as `adapt T`, so a literal beside `e@` goes along with `T`; two
+`@` of different types stay apart.
+
+An expression is inferred once, when something first asks for its type, with
+everything inside it. The inferred type of each part is kept, and checking
+reads it rather than inferring again, so a statement is inferred in one pass
+however deeply its calls and operators nest
+(`crates/datalove-datafun-tycheck/src/infer.rs`).
+
 ### Rule selection
 
 `check_expr` in `check.rs` chooses a rule in this order:
@@ -483,15 +488,13 @@ read only in a borrowed position carry the side condition
 1. A hinted expression `: T₀ / e` compares `T₀` with the expected type
    (F016, "the type hint disagrees"), then continues with `e`.
 2. If a checking rule matches the expression form and the expected type, it
-   is used. Its failure is an error, except for `Check-BinOp`, which falls
-   back to step 3.
+   is used. Its failure is an error.
 3. Otherwise `Check-Subsume`: synthesize, then compare by `≡`. A failure is
    F016, with a note suggesting `@` where `Check-Adapt` would have succeeded.
 
-Synthesis is syntax-directed throughout, except that `~` and generic
-matching try their premises in order. The two backtracking points, then,
-are `Check-BinOp` and the speculative synthesis in step 1 of generic
-matching.
+Synthesis is syntax-directed throughout, and nothing is tried and undone:
+where expressions must agree, inference unifies them, and checking reads the
+result.
 
 There is no implicit conversion anywhere: no numeric widening, no implicit
 `data`, and no implicit enum injection of a non-literal. Each is written:

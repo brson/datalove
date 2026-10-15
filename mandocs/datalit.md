@@ -441,10 +441,12 @@ A numeric literal contains no whitespace or comments.
 | table  | `{\| col1: T1, col2: T2 \|}`     | `{\| col1, col2; 1, 2; 3, 4 \|}` |
 | tensor | `[\|T, N\|]`                     | `[\| 1 2 3, 4 5 6 \|]`           |
 
-Empty collections synthesize with unit element types
-(`[()]`, `#{()}`, `%{() = ()}`, and `[|(), 1|]` for `[| |]`),
-but check against any element type:
-`: [u32] / []` is valid.
+An empty collection leaves its element type open,
+so it does not synthesize a type:
+`[]`, `#{}`, `%{}`, an empty tensor, and a table with no rows
+need a type hint or checking context,
+as `none` does.
+`: [u32] / []` is valid, and `[]` alone is an error.
 
 
 
@@ -455,16 +457,18 @@ An ordered sequence of homogeneous elements.
 ```datalove
 [1, 2, 3]                      // [int]
 : [u32] / [1, 2, 3]            // [u32] via type hint
-[]                             // [()], empty list
 : [string] / []                // [string], empty with hint
+[: u8 / 1, 2]                  // [u8]
 ```
 
-All elements must have the same type.
+All elements have the same type.
 Without an expected type,
-each element synthesizes its own type
-and all must agree with the first:
-`[: u8 / 1, 2]` is an error, since `2` synthesizes `int`.
-Use a type hint on the list for fixed-width element types.
+the elements are [typed together](#user-content-typing-together):
+literals go along with any element that has a definite type,
+and take their defaults if none does.
+`[: u8 / 1, 2]` is a `[u8]`,
+`[some 1, none]` is a `[?int]`,
+and `[: u8 / 1, : u16 / 2]` is an error.
 
 
 ### Map
@@ -474,7 +478,7 @@ A key-value mapping, ordered by key.
 ```datalove
 %{ "a" = 1, "b" = 2 }          // %{string = int}
 : %{u32 = string} / %{ 1 = "x", 2 = "y" }
-%{}                            // %{() = ()}, empty map
+: %{string = u32} / %{}        // empty map
 ```
 
 Entries use `=` to separate keys from values,
@@ -497,7 +501,7 @@ A collection of unique elements, ordered by value.
 ```datalove
 #{ 1, 2, 3 }                   // #{int}
 : #{u32} / #{ 10, 20, 30 }
-#{}                            // #{()}, empty set
+: #{u32} / #{}                 // empty set
 ```
 
 All elements must have the same type.
@@ -526,9 +530,15 @@ Rows are delimited by newlines or semicolons.
 : {| x: int, y: int |} / {| x, y; 1, 2; 3, 4 |}
 ```
 
-Table literals always require a type hint &mdash;
-they cannot synthesize a type.
-Column names in the literal must match the type hint in order.
+Without a type hint,
+each column's elements are typed together,
+as a list's are,
+and the table synthesizes those column types:
+`{| x; 1; 2 |}` is a `{| x: int |}`.
+A table with columns and no rows leaves its column types open,
+so it needs a type hint.
+Checked against a table type,
+the column names in the literal must match the type's in order.
 Each column is named by exactly one identifier,
 and no two columns share a name.
 Each data row must have exactly as many values as there are columns.
@@ -555,9 +565,9 @@ typed by element type and rank.
 [| 1 2 3, 4 5 6 |]             // 2D, shape [2, 3]
 [| 1 2, 3 4,, 5 6, 7 8 |]      // 3D, shape [2, 2, 2]
 : [|u32, 2|] / [| 1 2, 3 4 |]  // typed: element u32, rank 2
-[| |]                          // empty tensor, rank 1, shape [0]
+: [|u8, 1|] / [| |]            // empty tensor, rank 1, shape [0]
 [| 2 3 | 1 2 3 4 5 6 |]        // shape [2, 3], given in a header
-[| 0 3 | |]                    // empty tensor, shape [0, 3]
+: [|u8, 2|] / [| 0 3 | |]      // empty tensor, shape [0, 3]
 ```
 
 Shape is inferred from the multi-comma structure:
@@ -604,8 +614,8 @@ the extents as whole numbers and then a `|`:
 
 ```datalove
 [| 1 3 | 1 2 3 |]              // shape [1, 3]
-[| 0 3 | |]                    // shape [0, 3], empty
-[| 2 0 | |]                    // shape [2, 0], empty, and not the same value
+: [|u8, 2|] / [| 0 3 | |]      // shape [0, 3], empty
+: [|u8, 2|] / [| 2 0 | |]      // shape [2, 0], empty, and not the same value
 [| 2 2 | 1 2 3 4 |]            // shape [2, 2], body written flat
 [| 2 2 | 1 2, 3 4 |]           // shape [2, 2], body shaped as the header says
 ```
@@ -626,7 +636,10 @@ The type specifies element type and rank: `[|T, N|]`.
 Shape is not part of the type &mdash;
 two tensors of the same element type and rank
 but different shapes have the same type.
-All elements must have the same type.
+All elements have the same type,
+and are typed together as a list's are.
+An empty tensor needs a type hint for its element type;
+its rank is its shape's, hint or not.
 
 
 ### EBNF · Collections
@@ -848,6 +861,15 @@ where the enum type is expected:
   [atom Red, term Custom "hello", enum { atom Blue }]
 ```
 
+This is not subtyping.
+An atom literal is a value of every enum that lists it,
+as `5` is a value of every integer type that holds it,
+and in both cases it is the literal that is flexible,
+not the type:
+an `atom Red` value is not an enum value,
+as a `u8` value is not an `int` value,
+and in Datalove each is converted with `@`.
+
 
 ### EBNF · Aggregates
 
@@ -896,7 +918,7 @@ together with that type.
 and its payload `e` must synthesize a type of its own,
 which is the type the `data` carries:
 `data 1` holds an `int`, `data : u32 / 1` a `u32`,
-and `data none` is an error.
+and `data none` and `data []` are errors.
 
 An `error` is the same thing under a different type,
 used for the failure side of results.
@@ -954,6 +976,14 @@ An expression with a hint has the hinted type,
 and checks only against that type:
 `: {a: u32} / {a = : u8 / 1}` is an error.
 
+An expression synthesizes a type only when its form determines the whole type.
+A literal checks against every type that holds the value it writes,
+and synthesizes a default:
+`5` checks against `u8` and synthesizes `int`.
+An expression whose form leaves part of its type open,
+like `none` or `[]`,
+does not synthesize at all.
+
 | Expression      | Synthesizes                  | Also checks against                    |
 |-----------------|------------------------------|----------------------------------------|
 | `true`, `false` | `bool`                       |                                        |
@@ -963,13 +993,13 @@ and checks only against that type:
 | string          | `string`                     |                                        |
 | tuple           | tuple of element types       | tuple of same length, elementwise      |
 | struct          | struct of field types        | struct of same fields in order, fieldwise |
-| list, set       | of the first element's type  | any element type, elementwise          |
-| empty list, set | element type `()`            | any element type                       |
-| empty map       | key and value types `()`     | any key and value types                |
-| map             | of the first entry's types   | any key and value types, entrywise     |
-| tensor          | first element's type, rank as written | same rank, elementwise        |
-| empty tensor    | element type `()`, rank as written | any element type, same rank      |
-| table           | &mdash;                      | same columns in order, cellwise        |
+| list, set       | of its elements, typed together | any element type, elementwise       |
+| map             | of its keys and of its values, each typed together | any key and value types, entrywise |
+| tensor          | of its elements, typed together; rank as written | same rank, elementwise |
+| table           | of each column's elements, typed together | same columns in order, cellwise |
+| empty list, set, map | &mdash;                 | any element types                      |
+| empty tensor    | &mdash;                      | any element type, same rank            |
+| table with no rows | &mdash;                   | same columns in order                  |
 | `some e`        | `?T` where `e` synthesizes `T` | `?T`, checking `e` against `T`       |
 | `none`          | &mdash;                      | any `?T`                               |
 | `ok e`          | `!T` where `e` synthesizes `T` | `!T`, checking `e` against `T`       |
@@ -980,10 +1010,44 @@ and checks only against that type:
 | `term A e`      | `term A T` where `e` synthesizes `T` | `term A T`, or an enum listing `term A T`, checking `e` against `T` |
 | `enum { v }`    | &mdash;                      | an enum listing `v`                    |
 
+The table with no columns, `{| |}`, leaves nothing open
+and synthesizes `{| |}`.
+
 So a type hint or context is required for
-`none`, `er`, tables, enum literals,
-fixed-width numbers, `index`, `offset` and `f32`,
-and empty collections of anything but `()`.
+`none`, `er`, enum literals,
+empty collections,
+and fixed-width numbers, `index`, `offset` and `f32`;
+and for anything containing one of these
+where it would have to synthesize,
+as in `data []`, `some none`, or a struct `{ xs = [] }` with no hint.
+
+
+### Typing together
+
+Without a hint,
+a collection's type comes from all of its elements together.
+Literals like `1`, `2.0` and `none` go along with the rest:
+if any element has a definite type,
+such as a hinted one,
+the literals are read as that type.
+If nothing decides,
+the literals take their defaults, `int` and `f64`,
+and `none` or `[]` with nothing to go along with needs a hint.
+The order of the elements doesn't matter.
+
+```datalove
+[1, 2]                         // [int]
+[1, : u8 / 2]                  // [u8]
+[some 1, none]                 // [?int]
+[[], [1]]                      // [[int]]
+[none, none]                   // error: nothing says what the option holds
+[: u8 / 1, : u16 / 2]          // error: two different types
+```
+
+A map's keys go along with each other, and so do its values,
+and so do the elements of each table column.
+The same rule types the operands of a Datalove operator
+and the arguments of a generic function.
 
 
 
@@ -1034,7 +1098,9 @@ Enum variant names order by UTF-8 byte.
 Datalove Literals has no canonical serialized form
 as might be used for consistent hashing.
 There is no canonical form for floats.
-Required type-hint insertion points are unknown.
+A printed value needs a type hint
+where its type is not the one its literals default to,
+and on an empty collection that nothing around it types.
 Will be revisited.
 
 
@@ -1050,6 +1116,9 @@ Will be revisited.
   but instantiation parses decimal through `i128` and hex through `u128`,
   so `170141183460469231731687303715884105728` fails with
   "number too large to fit in target type".
+- **Deep nesting overflows the checker's stack.**
+  A list nested about 700 deep aborts the process
+  instead of reporting an error.
 
 ### Open questions
 
@@ -1058,6 +1127,8 @@ Will be revisited.
   It is silently rounded today.
 - Whether duplicate map keys and set elements should be errors
   rather than resolved last-wins.
+- Whether nesting depth is limited,
+  and if so to what.
 - Whether a byte order mark is allowed.
   Nothing strips one.
 - The value printer writes non-finite floats as `nan`, `inf` and `-inf`,
@@ -1066,13 +1137,9 @@ Will be revisited.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-- Should empty collections synthesize?
-- Should empty tensors synthesize rank 1?
-- Should atom/term actually check against enums?
 - What are the rules for printing disambiguating type hints?
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?
-- Why can't tables synthesize?
 - Why are semicolons special inside tables?
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?

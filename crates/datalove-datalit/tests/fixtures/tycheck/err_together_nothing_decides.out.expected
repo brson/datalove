@@ -1,0 +1,41 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": "None",
+            "type_hint": null
+          },
+          {
+            "expr": "None",
+            "type_hint": null
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            1,
+            5
+          ],
+          "text": "none"
+        }
+      ],
+      "message": "cannot infer type for None value"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
+}

@@ -7,13 +7,26 @@
     },
     "type_hint": null
   },
-  "diagnostics": [],
-  "errors": [],
-  "root_type": {
-    "element_type": {
-      "fields": [],
-      "kind": "AnonTuple"
-    },
-    "kind": "Set"
-  }
+  "diagnostics": [
+    {
+      "code": "T016",
+      "labels": [
+        {
+          "message": "type annotation required",
+          "span": [
+            0,
+            3
+          ],
+          "text": "#{}"
+        }
+      ],
+      "message": "cannot infer type for empty set"
+    }
+  ],
+  "errors": [
+    {
+      "kind": "CannotSynthesize"
+    }
+  ],
+  "root_type": null
 }

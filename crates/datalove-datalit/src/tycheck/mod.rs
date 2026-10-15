@@ -8,6 +8,7 @@
 mod api;
 mod check;
 mod context;
+pub mod infer;
 mod synthesize;
 pub mod types;
 
@@ -50,16 +51,10 @@ pub use types::{
     // Type equivalence.
     types_equivalent,
     can_widen_to,
-    // Element compatibility.
-    check_element_compatible,
-    check_map_entry_compatible,
+    can_adapt_to,
     check_type_coercion,
-    // Empty collection types.
+    // Unit and shape helpers.
     unit_type,
-    empty_list_type,
-    empty_set_type,
-    empty_map_type,
-    empty_tensor_type,
     check_tensor_element_count,
     // Integer range checking.
     check_int_fits_type,

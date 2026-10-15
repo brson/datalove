@@ -47,7 +47,7 @@
   },
   "diagnostics": [
     {
-      "code": "T052",
+      "code": "T022",
       "labels": [
         {
           "message": "expected `int`, found `string`",
@@ -58,7 +58,7 @@
           "text": "\"three\""
         }
       ],
-      "message": "mismatched types in tensor"
+      "message": "mismatched types"
     }
   ],
   "errors": [

@@ -37,6 +37,10 @@ home here.
   - [Nothing names another module's type](#user-content-nothing-names-another-modules-type)
   - [What writing the store demo ran into](#user-content-what-writing-the-store-demo-ran-into)
 
+- [The typecheckers: cost and limits](#user-content-the-typecheckers-cost-and-limits)
+  - [Deeply nested literals overflow the stack](#user-content-deeply-nested-literals-overflow-the-stack)
+  - [Datafun records a copy of every expression's type](#user-content-datafun-records-a-copy-of-every-expressions-type)
+
 - [Backends and performance](#user-content-backends-and-performance)
   - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
   - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
@@ -492,6 +496,52 @@ data files. None stopped it; each cost a detour.
   every sale, and it was 14% of the interpreter's run. In place it is `set
   m[k@] = #{}` when absent, then `set.insert(mut m[k]!, x)`. Nothing points
   the writer from the first to the second.
+
+## The typecheckers: cost and limits
+
+Where checking a datalit or datafun input takes time or stack out of
+proportion to its size.
+
+### Deeply nested literals overflow the stack
+
+**Reproduced, debug build.** A list nested 700 deep, `[[[ ... 1 ... ]]]`,
+aborts `datalove lit-tycheck` with "thread 'main' has overflowed its stack".
+At 400 deep it checks. `datalove lit-ast` parses the 700-deep file, so the
+datalit parser gets past the point where the checker fails, and the checker's
+recursion in `synthesize` and `check`
+(`crates/datalove-datalit/src/tycheck/`) is what runs out. The same list as
+`let x = [[[ ... ]]]` in a datafun script aborts at 700 and runs at 400; which
+phase overflows there is not identified. The release-build threshold is not
+measured.
+
+Nothing in the parsers or checkers limits nesting, so a file of a few
+kilobytes crashes the process instead of producing an error. Data files are
+the exposed case: they are written by programs, and a `require data` of one
+aborts the compiler.
+
+The fix is either a nesting limit with a diagnostic, which the datalit spec
+would then have to state, or an explicit work stack in place of recursion in
+each phase that walks the expression. The runtime already bounds recursion
+against the native stack (`dtlv_rti_native_stack_limit`, see
+[Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)),
+but the front end has nothing like it. Inference, which
+[One Rule for Literals That Share a Type](plan-literal-typing.md) added to
+both checkers, recurses on the expression too, and would need the same
+treatment.
+
+### Datafun records a copy of every expression's type
+
+**Reasoned from the code, not measured.** `TypeContext::store_expr_type`
+clones the full `Type` of every expression it records. In a nested literal
+each level's type contains the type of everything below it, so a literal
+nested `d` deep records `O(d²)` of type for `O(d)` of input, and in general
+`O(n × d)`. The [stack overflow](#user-content-deeply-nested-literals-overflow-the-stack)
+stops the program at a depth where this is still too small to measure. Once
+that is fixed, it is the next superlinear cost. Inference
+([One Rule for Literals That Share a Type](plan-literal-typing.md)) keeps an
+inferred type per expression as well, and where that type is known outright,
+as a variable's is, it is a cloned `Type` the same way. Interned or shared
+types would remove both.
 
 ## Backends and performance
 

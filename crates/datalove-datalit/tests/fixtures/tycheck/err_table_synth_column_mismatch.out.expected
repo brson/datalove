@@ -54,7 +54,7 @@
   },
   "diagnostics": [
     {
-      "code": "T060",
+      "code": "T022",
       "labels": [
         {
           "message": "expected `int`, found `string`",
@@ -65,7 +65,7 @@
           "text": "\"thirty\""
         }
       ],
-      "message": "mismatched types in table column"
+      "message": "mismatched types"
     }
   ],
   "errors": [

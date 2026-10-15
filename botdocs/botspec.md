@@ -866,9 +866,11 @@ An expected type reaches `@` from:
   both to `int`.
 - An operand of a comparison, when the other operand has a type of its own.
   A comparison returns `bool`, which says nothing about its operands, so the
-  type comes from across the operator instead: `a@ .< b` takes `b`'s type,
-  and `a@ .< 0` takes the literal's. With `@` on both sides there is nothing
-  to take, so each clones and the two have to agree on their own.
+  type comes from across the operator instead: `a@ .< b` takes `b`'s type. A
+  literal has no type of its own to give, so in `a@ .< 0` the literal goes
+  along with `a@` and the comparison is at `a`'s type. With `@` on both sides
+  there is nothing to take, so each clones and the two have to agree on their
+  own.
 
 Widening is only what was asked for, so an atom under no expectation stays an
 atom: `let c = (atom Red)@` gives `c` the type `atom Red`, and using it where
@@ -1375,37 +1377,35 @@ is equal only to itself, so nothing in the body can inspect a value of that type
 or convert it to anything else.
 
 **Binding.** The call site does not name the types; they are read off the
-arguments. Each argument is matched against its parameter's type, and wherever
-the parameter has a type parameter, whatever the argument has in that position
-is what it stands for:
+arguments, and off what the result is expected to be. Each type parameter is a
+variable unified with the argument types in its positions and with the
+expected result, the way a list's elements are typed together
+([Datalove Literals](../mandocs/datalit.md#user-content-typing-together)):
 
 ```datalove
 call unwrap_or(some (: u32 / 7), : u32 / 0)      // T is u32
 call unwrap_or(some "hello", "fallback")         // T is string
 ```
 
-The first argument to reach a type parameter fixes it, and the rest are checked
-against the result, so a disagreement is a type mismatch rather than a
-reinterpretation:
+Two arguments that decide a parameter differently are a type mismatch rather
+than a reinterpretation:
 
 ```datalove
 call pick_first(: u32 / 1, "not a u32")          // error: expected u32, found string
 ```
 
-An argument that cannot say what it is on its own binds nothing, and is checked
-afterwards against whatever another argument fixed. So `none` is usable where
-something else determines the type:
+An argument that says nothing about a parameter, such as `none`, or a literal,
+which only has a default, goes along with what the others say. So order does
+not matter:
 
 ```datalove
 call unwrap_or(none, "fallback")                 // T is string, from the second
+call pick_first(99, : u32 / 1)                   // T is u32; 99 is a u32
+let xs: [u32] = list.of(5)                       // T is u32, from the expected result
 ```
 
-Because the first argument fixes it, argument order decides whether a call
-type-checks at all. An unsuffixed integer literal with nothing to fix it is
-`int`, so `pick_first(99, : u32 / 1)` makes `T` `int`, and the `u32` is a
-mismatch, since nothing widens implicitly. Written the other way round,
-`pick_first(: u32 / 1, 99)`, the `u32` fixes `T` first and the literal is
-checked against it, so `99` is a `u32`.
+A parameter nothing decides is F011. Where an argument such as `[]` leaves it
+open, the argument is what is reported as needing a type.
 
 **Where a type parameter may appear.** Anywhere: on its own, under `?` or `!`
 to any depth, and inside a list, set, map, tensor, table, tuple, struct, term
@@ -2118,9 +2118,9 @@ fun add(): !u32
 end fun
 ```
 
-With no expected type for a binary operator, one operand can supply the other's.
-When exactly one side is a bare numeric literal and the other has a numeric type
-of its own, the literal checks against that type:
+With no expected type, the two operands of a binary operator are typed
+together, as a list's elements are: a literal takes the type of the operand
+beside it, on either side.
 
 ```datalove
 fun f(n: u32): bool
@@ -2128,9 +2128,14 @@ fun f(n: u32): bool
 end fun
 ```
 
-With a literal on both sides there is nothing to propagate and both synthesize
-`int`, so `1 == 2` compares bigints. A non-numeric operand supplies nothing
-either: `1 + "hello"` is a plain mismatch.
+With a literal on both sides nothing decides the type, and both take their
+default, so `1 == 2` compares bigints. A literal does not take a type it could
+not have: `1 + "hello"` is a plain mismatch.
+
+The same holds for the elements of a collection literal, the arguments of a
+generic call, and the payloads of `some` and `term` inside them. An empty
+collection, `none` or `er` with nothing to go along with needs a type
+annotation: `let xs = []` is F011, as `let x = none` is.
 
 Float literals infer their precision from context:
 
