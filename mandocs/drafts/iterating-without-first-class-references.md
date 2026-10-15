@@ -25,6 +25,16 @@ and that this is a problem to be solved soon.
 A simple solution is relatively straightforword
 but is slightly complexified by the limitations of Datalove's simple type system.
 
+- [The situation with loops in Datalove](#user-content-the-situation-with-loops-ind-datalove)
+- [A simple design for `for` loops](#user-content-a-simple-design-for-for-loops)
+- [Getting at that loop induction variable](#user-content-getting-at-that-loop-induction-variable)
+- [A protocol for iterating over collections](#user-content-a-protocol-for-iterating-over-collections)
+- [Results](#user-content-results)
+
+
+
+## The situation with loops in Datalove
+
 Here's how it has been done prior to this work in `list.contains`:
 
 ```datalove
@@ -118,7 +128,7 @@ But working within limitations is fun, so let's have fun.
 
 <!-- the thesis -->
 
-## A simple design of `for` loops
+## A simple design for `for` loops
 
 I want to write the previous `contains` function like the following.
 
@@ -245,7 +255,7 @@ Sets and maps won't support this form since they don't index by number.
 
 <!-- the payoff? -->
 
-## How to implement iteration over collections
+## A protocol for iterating over collections
 
 Datalove's collection's data layouts and APIs are defined in the runtime,
 callable by both the compiler's emitted code and native code linked to Datalove packages.
@@ -354,34 +364,157 @@ The general shape and use of the cursors is
   so an indexed `for i, elem` needs no counter of its own.
 - Call an `advance` function to move the cursor forward.
 
-There are pros and cons of Datalove not having any capability to express abstractions such as iterators itself.
-Pro: we don't have to come up with a single abstraction facility that can express iteration over all types of collections;
-Con: we do have to define explicit runtime APIs for the collections we do support and commit to them.
-
-<!-- todo thats weak -->
-
+Datalove can't express an iterator in the language itself,
+so the cursor protocol _is_ the abstraction,
+and it lives in the runtime ABI instead of in something like a trait.
+I love this for the compiler:
+because the compiler knows exactly what a cursor looks like,
+every backend can open-code the hot parts &mdash;
+the 'done' check, the element, and a strided advance are just loads and adds against the struct &mdash;
+while the IR interpreter calls the real runtime functions
+and gives the fast backends something to be checked against.
+For hypothetical users though:
+tough luck, you can't write an iterator.
 
 
 
 
 <!-- the results -->
 
+## Results
+
 After implementing the cursor protocol I was able
-to convert TODO unconditional or `while` loops to `for` loops
-and eliminate TODO explicit loop induction variables and their wrapping arithmetic.
+to convert 25 `loop while` loops to `for` loops &mdash;
+15 in the system library,
+7 in the "store demo" I use to prove features and performance,
+and 3 in the benchmarks &mdash;
+and eliminate all 25 of their explicit loop induction variables,
+along with 16 calls to `add_wrapping_index`.
+The demo loops were a special kind of ugly:
+having no way to walk a map,
+they built a list of its keys with `map.keys`
+and then did a full lookup for each key to get the value.
+Now they just bind both:
 
-todo what about performance?
+```datalove
+for category, r in ref revenue
+    let c = map.get_or(ref cost, ref category, 0)
+    let u = map.get_or(ref units, ref category, 0)
+    call list.push(mut rows, (r, category@, c, u))
+end for
+```
 
-todo what about cases that weren't convertable or left induction variables around?
+Performance is about what you'd hope.
+Summing a list of 100,000 `u32`s 200 times,
+and a set of 5,000 `u32`s 20 times
+(release build, `hyperfine` means):
+
+| | interp | JIT | AOT |
+|---|---:|---:|---:|
+| list, index loop | 230 ms | 38 ms | 18.1 ms |
+| list, `for`, every cursor operation a runtime call | 487 ms | 155 ms | 52 ms |
+| list, `for`, open-coded | 193 ms | 34 ms | 16.4 ms |
+| set, `set.get` by position | 58 ms | 61 ms | 53 ms |
+| set, `for` | 7.2 ms | 7.5 ms | 1.4 ms |
+
+The middle row is why the backends open-code the cursors:
+calling into the runtime for every step cost two to four times the old index loop.
+Open-coded, a list's `for` beats its index loop on every engine,
+though not by much,
+since the index loop was already just a bounds check and an add.
+The set is the real win:
+linear instead of quadratic,
+8x faster on the interpreter and 38x under AOT at only 5,000 elements.
+
+Not every loop converted.
+Eight functions in the system library still count by hand.
+
+`repeated` builds a list `n` long and has nothing to walk.
+
+```datalove
+// A list of n clones of one element.
+fun repeated<T>(ref elem: T, n: index): [T]
+  var built: [T] = []
+  call list_reserve(mut built, n)
+  var i: index = : index / 0
+  loop while i .< n
+    call push(mut built, elem@)
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+```
+
+`take` and `skip` walk part of a list,
+which `for` can't do without some kind of slice.
+
+```datalove
+// The first n elements, or all of them if there are fewer.
+fun take<T>(ref self: [T], n: index): [T]
+  var built: [T] = []
+  var i: index = : index / 0
+  loop while i .< n
+    if get(ref self, i) |elem|
+      call push(mut built, elem)
+    else
+      break
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret built
+end fun
+```
 
 
-<!--
+Some jump around
+(the merge in `sorted`, `binary_search`),
+which no cursor will help with.
+`zip` walks two lists in lockstep,
+which would need two cursors in one loop header.
 
-don't expect much problems here.
-maybe number of loop conversions that were able to remove the explicit variable.
-some perf numbers for the set walk
-cases where there's still wrapping addition related to loops or the for loop wasn't sufficient.
-maybe show whether cranelift can lift the bounds check without the for loop.
-open qs: reverse, zip, etc, by-value iters
+And some are directly about holding first-class references.
+`is_sorted` and `deduped` compare each element to the one before it,
+and the obvious way to write that is to hang on to a reference to the previous element
+across iterations.
 
--->
+```datalove
+fun is_sorted<T>(ref self: [T]): bool where { T is ord }
+  var ordered = true
+  let n = list_len(ref self)
+  var i: index = : index / 1
+  loop while i .< n
+    let i_prev = icall sub_wrapping_index(i, : index / 1)
+    if greater_at(ref self, i_prev, i) |out_of_order|
+      if out_of_order
+        set ordered = false
+        break
+      end if
+    end if
+    set i = icall add_wrapping_index(i, : index / 1)
+  end loop
+  ret ordered
+end fun
+```
+
+Datalove can't, so they keep an index
+and read both elements back out of the list by position.
+`least` and `greatest` did convert,
+but they have the same problem in a different shape:
+they can't hold on to the best element seen so far,
+so they hold its index and re-index the list on every comparison:
+
+```datalove
+fun least<T>(ref self: [T]): ?T where { T is ord }
+  var best: index = : index / 0
+  for i, item in ref self
+    if less(ref item, ref self[best]?)
+      set best = i
+    end if
+  end for
+  ret some self[best]?@
+end fun
+```
+
+So the special-cased `for` that counts the index
+provides a workaround here for not having references.
+A pleasant consolation.
