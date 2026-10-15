@@ -27,7 +27,7 @@ pub use crate::{
 
 use datalove_datafun_common::{can_clone_coerce_to, convert_type_hint_with_aliases};
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 /// Where a script unit reads the bindings the units before it left behind.
 ///
@@ -108,10 +108,13 @@ pub struct TypeContext<'db> {
     /// the unit binds itself is recorded as well, because the alternative is
     /// tracking which binding a lookup found through every site that writes one
     /// -- and `statement.rs` writes pattern bindings straight into `variables`,
-    /// and scopes save and restore the whole map. Over-reporting costs a
-    /// dependency that resolves to no provider; under-reporting would keep a
-    /// stale type. See `botdocs/plan-script-reactivity.md`.
-    asked_names: RefCell<BTreeSet<InternedText<'db>>>,
+    /// and scopes undo bindings wholesale. Over-reporting costs a dependency
+    /// that resolves to no provider; under-reporting would keep a stale type.
+    /// See `botdocs/plan-script-reactivity.md`.
+    ///
+    /// None outside a script unit, which is the only reader: recording every
+    /// lookup of a module's typecheck cost a percent of a compile.
+    asked_names: Option<RefCell<rustc_hash::FxHashSet<InternedText<'db>>>>,
     /// The bound each of the enclosing function's type parameters carries.
     ///
     /// A bare parameter is absent here and nothing may be done to a value of
@@ -212,7 +215,7 @@ impl<'db> TypeContext<'db> {
             variables: Default::default(),
             scope_undo: Vec::new(),
             functions: Default::default(),
-            asked_names: RefCell::new(BTreeSet::new()),
+            asked_names: None,
             function_asts: Default::default(),
             type_aliases: HashMap::new(),
             type_param_bounds: HashMap::new(),
@@ -1091,7 +1094,14 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Record that something asked about `name`, found or not.
     fn note_asked(&self, name: InternedText<'db>) {
-        self.asked_names.borrow_mut().insert(name);
+        if let Some(asked) = &self.asked_names {
+            asked.borrow_mut().insert(name);
+        }
+    }
+
+    /// Record every name asked about, for a script unit; see `asked_names`.
+    pub(crate) fn record_asked_names(&mut self) {
+        self.asked_names = Some(RefCell::default());
     }
 
     /// What the earlier script units left behind under `name`.
@@ -1118,7 +1128,8 @@ replace the view rather than the elements it shows. Index down to single element
     /// `InternedText` iterates by salsa id; sorting by text is what keeps it the
     /// same between runs. See the determinism section of salsa-patterns.md.
     pub fn asked_names(&self) -> Vec<InternedText<'db>> {
-        let mut names: Vec<InternedText<'db>> = self.asked_names.borrow().iter().copied().collect();
+        let asked = self.asked_names.as_ref().expect("a script unit records what it asks");
+        let mut names: Vec<InternedText<'db>> = asked.borrow().iter().copied().collect();
         names.sort_by(|a, b| a.as_str(self.db).cmp(b.as_str(self.db)));
         names
     }

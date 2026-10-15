@@ -284,6 +284,7 @@ pub fn typecheck_script_unit<'db>(
     let unit_spec = unit_ast(db, script.unit(db));
     let mut ctx = TypeContext::with_options(db, unit_spec.spans.clone(), None, auto_adapt_mode);
     ctx.data_files = env.data(db).C();
+    ctx.record_asked_names();
 
     // The environment the earlier units left is read on a lookup miss rather
     // than seeded into the context, which is the whole of stage B.
