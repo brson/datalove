@@ -13,7 +13,8 @@ impl Op {
             | Op::CmpI32 { .. } | Op::CmpU64 { .. } | Op::CmpI64 { .. } | Op::AddWrapU32 { .. }
             | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. } | Op::ShrU32 { .. }
             | Op::ShlU32 { .. } | Op::AndU32 { .. } | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::MulWrapIndex { .. } | Op::ShrIndex { .. }
-            | Op::U64ToIndex { .. } | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. }
+            | Op::U64ToIndex { .. } | Op::IndexToU64 { .. } | Op::U64ToU32 { .. }
+            | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. }
             | Op::NotBool { .. } | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. }
             | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. }
             | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. }
@@ -36,6 +37,8 @@ impl Op {
             | Op::MulCkU32I { .. } | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. }
             | Op::ListSetCopy { .. } | Op::ListStoreAt { .. } | Op::ListElementRef { .. }
             | Op::ListElementRefRt { .. } | Op::CloneRt { .. }
+            | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. } | Op::WrapErrRt { .. }
+            | Op::UnwrapOptionRt { .. } | Op::UnwrapResultRt { .. } | Op::ErrorFromRt { .. }
             | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
             | Op::WidenFixedRt { .. } | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. } | Op::Drop { .. } | Op::DropTracked { .. }
@@ -56,7 +59,9 @@ impl Op {
             | Op::EdgeIr { .. } | Op::ReturnUnit | Op::ReturnIr { .. }
             | Op::ListElementRefRt { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. } | Op::BinOpRt { .. }
-            | Op::OpAssignRt { .. } => {}
+            | Op::OpAssignRt { .. } | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. }
+            | Op::WrapErrRt { .. } | Op::ErrorFromRt { .. } => {}
+            Op::UnwrapOptionRt { flag, .. } | Op::UnwrapResultRt { flag, .. } => f(flag, 1),
             Op::CkAssign { ty, place, b, ovf, .. } => { f(place, ty.size()); f(b, ty.size()); f(ovf, 1) }
             Op::CkAssignU32I { place, ovf, .. } => { f(place, 4); f(ovf, 1) }
             Op::CopyDyn { dst, src, desc } => { f(dst, 8); f(src, 8); f(desc, 8) }
@@ -99,6 +104,8 @@ impl Op {
             }
             Op::ShrIndex { dst, a, b } => { f(dst, I); f(a, I); f(b, 4) }
             Op::U64ToIndex { dst, src } => { f(dst, I); f(src, 8) }
+            Op::IndexToU64 { dst, src } => { f(dst, 8); f(src, I) }
+            Op::U64ToU32 { dst, src } => { f(dst, 4); f(src, 8) }
             Op::ZextU8U32 { dst, src } => { f(dst, 4); f(src, 1) }
             Op::ZextU8U64 { dst, src } => { f(dst, 8); f(src, 1) }
             Op::ZextU32U64 { dst, src } => { f(dst, 8); f(src, 4) }
@@ -201,13 +208,15 @@ impl Op {
             | Op::AddWrapU32 { .. } | Op::SubWrapU32 { .. } | Op::MulWrapU32 { .. } | Op::RemU32 { .. }
             | Op::ShrU32 { .. } | Op::ShlU32 { .. } | Op::AndU32 { .. }
             | Op::AddWrapIndex { .. } | Op::SubWrapIndex { .. } | Op::MulWrapIndex { .. } | Op::ShrIndex { .. } | Op::U64ToIndex { .. }
-            | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
+            | Op::IndexToU64 { .. } | Op::U64ToU32 { .. } | Op::ZextU8U32 { .. } | Op::ZextU8U64 { .. } | Op::ZextU32U64 { .. } | Op::NotBool { .. }
             | Op::XorU32 { .. } | Op::OrU32 { .. } | Op::CmpF32 { .. } | Op::CmpF64 { .. } | Op::AddF64 { .. } | Op::SubF64 { .. } | Op::MulF64 { .. } | Op::DivF64 { .. } | Op::AddF32 { .. } | Op::SubF32 { .. } | Op::MulF32 { .. } | Op::DivF32 { .. } | Op::NegF64 { .. } | Op::NegF32 { .. } | Op::SqrtF64 { .. } | Op::SqrtF32 { .. } | Op::U64ToF64 { .. } | Op::I64ToF64 { .. } | Op::F32ToF64 { .. } | Op::F64ToF32 { .. }
             | Op::ListBoundsCheck { .. } | Op::ListGetCopy { .. } | Op::ListSetCopy { .. }
             | Op::ListCopyAt { .. } | Op::ListStoreAt { .. }
             | Op::ListElementRef { .. } | Op::ListElementRefRt { .. }
             | Op::CursorDone { .. } | Op::CursorElem { .. } | Op::CursorValue { .. } | Op::CursorAdvance { .. }
             | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
+            | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. } | Op::WrapErrRt { .. }
+            | Op::UnwrapOptionRt { .. } | Op::UnwrapResultRt { .. } | Op::ErrorFromRt { .. }
             | Op::WrapSome { .. } | Op::WrapNone { .. } | Op::WrapOk { .. }
             | Op::UnwrapOption { .. } | Op::UnwrapResult { .. }
             | Op::Drop { .. } | Op::DropTracked { .. } | Op::StoreTracked { .. } | Op::LoadMoveTracked { .. }

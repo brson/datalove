@@ -294,6 +294,8 @@ impl IrInterpreter {
                         wr(base, dst, rd::<rtdt::IndexRepr>(base, a).wrapping_shr(rd::<u32>(base, b)))
                     }
                     Op::U64ToIndex { dst, src } => wr(base, dst, rd::<u64>(base, src) as rtdt::IndexRepr),
+                    Op::IndexToU64 { dst, src } => wr(base, dst, rd::<rtdt::IndexRepr>(base, src) as u64),
+                    Op::U64ToU32 { dst, src } => wr(base, dst, rd::<u64>(base, src) as u32),
                     Op::ZextU8U32 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u32),
                     Op::ZextU8U64 { dst, src } => wr(base, dst, rd::<u8>(base, src) as u64),
                     Op::ZextU32U64 { dst, src } => wr(base, dst, rd::<u32>(base, src) as u64),
@@ -448,7 +450,9 @@ impl IrInterpreter {
                     }
                     Op::ConstString { .. } | Op::ListElementRefRt { .. }
                     | Op::CloneRt { .. } | Op::WidenFixedRt { .. }
-                    | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. } | Op::MapGetRt { .. } => {
+                    | Op::Widen { .. } | Op::BinOpRt { .. } | Op::OpAssignRt { .. } | Op::MapGetRt { .. }
+                    | Op::WrapSomeRt { .. } | Op::WrapNoneRt { .. } | Op::WrapOkRt { .. } | Op::WrapErrRt { .. }
+                    | Op::UnwrapOptionRt { .. } | Op::UnwrapResultRt { .. } | Op::ErrorFromRt { .. } => {
                         self.run_routine_op(*ops.add(pc), bc, &mut regs.frame, base)
                     }
                     Op::CkAssign { ty, kind, place, b, ovf } => wr(base, ovf, ck_assign(base, ty, kind, place, b)),
@@ -743,6 +747,37 @@ impl IrInterpreter {
                     let [p, r, _] = bc.rt[at as usize];
                     let (place, rhs) = (rt_value(frame, base, p), rt_value(frame, base, r));
                     self.execute_op_assign(op, &place, &rhs);
+                }
+                Op::WrapSomeRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_wrap_some(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::WrapNoneRt { at } => {
+                    let [d, _, _] = bc.rt[at as usize];
+                    self.execute_wrap_none(rt_dest(frame, base, d));
+                }
+                Op::WrapOkRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_wrap_ok(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::WrapErrRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_wrap_err(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::ErrorFromRt { at } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    self.execute_error_from(&rt_value(frame, base, s), rt_dest(frame, base, d));
+                }
+                Op::UnwrapOptionRt { at, flag } => {
+                    let [d, s, _] = bc.rt[at as usize];
+                    let flag = Destination { ptr: flag.at(base), tydesc: std::ptr::null() };
+                    self.execute_unwrap_option(&rt_value(frame, base, s), rt_dest(frame, base, d), flag);
+                }
+                Op::UnwrapResultRt { at, flag } => {
+                    let [ok, err, s] = bc.rt[at as usize];
+                    let flag = Destination { ptr: flag.at(base), tydesc: std::ptr::null() };
+                    self.execute_unwrap_result(
+                        &rt_value(frame, base, s), rt_dest(frame, base, ok), rt_dest(frame, base, err), flag);
                 }
                 op => unreachable!("{:?} is not a routine op", op),
             }

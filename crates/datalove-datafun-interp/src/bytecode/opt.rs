@@ -368,7 +368,8 @@ fn single_result(op: &mut Op) -> Option<&mut Loc> {
         | Op::CmpI64 { dst, .. } | Op::AddWrapU32 { dst, .. } | Op::SubWrapU32 { dst, .. }
         | Op::MulWrapU32 { dst, .. } | Op::RemU32 { dst, .. } | Op::ShrU32 { dst, .. }
         | Op::ShlU32 { dst, .. } | Op::AndU32 { dst, .. } | Op::AddWrapIndex { dst, .. }
-        | Op::SubWrapIndex { dst, .. } | Op::MulWrapIndex { dst, .. } | Op::ShrIndex { dst, .. } | Op::U64ToIndex { dst, .. } | Op::ZextU8U32 { dst, .. }
+        | Op::SubWrapIndex { dst, .. } | Op::MulWrapIndex { dst, .. } | Op::ShrIndex { dst, .. } | Op::U64ToIndex { dst, .. }
+        | Op::IndexToU64 { dst, .. } | Op::U64ToU32 { dst, .. } | Op::ZextU8U32 { dst, .. }
         | Op::ZextU8U64 { dst, .. } | Op::ZextU32U64 { dst, .. } | Op::NotBool { dst, .. }
         | Op::ListCopyAt { dst, .. } | Op::XorU32 { dst, .. } | Op::OrU32 { dst, .. }
         | Op::CmpF32 { dst, .. } | Op::CmpF64 { dst, .. } | Op::AddF64 { dst, .. }

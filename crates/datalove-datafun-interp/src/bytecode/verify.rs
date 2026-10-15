@@ -46,7 +46,10 @@ impl BcFunction {
                 }
                 Op::ListElementRefRt { at: i, .. }
                 | Op::CloneRt { at: i } | Op::WidenFixedRt { at: i } | Op::BinOpRt { at: i, .. }
-                | Op::OpAssignRt { at: i, .. } | Op::MapGetRt { at: i, .. } => {
+                | Op::OpAssignRt { at: i, .. } | Op::MapGetRt { at: i, .. }
+                | Op::WrapSomeRt { at: i } | Op::WrapNoneRt { at: i } | Op::WrapOkRt { at: i }
+                | Op::WrapErrRt { at: i } | Op::UnwrapOptionRt { at: i, .. }
+                | Op::UnwrapResultRt { at: i, .. } | Op::ErrorFromRt { at: i } => {
                     in_table(i, self.rt.len(), "routine operands");
                     // Unused entries of a triple are padding, with no descriptor.
                     for (loc, desc) in self.rt[i as usize] {

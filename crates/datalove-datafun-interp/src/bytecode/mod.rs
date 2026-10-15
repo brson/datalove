@@ -314,6 +314,8 @@ pub(crate) enum Op {
     /// index's width as the other engines do.
     ShrIndex { dst: Loc, a: Loc, b: Loc },
     U64ToIndex { dst: Loc, src: Loc },
+    IndexToU64 { dst: Loc, src: Loc },
+    U64ToU32 { dst: Loc, src: Loc },
     ZextU8U32 { dst: Loc, src: Loc },
     ZextU8U64 { dst: Loc, src: Loc },
     ZextU32U64 { dst: Loc, src: Loc },
@@ -377,6 +379,19 @@ pub(crate) enum Op {
     /// destination and the source.
     CloneRt { at: u32 },
     WidenFixedRt { at: u32 },
+    /// Option and result tags and payloads where the descriptors say where
+    /// the payload is, as in a generic: `rt[at]` holds the destination and
+    /// the source, and an unwrap's flag is at `flag`. `UnwrapResultRt` holds
+    /// the `Ok` destination, the `Err` destination and the source.
+    WrapSomeRt { at: u32 },
+    WrapNoneRt { at: u32 },
+    WrapOkRt { at: u32 },
+    WrapErrRt { at: u32 },
+    UnwrapOptionRt { at: u32, flag: Loc },
+    UnwrapResultRt { at: u32, flag: Loc },
+    /// An `Error` made from a value, on the IR walker's routine: `rt[at]`
+    /// holds the destination and the source.
+    ErrorFromRt { at: u32 },
 
     /// Option and result tags, and payloads at a fixed offset.
     WrapSome { dst: Loc, src: Loc, at: u32, len: u32 },

@@ -278,9 +278,15 @@ impl<'a> Lowering<'a> {
                     Instruction::ListBoundsCheck { .. } | Instruction::ListElementRef { .. }
                     | Instruction::CursorDone { .. } | Instruction::CursorElem { .. }
                     | Instruction::CursorValue { .. } | Instruction::CursorAdvance { .. });
-                if let Some(op) = self.lower_dynamic_move(instr) {
+                let lowered = if let Some(op) = self.lower_dynamic_move(instr) {
                     self.emit(op);
-                } else if (!through && self.touches_dynamic(instr)) || !self.lower_instruction(instr) {
+                    true
+                } else if !through && self.touches_dynamic(instr) {
+                    self.lower_rt(instr)
+                } else {
+                    self.lower_instruction(instr)
+                };
+                if !lowered {
                     self.escape(b, i);
                 }
             }
@@ -574,14 +580,8 @@ impl<'a> Lowering<'a> {
                 self.emit(Op::ListElementRefRt { dest: dest.0, at });
                 true
             }
-            // The source is borrowed.
-            Instruction::Clone { dest, src } => {
-                let (Some(d), Some(s)) = (self.rt_operand(&Operand::Value(*dest)), self.rt_operand(src)) else {
-                    return false;
-                };
-                let at = self.rt_push(&[d, s]);
-                self.emit(Op::CloneRt { at });
-                true
+            Instruction::Clone { .. } | Instruction::WrapErr { .. } | Instruction::ErrorFrom { .. } => {
+                self.lower_rt(instr)
             }
             Instruction::WidenFixed { dest, src } => {
                 let (Some(from), Some(to), Some(s)) = (self.typed(src), self.value_type(*dest), self.loc(src)) else {
@@ -889,6 +889,61 @@ impl<'a> Lowering<'a> {
         }
     }
 
+    /// Lower an instruction to an op that hands its operands to the IR
+    /// walker's routine, resolved at lowering or, for a dynamic type, at run
+    /// time; the routine reads where the payload is from the descriptors.
+    ///
+    /// A source an instruction consumes has to be left behind or consumed
+    /// without a record of it, as in `lower_rt_unary`.
+    fn lower_rt(&mut self, instr: &Instruction) -> bool {
+        let value = |id: &ValueId| Operand::Value(*id);
+        match instr {
+            // The source is borrowed.
+            Instruction::Clone { dest, src } => {
+                let (Some(d), Some(s)) = (self.rt_operand(&value(dest)), self.rt_operand(src)) else {
+                    return false;
+                };
+                let at = self.rt_push(&[d, s]);
+                self.emit(Op::CloneRt { at });
+                true
+            }
+            Instruction::WrapSome { dest, inner } => self.lower_rt_unary(*dest, inner, |at| Op::WrapSomeRt { at }),
+            Instruction::WrapOk { dest, inner } => self.lower_rt_unary(*dest, inner, |at| Op::WrapOkRt { at }),
+            Instruction::WrapErr { dest, inner } => self.lower_rt_unary(*dest, inner, |at| Op::WrapErrRt { at }),
+            Instruction::ErrorFrom { dest, inner } => self.lower_rt_unary(*dest, inner, |at| Op::ErrorFromRt { at }),
+            Instruction::WrapNone { dest } => {
+                let Some(d) = self.rt_operand(&value(dest)) else { return false };
+                let at = self.rt_push(&[d]);
+                self.emit(Op::WrapNoneRt { at });
+                true
+            }
+            Instruction::UnwrapOption { dest, is_some, src } => {
+                if !self.is_copy(src) && self.consumed(src).is_none() {
+                    return false;
+                }
+                let (Some(d), Some(s)) = (self.rt_operand(&value(dest)), self.rt_operand(src)) else {
+                    return false;
+                };
+                let at = self.rt_push(&[d, s]);
+                self.emit(Op::UnwrapOptionRt { at, flag: self.value_loc(*is_some) });
+                true
+            }
+            Instruction::UnwrapResult { ok_dest, err_dest, is_ok, src } => {
+                if !self.is_copy(src) && self.consumed(src).is_none() {
+                    return false;
+                }
+                let (Some(ok), Some(err), Some(s)) =
+                    (self.rt_operand(&value(ok_dest)), self.rt_operand(&value(err_dest)), self.rt_operand(src)) else {
+                    return false;
+                };
+                let at = self.rt_push(&[ok, err, s]);
+                self.emit(Op::UnwrapResultRt { at, flag: self.value_loc(*is_ok) });
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn lower_const(&mut self, dest: ValueId, value: &ConstValue) -> bool {
         let dst = self.value_loc(dest);
         let bytes: Vec<u8> = match value {
@@ -1083,6 +1138,8 @@ impl<'a> Lowering<'a> {
             let dst = self.value_loc(dest);
             let op = match intrinsic {
                 IntrinsicId::U64ToIndex => Op::U64ToIndex { dst, src },
+                IntrinsicId::IndexToU64 => Op::IndexToU64 { dst, src },
+                IntrinsicId::U64ToU32 => Op::U64ToU32 { dst, src },
                 IntrinsicId::SqrtF64 => Op::SqrtF64 { dst, src },
                 IntrinsicId::SqrtF32 => Op::SqrtF32 { dst, src },
                 IntrinsicId::U64ToF64 => Op::U64ToF64 { dst, src },

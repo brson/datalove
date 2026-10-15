@@ -500,7 +500,9 @@ value take the same route.
 **What is lowered** is most of what function bodies do: constants, copies and
 moves, slot and parameter stores and loads, tracked or not, drops and clones,
 typed integer and float arithmetic and comparisons, option and result wrapping
-and unwrapping, packing and field reads, list bounds checks, element reads,
+and unwrapping (in a generic too, where `rt_operand` resolves the places and
+descriptors at run time and the IR walker's routine does the work), error
+construction, packing and field reads, list bounds checks, element reads,
 stores and references (copy elements without the runtime), map reads, the
 `data` operations of generic code, the hot intrinsics, branches, switches,
 returns and calls. `lower.rs` is the list; `DATALOVE_BC_STATS` reports which
@@ -587,9 +589,11 @@ two and a half times CPython's 945ms, where it was four.
   flags, since the bytecode keeps none for values and untracked slots. The IR
   walker remains the checked engine; the bytecode is checked against it by the
   differential suites.
-- Collection construction, unpacking, error construction and the rarer
-  collection and string operations are still IR walker instructions, reached
-  through `execute_hot` and `execute_warm`. None is hot in the benchmarks.
+- Collection construction, unpacking, starting a walk, moves and drops of a
+  tracked slot of a dynamic type, and the rarer collection and string
+  operations are still IR walker instructions, reached through `execute_hot`
+  and `execute_warm`. None is hot in the benchmarks: in benchvs, none runs more
+  than about ten thousand times a run.
 - Ops are 24 bytes rather than 16, which has not been measured as worth
   changing. (A call between bytecode bodies no longer recurses on the Rust
   stack; see [plan-frame-stack.md](plan-frame-stack.md).)
