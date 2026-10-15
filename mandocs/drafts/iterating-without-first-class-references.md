@@ -435,20 +435,19 @@ fun repeated<T>(ref elem: T, n: index): [T]
 end fun
 ```
 
-`take` and `skip` walk part of a list.
+`skip` walks the tail part of a list.
 An indexed `for` with a `break` or `continue` could do it,
-but what they really want is a slice.
+but what it really wants is a slice.
 
 ```datalove
-// The first n elements, or all of them if there are fewer.
-fun take<T>(ref self: [T], n: index): [T]
+// Everything after the first n elements.
+fun skip<T>(ref self: [T], n: index): [T]
   var built: [T] = []
-  var i: index = : index / 0
-  loop while i .< n
+  let total = len(ref self)
+  var i: index = n
+  loop while i .< total
     if get(ref self, i) |elem|
       call push(mut built, elem)
-    else
-      break
     end if
     set i = icall add_wrapping_index(i, : index / 1)
   end loop
