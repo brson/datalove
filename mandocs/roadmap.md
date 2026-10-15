@@ -49,13 +49,14 @@ Focus on ergonomic scripting experience and the REPL.
 - for loops
 - reactive scripts
 - repl ux
-- generics overhaul
+- parser overhaul
 
 
 
 
 ## On deck
 
+- generics specialization
 - recursive types
 - saturating and wrapping math ops
 - generic benchmarking
