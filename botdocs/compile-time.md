@@ -59,9 +59,10 @@ Shares of a run, inclusive, after the fixes below:
 An empty script takes 3.7ms and 767 page faults; the library is everything
 above that.
 
-Parsing has no hot spot; see [Parsing](#user-content-parsing). Typecheck and ownership analysis keep their
+Parsing has no hot spot; see [Parsing](#user-content-parsing). Typecheck and ownership analysis kept their
 per-expression tables in `BTreeMap`s keyed by `ExprKey`, and inserting into
-those is the largest item in each.
+those was the largest item in each. They are dense vectors per function now
+(`BodyTable`); see [plan-plain-ast.md](plan-plain-ast.md).
 
 ## Page faults
 
@@ -157,8 +158,6 @@ the rest of the allocation being the AST's own.
 - Huge pages, above: the largest single item, and a decision about the
   allocator.
 - Parsing: no single fix; see [Parsing](#user-content-parsing).
-- The analysis tables: dense per-function indices instead of `BTreeMap`s keyed
-  by `ExprKey`, if their hashing and ordering requirements allow.
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,
   since `LowerCtx` owns it; borrowing it would save the copy.
 - Lowering on demand, which would skip most of 5a and 5d; see

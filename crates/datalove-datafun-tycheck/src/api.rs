@@ -674,14 +674,14 @@ pub fn typecheck_module<'db>(
     SingleModuleTypecheckResult::new(
         db,
         module_id,
-        ctx.errors.C(),
-        ctx.pending_diagnostics.C(),
+        ctx.errors,
+        ctx.pending_diagnostics,
         exports,
         type_aliases,
         imports,
-        ctx.expr_types.C(),
-        ctx.call_targets.C(),
-        ctx.resolved_data.C(),
+        ctx.expr_types,
+        ctx.call_targets,
+        ctx.resolved_data,
     )
 }
 

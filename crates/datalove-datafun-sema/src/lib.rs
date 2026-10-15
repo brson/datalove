@@ -13,21 +13,84 @@ use bct::text::InternedText;
 use datalove_datafun_ast::ast::{Binding, FunHead, Statement, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
-/// Types of expressions, keyed by the expression's identity.
+/// Types of expressions, by expression.
 ///
-/// This used to be a `Vec` indexed by the raw salsa id, which sizes it by
+/// This used to be a `Vec` indexed by the raw salsa id, which sized it by
 /// however many ids the database had handed out rather than by how many
-/// expressions there are: measured at 1416 slots for 8 of them, and growing
-/// with every module added. Keying it also lets two tables with the same
-/// contents compare equal, which they could not when their length depended on
-/// where the id counter happened to stand.
-pub type ExprTypes<'db> = BTreeMap<ExprKey<'db>, datalove_datafun_common::Type<'db>>;
+/// expressions there are, and then a `BTreeMap` keyed by `ExprKey`, whose
+/// inserts and lookups were the largest single item in typechecking and a
+/// percent of lowering. An expression's key is now its body and its place in
+/// that body's arena, so the table is one dense vector per body.
+pub type ExprTypes<'db> = BodyTable<'db, datalove_datafun_common::Type<'db>>;
 
-/// Resolved call targets, keyed by the call's identity.
+/// Resolved call targets, by call.
 ///
 /// Calls are numbered separately from other expressions, so a key from one
 /// of these tables means nothing against the other.
-pub type CallTargets<'db> = BTreeMap<ExprKey<'db>, ResolvedCallTarget<'db>>;
+pub type CallTargets<'db> = BodyTable<'db, ResolvedCallTarget<'db>>;
+
+/// A value for some of the expressions, or calls, of a module or a script unit,
+/// in a vector per body indexed by `local_index`.
+///
+/// Every key in one table names the same module, and the bodies are in the
+/// order they were first written to, which is the order they were checked, so
+/// two tables with the same contents compare equal.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct BodyTable<'db, T> {
+    /// The module every key names, once one has been inserted.
+    module_id: Option<Option<ModuleId<'db>>>,
+    bodies: Vec<(Option<InternedText<'db>>, Vec<Option<T>>)>,
+}
+
+impl<'db, T> Default for BodyTable<'db, T> {
+    fn default() -> Self {
+        BodyTable { module_id: None, bodies: Vec::new() }
+    }
+}
+
+impl<'db, T> BodyTable<'db, T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(&mut self, key: ExprKey<'db>, value: T) {
+        let module_id = *self.module_id.get_or_insert(key.module_id);
+        assert_eq!(module_id, key.module_id, "one table holds one module's expressions");
+        let at = match self.bodies.iter().position(|(name, _)| *name == key.fn_name) {
+            Some(at) => at,
+            None => {
+                self.bodies.push((key.fn_name, Vec::new()));
+                self.bodies.len() - 1
+            }
+        };
+        let body = &mut self.bodies[at].1;
+        let index = key.local_index as usize;
+        if body.len() <= index {
+            body.resize_with(index + 1, || None);
+        }
+        body[index] = Some(value);
+    }
+
+    pub fn get(&self, key: &ExprKey<'db>) -> Option<&T> {
+        if self.module_id != Some(key.module_id) {
+            return None;
+        }
+        self.bodies.iter()
+            .find(|(name, _)| *name == key.fn_name)
+            .and_then(|(_, body)| body.get(key.local_index as usize))
+            .and_then(Option::as_ref)
+    }
+
+    /// How many expressions have a value.
+    pub fn len(&self) -> usize {
+        self.bodies.iter().map(|(_, body)| body.iter().filter(|v| v.is_some()).count()).sum()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
 
 // ============================================================================
 // Resolved call target

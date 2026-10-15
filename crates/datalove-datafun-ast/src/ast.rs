@@ -16,9 +16,8 @@ use datalove_datalit as datalit;
 /// between salsa releases, so neither side of a lookup could rely on one
 /// staying put.
 ///
-/// The module has to be part of it. Within one module a function name and an
-/// index identify an expression, but the type table is merged across a whole
-/// graph, and every module numbers its expressions from zero.
+/// The module is part of it because every module numbers its expressions from
+/// zero, and a key turns up in diagnostics outside the module's own tables.
 #[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprKey<'db> {

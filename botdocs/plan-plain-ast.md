@@ -323,6 +323,21 @@ means giving the script-side queries that take it
 their key instead, and the borrows of a `ParsedStatements` held by value
 somewhere other than a memo then live only as long as that copy.
 
+**Phase 4, so far.** `ResolvedCallTarget` became a plain value in the
+call-target table: 151.39M to 150.63M instructions. Then `ExprTypes` and
+`CallTargets` became `BodyTable`s, a dense vector per body indexed by
+`local_index`, in place of `BTreeMap`s keyed by `ExprKey`; nothing iterated
+them, so `get` and `insert` kept their signatures and no reader changed. With
+the typechecker moving its tables into its result rather than cloning them,
+and the intrinsic-target table nobody read gone, the `sys/std` compile went
+to 145.56M (page faults 3,709 to 3,653). On `recompile_profile` at 512
+modules, an edit went from 24.6M instructions to 24.1M and the cold compile
+from 4.62G to 4.34G, peak memory from 215MB to 202MB.
+
+A `BodyTable` finds a body by a linear search of its bodies, about 40 in a
+module; the lookups that remain are 1--2% of a compile, so caching the current
+body beside the arena is the next step if they matter.
+
 ## Verifying each phase
 
 - **Parse snapshots**, against a baseline written before the phase: identical,

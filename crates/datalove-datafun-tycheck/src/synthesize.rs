@@ -1255,7 +1255,7 @@ fn synthesize_intrinsic_call<'db>(
     }
 
     // Look up intrinsic by name.
-    let (intrinsic_id, intrinsic_def) = lookup_intrinsic(name_str)
+    let (_, intrinsic_def) = lookup_intrinsic(name_str)
         .ok_or_else(|| ctx.error_cannot_synthesize(expr, &format!("unknown intrinsic: {}", name_str)))?;
 
     // Check arity.
@@ -1280,9 +1280,6 @@ fn synthesize_intrinsic_call<'db>(
             ));
         }
     }
-
-    // Store the resolved intrinsic ID for lowering.
-    ctx.store_intrinsic_target(expr, intrinsic_id);
 
     // Return the intrinsic's return type.
     Ok(intrinsic_type_to_datafun(db, intrinsic_def.ret))
