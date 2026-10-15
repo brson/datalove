@@ -1,5 +1,5 @@
 ---
-title: "`for` loops without first-class references"
+title: "Iterating collections without first-class references"
 category: design
 summary: "Language-integrated iteration over collections faces compromises when you don't have reference types"
 ---
