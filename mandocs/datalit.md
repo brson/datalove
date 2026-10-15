@@ -99,6 +99,9 @@ with two exceptions:
 newlines separate table rows,
 and spaces separate the elements of a tensor row.
 A newline is `\n`; a `\r` before it is ordinary whitespace.
+A `;` is a line break written on the line:
+it is a newline everywhere,
+separating table rows and otherwise insignificant.
 
 Comments are either `//` to end of line,
 or `/* ... */`, which nest.
@@ -142,9 +145,9 @@ from `[| 1 - 2 |]`, an error.
 ### EBNF · Lexical
 
 ```ebnf
-ws             = { whitespace | comment } ;
+ws             = { whitespace | newline | comment } ;
 whitespace     = ? any Unicode whitespace character ? ;
-newline        = "\n" ;
+newline        = "\n" | ";" ;
 comment        = line_comment | block_comment ;
 line_comment   = "//", { ? any char except newline ? } ;
 block_comment  = "/*", { block_comment | ? any char ? }, "*/" ;
@@ -545,14 +548,13 @@ Each data row must have exactly as many values as there are columns.
 A table with no rows is written with just its header row,
 and the table with no columns, of type `{| |}`, is written `{| |}`.
 
-A semicolon is written to go between two rows,
-so one with nothing before it is an error,
-as is a comma with no column before it:
-`{| x, y;; 1, 2 |}` and `{| x,, y |}` do not parse.
-A newline is not written to separate anything in particular,
-so blank lines are free.
-A semicolon or comma at the very end
-closes the row or value before it and is fine.
+A semicolon is a newline,
+so a run of them is blank lines, which are free:
+`{| x, y;; 1, 2; |}` is a table with one row.
+A comma with no column before it is an error:
+`{| x,, y |}` does not parse.
+A comma at the end of a row
+closes the value before it and is fine.
 
 
 ### Tensor
@@ -657,8 +659,7 @@ map_expr       = "%{", ws, [ entry_list ], ws, "}" ;
 set_expr       = "#{", ws, [ expr_list ], ws, "}" ;
 table_expr     = "{|", tbl_ws,
                  [ table_header,
-                   { ws, row_sep, tbl_ws, table_row },
-                   [ ws, ";" ] ],
+                   { ws, newline, tbl_ws, table_row } ],
                  tbl_ws, "|}" ;
 tensor_expr    = "[|", ws, [ tensor_header ], [ tensor_body ], ws, "|]" ;
 tensor_header  = extent, { ws, extent }, ws, "|", ws ;
@@ -670,7 +671,6 @@ entry          = full_expr, ws, "=", ws, full_expr ;
 
 table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;
-row_sep        = ";" | newline ;
 tbl_ws         = { ws | newline } ;
 
 tensor_body    = tensor_row, { ws, comma_run, ws, tensor_row } ;
@@ -679,7 +679,7 @@ comma_run      = ",", { ws, "," } ;
 ```
 
 Within a table, outside any brackets nested in it,
-`ws` does not include newlines, which are `row_sep`;
+`ws` does not include newlines, which separate rows;
 a newline inside a block comment is not one.
 Some rules for these forms cannot be expressed in EBNF:
 
@@ -1219,7 +1219,6 @@ but the payloads of its `data` and `error` values.
   once at the root, or on each part that needs one.
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?
-- Why are semicolons special inside tables?
 - Should grouping parens actually be allowed? Are they needed?
 - Should structs require identical field order?
 - Need to think harder about float total order and ergonomics.
