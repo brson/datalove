@@ -1510,17 +1510,10 @@ not just receive them.
 
 ### Inference
 
-Type parameters are always inferred.
+Type parameters are always inferred through unification of
+the arguments and expected return type.
 There is no syntax for the caller to name them.
-A type parameter is worked out from all the arguments together,
-and from what the call's result is expected to be,
-the way a list's elements are typed together:
-an argument with a definite type decides it,
-and literals, and arguments like `none` that say nothing about it,
-go along with that.
 Two arguments that decide it differently are a mismatch.
-In the example above `none` says nothing about its payload,
-so `T` is decided by `"other"`.
 
 ```datalove
 fun unwrap_or<T>(opt: ?T, default: T): T

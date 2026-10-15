@@ -1046,8 +1046,6 @@ The order of the elements doesn't matter.
 
 A map's keys go along with each other, and so do its values,
 and so do the elements of each table column.
-The same rule types the operands of a Datalove operator
-and the arguments of a generic function.
 
 
 
@@ -1098,10 +1096,11 @@ Enum variant names order by UTF-8 byte.
 Datalove Literals has no canonical serialized form
 as might be used for consistent hashing.
 There is no canonical form for floats.
+Will be revisited.
+
 A printed value needs a type hint
 where its type is not the one its literals default to,
 and on an empty collection that nothing around it types.
-Will be revisited.
 
 
 
