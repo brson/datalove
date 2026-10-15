@@ -289,12 +289,25 @@ pub struct StrideCursor {
 
 #[repr(C)]
 pub struct TreeCursor {
-    pub leaf: *const u8,     // The current leaf; null is done.
-    pub elem: *const u8,     // The current key; a set's element.
-    pub value: *const u8,    // A map's current value; null for a set.
-    pub slot: u32,           // The current key's slot within the leaf.
+    pub leaf: *const u8,       // The current leaf; null is done.
+    pub elem: *const u8,       // The current key; a set's element.
+    pub value: *const u8,      // A map's current value; null for a set.
+    pub elem_stride: usize,    // Bytes from one key to the next.
+    pub value_stride: usize,   // Bytes from one value to the next.
+    pub slot: u32,             // The current key's slot within the leaf.
+    pub leaf_len: u32,         // How many keys the current leaf holds.
+    pub next_leaf_offset: u32, // Where a leaf keeps its next pointer.
+    pub keys_offset: u32,      // Where a leaf's keys start.
+    pub values_offset: u32,    // Where a leaf's values start.
 }
 ```
+
+The tree cursor carries a lot more than its position.
+Starting a walk reads the collection and its type descriptor,
+and puts everything the rest of the walk needs into the cursor:
+the strides, and where a leaf keeps its keys, its values,
+and its pointer to the next leaf.
+After that, advancing reads only the cursor.
 
 These are part of a public ABI that the compiler knows directly,
 so it's convenient to share them rather than give each collection its own type.
@@ -332,15 +345,9 @@ fn dtlv_rti_btreemap_cursor_begin_local(
     map_tydesc: *const TyDesc,
     cursor_out: *mut TreeCursor,
 ) -> RtStatus;
-fn dtlv_rti_btreeset_cursor_advance_local(
+fn dtlv_rti_tree_cursor_advance_local(
     rt: LocalRtHandle,
     cursor_mut: *mut TreeCursor,
-    set_tydesc: *const TyDesc,
-) -> RtStatus;
-fn dtlv_rti_btreemap_cursor_advance_local(
-    rt: LocalRtHandle,
-    cursor_mut: *mut TreeCursor,
-    map_tydesc: *const TyDesc,
 ) -> RtStatus;
 ```
 
@@ -366,11 +373,12 @@ which is why the loop body can't mutate `self`.
 
 I love this for the compiler.
 Every backend knows exactly what a cursor looks like,
-so each can open-code the hot parts.
-The done check, the element read, and a strided advance
-are just loads and adds against the struct.
-A tree cursor moves along its leaf inline
-and calls the runtime only to cross to the next leaf.
+so each can open-code the hot parts
+by doing exactly what the runtime's `advance` does.
+The done check, the element read, and every advance
+are just loads and adds against the struct,
+plus a pointer chase when a tree cursor reaches the end of a leaf.
+Only `begin` is a call, once per loop.
 For hypothetical users, though, it's tough luck.
 They can't write an iterator,
 and only the collections the compiler knows about can be walked.
