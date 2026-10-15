@@ -13,7 +13,7 @@ a loop induction variable of type [`index`](../datafun.md#user-content-collectio
 incrementing it with wrapping math,
 and indexing into the collection on each iteration to access the element.
 This is a problem of missing basic language features.
-A simple solution is relatively straightforword
+A simple solution is relatively straightforward
 but is slightly complexified by the limitations of Datalove's simple type system.
 
 - [The situation with loops in Datalove](#user-content-the-situation-with-loops-in-datalove)
@@ -27,7 +27,7 @@ but is slightly complexified by the limitations of Datalove's simple type system
 
 ## The situation with loops in Datalove
 
-Here's how it has been done prior to this work in `list.contains`:
+Here's how `ord.contains` did it before this work:
 
 ```datalove
 fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
@@ -62,7 +62,7 @@ The indexing hazard gets _much worse_ when we look at how sets and maps are iter
 Here's `set.is_subset_of`:
 
 ```datalove
-fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord, }
+fun is_subset_of<T>(ref self: #{T}, ref other: #{T}): bool where { T is ord }
   var all_present: bool = true
   let n = len(ref self)
   var i: index = : index / 0
@@ -89,7 +89,7 @@ So it's no longer just a bounds check and some pointer math per element.
 Reaching element `i` costs O(i),
 which makes a loop over the whole set O(n²).
 Maps are the same, through `map.key_at` and `map.value_at`.
-Those algorithmically-abhorrent accessor APIs are waiting on
+Those algorithmically abhorrent accessor APIs are waiting on
 some way to iterate over collections before they can be retired.
 
 The indexing is a performance hazard,
@@ -102,7 +102,7 @@ and the wrapping is impossible to hit and will be eliminated shortly.
 
 Both of these problems are solvable with language-level container iteration,
 like Python's `for x in xs` or Rust's `for x in &xs`.
-A simple design for this is obvious
+A simple design for this is obvious,
 so I'll go ahead and do it now!
 
 We have some constraints:
@@ -159,8 +159,8 @@ iteration consideration: maps, sets, tensors, and tables.
 
 Maps and sets are trees kept in the total order,
 so `for` walks them in that order.
-Sets bind a reference to the key,
-maps to both the key and value.
+Sets bind a reference to the element,
+maps to both the key and the value.
 
 ```datalove
 fun top_checksum(ref counts: %{string = u32}): !u32
@@ -191,7 +191,8 @@ but are generally extensions in the same solution space.
 
 Many of the collection iterations in the system library
 also make use of the loop induction variable for more than just indexing the collection
-once every time through the loop. Here the `list.index_of` function
+once every time through the loop.
+Here the `ord.index_of` function
 needs to hold onto that index and return it:
 
 ```datalove
@@ -212,8 +213,8 @@ end fun
 
 So it's not enough to just make collections iterable:
 unless I want to force users to keep their own index counter in sync with the collection index
-(which would mean they probably do the same wrapping math I want to avoid)
-then the iteration needs to provide the index value as well.
+(which would mean they probably do the same wrapping math I want to avoid),
+the iteration needs to provide the index value as well.
 
 Go and Zig and probably others do this with another form of `for` that adds another term to
 the loop header to represent the index. So I guess I'll do that too!
@@ -237,7 +238,7 @@ can do this and much more (what about reverse iteration? seems important...).
 I don't know if Datalove will grow an iterator protocol like Rust has.
 I don't know if Datalove will ever get first-class reference types that could be stored in an iterator struct.
 I don't intend Datalove to have a high level of expressivity in its language integration.
-So for now this is a compromise I have to make to make `for` loops useful in
+So for now this is a compromise I'll make so that `for` loops are useful in
 the most common case.
 
 Sets and maps won't support this form since they don't index by number.
@@ -247,25 +248,25 @@ Sets and maps won't support this form since they don't index by number.
 
 ## A protocol for iterating over collections
 
-Datalove's collection's data layouts and APIs are defined in the runtime,
+Datalove's collections' data layouts and APIs are defined in the runtime,
 callable by both the compiler's emitted code and native code linked to Datalove packages.
 So I need to have a clear ABI and API for iterating over collections.
 In practice most backends won't actually call the runtime collections API for every operation &mdash;
 iterating over a list by calling a native function at each step would be slow
 when the compiler can just bump a pointer itself.
 But I think having the API spelled out in the runtime makes it clear what the contract is,
-and I'll likely have the reference IR interpreter actually make those calls
+and the reference IR interpreter does actually make those calls
 for the fast backends to compare against.
 
 Between array-like collections
-(lists and and rank-1 tensors)
+(lists and rank-1 tensors)
 and tree-like collections
 (sets and maps)
 we have two
 fundamentally different methods of iteration:
 array-like collections want to just bump a pointer against their buffer according to some fixed stride;
 tree-like collections instead want to follow pointers between heap-allocated nodes.
-Rank-2+ tensors have some additional considerations not detailed here.
+Rank-2+ tensors walk row by row, with a third cursor type not detailed here.
 
 We can represent these styles of iteration with two cursor types:
 
@@ -287,8 +288,8 @@ pub struct TreeCursor {
 }
 ```
 
-Since these have to part of a public API and ABI that the compiler knows about directly
-its convenient to consolidate them instead of having a distinct type for each collection.
+Since these have to be part of a public API and ABI that the compiler knows about directly,
+it's convenient to consolidate them instead of having a distinct type for each collection.
 But we do need to give every collection type its own suite of functions,
 all part of the runtime API:
 
@@ -339,10 +340,10 @@ fn dtlv_rti_btreemap_cursor_advance_local(
 Lots of the detail here is related to Datalove runtime API conventions:
 every call gets a `LocalRtHandle` and returns an `RtStatus`,
 return values are in out-pointers,
-the term "local" refers to the class of heap.
+and the term "local" refers to the class of heap.
 Some of the functions are collection-specific;
 some are shared between cursor types.
-The general shape and use of the cursors is
+The general shape and use of the cursors is:
 
 - Call a collection-specific `begin` constructor.
 - Ask whether iteration is done by checking whether the `index`
@@ -377,7 +378,7 @@ to convert 25 `loop while` loops to `for` loops &mdash;
 7 in the "store demo" I use to prove features and performance,
 and 3 in the benchmarks &mdash;
 and eliminate all 25 of their explicit loop induction variables,
-along with 16 calls to `add_wrapping_index`.
+along with the wrapping increments that went with them.
 The demo loops were a special kind of ugly:
 having no way to walk a map,
 they built a list of its keys with `map.keys`
@@ -394,7 +395,7 @@ end for
 
 Performance is about what you'd hope.
 Summing a list of 100,000 `u32`s 200 times,
-and a set of 5,000 `u32`s 20 times
+and a set of 5,000 elements 20 times
 (release build, `hyperfine` means):
 
 | | interp | JIT | AOT |
@@ -433,8 +434,9 @@ fun repeated<T>(ref elem: T, n: index): [T]
 end fun
 ```
 
-`take` and `skip` walk part of a list,
-which `for` can't do without some kind of slice.
+`take` and `skip` walk part of a list.
+An indexed `for` with a `break` or `continue` could do it,
+but what they really want is some kind of slice.
 
 ```datalove
 // The first n elements, or all of them if there are fewer.
