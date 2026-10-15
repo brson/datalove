@@ -3,7 +3,7 @@
 //! Handles list, set, map, tensor, and table construction.
 //! All runtime calls are infallible.
 
-use datalove_datafun_ir::Operand;
+use datalove_datafun_ir::{CursorKind, Operand};
 use datalove_rtdt as rtdt;
 use datalove_rtdt::TyDescRef;
 
@@ -259,5 +259,39 @@ impl IrInterpreter {
                 );
             }
         }
+    }
+}
+
+/// Whether a walk is over: no elements remaining, or no leaf.
+pub(crate) unsafe fn cursor_done(kind: CursorKind, at: *const u8) -> bool {
+    unsafe {
+        match kind {
+            CursorKind::Stride => (*(at as *const rtdt::StrideCursor)).remaining == rtdt::Index::ZERO,
+            CursorKind::Row => (*(at as *const rtdt::RowCursor)).remaining == rtdt::Index::ZERO,
+            CursorKind::Tree => (*(at as *const rtdt::TreeCursor)).leaf.is_null(),
+        }
+    }
+}
+
+/// A reference to the current element: the cursor's pointer, or for a row,
+/// the view inside the cursor.
+pub(crate) unsafe fn cursor_elem(kind: CursorKind, at: *const u8) -> *const u8 {
+    unsafe {
+        debug_assert!(!cursor_done(kind, at), "reading a cursor that is done");
+        match kind {
+            CursorKind::Stride => (*(at as *const rtdt::StrideCursor)).elem,
+            CursorKind::Row => &raw const (*(at as *const rtdt::RowCursor)).view as *const u8,
+            CursorKind::Tree => (*(at as *const rtdt::TreeCursor)).elem,
+        }
+    }
+}
+
+/// A reference to a map's current value.
+pub(crate) unsafe fn cursor_value(at: *const u8) -> *const u8 {
+    unsafe {
+        debug_assert!(!cursor_done(CursorKind::Tree, at), "reading a cursor that is done");
+        let value = (*(at as *const rtdt::TreeCursor)).value;
+        debug_assert!(!value.is_null(), "reading the value of a set cursor");
+        value
     }
 }

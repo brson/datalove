@@ -1233,28 +1233,6 @@ pub unsafe fn dtlv_rti_tensor_cursor_begin_local(rt: LocalRtHandle, tensor_ref: 
     unsafe { (crate::table(rt).dtlv_rti_tensor_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
 }
 
-/// Calls [`RtiTable::dtlv_rti_stride_cursor_done_local`](crate::table::RtiTable::dtlv_rti_stride_cursor_done_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_stride_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const rtdt::StrideCursor, done_out: *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_stride_cursor_done_local)(rt, cursor_ref, done_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_stride_cursor_elem_local`](crate::table::RtiTable::dtlv_rti_stride_cursor_elem_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_stride_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const rtdt::StrideCursor, elem_out: *mut *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_stride_cursor_elem_local)(rt, cursor_ref, elem_out) }
-}
-
 /// Calls [`RtiTable::dtlv_rti_stride_cursor_advance_local`](crate::table::RtiTable::dtlv_rti_stride_cursor_advance_local).
 ///
 /// # Safety
@@ -1275,28 +1253,6 @@ pub unsafe fn dtlv_rti_stride_cursor_advance_local(rt: LocalRtHandle, cursor_mut
 #[inline]
 pub unsafe fn dtlv_rti_tensor_row_cursor_begin_local(rt: LocalRtHandle, tensor_ref: *const u8, tensor_tydesc: *const rtdt::TyDesc, cursor_out: *mut rtdt::RowCursor) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_tensor_row_cursor_begin_local)(rt, tensor_ref, tensor_tydesc, cursor_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_row_cursor_done_local`](crate::table::RtiTable::dtlv_rti_row_cursor_done_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_row_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const rtdt::RowCursor, done_out: *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_row_cursor_done_local)(rt, cursor_ref, done_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_row_cursor_elem_local`](crate::table::RtiTable::dtlv_rti_row_cursor_elem_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_row_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const rtdt::RowCursor, elem_out: *mut *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_row_cursor_elem_local)(rt, cursor_ref, elem_out) }
 }
 
 /// Calls [`RtiTable::dtlv_rti_row_cursor_advance_local`](crate::table::RtiTable::dtlv_rti_row_cursor_advance_local).
@@ -1352,37 +1308,4 @@ pub unsafe fn dtlv_rti_btreeset_cursor_advance_local(rt: LocalRtHandle, cursor_m
 #[inline]
 pub unsafe fn dtlv_rti_btreemap_cursor_advance_local(rt: LocalRtHandle, cursor_mut: *mut rtdt::TreeCursor, map_tydesc: *const rtdt::TyDesc) -> RtStatus {
     unsafe { (crate::table(rt).dtlv_rti_btreemap_cursor_advance_local)(rt, cursor_mut, map_tydesc) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_tree_cursor_done_local`](crate::table::RtiTable::dtlv_rti_tree_cursor_done_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_tree_cursor_done_local(rt: LocalRtHandle, cursor_ref: *const rtdt::TreeCursor, done_out: *mut u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_tree_cursor_done_local)(rt, cursor_ref, done_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_tree_cursor_elem_local`](crate::table::RtiTable::dtlv_rti_tree_cursor_elem_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_tree_cursor_elem_local(rt: LocalRtHandle, cursor_ref: *const rtdt::TreeCursor, elem_out: *mut *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_tree_cursor_elem_local)(rt, cursor_ref, elem_out) }
-}
-
-/// Calls [`RtiTable::dtlv_rti_tree_cursor_value_local`](crate::table::RtiTable::dtlv_rti_tree_cursor_value_local).
-///
-/// # Safety
-///
-/// `rt` must be a handle the runtime gave out, and the remaining
-/// arguments must be what that function requires.
-#[inline]
-pub unsafe fn dtlv_rti_tree_cursor_value_local(rt: LocalRtHandle, cursor_ref: *const rtdt::TreeCursor, value_out: *mut *const u8) -> RtStatus {
-    unsafe { (crate::table(rt).dtlv_rti_tree_cursor_value_local)(rt, cursor_ref, value_out) }
 }

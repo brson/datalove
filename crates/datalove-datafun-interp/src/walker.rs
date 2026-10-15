@@ -652,9 +652,8 @@ impl IrInterpreter {
                     }
                 }
             }
-            // A cursor is walked through the runtime's protocol and nothing
-            // else: the interpreter is where that protocol is the whole story,
-            // with no part of it open-coded.
+            // A cursor begins and advances through the runtime's functions,
+            // with no part of them open-coded.
             Instruction::CursorBegin { cursor, coll } => {
                 let coll_val = self.read_operand(coll, frame, frames);
                 let out = frame.slot_dest(*cursor).ptr;
@@ -678,44 +677,25 @@ impl IrInterpreter {
                 debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "starting a cursor cannot fail");
                 frame.mark_slot_live(*cursor);
             }
-            // Done, elem and value write their answer straight into the
-            // destination, the out parameter being where the value goes.
+            // Done, elem and value read the cursor's own fields, which begin
+            // and advance keep current.
             Instruction::CursorDone { dest, cursor } => {
                 let at = frame.slot(*cursor).ptr;
                 let out = frame.value_dest(*dest).ptr;
-                let rt = self.runtime.handle();
-                let status = unsafe {
-                    match frame.cursor_kind(*cursor) {
-                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_done_local(rt, at as *const rtdt::StrideCursor, out),
-                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_done_local(rt, at as *const rtdt::RowCursor, out),
-                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_done_local(rt, at as *const rtdt::TreeCursor, out),
-                    }
-                };
-                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "asking whether a cursor is done cannot fail");
+                unsafe { *out = crate::collections::cursor_done(frame.cursor_kind(*cursor), at) as u8 };
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorElem { dest, cursor } => {
                 let at = frame.slot(*cursor).ptr;
                 let out = frame.value_dest(*dest).ptr as *mut *const u8;
-                let rt = self.runtime.handle();
-                let status = unsafe {
-                    match frame.cursor_kind(*cursor) {
-                        CursorKind::Stride => datalove_rt::c::dtlv_rti_stride_cursor_elem_local(rt, at as *const rtdt::StrideCursor, out),
-                        CursorKind::Row => datalove_rt::c::dtlv_rti_row_cursor_elem_local(rt, at as *const rtdt::RowCursor, out),
-                        CursorKind::Tree => datalove_rt::c::dtlv_rti_tree_cursor_elem_local(rt, at as *const rtdt::TreeCursor, out),
-                    }
-                };
-                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
+                unsafe { *out = crate::collections::cursor_elem(frame.cursor_kind(*cursor), at) };
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorValue { dest, cursor } => {
                 debug_assert_eq!(frame.cursor_kind(*cursor), CursorKind::Tree, "only a map's cursor has values");
                 let at = frame.slot(*cursor).ptr;
                 let out = frame.value_dest(*dest).ptr as *mut *const u8;
-                let status = unsafe {
-                    datalove_rt::c::dtlv_rti_tree_cursor_value_local(self.runtime.handle(), at as *const rtdt::TreeCursor, out)
-                };
-                debug_assert_eq!(status, datalove_rt::c::RtStatus::Ok, "reading a cursor cannot fail");
+                unsafe { *out = crate::collections::cursor_value(at) };
                 frame.mark_value_live(*dest);
             }
             Instruction::CursorAdvance { cursor, coll } => {

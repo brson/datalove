@@ -3317,9 +3317,10 @@ impl<'a> FunctionCodegenContext<'a> {
         }
     }
 
-    // A cursor's operations are the runtime's protocol, `dtlv_rti_*_cursor_*`.
-    // Most are open-coded on the runtime's layouts, read off the `rtdt`
-    // structs, and keep the runtime's meanings field for field. What stays a
+    // A cursor begins and advances through the runtime's protocol,
+    // `dtlv_rti_*_cursor_*`, and is read through its `rtdt` fields. Most of
+    // the protocol is open-coded on those layouts too, keeping the runtime's
+    // meanings field for field. What stays a
     // call is starting a walk over a tensor or a tree, once a walk, and a
     // tree's advance from one leaf to the next.
 

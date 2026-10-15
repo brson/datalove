@@ -724,12 +724,14 @@ pub struct SliceRange {
 
 // ## Cursors
 //
-// A `for` loop walks a collection with a cursor: begin, then done, elem and
-// advance until done. Each is plain data owning nothing, and holds pointers
-// into the collection's storage, which the language keeps frozen for the walk.
-// The runtime's `*_cursor_*` functions are the whole protocol; compiled code
-// may open-code them, but only on these layouts and with these meanings, since
-// a cursor the interpreter built can be continued by compiled code.
+// A `for` loop walks a collection with a cursor: begin, then advance until
+// done. Each is plain data owning nothing, and holds pointers into the
+// collection's storage, which the language keeps frozen for the walk. The
+// runtime's `*_cursor_*` functions begin and advance a walk; whether it is
+// done and its current element are read off these fields directly. Compiled
+// code may open-code begin and advance too, but only on these layouts and with
+// these meanings, since a cursor the interpreter built can be continued by
+// compiled code.
 
 /// A walk over a list or a rank-1 tensor.
 ///

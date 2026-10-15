@@ -473,6 +473,12 @@ What the plan says, with these differences:
   open-codes nothing.
 - **Begin over a tensor or a tree stays a call** in the compiled backends; it
   runs once a walk.
+- **Done, elem and value are not runtime functions.** They were exported at
+  first, but each only read a field that begin and advance had already
+  written. The runtime now exports only begin and advance, the functions
+  with the walk's logic, nine in all; every engine, the interpreter
+  included, reads done, the element and a map's value straight off the
+  `rtdt` cursor fields. The IR instructions remain.
 - **Errors.** P078 (a `for` header that does not parse), P079 (no `ref`),
   F087 (a temporary, a value that is not a collection, or the wrong number of
   names for it), D015 (changing the collection being walked).

@@ -1,12 +1,13 @@
 //! Cursors: walking a collection one element at a time.
 //!
-//! The protocol is begin, then done, elem and advance until done. Lists and
-//! rank-1 tensors walk with a `StrideCursor`, tensors of higher rank with a
-//! `RowCursor`, and sets and maps with a `TreeCursor`, whose begin and advance
-//! live with the trees in `set` and `btreemap`.
+//! The protocol is begin, then advance until done. Lists and rank-1 tensors
+//! walk with a `StrideCursor`, tensors of higher rank with a `RowCursor`, and
+//! sets and maps with a `TreeCursor`, whose begin and advance live with the
+//! trees in `set` and `btreemap`. Whether a walk is done and its current
+//! element are the cursor's own fields, read by the caller.
 
 use datalove_rtdt as rtdt;
-use datalove_rtdt::{RowCursor, StrideCursor, Tensor, TreeCursor, TyDescRef};
+use datalove_rtdt::{RowCursor, StrideCursor, Tensor, TyDescRef};
 
 /// Starts a walk over a list at its first element.
 pub unsafe fn list_cursor_begin_impl(
@@ -39,19 +40,6 @@ pub unsafe fn tensor_cursor_begin_impl(
             stride: ((*tensor.strides).0 as usize).wrapping_mul(size),
             remaining: *tensor.shape,
         });
-    }
-}
-
-/// Whether a walk with a stride cursor is over.
-pub unsafe fn stride_cursor_done_impl(cursor_ref: *const StrideCursor) -> bool {
-    unsafe { (*cursor_ref).remaining == rtdt::Index::ZERO }
-}
-
-/// The current element of a walk with a stride cursor.
-pub unsafe fn stride_cursor_elem_impl(cursor_ref: *const StrideCursor) -> *const u8 {
-    unsafe {
-        debug_assert!(!stride_cursor_done_impl(cursor_ref), "reading a stride cursor that is done");
-        (*cursor_ref).elem
     }
 }
 
@@ -90,19 +78,6 @@ pub unsafe fn tensor_row_cursor_begin_impl(
     }
 }
 
-/// Whether a walk with a row cursor is over.
-pub unsafe fn row_cursor_done_impl(cursor_ref: *const RowCursor) -> bool {
-    unsafe { (*cursor_ref).remaining == rtdt::Index::ZERO }
-}
-
-/// The current row of a walk with a row cursor: the view inside the cursor.
-pub unsafe fn row_cursor_elem_impl(cursor_ref: *const RowCursor) -> *const u8 {
-    unsafe {
-        debug_assert!(!row_cursor_done_impl(cursor_ref), "reading a row cursor that is done");
-        &raw const (*cursor_ref).view as *const u8
-    }
-}
-
 /// Moves a walk with a row cursor to the next row, or to done after the last.
 pub unsafe fn row_cursor_advance_impl(cursor_mut: *mut RowCursor) {
     unsafe {
@@ -110,27 +85,5 @@ pub unsafe fn row_cursor_advance_impl(cursor_mut: *mut RowCursor) {
         debug_assert!(cursor.remaining != rtdt::Index::ZERO, "advancing a row cursor that is done");
         cursor.view.offset_elems = rtdt::Index(cursor.view.offset_elems.0.wrapping_add(cursor.stride.0));
         cursor.remaining -= rtdt::Index::ONE;
-    }
-}
-
-/// Whether a walk with a tree cursor is over.
-pub unsafe fn tree_cursor_done_impl(cursor_ref: *const TreeCursor) -> bool {
-    unsafe { (*cursor_ref).leaf.is_null() }
-}
-
-/// The current key of a walk with a tree cursor; a set's element.
-pub unsafe fn tree_cursor_elem_impl(cursor_ref: *const TreeCursor) -> *const u8 {
-    unsafe {
-        debug_assert!(!tree_cursor_done_impl(cursor_ref), "reading a tree cursor that is done");
-        (*cursor_ref).elem
-    }
-}
-
-/// The current value of a walk over a map with a tree cursor.
-pub unsafe fn tree_cursor_value_impl(cursor_ref: *const TreeCursor) -> *const u8 {
-    unsafe {
-        debug_assert!(!tree_cursor_done_impl(cursor_ref), "reading a tree cursor that is done");
-        debug_assert!(!(*cursor_ref).value.is_null(), "reading the value of a set cursor");
-        (*cursor_ref).value
     }
 }

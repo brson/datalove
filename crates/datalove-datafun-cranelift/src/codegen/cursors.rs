@@ -1,9 +1,10 @@
 //! Cursors: a `for` loop's walk over a collection.
 //!
-//! The runtime's `dtlv_rti_*_cursor_*` functions are the whole protocol, and
-//! the interpreter runs exactly them. Here most of it is open-coded on the
-//! runtime's own layouts, read off the `rtdt` structs, and keeps the runtime's
-//! meanings field for field: OSR continues in compiled code a walk the
+//! The runtime's `dtlv_rti_*_cursor_*` functions begin and advance a walk, and
+//! the interpreter runs exactly them; whether it is done and its current
+//! element are the cursor's fields. Here most of the protocol is open-coded on
+//! the runtime's own layouts, read off the `rtdt` structs, and keeps the
+//! runtime's meanings field for field: OSR continues in compiled code a walk the
 //! interpreter began. What stays a call is starting a walk over a tensor or a
 //! tree, once a walk, and a tree's advance from one leaf to the next, once
 //! every few elements.
