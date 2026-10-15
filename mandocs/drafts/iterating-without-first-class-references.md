@@ -116,8 +116,6 @@ But working within limits is fun, so let's have fun.
 
 
 
-<!-- the thesis -->
-
 ## A simple design for `for` loops
 
 I want to write `contains` like this:
@@ -180,8 +178,6 @@ but they mostly extend the same design.
 
 
 
-
-<!-- but ... -->
 
 ## Getting at that loop induction variable
 
