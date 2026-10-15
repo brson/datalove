@@ -86,7 +86,16 @@ the variable set. Neither is done.
 
 ## Parsing
 
-Parsing is about a quarter of the run, some 250 instructions per byte of
+Parsing on its own is counted by the `parse_only` example in `datalove-bench`,
+which parses every `sys/std` module on a fresh database and nothing else. In
+October 2026 it was 43.0M instructions a pass (218 a byte, 1,204 page faults)
+before expressions moved into arenas and 34.7M (176 a byte, 1,070 faults)
+after; see [plan-plain-ast.md](plan-plain-ast.md). That is still a fifth of a
+compile, because the rest got cheaper too, and still several times what a
+direct hand-written parser needs.
+
+What follows was written before the parser rewrite. Parsing was about a
+quarter of the run, some 250 instructions per byte of
 source, where a direct hand-written parser needs tens. Measured by
 instructions, top down: statement parsing 18% of the run, the lexer 4.8%
 before the fix below, splitting the top level into lines 3.8%, the non-ASCII
