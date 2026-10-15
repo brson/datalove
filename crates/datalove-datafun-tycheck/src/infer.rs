@@ -17,7 +17,6 @@
 //! comes after, is what reports what is wrong.
 
 use rmx::prelude::*;
-use rmx::std::collections::HashMap;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit as datalit;
@@ -33,9 +32,9 @@ use crate::types::*;
 pub struct Inference<'db> {
     pub(crate) uni: Unifier<'db>,
     /// What each expression inferred so far was inferred to be.
-    types: HashMap<ExprKey<'db>, PType<'db>>,
+    types: datalove_datafun_sema::BodyTable<'db, PType<'db>>,
     /// The variable standing for each type parameter of a generic call.
-    call_params: HashMap<ExprKey<'db>, Vec<(InternedText<'db>, PType<'db>)>>,
+    call_params: datalove_datafun_sema::BodyTable<'db, Vec<(InternedText<'db>, PType<'db>)>>,
     /// The expressions that leave a type open, by the index their variables
     /// carry as their origin.
     open_exprs: Vec<ExprFun<'db>>,
@@ -45,8 +44,8 @@ impl<'db> Inference<'db> {
     pub fn new(db: &'db dyn crate::Db) -> Self {
         Inference {
             uni: Unifier::new(db),
-            types: HashMap::new(),
-            call_params: HashMap::new(),
+            types: Default::default(),
+            call_params: Default::default(),
             open_exprs: Vec::new(),
         }
     }
@@ -63,8 +62,7 @@ pub enum Undecided<'db> {
 
 /// The type inferred for an expression, inferring it now if nothing has yet.
 pub fn infer<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db> {
-    let key = expr.key();
-    if let Some(ty) = ctx.inference.types.get(&key) {
+    if let Some(ty) = ctx.inference.types.get(expr) {
         return ty.clone();
     }
     // Inference reads names and hints the way checking does, and the lookups
@@ -119,8 +117,7 @@ pub fn call_type_args<'db>(
     call_expr: ExprFun<'db>,
 ) -> Vec<(InternedText<'db>, Result<DT<'db>, Undecided<'db>>)> {
     infer(ctx, call_expr);
-    let key = call_expr.key();
-    let params = ctx.inference.call_params.get(&key).cloned().unwrap_or_default();
+    let params = ctx.inference.call_params.get(call_expr).cloned().unwrap_or_default();
     params.into_iter()
         .map(|(name, var)| {
             let resolved = resolve_ptype(ctx, &var).map(|ty| match ty {
@@ -159,7 +156,7 @@ fn infer_expr<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>) -> PType<'db>
         },
         None => infer_unhinted(ctx, expr),
     };
-    ctx.inference.types.insert(expr.key(), ty.clone());
+    ctx.inference.types.insert(expr, ty.clone());
     ty
 }
 
@@ -386,7 +383,7 @@ fn infer_call<'db>(ctx: &mut TypeContext<'db>, expr: ExprFun<'db>, call: &ExprFu
         Type::Datalit(ret) => instantiate(&ret, &params),
         Type::Function(_) => unknown(ctx),
     };
-    ctx.inference.call_params.insert(expr.key(), params);
+    ctx.inference.call_params.insert(expr, params);
     ret
 }
 
