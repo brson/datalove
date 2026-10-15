@@ -286,6 +286,125 @@ impl StmtKey {
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BindingId(pub u32);
 
+/// A value for some of a body's bindings, by `BindingId`.
+///
+/// Binding ids are numbered from zero in each body, so this is a vector
+/// indexed by them. Iteration is in id order, as a `BTreeMap`'s was, which is
+/// the order drops are emitted in.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BindingMap<T> {
+    slots: Vec<Option<T>>,
+    len: usize,
+}
+
+impl<T> Default for BindingMap<T> {
+    fn default() -> Self {
+        BindingMap { slots: Vec::new(), len: 0 }
+    }
+}
+
+impl<T> BindingMap<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn get(&self, id: &BindingId) -> Option<&T> {
+        self.slots.get(id.0 as usize)?.as_ref()
+    }
+
+    pub fn get_mut(&mut self, id: &BindingId) -> Option<&mut T> {
+        self.slots.get_mut(id.0 as usize)?.as_mut()
+    }
+
+    pub fn contains_key(&self, id: &BindingId) -> bool {
+        self.get(id).is_some()
+    }
+
+    pub fn insert(&mut self, id: BindingId, value: T) -> Option<T> {
+        let index = id.0 as usize;
+        if self.slots.len() <= index {
+            self.slots.resize_with(index + 1, || None);
+        }
+        let old = self.slots[index].replace(value);
+        if old.is_none() {
+            self.len += 1;
+        }
+        old
+    }
+
+    pub fn remove(&mut self, id: &BindingId) -> Option<T> {
+        let old = self.slots.get_mut(id.0 as usize)?.take();
+        if old.is_some() {
+            self.len -= 1;
+        }
+        old
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// The entries, in id order.
+    pub fn iter(&self) -> impl Iterator<Item = (BindingId, &T)> + '_ {
+        self.slots.iter().enumerate()
+            .filter_map(|(i, v)| v.as_ref().map(|v| (BindingId(i as u32), v)))
+    }
+
+    pub fn keys(&self) -> impl Iterator<Item = BindingId> + '_ {
+        self.iter().map(|(id, _)| id)
+    }
+
+    pub fn values(&self) -> impl Iterator<Item = &T> + '_ {
+        self.slots.iter().filter_map(Option::as_ref)
+    }
+}
+
+impl<T> Extend<(BindingId, T)> for BindingMap<T> {
+    fn extend<I: IntoIterator<Item = (BindingId, T)>>(&mut self, iter: I) {
+        for (id, value) in iter {
+            self.insert(id, value);
+        }
+    }
+}
+
+impl<T> IntoIterator for BindingMap<T> {
+    type Item = (BindingId, T);
+    type IntoIter = std::iter::FilterMap<
+        std::iter::Enumerate<std::vec::IntoIter<Option<T>>>,
+        fn((usize, Option<T>)) -> Option<(BindingId, T)>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.slots.into_iter().enumerate()
+            .filter_map(|(i, v)| v.map(|v| (BindingId(i as u32), v)))
+    }
+}
+
+impl<'a, T> IntoIterator for &'a BindingMap<T> {
+    type Item = (BindingId, &'a T);
+    type IntoIter = std::iter::FilterMap<
+        std::iter::Enumerate<std::slice::Iter<'a, Option<T>>>,
+        fn((usize, &'a Option<T>)) -> Option<(BindingId, &'a T)>,
+    >;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.slots.iter().enumerate()
+            .filter_map(|(i, v)| v.as_ref().map(|v| (BindingId(i as u32), v)))
+    }
+}
+
+impl<T> FromIterator<(BindingId, T)> for BindingMap<T> {
+    fn from_iter<I: IntoIterator<Item = (BindingId, T)>>(iter: I) -> Self {
+        let mut map = BindingMap::new();
+        map.extend(iter);
+        map
+    }
+}
+
 /// Tracking category for a binding.
 ///
 /// Determines whether the binding needs runtime tracking for moves/drops.

@@ -39,7 +39,7 @@
 //! - At loop body end for iteration-scoped bindings
 
 use rmx::prelude::*;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use datalove_datafun_ast::ast::{
     Statement, StmtFun, FunKey, StmtLet, StmtVar, StmtSet, StmtRet, StmtIf, StmtLoop, StmtFor, StmtConst,
     StmtMatch, MatchCaseKind,
@@ -49,7 +49,7 @@ use datalove_datafun_ast::reachable::body_completes;
 use datalove_datafun_ast::ast::Binding;
 use datalove_datafun_ir::{CursorKind, IrType};
 use datalove_datafun_common::Type;
-use datalove_datafun_sema::Destructure;
+use datalove_datafun_sema::{BindingMap, Destructure};
 
 // Re-export types from sema for backward compatibility.
 pub use datalove_datafun_sema::{
@@ -161,10 +161,10 @@ enum Walked {
 /// is true afterwards along with every other exit.
 #[derive(Default)]
 struct LoopExits {
-    breaks: Vec<BTreeMap<BindingId, BindingState>>,
+    breaks: Vec<BindingMap<BindingState>>,
     /// Which out parameters each `break` left with a value, beside `breaks`.
-    break_inits: Vec<HashMap<BindingId, OutParamInitState>>,
-    continues: Vec<BTreeMap<BindingId, BindingState>>,
+    break_inits: Vec<BindingMap<OutParamInitState>>,
+    continues: Vec<BindingMap<BindingState>>,
 }
 
 /// A scope frame for tracking bindings.
@@ -187,15 +187,15 @@ struct ScopeFrame<'db> {
     ///
     /// Ordered, because `live_bindings_for_return` walks it to build the drop
     /// schedule, and the order drops are emitted in reaches the emitted code.
-    current_state: BTreeMap<BindingId, BindingState>,
+    current_state: BindingMap<BindingState>,
     /// Initialization state for Out params.
-    out_param_init: HashMap<BindingId, OutParamInitState>,
+    out_param_init: BindingMap<OutParamInitState>,
     /// Where each binding was moved, for error reporting.
-    moved_at: HashMap<BindingId, ExprKey<'db>>,
+    moved_at: BindingMap<ExprKey<'db>>,
     /// Where each binding was last given a value by `set`, for error reporting.
     ///
     /// Keyed by the assigned expression, which is what there is a span for.
-    assigned_at: HashMap<BindingId, ExprKey<'db>>,
+    assigned_at: BindingMap<ExprKey<'db>>,
 }
 
 /// How one branch of an `if` or `match` left the bindings that outlive it.
@@ -205,9 +205,9 @@ struct BranchEnd<'db> {
     /// Where to make it agree with the others, which is somewhere else when
     /// the branch is an `else` that was not written.
     fix_in: String,
-    state: BTreeMap<BindingId, BindingState>,
-    moved_at: HashMap<BindingId, ExprKey<'db>>,
-    assigned_at: HashMap<BindingId, ExprKey<'db>>,
+    state: BindingMap<BindingState>,
+    moved_at: BindingMap<ExprKey<'db>>,
+    assigned_at: BindingMap<ExprKey<'db>>,
 }
 
 /// Which names declared outside the analyzed body are consts.
@@ -692,7 +692,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
     /// Script top-level bindings are NOT included (they're exported, not dropped).
     fn live_bindings_for_return(&self) -> Vec<BindingId> {
         let mut result = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = vec![false; self.bindings.len()];
         for frame in self.scope_stack.iter().rev() {
             // For ScriptUnit, don't include its bindings (they're exported).
             // Just stop here without adding them.
@@ -703,7 +703,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             // Include bindings defined in this frame.
             for &id in &frame.bindings {
                 // Mark as seen first - inner scopes have the most up-to-date state.
-                if !seen.insert(id) {
+                if std::mem::replace(&mut seen[id.0 as usize], true) {
                     continue;
                 }
                 if frame.current_state.get(&id) == Some(&BindingState::Live) {
@@ -715,9 +715,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 }
             }
             // Also include bindings from parent scopes that are tracked here.
-            for (&id, &state) in &frame.current_state {
+            for (id, &state) in &frame.current_state {
                 // Mark as seen first - inner scopes have the most up-to-date state.
-                if !seen.insert(id) {
+                if std::mem::replace(&mut seen[id.0 as usize], true) {
                     continue;
                 }
                 if state == BindingState::Live {
@@ -2099,7 +2099,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
     };
 
     if let Some(frame) = ctx.scope_stack.last_mut() {
-        for (&id, &state) in state_after {
+        for (id, &state) in state_after {
             frame.current_state.insert(id, state);
         }
 
@@ -2120,7 +2120,7 @@ fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx:
         // returned. Every `ret` checks the out parameters it leaves through, so
         // a branch that returned had them all written, and converging against
         // it already gives the other branch's answer.
-        for (&id, &then_init) in &out_param_init_after_then {
+        for (id, &then_init) in &out_param_init_after_then {
             let else_init = out_param_init_after_else.get(&id).copied()
                 .unwrap_or(OutParamInitState::Uninitialized);
             // After convergence, use the "most restrictive" state: if either is
@@ -2149,7 +2149,7 @@ fn check_branches_agree<'db>(
     before: &BranchEnd<'db>,
     merging: &[&BranchEnd<'db>],
 ) {
-    for (&id, &state_before) in &before.state {
+    for (id, &state_before) in &before.state {
         if ctx.bindings[id.0 as usize].ty.is_copy() {
             continue;
         }
@@ -2297,7 +2297,7 @@ fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stm
         Some(arm_end) => {
             if let Some(frame) = ctx.scope_stack.last_mut() {
                 // The arm's own bindings ended with it.
-                for (&id, &state) in &arm_end.state {
+                for (id, &state) in &arm_end.state {
                     if !state_before.contains_key(&id) {
                         continue;
                     }
@@ -2411,13 +2411,13 @@ struct LoopEntry {
     /// The state the loop is entered with, which is also the state it is left
     /// with when it ends before its body runs, since nothing that changed a
     /// binding here survives the repeat check.
-    state_before: BTreeMap<BindingId, BindingState>,
+    state_before: BindingMap<BindingState>,
     /// Outer-scope non-copy bindings live on entry. If one is moved in the
     /// body, that's an error, because the body can run more than once.
     outer_live: Vec<BindingId>,
     /// Which out parameters have a value on entry, which is also which have
     /// one when the loop ends before its body runs.
-    inits_before: HashMap<BindingId, OutParamInitState>,
+    inits_before: BindingMap<OutParamInitState>,
 }
 
 impl LoopEntry {
@@ -2429,7 +2429,7 @@ impl LoopEntry {
             .filter(|(id, state)| {
                 **state == BindingState::Live && !ctx.bindings[id.0 as usize].ty.is_copy()
             })
-            .map(|(id, _)| *id)
+            .map(|(id, _)| id)
             .collect();
         let inits_before = ctx.scope_stack.last()
             .map(|frame| frame.out_param_init.C())
@@ -2511,7 +2511,7 @@ fn merge_loop_exits<'db>(
     adapted: &[BindingId],
 ) {
     let state_before = &entry.state_before;
-    let mut exit_states: Vec<&BTreeMap<BindingId, BindingState>> = exits.breaks.iter().collect();
+    let mut exit_states: Vec<&BindingMap<BindingState>> = exits.breaks.iter().collect();
     if can_run_out {
         exit_states.push(state_before);
     }
@@ -2524,18 +2524,18 @@ fn merge_loop_exits<'db>(
 
     // An out parameter has a value after the loop only if every way out left
     // it one: a body that may not run, or a `break` before the `set`, does not.
-    let mut exit_inits: Vec<&HashMap<BindingId, OutParamInitState>> = exits.break_inits.iter().collect();
+    let mut exit_inits: Vec<&BindingMap<OutParamInitState>> = exits.break_inits.iter().collect();
     if can_run_out {
         exit_inits.push(&entry.inits_before);
     }
-    for &id in entry.inits_before.keys() {
+    for id in entry.inits_before.keys() {
         let initialized = exit_inits.iter()
             .all(|inits| inits.get(&id) == Some(&OutParamInitState::Initialized));
         let state = if initialized { OutParamInitState::Initialized } else { OutParamInitState::Uninitialized };
         ctx.set_out_param_init(id, state);
     }
 
-    for &id in state_before.keys() {
+    for id in state_before.keys() {
         // A binding the repeat check cloned is live on every path by
         // construction, the move it disagreed about having gone away.
         if adapted.contains(&id) || ctx.bindings[id.0 as usize].ty.is_copy() {
