@@ -1098,9 +1098,69 @@ as might be used for consistent hashing.
 There is no canonical form for floats.
 Will be revisited.
 
-A printed value needs a type hint
-where its type is not the one its literals default to,
-and on an empty collection that nothing around it types.
+
+### Required type hints
+
+Written with no expected type,
+an expression has the type its literals default to,
+with parts that must agree [typed together](#user-content-typing-together).
+A value of any other type needs type hints.
+
+A part of a value needs a hint,
+on itself or on anything containing it,
+in exactly these situations:
+
+1. An integer whose type is not `int`:
+   `u8` .. `u64`, `i8` .. `i64`, `index` or `offset`.
+2. A float whose type is `f32`.
+3. A float written as a hex bit pattern,
+   as a NaN or infinity must be:
+   a hex literal by itself is an `int`.
+4. An atom or term whose type is an enum.
+   By itself it has its own type, `atom A` or `term A T`.
+5. An enum literal, `enum { v }`.
+6. `none`, which says nothing of what the option holds,
+   and `er e`, which says nothing of what the result holds.
+7. An empty list, set, map or tensor,
+   and a table with columns and no rows.
+   The table with no columns, `{| |}`, needs none.
+
+Each of these is excused when something else decides its type.
+That is a part sharing its position,
+with a type that is not a literal's default:
+
+- the elements of one list, set or tensor share a position,
+  as do the keys of one map, the values of one map,
+  and the elements of one table column;
+- so do the corresponding parts inside them:
+  the payloads of `some` elements of one list,
+  the first elements of tuples in one list, and so on;
+- a part decides its position if it is hinted,
+  or if its type follows from its form alone,
+  as a string's, a `bool`'s, or a `data`'s does.
+  A numeric literal, an atom or a term decides nothing,
+  since its synthesized type is only a default.
+
+```datalove
+[1, 2]                         // [int]: no hint needed
+: [u8] / [1, 2]                // [u8]: one hint, on the list
+[1, : u8 / 2]                  // [u8]: one hint, on an element
+[none, some "a"]               // [?string]: the string decides
+[: enum { atom A, atom B } / atom A, atom B]
+                               // the first element decides the second
+[1.5, 0x7FF8000000000000]      // [f64]: the decimal float decides the NaN
+%{ 1 = none }                  // error: nothing decides what the option holds
+```
+
+The payload of `data` and of `error` is typed on its own,
+as a whole document is,
+so nothing outside it decides anything inside it:
+`: [data] / [data 1]` holds an `int`,
+and `data : u8 / 1` is how to hold a `u8`.
+
+A hint names exactly the type of what it is on.
+So a hint at the root of a value covers every part of it
+but the payloads of its `data` and `error` values.
 
 
 
@@ -1136,7 +1196,8 @@ and on an empty collection that nothing around it types.
   so they read back as `int` and `f64`.
   Round-tripping through the value printer is only exact
   for values whose types synthesize.
-- What are the rules for printing disambiguating type hints?
+- Where a printer should put the hints [required above](#user-content-required-type-hints):
+  once at the root, or on each part that needs one.
 - What are the rules for printing disambiguating floats, etc?
 - Should dupe map/set keys be an error?
 - Why are semicolons special inside tables?
