@@ -29,13 +29,13 @@ Focus on ergonomic scripting experience and the REPL.
 - [ ] UX
 - [ ] module and script compile reactivity
 - [ ] script interpreter reactivity
-- [ ] script unit undo/redo
+- [ ] repl error and abort semantics
 - [ ] assert statements
 - [ ] auto-adapt and other conveniences
 - [ ] rational numbers
 - [ ] monadic math ops
 - [ ] ?/! polymorphism
-- [ ] type sythesis for all literal forms
+- [ ] type synthesis for all literal forms
 - [ ] enum subtyping
 - [ ] filesystem workspaces
 - [ ] multiple concurrent interactive scripts
@@ -47,8 +47,6 @@ Focus on ergonomic scripting experience and the REPL.
 ## In progress
 
 - for loops
-- reactive scripts
-- repl ux
 - parser overhaul
 
 
@@ -56,11 +54,14 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## On deck
 
+- lazy lowering
+- lazy lowering of consts
+- parallel pipeline overhaul
+- repl ux and script reactivity
 - generics specialization
+- generic benchmarking
 - recursive types
 - saturating and wrapping math ops
-- generic benchmarking
-- generic specialization
 
 
 
