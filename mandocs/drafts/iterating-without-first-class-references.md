@@ -271,7 +271,8 @@ We can represent these styles of iteration with two cursor types:
 pub struct StrideCursor {
     pub elem: *const u8,     // The current element.
     pub stride: usize,       // Bytes from one element to the next.
-    pub remaining: Index,    // Elements from this one to the end; 0 is done.
+    pub index: Index,        // The current element's position; len is done.
+    pub len: Index,          // How many elements the walk visits.
 }
 
 #[repr(C)]
@@ -341,13 +342,14 @@ some are shared between cursor types.
 The general shape and use of the cursors is
 
 - Call a collection-specific `begin` constructor.
-- Ask whether iteration is done by checking the `remaining`
-  field of the `StrideCursor` for `0` or the `leaf` field
-  of the `TreeCursor` for null.  
+- Ask whether iteration is done by checking whether the `index`
+  field of the `StrideCursor` equals its `len`, or whether the `leaf` field
+  of the `TreeCursor` is null.
   The cursors own nothing so don't need to be destructed.
-- Call an `advance` function to move the cursor forward.
 - Read the element and/or value pointer off the cursor.
-- If needed get the iteration count todo
+- If needed, read the iteration count off the `StrideCursor`'s `index`,
+  so an indexed `for i, elem` needs no counter of its own.
+- Call an `advance` function to move the cursor forward.
 
 There are pros and cons of Datalove not having any capability to express abstractions such as iterators itself.
 Pro: we don't have to come up with a single abstraction facility that can express iteration over all types of collections;
