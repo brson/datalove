@@ -392,8 +392,8 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     .collect::<Vec<_>>()
                     .join(", ");
                 // Get type from the let statement's value expression.
-                let key = script.body(&db).arena.get(let_stmt.value).key();
-                if let Some(ty) = expr_types.get(&key) {
+                let value = script.body(&db).arena.get(let_stmt.value);
+                if let Some(ty) = expr_types.get(value) {
                     judgements.push(json!({
                         "kind": "variable",
                         "name": name,

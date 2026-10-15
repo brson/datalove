@@ -737,7 +737,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
 
     /// Get the type of an expression.
     fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
-        self.expr_types.get(&expr.key())
+        self.expr_types.get(expr)
             .map(|ty| self.ir_type(ty))
             .unwrap_or(IrType::Unit)
     }
@@ -991,7 +991,7 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                 // A const argument is not passed: specialization writes its
                 // value into the callee. So it is not a move, and the argument
                 // is the bare const name the typechecker required.
-                let target = self.call_targets.get(&ExprKey::of_call(expr, call))
+                let target = self.call_targets.get_call(expr, call)
                     .expect("ownership analysis runs only on a typechecked body, where every call is resolved");
                 let callee_comptime: Vec<bool> = target.func().params().iter()
                     .map(|p| p.is_comptime)

@@ -333,7 +333,7 @@ impl<'db> LowerCtx<'db> {
 
     pub fn expr_type(&self, expr: ExprFun<'db>) -> IrType {
         let key = expr.key();
-        match self.expr_types.get(&key) {
+        match self.expr_types.get(expr) {
             Some(datalove_datafun_common::Type::Datalit(dl)) => self.ir_type(dl),
             Some(ty) => IrType::from_tycheck(self.db, ty),
             None => panic!(
@@ -455,7 +455,7 @@ impl<'db> LowerCtx<'db> {
         let func_name = call.name.text(self.db).to_string();
 
         // Get the resolved call target from typechecking.
-        let target = self.call_targets.and_then(|t| t.get(&key))
+        let target = self.call_targets.and_then(|t| t.get_call(expr, call))
             .unwrap_or_else(|| panic!(
                 "function call not resolved by typechecker: {} ({:?})",
                 func_name, key

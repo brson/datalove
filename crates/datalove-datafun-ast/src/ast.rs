@@ -210,6 +210,11 @@ pub struct ExprArena<'db> {
     pub module_id: Option<ModuleId<'db>>,
     /// Function the body is, or None for the code outside any function.
     pub fn_name: Option<InternedText<'db>>,
+    /// Which body of its parse this is: 0 for the code outside any function,
+    /// and a function's `local_index` plus one for a function, so each body
+    /// of a source has its own. A table of per-expression values indexes its
+    /// bodies by this; see `BodyTable`.
+    pub body: u32,
     pub exprs: Vec<ExprFunKind<'db>>,
 }
 

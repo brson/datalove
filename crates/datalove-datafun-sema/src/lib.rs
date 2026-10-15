@@ -10,7 +10,7 @@
 use rmx::std::collections::BTreeMap;
 use bct::module_graph::ModuleId;
 use bct::text::InternedText;
-use datalove_datafun_ast::ast::{Binding, FunHead, Statement, ParamMode, ExprKey};
+use datalove_datafun_ast::ast::{Binding, ExprArena, ExprFun, ExprFunctionCall, FunHead, Statement, ParamMode, ExprKey};
 use datalove_datafun_ir::IrType;
 
 /// Types of expressions, by expression.
@@ -32,15 +32,16 @@ pub type CallTargets<'db> = BodyTable<'db, ResolvedCallTarget<'db>>;
 /// A value for some of the expressions, or calls, of a module or a script unit,
 /// in a vector per body indexed by `local_index`.
 ///
-/// Every key in one table names the same module, and the bodies are in the
-/// order they were first written to, which is the order they were checked, so
-/// two tables with the same contents compare equal.
+/// The bodies are indexed by `ExprArena::body`, so reaching a value is two
+/// indexes. Every expression in one table belongs to the same module, and the
+/// layout depends only on what was inserted, so two tables with the same
+/// contents compare equal.
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct BodyTable<'db, T> {
-    /// The module every key names, once one has been inserted.
+    /// The module every expression belongs to, once one has been inserted.
     module_id: Option<Option<ModuleId<'db>>>,
-    bodies: Vec<(Option<InternedText<'db>>, Vec<Option<T>>)>,
+    bodies: Vec<Vec<Option<T>>>,
 }
 
 impl<'db, T> Default for BodyTable<'db, T> {
@@ -54,37 +55,51 @@ impl<'db, T> BodyTable<'db, T> {
         Self::default()
     }
 
-    pub fn insert(&mut self, key: ExprKey<'db>, value: T) {
-        let module_id = *self.module_id.get_or_insert(key.module_id);
-        assert_eq!(module_id, key.module_id, "one table holds one module's expressions");
-        let at = match self.bodies.iter().position(|(name, _)| *name == key.fn_name) {
-            Some(at) => at,
-            None => {
-                self.bodies.push((key.fn_name, Vec::new()));
-                self.bodies.len() - 1
-            }
-        };
-        let body = &mut self.bodies[at].1;
-        let index = key.local_index as usize;
-        if body.len() <= index {
-            body.resize_with(index + 1, || None);
-        }
-        body[index] = Some(value);
+    /// The value for `expr`.
+    pub fn get(&self, expr: ExprFun<'db>) -> Option<&T> {
+        self.get_at(expr.arena(), expr.local_index())
     }
 
-    pub fn get(&self, key: &ExprKey<'db>) -> Option<&T> {
-        if self.module_id != Some(key.module_id) {
-            return None;
+    pub fn insert(&mut self, expr: ExprFun<'db>, value: T) {
+        self.insert_at(expr.arena(), expr.local_index(), value)
+    }
+
+    /// The value for `call`, which `expr` is; calls are numbered apart from
+    /// expressions.
+    pub fn get_call(&self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>) -> Option<&T> {
+        self.get_at(expr.arena(), call.local_index)
+    }
+
+    pub fn insert_call(&mut self, expr: ExprFun<'db>, call: &ExprFunctionCall<'db>, value: T) {
+        self.insert_at(expr.arena(), call.local_index, value)
+    }
+
+    fn get_at(&self, arena: &ExprArena<'db>, index: u32) -> Option<&T> {
+        debug_assert!(
+            self.module_id.is_none_or(|m| m == arena.module_id),
+            "one table holds one module's expressions",
+        );
+        self.bodies.get(arena.body as usize)?.get(index as usize)?.as_ref()
+    }
+
+    fn insert_at(&mut self, arena: &ExprArena<'db>, index: u32, value: T) {
+        let module_id = *self.module_id.get_or_insert(arena.module_id);
+        assert_eq!(module_id, arena.module_id, "one table holds one module's expressions");
+        let body = arena.body as usize;
+        if self.bodies.len() <= body {
+            self.bodies.resize_with(body + 1, Vec::new);
         }
-        self.bodies.iter()
-            .find(|(name, _)| *name == key.fn_name)
-            .and_then(|(_, body)| body.get(key.local_index as usize))
-            .and_then(Option::as_ref)
+        let slots = &mut self.bodies[body];
+        let index = index as usize;
+        if slots.len() <= index {
+            slots.resize_with(index + 1, || None);
+        }
+        slots[index] = Some(value);
     }
 
     /// How many expressions have a value.
     pub fn len(&self) -> usize {
-        self.bodies.iter().map(|(_, body)| body.iter().filter(|v| v.is_some()).count()).sum()
+        self.bodies.iter().map(|body| body.iter().filter(|v| v.is_some()).count()).sum()
     }
 
     pub fn is_empty(&self) -> bool {

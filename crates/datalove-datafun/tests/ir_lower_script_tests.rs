@@ -35,7 +35,7 @@ fn build_const_graph<'db>(
             let name = const_stmt.name.text(db).to_string();
             // Get the type from the typechecker's table.
             let ir_type = expr_types
-                .get(&expr.key())
+                .get(expr)
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 

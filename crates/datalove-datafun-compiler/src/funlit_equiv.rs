@@ -402,7 +402,7 @@ pub fn datafun_unit_typecheck_to_serde<'db>(
     // Find the type for this expression in expr_types.
     let expr_types = result.expr_types(db);
     let root_type = expr_types
-        .get(&expr.key())
+        .get(expr)
         .map(|t| datafun_type_to_serde(db, t));
 
     let errors = result.errors(db).iter()

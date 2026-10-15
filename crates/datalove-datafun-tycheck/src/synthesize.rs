@@ -1093,7 +1093,7 @@ pub(crate) fn synthesize_function_call_expecting<'db>(
                 }
             }
         }
-        ctx.store_call_target(ExprKey::of_call(expr, call), func_ast, module_id, type_args);
+        ctx.store_call_target(expr, call, func_ast, module_id, type_args);
     }
 
     // Return the function's return type.

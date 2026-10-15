@@ -3,7 +3,7 @@
 //! Transforms AST expressions into IR values and instructions. Handles literals,
 //! operators, function calls, tuples, records, and control flow expressions.
 
-use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode, ExprKey};
+use datalove_datafun_ast::ast::{self, ExprFun, ExprFunKind, ParamMode};
 use datalove_datafun_ir::{
     IrType, Operand, ValueId, BinOp, UnaryOp, Instruction, ConstValue, Terminator, TypeRef,
 };
@@ -559,7 +559,7 @@ pub fn lower_expression<'db>(
             let func_ref = ctx.resolve_call(expr, call);
 
             // Get param modes and types from the resolved call target.
-            let target = ctx.call_targets.and_then(|t| t.get(&ExprKey::of_call(expr, call)));
+            let target = ctx.call_targets.and_then(|t| t.get_call(expr, call));
             // A const argument is passed by reference, as the callee's const
             // parameter is lowered: see `lower_function_body`.
             let param_modes: Vec<ParamMode> = target

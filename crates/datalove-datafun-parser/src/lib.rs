@@ -108,7 +108,7 @@ fn parse_bracer_expr<'db>(
     let root = parser.parse_expr_full();
     parser.error_if_not_exhausted();
     let qualified_calls = each_once(parser.take_qualified_calls());
-    let arena = ast::ExprArena { module_id: None, fn_name: None, exprs: parser.take_exprs() };
+    let arena = ast::ExprArena { module_id: None, fn_name: None, body: 0, exprs: parser.take_exprs() };
     let top = ast::TopLevel::new(db, ast::Body { statements: vec![], arena });
     ast::ParsedExpr { top, root, qualified_calls }
 }
@@ -247,7 +247,7 @@ fn parse_statements<'db>(
     debug_assert_eq!(exprs.len(), counters.expr as usize);
     let body = ast::Body {
         statements,
-        arena: ast::ExprArena { module_id, fn_name: None, exprs },
+        arena: ast::ExprArena { module_id, fn_name: None, body: 0, exprs },
     };
     (body, spans, qualified_calls)
 }

@@ -334,9 +334,13 @@ to 145.56M (page faults 3,709 to 3,653). On `recompile_profile` at 512
 modules, an edit went from 24.6M instructions to 24.1M and the cold compile
 from 4.62G to 4.34G, peak memory from 215MB to 202MB.
 
-A `BodyTable` finds a body by a linear search of its bodies, about 40 in a
-module; the lookups that remain are 1--2% of a compile, so caching the current
-body beside the arena is the next step if they matter.
+A `BodyTable` first found a body by a linear search of its bodies by name.
+Each `ExprArena` now carries a `body` number -- 0 for the code outside any
+function, a function's `local_index` plus one -- and the table is indexed by
+it, taking an `ExprFun` rather than an `ExprKey`, so a lookup is two indexes.
+Every reader already held the expression. That took the compile from 145.56M
+to 140.63M instructions, more than the estimate, and a 512-module edit from
+24.1M to 23.8M.
 
 ## Verifying each phase
 

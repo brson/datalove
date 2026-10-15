@@ -1136,7 +1136,8 @@ replace the view rather than the elements it shows. Index down to single element
     /// Store resolved call target for a function call expression.
     pub fn store_call_target(
         &mut self,
-        call: ExprKey<'db>,
+        expr: ExprFun<'db>,
+        call: &ExprFunctionCall<'db>,
         func: FunHead<'db>,
         module_id: Option<ModuleId<'db>>,
         type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
@@ -1146,7 +1147,8 @@ replace the view rather than the elements it shows. Index down to single element
         {
             self.inline_calls.push((caller, func.key()));
         }
-        self.call_targets.insert(
+        self.call_targets.insert_call(
+            expr,
             call,
             ResolvedCallTarget { func, module_id, type_args },
         );
@@ -1154,7 +1156,7 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Store the type for an expression.
     pub fn store_expr_type(&mut self, expr: ExprFun<'db>, ty: &Type<'db>) {
-        self.expr_types.insert(expr.key(), ty.clone());
+        self.expr_types.insert(expr, ty.clone());
     }
 
     /// Synthesize the type of an expression.

@@ -103,7 +103,7 @@ pub fn data_consts<'db>(
             if !matches!(value.kind(), ExprFunKind::DataFile(_)) {
                 return None;
             }
-            let ty = expr_types.get(&value.key())?;
+            let ty = expr_types.get(value)?;
             let ty = IrType::from_tycheck(db, ty);
             let value = lower::try_extract_literal(db, value, &ty, data_files)
                 .expect("a data file is a literal");
@@ -114,7 +114,7 @@ pub fn data_consts<'db>(
 
 /// The type the typechecker gave a const's initializer.
 pub fn const_type(env: &ConstEvalEnv<'_, '_>, init: ExprFun<'_>) -> Result<IrType, ConstError> {
-    env.expr_types.get(&init.key())
+    env.expr_types.get(init)
         .map(|ty| IrType::from_tycheck(env.db, ty))
         .ok_or(ConstError::MissingType)
 }

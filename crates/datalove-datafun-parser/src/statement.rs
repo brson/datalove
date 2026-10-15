@@ -643,7 +643,7 @@ statements that run belong in a function or a script")
             body.push(stmt);
         }
 
-        let arena = self.exit_function();
+        let arena = self.exit_function(local_index);
         if !found_end_fun {
             return self.unterminated_block("fun");
         }

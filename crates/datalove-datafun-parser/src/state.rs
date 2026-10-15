@@ -355,12 +355,13 @@ impl<'db> Parser<'db> {
     }
 
     /// Exit function context, restoring the script-level counters, and give
-    /// back the function's expressions.
-    pub(super) fn exit_function(&mut self) -> ast::ExprArena<'db> {
+    /// back the function's expressions. `local_index` is the function's.
+    pub(super) fn exit_function(&mut self, local_index: u32) -> ast::ExprArena<'db> {
         debug_assert_eq!(self.filed.exprs.len(), self.expr_counter as usize);
         let arena = ast::ExprArena {
             module_id: self.module_id,
             fn_name: self.current_fn_name,
+            body: local_index + 1,
             exprs: rmx::std::mem::replace(&mut self.filed.exprs, rmx::std::mem::take(&mut self.script_exprs)),
         };
         self.current_fn_name = None;

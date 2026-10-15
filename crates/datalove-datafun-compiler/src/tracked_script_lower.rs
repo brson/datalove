@@ -173,7 +173,7 @@ pub fn collect_const_graph<'db>(
 
             // Get the type from the typechecker's table.
             let ir_type = expr_types
-                .get(&expr.key())
+                .get(expr)
                 .map(|ty| IrType::from_tycheck(db, ty))
                 .unwrap_or(IrType::Unit);
 
