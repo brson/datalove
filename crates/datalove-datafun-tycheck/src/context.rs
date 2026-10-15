@@ -1152,7 +1152,7 @@ replace the view rather than the elements it shows. Index down to single element
         }
         self.call_targets.insert(
             call,
-            ResolvedCallTarget::new(self.db, func, module_id, type_args),
+            ResolvedCallTarget { func, module_id, type_args },
         );
     }
 

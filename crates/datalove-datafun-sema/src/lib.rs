@@ -35,15 +35,16 @@ pub type CallTargets<'db> = BTreeMap<ExprKey<'db>, ResolvedCallTarget<'db>>;
 
 /// Resolved call target from typechecking.
 ///
-/// Stores the resolved function AST and source module for a function call,
-/// eliminating the need for runtime name lookup.
-#[salsa::tracked]
+/// What a call resolved to, so nothing after typechecking looks a name up
+/// again. A plain value in the call-target table: it used to be a salsa
+/// tracked struct, minted per call with its identity hashed, though nothing
+/// ever needed its identity.
+#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct ResolvedCallTarget<'db> {
     /// What the call site knows of the function it resolved to.
-    #[returns(ref)]
     pub func: FunHead<'db>,
     /// The source module (None for script-local functions).
-    #[returns(copy)]
     pub module_id: Option<ModuleId<'db>>,
     /// What this call site bound the callee's type parameters to, in the
     /// callee's declaration order.
@@ -51,8 +52,21 @@ pub struct ResolvedCallTarget<'db> {
     /// Empty for a callee with no type parameters. This is the only place the
     /// answer exists: the call site worked it out from the arguments and what
     /// it expected back, and nothing downstream can work it out again.
-    #[returns(ref)]
     pub type_args: Vec<datalove_datalit::tycheck::Type<'db>>,
+}
+
+impl<'db> ResolvedCallTarget<'db> {
+    pub fn func(&self) -> &FunHead<'db> {
+        &self.func
+    }
+
+    pub fn module_id(&self) -> Option<ModuleId<'db>> {
+        self.module_id
+    }
+
+    pub fn type_args(&self) -> &Vec<datalove_datalit::tycheck::Type<'db>> {
+        &self.type_args
+    }
 }
 
 // ============================================================================
