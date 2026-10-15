@@ -8,7 +8,7 @@ summary: "Iterating over collections can't be satisfyingly abstract without firs
 
 
 In my [previous round of benchmarking](../posts/20261009a-compound-assignment.md)
-I noted that Datalove's system library walks collections in an awkward way.
+I noted that Datalove's system library iterates collections in an awkward way.
 It keeps a loop induction variable of type [`index`](../datafun.md#user-content-collections-and-indexing),
 increments it each time around the loop, and indexes into the collection to get the element.
 Each index imposes a bounds check.
