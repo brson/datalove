@@ -46,7 +46,9 @@ fun contains<T>(ref self: [T], ref elem: T): bool where { T is ord }
   ret found
 end fun
 
-fun equal_to_at<T>(ref self: [T], i: index, ref elem: T): ?bool where { T is ord }
+fun equal_to_at<T>(
+  ref self: [T], i: index, ref elem: T
+): ?bool where { T is ord }
   ret some equal(ref self[i]?, ref elem)
 end fun
 ```
@@ -90,7 +92,7 @@ Reaching element `i` costs O(i),
 which makes a loop over the whole set O(n²).
 Maps are the same, through `map.key_at` and `map.value_at`.
 Those algorithmically abhorrent accessor APIs are waiting on
-some way to iterate over collections before they can be retired.
+a way to iterate over collections before they can be retired.
 
 The indexing is a performance hazard,
 but also the wrapping math is a
@@ -101,13 +103,13 @@ but Datalove doesn't yet have any kind of assert,
 and the wrapping is impossible to hit and will be eliminated shortly.
 
 Both of these problems are solvable with language-level container iteration,
-like Python's `for x in xs` or Rust's `for x in &xs`.
+like Python's `for x in xs`.
 A simple design for this is obvious,
 so I'll go ahead and do it now!
 
 We have some constraints:
-Datalove has a linear type system where values are neither garbage-collected nor reference-counted,
-but are inline value types.
+Datalove has a linear type system where values are neither garbage-collected nor reference-counted.
+They are always inline value types.
 So copying can be expensive, but we want to iterate cheaply.
 Datalove also [does not have first-class references](../datafun.md#user-content-borrows-are-second-class),
 so in the surface language we can't take pointers directly into collections and treat them as values
@@ -145,7 +147,7 @@ This is in contrast to [`match` and destructuring `if`](../datafun.md#user-conte
 which fully destructure their operands.
 
 Even though I don't plan immediately to have by-value iteration,
-it probably makes sense to write the word `ref` somewhere in the loop header -
+it probably makes sense to write the word `ref` somewhere in the loop header &mdash;
 I've got a mostly consistent explicit philosophy of writing `ref` everywhere
 there is a reference binding.
 Here I've put it next to the _collection_, not the binding,
@@ -358,14 +360,14 @@ The general shape and use of the cursors is:
 Datalove can't express an iterator in the language itself,
 so the cursor protocol _is_ the abstraction,
 and it lives in the runtime ABI instead of in something like a trait.
-I love this for the compiler:
-because the compiler knows exactly what a cursor looks like,
+I love this for the compiler.
+Because the compiler knows exactly what a cursor looks like,
 every backend can open-code the hot parts &mdash;
 the 'done' check, the element, and a strided advance are just loads and adds against the struct &mdash;
 while the IR interpreter calls the real runtime functions
 and gives the fast backends something to be checked against.
-For hypothetical users though:
-tough luck, you can't write an iterator.
+For hypothetical users, though, it's tough luck:
+they can't write an iterator.
 
 
 
@@ -394,7 +396,7 @@ end for
 ```
 
 Performance is about what you'd hope.
-Summing a list of 100,000 `u32`s 200 times,
+The benchmark sums a list of 100,000 `u32`s 200 times,
 and a set of 5,000 elements 20 times
 (release build, `hyperfine` means):
 
@@ -489,8 +491,8 @@ end fun
 Datalove can't, so they keep an index
 and read both elements back out of the list by position.
 `least` and `greatest` did convert,
-but they have the same problem in a different shape:
-they can't hold on to the best element seen so far,
+but they have the same problem in a different shape.
+They can't hold on to the best element seen so far,
 so they hold its index and re-index the list on every comparison:
 
 ```datalove
