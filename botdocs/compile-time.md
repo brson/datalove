@@ -132,6 +132,15 @@ the rest of the allocation being the AST's own.
 
 ## What was fixed
 
+- Maps keyed by dense ids or hashed with SipHash, October 2026, from 140.6M
+  instructions to 128.0M: ownership's per-binding state as vectors indexed by
+  `BindingId` (`BindingMap`, 2.9%), the typechecker's, lowering's and
+  ownership's name-keyed maps on FxHash (4.0%), block scopes undoing their
+  bindings rather than copying the map (0.4%), the IR passes' per-value tables
+  as vectors indexed by `ValueId` (`ValueMap`, `ValueSet`) and the inliner on
+  FxHash (1.3%), and the function-id lookup on FxHash (0.8%). What is left of
+  map and hashing cost is spread thin, much of it salsa hashing memo values.
+
 - `compute_func_id_map` checked each rider function against every entry so
   far, to skip a rider required by several modules: quadratic, and 5.7% of the
   run. It now skips a rider it has seen.

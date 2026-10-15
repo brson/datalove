@@ -12,11 +12,10 @@
 
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
-use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{self, Statement, ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
     IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
-    Operand, Terminator, Instruction, ConstValue, SlotDest, ExportBinding, IrModuleId, FuncId,
+    Operand, Terminator, Instruction, ConstValue, SlotDest, ExportBinding, FuncId,
 };
 use datalove_datafun_sema::ScriptAnalysisData;
 use crate::ScriptFunctionAnalyses;
@@ -79,7 +78,7 @@ pub fn lower_script_fragment_raw<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db crate::FuncIdTable<'db>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     body: &'db ast::Body<'db>,
@@ -213,7 +212,7 @@ pub fn lower_script_functions<'db>(
     func_analyses: &ScriptFunctionAnalyses<'db>,
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
     func_return_types: Option<&HashMap<String, Type<'db>>>,
-    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db crate::FuncIdTable<'db>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     script_consts: &HashMap<String, (IrType, Arc<ConstValue>)>,
@@ -298,7 +297,7 @@ pub fn lower_script_expr<'db>(
     db: &'db dyn salsa::Database,
     expr_types: &'db ExprTypes<'db>,
     call_targets: &'db CallTargets<'db>,
-    func_id_map: &'db HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    func_id_map: &'db crate::FuncIdTable<'db>,
     data_files: &'db DataFiles,
     script_ctx: ScriptLowerContext,
     expr: ExprFun<'db>,

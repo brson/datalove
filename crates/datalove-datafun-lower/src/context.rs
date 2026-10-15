@@ -1538,7 +1538,7 @@ pub trait FuncIds<'db> {
     fn func_id(&self, module: ModuleId<'db>, name: &str) -> Option<(IrModuleId, FuncId)>;
 }
 
-impl<'db> FuncIds<'db> for HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> {
+impl<'db> FuncIds<'db> for crate::FuncIdTable<'db> {
     fn func_id(&self, module: ModuleId<'db>, name: &str) -> Option<(IrModuleId, FuncId)> {
         self.get(&(module, name.to_string())).copied()
     }

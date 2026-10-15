@@ -145,7 +145,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                 };
 
                 // Script tests don't use modules, so use empty func_id_map.
-                let func_id_map = HashMap::new();
+                let func_id_map = lower::FuncIdTable::default();
 
                 // Lower functions so CTFE can reuse them.
                 // Use empty ScriptLowerContext since tests don't accumulate across units.

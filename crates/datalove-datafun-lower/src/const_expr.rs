@@ -10,10 +10,9 @@
 
 use std::sync::Arc;
 use std::collections::HashMap;
-use bct::module_graph::ModuleId;
 use datalove_datafun_ast::ast::{ExprFun, ExprFunKind};
 use datalove_datafun_ir::{
-    ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext, IrModuleId,
+    ConstValue, IrType, IrCodeUnit, CodeUnitId, CodeUnitContext, ScriptContext,
     Operand, Terminator,
 };
 use super::context::{DataFiles, LowerCtx};
@@ -37,7 +36,7 @@ pub fn lower_const_expr_to_unit_standalone<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
-    module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
+    module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
     data_files: &'db DataFiles,
 ) -> Result<IrCodeUnit, LowerError> {
     use datalove_datafun_ir::{CodeRef, FuncId};
@@ -156,7 +155,7 @@ pub fn lower_const_binding<'db>(
     return_type: Option<IrType>,
     lowered_functions: &[std::sync::Arc<IrCodeUnit>],
     func_name_to_id: &HashMap<String, datalove_datafun_ir::FuncId>,
-    module_func_id_map: Option<&'db HashMap<(ModuleId<'db>, String), (IrModuleId, datalove_datafun_ir::FuncId)>>,
+    module_func_id_map: Option<&'db crate::FuncIdTable<'db>>,
     data_files: &'db DataFiles,
 ) -> Result<(Option<IrCodeUnit>, Option<Arc<ConstValue>>), LowerError> {
     // Try simple literal extraction first.

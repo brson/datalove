@@ -46,7 +46,7 @@ pub struct FuncIdMap<'db> {
 }
 
 /// `FuncIdMap`'s entries in a form that can be looked up in.
-pub type FuncIdLookup<'db> = HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>;
+pub type FuncIdLookup<'db> = lower::FuncIdTable<'db>;
 
 /// The lookup form of a `FuncIdMap`.
 ///
@@ -79,7 +79,7 @@ impl<'db> FuncIdMap<'db> {
     }
 
     /// Convert to a HashMap for efficient repeated lookups.
-    pub fn to_hashmap(&self, db: &'db dyn salsa::Database) -> HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)> {
+    pub fn to_hashmap(&self, db: &'db dyn salsa::Database) -> FuncIdLookup<'db> {
         self.entries(db).iter().cloned().collect()
     }
 }
@@ -573,7 +573,7 @@ pub fn lower_module<'db>(
 fn export_signatures<'db>(
     db: &'db dyn salsa::Database,
     typecheck: SingleModuleTypecheckResult<'db>,
-) -> HashMap<bct::text::InternedText<'db>, datalove_datafun_tycheck::TypeFunction<'db>> {
+) -> rustc_hash::FxHashMap<bct::text::InternedText<'db>, datalove_datafun_tycheck::TypeFunction<'db>> {
     typecheck.exports(db).iter().copied().collect()
 }
 
@@ -664,7 +664,7 @@ fn ctfe_module_units<'db>(
 pub fn add_native_rider_units<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
-    func_id_map: &HashMap<(ModuleId<'db>, String), (IrModuleId, FuncId)>,
+    func_id_map: &lower::FuncIdTable<'db>,
     registry: &mut ModuleFunctionRegistry,
 ) {
     use datalove_datafun_ir::NativeContext;
