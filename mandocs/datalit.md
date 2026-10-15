@@ -1101,60 +1101,79 @@ Will be revisited.
 
 ### Required type hints
 
-Written with no expected type,
-an expression has the type its literals default to,
-with parts that must agree [typed together](#user-content-typing-together).
-A value of any other type needs type hints.
+Without an expected type,
+an expression's type is worked out from its parts.
+Parts in the same position get one type between them.
+These share a position:
 
-A part of a value needs a hint,
-on itself or on anything containing it,
-in exactly these situations:
-
-1. An integer whose type is not `int`:
-   `u8` .. `u64`, `i8` .. `i64`, `index` or `offset`.
-2. A float whose type is `f32`.
-3. A float written as a hex bit pattern,
-   as a NaN or infinity must be:
-   a hex literal by itself is an `int`.
-4. An atom or term whose type is an enum.
-   By itself it has its own type, `atom A` or `term A T`.
-5. An enum literal, `enum { v }`.
-6. `none`, which says nothing of what the option holds,
-   and `er e`, which says nothing of what the result holds.
-7. An empty list, set, map or tensor,
-   and a table with columns and no rows.
-   The table with no columns, `{| |}`, needs none.
-
-Each of these is excused when something else decides its type.
-That is a part sharing its position,
-with a type that is not a literal's default:
-
-- the elements of one list, set or tensor share a position,
-  as do the keys of one map, the values of one map,
+- the elements of one list, set or tensor,
+  the keys of one map, the values of one map,
   and the elements of one table column;
-- so do the corresponding parts inside them:
-  the payloads of `some` elements of one list,
-  the first elements of tuples in one list, and so on;
-- a part decides its position if it is hinted,
-  or if its type follows from its form alone,
-  as a string's, a `bool`'s, or a `data`'s does.
-  A numeric literal, an atom or a term decides nothing,
-  since its synthesized type is only a default.
+- and the matching parts inside those:
+  the payloads of the `some` elements of one list,
+  the first elements of the tuples in one list, and so on.
+
+The type they share is, in order of preference:
+
+1. the type of any of them that has a definite type:
+   one with a hint,
+   or one whose form fixes its type,
+   as a string, a `bool` or a `data` does;
+2. otherwise, the default of the literals among them:
+   `int` for integers,
+   `f64` for floats and for hex beside a float,
+   and an atom's or term's own type, `atom A` or `term A T`;
+3. otherwise, none:
+   the parts are only `none`, `er e`, empty collections and enum literals,
+   and a hint is required.
+
+A part with nothing else in its position
+gets its own definite type or its default,
+and needs a hint if it has neither.
+
+So a value needs a hint,
+on the part or on anything containing it,
+wherever this gives a type other than the value's.
+That happens in exactly these cases:
+
+- **A type no literal defaults to**:
+  an integer that is not an `int`
+  (`u8` .. `u64`, `i8` .. `i64`, `index`, `offset`),
+  an `f32`,
+  a float written only as hex bit patterns
+  (as a NaN or infinity must be),
+  an atom or term of an enum type,
+  or an enum literal.
+  These need a hint unless a part in the same position
+  has that type definitely.
+  A literal beside them does not help,
+  since it brings only its default.
+- **A type nothing in the value says**:
+  `none`, `er e`, an empty list, set, map or tensor,
+  or a table with columns and no rows.
+  These need a hint unless something in the same position has a type,
+  and then they take it,
+  even if it is only a literal's default.
+  The table with no columns, `{| |}`, needs none.
 
 ```datalove
-[1, 2]                         // [int]: no hint needed
-: [u8] / [1, 2]                // [u8]: one hint, on the list
-[1, : u8 / 2]                  // [u8]: one hint, on an element
-[none, some "a"]               // [?string]: the string decides
+[1, 2]                         // [int]: defaults, no hint needed
+[1, : u8 / 2]                  // [u8]: the hinted element decides
+: [u8] / [1, 2]                // [u8]: or one hint on the list
+[none, some 1]                 // [?int]: none takes 1's default
+[none, some atom Foo]          // [?atom Foo]: and atom Foo's
+[[], [1]]                      // [[int]]
+[none, some "a"]               // [?string]
 [: enum { atom A, atom B } / atom A, atom B]
-                               // the first element decides the second
-[1.5, 0x7FF8000000000000]      // [f64]: the decimal float decides the NaN
-%{ 1 = none }                  // error: nothing decides what the option holds
+                               // the hinted element decides; atom B goes along
+[1.5, 0x7FF8000000000000]      // [f64]: the NaN goes along with the float
+[atom A, atom B]               // error: two defaults, no enum
+[none, none]                   // error: nothing has a type
 ```
 
 The payload of `data` and of `error` is typed on its own,
 as a whole document is,
-so nothing outside it decides anything inside it:
+so nothing outside it says anything about it:
 `: [data] / [data 1]` holds an `int`,
 and `data : u8 / 1` is how to hold a `u8`.
 
