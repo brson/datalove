@@ -84,6 +84,10 @@ pub struct TypeContext<'db> {
     pub(crate) current_module_id: Option<ModuleId<'db>>,
     /// Variable bindings, by name.
     pub(crate) variables: rustc_hash::FxHashMap<InternedText<'db>, VarBinding<'db>>,
+    /// What each binding made replaced in `variables`, newest last, so that
+    /// leaving a scope can put back what it found rather than copying the
+    /// whole map on the way in. See `with_scope`.
+    scope_undo: Vec<(InternedText<'db>, Option<VarBinding<'db>>)>,
     /// Function signatures (name -> function type).
     pub(crate) functions: rustc_hash::FxHashMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
@@ -204,6 +208,7 @@ impl<'db> TypeContext<'db> {
             spans,
             current_module_id: module_id,
             variables: Default::default(),
+            scope_undo: Vec::new(),
             functions: Default::default(),
             asked_names: RefCell::new(BTreeSet::new()),
             function_asts: Default::default(),
@@ -1013,7 +1018,8 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Bind a name, replacing whatever it named, a const included.
     pub fn add_variable(&mut self, name: InternedText<'db>, ty: Type<'db>, is_mutable: bool) {
-        self.variables.insert(name, VarBinding { ty, is_mutable, is_const: false });
+        let replaced = self.variables.insert(name, VarBinding { ty, is_mutable, is_const: false });
+        self.scope_undo.push((name, replaced));
     }
 
     /// Add a function signature only (for imports where AST comes from another module).
@@ -1047,13 +1053,34 @@ replace the view rather than the elements it shows. Index down to single element
 
     /// Execute a closure in a new variable scope.
     ///
-    /// Saves and restores the variable bindings around the closure,
-    /// so any variables added inside are not visible outside.
+    /// Any variable added inside is not visible outside: leaving the scope
+    /// undoes, newest first, every binding made since it was entered.
     pub fn with_scope<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
-        let saved = self.variables.clone();
+        let mark = self.scope_undo.len();
         let result = f(self);
-        self.variables = saved;
+        self.undo_bindings_to(mark);
         result
+    }
+
+    pub(crate) fn scope_undo_len(&self) -> usize {
+        self.scope_undo.len()
+    }
+
+    /// Forget the bindings made since `mark` without undoing them, for a
+    /// caller that restores `variables` wholesale.
+    pub(crate) fn truncate_scope_undo(&mut self, mark: usize) {
+        self.scope_undo.truncate(mark);
+    }
+
+    /// Put back what the bindings made since `mark` replaced.
+    fn undo_bindings_to(&mut self, mark: usize) {
+        while self.scope_undo.len() > mark {
+            let (name, replaced) = self.scope_undo.pop().expect("longer than the mark");
+            match replaced {
+                Some(binding) => self.variables.insert(name, binding),
+                None => self.variables.remove(&name),
+            };
+        }
     }
 
     pub fn lookup_variable(&self, name: InternedText<'db>) -> Option<Type<'db>> {

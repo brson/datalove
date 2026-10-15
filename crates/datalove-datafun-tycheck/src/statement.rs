@@ -338,6 +338,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             // flag is what refuses the ones a body may not name. Restoring
             // `variables` afterwards also takes back the consts the body bound.
             let saved_variables = ctx.variables.C();
+            let undo_mark = ctx.scope_undo_len();
             let saved_in_function_body = ctx.in_function_body;
             let saved_checking_inline = ctx.checking_inline;
             let saved_enclosing_fun = ctx.enclosing_fun;
@@ -398,8 +399,10 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
                 ctx.report_missing_return(stmt.local_index(), name);
             }
 
-            // Restore context.
+            // Restore context. The bindings the body made are gone with the
+            // map they were made in, and so is what undoing them would mean.
             ctx.variables = saved_variables;
+            ctx.truncate_scope_undo(undo_mark);
             ctx.in_function_body = saved_in_function_body;
             ctx.checking_inline = saved_checking_inline;
             ctx.enclosing_fun = saved_enclosing_fun;
