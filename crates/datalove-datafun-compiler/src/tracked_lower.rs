@@ -96,10 +96,73 @@ impl<'db> FuncIdMap<'db> {
 /// Interned rather than returned as a plain `Vec`, because both lowering
 /// queries take it and each would otherwise intern the whole list into its own
 /// memo key, once per module per compile. As an id it is one word to either.
+///
+/// It holds a handle per reachable module rather than the entries themselves,
+/// sorted by module. Copying out every reachable entry, names and all, for
+/// every module was 4% of a compile.
 #[salsa::interned]
 pub struct ReachableFuncIds<'db> {
     #[returns(ref)]
-    pub entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))>,
+    pub modules: ReachableModules<'db>,
+}
+
+/// The modules a `ReachableFuncIds` holds, each with its functions, sorted by
+/// module.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
+pub struct ReachableModules<'db>(pub Vec<(ModuleId<'db>, ModuleFuncIds<'db>)>);
+
+/// One module's functions in the IR: its `IrModuleId`, and each function's
+/// name and id, sorted by name.
+///
+/// Interned, so a module whose functions did not change keeps its handle, and
+/// a `ReachableFuncIds` built from the same handles is the same one.
+#[salsa::interned]
+#[derive(Debug)]
+pub struct ModuleFuncIds<'db> {
+    #[returns(copy)]
+    pub ir_module_id: IrModuleId,
+    #[returns(ref)]
+    pub functions: Vec<(String, FuncId)>,
+}
+
+/// Searched rather than hashed: building a map of every function a module can
+/// reach, once per module, cost more than the lookups it served.
+impl<'db> lower::FuncIds<'db> for ReachableModules<'db> {
+    fn func_id(
+        &self,
+        db: &'db dyn salsa::Database,
+        module: ModuleId<'db>,
+        name: &str,
+    ) -> Option<(IrModuleId, FuncId)> {
+        let at = self.0.binary_search_by_key(&module, |(m, _)| *m).ok()?;
+        let funcs = self.0[at].1;
+        let functions = funcs.functions(db);
+        let found = functions.binary_search_by(|(n, _)| n.as_str().cmp(name)).ok()?;
+        Some((funcs.ir_module_id(db), functions[found].1))
+    }
+}
+
+/// Every module's functions in `func_id_map`, a handle per module, sorted by
+/// module.
+#[salsa::tracked(returns(ref))]
+fn func_ids_by_module<'db>(
+    db: &'db dyn salsa::Database,
+    func_id_map: FuncIdMap<'db>,
+) -> Vec<(ModuleId<'db>, ModuleFuncIds<'db>)> {
+    let mut by_module: BTreeMap<ModuleId<'db>, (IrModuleId, Vec<(String, FuncId)>)> = BTreeMap::new();
+    for ((module_id, name), (ir_module_id, func_id)) in func_id_map.entries(db) {
+        by_module.entry(*module_id)
+            .or_insert_with(|| (*ir_module_id, Vec::new()))
+            .1
+            .push((name.clone(), *func_id));
+    }
+    by_module.into_iter()
+        .map(|(module_id, (ir_module_id, mut functions))| {
+            functions.sort_by(|a, b| a.0.cmp(&b.0));
+            (module_id, ModuleFuncIds::new(db, ir_module_id, functions))
+        })
+        .collect()
 }
 
 #[salsa::tracked(returns(copy))]
@@ -129,12 +192,12 @@ fn reachable_func_ids<'db>(
     let in_graph: std::collections::BTreeSet<ModuleId<'db>> =
         graph.iter_modules(db).map(|m| m.id(db)).collect();
 
-    let entries: Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))> = func_id_map.entries(db)
+    let modules = func_ids_by_module(db, func_id_map)
         .iter()
-        .filter(|((mid, _), _)| reachable.contains(mid) || !in_graph.contains(mid))
-        .cloned()
+        .filter(|(mid, _)| reachable.contains(mid) || !in_graph.contains(mid))
+        .copied()
         .collect();
-    ReachableFuncIds::new(db, entries)
+    ReachableFuncIds::new(db, ReachableModules(modules))
 }
 
 /// The `IrModuleId` of every module the program has, riders included.
@@ -496,7 +559,7 @@ pub fn lower_module<'db>(
                     db,
                     expr_types,
                     call_targets,
-                    reachable.entries(db),
+                    reachable.modules(db),
                     func,
                     func_id,
                     analysis,
@@ -817,7 +880,7 @@ pub fn lower_module_functions<'db>(
         module_consts.into_iter().map(|(name, (ty, value))| (name, (ty, value.0))).collect();
     let restricting = restrict.is_some();
     let restrict = restrict.as_ref();
-    let func_id_entries = func_ids.entries(db);
+    let func_id_entries = func_ids.modules(db);
     let module_consts = &module_consts;
 
     let expr_types = single_typecheck.expr_types(db);
@@ -2036,9 +2099,10 @@ mod reachable_func_ids_tests {
     fn reachable_names<'db>(db: &'db Database, graph: ModuleGraph<'db>, module: ModuleId<'db>) -> Vec<String> {
         let map = test_func_id_map(db, graph);
         let mut names: Vec<String> = reachable_func_ids(db, graph, map, module)
-            .entries(db)
+            .modules(db)
+            .0
             .iter()
-            .map(|((_, name), _)| name.clone())
+            .flat_map(|(_, funcs)| funcs.functions(db).iter().map(|(name, _)| name.clone()))
             .collect();
         names.sort();
         names
@@ -2085,7 +2149,7 @@ mod reachable_func_ids_tests {
         let graph_before = builder.build();
         let before = reachable_func_ids(
             &db, graph_before, test_func_id_map(&db, graph_before), a,
-        ).entries(&db).clone();
+        ).modules(&db).clone();
 
         // The same graph plus an unrelated module, which lands after `a` and
         // so does not disturb its IR module index either.
@@ -2095,7 +2159,7 @@ mod reachable_func_ids_tests {
         let graph_after = builder.build();
         let after = reachable_func_ids(
             &db, graph_after, test_func_id_map(&db, graph_after), a2,
-        ).entries(&db).clone();
+        ).modules(&db).clone();
 
         assert_eq!(a, a2, "the path is the identity, so these are one module");
         assert_eq!(

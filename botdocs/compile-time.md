@@ -57,7 +57,7 @@ profiles, inclusive:
 | Ownership analysis | 10% |
 | Lowering every function, in two strata | 18% |
 | Assembly: inlining, of which `simplify` 11% | 20% |
-| `reachable_func_ids` | 4% |
+| `reachable_func_ids` (since fixed; see below) | 4% |
 | CTFE registry, consts, the rest of phase 5 | 2% |
 | Process start and the empty script (5.3M) | 4% |
 
@@ -137,6 +137,13 @@ building it did: 26,189 and 5.6MB, and parsing from 27% of the run to 23%,
 the rest of the allocation being the AST's own.
 
 ## What was fixed
+
+- `reachable_func_ids` copied, for every module, every entry of the world's
+  function-id table that module could reach, names and all, and interned the
+  copy: 4% of the `sys/std` compile and quadratic in the module count. It
+  holds a handle per reachable module now (`ModuleFuncIds`, interned once per
+  module): 128.0M to 123.4M instructions, and a cold 512-module compile in
+  `recompile_profile` from 4.25G to 2.19G.
 
 - Maps keyed by dense ids or hashed with SipHash, October 2026, from 140.6M
   instructions to 128.0M: ownership's per-binding state as vectors indexed by

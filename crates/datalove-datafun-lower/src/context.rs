@@ -466,7 +466,7 @@ impl<'db> LowerCtx<'db> {
                 // Module function - look up by (ModuleId<'db>, func_name).
                 let resolved_func_name = target.func().name.text(self.db).to_string();
                 let (ir_mod, func_id) = self.func_id_map
-                    .and_then(|m| m.func_id(module_id, &resolved_func_name))
+                    .and_then(|m| m.func_id(self.db, module_id, &resolved_func_name))
                     .unwrap_or_else(|| panic!(
                         "module function not in func_id_map: {}",
                         resolved_func_name
@@ -1535,21 +1535,21 @@ impl<'db> LowerCtx<'db> {
 /// Where lowering finds a module function a call names: the IR module and id
 /// of the function `name` in `module`.
 pub trait FuncIds<'db> {
-    fn func_id(&self, module: ModuleId<'db>, name: &str) -> Option<(IrModuleId, FuncId)>;
+    fn func_id(
+        &self,
+        db: &'db dyn salsa::Database,
+        module: ModuleId<'db>,
+        name: &str,
+    ) -> Option<(IrModuleId, FuncId)>;
 }
 
 impl<'db> FuncIds<'db> for crate::FuncIdTable<'db> {
-    fn func_id(&self, module: ModuleId<'db>, name: &str) -> Option<(IrModuleId, FuncId)> {
+    fn func_id(
+        &self,
+        _db: &'db dyn salsa::Database,
+        module: ModuleId<'db>,
+        name: &str,
+    ) -> Option<(IrModuleId, FuncId)> {
         self.get(&(module, name.to_string())).copied()
-    }
-}
-
-/// Entries sorted by module and then name, as the compiler's function id map
-/// keeps them, searched rather than hashed: building a map of every function a
-/// module can reach, once per module, cost more than the lookups it served.
-impl<'db> FuncIds<'db> for Vec<((ModuleId<'db>, String), (IrModuleId, FuncId))> {
-    fn func_id(&self, module: ModuleId<'db>, name: &str) -> Option<(IrModuleId, FuncId)> {
-        let found = self.binary_search_by(|((m, n), _)| m.cmp(&module).then_with(|| n.as_str().cmp(name)));
-        found.ok().map(|i| self[i].1)
     }
 }
