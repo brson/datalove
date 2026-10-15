@@ -412,24 +412,29 @@ end for
 Whether `for` is fast depends on that open-coding.
 This benchmark sums a list of 100,000 `u32`s 200 times
 and a set of 5,000 elements 20 times.
-These are `hyperfine` means for a release build.
+These are `hyperfine` means for a release build,
+including process startup and building the collection.
 
 | | interp | JIT | AOT |
 |---|---:|---:|---:|
-| list, index loop | 230 ms | 38 ms | 18.1 ms |
-| list, `for`, every cursor operation a runtime call | 487 ms | 155 ms | 52 ms |
-| list, `for`, open-coded | 193 ms | 34 ms | 16.4 ms |
-| set, `set.get` by position | 58 ms | 61 ms | 53 ms |
-| set, `for` | 7.2 ms | 7.5 ms | 1.4 ms |
+| list, index loop | 286 ms | 24.2 ms | 29.2 ms |
+| list, `for`, every advance a runtime call | 226 ms | 41.3 ms | 21.8 ms |
+| list, `for`, open-coded | 226 ms | 24.6 ms | 18.4 ms |
+| set, `set.get` by position | 57 ms | 58 ms | 54 ms |
+| set, `for` | 5.6 ms | 5.7 ms | 1.4 ms |
 
 The middle row is why the backends open-code the cursors.
-Calling into the runtime for every step cost two to four times as much as the old index loop.
-Open-coded, a list's `for` beats its index loop on every engine,
-though not by much.
+The interpreter always calls the runtime,
+so its two `for` rows are the same run.
+Under the JIT, calling the runtime for every advance
+made the loop 1.7x slower than open-coding it,
+even with the done check and the element read already inline.
+Open-coded, a list's `for` beats its index loop
+under the interpreter and AOT, and ties it under the JIT.
 The index loop was already just a bounds check and an add.
 The set is the biggest win:
 linear instead of quadratic,
-8x faster on the interpreter and 38x under AOT, at only 5,000 elements.
+10x faster on the interpreter and 39x under AOT, at only 5,000 elements.
 The old set loop runs about the same on every engine
 because nearly all its time is spent inside the runtime's `get`.
 
