@@ -1,0 +1,33 @@
+{
+  "ast": {
+    "expr": {
+      "List": {
+        "elements": [
+          {
+            "expr": {
+              "Hex": {
+                "value": "0x7FF8000000000000"
+              }
+            },
+            "type_hint": null
+          },
+          {
+            "expr": {
+              "Float": {
+                "value": "1.5"
+              }
+            },
+            "type_hint": null
+          }
+        ]
+      }
+    },
+    "type_hint": null
+  },
+  "diagnostics": [],
+  "errors": [],
+  "root_type": {
+    "element_type": "f64",
+    "kind": "List"
+  }
+}

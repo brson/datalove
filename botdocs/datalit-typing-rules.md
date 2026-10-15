@@ -276,6 +276,7 @@ type could be of both classes:
 |---|---|
 | `open` and `c` | `c` |
 | `int` and `hex` | `int` |
+| `float` and `hex` | `float` |
 | the same literal class | that class |
 | `atom a` and `atom a` | `atom a` |
 | `term a τ` and `term a τ'` | `term a τ`, with `τ ≐ τ'` |

@@ -435,6 +435,10 @@ fn merge_classes<'db>(
             (LiteralKind::Int, LiteralKind::Hex) | (LiteralKind::Hex, LiteralKind::Int) => {
                 (Class::Literal(LiteralKind::Int), None)
             }
+            // A hex literal is a float's bits as readily as an integer.
+            (LiteralKind::Float, LiteralKind::Hex) | (LiteralKind::Hex, LiteralKind::Float) => {
+                (Class::Literal(LiteralKind::Float), None)
+            }
             _ => return None,
         },
         (
