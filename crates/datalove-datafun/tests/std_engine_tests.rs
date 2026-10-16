@@ -314,31 +314,53 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
     if datalove_exampletest::engine_enabled("spec") {
         spec_world.with_compiled(|db, compiled| {
             check_library(compiled);
-            let (value, rider_lib_paths) = run_with_executor(
-                db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Spec Interp", GenericsPolicy::All)?;
-            let mut mismatches = Vec::new();
-            if value != interp_value {
-                mismatches.push(format!(
-                    "Spec Interp output mismatch:\n  interp: {}\n  Spec Interp: {}", interp_value, value));
-            }
-            mismatches.extend(compare_backends(
-                db, compiled, descriptor, &script_text, &rider_lib_paths, &interp_value, GenericsPolicy::All));
-            if !mismatches.is_empty() {
-                return Err(mismatches.join("\n"));
-            }
-            Ok(())
+            specialized(db, compiled, descriptor, &script_text, &interp_value, GenericsPolicy::All)
+        })?;
+    }
+
+    // And with a coin per call site, seeded from the fixture. Only the
+    // script's calls: the library's modules are compiled once per worker, and
+    // make no call to a generic at a concrete binding to toss one for.
+    if datalove_exampletest::engine_enabled("specchaos") {
+        let mut seed = std::hash::DefaultHasher::new();
+        std::hash::Hash::hash(&script_text, &mut seed);
+        let seed = std::hash::Hasher::finish(&seed);
+        world.with_compiled(|db, compiled| {
+            specialized(db, compiled, descriptor, &script_text, &interp_value, GenericsPolicy::Chaos { seed })
         })?;
     }
 
     Ok(interp_value)
 }
 
+/// The reference and every backend with the script compiled under
+/// `generics`, each held to `interp_value`, the reference's output without
+/// specialization.
+fn specialized(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    descriptor: &WorkspaceDescriptor,
+    script_text: &str,
+    interp_value: &str,
+    generics: GenericsPolicy,
+) -> Result<(), String> {
+    let name = format!("{generics:?} Interp");
+    let (value, rider_lib_paths) = run_with_executor(
+        db, compiled, descriptor, script_text, Engine::IrWalker, None, &name, generics)?;
+    let mut mismatches = Vec::new();
+    if value != interp_value {
+        mismatches.push(format!("{name} output mismatch:\n  interp: {interp_value}\n  {name}: {value}"));
+    }
+    mismatches.extend(compare_backends(
+        db, compiled, descriptor, script_text, &rider_lib_paths, interp_value, generics));
+    if mismatches.is_empty() { Ok(()) } else { Err(mismatches.join("\n")) }
+}
+
 /// Run every backend but the reference, and say how each disagreed with
 /// `interp_value`.
 ///
-/// Under a `generics` policy other than `Off` each backend is named with a
-/// `Spec` in front, and runs if the `spec` engine is enabled as well as its
-/// own.
+/// Under a `generics` policy other than `Off` each backend is named with the
+/// policy in front.
 fn compare_backends(
     db: &datafun::Database,
     compiled: &datafun::pipeline::CompiledModules<'_>,
@@ -348,8 +370,10 @@ fn compare_backends(
     interp_value: &str,
     generics: GenericsPolicy,
 ) -> Vec<String> {
-    let spec = generics != GenericsPolicy::Off;
-    let named = |name: &str| if spec { format!("Spec {name}") } else { name.to_string() };
+    let named = |name: &str| match generics {
+        GenericsPolicy::Off => name.to_string(),
+        policy => format!("{policy:?} {name}"),
+    };
 
     // The JIT.
     //

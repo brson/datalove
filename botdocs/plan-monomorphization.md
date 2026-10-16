@@ -1,6 +1,6 @@
 # Specializing Generics
 
-Written October 2026, after generics by reference landed. Phases 1 and 2
+Written October 2026, after generics by reference landed. Phases 1 to 3
 are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
 policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
@@ -322,7 +322,13 @@ Each phase leaves default behaviour unchanged and the suite passing.
    bytecode, jit, OSR, Cranelift AOT, C -- is held to the unspecialized
    reference. Instance names are `{generic}__g{id}`; the bindings are not
    spelled out yet.
-3. **Chaos.** `Chaos { seed }` and `specchaos`.
+3. **Chaos.** Done: `Chaos { seed }` hashes the seed with the call site
+   (function name, block, instruction), the callee and the bindings. The
+   policy is asked per site before an existing instance is reused, so two
+   sites calling one instance can go different ways. `specchaos` in
+   `engine_tests` seeds from the fixture; in `std_engine_tests` it seeds from
+   the script and tosses for the script's calls only, since the library is
+   compiled once per worker and has no concrete call to toss for.
 4. **Run time, callee side.** Descriptors back to types, the session instance
    table, `FuncIdentity::Instance`, per-binding counting, fallback to the
    generic. `specjit`.

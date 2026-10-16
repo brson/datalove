@@ -22,8 +22,11 @@
 //! - **noconst**: the bytecode with const inlining off, so every `const` is
 //!   evaluated at run time rather than at compile time.
 //! - **nospec**: the bytecode with comptime specialization off.
+//! - **spec**: the bytecode with every call to a generic at concrete bindings
+//!   pointed at an instance of it (`GenericsPolicy::All`).
+//! - **specchaos**: the same, a coin per call site, seeded from the fixture.
 //!
-//! The last two compile differently, so they are held to the reference's
+//! The last four compile differently, so they are held to the reference's
 //! outputs and debug logs, not to its IR, and only for a program the reference
 //! compiled without error: a `const` that fails to evaluate is a compile error,
 //! and at run time it is a value. Under Miri only the interpreted
@@ -88,10 +91,11 @@ enum Differential {
     NoConst,
     NoSpec,
     Spec,
+    SpecChaos,
 }
 
 impl Differential {
-    const ALL: [Differential; 10] = [
+    const ALL: [Differential; 11] = [
         Differential::Bytecode,
         Differential::Plain,
         Differential::Jit,
@@ -102,6 +106,7 @@ impl Differential {
         Differential::NoConst,
         Differential::NoSpec,
         Differential::Spec,
+        Differential::SpecChaos,
     ];
 
     fn name(self) -> &'static str {
@@ -116,6 +121,7 @@ impl Differential {
             Differential::NoConst => "noconst",
             Differential::NoSpec => "nospec",
             Differential::Spec => "spec",
+            Differential::SpecChaos => "specchaos",
         }
     }
 }
@@ -416,13 +422,14 @@ fn check(path: &Path) -> Result<String, String> {
         if skip.contains(&engine) || !datalove_exampletest::engine_enabled(engine.name()) {
             continue;
         }
-        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec | Differential::Spec) {
+        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec | Differential::Spec | Differential::SpecChaos) {
             continue;
         }
         let variant = match engine {
             Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..AnalysisOptions::default() }),
             Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..AnalysisOptions::default() }),
             Differential::Spec => Some(AnalysisOptions { generics: GenericsPolicy::All, ..AnalysisOptions::default() }),
+            Differential::SpecChaos => Some(AnalysisOptions { generics: GenericsPolicy::Chaos { seed }, ..AnalysisOptions::default() }),
             _ => None,
         };
         if let Some(options) = variant {
@@ -461,7 +468,7 @@ fn check(path: &Path) -> Result<String, String> {
                     Box::new(jit)
                 }),
             }),
-            Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec | Differential::Spec => None,
+            Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec | Differential::Spec | Differential::SpecChaos => None,
         };
         if let Some(setup) = interpreted {
             RAN[i].fetch_add(1, Ordering::Relaxed);

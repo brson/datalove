@@ -18,6 +18,7 @@
 //! its copies (`specialize`).
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use datalove_datafun_ir::instantiate::instantiate;
@@ -39,15 +40,36 @@ pub enum GenericsPolicy {
     Off,
     /// Every call whose bindings are concrete.
     All,
+    /// A coin per call site, seeded: the same seed makes the same choices.
+    ///
+    /// For testing. Two calls to one instance in one function can go
+    /// different ways, which is where an instance meeting its generic is most
+    /// likely to go wrong.
+    Chaos { seed: u64 },
+}
+
+/// One call site: the function it is in, and where in it.
+#[derive(Hash)]
+struct Site<'u> {
+    function: &'u str,
+    block: usize,
+    instruction: usize,
 }
 
 impl GenericsPolicy {
-    /// Whether to point a call to `callee` at bindings `bindings` at an
-    /// instance.
-    fn wants(self, _callee: CalleeKey, _bindings: &[IrType]) -> bool {
+    /// Whether to point the call at `site` to `callee` at bindings
+    /// `bindings` at an instance.
+    fn wants(self, site: &Site<'_>, callee: CalleeKey, bindings: &[IrType]) -> bool {
         match self {
             GenericsPolicy::Off => false,
             GenericsPolicy::All => true,
+            GenericsPolicy::Chaos { seed } => {
+                // `DefaultHasher::new` is keyed the same every time, so the
+                // choices are reproducible from the seed.
+                let mut hasher = std::hash::DefaultHasher::new();
+                (seed, site, callee, bindings).hash(&mut hasher);
+                hasher.finish() & 1 == 1
+            }
         }
     }
 }
@@ -110,8 +132,8 @@ impl<'a> Instantiator<'a> {
         chain: &[(CalleeKey, Vec<IrType>)],
         pending: &mut Vec<(Instance, Vec<(CalleeKey, Vec<IrType>)>)>,
     ) {
-        for block in &mut unit.blocks {
-            for instr in &mut block.instructions {
+        for (b, block) in unit.blocks.iter_mut().enumerate() {
+            for (i, instr) in block.instructions.iter_mut().enumerate() {
                 let Instruction::Call { func, bindings, .. } = instr else {
                     continue;
                 };
@@ -121,6 +143,10 @@ impl<'a> Instantiator<'a> {
                 let Some(callee) = (self.key_of)(func) else {
                     continue;
                 };
+                let site = Site { function: &unit.name, block: b, instruction: i };
+                if !self.policy.wants(&site, callee, bindings) {
+                    continue;
+                }
                 if let Some(instance) = self.instance_for(callee, bindings, chain, pending) {
                     *func = instance;
                     bindings.clear();
@@ -131,6 +157,9 @@ impl<'a> Instantiator<'a> {
 
     /// How to reach the instance of `callee` at `bindings`, made now if it
     /// has to be; `None` to leave the call to the generic.
+    ///
+    /// The policy has been asked already, per call site, so that a site can
+    /// call the generic though another has made the instance.
     fn instance_for(
         &mut self,
         callee: CalleeKey,
@@ -142,7 +171,7 @@ impl<'a> Instantiator<'a> {
         if let Some(made) = self.made.get(&key) {
             return Some(made.clone());
         }
-        if !self.policy.wants(callee, bindings) || grows(chain, callee, bindings) {
+        if grows(chain, callee, bindings) {
             return None;
         }
         let count = self.per_function.entry(callee).or_default();
@@ -404,6 +433,34 @@ mod tests {
         assert_eq!(functions.len(), 3);
         assert_eq!(calls(&functions[0]), [(module(2), vec![])]);
         assert_eq!(calls(&functions[2]), [(module(1), vec![list(IrType::U32)])]);
+    }
+
+    fn run_under(policy: GenericsPolicy, functions: Vec<IrCodeUnit>) -> Vec<Arc<IrCodeUnit>> {
+        let mut functions: Vec<Arc<IrCodeUnit>> = functions.into_iter().map(Arc::new).collect();
+        instantiate_module_graph(&mut [(M, &mut functions)], policy);
+        functions
+    }
+
+    #[test]
+    fn chaos_splits_sites_and_repeats_itself() {
+        // Sixteen calls to `f<u32>` in one function.
+        let program = || vec![
+            function(0, 0, IrType::U32, vec![(1, vec![IrType::U32]); 16]),
+            function(1, 1, IrType::Param(0), vec![]),
+        ];
+        let instanced = |functions: &[Arc<IrCodeUnit>]| calls(&functions[0]).iter()
+            .map(|(func, _)| *func != module(1))
+            .collect::<Vec<bool>>();
+        let mixed = (0..8).any(|seed| {
+            let sites = instanced(&run_under(GenericsPolicy::Chaos { seed }, program()));
+            sites.contains(&true) && sites.contains(&false)
+        });
+        assert!(mixed, "some seed sends one site to the instance and another to the generic");
+        for seed in 0..8 {
+            let once = instanced(&run_under(GenericsPolicy::Chaos { seed }, program()));
+            let again = instanced(&run_under(GenericsPolicy::Chaos { seed }, program()));
+            assert_eq!(once, again);
+        }
     }
 
     #[test]
