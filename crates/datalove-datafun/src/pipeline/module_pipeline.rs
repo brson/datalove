@@ -518,6 +518,7 @@ impl ModuleCompilationPipeline {
                 evaluator,
                 !self.options.const_inlining,
                 self.options.skip_specialization,
+                self.options.generics,
                 self.options.cache_consts.then_some(&mut self.const_cache),
             ))
         } else {

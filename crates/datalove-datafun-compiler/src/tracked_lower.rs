@@ -31,6 +31,7 @@ use crate::specialize::{
     CalleeKey, MAX_ROUNDS, MonomorphizationPlan, collect_instantiations_into,
     module_callee_key, monomorphize_function, over_limit, rewrite_comptime_calls,
 };
+use crate::instances::{GenericsPolicy, has_concrete_generic_call, instantiate_module_graph};
 use crate::tracked_ownership_analysis::{SingleModuleAnalysis, ModuleGraphAnalysis};
 
 /// Function ID map for cross-module call resolution.
@@ -1364,6 +1365,7 @@ fn evaluate_module_level_consts<'db>(
 ///
 /// - `skip_const_inlining`: Skip const inlining phase (for testing)
 /// - `skip_specialization`: Skip const parameter specialization (for differential testing)
+/// - `generics`: Which calls to generics are pointed at instances; see `instances`
 pub fn lower_module_graph_with_evaluator<'db>(
     db: &'db dyn DbClone,
     parsed_graph: ParsedModuleGraph<'db>,
@@ -1373,6 +1375,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     skip_const_inlining: bool,
     skip_specialization: bool,
+    generics: GenericsPolicy,
     mut const_cache: Option<&mut ConstCache>,
 ) -> ModuleGraphLoweringResult<'db> {
     let db_salsa = db.as_salsa_db();
@@ -1505,6 +1508,15 @@ pub fn lower_module_graph_with_evaluator<'db>(
             db_salsa, parsed_graph, typecheck_result, evaluator, func_id_map,
             &module_consts, callable_modules, lowered_modules,
         )
+    };
+
+    // Phase 5c'': calls to generics at concrete bindings pointed at instances,
+    // after const specialization so that a const copy, still generic, can be
+    // instantiated too.
+    let lowered_modules = if generics == GenericsPolicy::Off {
+        lowered_modules
+    } else {
+        instantiate_generics(db_salsa, parsed_graph, lowered_modules, generics)
     };
 
     // Module const failures have to reach the lowering result, or a module
@@ -1726,6 +1738,41 @@ fn specialize_module_graph<'db>(
         .collect();
 
     (specialized, errors)
+}
+
+/// Phase 5c'' over the whole graph, in and out under handles.
+fn instantiate_generics<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    modules: LoweredModules<'db>,
+    policy: GenericsPolicy,
+) -> LoweredModules<'db> {
+    if !modules.iter().any(|(_, lowered)| lowered.ir(db).functions.iter().any(|f| has_concrete_generic_call(f))) {
+        return modules;
+    }
+    let module_ids = ir_module_ids(db, parsed_graph);
+    let mut ir: Vec<(ModuleId<'db>, IrModuleId, ModuleLoweredFunctions)> = modules.iter()
+        .map(|(module_id, lowered)| (*module_id, module_ids[module_id], lowered.ir(db).as_ref().clone()))
+        .collect();
+    let before: HashMap<ModuleId<'db>, usize> = ir.iter()
+        .map(|(module_id, _, funcs)| (*module_id, funcs.functions.iter().map(|f| f.id.0 as usize + 1).max().unwrap_or(0)))
+        .collect();
+    let mut functions: Vec<(IrModuleId, &mut Vec<Arc<IrCodeUnit>>)> = ir.iter_mut()
+        .map(|(_, ir_module_id, funcs)| (*ir_module_id, &mut funcs.functions))
+        .collect();
+    instantiate_module_graph(&mut functions, policy);
+    ir.into_iter()
+        .map(|(module_id, _, mut funcs)| {
+            // The instances, numbered after everything that was there.
+            let added: Vec<(String, FuncId)> = funcs.functions.iter()
+                .filter(|f| f.id.0 as usize >= before[&module_id])
+                .map(|f| (f.name.clone(), FuncId(f.id.0)))
+                .collect();
+            funcs.func_name_to_id.extend(added);
+            funcs.func_name_to_id.sort_by(|a, b| a.0.cmp(&b.0));
+            (module_id, specialized_module(db, module_id, Arc::new(funcs)))
+        })
+        .collect()
 }
 
 /// Specialize functions with const parameters by monomorphization.

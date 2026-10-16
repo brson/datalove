@@ -14,6 +14,7 @@
 //!
 //! Scratch tool. `cargo run --release -p datalove-bench --example cold_phases -- [iterations]`.
 
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
@@ -80,6 +81,7 @@ fn one_cold_compile(
         &mut evaluator,
         false,
         false,
+        GenericsPolicy::Off,
         None,
     );
     split.lower = t.elapsed();

@@ -46,6 +46,7 @@ use datalove_datafun_compiler::tracked_script_ownership::{
 use datalove_datafun_compiler::lower::ScriptFunctionAnalyses;
 use datalove_datafun_ir::{ConstValue, CtfeEvaluator, CtfeError, IrCodeUnit, IrType, ResolvedConsts, ConstEvalError};
 use datalove_datafun_interp::InterpCtfeEvaluator;
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_tycheck::{
     type_check_script_units, typecheck_script_unit, unit_ast,
     Script, ScriptEnv, ScriptUnit, ScriptUnitKind,
@@ -160,6 +161,7 @@ impl<'db> CompiledModules<'db> {
             ctfe_evaluator: RefCell::new(ctfe_evaluator),
             skip_const_inlining: false,
             skip_specialization: false,
+            generics: GenericsPolicy::Off,
             shared_context: self.shared.clone(),
             auto_adapt_mode: AutoAdaptMode::Disabled,
             last_ownership_errors: Vec::new(),
@@ -224,6 +226,7 @@ pub struct ScriptSession {
     records: Vec<UnitLowerRecord>,
     skip_const_inlining: bool,
     skip_specialization: bool,
+    generics: GenericsPolicy,
     auto_adapt_mode: AutoAdaptMode,
 }
 
@@ -287,6 +290,8 @@ pub struct ScriptCompiler<'db> {
     skip_const_inlining: bool,
     /// When true, comptime calls are left naming the original function.
     skip_specialization: bool,
+    /// Which calls to generics are pointed at instances.
+    generics: GenericsPolicy,
     /// Shared module context for cross-module CTFE function calls.
     shared_context: Arc<SharedModuleContext<'db>>,
     /// Auto-adapt mode for ownership analysis.
@@ -735,6 +740,7 @@ impl<'db> ScriptCompiler<'db> {
         self.unit_records = session.records;
         self.skip_const_inlining = session.skip_const_inlining;
         self.skip_specialization = session.skip_specialization;
+        self.generics = session.generics;
         self.set_auto_adapt_mode(session.auto_adapt_mode);
     }
 
@@ -746,6 +752,7 @@ impl<'db> ScriptCompiler<'db> {
             records: self.unit_records,
             skip_const_inlining: self.skip_const_inlining,
             skip_specialization: self.skip_specialization,
+            generics: self.generics,
             auto_adapt_mode: self.auto_adapt_mode,
         }
     }
@@ -826,6 +833,12 @@ impl<'db> ScriptCompiler<'db> {
     /// still takes the const argument. Used for differential testing.
     pub fn set_skip_specialization(&mut self, enabled: bool) {
         self.skip_specialization = enabled;
+    }
+
+    /// Which calls to generics are pointed at instances; see
+    /// `datalove_datafun_compiler::instances`.
+    pub fn set_generics_policy(&mut self, policy: GenericsPolicy) {
+        self.generics = policy;
     }
 
     /// Skip compile-time const evaluation and inlining.
@@ -984,6 +997,11 @@ impl<'db> ScriptCompiler<'db> {
             Ok(ir) => ir,
             Err(result) => return result,
         };
+
+        // Phase 5': calls to generics pointed at instances, after const
+        // specialization so that a const copy, still generic, can be
+        // instantiated too.
+        let ir_unit = self.phase_instantiate(ir_unit);
 
         // Phase 6: Every function finished, as a module's are: calls to
         // `inline` functions replaced by their bodies, after specialization so
@@ -1602,6 +1620,16 @@ impl<'db> ScriptCompiler<'db> {
             callable: None,
             data_files: self.env.data(self.db),
         }
+    }
+
+    fn phase_instantiate(&self, mut ir_unit: IrCodeUnit) -> IrCodeUnit {
+        if self.generics == GenericsPolicy::Off {
+            return ir_unit;
+        }
+        let registry = &self.shared_context.module_registry;
+        let module_unit = |module, id| registry.get_module_function_as_unit(module, id).cloned();
+        datalove_datafun_compiler::instances::instantiate_script_unit(&mut ir_unit, &module_unit, self.generics);
+        ir_unit
     }
 
     fn phase_specialize(

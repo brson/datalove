@@ -15,6 +15,7 @@ use rmx::prelude::*;
 use std::path::{Path, PathBuf};
 use datalove_datafun as datafun;
 use datalove_datafun_cranelift_jit::JitEngine;
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use datalove_datafun_interp::{CallDispatcher, Engine};
 use datafun::pipeline::{
     WorkspaceDescriptor, TypecheckResult, LoweringResult,
@@ -30,13 +31,19 @@ use datafun::pipeline::{
 struct Worker {
     descriptor: WorkspaceDescriptor,
     world: datafun::pipeline::CompiledWorld,
+    /// The library again, with every call to a generic that can be pointed
+    /// at an instance pointed at one: the `spec` engines.
+    spec_world: datafun::pipeline::CompiledWorld,
 }
 
 impl Worker {
     fn new() -> Self {
         let descriptor = describe_sys();
         let world = datafun::pipeline::CompiledWorld::new(&descriptor);
-        Self { descriptor, world }
+        let mut spec_descriptor = describe_sys();
+        spec_descriptor.options.generics = GenericsPolicy::All;
+        let spec_world = datafun::pipeline::CompiledWorld::new(&spec_descriptor);
+        Self { descriptor, world, spec_world }
     }
 }
 
@@ -112,9 +119,11 @@ fn run_with_executor(
     engine: Engine,
     jit: Option<Box<dyn CallDispatcher>>,
     backend_name: &str,
+    generics: GenericsPolicy,
 ) -> Result<(String, Vec<PathBuf>), String> {
     let mut compiler = compiled.script_compiler_default(db)
         .ok_or(format!("{}: module compilation failed (compiler)", backend_name))?;
+    compiler.set_generics_policy(generics);
     let mut executor = compiled.script_executor(datalove_rt::c::DebugOutputMode::Disabled, jit)
         .ok_or(format!("{}: module compilation failed (executor)", backend_name))?;
     executor.set_engine(engine);
@@ -188,11 +197,13 @@ fn run_aot(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
+    generics: GenericsPolicy,
 ) -> Result<String, String> {
     let modified_source = format!("{}\ndebuglog output", script_text);
 
     let mut compiler = compiled.script_compiler_default(db)
         .ok_or("AOT: module compilation failed (compiler)")?;
+    compiler.set_generics_policy(generics);
 
     let result = compiler.compile_fragment(&modified_source);
     if let TypecheckResult::Error { errors } = &result.typecheck {
@@ -237,11 +248,13 @@ fn run_c_aot(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
+    generics: GenericsPolicy,
 ) -> Result<String, String> {
     let modified_source = format!("{}\ndebuglog output", script_text);
 
     let mut compiler = compiled.script_compiler_default(db)
         .ok_or("C AOT: module compilation failed (compiler)")?;
+    compiler.set_generics_policy(generics);
 
     let result = compiler.compile_fragment(&modified_source);
     if let TypecheckResult::Error { errors } = &result.typecheck {
@@ -278,89 +291,135 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
     let script_text = std::fs::read_to_string(path)
         .map_err(|e| format!("Failed to read file: {}", e))?;
 
-    // Split so that the descriptor and the world are borrowed separately.
-    let Worker { descriptor, world } = worker;
+    // Split so that the descriptor and the worlds are borrowed separately.
+    let Worker { descriptor, world, spec_world } = worker;
 
-    world.with_compiled(|db, compiled| {
+    let interp_value = world.with_compiled(|db, compiled| {
         check_library(compiled);
 
         // The reference.
-        let (interp_value, rider_lib_paths) =
-            run_with_executor(db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Interp")?;
+        let (interp_value, rider_lib_paths) = run_with_executor(
+            db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Interp", GenericsPolicy::Off)?;
 
-        // The JIT.
-        //
-        // Caught rather than allowed to propagate, so that a jit that panics on
-        // one fixture is reported as that fixture disagreeing with the
-        // interpreter rather than taking the whole suite with it. This used to be
-        // a spawned thread, which caught the panic as a side effect of joining
-        // and was there for a Cranelift relocation problem that the jit's own
-        // arena fixed.
-        let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, name: &str| {
-            std::panic::catch_unwind(|| {
-                let mut jit = JitEngine::new(threshold)
-                    .map_err(|e| format!("JIT engine creation failed: {}", e))?;
-                if let Some(iterations) = osr_threshold {
-                    jit.set_osr_threshold(iterations);
-                }
-                let (value, _) = run_with_executor(
-                    db, compiled, descriptor, &script_text, engine, Some(Box::new(jit)), name)?;
-                Ok(value)
-            })
-            .unwrap_or_else(|panic| {
-                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
-                    s.to_string()
-                } else if let Some(s) = panic.downcast_ref::<String>() {
-                    s.clone()
-                } else {
-                    "unknown panic".to_string()
-                };
-                Err(format!("{name} panicked: {}", msg))
-            })
-        };
-        let interpreted = |engine: Engine, name: &str| {
-            run_with_executor(db, compiled, descriptor, &script_text, engine, None, name)
-                .map(|(value, _)| value)
-        };
-
-        // Every other backend, by its name here and its name to
-        // `engine_enabled`, compared against the interpreter. All errors are
-        // fatal.
-        let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 7] = [
-            ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
-            // The bytecode without its optimization pass, for the pass's rules
-            // to be checked against.
-            ("PlainBytecode", "plain", &|| interpreted(Engine::PlainBytecode, "PlainBytecode")),
-            ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, "JIT")),
-            // The bytecode with the JIT, which it calls into from planned call
-            // sites; and with the JIT compiling no function by its calls and
-            // entering every loop at its second iteration instead, so that the
-            // library's loops and everything after them run in code entered
-            // partway through a call.
-            ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, "Bytecode JIT")),
-            ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR")),
-            ("AOT", "aot", &|| run_aot(db, compiled, &script_text, &rider_lib_paths)),
-            ("C AOT", "c", &|| run_c_aot(db, compiled, &script_text, &rider_lib_paths)),
-        ];
-        let mut mismatches = Vec::new();
-        for (name, engine, run) in backends {
-            if !datalove_exampletest::engine_enabled(engine) {
-                continue;
-            }
-            match run() {
-                Ok(value) if value != interp_value => mismatches.push(format!(
-                    "{} output mismatch:\n  interp: {}\n  {}: {}",
-                    name, interp_value, name, value)),
-                Err(e) => mismatches.push(format!("{} error: {}", name, e)),
-                _ => {}
-            }
-        }
+        let mismatches = compare_backends(
+            db, compiled, descriptor, &script_text, &rider_lib_paths, &interp_value, GenericsPolicy::Off);
         if !mismatches.is_empty() {
             return Err(mismatches.join("\n"));
         }
-
         Ok(interp_value)
-    })
+    })?;
+
+    // Every engine again, with calls to generics pointed at instances, in the
+    // library and in the script, and the reference the same.
+    if datalove_exampletest::engine_enabled("spec") {
+        spec_world.with_compiled(|db, compiled| {
+            check_library(compiled);
+            let (value, rider_lib_paths) = run_with_executor(
+                db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Spec Interp", GenericsPolicy::All)?;
+            let mut mismatches = Vec::new();
+            if value != interp_value {
+                mismatches.push(format!(
+                    "Spec Interp output mismatch:\n  interp: {}\n  Spec Interp: {}", interp_value, value));
+            }
+            mismatches.extend(compare_backends(
+                db, compiled, descriptor, &script_text, &rider_lib_paths, &interp_value, GenericsPolicy::All));
+            if !mismatches.is_empty() {
+                return Err(mismatches.join("\n"));
+            }
+            Ok(())
+        })?;
+    }
+
+    Ok(interp_value)
+}
+
+/// Run every backend but the reference, and say how each disagreed with
+/// `interp_value`.
+///
+/// Under a `generics` policy other than `Off` each backend is named with a
+/// `Spec` in front, and runs if the `spec` engine is enabled as well as its
+/// own.
+fn compare_backends(
+    db: &datafun::Database,
+    compiled: &datafun::pipeline::CompiledModules<'_>,
+    descriptor: &WorkspaceDescriptor,
+    script_text: &str,
+    rider_lib_paths: &[PathBuf],
+    interp_value: &str,
+    generics: GenericsPolicy,
+) -> Vec<String> {
+    let spec = generics != GenericsPolicy::Off;
+    let named = |name: &str| if spec { format!("Spec {name}") } else { name.to_string() };
+
+    // The JIT.
+    //
+    // Caught rather than allowed to propagate, so that a jit that panics on
+    // one fixture is reported as that fixture disagreeing with the
+    // interpreter rather than taking the whole suite with it. This used to be
+    // a spawned thread, which caught the panic as a side effect of joining
+    // and was there for a Cranelift relocation problem that the jit's own
+    // arena fixed.
+    let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, name: &str| {
+        std::panic::catch_unwind(|| {
+            let mut jit = JitEngine::new(threshold)
+                .map_err(|e| format!("JIT engine creation failed: {}", e))?;
+            if let Some(iterations) = osr_threshold {
+                jit.set_osr_threshold(iterations);
+            }
+            let (value, _) = run_with_executor(
+                db, compiled, descriptor, script_text, engine, Some(Box::new(jit)), name, generics)?;
+            Ok(value)
+        })
+        .unwrap_or_else(|panic| {
+            let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                s.to_string()
+            } else if let Some(s) = panic.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "unknown panic".to_string()
+            };
+            Err(format!("{name} panicked: {}", msg))
+        })
+    };
+    let interpreted = |engine: Engine, name: &str| {
+        run_with_executor(db, compiled, descriptor, script_text, engine, None, name, generics)
+            .map(|(value, _)| value)
+    };
+
+    // Every other backend, by its name here and its name to
+    // `engine_enabled`, compared against the interpreter. All errors are
+    // fatal.
+    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 7] = [
+        ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
+        // The bytecode without its optimization pass, for the pass's rules
+        // to be checked against.
+        ("PlainBytecode", "plain", &|| interpreted(Engine::PlainBytecode, "PlainBytecode")),
+        ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, "JIT")),
+        // The bytecode with the JIT, which it calls into from planned call
+        // sites; and with the JIT compiling no function by its calls and
+        // entering every loop at its second iteration instead, so that the
+        // library's loops and everything after them run in code entered
+        // partway through a call.
+        ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, "Bytecode JIT")),
+        ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR")),
+        ("AOT", "aot", &|| run_aot(db, compiled, script_text, rider_lib_paths, generics)),
+        ("C AOT", "c", &|| run_c_aot(db, compiled, script_text, rider_lib_paths, generics)),
+    ];
+    let mut mismatches = Vec::new();
+    for (name, engine, run) in backends {
+        if !datalove_exampletest::engine_enabled(engine) {
+            continue;
+        }
+        let name = named(name);
+        match run() {
+            Ok(value) if value != interp_value => mismatches.push(format!(
+                "{} output mismatch:\n  interp: {}\n  {}: {}",
+                name, interp_value, name, value)),
+            Err(e) => mismatches.push(format!("{} error: {}", name, e)),
+            _ => {}
+        }
+    }
+    mismatches
 }
 
 fn main() {

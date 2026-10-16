@@ -12,6 +12,7 @@ pub mod dense;
 pub mod display;
 pub mod frame_layout;
 pub mod inline;
+pub mod instantiate;
 pub mod layout;
 pub mod params;
 pub mod registry;

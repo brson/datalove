@@ -927,6 +927,14 @@ reports that.
 parameters, its `type_param_count` and its descriptor table; it drops only the
 const parameters, which come before the descriptors.
 
+**Generic specialization** (`ir::instantiate`, driven by
+`compiler::instances`) makes an instance: a generic with its type parameters
+substituted in its value, slot and signature types and its calls' bindings,
+which is a concrete function. Optional and additive, under a
+`GenericsPolicy` that is `Off` by default; it runs after const
+specialization, and a call at concrete bindings is pointed at the instance.
+See [Specializing Generics](plan-monomorphization.md).
+
 ## 14. Consumers
 
 All four agree with `ir::layout`.

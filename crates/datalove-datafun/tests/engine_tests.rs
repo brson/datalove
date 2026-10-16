@@ -43,6 +43,7 @@
 //! - `// expect-osr: entered`: the osr run entered compiled code at some loop,
 //!   and was refused at none.
 
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::Path;
 use std::process::Command;
@@ -86,10 +87,11 @@ enum Differential {
     C,
     NoConst,
     NoSpec,
+    Spec,
 }
 
 impl Differential {
-    const ALL: [Differential; 9] = [
+    const ALL: [Differential; 10] = [
         Differential::Bytecode,
         Differential::Plain,
         Differential::Jit,
@@ -99,6 +101,7 @@ impl Differential {
         Differential::C,
         Differential::NoConst,
         Differential::NoSpec,
+        Differential::Spec,
     ];
 
     fn name(self) -> &'static str {
@@ -112,6 +115,7 @@ impl Differential {
             Differential::C => "c",
             Differential::NoConst => "noconst",
             Differential::NoSpec => "nospec",
+            Differential::Spec => "spec",
         }
     }
 }
@@ -412,12 +416,13 @@ fn check(path: &Path) -> Result<String, String> {
         if skip.contains(&engine) || !datalove_exampletest::engine_enabled(engine.name()) {
             continue;
         }
-        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec) {
+        if cfg!(miri) && !matches!(engine, Differential::Bytecode | Differential::Plain | Differential::NoConst | Differential::NoSpec | Differential::Spec) {
             continue;
         }
         let variant = match engine {
             Differential::NoConst => Some(AnalysisOptions { skip_const_inlining: true, ..AnalysisOptions::default() }),
             Differential::NoSpec => Some(AnalysisOptions { skip_specialization: true, ..AnalysisOptions::default() }),
+            Differential::Spec => Some(AnalysisOptions { generics: GenericsPolicy::All, ..AnalysisOptions::default() }),
             _ => None,
         };
         if let Some(options) = variant {
@@ -456,7 +461,7 @@ fn check(path: &Path) -> Result<String, String> {
                     Box::new(jit)
                 }),
             }),
-            Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec => None,
+            Differential::Aot | Differential::C | Differential::NoConst | Differential::NoSpec | Differential::Spec => None,
         };
         if let Some(setup) = interpreted {
             RAN[i].fetch_add(1, Ordering::Relaxed);

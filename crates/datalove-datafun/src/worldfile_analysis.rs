@@ -15,6 +15,7 @@
 //! For testing purposes, use [`analyze_worldfile_with_options`] with
 //! `skip_const_inlining: true` to evaluate const bindings at runtime instead.
 
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
 use serde::{Serialize, Deserialize};
 
@@ -68,6 +69,9 @@ pub struct AnalysisOptions {
     /// Skip comptime specialization (use original function without union-branch dispatch).
     /// Useful for differential testing to verify specialization correctness.
     pub skip_specialization: bool,
+    /// Which calls to generics are pointed at instances, in the module graph
+    /// and in the scripts alike.
+    pub generics: GenericsPolicy,
 }
 
 // ============================================================================
@@ -134,6 +138,7 @@ pub fn analyze_worldfile_with_hooks(
         CompilerOptions {
             const_inlining: !options.skip_const_inlining,
             skip_specialization: options.skip_specialization,
+            generics: options.generics,
             keep_ir_dumps: true,
             ..CompilerOptions::default()
         },
@@ -176,6 +181,10 @@ pub fn analyze_worldfile_with_hooks(
         if let Some(ref mut compiler) = compiler {
             compiler.set_skip_specialization(true);
         }
+    }
+
+    if let Some(ref mut compiler) = compiler {
+        compiler.set_generics_policy(options.generics);
     }
 
     if let Some(executor) = &mut executor {

@@ -1,6 +1,8 @@
 # Specializing Generics
 
-Written October 2026, after generics by reference landed; not implemented.
+Written October 2026, after generics by reference landed. Phases 1 and 2
+are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
+policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
 generic again from source to get a concrete copy. Under the current design it
 does not.
@@ -187,8 +189,12 @@ the backstop.
   instantiated like any generic. Running 5c first means instances never see
   a `ComptimeCall` that 5c could have resolved.
 - *Inlining.* Inline functions are never called, so they are never
-  instantiated. Inlining runs after this pass and sees concrete callees more
-  often, which it already handles.
+  instantiated. Inlining runs after this pass, in `optimize::finish`, so a
+  call that inlining exposes -- an inline generic's body calling a
+  non-inline generic, now at the caller's concrete binding -- stays a call to
+  the generic. Inlining is per function and cannot make functions, so
+  catching those needs this pass to run again after it, or inlining to run
+  before it.
 - *Natives.* A generic native has no IR to instantiate. An instance calls it
   with static descriptors, which is already the cheap path.
 
@@ -306,12 +312,16 @@ IR text in fixtures stays at the default policy.
 
 Each phase leaves default behaviour unchanged and the suite passing.
 
-1. **`instantiate`.** The substitution, the no-`Param` assertion, and unit
-   tests that substitute into every instruction kind. A test hook that
-   instantiates a module function by hand and runs it on every engine.
-2. **The AOT pass under `All`.** Seed, close, growth check, caps, fresh ids;
-   the `spec` variant and AOT/C `All` builds. Done when every fixture passes
-   with leak checks.
+1. **`instantiate`.** Done: `crates/datalove-datafun-ir/src/instantiate.rs`,
+   with unit tests on a hand-built generic. The test hook became phase 2's
+   variants, which run instances on every engine.
+2. **The AOT pass under `All`.** Done: `instances.rs`, the module graph's
+   phase 5c'' and the script compiler's phase 5'. The variants are `spec` in
+   `engine_tests` (bytecode) and in `std_engine_tests`, where the standard
+   library is compiled a second time under `All` and every backend --
+   bytecode, jit, OSR, Cranelift AOT, C -- is held to the unspecialized
+   reference. Instance names are `{generic}__g{id}`; the bindings are not
+   spelled out yet.
 3. **Chaos.** `Chaos { seed }` and `specchaos`.
 4. **Run time, callee side.** Descriptors back to types, the session instance
    table, `FuncIdentity::Instance`, per-binding counting, fallback to the
@@ -327,6 +337,15 @@ Each phase leaves default behaviour unchanged and the suite passing.
 
 Phase 2 proves the design: `repeated[bool]` calling `push[bool]`, built
 ahead of time, with no descriptor in either.
+
+What phase 2 found: `sys/std` makes no call at a concrete binding inside its
+own modules, since its generics forward their `T`, so the module graph's pass
+makes nothing there. The chains form in script units, which instantiate
+`push`, `of`, `unwrap_or` and the like into their `nested_units`. Many of the
+library's generics are `inline` (`len`, `insert`, `get`) and are spliced
+rather than instantiated, which is where the inlining order above matters.
+The engine corpus has few generics; the standard library's suite is where
+this is tested.
 
 ## Open questions
 

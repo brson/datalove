@@ -71,7 +71,7 @@ pub const MAX_INSTANTIATIONS: usize = 64;
 pub const MAX_ROUNDS: usize = 16;
 
 /// Where a comptime call reaches.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CalleeKey {
     /// A unit beside the one making the call, in its `nested_units`.
     Local(CodeUnitId),

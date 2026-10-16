@@ -33,6 +33,9 @@ pub mod compile;
 // Comptime argument specialization.
 pub mod specialize;
 
+// Generic specialization: instances of generics.
+pub mod instances;
+
 // The passes that finish a function, in one order for every pipeline.
 pub mod optimize;
 

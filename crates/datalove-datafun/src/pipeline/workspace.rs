@@ -9,6 +9,7 @@
 //! (CLI, REPL, LSP) build descriptors and feed them to
 //! [`ModuleCompilationPipeline`](super::ModuleCompilationPipeline).
 
+use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -168,6 +169,9 @@ pub struct RiderCrate {
 pub struct CompilerOptions {
     pub const_inlining: bool,
     pub skip_specialization: bool,
+    /// Which calls to generics are pointed at instances; see
+    /// `datalove_datafun_compiler::instances`.
+    pub generics: GenericsPolicy,
     /// Keep a printed copy of every lowered function on the compiled modules.
     ///
     /// Off by default, because printing them costs about as much as the whole
@@ -186,6 +190,7 @@ impl Default for CompilerOptions {
         Self {
             const_inlining: true,
             skip_specialization: false,
+            generics: GenericsPolicy::Off,
             keep_ir_dumps: false,
             cache_consts: true,
         }
