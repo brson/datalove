@@ -20,7 +20,7 @@ Then add I/O to it &mdash; carefully.
 
 
 
-> **Latest news**: [Checkpoint 1](posts/) &middot; updated 2026-10-09.
+> **Latest news**: [Iterating collections without first-class references](posts/) &middot; updated 2026-10-16.
 
 > **Roadmap**: [0 of 15 complete](roadmap.md) &middot; updated 2026-10-09.
 
