@@ -73,6 +73,7 @@ pub use compiled_world::CompiledWorld;
 pub use script_compiler::{ScriptCompiler, ScriptSession};
 pub use script_executor::ScriptExecutor;
 pub use module_pipeline::ModuleCompilationPipeline;
+pub use datalove_datafun_compiler::instances::GenericsPolicy;
 pub use workspace::{
     WorkspaceDescriptor, WorkspaceDelta, SystemLibrary,
     PackageLibrary, PackageDescriptor, ModuleDescriptor,

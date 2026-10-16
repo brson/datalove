@@ -342,6 +342,10 @@ struct AotCompileCommand {
     /// there is no single object file to hand back.
     #[arg(long)]
     c: bool,
+    /// Compile each call to a generic at concrete types as a call to an
+    /// instance of it at those types, in the modules and the script alike.
+    #[arg(long)]
+    specialize: bool,
 }
 
 #[derive(clap::Args)]
@@ -871,10 +875,16 @@ impl AotCompileCommand {
         // component the emitted program links gets built.
         let work_dir = datalove::paths::work_dir()?;
         let sys = datalove::sys_packages::system_library();
-        let descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?
+        let mut descriptor = command_workspace(&sys, self.no_sys, Some(&self.file_path))?
             .with_work_dir(&work_dir);
+        let generics = if self.specialize {
+            datafun::pipeline::GenericsPolicy::All
+        } else {
+            datafun::pipeline::GenericsPolicy::Off
+        };
+        descriptor.options.generics = generics;
 
-                // Read the script file, which is what says where compilation starts.
+        // Read the script file, which is what says where compilation starts.
         let script_source = rmx::std::fs::read_to_string(&self.file_path)
             .with_context(|| format!("Failed to read script file: {}", self.file_path.display()))?;
 
@@ -894,8 +904,8 @@ impl AotCompileCommand {
         // Safe to unwrap since we checked has_errors() above.
         let mut compiler = compiled.script_compiler_default(&db)
             .expect("script_compiler should succeed after error check");
+        compiler.set_generics_policy(generics);
         let registry = compiled.module_registry();
-
 
         let compiled_unit = compiler.compile_fragment(&script_source);
 

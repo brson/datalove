@@ -1,7 +1,7 @@
 # Specializing Generics
 
 Written October 2026, after generics by reference landed. Phases 1 to 6
-are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
+are implemented, and phase 7 measured: `ir::instantiate`, and the ahead-of-time pass under the `All`
 policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
 generic again from source to get a concrete copy. Under the current design it
@@ -399,11 +399,40 @@ Each phase leaves default behaviour unchanged and the suite passing.
    `float.lerp` and reading them after failed so
    (`184_inline_generic_reads_after`). The splice now binds the callee with
    `substitute_types` and cleans it with the same pass first.
-7. **`Default`.** Heuristics, measured on benchvs (Sieve's `list.repeated`
-   is the case [AWFY](research/research-awfy-benchmarks.md) points at) and
-   the store demo, with code size and compile time recorded. The erased-era
-   numbers in that research doc predate generics by reference and need
-   remeasuring first.
+7. **`Default`.** Measured; no default changed yet. `aot-compile
+   --specialize` (the `All` policy ahead of time) and `script --jit
+   --jit-specialize` against the same without, release build, hyperfine, the
+   mean of five runs or more; every output identical:
+
+   | program | jit | jit, specializing | aot | aot, specializing |
+   |---|---:|---:|---:|---:|
+   | fib | 344 ms | 1.01 | 346 ms | 1.01 |
+   | sum | 284 ms | 1.00 | 302 ms | 1.00 |
+   | primes | 331 ms | 1.01 | 336 ms | 0.99 |
+   | wordfreq | 543 ms | 0.99 | 545 ms | 0.98 |
+   | sieve | 806 ms | 0.80 | 698 ms | 0.72 |
+   | mandelbrot | 544 ms | 1.00 | 545 ms | 1.00 |
+   | nbody | 185 ms | 1.00 | 167 ms | 1.02 |
+   | ordered | 558 ms | 1.06 | 521 ms | 0.94 |
+   | store demo, 20,000 orders | 387 ms | 1.02 | 134 ms | 0.95 |
+
+   Ahead of time it never loses: sieve, the case
+   [AWFY](research/research-awfy-benchmarks.md) points at, is 28% faster,
+   `ordered` and the store demo 5-6%, and the rest within noise. The
+   executables grow by at most 35 KB of 5-10 MB, and `aot-compile` takes no
+   measurably longer (3.03 s against 3.12 s for the store demo, within its
+   spread). So `All` is what `aot-compile` should do by default.
+
+   In the jit it wins on sieve and loses a little on `ordered` and the store
+   demo. `ordered` first measured 1.26: each instance warmed up on its own,
+   so a generic called at four bindings ran four times as long in the
+   interpreter before compiling. A call to an instance now counts toward its
+   generic too (`JitEngine::generic_calls`), and once the generic is hot an
+   instance compiles on its next call. What is left is the gap phase 5
+   names: interpreted generic code calling generics at its own type
+   parameters offers every call to the dispatcher rather than entering
+   planned code (`ordered` makes about 7,000 such calls warming up). Until
+   that is planned too, `--jit-specialize` stays off by default.
 
 Phase 2 proves the design: `repeated[bool]` calling `push[bool]`, built
 ahead of time, with no descriptor in either.
