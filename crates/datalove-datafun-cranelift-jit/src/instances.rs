@@ -15,7 +15,7 @@ use std::sync::Arc;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use datalove_datafun_interp::{FuncIdentity, IrInterpreter, ir_type_of_tydesc};
-use datalove_datafun_ir::instantiate::instantiate;
+use datalove_datafun_ir::instantiate::{clean_copy_types, instantiate};
 use datalove_datafun_ir::{IrCodeUnit, IrType};
 use datalove_rtdt::TyDesc;
 
@@ -97,7 +97,8 @@ impl Instances {
         }
         let id = self.next;
         self.next += 1;
-        let unit = instantiate(generic, &key.1, generic.id, format!("{}__i{id}", generic.name));
+        let mut unit = instantiate(generic, &key.1, generic.id, format!("{}__i{id}", generic.name));
+        clean_copy_types(&mut unit);
         self.units.insert(id, Instance { base, bindings: key.1.clone(), unit: Arc::new(unit) });
         self.by_types.insert(key, id);
         Some(id)

@@ -1,6 +1,6 @@
 # Specializing Generics
 
-Written October 2026, after generics by reference landed. Phases 1 to 5
+Written October 2026, after generics by reference landed. Phases 1 to 6
 are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
 policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
@@ -374,7 +374,31 @@ Each phase leaves default behaviour unchanged and the suite passing.
    What is left of phase 4's costs: a site whose binding is its caller's
    type parameters -- an interpreted generic calling another -- still offers
    every call, since only an offered call says its binding.
-6. **Cleanup.** The copy-type pass, measured alone.
+6. **Cleanup.** Done: `ir::instantiate::clean_copy_types`, run on every
+   instance, ahead of time and in the jit. Drops of copy types go, a `Clone`
+   or `Move` of one becomes a `Copy`, and a tracked slot of one is untracked.
+   Measured alone on a loop calling `dup<T>(x) = (x@, x)` and a `keep<T>` with
+   a `var` of `T` twenty million times at `u64`, under the jit
+   (`datalove script --jit --jit-specialize`, which this phase added):
+
+   | | running |
+   |---|---:|
+   | `--jit` | 735-1000 ms |
+   | `--jit --jit-specialize`, no cleanup | 240-365 ms |
+   | `--jit --jit-specialize` | 164-167 ms |
+
+   Most of the cleanup's share is the clone, which in an instance is a call
+   into the runtime to copy a `u64`.
+
+   Found on the way, and fixed: inlining a generic had the same leftovers.
+   `inline::splice` substituted the binding into the callee's types and kept
+   its drops of each `T`; after `simplify` replaced the copy of a caller's
+   copy value an `in` parameter was bound to by the value itself, that was a
+   drop of the caller's own, and the interpreter's liveness checks (debug
+   builds) took the value to be gone. A function passing its own `f64`s to
+   `float.lerp` and reading them after failed so
+   (`184_inline_generic_reads_after`). The splice now binds the callee with
+   `substitute_types` and cleans it with the same pass first.
 7. **`Default`.** Heuristics, measured on benchvs (Sieve's `list.repeated`
    is the case [AWFY](research/research-awfy-benchmarks.md) points at) and
    the store demo, with code size and compile time recorded. The erased-era

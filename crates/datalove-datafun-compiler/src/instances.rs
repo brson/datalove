@@ -21,7 +21,7 @@ use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use datalove_datafun_ir::instantiate::instantiate;
+use datalove_datafun_ir::instantiate::{clean_copy_types, instantiate};
 use datalove_datafun_ir::{CodeRef, CodeUnitId, Instruction, IrCodeUnit, IrModuleId, IrType};
 
 use crate::specialize::CalleeKey;
@@ -182,7 +182,8 @@ impl<'a> Instantiator<'a> {
         *count += 1;
 
         let (id, code_ref) = (self.place)(callee);
-        let unit = instantiate(&generic, bindings, id, format!("{}__g{}", generic.name, id.0));
+        let mut unit = instantiate(&generic, bindings, id, format!("{}__g{}", generic.name, id.0));
+        clean_copy_types(&mut unit);
         self.made.insert(key.clone(), code_ref.clone());
         let mut chain = chain.to_vec();
         chain.push(key);

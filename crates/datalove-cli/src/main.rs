@@ -297,6 +297,10 @@ struct ScriptCommand {
     /// [default: speed].
     #[arg(long, value_name = "LEVEL", requires = "jit")]
     jit_opt_level: Option<datalove::datafun_jit::JitOptLevel>,
+    /// Compile a generic once per binding it is called at, as an instance,
+    /// rather than once over descriptors.
+    #[arg(long, requires = "jit")]
+    jit_specialize: bool,
     /// Print to stderr what the JIT compiled and how calls crossed between it
     /// and the interpreter. Implies `--time`.
     #[arg(long, requires = "jit")]
@@ -659,6 +663,7 @@ impl ScriptCommand {
             if let Some(iterations) = self.jit_osr_threshold {
                 dispatcher.jit_mut().set_osr_threshold(iterations);
             }
+            dispatcher.jit_mut().set_specialize(self.jit_specialize);
             Some(Box::new(dispatcher))
         } else {
             None
