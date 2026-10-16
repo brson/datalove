@@ -32,25 +32,13 @@ pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType], id: CodeUnitId, na
         bindings.iter().all(|b| !b.is_dynamic()),
         "{} instantiated at a binding that is not concrete: {bindings:?}", generic.name,
     );
-    let subst = |ty: &IrType| ty.substitute(bindings);
 
-    let mut unit = generic.clone();
+    let mut unit = substitute_types(generic, bindings);
     unit.id = id;
     unit.name = name;
-    unit.value_types = generic.value_types.iter().map(subst).collect();
-    unit.slot_types = generic.slot_types.iter().map(subst).collect();
-    for block in &mut unit.blocks {
-        for instr in &mut block.instructions {
-            if let Instruction::Call { bindings: inner, .. } | Instruction::ComptimeCall { bindings: inner, .. } = instr {
-                *inner = inner.iter().map(subst).collect();
-            }
-        }
-    }
     let CodeUnitContext::Function(ctx) = &mut unit.context else {
         unreachable!("checked above");
     };
-    ctx.param_types = ctx.param_types.iter().map(subst).collect();
-    ctx.return_type = subst(&ctx.return_type);
     ctx.type_param_count = 0;
     ctx.descriptor_table = Vec::new();
     // An inline function is spliced into the functions that call it, but a
@@ -62,6 +50,96 @@ pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType], id: CodeUnitId, na
         panic!("instance {} of {} still mentions a type parameter: {ty}", unit.name, generic.name);
     }
     unit
+}
+
+/// `generic`'s body and signature with each type parameter `i` bound to
+/// `bindings[i]`, which may be written over another function's parameters:
+/// its value, slot, parameter and return types, and its calls' bindings.
+///
+/// Nothing else: the result still says it takes the type parameters. What
+/// `instantiate` and inlining a generic have in common.
+pub fn substitute_types(generic: &IrCodeUnit, bindings: &[IrType]) -> IrCodeUnit {
+    let subst = |ty: &IrType| ty.substitute(bindings);
+    let mut unit = generic.clone();
+    unit.value_types = generic.value_types.iter().map(subst).collect();
+    unit.slot_types = generic.slot_types.iter().map(subst).collect();
+    for block in &mut unit.blocks {
+        for instr in &mut block.instructions {
+            if let Instruction::Call { bindings: inner, .. } | Instruction::ComptimeCall { bindings: inner, .. } = instr {
+                *inner = inner.iter().map(subst).collect();
+            }
+        }
+    }
+    if let CodeUnitContext::Function(ctx) = &mut unit.context {
+        ctx.param_types = ctx.param_types.iter().map(subst).collect();
+        ctx.return_type = subst(&ctx.return_type);
+    }
+    unit
+}
+
+/// Remove from `unit` what it does for the sake of values that need no
+/// destroying, now that some of its types are copy types: what an instance
+/// keeps of its generic, where a `T` was not one.
+///
+/// Correct either way -- the backends treat a drop of a copy type as nothing
+/// and a move of one as a copy -- so this is only for speed:
+///
+/// - a drop of a value, slot or parameter of a copy type goes;
+/// - a `Clone` or `Move` of a copy type becomes a `Copy`, so that a clone is
+///   not a call into the runtime;
+/// - a tracked slot of a copy type is untracked: its tracked stores and loads
+///   become copies and its tracked drops go, since nothing else reads its
+///   tracking byte.
+///
+/// Returns how many instructions it changed or removed.
+pub fn clean_copy_types(unit: &mut IrCodeUnit) -> usize {
+    let copy_slots: Vec<SlotId> = unit.tracked_slots.iter().copied()
+        .filter(|s| unit.slot_types[s.0 as usize].is_copy())
+        .collect();
+    let param_types: Vec<IrType> = unit.function_context().map(|ctx| ctx.param_types.clone()).unwrap_or_default();
+    let value_types = &unit.value_types;
+    let slot_types = &unit.slot_types;
+    let copy_operand = |op: &Operand| match op {
+        Operand::Value(v) => value_types[v.0 as usize].is_copy(),
+        Operand::Slot(s) => slot_types[s.0 as usize].is_copy(),
+        Operand::Param(p) => param_types[p.0 as usize].is_copy(),
+        Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => false,
+    };
+    let copy_value = |v: &ValueId| value_types[v.0 as usize].is_copy();
+    let untracked = |dest: &SlotDest| matches!(dest, SlotDest::Local(s) if copy_slots.contains(s));
+
+    let mut changed = 0;
+    for block in &mut unit.blocks {
+        let before = block.instructions.len();
+        block.instructions.retain(|instr| !matches!(instr,
+            Instruction::Drop { operand } | Instruction::DropTracked { operand }
+            | Instruction::UnitEndDrop { operand } | Instruction::UnitEndDropTracked { operand }
+                if copy_operand(operand)));
+        changed += before - block.instructions.len();
+        for instr in &mut block.instructions {
+            let clean = match instr {
+                Instruction::Clone { dest, src } | Instruction::Move { dest, src } if copy_value(dest) => {
+                    Instruction::Copy { dest: *dest, src: src.clone() }
+                }
+                Instruction::SlotStoreCopyTracked { dest, value } | Instruction::SlotStoreMoveTracked { dest, value }
+                    if untracked(dest) =>
+                {
+                    Instruction::SlotStoreCopy { dest: dest.clone(), value: value.clone() }
+                }
+                Instruction::SetFieldTracked { slot, field_path, value } if untracked(slot) => {
+                    Instruction::SetField { slot: slot.clone(), field_path: field_path.clone(), value: value.clone() }
+                }
+                Instruction::SlotLoadMoveTracked { dest, slot } if copy_slots.contains(slot) => {
+                    Instruction::SlotLoadCopy { dest: *dest, slot: *slot }
+                }
+                _ => continue,
+            };
+            *instr = clean;
+            changed += 1;
+        }
+    }
+    unit.tracked_slots.retain(|s| !copy_slots.contains(s));
+    changed
 }
 
 /// The first type in `unit` that mentions a type parameter, if any.
@@ -165,6 +243,44 @@ mod tests {
             panic!("the call is where it was");
         };
         assert_eq!(bindings, &vec![list(IrType::Bool)]);
+    }
+
+    #[test]
+    fn cleaning_takes_out_what_a_copy_type_does_not_need() {
+        // v0: u32, v1: u32, v2: string; s0: u32 and s1: string, both tracked.
+        let instructions = vec![
+            Instruction::Clone { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
+            Instruction::Move { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
+            Instruction::Clone { dest: ValueId(2), src: Operand::Value(ValueId(2)) },
+            Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)) },
+            Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(SlotId(1)), value: Operand::Value(ValueId(2)) },
+            Instruction::SlotLoadMoveTracked { dest: ValueId(0), slot: SlotId(0) },
+            Instruction::DropTracked { operand: Operand::Slot(SlotId(0)) },
+            Instruction::DropTracked { operand: Operand::Slot(SlotId(1)) },
+            Instruction::Drop { operand: Operand::Value(ValueId(1)) },
+            Instruction::Drop { operand: Operand::Param(ParamId(0)) },
+            Instruction::Drop { operand: Operand::Value(ValueId(2)) },
+        ];
+        let mut unit = generic();
+        unit.value_types = vec![IrType::U32, IrType::U32, IrType::String];
+        unit.slot_types = vec![IrType::U32, IrType::String];
+        unit.tracked_slots = vec![SlotId(0), SlotId(1)];
+        unit.blocks[0].instructions = instructions;
+        let CodeUnitContext::Function(ctx) = &mut unit.context else { unreachable!() };
+        ctx.param_types = vec![IrType::U32, IrType::String];
+
+        assert_eq!(clean_copy_types(&mut unit), 7);
+        assert_eq!(unit.tracked_slots, vec![SlotId(1)]);
+        assert_eq!(unit.blocks[0].instructions, vec![
+            Instruction::Copy { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
+            Instruction::Copy { dest: ValueId(1), src: Operand::Value(ValueId(0)) },
+            Instruction::Clone { dest: ValueId(2), src: Operand::Value(ValueId(2)) },
+            Instruction::SlotStoreCopy { dest: SlotDest::Local(SlotId(0)), value: Operand::Value(ValueId(0)) },
+            Instruction::SlotStoreMoveTracked { dest: SlotDest::Local(SlotId(1)), value: Operand::Value(ValueId(2)) },
+            Instruction::SlotLoadCopy { dest: ValueId(0), slot: SlotId(0) },
+            Instruction::DropTracked { operand: Operand::Slot(SlotId(1)) },
+            Instruction::Drop { operand: Operand::Value(ValueId(2)) },
+        ]);
     }
 
     #[test]

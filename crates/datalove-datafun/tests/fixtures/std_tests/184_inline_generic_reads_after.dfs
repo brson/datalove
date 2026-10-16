@@ -1,0 +1,18 @@
+// An inline generic called with the caller's own values of a copy type, which
+// the caller reads again afterwards.
+//
+// Inlining binds the callee's type parameters, and its body drops each of its
+// `in` parameters, since a `T` might own something. Bound to `f64` that drop
+// does nothing, but `simplify` replaces the copy of the caller's value the
+// parameter was bound to by the value itself, and then it is a drop of the
+// caller's own: one the interpreter took to mean the value was gone. So the
+// drops a binding makes pointless are taken out when the callee is spliced.
+
+require module sys/std/float
+
+fun lerp_and_keep(a: f64, b: f64, t: f64): (f64, f64, f64, f64)
+    let mid = float.lerp(a, b, t)
+    ret (mid, a, b, t)
+end fun
+
+let output = lerp_and_keep(1.0, 3.0, 0.5)

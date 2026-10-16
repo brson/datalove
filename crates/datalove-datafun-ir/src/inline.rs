@@ -174,6 +174,21 @@ fn splice(caller: &mut IrCodeUnit, b: usize, i: usize, callee: &IrCodeUnit) {
     let Instruction::Call { dest, args, bindings, .. } = caller.blocks[b].instructions[i].clone() else {
         unreachable!("a splice is at a call");
     };
+    // A generic callee is bound first, and what its body does for a `T` that
+    // is not a copy type -- dropping one, cloning one -- is taken out where
+    // the binding is one. Left in, a drop of a copy value is harmless to the
+    // backends, but once `simplify` has replaced a copy of the caller's value
+    // by the value itself, it is a drop of the caller's own, which the
+    // interpreter then takes to be gone.
+    let bound;
+    let (callee, bindings) = if bindings.is_empty() {
+        (callee, bindings)
+    } else {
+        let mut unit = crate::instantiate::substitute_types(callee, &bindings);
+        crate::instantiate::clean_copy_types(&mut unit);
+        bound = unit;
+        (&bound, Vec::new())
+    };
     let ctx = callee.function_context().expect("an inline callee is a function");
     let subst = |ty: &IrType| if bindings.is_empty() { ty.clone() } else { ty.substitute(&bindings) };
     let caller_modes: Vec<ParamMode> = caller.function_context()
