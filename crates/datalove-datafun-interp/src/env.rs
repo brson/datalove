@@ -197,9 +197,6 @@ impl<'a> ExecutionContext<'a> {
             FuncIdentity::Unit { unit, id } if unit == self.unit => CodeRef::Local(id),
             FuncIdentity::Unit { unit, id } => CodeRef::External { unit, id },
             FuncIdentity::Module { module, id } => CodeRef::Module { module, id },
-            FuncIdentity::Instance { id } => {
-                unreachable!("run-time instance {id} is its dispatcher's, with no body the interpreter can find")
-            }
         };
         let callee = self.get_unit(&code_ref, registry);
         (self.for_callee(&code_ref, registry), code_ref, callee)

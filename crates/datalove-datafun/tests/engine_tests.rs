@@ -22,11 +22,9 @@
 //! - **noconst**: the bytecode with const inlining off, so every `const` is
 //!   evaluated at run time rather than at compile time.
 //! - **nospec**: the bytecode with comptime specialization off.
-//! - **spec**: the bytecode with every call to a generic at concrete bindings
+//! - **spec**: the IR walker with every call to a generic at concrete bindings
 //!   pointed at an instance of it (`GenericsPolicy::All`).
 //! - **specchaos**: the same, a coin per call site, seeded from the fixture.
-//! - **specjit**: the bytecode under the chaos dispatcher, its JIT compiling a
-//!   generic as an instance at each binding it is called at.
 //!
 //! The last four compile differently, so they are held to the reference's
 //! outputs and debug logs, not to its IR, and only for a program the reference
@@ -68,8 +66,6 @@ use datafun::worldfile_analysis::{Analysis, AnalysisOptions, ExecutorHooks};
 
 /// Functions the chaos dispatcher JIT-compiled, over the whole corpus.
 static CHAOS_COMPILED: AtomicU32 = AtomicU32::new(0);
-/// Instances of generics the `specjit` engine compiled.
-static SPECJIT_INSTANCES: AtomicU32 = AtomicU32::new(0);
 /// Entries at loop headers it compiled, and loop headers it could not enter.
 static CHAOS_LOOPS: AtomicU32 = AtomicU32::new(0);
 static CHAOS_LOOPS_REFUSED: AtomicU32 = AtomicU32::new(0);
@@ -96,11 +92,10 @@ enum Differential {
     NoSpec,
     Spec,
     SpecChaos,
-    SpecJit,
 }
 
 impl Differential {
-    const ALL: [Differential; 12] = [
+    const ALL: [Differential; 11] = [
         Differential::Bytecode,
         Differential::Plain,
         Differential::Jit,
@@ -112,7 +107,6 @@ impl Differential {
         Differential::NoSpec,
         Differential::Spec,
         Differential::SpecChaos,
-        Differential::SpecJit,
     ];
 
     fn name(self) -> &'static str {
@@ -128,7 +122,6 @@ impl Differential {
             Differential::NoSpec => "nospec",
             Differential::Spec => "spec",
             Differential::SpecChaos => "specchaos",
-            Differential::SpecJit => "specjit",
         }
     }
 }
@@ -258,10 +251,6 @@ impl ExecutorHooks for Setup {
                         eprintln!("jit refused {}: {}", f.name, why);
                     }
                 }
-            }
-            if self.differential == Some(Differential::SpecJit) {
-                SPECJIT_INSTANCES.fetch_add(stats.instances_compiled, Ordering::Relaxed);
-                return;
             }
             CHAOS_COMPILED.fetch_add(stats.compiled_count, Ordering::Relaxed);
             CHAOS_LOOPS.fetch_add(stats.osr_compiled_count, Ordering::Relaxed);
@@ -448,7 +437,13 @@ fn check(path: &Path) -> Result<String, String> {
                 continue;
             }
             RAN[i].fetch_add(1, Ordering::Relaxed);
-            let (other, _) = analyze(&parsed, options, Setup { engine: Engine::Bytecode, dispatcher: None, differential: Some(engine) })?;
+            // Specialization is offered only to the IR walker so far.
+            let walker = if matches!(engine, Differential::Spec | Differential::SpecChaos) {
+                Engine::IrWalker
+            } else {
+                Engine::Bytecode
+            };
+            let (other, _) = analyze(&parsed, options, Setup { engine: walker, dispatcher: None, differential: Some(engine) })?;
             let (want, got) = (observed(&reference), observed(&other));
             if want != got {
                 return Err(format!("{} differs from the reference {}", engine.name(), first_difference(&want, &got)));
@@ -469,15 +464,6 @@ fn check(path: &Path) -> Result<String, String> {
                 dispatcher: Some(Box::new(
                     OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?,
                 )),
-            }),
-            Differential::SpecJit => Some(Setup {
-                differential: Some(engine),
-                engine: Engine::Bytecode,
-                dispatcher: Some({
-                    let mut chaos = OptimizingDispatcher::with_config(DispatcherConfig::chaos(seed)).map_err(|e| e.to_string())?;
-                    chaos.jit_mut().set_specialize(true);
-                    Box::new(chaos)
-                }),
             }),
             Differential::Osr => Some(Setup {
                 differential: Some(engine),
@@ -544,13 +530,6 @@ fn report() -> Result<(), String> {
         }
         if loops == 0 {
             return Err("the chaos dispatcher never entered a loop".to_string());
-        }
-    }
-    if datalove_exampletest::engine_enabled("specjit") {
-        let instances = SPECJIT_INSTANCES.load(Ordering::Relaxed);
-        println!("specjit: {instances} instances JIT-compiled");
-        if instances == 0 {
-            return Err("the specjit engine never compiled an instance".to_string());
         }
     }
     if datalove_exampletest::engine_enabled("osr") {

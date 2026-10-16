@@ -28,6 +28,7 @@ pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType], id: CodeUnitId, na
         ctx.type_param_count as usize, bindings.len(),
         "{} has {} type parameters and was bound to {} types", generic.name, ctx.type_param_count, bindings.len(),
     );
+    assert!(!ctx.inline, "{} is inline, so it is never called and never instantiated", generic.name);
     assert!(
         bindings.iter().all(|b| !b.is_dynamic()),
         "{} instantiated at a binding that is not concrete: {bindings:?}", generic.name,
@@ -41,10 +42,6 @@ pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType], id: CodeUnitId, na
     };
     ctx.type_param_count = 0;
     ctx.descriptor_table = Vec::new();
-    // An inline function is spliced into the functions that call it, but a
-    // script unit's own body is not finished that way and calls it, and an
-    // instance made for that call is called too.
-    ctx.inline = false;
 
     if let Some(ty) = dynamic_type_in(&unit) {
         panic!("instance {} of {} still mentions a type parameter: {ty}", unit.name, generic.name);

@@ -294,18 +294,13 @@ impl CallDispatcher for OptimizingDispatcher {
     /// it asks, between the engine's policy -- entering compiled code, or
     /// counting -- and offering every call, so that the planned calls and the
     /// offered ones both run, and mix.
-    fn site_policy(
-        &mut self,
-        func: FuncIdentity,
-        body: &IrCodeUnit,
-        bindings: Option<&[*const datalove_rtdt::TyDesc]>,
-    ) -> SitePolicy {
+    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
         if !self.config.jit_enabled {
             return SitePolicy::Interpret;
         }
         let use_probability = self.chaos.as_ref().map(|c| c.use_jit);
         if self.rng.roll(use_probability) {
-            self.jit.site_policy(func, body, bindings)
+            self.jit.site_policy(func, body)
         } else {
             SitePolicy::EveryCall
         }

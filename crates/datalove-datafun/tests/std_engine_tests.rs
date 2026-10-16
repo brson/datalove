@@ -197,13 +197,11 @@ fn run_aot(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
-    generics: GenericsPolicy,
 ) -> Result<String, String> {
     let modified_source = format!("{}\ndebuglog output", script_text);
 
     let mut compiler = compiled.script_compiler_default(db)
         .ok_or("AOT: module compilation failed (compiler)")?;
-    compiler.set_generics_policy(generics);
 
     let result = compiler.compile_fragment(&modified_source);
     if let TypecheckResult::Error { errors } = &result.typecheck {
@@ -248,13 +246,11 @@ fn run_c_aot(
     compiled: &datafun::pipeline::CompiledModules<'_>,
     script_text: &str,
     rider_lib_paths: &[PathBuf],
-    generics: GenericsPolicy,
 ) -> Result<String, String> {
     let modified_source = format!("{}\ndebuglog output", script_text);
 
     let mut compiler = compiled.script_compiler_default(db)
         .ok_or("C AOT: module compilation failed (compiler)")?;
-    compiler.set_generics_policy(generics);
 
     let result = compiler.compile_fragment(&modified_source);
     if let TypecheckResult::Error { errors } = &result.typecheck {
@@ -302,15 +298,15 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
             db, compiled, descriptor, &script_text, Engine::IrWalker, None, "Interp", GenericsPolicy::Off)?;
 
         let mismatches = compare_backends(
-            db, compiled, descriptor, &script_text, &rider_lib_paths, &interp_value, GenericsPolicy::Off);
+            db, compiled, descriptor, &script_text, &rider_lib_paths, &interp_value);
         if !mismatches.is_empty() {
             return Err(mismatches.join("\n"));
         }
         Ok(interp_value)
     })?;
 
-    // Every engine again, with calls to generics pointed at instances, in the
-    // library and in the script, and the reference the same.
+    // The IR walker again, with calls to generics pointed at instances, in the
+    // library and in the script, and the same output.
     if datalove_exampletest::engine_enabled("spec") {
         spec_world.with_compiled(|db, compiled| {
             check_library(compiled);
@@ -333,9 +329,10 @@ fn analyze_file(worker: &mut Worker, path: &Path) -> Result<String, String> {
     Ok(interp_value)
 }
 
-/// The reference and every backend with the script compiled under
-/// `generics`, each held to `interp_value`, the reference's output without
-/// specialization.
+/// The IR walker with the script and the library compiled under `generics`,
+/// held to `interp_value`, the reference's output without specialization.
+///
+/// Only the walker: specialization is not offered to the other engines yet.
 fn specialized(
     db: &datafun::Database,
     compiled: &datafun::pipeline::CompiledModules<'_>,
@@ -345,22 +342,16 @@ fn specialized(
     generics: GenericsPolicy,
 ) -> Result<(), String> {
     let name = format!("{generics:?} Interp");
-    let (value, rider_lib_paths) = run_with_executor(
+    let (value, _) = run_with_executor(
         db, compiled, descriptor, script_text, Engine::IrWalker, None, &name, generics)?;
-    let mut mismatches = Vec::new();
     if value != interp_value {
-        mismatches.push(format!("{name} output mismatch:\n  interp: {interp_value}\n  {name}: {value}"));
+        return Err(format!("{name} output mismatch:\n  interp: {interp_value}\n  {name}: {value}"));
     }
-    mismatches.extend(compare_backends(
-        db, compiled, descriptor, script_text, &rider_lib_paths, interp_value, generics));
-    if mismatches.is_empty() { Ok(()) } else { Err(mismatches.join("\n")) }
+    Ok(())
 }
 
 /// Run every backend but the reference, and say how each disagreed with
 /// `interp_value`.
-///
-/// Under a `generics` policy other than `Off` each backend is named with the
-/// policy in front.
 fn compare_backends(
     db: &datafun::Database,
     compiled: &datafun::pipeline::CompiledModules<'_>,
@@ -368,12 +359,7 @@ fn compare_backends(
     script_text: &str,
     rider_lib_paths: &[PathBuf],
     interp_value: &str,
-    generics: GenericsPolicy,
 ) -> Vec<String> {
-    let named = |name: &str| match generics {
-        GenericsPolicy::Off => name.to_string(),
-        policy => format!("{policy:?} {name}"),
-    };
 
     // The JIT.
     //
@@ -383,16 +369,15 @@ fn compare_backends(
     // a spawned thread, which caught the panic as a side effect of joining
     // and was there for a Cranelift relocation problem that the jit's own
     // arena fixed.
-    let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, specialize: bool, name: &str| {
+    let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, name: &str| {
         std::panic::catch_unwind(|| {
             let mut jit = JitEngine::new(threshold)
                 .map_err(|e| format!("JIT engine creation failed: {}", e))?;
             if let Some(iterations) = osr_threshold {
                 jit.set_osr_threshold(iterations);
             }
-            jit.set_specialize(specialize);
             let (value, _) = run_with_executor(
-                db, compiled, descriptor, script_text, engine, Some(Box::new(jit)), name, generics)?;
+                db, compiled, descriptor, script_text, engine, Some(Box::new(jit)), name, GenericsPolicy::Off)?;
             Ok(value)
         })
         .unwrap_or_else(|panic| {
@@ -407,45 +392,34 @@ fn compare_backends(
         })
     };
     let interpreted = |engine: Engine, name: &str| {
-        run_with_executor(db, compiled, descriptor, script_text, engine, None, name, generics)
+        run_with_executor(db, compiled, descriptor, script_text, engine, None, name, GenericsPolicy::Off)
             .map(|(value, _)| value)
     };
 
     // Every other backend, by its name here and its name to
     // `engine_enabled`, compared against the interpreter. All errors are
     // fatal.
-    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 10] = [
+    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 7] = [
         ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
         // The bytecode without its optimization pass, for the pass's rules
         // to be checked against.
         ("PlainBytecode", "plain", &|| interpreted(Engine::PlainBytecode, "PlainBytecode")),
-        ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, false, "JIT")),
+        ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, "JIT")),
         // The bytecode with the JIT, which it calls into from planned call
         // sites; and with the JIT compiling no function by its calls and
         // entering every loop at its second iteration instead, so that the
         // library's loops and everything after them run in code entered
         // partway through a call.
-        ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, false, "Bytecode JIT")),
-        ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), false, "OSR")),
-        // The JIT compiling each generic as an instance at each binding it is
-        // called at, entered from the interpreter and from compiled callers.
-        ("Specializing JIT", "specjit", &|| under_jit(Engine::IrWalker, 1, None, true, "Specializing JIT")),
-        ("Specializing Bytecode JIT", "specjit", &|| under_jit(Engine::Bytecode, 1, None, true, "Specializing Bytecode JIT")),
-        // And compiling only what is called fifty times, so that interpreted
-        // callers stay interpreted while the instances they call are
-        // compiled, and their planned call sites enter them.
-        ("Specializing Bytecode JIT at 50", "specjit", &|| under_jit(Engine::Bytecode, 50, None, true, "Specializing Bytecode JIT at 50")),
-        ("AOT", "aot", &|| run_aot(db, compiled, script_text, rider_lib_paths, generics)),
-        ("C AOT", "c", &|| run_c_aot(db, compiled, script_text, rider_lib_paths, generics)),
+        ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, "Bytecode JIT")),
+        ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR")),
+        ("AOT", "aot", &|| run_aot(db, compiled, script_text, rider_lib_paths)),
+        ("C AOT", "c", &|| run_c_aot(db, compiled, script_text, rider_lib_paths)),
     ];
     let mut mismatches = Vec::new();
     for (name, engine, run) in backends {
-        // Specializing at run time is tested against the program as written;
-        // under a compile-time policy it would mostly find instances already.
-        if !datalove_exampletest::engine_enabled(engine) || (engine == "specjit" && generics != GenericsPolicy::Off) {
+        if !datalove_exampletest::engine_enabled(engine) {
             continue;
         }
-        let name = named(name);
         match run() {
             Ok(value) if value != interp_value => mismatches.push(format!(
                 "{} output mismatch:\n  interp: {}\n  {}: {}",

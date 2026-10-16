@@ -19,8 +19,6 @@ use datalove_datafun_interp::FuncIdentity;
 pub struct JitStats {
     /// Total number of functions compiled.
     pub compiled_count: u32,
-    /// How many of them were run-time instances of generics.
-    pub instances_compiled: u32,
     /// Total compilation time across all functions.
     pub total_compile_time: Duration,
     /// Total generated code size in bytes.
@@ -118,7 +116,6 @@ impl JitStats {
                 None => format!("<module {}>.{}", module.0, f.name),
             },
             FuncIdentity::Unit { unit, .. } => format!("<unit {unit}>.{}", f.name),
-            FuncIdentity::Instance { .. } => format!("<instance>.{}", f.name),
         };
 
         let (interpreted, entered, exited) = self.functions.values()

@@ -578,9 +578,7 @@ impl CallCache {
         if self.dispatcher != Some(epoch) {
             return true;
         }
-        matches!(&self.plan,
-            Some(Plan::Body(BodyPlan { countdown: Some(c), .. }) | Plan::Jit(JitPlan { countdown: Some(c), .. }))
-                if c.run_out())
+        matches!(&self.plan, Some(Plan::Body(BodyPlan { countdown: Some(c), .. })) if c.run_out())
     }
 }
 
@@ -667,9 +665,6 @@ struct JitPlan {
     /// The descriptors of what the call bound the callee's type parameters
     /// to, entered with after the arguments.
     descriptors: std::rc::Rc<[crate::BindingRef]>,
-    /// For a site counting calls for the dispatcher while it enters this
-    /// code (`SitePolicy::EnterCounting`), as a body plan's does.
-    countdown: Option<Countdown>,
 }
 
 /// The arguments of a planned call to a body.

@@ -24,17 +24,6 @@ use datalove_datafun_cranelift::types::{align_shift, PTR_ALIGN, PTR_TYPE};
 use crate::trampoline::{self, EncodedFuncKey};
 use crate::JitError;
 
-/// A call to a generic at a concrete binding that a function being compiled
-/// makes to the instance at that binding instead; see
-/// `FunctionCompiler::set_instance_funcs`.
-pub(crate) struct InstanceCallee {
-    pub code_ref: CodeRef,
-    pub bindings: Vec<IrType>,
-    /// The instance's identity, `FuncIdentity::Instance`.
-    pub key: FuncIdentity,
-    pub unit: Arc<IrCodeUnit>,
-}
-
 /// Size of the contiguous memory arena for JIT code and data.
 ///
 /// All JIT-compiled code and associated data (type descriptors, constants) are
@@ -292,18 +281,14 @@ impl JitCompiler {
     /// up.
     ///
     /// Returns (code_ptr, uses_sret, code_size).
-    ///
-    /// Each of `instances` is a call `func` makes to an instance rather than
-    /// to the generic it names.
     pub fn compile_function<'a>(
         &mut self,
         func: &IrCodeUnit,
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
-        instances: &[InstanceCallee],
     ) -> Result<(*const u8, bool, usize), JitError> {
-        self.compile_entry(func, ctx, registry, interp, instances, None)
+        self.compile_entry(func, ctx, registry, interp, None)
     }
 
     /// Compile an entry into `func` at a loop header, for a frame the
@@ -315,10 +300,9 @@ impl JitCompiler {
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
-        instances: &[InstanceCallee],
         spec: codegen::OsrSpec,
     ) -> Result<(*const u8, bool, usize), JitError> {
-        self.compile_entry(func, ctx, registry, interp, instances, Some(spec))
+        self.compile_entry(func, ctx, registry, interp, Some(spec))
     }
 
     /// Compile `func`, entered at its start or, given `osr`, at a loop header.
@@ -328,7 +312,6 @@ impl JitCompiler {
         ctx: &ExecutionContext<'a>,
         registry: &FunctionRegistry,
         interp: &mut IrInterpreter,
-        instances: &[InstanceCallee],
         osr: Option<codegen::OsrSpec>,
     ) -> Result<(*const u8, bool, usize), JitError> {
         // Collect all Call targets in this function.
@@ -401,25 +384,6 @@ impl JitCompiler {
             }
         }
 
-        // An instance is a callee like any other, with a stub and a code cell
-        // under its own identity; the calls that reach it are by the generic
-        // they name and the binding.
-        let mut instance_funcs: HashMap<(CodeRef, Vec<IrType>), codegen::LocalCallee> = HashMap::new();
-        for instance in instances {
-            let stub_id = match self.stubs.get(&instance.key) {
-                Some(&id) => id,
-                None => {
-                    let id = self.create_stub_for_callee(instance.key, &instance.unit)?;
-                    self.stubs.insert(instance.key, id);
-                    id
-                }
-            };
-            code_cells.insert(stub_id, self.code_cell(instance.key) as usize);
-            instance_funcs.insert(
-                (instance.code_ref.clone(), instance.bindings.clone()),
-                codegen::LocalCallee::of(&instance.unit, stub_id));
-        }
-
         // Build a FunctionCompiler with stub mappings.
         let mut compiler = codegen::FunctionCompiler::new(
             func,
@@ -433,7 +397,6 @@ impl JitCompiler {
         compiler.set_external_funcs(external_funcs);
         compiler.set_module_funcs(module_funcs);
         compiler.set_code_cells(code_cells);
-        compiler.set_instance_funcs(instance_funcs);
         compiler.set_static_consts(static_consts_of(func, interp));
         compiler.abandon_on_interpreter_errors();
 

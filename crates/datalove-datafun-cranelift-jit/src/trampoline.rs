@@ -136,8 +136,7 @@ fn get_dispatch_context() -> Option<NonNull<DispatchContext<'static>>> {
 /// the stub is built, where the unit is known, it holds still.
 ///
 /// Packed as: kind (2 bits) | unit or module (30 bits) | function id (32 bits),
-/// with kind 0 a script unit's function, kind 1 a module's, and kind 2 a
-/// run-time instance, by number.
+/// with kind 0 a script unit's function and kind 1 a module's.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct EncodedFuncKey(u64);
@@ -147,7 +146,6 @@ impl EncodedFuncKey {
         let (kind, owner, id) = match func {
             FuncIdentity::Unit { unit, id } => (0u64, unit, id),
             FuncIdentity::Module { module, id } => (1u64, module.0, id),
-            FuncIdentity::Instance { id } => (2u64, 0, CodeUnitId(id)),
         };
         assert!(owner < (1 << 30), "unit or module {} does not fit the encoding", owner);
         Self((kind << 62) | ((owner as u64) << 32) | id.0 as u64)
@@ -159,7 +157,6 @@ impl EncodedFuncKey {
         match self.0 >> 62 {
             0 => FuncIdentity::Unit { unit: owner, id },
             1 => FuncIdentity::Module { module: IrModuleId(owner), id },
-            2 => FuncIdentity::Instance { id: id.0 },
             kind => unreachable!("no function kind {}", kind),
         }
     }
@@ -217,16 +214,8 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // SAFETY: context is valid per set_dispatch_context contract.
     let ctx = unsafe { &mut *ctx_ptr.as_ptr() };
 
-    // Decode target function. An instance is a call to its generic at its
-    // binding, made by compiled code that was compiled to call the instance:
-    // the generic is what the interpreter runs, until the instance is
-    // compiled.
-    let called = EncodedFuncKey::from_u64(encoded_key).to_identity();
-    let instance = match called {
-        FuncIdentity::Instance { id } => Some(ctx.jit_engine.instances.instance(id)),
-        _ => None,
-    };
-    let key = instance.map_or(called, |instance| instance.base);
+    // Decode target function.
+    let key = EncodedFuncKey::from_u64(encoded_key).to_identity();
     let (callee_ctx, code_ref, ir_unit) = ctx.exec_ctx.resolve_identity(key, ctx.registry);
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
@@ -243,17 +232,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .map(|i| unsafe { *args.add(i) } as *mut u8)
         .collect();
 
-    // A descriptor per type parameter comes after the arguments, for a call
-    // to a generic; a call to an instance hands over none, and its binding is
-    // described here. A dynamic return is described by them.
-    let type_params: Vec<*const rtdt::TyDesc> = match instance {
-        Some(instance) => instance.bindings.iter()
-            .map(|binding| ctx.interp.tydesc_table_mut().get_or_create(binding))
-            .collect(),
-        None => (0..func_ctx.type_param_count as usize)
-            .map(|k| unsafe { *descriptors.add(k) })
-            .collect(),
-    };
+    // A descriptor per type parameter comes after the arguments. A dynamic
+    // return is described by them.
+    let type_params: Vec<*const rtdt::TyDesc> = (0..func_ctx.type_param_count as usize)
+        .map(|k| unsafe { *descriptors.add(k) })
+        .collect();
     let mut return_tydesc = layout.return_tydesc.expect("a jit callee is a function");
     if return_tydesc.is_null() {
         return_tydesc = ctx.interp.describe(&func_ctx.return_type, &type_params);
@@ -264,34 +247,19 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     };
 
     // Count the call, which may compile the callee. Once it is compiled its
-    // stubs call it directly and no longer come here. When specializing, a
-    // call to a generic counts toward its instance at the call's binding,
-    // which takes no descriptors, as well as toward the generic, whose code
-    // runs it until the instance is compiled; the interpreter runs the
-    // generic until neither is.
-    let instance = match instance {
-        Some(instance) if !ctx.jit_engine.refused(called) => Some((called, std::sync::Arc::clone(&instance.unit))),
-        Some(_) => None,
-        None => ctx.jit_engine.specialized(key, ir_unit, &type_params, ctx.interp),
-    };
-    let recorded = ctx.jit_engine.record_generic_call(
-        key, ir_unit, instance.as_ref(), 1, &callee_ctx, ctx.registry, ctx.interp);
-    let (counted_key, counted, counted_params) = match &recorded {
-        Ok((key, _, true)) => (*key, &*instance.as_ref().expect("entering the instance there is").1, &[][..]),
-        _ => (key, ir_unit, &type_params[..]),
-    };
-    match recorded.map(|(_, recorded, _)| recorded) {
+    // stubs call it directly and no longer come here.
+    match ctx.jit_engine.record_call(key, ir_unit, 1, &callee_ctx, ctx.registry, ctx.interp) {
         Ok(Recorded::Compiled { entry, .. }) => {
-            ctx.jit_engine.note_call(counted_key, counted, CallFrom::Native, true, 1);
+            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, true, 1);
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
-                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_ptrs, dest, counted_params,
+                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_ptrs, dest, &type_params,
                 )
             }
         }
         Ok(Recorded::Interpret) => {
-            ctx.jit_engine.note_call(counted_key, counted, CallFrom::Native, false, 1);
+            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, false, 1);
             // The engine, for what the interpreter calls in turn: the
             // dispatcher it belongs to is out of the interpreter for as long as
             // the compiled code calling this runs.
@@ -347,13 +315,8 @@ impl CallDispatcher for LentEngine {
         self.engine().dispatch_call(code_ref, func, args, ret_dest, rt_handle, call_ctx)
     }
 
-    fn site_policy(
-        &mut self,
-        func: FuncIdentity,
-        body: &IrCodeUnit,
-        bindings: Option<&[*const rtdt::TyDesc]>,
-    ) -> SitePolicy {
-        self.engine().site_policy(func, body, bindings)
+    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        self.engine().site_policy(func, body)
     }
 
     fn call_compiled(

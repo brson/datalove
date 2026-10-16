@@ -1,6 +1,6 @@
-// Generics called many times at one binding per call site, so that a JIT
-// specializing them compiles an instance per binding and enters it: from
-// compiled callers, and from call sites the interpreter has planned.
+// Generics called many times in loops, at several bindings: from a
+// function, from the script, and from a generic at its own type parameter,
+// which specialized is an instance calling instances.
 
 require module sys/std/list
 
@@ -13,11 +13,8 @@ fun first_of<T>(ref p: (T, T)): T
     ret a
 end fun
 
-// One function calling generics at two bindings, from two sites each. Called
-// once, so that under a JIT that compiles what is called often it stays in
-// the interpreter, and its planned call sites are what enter the instances.
-// Then at a third binding, fewer times than makes an instance hot, which a
-// specializing JIT runs in the generic's code, compiled by then.
+// One function calling generics at two bindings, from two sites each, and
+// then at a third.
 fun fill(n: u32): !([u32], [string], u32, u32)
     var numbers: [u32] = []
     var words: [string] = []

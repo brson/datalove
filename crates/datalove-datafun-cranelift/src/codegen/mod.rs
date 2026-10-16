@@ -115,7 +115,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use cranelift_module::{FuncId, Linkage, Module};
 
 use datalove_datafun_ir::{
-    BlockId, CodeRef, ConstValue, FunctionContext, FunctionRegistry, IrBlock, IrCodeUnit, ParamMode,
+    BlockId, ConstValue, FunctionContext, FunctionRegistry, IrBlock, IrCodeUnit, ParamMode,
     IrModuleId, IrType, Instruction, NativeContext, Operand, ParamId, SlotDest, SlotId,
     Terminator, ValueId,
 };
@@ -163,10 +163,6 @@ pub struct FunctionCompiler<'a, M: Module> {
     /// address of a word holding the callee's compiled code, zero until it
     /// has some. The JIT's; see `set_code_cells`.
     code_cells: HashMap<FuncId, usize>,
-    /// Instances of generics declared beside this function, by the callee
-    /// and bindings of the calls that reach them: the JIT's, when it is
-    /// specializing. See `set_instance_funcs`.
-    instance_funcs: HashMap<(CodeRef, Vec<IrType>), LocalCallee>,
     /// Function registry for looking up module functions.
     registry: Option<&'a FunctionRegistry>,
     /// Where the frame is: values, slots and tracking bytes, as `layout` says.
@@ -277,7 +273,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             external_funcs: HashMap::new(),
             module_funcs: HashMap::new(),
             code_cells: HashMap::new(),
-            instance_funcs: HashMap::new(),
             registry,
             frame_slot: None,
             runtime,
@@ -357,15 +352,6 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
     /// between compiled functions.
     pub fn set_code_cells(&mut self, code_cells: HashMap<FuncId, usize>) {
         self.code_cells = code_cells;
-    }
-
-    /// Set the instances that calls to generics at concrete bindings reach.
-    ///
-    /// A call to `code_ref` with `bindings` that has an instance here calls
-    /// the instance, a concrete function with its own signature, and hands
-    /// over no descriptors. One that has none calls the generic as always.
-    pub fn set_instance_funcs(&mut self, instance_funcs: HashMap<(CodeRef, Vec<IrType>), LocalCallee>) {
-        self.instance_funcs = instance_funcs;
     }
 
 }

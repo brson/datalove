@@ -41,7 +41,7 @@ pub use datalove_rti::{RtHeader, ABANDONED_FOR_ERROR, ABANDONED_FOR_STACK};
 /// the runtime owns constants for the types that pack into a `data`'s own
 /// words and so have none of their own to lend. Two descriptions of one type
 /// sit at different addresses and still describe it.
-pub fn same_tydesc(a: *const rtdt::TyDesc, b: *const rtdt::TyDesc) -> bool {
+fn same_tydesc(a: *const rtdt::TyDesc, b: *const rtdt::TyDesc) -> bool {
     if a == b {
         return true;
     }

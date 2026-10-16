@@ -102,12 +102,7 @@ impl IrInterpreter {
                 Some(countdown) if countdown.tick() => Some(Planned::Offer(countdown.batch())),
                 Some(_) => Some(Planned::Body(plan)),
             },
-            Plan::Jit(plan) => match &plan.countdown {
-                None => Some(Planned::Jit(plan)),
-                Some(countdown) if countdown.run_out() => None,
-                Some(countdown) if countdown.tick() => Some(Planned::Offer(countdown.batch())),
-                Some(_) => Some(Planned::Jit(plan)),
-            },
+            Plan::Jit(plan) => Some(Planned::Jit(plan)),
         }
     }
 
@@ -329,9 +324,6 @@ impl IrInterpreter {
                 return Ok(false);
             }
             Some(SitePolicy::Enter(entry)) => entry,
-            Some(SitePolicy::EnterInstance(..) | SitePolicy::EnterCounting(..)) => {
-                unreachable!("a loop header is entered or not; only a call site counts calls")
-            }
         };
         // The next call to run the loop asks again, and is told the same at
         // once.
@@ -593,28 +585,16 @@ impl IrInterpreter {
             // A body compiled, entered as the dispatcher would enter it from
             // the call's arguments: each as the caller has it, descriptor and
             // all, which is what a call offered to it is handed.
-            //
-            // An instance at the site's binding is entered the same way, with
-            // no descriptors, which it does not take.
-            //
-            // Or entered while the site counts calls for the dispatcher, which
-            // is still working toward something better for it.
-            (Some(layout), None) if matches!(policy,
-                Some(SitePolicy::Enter(_) | SitePolicy::EnterInstance(..) | SitePolicy::EnterCounting(..))) =>
-            {
-                let generic = || crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit());
-                let (func, entry, descriptors, countdown) = match policy {
-                    Some(SitePolicy::Enter(entry)) => (generic(), entry, std::rc::Rc::clone(descriptors), None),
-                    Some(SitePolicy::EnterCounting(entry, n)) => {
-                        (generic(), entry, std::rc::Rc::clone(descriptors), Some(Countdown::new(n)))
-                    }
-                    Some(SitePolicy::EnterInstance(func, entry)) => (func, entry, std::rc::Rc::from([]), None),
-                    _ => unreachable!(),
-                };
+            (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_))) => {
+                let Some(SitePolicy::Enter(entry)) = policy else { unreachable!() };
                 let args: Box<[ArgRecipe]> = (0..layout.param_modes.len()).map(read).collect();
                 let width = 1 + entry.uses_sret as usize + args.len() + descriptors.len();
                 (width <= crate::dispatch::MAX_ENTRY_WORDS)
-                    .then(|| Plan::Jit(JitPlan { func, entry, args, descriptors, countdown }))
+                    .then(|| Plan::Jit(JitPlan {
+                        func: crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
+                        entry, args,
+                        descriptors: std::rc::Rc::clone(descriptors),
+                    }))
             }
             // A body, whose frame holds a pointer at each argument.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
@@ -724,16 +704,9 @@ impl IrInterpreter {
                     let plannable = suits && !matches!(code_ref, CodeRef::External { .. });
                     let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
                         let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
-                        // The binding, if it is the same at every call.
-                        let statics: Option<Vec<*const datalove_rtdt::TyDesc>> = descriptors.iter()
-                            .map(|r| match r {
-                                crate::BindingRef::Static(tydesc) => Some(*tydesc),
-                                crate::BindingRef::Table(_) => None,
-                            })
-                            .collect();
                         self.call_dispatcher.borrow_mut().as_mut()
                             .expect("installed")
-                            .site_policy(identity, callee, statics.as_deref())
+                            .site_policy(identity, callee)
                     });
                     let plan = if plannable {
                         self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy, &descriptors)
