@@ -38,23 +38,23 @@ fun mandelbrot(size: u32): u32
           set not_done = false
           set escape = 1
         end if
-        set z = u32.add_wrapping(z, : u32 / 1)
+        set z = u32.add_wrapping(z, 1)
       end loop
-      set byte_acc = u32.add_wrapping(u32.shift_left_wrapping(byte_acc, : u32 / 1), escape)
-      set bit_num = u32.add_wrapping(bit_num, : u32 / 1)
+      set byte_acc = u32.add_wrapping(u32.shift_left_wrapping(byte_acc, 1), escape)
+      set bit_num = u32.add_wrapping(bit_num, 1)
       if bit_num == 8
         set sum = u32.bitxor(sum, byte_acc)
         set byte_acc = 0
         set bit_num = 0
-      else if x == u32.sub_wrapping(size, : u32 / 1)
-        set byte_acc = u32.shift_left_wrapping(byte_acc, u32.sub_wrapping(: u32 / 8, bit_num))
+      else if x == u32.sub_wrapping(size, 1)
+        set byte_acc = u32.shift_left_wrapping(byte_acc, u32.sub_wrapping(8, bit_num))
         set sum = u32.bitxor(sum, byte_acc)
         set byte_acc = 0
         set bit_num = 0
       end if
-      set x = u32.add_wrapping(x, : u32 / 1)
+      set x = u32.add_wrapping(x, 1)
     end loop
-    set y = u32.add_wrapping(y, : u32 / 1)
+    set y = u32.add_wrapping(y, 1)
   end loop
   ret sum
 end fun
@@ -63,6 +63,6 @@ var total: u32 = 0
 var n: u32 = 0
 loop while n .< ITERATIONS
   set total = u32.add_wrapping(total, mandelbrot(SIZE))
-  set n = u32.add_wrapping(n, : u32 / 1)
+  set n = u32.add_wrapping(n, 1)
 end loop
 debuglog(total)

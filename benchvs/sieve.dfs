@@ -16,15 +16,15 @@ fun sieve(mut flags: [bool], size: index): !u32
   var prime_count: u32 = 0
   var i: index = 2
   loop while i <= size
-    if flags[index.sub_wrapping(i, : index / 1)]!
-      set prime_count = u32.add_wrapping(prime_count, : u32 / 1)
+    if flags[index.sub_wrapping(i, 1)]!
+      set prime_count = u32.add_wrapping(prime_count, 1)
       var k = index.add_wrapping(i, i)
       loop while k <= size
-        set flags[index.sub_wrapping(k, : index / 1)]! = false
+        set flags[index.sub_wrapping(k, 1)]! = false
         set k = index.add_wrapping(k, i)
       end loop
     end if
-    set i = index.add_wrapping(i, : index / 1)
+    set i = index.add_wrapping(i, 1)
   end loop
   ret ok prime_count
 end fun
@@ -39,7 +39,7 @@ fun run(): !u32
   var n: u32 = 0
   loop while n .< ITERATIONS
     set total = u32.add_wrapping(total, benchmark()!)
-    set n = u32.add_wrapping(n, : u32 / 1)
+    set n = u32.add_wrapping(n, 1)
   end loop
   ret ok total
 end fun

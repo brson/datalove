@@ -21,8 +21,8 @@ const TOP: u32 = 20
 
 // Advance the generator and return 16 well-mixed bits of it.
 fun next(mut state: u32): u32
-  set state = u32.add_wrapping(u32.mul_wrapping(state, : u32 / 1664525), : u32 / 1013904223)
-  ret u32.shift_right_wrapping(state, : u32 / 16)
+  set state = u32.add_wrapping(u32.mul_wrapping(state, 1664525), 1013904223)
+  ret u32.shift_right_wrapping(state, 16)
 end fun
 
 // The 4096 words: three syllables each, named by the index's three hex digits.
@@ -33,9 +33,9 @@ fun vocabulary(): ![string]
   var i: u32 = 0
   loop while i .< 4096
     var word = string.new()
-    call string.push_str(mut word, ref syllables[index.from_u32(u32.bitand(i, : u32 / 15))]!)
-    call string.push_str(mut word, ref syllables[index.from_u32(u32.bitand(u32.shift_right_wrapping(i, : u32 / 4), : u32 / 15))]!)
-    call string.push_str(mut word, ref syllables[index.from_u32(u32.shift_right_wrapping(i, : u32 / 8))]!)
+    call string.push_str(mut word, ref syllables[index.from_u32(u32.bitand(i, 15))]!)
+    call string.push_str(mut word, ref syllables[index.from_u32(u32.bitand(u32.shift_right_wrapping(i, 4), 15))]!)
+    call string.push_str(mut word, ref syllables[index.from_u32(u32.shift_right_wrapping(i, 8))]!)
     call list.push(mut vocab, word)
     set i +!= 1
   end loop
@@ -49,8 +49,8 @@ fun generate(ref vocab: [string]): !string
   var i: u32 = 0
   loop while i .< WORDS
     // The smaller of two draws, so that the counts fall off with the index.
-    let a = u32.rem_checked(next(mut state), : u32 / 4096)
-    let b = u32.rem_checked(next(mut state), : u32 / 4096)
+    let a = u32.rem_checked(next(mut state), 4096)
+    let b = u32.rem_checked(next(mut state), 4096)
     var w: index = 0
     if a |x|
       if b |y|
@@ -58,7 +58,7 @@ fun generate(ref vocab: [string]): !string
       end if
     end if
     var shout = false
-    if u32.rem_checked(next(mut state), : u32 / 10) |r|
+    if u32.rem_checked(next(mut state), 10) |r|
       set shout = r == 0
     end if
     if shout
@@ -68,7 +68,7 @@ fun generate(ref vocab: [string]): !string
       call string.push_str(mut text, ref vocab[w]!)
     end if
     var newline = false
-    if u32.rem_checked(i, : u32 / 12) |r|
+    if u32.rem_checked(i, 12) |r|
       set newline = r == 11
     end if
     if newline
@@ -87,7 +87,7 @@ fun count(ref text: string): !%{string = u32}
   var counts: %{string = u32} = %{}
   for word in ref words
     let lower = string.to_ascii_lowercase(ref word)
-    let _ = map.add(mut counts, ref lower, : u32 / 1)!
+    let _ = map.add(mut counts, ref lower, 1)!
   end for
   ret ok counts
 end fun
@@ -106,12 +106,12 @@ fun top_checksum(ref counts: %{string = u32}): !u32
   var sum: u32 = 0
   var r: index = 0
   loop while r .< index.from_u32(TOP)
-    set sum = u32.add_wrapping(u32.mul_wrapping(sum, : u32 / 31), u32.max_value() -! sorted[r]!.0)
+    set sum = u32.add_wrapping(u32.mul_wrapping(sum, 31), u32.max_value() -! sorted[r]!.0)
     var j: index = 0
     loop while j .< string.len(ref sorted[r]!.1)
       if string.get_byte(ref sorted[r]!.1, j) |byte|
         let wide: u32 = byte@
-        set sum = u32.add_wrapping(u32.mul_wrapping(sum, : u32 / 31), wide)
+        set sum = u32.add_wrapping(u32.mul_wrapping(sum, 31), wide)
       end if
       set j +!= 1
     end loop

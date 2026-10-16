@@ -52,7 +52,7 @@ fun create_bodies(): ![Body]
     set px = px + bodies[i]!.vx * bodies[i]!.mass
     set py = py + bodies[i]!.vy * bodies[i]!.mass
     set pz = pz + bodies[i]!.vz * bodies[i]!.mass
-    set i = index.add_wrapping(i, : index / 1)
+    set i = index.add_wrapping(i, 1)
   end loop
   set bodies[0]!.vx = 0.0 - (px / SOLAR_MASS)
   set bodies[0]!.vy = 0.0 - (py / SOLAR_MASS)
@@ -64,7 +64,7 @@ fun advance(mut bodies: [Body], dt: f64): !()
   let n = list.len(ref bodies)
   var i: index = 0
   loop while i .< n
-    var j = index.add_wrapping(i, : index / 1)
+    var j = index.add_wrapping(i, 1)
     loop while j .< n
       let dx = bodies[i]!.x - bodies[j]!.x
       let dy = bodies[i]!.y - bodies[j]!.y
@@ -80,16 +80,16 @@ fun advance(mut bodies: [Body], dt: f64): !()
       set bodies[j]!.vx = bodies[j]!.vx + (dx * i_mass * mag)
       set bodies[j]!.vy = bodies[j]!.vy + (dy * i_mass * mag)
       set bodies[j]!.vz = bodies[j]!.vz + (dz * i_mass * mag)
-      set j = index.add_wrapping(j, : index / 1)
+      set j = index.add_wrapping(j, 1)
     end loop
-    set i = index.add_wrapping(i, : index / 1)
+    set i = index.add_wrapping(i, 1)
   end loop
   set i = 0
   loop while i .< n
     set bodies[i]!.x = bodies[i]!.x + dt * bodies[i]!.vx
     set bodies[i]!.y = bodies[i]!.y + dt * bodies[i]!.vy
     set bodies[i]!.z = bodies[i]!.z + dt * bodies[i]!.vz
-    set i = index.add_wrapping(i, : index / 1)
+    set i = index.add_wrapping(i, 1)
   end loop
   ret ok ()
 end fun
@@ -101,7 +101,7 @@ fun energy(ref bodies: [Body]): !f64
   loop while i .< n
     let ib = bodies[i]!
     set e = e + 0.5 * ib.mass * (ib.vx * ib.vx + ib.vy * ib.vy + ib.vz * ib.vz)
-    var j = index.add_wrapping(i, : index / 1)
+    var j = index.add_wrapping(i, 1)
     loop while j .< n
       let jb = bodies[j]!
       let dx = ib.x - jb.x
@@ -109,9 +109,9 @@ fun energy(ref bodies: [Body]): !f64
       let dz = ib.z - jb.z
       let distance = f64.sqrt(dx * dx + dy * dy + dz * dz)
       set e = e - (ib.mass * jb.mass) / distance
-      set j = index.add_wrapping(j, : index / 1)
+      set j = index.add_wrapping(j, 1)
     end loop
-    set i = index.add_wrapping(i, : index / 1)
+    set i = index.add_wrapping(i, 1)
   end loop
   ret ok e
 end fun
@@ -124,10 +124,10 @@ fun run(): !f64
     var step: u32 = 0
     loop while step .< STEPS
       let _ = advance(mut bodies, 0.01)!
-      set step = u32.add_wrapping(step, : u32 / 1)
+      set step = u32.add_wrapping(step, 1)
     end loop
     set total = total + energy(ref bodies)!
-    set n = u32.add_wrapping(n, : u32 / 1)
+    set n = u32.add_wrapping(n, 1)
   end loop
   ret ok total
 end fun
