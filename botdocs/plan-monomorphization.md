@@ -1,470 +1,352 @@
-# Monomorphizing Generics
+# Specializing Generics
 
-> **Written under erasure.** Generics are now compiled by reference -- fat
-> pointers and a descriptor table per function ([Generics: how it
-> works](generics.md)) -- so "erased" below means that one compiled body. The
-> conversions at the boundary this plan sets out to avoid are already gone;
-> what monomorphizing still saves is reading a `T` through a pointer, copying
-> `desc.size` bytes per move, and the runtime calls a bounded operation makes.
+Written October 2026, after generics by reference landed; not implemented.
+This replaces an earlier plan written under erasure, which had to lower a
+generic again from source to get a concrete copy. Under the current design it
+does not.
 
-A plan to let any generic function be translated two ways: erased, as every one
-is today, or monomorphized -- lowered again for one set of concrete type
-arguments, into ordinary concrete IR -- with the call sites that reach it
-monomorphized too, so that nothing is converted at the boundary. Which one is
-used is a policy, per function and per call site, and the policy can be
-anything: all erased, all monomorphized, a heuristic, or a seeded coin per
-decision, as the chaos dispatcher already is for the jit. The eventual consumer
-is the running program itself: the interpreter and the jit asking for an
-instance when a generic call gets hot.
+A generic function is compiled once and run on descriptors ([Generics: how it
+works](generics.md)). Every `T` is read through a pointer, every move copies
+`desc.size` bytes, every call fills a descriptor table or compares against its
+one-entry cache, and every bounded operation is a call into the runtime. That
+is the right default for a language with a REPL, but it is what a hot generic
+pays on every call, and it is what keeps the AOT backends from producing the
+code a concrete function gets. The answer is a pass that makes an **instance**
+-- the generic's IR with its type parameters substituted -- as an optional,
+additive optimization. The same pass serves three callers: the AOT pipeline
+specializing what it can see, the JIT specializing a function at the bindings
+it is actually called with, and tests choosing at random.
 
-Background: [Generics: how it works](generics.md) is the erased implementation
-this builds beside; [Generics and Specialization](plan-generics.md) is the
-reasoning that chose erasure, and its "Layer 2: monomorphize what is hot" is
-what this makes concrete. The motivation is measured in
-[Are We Fast Yet for benchvs](research/research-awfy-benchmarks.md): after
-everything else, `list.repeated` is about 85% of jit Sieve, and by cause it is
-packing a bare `T` into a `data` and out again (~34%), borrowing a wrapped
-`[T]` on every call (~10%), and the layers of calls between (~32%). The first
-two are what every generic pays, and both go away in an instance.
+The pass is small because the IR already keeps type parameters as types.
+`IrType::Param(i)` sits inside a function's value, slot and parameter types
+and inside each call's `bindings`. No instruction says it is generic; a
+backend decides from the operand types. Substitute the parameters and what is
+left is a concrete function, which every backend already compiles.
+`ir::inline` already does this substitution when it splices a generic callee
+into a caller.
 
 ## Contents
 
-- [What an instance is](#user-content-what-an-instance-is)
-- [Why lowering again rather than copying IR](#user-content-why-lowering-again-rather-than-copying-ir)
-- [Lowering under a substitution](#user-content-lowering-under-a-substitution)
-- [Ownership analysis per instance](#user-content-ownership-analysis-per-instance)
-- [Call sites](#user-content-call-sites)
-- [The instance plan](#user-content-the-instance-plan)
-- [Policy](#user-content-policy)
-- [Identity](#user-content-identity)
-- [Salsa](#user-content-salsa)
-- [Scripts and the REPL](#user-content-scripts-and-the-repl)
-- [What the backends need](#user-content-what-the-backends-need)
+- [Why the old plan no longer applies](#user-content-why-the-old-plan-no-longer-applies)
+- [An instance is a substitution](#user-content-an-instance-is-a-substitution)
+- [Why substitution is sound](#user-content-why-substitution-is-sound)
+- [Additive: every call site is optional](#user-content-additive-every-call-site-is-optional)
+- [Ahead of time](#user-content-ahead-of-time)
+- [At run time](#user-content-at-run-time)
+- [Cleaning up after substitution](#user-content-cleaning-up-after-substitution)
 - [Testing](#user-content-testing)
-- [Asking at run time](#user-content-asking-at-run-time)
 - [Phases](#user-content-phases)
 - [Open questions](#user-content-open-questions)
 
-## What an instance is
+## Why the old plan no longer applies
 
-An **instance** is a generic function lowered with its type parameters bound:
-`(function, type arguments)`, the arguments being concrete typechecker types in
-the function's declaration order. `repeated[bool]` is `list.repeated` with
-`T := bool`. The erased version is not an instance; it is what every generic
-always has, and what anything not monomorphized calls.
+The erased design converted at the boundary. A `T` was a `data` in the IR,
+containers of `T` were wrapped, and calls had `Erase` and `Reify` around them.
+By the time a function was lowered its generic-ness was spread through the
+instructions, so the earlier plan argued for lowering again under a
+substitution, running ownership analysis again per instance, and adding
+per-instance salsa queries. Because a call site lowered as monomorphized had
+no erasure shell, the set of instances also had to be planned before lowering.
 
-An instance is a complete, ordinary function. Its parameters and return have
-their concrete types, it takes no descriptors (`descriptor_params` and
-`descriptor_shapes` are empty), and its body holds no `data` that the source
-did not write as `data`. To every backend it is indistinguishable from a
-function written without type parameters, which is most of why this is
-feasible: the engines need to *find* instances, not learn anything about them.
+Generics by reference removed every one of those reasons:
 
-**Partial instances** -- some parameters bound, the rest left erased -- fall out
-of the same machinery, because lowering already erases whatever `Var` is left.
-They are not needed for anything below and are not planned for a first
-version; [Open questions](#user-content-open-questions) says where they might
-earn their place.
+- The IR of a generic is the IR it would have if `T` were a concrete type.
+  Only the types differ: `Param(0)` where `u32` would be.
+- A dynamic value's calling convention is a pointer, and so is a concrete
+  aggregate's. There is no conversion to remove at a boundary, so an instance
+  and the generic can be mixed freely at any call site.
+- `descriptor_table` is computed from the unit (`ir::descriptor_table`), so a
+  rewritten unit has its table worked out again, and for an instance it is
+  empty.
 
-## Why lowering again rather than copying IR
+So a specialization pass works on IR, beside const-parameter specialization
+(`crates/datalove-datafun-compiler/src/specialize.rs`), not inside lowering.
 
-The compiler already makes copies of functions: `const` specialization
-(`compiler/src/specialize.rs`, phase 5c) copies a lowered unit per tuple of
-constant arguments and points the `ComptimeCall`s at the copies. That is IR
-copying, and it is the right model for *where copies live and how calls are
-pointed at them*, but not for *what is in them*: by phase 5c a generic body is
-already erased. Its values of `T` are `data` in `value_types`, its containers
-are wrapped, its literals carry descriptor shapes, its borrows go through
-`DataBorrow`, and its call sites have `Erase` and `Reify` in them. Undoing all
-of that on IR is a second, worse lowering.
-
-So an instance is made from the source: the typechecked body, lowered by the
-ordinary `lower_function_body` with a substitution in force. The typechecker
-does not run again. A generic body is checked once with `T` opaque, which is
-strictly fewer capabilities than any type it admits -- `==` on an unbounded
-`T`, literals against `T`, non-copy projection are all refused -- so a body that
-checked generically is well typed under any binding its bounds allow.
-Substituting into the stored expression types is sound.
-
-## Lowering under a substitution
-
-Erasure happens at one conversion: `IrType::from_datalit` turns `Var` into
-`Data` (`ir/src/lib.rs`, the `Var` arm, and `datalit_is_container_of_var`).
-Every generic special case in lowering keys off the result being `Data`, or off
-a type hint naming a type parameter. Substitute before the conversion and they
-do not fire:
-
-| Special case | Keys off | Under a substitution |
-|---|---|---|
-| erased literal (`ListNew { descriptor: Some }`), `build_shape`, `built_shapes` | `shape_of` finding a `Var` | plain `ListNew`, no shape |
-| `wrapped_shapes`, `container_shape`, `open_container` / `DataBorrow` | operand type `Data` | never `Data`, never fires |
-| dyn arithmetic on a bounded `T` | backends seeing `Data` operands | ordinary `BinOp` on `f64`, which lowering always emitted |
-| `drop_discarded_checked_result`, `checked_failure_message`, `lower_set_compound` | `Data` | concrete paths |
-
-So the substitution goes in `LowerCtx`, as a binding map applied with
-`substitute_type_params` (`datafun-common/src/generics.rs`, which already
-exists and handles every type form) at each place a typechecker type enters
-lowering:
-
-- `expr_type` and `expr_source_type` (`lower/src/context.rs`);
-- `shape_of`, `erased_element`, `container_shape`;
-- the resolved parameter and return types the compiler hands
-  `lower_function_for_module`, which today come from `from_tycheck` on the
-  export signature and so are erased;
-- each nested call's `type_args` (below).
-
-The signature path in `lower/src/func.rs` reads the AST type hints with the
-function's `type_params` and decides erasure from them
-(`type_hint_mentions_param`, `erased_param_type`, `descriptor_params`, the
-parameter `wrapped_shapes`). In an instance those branches are skipped
-outright: parameter and return types are the substituted resolved types,
-`descriptor_params` is empty, nothing is wrapped, and `ctx.body.type_params` is
-empty, so a `Var` that escaped the substitution fails loudly in `shape_of`
-rather than becoming a `data` nobody described.
-
-One hint path needs fixing anyway: an uninitialized `var x: T` is typed from its
-hint with `from_type_hint` (`lower/src/stmt.rs`), which knows no type
-parameters and makes `IrType::Error`. It should take the typechecker's type.
-
-**Nested calls compose.** Inside a generic the `type_args` recorded at a call
-site are written over the caller's own `Var`s: `repeated` calls `push` with
-`T := Var(T)`. In `repeated[bool]` each of them is substituted with the outer
-binding first, giving `push` with `T := bool`. Every consumer of `type_args`
-goes through the composition; one that forgets produces `shape_of(Var)` in a
-body with no type parameters, which is a loud failure, not a wrong answer.
-
-## Ownership analysis per instance
-
-This is the subtle part. Ownership analysis sees `IrType`s, a `T` is a `Data`,
-and `IrType::is_copy` says a `Data` is not copy -- so in the generic, every
-binding of type `T` is tracked, scheduled for drops and checked for moves. In
-`repeated[u32]` those bindings are `u32`s, which are copy, and copy-ness decides
-about a dozen things in `datafun-ownership`: the tracking category, scope-exit
-and branch drops, the before-return and try-return lists, loop drop
-candidates, `mark_moved` and the D001/D002/D007/D008/D014 checks.
-
-Reusing the generic's analysis is therefore wrong, not merely slow: it would
-schedule drops of `u32`s and track bindings that cannot be moved, and lowering's
-own copy checks would disagree with it. Running it again on the substituted
-types is right and sound -- copy is more permissive, so a body that passed with
-`T` non-copy passes with `T := u32`, and binding allocation does not depend on
-types, so `BindingId` and `StmtKey` order are unchanged.
-
-So an instance gets its own `FunctionAnalysis`, from `analyze_module`'s
-per-function work with the expression types substituted before
-`convert_expr_types`. Two paths there read AST type hints rather than
-expression types (the fallback when no resolved types are given, and an
-uninitialized `var x: T`) and need the substitution as well.
-
-## Call sites
-
-No erasure shell: a call into an instance is lowered as a concrete call, and an
-instance is entered only that way. This is where the gain is -- an instance
-calling an instance converts nothing -- and it is also what keeps the design
-honest, since the boundary conversions are exactly the code the instance exists
-to remove.
-
-Today the conversion is the caller's: lowering a call to a generic
-(`lower/src/expr.rs`, the call arm) reads the callee's source signature, decides
-`param_is_erased` per parameter, emits `Erase` (or `EraseTracked`, moving a
-non-copy binding out first) before each owned erased argument, gives the call
-the erased return type, and emits `Reify` after it and after each erased `out`
-parameter. Shape descriptors are resolved onto the `Call` later.
-
-A call site that the policy monomorphizes does none of that. With its
-`type_args` composed and all concrete, it:
-
-- names the instance as its callee (see [Identity](#user-content-identity));
-- takes its parameter and return types from the callee's signature under the
-  substitution -- concrete, so every argument already has the right type and no
-  `Erase`, `Reify` or out-parameter round trip is emitted;
-- records no `type_args` and gets no `shape_descriptors`;
-- passes borrowed arguments as they stand, with no descriptor, because the
-  instance asked for none.
-
-A call site the policy leaves erased is lowered exactly as today, whether its
-caller is erased, concrete, or itself an instance. That is the property that
-makes per-site choice possible: the two kinds of call are independent, and a
-caller can hold both, to the same callee.
-
-A call whose `type_args` still mention a `Var` after composition -- an erased
-caller forwarding its own `T` -- can only be erased. The policy is not asked.
-
-## The instance plan
-
-Lowering a call site as monomorphized commits the program to an instance
-existing. So which instances exist has to be known before callers are lowered,
-and it has to be finite.
-
-The plan is computed from the typechecker's output alone, without lowering
-anything: `CallTargets` already records, for every call, its callee and its
-type arguments. Starting from every call site whose type arguments are concrete
-and that the policy monomorphizes, each new instance's body contributes its own
-call sites, with their type arguments composed under its binding; the policy is
-asked about each; the closure is the plan. Its output is
-
-- the set of instances, each `(function, type arguments)`;
-- per call site *per containing function or instance*, whether it is
-  monomorphized -- a call site inside `repeated` is a different decision in
-  `repeated[bool]` than in `repeated[string]`.
-
-**It has to terminate.** A generic that calls itself at a strictly larger type
--- `f[T]` calling `f[[T]]` -- would instantiate forever. `close_shapes` already
-decides exactly this for descriptor shapes, from the same call graph: an edge
-from callee type parameter to caller type parameter, *strict* when the binding
-wraps it in a type constructor, and a cycle holding a strict edge grows. The
-plan reuses that answer: a call site on a growing cycle is erased, whatever the
-policy says. A cap on the number of instances is the backstop, as
-`MAX_INSTANTIATIONS` is for consts; a call site the cap refuses is erased too.
-Both are decided in the plan, before any lowering, so lowering never discovers
-an instance it was not promised.
-
-## Policy
+## An instance is a substitution
 
 ```rust
-enum GenericsPolicy {
-    /// Every call site erased: today's behaviour.
-    Erased,
-    /// Every call site that can be monomorphized is.
-    Monomorphized,
-    /// A seeded coin per call site, the same seed giving the same choices.
+/// `generic` with every type parameter bound: a concrete function.
+pub fn instantiate(generic: &IrCodeUnit, bindings: &[IrType]) -> IrCodeUnit
+```
+
+in `crates/datalove-datafun-ir`, beside `inline`. It clones the unit and
+applies `IrType::substitute(bindings)` to:
+
+- `FunctionContext::param_types` and `return_type`;
+- `value_types` and `slot_types`;
+- each `Call` and `ComptimeCall`'s `bindings`, which are written over this
+  function's parameters, so `repeated[bool]`'s call to `push` with
+  `T := Param(0)` becomes `push` with `T := bool`.
+
+Then it sets `type_param_count` to 0 and recomputes `descriptor_table`, which
+comes out empty. It asserts that no `Param` survives anywhere. Every
+`bindings` is concrete, so every call the instance makes has static
+descriptors. The name gets the bindings for debugging: `push[bool]`.
+
+These are exactly the places `inline::splice` substitutes, and the reason is
+the same: instructions do not carry `IrType`. Those that name a type carry a
+`TypeRef`, which is a shape (`Tuple(n)`, `Option`, `List`), not a type over
+parameters. If an instruction later gains an `IrType` field, both passes need
+it. That is worth a test that substitutes into a unit holding every
+instruction kind.
+
+`substitute` panics on a missing argument, so partial instances (some
+parameters bound, the rest renumbered) need a variant of it. They are left to
+[Open questions](#user-content-open-questions).
+
+## Why substitution is sound
+
+A generic body was typechecked with `T` opaque, which allows strictly less
+than any type the bounds admit. The concern is the decisions lowering made
+on the assumption that a `T` is not a copy type, now that it may be one:
+
+- **Instruction choice.** Lowering picks `Move` over `Copy`, `SlotStoreMove`
+  over `SlotStoreCopy`, and schedules `Drop`s and tracked slots for each `T`
+  binding. Each of these is still correct for a copy type: a move of a `u32`
+  copies it, and the backends treat a drop of a copy type as nothing
+  (`compile_drop` returns early on `is_copy`). The IR is redundant, not
+  wrong. [Cleaning up](#user-content-cleaning-up-after-substitution) removes
+  the redundancy.
+- **Arithmetic.** A bounded operation on `T` is an ordinary `BinOp` or
+  `BinOpChecked`, and lowering picks between them from the operator, not the
+  type. Under substitution it is the instruction a concrete function would
+  have, and the backend compiles it natively in place of `dyn_ops`.
+- **Literals and projections.** `ListNew`, `Pack` and `GetField` take their
+  descriptor or offset from the operand type. A static type gets a static
+  descriptor and a static offset.
+- **`in` arguments.** For a dynamic argument, the caller decides at run time
+  from `TyDesc::PLAIN` whether the argument was moved. For a static one, the
+  backends decide from the static type. A substituted argument has a static
+  type, so the static path applies, and it gives the same answer.
+
+Unlike the old plan, ownership analysis does not run again. It ran on the
+generic, and its output is IR that stays correct under any binding.
+
+The interpreter needs nothing new. An instance is a function whose types
+mention no parameter, and that is all the walker or the bytecode looks at.
+
+## Additive: every call site is optional
+
+As with const specialization, the generic stays. An instance is an extra
+function, and a call to the generic at bindings `B` means the same as a call
+to the instance at `B`. Therefore:
+
+- Any call site can be pointed at an instance or left alone, one site at a
+  time and in any combination. A caller can hold both kinds of call to one
+  callee.
+- Refusing is always safe. A site on a growing cycle, a site over the
+  instance cap, or a binding the run time cannot turn back into types stays a
+  call to the generic.
+- Nothing has to be planned before lowering. Instances can be made after the
+  fact, by the AOT pipeline, by a script unit, or by the JIT halfway through a
+  run.
+
+The policy is the same everywhere: a function from
+`(callee, bindings, caller)` to yes or no.
+
+```rust
+enum SpecializePolicy {
+    /// No instances: today's behaviour.
+    Off,
+    /// Every call site whose bindings are concrete.
+    All,
+    /// A seeded coin per call site, stable for a seed.
     Chaos { seed: u64 },
-    /// What the compiler thinks pays.
+    /// What pays: instances of small or hot generics.
     Default,
 }
 ```
 
-A policy answers one question: monomorphize this call site, of this callee at
-these type arguments, in this function or instance? Per-function choice is the
-special case of answering the same for every site that reaches a callee.
-`Chaos` hashes the seed with the site and the containing function, so its
-choices are stable across a run and reproducible from the seed, and two call
-sites of one callee in one caller can differ -- which is the case most likely
-to expose a boundary bug.
+## Ahead of time
 
-`Default` is a heuristic and starts conservative: monomorphize where the
-compiled backends are building the whole program (AOT, C) and the instance is
-small, erase in the interpreter and jit until [run time asks](#user-content-asking-at-run-time).
-It is the one policy whose choices are about speed; the others exist to test.
+The compile-time pass is phase 5c's twin and runs after it. It is
+graph-wide, since it creates functions, and is gated by an `AnalysisOptions`
+field that is also a salsa input, as `skip_specialization` is.
 
-The policy is part of the compilation's input (an `AnalysisOptions` field and a
-salsa input, as `skip_specialization` is), so changing it invalidates the plan
-and nothing else.
+1. **Seed.** Collect each `Call` in a non-generic function whose callee is
+   generic (`type_param_count > 0`, not `inline`) and whose bindings are
+   concrete, and ask the policy about each.
+2. **Instantiate.** For each new `(callee, bindings)`, `instantiate` the
+   callee into its own module with a fresh `CodeUnitId` after the module's
+   others, as const copies get. Repoint the call.
+3. **Close.** An instance's own calls to generics now have concrete bindings.
+   Treat them as in step 1, and repeat until nothing new appears.
 
-## Identity
+**Termination.** `f<T>` calling `f<[T]>` would instantiate forever. Track the
+chain of instances that led to each request. A request for a callee already
+on its own chain, at a binding that strictly contains the earlier one, is
+refused, and so the site stays generic. Generics by reference handles that
+call at run time by building one more descriptor, as it does now. A
+per-function cap (`MAX_INSTANTIATIONS`, as for consts) and a total cap are
+the backstop.
 
-An instance needs a name every layer can use: a `CodeRef` in the IR, a
-`FuncIdentity` in the interpreter and jit, a symbol in each backend.
+**Interactions.**
 
-Const copies take fresh `FuncId`s after the source functions'. That works
-because phase 5c runs after lowering, when the ids are settled. Instances are
-named *during* lowering -- a caller's call site names its instance before the
-instance is lowered, possibly in another module -- so the name has to come from
-the key, not from an allocation. The plan is the natural numbering: it is
-computed before lowering and is deterministic, so it can give each instance an
-index within its module.
+- *Const specialization.* A const copy keeps its type parameters
+  ([IR: passes](ir.md#user-content-13-passes)), so it can then be
+  instantiated like any generic. Running 5c first means instances never see
+  a `ComptimeCall` that 5c could have resolved.
+- *Inlining.* Inline functions are never called, so they are never
+  instantiated. Inlining runs after this pass and sees concrete callees more
+  often, which it already handles.
+- *Natives.* A generic native has no IR to instantiate. An instance calls it
+  with static descriptors, which is already the cheap path.
 
-- **IR:** a new `CodeRef::Instance { module, id: InstanceId }`, where
-  `InstanceId` indexes the module's instances in the plan. A distinct variant
-  rather than ids after the source functions', so nothing that matches on
-  `CodeRef::Module` mistakes an instance for a source function, and the
-  registry's lookup can say which table to read.
-- **Registry:** `ModuleFunctionRegistry` gains a per-module instance table
-  beside its functions. It stays immutable after module compilation, as now.
-- **Interpreter and jit:** `FuncIdentity::Instance { module, id }`. The jit's
-  `EncodedFuncKey` has two unused kinds; one of them is this. The layout cache,
-  code cells, stubs and stats key on `FuncIdentity` already.
-- **Symbols:** `__mod_{m}_{name}__i{id}` in the Cranelift AOT and C backends,
-  and the jit's `unique_symbol` extended the same way. A name is not enough on
-  its own -- `push` has an instance per element type -- and the type arguments
-  are too long to mangle, so the index carries the identity; the debug name can
-  spell the types out (`push[bool]`).
+**Backends.** Cranelift AOT and C need nothing beyond what const copies
+already need: an instance is a module function with an id and a name. The
+symbol is the module's usual mangling of the id. The debug name spells out
+the bindings.
 
-## Salsa
+**Scripts and the REPL.** A script unit runs the same pass over its own
+functions, putting instances of module functions into its `nested_units`,
+the way `specialize_script_unit` does for consts. The policy for the REPL
+starts as `Off`: generics by reference exist so that a new binding in a REPL
+line costs no compilation.
 
-Lowering is per module today (`lower_module_functions`, keyed on the module and
-its typecheck and analysis), with no per-function query. Instances need finer
-grain: a new instance should lower one function, not its module.
+## At run time
 
-- `instance_plan(graph, policy)` -- the closure above, over the graph's
-  typecheck `CallTargets`. Its output is per module, so each module's lowering
-  depends only on its own part.
-- `analyze_instance(module, function, type_args)` -- ownership analysis under
-  the substitution.
-- `lower_instance(module, function, type_args)` -- one `IrCodeUnit`, in the
-  callee's module, with that module's `ExprTypes` and `CallTargets`. An instance
-  belongs to the callee's module because only that module's tables can lower
-  the body; the caller only names it.
+This is the per-function, on-demand case. The interpreter and the JIT already
+see, at every call, the callee's `IrCodeUnit` and the descriptors it is being
+called with (`DispatchCallContext::type_params`). A generic that is hot at
+some binding can be instantiated at that binding then. No caller has to
+change, because the calling conventions line up.
 
-`type_args` is interned, so the key is cheap and two call sites asking for the
-same instance share it. Which instances a module has depends on its *importers*
--- `list.push[bool]` exists because Sieve calls `repeated` with a `bool` -- so
-an importer adding a call site at a new type adds one `lower_instance`, not a
-relowering of `sys/std/list`.
+**Descriptors back to types.** A request arrives as `TyDesc`s, and
+`instantiate` wants `IrType`s. `IrType` is structural (struct fields by name,
+enums by variant), and a descriptor carries the whole type, so the mapping
+exists in principle. It already exists in practice for most tags as
+`ir_type_from_tydesc` in `crates/datalove-datafun-interp/src/ctfe.rs`. It
+moves somewhere shared and is completed for enums, terms, atoms and cursors.
+A descriptor it cannot map is a refusal, and the call stays generic.
 
-Shape closure (`close_shapes_over_calls`) runs over erased functions only.
-An instance has no shapes, and its erased call sites have concrete type
-arguments, so their descriptors are all `Static` and `resolve_call_descriptors`
-settles them on the instance alone.
+**Identity.** The registries are immutable and stay so. Run-time instances
+live in a session table owned by the dispatcher: append-only and keyed by
+`(FuncIdentity, interned bindings)`. They get
+`FuncIdentity::Instance { base, binding }`, which takes one of the two unused
+kinds in the JIT's `EncodedFuncKey`. Code cells, stubs, layout caches and
+stats already key on `FuncIdentity`. When the JIT retires a function's cells
+because its code changed, it retires its instances' cells too.
 
-Const specialization runs after, unchanged: an instance's `ComptimeCall`s are
-copied like anyone else's, and its copies are instances' copies.
+**Callee side: entering an instance.** When the dispatcher sees a call to a
+generic, it counts per `(function, binding)` rather than per function. A hot
+pair is instantiated and compiled, and later calls at that binding enter the
+instance. The entry convention is the same: a compiled entry takes a pointer
+per argument and an `sret` pointer, then descriptors for a generic. An
+instance takes the same words minus the descriptors. A planned interpreter
+call site whose bindings are all `BindingRef::Static` always calls at the
+same binding, so its plan can `Enter` the instance directly. A site whose
+bindings come from a table varies, and keeps asking.
 
-## Scripts and the REPL
+This also fixes a known cost: the descriptor-table cache holds one binding
+([issues](issues.md)). A generic called alternately at two hot bindings gets
+two instances and fills no table.
 
-A script unit cannot add to a module: the module registry is immutable once
-built, and a REPL line arriving later is exactly the case erasure was chosen
-for. Phase 5c already has the answer for consts: `specialize_script_unit` copies
-the module function into the script unit's own `nested_units`, reached by
-`CodeRef::Local`, so a new instantiation in line 12 compiles one function into
-line 12 and touches nothing shared.
+**Caller side: compiling call sites to instances.** When the JIT compiles a
+function, whether concrete or itself an instance, a call with concrete
+bindings can target the instance's code cell in place of the generic's. It
+is compiled against the instance's signature, which is concrete. This makes
+chains specialize: once `repeated[bool]` is compiled, its call to `push`
+goes to `push[bool]`, and neither one touches a descriptor.
 
-Instances demanded by a script unit do the same: lowered with the callee
-module's tables, placed in the unit's `nested_units`. The cost is duplication --
-two lines using `push[bool]` lower it twice and tier it twice -- which is what
-const copies cost today too. A session-wide instance table, append-only like
-`UnitFunctionRegistry`, would remove it, and is the same structure
-[run-time requests](#user-content-asking-at-run-time) need; it can come with
-them.
+**Fallback.** An instance's cell starts at its stub, like any other. If the
+instance has not been compiled, or the JIT refuses it, the dispatcher runs
+the *generic* in the interpreter with the binding's static descriptors. These
+are equivalent by construction. So the interpreter never needs to resolve an
+`Instance` identity, and an instance costs nothing until it is worth
+compiling.
 
-Erasure stays what makes the REPL cheap. A new type at a REPL line compiles at
-most the instances the policy asks for, and with an erased policy, nothing.
+**AOT executables** have no IR and never ask. They get what the
+compile-time pass gave them.
 
-## What the backends need
+## Cleaning up after substitution
 
-Nothing about instances themselves: an instance is a concrete function. What
-each needs is to *find* one.
+An instance carries what the generic needed for a non-copy `T`: tracked slots
+and drop flags for bindings that are now `u32`, `Drop`s that do nothing,
+`Clone`s that go through `dtlv_rti_clone_local` to copy a word. All of it is
+correct. A short pass after `instantiate` removes it:
 
-- **Interpreter:** `ExecutionContext::get_unit` resolves the new `CodeRef`
-  through the registry's instance table; `resolve_identity` maps the
-  `FuncIdentity` back. The bytecode's planned-call caches validate a callee by
-  registry pointer and code epoch, which covers instance callees as they are.
-- **Cranelift (jit and AOT):** declare instance units with the module's other
-  functions (`cranelift-aot` declares from the registry; the jit's
-  `compile_entry` gathers callees by `CodeRef`). Instance call sites carry no
-  descriptors, so the signature code is untouched.
-- **C:** the same declarations, `emit_module_declarations`.
+- a `Drop` or `DropTracked` of a copy type is deleted;
+- a `Clone` of a copy type becomes `Copy`;
+- `Move` and the `*Move*` slot forms of a copy type become their copying
+  forms;
+- a tracked slot of a copy type is untracked, along with its tracked stores
+  and loads.
 
-Two facts found on the way, independent of this but in its path:
-`collect_call_targets` in the jit (`cranelift-jit/src/compiler.rs`) collects
-`Call` but not `ComptimeCall`, so a function compiled with a surviving
-`ComptimeCall` panics on an undeclared callee (reachable under
-`skip_specialization`); and the typechecker's `is_copy_type` calls a `Result`
-of a copy type copy where `IrType::is_copy` never does.
+Then `simplify` and dead code elimination run as they do after inlining.
+None of this is needed for correctness, so it can land after everything else
+and be measured on its own.
 
 ## Testing
 
-The two translations are each other's oracle. Any program means the same thing
-erased and monomorphized, at every call site independently, so every fixture
-can run under each policy and be compared against the reference, the way
-`noconst` and `nospec` compare against it today.
-
-New engine-test variants (`Differential` in `datafun/tests/engine_tests.rs`):
+The generic and its instances are each other's oracle: any program means the
+same at every policy and at every call site independently. Therefore:
 
 | Variant | Policy | Engine |
 |---|---|---|
-| `mono` | `Monomorphized` | bytecode |
-| `monochaos` | `Chaos { seed }`, the fixture's seed | bytecode |
-| `monojit` | `Chaos { seed }` | jit through the chaos dispatcher |
+| `spec` | `All` | bytecode |
+| `specchaos` | `Chaos { seed }`, the fixture's seed | bytecode |
+| `specjit` | `Chaos { seed }`, run-time requests on | jit through the chaos dispatcher |
 
-and the AOT and C runs gain a monomorphized build, since that is where
-`Default` will monomorphize first. The leak check runs under all of them: a
-drop schedule computed for the wrong copy-ness leaks or double-frees, which is
-the failure this design is most exposed to, and the leak check is what sees it.
+as `Differential` variants in `crates/datalove-datafun/tests/engine_tests.rs`,
+beside `noconst` and `nospec`, plus an `All` build in the AOT and C backend
+fixtures. The leak check runs under all of them. The chaos dispatcher also
+gets a coin for "instantiate this binding now" at run time, so the callee-side
+path runs on every fixture, not only on hot loops.
 
-The erased implementation has had several silent faults, two of them identical
-in all four backends, which comparing backends cannot catch. Comparing
-translations can: a monomorphized `[(string, u32)]` computes its strides from
-its type, with no descriptor in sight, so an erased path that gets one wrong
-disagrees with it. The new variants are a test of erasure as much as of
-monomorphization.
+This also tests generics by reference. Most faults there have been silent,
+some identical in all four backends ([Where the tests
+are](generics.md#user-content-where-the-tests-are)), so comparing backends
+did not catch them. An instance computes strides and offsets from static
+types without any descriptor, so a descriptor-path fault shows up as a
+disagreement.
 
-IR text in fixtures stays the erased lowering, under the default policy; the
-variants compare behaviour.
-
-## Asking at run time
-
-The end state: the interpreter or jit notices a generic call is hot and asks
-for an instance. With no erasure shell, what it asks for has to be a call site
-that is monomorphized -- and a call site is part of its caller's IR. So the
-request is not "an instance of `push` at `bool`" but "the caller, lowered again
-with this call site monomorphized".
-
-When the hot call is in a concrete function, its type arguments are static, the
-plan could have monomorphized it at compile time, and asking amounts to the
-policy changing its answer for that site: lower the caller again under the new
-answer, lower the instance it now names, and install the new caller. When the
-hot call is inside an erased generic, its type arguments are known only from
-the descriptors that arrived, and the request moves up a level: monomorphize
-the generic *itself* at those arguments, from its own caller's site, and so on
-up to a concrete caller -- which is how Julia specializes, on the types a call
-is made with, from where they are known.
-
-What that needs, none of which exists yet:
-
-- **A compiler at run time.** The interpreter today runs on registries. A
-  `Specializer` installed the way a `CallDispatcher` is, holding the database,
-  that turns a request into new units. The CLI and the REPL both have the
-  database; an AOT executable does not and never asks.
-- **Types from descriptors.** A request from an erased frame knows its type
-  arguments as `TyDesc`s, and an instance is keyed on typechecker types. The
-  tydesc table is built from `IrType`s; whether every concrete `IrType` maps
-  back to one typechecker type (struct and enum names, aliases) needs checking.
-- **Replacing a running function.** A new caller has to replace the old one
-  for future calls -- the jit's code cells and the bytecode's per-site caches,
-  validated by code epoch, are the mechanism -- while frames already running the
-  old one finish in it. OSR into the new version is a later refinement.
-- **An append-only instance table** shared by the session, which the REPL
-  wants anyway.
-
-This is the last phase and the largest, and every phase before it stands on
-its own.
+IR text in fixtures stays at the default policy.
 
 ## Phases
 
-Each phase leaves the default behaviour unchanged and the suite passing.
+Each phase leaves default behaviour unchanged and the suite passing.
 
-1. **Substitution plumbing.** The binding map in `LowerCtx`, applied at every
-   entry point in [Lowering under a substitution](#user-content-lowering-under-a-substitution),
-   with an empty map everywhere. The `var x: T` hint fix. Ownership analysis
-   taking substituted types. No behaviour change: the empty map is today.
-2. **Instances, lowered and named.** `lower_instance` and `analyze_instance`;
-   `CodeRef::Instance`, the registry's instance table, `FuncIdentity::Instance`,
-   symbols in the three code generators. A test hook that lowers an instance
-   by hand and calls it, to check an instance alone before any call site
-   reaches one.
-3. **Call sites and the plan.** `instance_plan` with the growth check and cap;
-   concrete call-site lowering; the `Monomorphized` policy; the `mono` variant.
-   Done when every fixture passes under it, leak check included.
-4. **Chaos.** `Chaos { seed }`, `monochaos` and `monojit`, and the AOT and C
-   monomorphized builds.
-5. **Scripts and the REPL.** Instances in script units' `nested_units`.
-6. **`Default`.** The heuristic, starting with AOT and C, measured on benchvs
-   and the store demo; code size and compile time recorded alongside speed.
-7. **Run-time requests.** The `Specializer`, types from descriptors, replacing
-   callers, the session instance table.
+1. **`instantiate`.** The substitution, the no-`Param` assertion, and unit
+   tests that substitute into every instruction kind. A test hook that
+   instantiates a module function by hand and runs it on every engine.
+2. **The AOT pass under `All`.** Seed, close, growth check, caps, fresh ids;
+   the `spec` variant and AOT/C `All` builds. Done when every fixture passes
+   with leak checks.
+3. **Chaos.** `Chaos { seed }` and `specchaos`.
+4. **Run time, callee side.** Descriptors back to types, the session instance
+   table, `FuncIdentity::Instance`, per-binding counting, fallback to the
+   generic. `specjit`.
+5. **Run time, caller side.** JIT call sites with concrete bindings target
+   instance cells.
+6. **Cleanup.** The copy-type pass, measured alone.
+7. **`Default`.** Heuristics, measured on benchvs (Sieve's `list.repeated`
+   is the case [AWFY](research/research-awfy-benchmarks.md) points at) and
+   the store demo, with code size and compile time recorded. The erased-era
+   numbers in that research doc predate generics by reference and need
+   remeasuring first.
 
-Phase 3 is the one that proves the design: `repeated[bool]` calling
-`push[bool]` with nothing converted.
+Phase 2 proves the design: `repeated[bool]` calling `push[bool]`, built
+ahead of time, with no descriptor in either.
 
 ## Open questions
 
-- **Partial instances.** Binding some type parameters and erasing the rest
-  falls out of the substitution, and a call site in an erased caller with one
-  concrete argument could use one. Worth it only if a measurement shows such
-  sites hot.
-- **Inlining.** An instance of `push` is a one-line function around a native
-  call. Inlining it into `repeated[bool]` removes a layer the plan cannot.
-  There is no function inliner today; instances make one more valuable, since
-  an instance is concrete enough to inline into anything.
-- **Code size and compile time.** Unbounded under `Monomorphized` except by the
-  cap. `Default` needs a measure of both before it monomorphizes much.
-- **Descriptors back to types**, for run-time requests: see above.
-- **Instances of natives.** A generic native (`std.list_push`) is not lowered,
-  so it has no instance; an instance calls it with concrete descriptors, which
-  is already cheaper than erased, since `list_push_erased` finds nothing to
-  unwrap. A typed fast path in the runtime for a known element type is a
-  separate question.
-- **Whether `descriptor_params` survives.** If enough of the program runs as
-  instances, the erased path's borrowed-descriptor machinery serves less of it.
-  It stays as long as erasure does, which is as long as the REPL wants it.
+- **Partial instances.** Binding some parameters and renumbering the rest is a
+  small change to `substitute`. A generic caller forwarding its `T` with a
+  second parameter concrete could use one. Is any such site hot enough to
+  matter?
+- **Where the run-time pass lives.** `instantiate` is pure IR and needs no
+  database, so the dispatcher can call it directly. Should a run-time instance
+  also go through the compile-time pipeline's later passes (inline, simplify,
+  promote), which today run per module in salsa, or is a subset callable
+  without the database enough?
+- **The REPL's default.** Should the REPL ever specialize ahead of time, or
+  only through the JIT? The JIT is not used by the CLI's REPL today.
+- **Whether the cleanup pass is worth its code.** The redundant drops and
+  tracking cost a byte store and a branch each. Cranelift may already remove
+  some of it.
+
+Generics by reference made the boundary disappear. Since nothing converts
+there, a generic and its instance can stand on either side of any call, and
+specializing becomes a substitution that any engine can run at any time.
+What is still open is choosing when it pays, which is the `Default` policy,
+and that is a question of measurement.

@@ -118,7 +118,7 @@ And why, from a profile of each:
   again, about a third of the run. (Since: the runtime's element write is
   gone, a list store being one checked `ListSet`, which Cranelift and C inline
   as a store for a copy element. `repeated` still goes through `data`, which
-  is what [Monomorphizing Generics](../plan-monomorphization.md) is for.)
+  is what [Specializing Generics](../plan-monomorphization.md) is for.)
 - **NBody, 4.7x Java (fixed: now 1.6x).** Close to half of the compiled
   `advance` was calls to the runtime's generic destroy (`any_destroy_local`),
   though every value there is an `f64` or a struct of them, and owns nothing:

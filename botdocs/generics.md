@@ -292,7 +292,7 @@ entity, and a generic's body never contributes to its callers' calling
 convention. Monomorphization needs to see every call site before it can emit
 the callee, which is exactly what a REPL cannot give.
 
-Monomorphizing what is *hot* is [Monomorphizing
+Monomorphizing what is *hot* is [Specializing
 Generics](plan-monomorphization.md): an optimization over a complete
 implementation, not a different design.
 

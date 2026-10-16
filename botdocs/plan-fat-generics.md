@@ -11,7 +11,7 @@ reference now.
 
 This supersedes the erasure half of [Generics and
 Specialization](plan-generics.md) and, once done, most of [Generics: how it
-works](generics.md). [Monomorphizing Generics](plan-monomorphization.md)
+works](generics.md). [Specializing Generics](plan-monomorphization.md)
 stays the plan for speed, and comes after this.
 
 ## Contents
