@@ -89,6 +89,11 @@ pub enum SitePolicy {
     Count(u32),
     /// Enter compiled code, through `call_compiled`.
     Enter(CompiledEntry),
+    /// Enter compiled code, through `call_compiled`, for `n` more calls,
+    /// and offer the `n`th to `dispatch_call` as standing for all of them
+    /// (`DispatchCallContext::weight`), then ask again. For a dispatcher
+    /// that has code for the call but is counting toward better code.
+    EnterCounting(CompiledEntry, u32),
     /// Enter the compiled code of `func`, an instance of the generic the site
     /// calls at the site's binding, through `call_compiled`: with the
     /// arguments and no descriptors. Only for a call site whose binding is the

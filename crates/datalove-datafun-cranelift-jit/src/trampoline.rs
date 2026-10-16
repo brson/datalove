@@ -264,20 +264,23 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     };
 
     // Count the call, which may compile the callee. Once it is compiled its
-    // stubs call it directly and no longer come here. When specializing, what
-    // is counted and entered for a generic is its instance at the call's
-    // binding, which takes no descriptors, and so the generic's stubs keep
-    // coming here; the interpreter runs the generic.
+    // stubs call it directly and no longer come here. When specializing, a
+    // call to a generic counts toward its instance at the call's binding,
+    // which takes no descriptors, as well as toward the generic, whose code
+    // runs it until the instance is compiled; the interpreter runs the
+    // generic until neither is.
     let instance = match instance {
         Some(instance) if !ctx.jit_engine.refused(called) => Some((called, std::sync::Arc::clone(&instance.unit))),
         Some(_) => None,
         None => ctx.jit_engine.specialized(key, ir_unit, &type_params, ctx.interp),
     };
-    let (counted_key, counted, counted_params) = match &instance {
-        Some((key, unit)) => (*key, &**unit, &[][..]),
-        None => (key, ir_unit, &type_params[..]),
+    let recorded = ctx.jit_engine.record_generic_call(
+        key, ir_unit, instance.as_ref(), 1, &callee_ctx, ctx.registry, ctx.interp);
+    let (counted_key, counted, counted_params) = match &recorded {
+        Ok((key, _, true)) => (*key, &*instance.as_ref().expect("entering the instance there is").1, &[][..]),
+        _ => (key, ir_unit, &type_params[..]),
     };
-    match ctx.jit_engine.record_call(counted_key, counted, 1, &callee_ctx, ctx.registry, ctx.interp) {
+    match recorded.map(|(_, recorded, _)| recorded) {
         Ok(Recorded::Compiled { entry, .. }) => {
             ctx.jit_engine.note_call(counted_key, counted, CallFrom::Native, true, 1);
             // SAFETY: code_ptr is compiled code for this callee.

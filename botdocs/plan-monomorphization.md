@@ -371,9 +371,8 @@ Each phase leaves default behaviour unchanged and the suite passing.
    in `std_engine_tests` are what reach the planned sites: a function called
    once stays interpreted while what it calls in a loop is compiled.
 
-   What is left of phase 4's costs: a site whose binding is its caller's
-   type parameters -- an interpreted generic calling another -- still offers
-   every call, since only an offered call says its binding.
+   What was left of phase 4's costs, a site whose binding is its caller's
+   type parameters offering every call, went with phase 7's middle tier.
 6. **Cleanup.** Done: `ir::instantiate::clean_copy_types`, run on every
    instance, ahead of time and in the jit. Drops of copy types go, a `Clone`
    or `Move` of one becomes a `Copy`, and a tracked slot of one is untracked.
@@ -406,38 +405,47 @@ Each phase leaves default behaviour unchanged and the suite passing.
 
    | program | jit | jit, specializing | aot | aot, specializing |
    |---|---:|---:|---:|---:|
-   | fib | 344 ms | 1.01 | 346 ms | 1.01 |
-   | sum | 284 ms | 1.00 | 302 ms | 1.00 |
-   | primes | 331 ms | 1.01 | 336 ms | 0.99 |
-   | wordfreq | 543 ms | 0.99 | 545 ms | 0.98 |
-   | sieve | 806 ms | 0.80 | 698 ms | 0.72 |
-   | mandelbrot | 544 ms | 1.00 | 545 ms | 1.00 |
-   | nbody | 185 ms | 1.00 | 167 ms | 1.02 |
-   | ordered | 551 ms | 1.26 | 521 ms | 0.94 |
-   | store demo, 20,000 orders | 387 ms | 1.02 | 134 ms | 0.95 |
+   | fib | 356 ms | 0.99 | 346 ms | 1.01 |
+   | sum | 330 ms | 0.99 | 302 ms | 1.00 |
+   | primes | 347 ms | 1.01 | 336 ms | 0.99 |
+   | wordfreq | 549 ms | 1.00 | 545 ms | 0.98 |
+   | sieve | 797 ms | 0.72 | 698 ms | 0.72 |
+   | mandelbrot | 570 ms | 1.01 | 545 ms | 1.00 |
+   | nbody | 185 ms | 0.99 | 167 ms | 1.02 |
+   | ordered | 549 ms | 1.02 | 521 ms | 0.94 |
+   | store demo, 20,000 orders | 402 ms | 0.99 | 134 ms | 0.95 |
 
    Ahead of time it never loses: sieve, the case
    [AWFY](research/research-awfy-benchmarks.md) points at, is 28% faster,
    `ordered` and the store demo 5-6%, and the rest within noise. The
    executables grow by at most 35 KB of 5-10 MB, and `aot-compile` takes no
    measurably longer (3.03 s against 3.12 s for the store demo, within its
-   spread). So `All` is what `aot-compile` should do by default.
+   spread).
 
-   In the jit it wins on sieve and loses on `ordered` and a little on the
-   store demo. `ordered` calls each of its generics at four bindings, and
-   each instance warms up on its own: until it has been called as often as
-   the threshold it runs in the interpreter, so a generic called at four
-   bindings runs four times as long there as it does unspecialized, where
-   the one compiled generic serves them all. (Counting every instance's calls
-   toward its generic, and compiling an instance on its next call once the
-   generic is hot, brought it to 1.06, but compiles instances that are not
-   hot, and was taken out.) The way to keep both is a tier between: compile
-   the generic over descriptors once it is hot, as the jit does without
-   specializing, run an instance's calls in that until the instance is hot
-   itself, and only then compile the instance. Also left is the gap phase 5
-   names: interpreted generic code calling generics at its own type
-   parameters offers every call to the dispatcher rather than entering
-   planned code.
+   In the jit, sieve is 28% faster too, and nothing loses more than `ordered`'s
+   2%. That took a tier between the generic and its instances. `ordered`
+   calls each of its generics at four bindings, and with each instance
+   warming up on its own in the interpreter, a generic called at four
+   bindings ran four times as long there as unspecialized, where one compiled
+   generic serves them all: 1.26. (Compiling an instance on its next call
+   once its generic was hot brought that to 1.06, but compiled instances that
+   were not hot, and was taken out.) Now every call to a generic counts
+   toward the generic, whatever its binding, as well as toward its instance
+   (`JitEngine::record_generic_call`). The generic is compiled over
+   descriptors once it is hot, as without specializing; a call whose instance
+   is not compiled yet runs in that; and an instance is compiled only once it
+   is hot itself. So the generic's code is there for every binding not hot
+   enough for its own, at the cost of compiling a hot generic once more than
+   its hot instances. A planned interpreter call site at one binding enters
+   the generic's code meanwhile, counting its calls, and offers every so many
+   to the dispatcher (`SitePolicy::EnterCounting`, a countdown on the
+   bytecode's `JitPlan`), so it moves to the instance when that is compiled.
+   A site that binds a generic to its caller's type parameters is planned as
+   any site is, rather than offering every call as phase 5 had it.
+
+   One thing `--jit-stats` now gets wrong: the calls an `EnterCounting` site
+   makes between offers ran in compiled code, but are reported as
+   interpreted, as a `Count` site's are.
 
    Specialization stays an experiment, off by default everywhere: the
    policy's default is `Off`, and `--specialize` and `--jit-specialize` are

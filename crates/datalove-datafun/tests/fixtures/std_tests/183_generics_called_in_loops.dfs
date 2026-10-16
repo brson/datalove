@@ -16,7 +16,9 @@ end fun
 // One function calling generics at two bindings, from two sites each. Called
 // once, so that under a JIT that compiles what is called often it stays in
 // the interpreter, and its planned call sites are what enter the instances.
-fun fill(n: u32): !([u32], [string], u32)
+// Then at a third binding, fewer times than makes an instance hot, which a
+// specializing JIT runs in the generic's code, compiled by then.
+fun fill(n: u32): !([u32], [string], u32, u32)
     var numbers: [u32] = []
     var words: [string] = []
     var total: u32 = 0
@@ -30,7 +32,16 @@ fun fill(n: u32): !([u32], [string], u32)
         call list.push(mut words, first_of(ref q))
         set i +!= 1
     end loop
-    ret ok (numbers, words, total)
+    var trues: u32 = 0
+    set i = 0
+    loop while i .< 20
+        let r = pair(true)
+        if first_of(ref r)
+            set trues +!= 1
+        end if
+        set i +!= 1
+    end loop
+    ret ok (numbers, words, total, trues)
 end fun
 
 // A generic calling a generic at its own binding, called at two.

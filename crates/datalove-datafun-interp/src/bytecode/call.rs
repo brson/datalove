@@ -102,7 +102,12 @@ impl IrInterpreter {
                 Some(countdown) if countdown.tick() => Some(Planned::Offer(countdown.batch())),
                 Some(_) => Some(Planned::Body(plan)),
             },
-            Plan::Jit(plan) => Some(Planned::Jit(plan)),
+            Plan::Jit(plan) => match &plan.countdown {
+                None => Some(Planned::Jit(plan)),
+                Some(countdown) if countdown.run_out() => None,
+                Some(countdown) if countdown.tick() => Some(Planned::Offer(countdown.batch())),
+                Some(_) => Some(Planned::Jit(plan)),
+            },
         }
     }
 
@@ -324,7 +329,9 @@ impl IrInterpreter {
                 return Ok(false);
             }
             Some(SitePolicy::Enter(entry)) => entry,
-            Some(SitePolicy::EnterInstance(..)) => unreachable!("a loop is entered in its own function"),
+            Some(SitePolicy::EnterInstance(..) | SitePolicy::EnterCounting(..)) => {
+                unreachable!("a loop header is entered or not; only a call site counts calls")
+            }
         };
         // The next call to run the loop asks again, and is told the same at
         // once.
@@ -589,20 +596,25 @@ impl IrInterpreter {
             //
             // An instance at the site's binding is entered the same way, with
             // no descriptors, which it does not take.
-            (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_) | SitePolicy::EnterInstance(..))) => {
-                let (func, entry, descriptors) = match policy {
-                    Some(SitePolicy::Enter(entry)) => (
-                        crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
-                        entry,
-                        std::rc::Rc::clone(descriptors),
-                    ),
-                    Some(SitePolicy::EnterInstance(func, entry)) => (func, entry, std::rc::Rc::from([])),
+            //
+            // Or entered while the site counts calls for the dispatcher, which
+            // is still working toward something better for it.
+            (Some(layout), None) if matches!(policy,
+                Some(SitePolicy::Enter(_) | SitePolicy::EnterInstance(..) | SitePolicy::EnterCounting(..))) =>
+            {
+                let generic = || crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit());
+                let (func, entry, descriptors, countdown) = match policy {
+                    Some(SitePolicy::Enter(entry)) => (generic(), entry, std::rc::Rc::clone(descriptors), None),
+                    Some(SitePolicy::EnterCounting(entry, n)) => {
+                        (generic(), entry, std::rc::Rc::clone(descriptors), Some(Countdown::new(n)))
+                    }
+                    Some(SitePolicy::EnterInstance(func, entry)) => (func, entry, std::rc::Rc::from([]), None),
                     _ => unreachable!(),
                 };
                 let args: Box<[ArgRecipe]> = (0..layout.param_modes.len()).map(read).collect();
                 let width = 1 + entry.uses_sret as usize + args.len() + descriptors.len();
                 (width <= crate::dispatch::MAX_ENTRY_WORDS)
-                    .then(|| Plan::Jit(JitPlan { func, entry, args, descriptors }))
+                    .then(|| Plan::Jit(JitPlan { func, entry, args, descriptors, countdown }))
             }
             // A body, whose frame holds a pointer at each argument.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {

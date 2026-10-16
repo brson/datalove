@@ -251,6 +251,39 @@ impl JitEngine {
         callees
     }
 
+    /// Count a call to `func`, which is `key`, which may compile it; when
+    /// specializing, `instance` is the generic's instance at the call's
+    /// binding.
+    ///
+    /// The call counts toward the instance, and is to enter it once it is
+    /// compiled. It counts toward the generic too, whichever binding it is at,
+    /// and until the instance is compiled is to enter the generic's code, over
+    /// descriptors, once that is: so the generic is compiled once it is hot at
+    /// all its bindings together, an instance warms up in compiled code, and
+    /// only an instance that is hot itself is compiled. Returns what the call
+    /// is to enter or be interpreted as, what that came to, and whether it is
+    /// the instance.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn record_generic_call(
+        &mut self,
+        key: FuncIdentity,
+        func: &IrCodeUnit,
+        instance: Option<&(FuncIdentity, std::sync::Arc<IrCodeUnit>)>,
+        weight: u32,
+        ctx: &ExecutionContext<'_>,
+        registry: &FunctionRegistry,
+        interp: &mut IrInterpreter,
+    ) -> Result<(FuncIdentity, Recorded, bool), JitError> {
+        let generic = self.record_call(key, func, weight, ctx, registry, interp)?;
+        if let Some((instance, unit)) = instance {
+            let recorded = self.record_call(*instance, unit, weight, ctx, registry, interp)?;
+            if let Recorded::Compiled { .. } = recorded {
+                return Ok((*instance, recorded, true));
+            }
+        }
+        Ok((key, generic, false))
+    }
+
     /// What a call to `func`, which is `key`, at the binding `type_params`
     /// describe, is counted and run as when compiled: the instance at that
     /// binding, when specializing and there is one that has not been refused.
@@ -364,25 +397,37 @@ impl JitEngine {
         bindings: Option<&[*const datalove_rtdt::TyDesc]>,
     ) -> SitePolicy {
         let generic = body.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
-        let counting = matches!(self.states.get(&func), Some(Tier::Counting(_)) | None);
-        // When specializing, a call to a generic is counted toward, and
-        // enters, its instance at the call's binding. A site at one binding
-        // does that itself; the instance is made by the first call it offers.
-        // The generic is counted only once an instance is refused, and
-        // compiled, entered as it always is.
-        if self.specialize && generic && counting && let Some(bindings) = bindings {
+        // When specializing, a site at one binding counts its calls toward the
+        // instance at that binding, and enters it once it is compiled. Until
+        // then it runs the generic as any site does -- interpreted, or entered
+        // once compiled -- and offers a call to the dispatcher once as many
+        // have been made as the instance lacks, or the generic, whichever is
+        // fewer. The instance is made by the first call it offers.
+        //
+        // A site that binds the generic to its caller's type parameters says
+        // its binding only by offering a call, and runs the generic as any
+        // site does.
+        if self.specialize && generic && let Some(bindings) = bindings {
             let instance = self.instances.find(func, bindings);
-            match instance.map(|i| (i, self.states.get(&i))) {
-                Some((instance, Some(Tier::Compiled(entry)))) => return SitePolicy::EnterInstance(instance, *entry),
-                Some((_, Some(Tier::Refused))) => {}
-                Some((_, Some(tier))) => return tier.policy(self.threshold),
-                Some((_, None)) | None => return Tier::Counting(0).policy(self.threshold),
+            let lacking = match instance.map(|i| self.states.get(&i)) {
+                Some(Some(Tier::Compiled(entry))) => {
+                    return SitePolicy::EnterInstance(instance.expect("found"), *entry);
+                }
+                Some(Some(Tier::Refused)) => None,
+                Some(Some(Tier::Counting(counted))) => Some(self.threshold.saturating_sub(*counted).max(1)),
+                Some(None) | None => Some(self.threshold),
+            };
+            if let Some(lacking) = lacking {
+                return match self.states.get(&func) {
+                    Some(Tier::Compiled(entry)) => SitePolicy::EnterCounting(*entry, lacking),
+                    Some(Tier::Counting(counted)) => {
+                        SitePolicy::Count(lacking.min(self.threshold.saturating_sub(*counted).max(1)))
+                    }
+                    Some(Tier::Refused) | None => SitePolicy::Count(lacking),
+                };
             }
         }
         match self.states.get(&func) {
-            // A site that binds the generic to its caller's type parameters
-            // says its binding only by offering a call.
-            Some(Tier::Counting(_)) | None if self.specialize && generic && bindings.is_none() => SitePolicy::EveryCall,
             Some(tier) => tier.policy(self.threshold),
             None if !bridge::enterable(body) => SitePolicy::Interpret,
             None => Tier::Counting(0).policy(self.threshold),
@@ -541,15 +586,21 @@ impl JitEngine {
     ) -> JitDispatch {
         let key = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
         let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
-        // When specializing, what is counted and entered is the instance at
-        // the call's binding, which takes no descriptors; the interpreter
-        // still runs the generic, with them.
+        // When specializing, the call counts toward the instance at its
+        // binding, which takes no descriptors, as well as toward the generic;
+        // the interpreter runs the generic, with them.
         let instance = self.specialized(key, func, call_ctx.type_params, call_ctx.interp);
-        let (key, func, type_params) = match &instance {
-            Some((key, unit)) => (*key, &**unit, &[][..]),
-            None => (key, func, call_ctx.type_params),
+        let recorded = self.record_generic_call(
+            key, func, instance.as_ref(), call_ctx.weight, &callee_ctx, call_ctx.registry, call_ctx.interp);
+        let (key, recorded, func, type_params) = match recorded {
+            Ok((key, recorded, true)) => {
+                let (_, unit) = instance.as_ref().expect("entering the instance there is");
+                (key, Ok(recorded), &**unit, &[][..])
+            }
+            Ok((key, recorded, false)) => (key, Ok(recorded), func, call_ctx.type_params),
+            Err(e) => (key, Err(e), func, call_ctx.type_params),
         };
-        match self.record_call(key, func, call_ctx.weight, &callee_ctx, call_ctx.registry, call_ctx.interp) {
+        match recorded {
             Err(e) => JitDispatch {
                 result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
             },
