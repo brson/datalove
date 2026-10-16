@@ -163,13 +163,26 @@ impl<'a, M: Module> FunctionCompiler<'a, M> {
             CraneliftError::Codegen("Call requires runtime handle".into())
         })?;
 
-        let callee_func_id = self.resolve_code_ref(code_ref)?;
+        // An instance of the generic at this call's binding, if there is one,
+        // is called in its place, with no descriptors.
+        let instance = match bindings {
+            [] => None,
+            _ => self.instance_funcs.get(&(code_ref.clone(), bindings.to_vec())).cloned(),
+        };
+        let bindings = if instance.is_some() { &[][..] } else { bindings };
+        let callee_func_id = match &instance {
+            Some(instance) => instance.func_id,
+            None => self.resolve_code_ref(code_ref)?,
+        };
 
         // The callee's own return type says whether it returns through a
         // pointer; a generic returning `T` does even where this call bound `T`
         // to `()`.
         let dest_ty = &self.func.value_types[dest.0 as usize];
-        let callee_uses_sret = self.callee_uses_sret(code_ref);
+        let callee_uses_sret = match &instance {
+            Some(instance) => instance.uses_sret,
+            None => self.callee_uses_sret(code_ref),
+        };
 
         // Build call arguments: [rt_handle, sret?, user_args...]
         let mut call_args = Vec::with_capacity(2 + args.len());

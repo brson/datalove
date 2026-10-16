@@ -1,6 +1,6 @@
 # Specializing Generics
 
-Written October 2026, after generics by reference landed. Phases 1 to 4
+Written October 2026, after generics by reference landed. Phases 1 to 5
 are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
 policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
@@ -344,10 +344,10 @@ Each phase leaves default behaviour unchanged and the suite passing.
    bytecode jit specializing; the standard library's suite compiles about six
    hundred instances, `push`, `of`, `len` and `insert` the most.
 
-   What it costs until phase 5: a generic is never compiled itself while its
+   What it cost until phase 5: a generic is never compiled itself while its
    instances can be, so its code cell stays empty and every call to it from
-   compiled code goes through its stub and the trampoline to find the
-   instance; and a planned interpreter call site to a generic offers every
+   compiled code went through its stub and the trampoline to find the
+   instance; and a planned interpreter call site to a generic offered every
    call to the dispatcher (`SitePolicy::EveryCall`) rather than entering
    code, since only an offered call carries its binding.
 
@@ -356,8 +356,24 @@ Each phase leaves default behaviour unchanged and the suite passing.
    `inline` functions are real calls, and `inline` functions are called at
    run time. An instance of one is made like any other, and is not
    `inline`.
-5. **Run time, caller side.** JIT call sites with concrete bindings target
-   instance cells.
+5. **Run time, caller side.** Done. When the jit compiles a function, each
+   call it makes to a generic at a concrete binding calls the instance at
+   that binding (`JitEngine::instance_callees`, the codegen's
+   `set_instance_funcs`): a stub and code cell of the instance's own, its
+   signature, no descriptors. The instance's stub reaches the trampoline with
+   the instance's identity, which counts and enters the instance, or runs
+   the generic in the interpreter with descriptors built from the binding.
+   And a planned interpreter call site whose binding is the same at every
+   call -- every `BindingRef::Static` -- is told by `site_policy`, which now
+   takes the site's descriptors, to count toward its binding's instance and,
+   once that is compiled, to enter it (`SitePolicy::EnterInstance`).
+   `183_generics_called_in_loops` and a "Specializing Bytecode JIT at 50" run
+   in `std_engine_tests` are what reach the planned sites: a function called
+   once stays interpreted while what it calls in a loop is compiled.
+
+   What is left of phase 4's costs: a site whose binding is its caller's
+   type parameters -- an interpreted generic calling another -- still offers
+   every call, since only an offered call says its binding.
 6. **Cleanup.** The copy-type pass, measured alone.
 7. **`Default`.** Heuristics, measured on benchvs (Sieve's `list.repeated`
    is the case [AWFY](research/research-awfy-benchmarks.md) points at) and

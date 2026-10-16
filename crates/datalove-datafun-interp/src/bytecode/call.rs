@@ -324,6 +324,7 @@ impl IrInterpreter {
                 return Ok(false);
             }
             Some(SitePolicy::Enter(entry)) => entry,
+            Some(SitePolicy::EnterInstance(..)) => unreachable!("a loop is entered in its own function"),
         };
         // The next call to run the loop asks again, and is told the same at
         // once.
@@ -585,16 +586,23 @@ impl IrInterpreter {
             // A body compiled, entered as the dispatcher would enter it from
             // the call's arguments: each as the caller has it, descriptor and
             // all, which is what a call offered to it is handed.
-            (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_))) => {
-                let Some(SitePolicy::Enter(entry)) = policy else { unreachable!() };
+            //
+            // An instance at the site's binding is entered the same way, with
+            // no descriptors, which it does not take.
+            (Some(layout), None) if matches!(policy, Some(SitePolicy::Enter(_) | SitePolicy::EnterInstance(..))) => {
+                let (func, entry, descriptors) = match policy {
+                    Some(SitePolicy::Enter(entry)) => (
+                        crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
+                        entry,
+                        std::rc::Rc::clone(descriptors),
+                    ),
+                    Some(SitePolicy::EnterInstance(func, entry)) => (func, entry, std::rc::Rc::from([])),
+                    _ => unreachable!(),
+                };
                 let args: Box<[ArgRecipe]> = (0..layout.param_modes.len()).map(read).collect();
                 let width = 1 + entry.uses_sret as usize + args.len() + descriptors.len();
                 (width <= crate::dispatch::MAX_ENTRY_WORDS)
-                    .then(|| Plan::Jit(JitPlan {
-                        func: crate::dispatch::FuncIdentity::of(code_ref, callee_ctx.unit()),
-                        entry, args,
-                        descriptors: std::rc::Rc::clone(descriptors),
-                    }))
+                    .then(|| Plan::Jit(JitPlan { func, entry, args, descriptors }))
             }
             // A body, whose frame holds a pointer at each argument.
             (Some(layout), None) => Some(Plan::Body(BodyPlan {
@@ -704,9 +712,16 @@ impl IrInterpreter {
                     let plannable = suits && !matches!(code_ref, CodeRef::External { .. });
                     let policy = (plannable && dispatched && layout.is_some() && forward.is_none()).then(|| {
                         let identity = crate::dispatch::FuncIdentity::of(code_ref, ctx.unit());
+                        // The binding, if it is the same at every call.
+                        let statics: Option<Vec<*const datalove_rtdt::TyDesc>> = descriptors.iter()
+                            .map(|r| match r {
+                                crate::BindingRef::Static(tydesc) => Some(*tydesc),
+                                crate::BindingRef::Table(_) => None,
+                            })
+                            .collect();
                         self.call_dispatcher.borrow_mut().as_mut()
                             .expect("installed")
-                            .site_policy(identity, callee)
+                            .site_policy(identity, callee, statics.as_deref())
                     });
                     let plan = if plannable {
                         self.make_plan(call, ir_args, callee, code_ref, &callee_ctx, registry, layout.as_ref(), forward.as_ref(), policy, &descriptors)

@@ -89,6 +89,11 @@ pub enum SitePolicy {
     Count(u32),
     /// Enter compiled code, through `call_compiled`.
     Enter(CompiledEntry),
+    /// Enter the compiled code of `func`, an instance of the generic the site
+    /// calls at the site's binding, through `call_compiled`: with the
+    /// arguments and no descriptors. Only for a call site whose binding is the
+    /// same at every call.
+    EnterInstance(FuncIdentity, CompiledEntry),
 }
 
 /// Result of dispatching a call.
@@ -149,9 +154,19 @@ pub trait CallDispatcher {
     /// How a planned call site is to make calls to `func`, whose body is
     /// `body`, from now on.
     ///
+    /// `bindings` is the descriptor of what the site binds each of `func`'s
+    /// type parameters to, when that is the same at every call: empty for a
+    /// function that is not generic, and `None` for a site in a generic that
+    /// binds them to its own.
+    ///
     /// The default sees every call, as a dispatcher always has.
-    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
-        let _ = (func, body);
+    fn site_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        bindings: Option<&[*const datalove_rtdt::TyDesc]>,
+    ) -> SitePolicy {
+        let _ = (func, body, bindings);
         SitePolicy::EveryCall
     }
 

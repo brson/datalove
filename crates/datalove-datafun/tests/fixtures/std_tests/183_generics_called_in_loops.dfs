@@ -1,0 +1,62 @@
+// Generics called many times at one binding per call site, so that a JIT
+// specializing them compiles an instance per binding and enters it: from
+// compiled callers, and from call sites the interpreter has planned.
+
+require module sys/std/list
+
+fun pair<T>(x: T): (T, T)
+    ret (x@, x)
+end fun
+
+fun first_of<T>(ref p: (T, T)): T
+    let (a, b) = p@
+    ret a
+end fun
+
+// One function calling generics at two bindings, from two sites each. Called
+// once, so that under a JIT that compiles what is called often it stays in
+// the interpreter, and its planned call sites are what enter the instances.
+fun fill(n: u32): !([u32], [string], u32)
+    var numbers: [u32] = []
+    var words: [string] = []
+    var total: u32 = 0
+    var i: u32 = 0
+    loop while i .< n
+        call list.push(mut numbers, i)
+        call list.push(mut words, "w")
+        let p = pair(i)
+        set total +!= first_of(ref p)
+        let q = pair("s")
+        call list.push(mut words, first_of(ref q))
+        set i +!= 1
+    end loop
+    ret ok (numbers, words, total)
+end fun
+
+// A generic calling a generic at its own binding, called at two.
+fun firsts<T>(x: T, n: u32): ![T]
+    var out: [T] = []
+    var i: u32 = 0
+    loop while i .< n
+        let p = pair(x@)
+        call list.push(mut out, first_of(ref p))
+        set i +!= 1
+    end loop
+    ret ok out
+end fun
+
+let filled = fill(120)
+
+var total: u32 = 0
+var i: u32 = 0
+loop while i .< 200
+    let p = pair(i)
+    set total +!= first_of(ref p)
+    let q = pair("s")
+    set i +!= 1
+end loop
+
+let ones = firsts(: u32 / 1, 12)
+let esses = firsts("s", 12)
+
+let output = (filled, total, ones, esses)

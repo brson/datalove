@@ -414,7 +414,7 @@ fn compare_backends(
     // Every other backend, by its name here and its name to
     // `engine_enabled`, compared against the interpreter. All errors are
     // fatal.
-    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 9] = [
+    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 10] = [
         ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
         // The bytecode without its optimization pass, for the pass's rules
         // to be checked against.
@@ -431,6 +431,10 @@ fn compare_backends(
         // called at, entered from the interpreter and from compiled callers.
         ("Specializing JIT", "specjit", &|| under_jit(Engine::IrWalker, 1, None, true, "Specializing JIT")),
         ("Specializing Bytecode JIT", "specjit", &|| under_jit(Engine::Bytecode, 1, None, true, "Specializing Bytecode JIT")),
+        // And compiling only what is called fifty times, so that interpreted
+        // callers stay interpreted while the instances they call are
+        // compiled, and their planned call sites enter them.
+        ("Specializing Bytecode JIT at 50", "specjit", &|| under_jit(Engine::Bytecode, 50, None, true, "Specializing Bytecode JIT at 50")),
         ("AOT", "aot", &|| run_aot(db, compiled, script_text, rider_lib_paths, generics)),
         ("C AOT", "c", &|| run_c_aot(db, compiled, script_text, rider_lib_paths, generics)),
     ];

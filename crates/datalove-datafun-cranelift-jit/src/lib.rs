@@ -202,6 +202,55 @@ impl JitEngine {
         self.specialize = specialize;
     }
 
+    /// Whether the backend declined to compile `func`.
+    pub(crate) fn refused(&self, func: FuncIdentity) -> bool {
+        matches!(self.states.get(&func), Some(Tier::Refused))
+    }
+
+    /// The calls `func`, running in `ctx`, makes to generics at concrete
+    /// bindings that are to call instances instead, when specializing: each
+    /// one whose instance can be made and has not been refused.
+    fn instance_callees(
+        &mut self,
+        func: &IrCodeUnit,
+        ctx: &ExecutionContext<'_>,
+        registry: &FunctionRegistry,
+    ) -> Vec<compiler::InstanceCallee> {
+        if !self.specialize {
+            return Vec::new();
+        }
+        let mut callees: Vec<compiler::InstanceCallee> = Vec::new();
+        for instr in func.blocks.iter().flat_map(|b| &b.instructions) {
+            let datalove_datafun_ir::Instruction::Call { func: code_ref, bindings, .. } = instr else {
+                continue;
+            };
+            if bindings.is_empty() || bindings.iter().any(|b| b.is_dynamic())
+                || callees.iter().any(|c| c.code_ref == *code_ref && c.bindings == *bindings)
+            {
+                continue;
+            }
+            let generic = ctx.get_unit(code_ref, registry);
+            if generic.function_context().is_none() {
+                continue;
+            }
+            let base = FuncIdentity::of(code_ref, ctx.unit());
+            let Some(id) = self.instances.by_types(base, generic, bindings.clone().into()) else {
+                continue;
+            };
+            let key = FuncIdentity::Instance { id };
+            if matches!(self.states.get(&key), Some(Tier::Refused)) {
+                continue;
+            }
+            callees.push(compiler::InstanceCallee {
+                code_ref: code_ref.clone(),
+                bindings: bindings.clone(),
+                key,
+                unit: std::sync::Arc::clone(&self.instances.instance(id).unit),
+            });
+        }
+        callees
+    }
+
     /// What a call to `func`, which is `key`, at the binding `type_params`
     /// describe, is counted and run as when compiled: the instance at that
     /// binding, when specializing and there is one that has not been refused.
@@ -255,7 +304,9 @@ impl JitEngine {
             table_offset: layout.table_offset,
         };
         let start = Instant::now();
-        match self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, spec) {
+        let instances = self.instance_callees(body, call_ctx.exec_ctx, call_ctx.registry);
+        let tier = self.loops.get_mut(&(func, header)).expect("counted above");
+        match self.compiler.compile_osr(body, call_ctx.exec_ctx, call_ctx.registry, call_ctx.interp, &instances, spec) {
             Ok((code_ptr, uses_sret, code_size)) => {
                 let compile_time = start.elapsed();
                 self.stats.osr_compiled_count += 1;
@@ -306,14 +357,32 @@ impl JitEngine {
 
     /// How a planned call site is to make its calls to `func`; see
     /// `CallDispatcher::site_policy` and `Tier::policy`.
-    pub fn site_policy(&self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+    pub fn site_policy(
+        &self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        bindings: Option<&[*const datalove_rtdt::TyDesc]>,
+    ) -> SitePolicy {
         let generic = body.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
+        let counting = matches!(self.states.get(&func), Some(Tier::Counting(_)) | None);
+        // When specializing, a call to a generic is counted toward, and
+        // enters, its instance at the call's binding. A site at one binding
+        // does that itself; the instance is made by the first call it offers.
+        // The generic is counted only once an instance is refused, and
+        // compiled, entered as it always is.
+        if self.specialize && generic && counting && let Some(bindings) = bindings {
+            let instance = self.instances.find(func, bindings);
+            match instance.map(|i| (i, self.states.get(&i))) {
+                Some((instance, Some(Tier::Compiled(entry)))) => return SitePolicy::EnterInstance(instance, *entry),
+                Some((_, Some(Tier::Refused))) => {}
+                Some((_, Some(tier))) => return tier.policy(self.threshold),
+                Some((_, None)) | None => return Tier::Counting(0).policy(self.threshold),
+            }
+        }
         match self.states.get(&func) {
-            // When specializing, a call to a generic is counted toward its
-            // instance at the call's binding, which only an offered call says.
-            // The generic is counted itself only once an instance is refused,
-            // and compiled, entered as it always is.
-            Some(Tier::Counting(_)) | None if self.specialize && generic => SitePolicy::EveryCall,
+            // A site that binds the generic to its caller's type parameters
+            // says its binding only by offering a call.
+            Some(Tier::Counting(_)) | None if self.specialize && generic && bindings.is_none() => SitePolicy::EveryCall,
             Some(tier) => tier.policy(self.threshold),
             None if !bridge::enterable(body) => SitePolicy::Interpret,
             None => Tier::Counting(0).policy(self.threshold),
@@ -422,7 +491,9 @@ impl JitEngine {
         }
 
         let start = Instant::now();
-        match self.compiler.compile_function(func, ctx, registry, interp) {
+        let instances = self.instance_callees(func, ctx, registry);
+        let tier = self.states.get_mut(&key).expect("counted above");
+        match self.compiler.compile_function(func, ctx, registry, interp, &instances) {
             Ok((code_ptr, uses_sret, code_size)) => {
                 let compile_time = start.elapsed();
                 self.stats.compiled_count += 1;
@@ -959,8 +1030,13 @@ impl CallDispatcher for JitEngine {
         self.dispatch_with(code_ref, func, args, ret_dest, rt_handle, call_ctx, || true).result
     }
 
-    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
-        JitEngine::site_policy(self, func, body)
+    fn site_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        bindings: Option<&[*const datalove_rtdt::TyDesc]>,
+    ) -> SitePolicy {
+        JitEngine::site_policy(self, func, body, bindings)
     }
 
     fn call_compiled(

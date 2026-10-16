@@ -217,8 +217,16 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // SAFETY: context is valid per set_dispatch_context contract.
     let ctx = unsafe { &mut *ctx_ptr.as_ptr() };
 
-    // Decode target function.
-    let key = EncodedFuncKey::from_u64(encoded_key).to_identity();
+    // Decode target function. An instance is a call to its generic at its
+    // binding, made by compiled code that was compiled to call the instance:
+    // the generic is what the interpreter runs, until the instance is
+    // compiled.
+    let called = EncodedFuncKey::from_u64(encoded_key).to_identity();
+    let instance = match called {
+        FuncIdentity::Instance { id } => Some(ctx.jit_engine.instances.instance(id)),
+        _ => None,
+    };
+    let key = instance.map_or(called, |instance| instance.base);
     let (callee_ctx, code_ref, ir_unit) = ctx.exec_ctx.resolve_identity(key, ctx.registry);
     let func_ctx = ir_unit.function_context()
         .expect("trampoline dispatch requires a function code unit");
@@ -235,11 +243,17 @@ pub unsafe extern "C" fn __jit_dispatch_call(
         .map(|i| unsafe { *args.add(i) } as *mut u8)
         .collect();
 
-    // A descriptor per type parameter comes after the arguments. A dynamic
-    // return is described by them.
-    let type_params: Vec<*const rtdt::TyDesc> = (0..func_ctx.type_param_count as usize)
-        .map(|k| unsafe { *descriptors.add(k) })
-        .collect();
+    // A descriptor per type parameter comes after the arguments, for a call
+    // to a generic; a call to an instance hands over none, and its binding is
+    // described here. A dynamic return is described by them.
+    let type_params: Vec<*const rtdt::TyDesc> = match instance {
+        Some(instance) => instance.bindings.iter()
+            .map(|binding| ctx.interp.tydesc_table_mut().get_or_create(binding))
+            .collect(),
+        None => (0..func_ctx.type_param_count as usize)
+            .map(|k| unsafe { *descriptors.add(k) })
+            .collect(),
+    };
     let mut return_tydesc = layout.return_tydesc.expect("a jit callee is a function");
     if return_tydesc.is_null() {
         return_tydesc = ctx.interp.describe(&func_ctx.return_type, &type_params);
@@ -254,7 +268,11 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     // is counted and entered for a generic is its instance at the call's
     // binding, which takes no descriptors, and so the generic's stubs keep
     // coming here; the interpreter runs the generic.
-    let instance = ctx.jit_engine.specialized(key, ir_unit, &type_params, ctx.interp);
+    let instance = match instance {
+        Some(instance) if !ctx.jit_engine.refused(called) => Some((called, std::sync::Arc::clone(&instance.unit))),
+        Some(_) => None,
+        None => ctx.jit_engine.specialized(key, ir_unit, &type_params, ctx.interp),
+    };
     let (counted_key, counted, counted_params) = match &instance {
         Some((key, unit)) => (*key, &**unit, &[][..]),
         None => (key, ir_unit, &type_params[..]),
@@ -326,8 +344,13 @@ impl CallDispatcher for LentEngine {
         self.engine().dispatch_call(code_ref, func, args, ret_dest, rt_handle, call_ctx)
     }
 
-    fn site_policy(&mut self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
-        self.engine().site_policy(func, body)
+    fn site_policy(
+        &mut self,
+        func: FuncIdentity,
+        body: &IrCodeUnit,
+        bindings: Option<&[*const rtdt::TyDesc]>,
+    ) -> SitePolicy {
+        self.engine().site_policy(func, body, bindings)
     }
 
     fn call_compiled(
