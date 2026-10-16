@@ -137,8 +137,6 @@ pub struct JitEngine {
     specialize: bool,
     /// The instances made, when specializing.
     instances: instances::Instances,
-    /// Calls counted toward each generic's instances, all bindings together.
-    generic_calls: FxHashMap<FuncIdentity, u32>,
 }
 
 /// Calls before compiling a function, for a dispatcher configured by default.
@@ -195,7 +193,6 @@ impl JitEngine {
             loops: FxHashMap::default(),
             specialize: false,
             instances: instances::Instances::default(),
-            generic_calls: FxHashMap::default(),
         })
     }
 
@@ -354,7 +351,6 @@ impl JitEngine {
             other => which(other),
         };
         self.states.retain(|f, _| !which(f));
-        self.generic_calls.retain(|f, _| !which(f));
         self.loops.retain(|(f, _), _| !which(f));
         self.compiler.forget(which);
     }
@@ -485,20 +481,6 @@ impl JitEngine {
             self.states.insert(key, Tier::Refused);
             return Ok(Recorded::Interpret);
         }
-
-        // A call to an instance is a call to its generic too, and it is the
-        // generic being hot that says its instances are worth compiling: a
-        // generic called at four bindings would otherwise run each one in the
-        // interpreter as long as a function called at one, four times over.
-        // Once the generic is hot, an instance compiles on its next call.
-        let weight = match key {
-            FuncIdentity::Instance { id } => {
-                let calls = self.generic_calls.entry(self.instances.instance(id).base).or_insert(0);
-                *calls = calls.saturating_add(weight);
-                if *calls >= self.threshold { self.threshold } else { weight }
-            }
-            _ => weight,
-        };
 
         let tier = self.states.entry(key).or_insert(Tier::Counting(0));
         if let Tier::Compiled(entry) = *tier {

@@ -413,7 +413,7 @@ Each phase leaves default behaviour unchanged and the suite passing.
    | sieve | 806 ms | 0.80 | 698 ms | 0.72 |
    | mandelbrot | 544 ms | 1.00 | 545 ms | 1.00 |
    | nbody | 185 ms | 1.00 | 167 ms | 1.02 |
-   | ordered | 558 ms | 1.06 | 521 ms | 0.94 |
+   | ordered | 551 ms | 1.26 | 521 ms | 0.94 |
    | store demo, 20,000 orders | 387 ms | 1.02 | 134 ms | 0.95 |
 
    Ahead of time it never loses: sieve, the case
@@ -423,16 +423,25 @@ Each phase leaves default behaviour unchanged and the suite passing.
    measurably longer (3.03 s against 3.12 s for the store demo, within its
    spread). So `All` is what `aot-compile` should do by default.
 
-   In the jit it wins on sieve and loses a little on `ordered` and the store
-   demo. `ordered` first measured 1.26: each instance warmed up on its own,
-   so a generic called at four bindings ran four times as long in the
-   interpreter before compiling. A call to an instance now counts toward its
-   generic too (`JitEngine::generic_calls`), and once the generic is hot an
-   instance compiles on its next call. What is left is the gap phase 5
+   In the jit it wins on sieve and loses on `ordered` and a little on the
+   store demo. `ordered` calls each of its generics at four bindings, and
+   each instance warms up on its own: until it has been called as often as
+   the threshold it runs in the interpreter, so a generic called at four
+   bindings runs four times as long there as it does unspecialized, where
+   the one compiled generic serves them all. (Counting every instance's calls
+   toward its generic, and compiling an instance on its next call once the
+   generic is hot, brought it to 1.06, but compiles instances that are not
+   hot, and was taken out.) The way to keep both is a tier between: compile
+   the generic over descriptors once it is hot, as the jit does without
+   specializing, run an instance's calls in that until the instance is hot
+   itself, and only then compile the instance. Also left is the gap phase 5
    names: interpreted generic code calling generics at its own type
    parameters offers every call to the dispatcher rather than entering
-   planned code (`ordered` makes about 7,000 such calls warming up). Until
-   that is planned too, `--jit-specialize` stays off by default.
+   planned code.
+
+   Specialization stays an experiment, off by default everywhere: the
+   policy's default is `Off`, and `--specialize` and `--jit-specialize` are
+   the only ways to turn it on.
 
 Phase 2 proves the design: `repeated[bool]` calling `push[bool]`, built
 ahead of time, with no descriptor in either.
