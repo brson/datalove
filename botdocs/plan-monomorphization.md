@@ -1,6 +1,6 @@
 # Specializing Generics
 
-Written October 2026, after generics by reference landed. Phases 1 to 3
+Written October 2026, after generics by reference landed. Phases 1 to 4
 are implemented: `ir::instantiate`, and the ahead-of-time pass under the `All`
 policy (`crates/datalove-datafun-compiler/src/instances.rs`).
 This replaces an earlier plan written under erasure, which had to lower a
@@ -329,9 +329,33 @@ Each phase leaves default behaviour unchanged and the suite passing.
    `engine_tests` seeds from the fixture; in `std_engine_tests` it seeds from
    the script and tosses for the script's calls only, since the library is
    compiled once per worker and has no concrete call to toss for.
-4. **Run time, callee side.** Descriptors back to types, the session instance
-   table, `FuncIdentity::Instance`, per-binding counting, fallback to the
-   generic. `specjit`.
+4. **Run time, callee side.** Done: `JitEngine::set_specialize` and
+   `crates/datalove-datafun-cranelift-jit/src/instances.rs`. A call to a
+   generic, offered by the interpreter (`dispatch_with`) or arriving at the
+   trampoline from compiled code, is counted, compiled and entered as the
+   instance at its binding, `FuncIdentity::Instance { id }`, numbered by the
+   jit. The binding is read back with `interp::ir_type_of_tydesc` and checked
+   by building its descriptor again and comparing (`rt::c::same_tydesc`); a
+   binding that does not come back exactly, a generic at its cap, or an
+   instance the backend refused, leaves the call to the generic, which the
+   interpreter runs with its descriptors throughout. Instances go when their
+   generic's body is replaced. `specjit` runs the engine corpus under the
+   chaos dispatcher specializing, and `std_engine_tests` runs the jit and the
+   bytecode jit specializing; the standard library's suite compiles about six
+   hundred instances, `push`, `of`, `len` and `insert` the most.
+
+   What it costs until phase 5: a generic is never compiled itself while its
+   instances can be, so its code cell stays empty and every call to it from
+   compiled code goes through its stub and the trampoline to find the
+   instance; and a planned interpreter call site to a generic offers every
+   call to the dispatcher (`SitePolicy::EveryCall`) rather than entering
+   code, since only an offered call carries its binding.
+
+   Found on the way: a script unit's own body is not finished by
+   `optimize::finish` -- only its `nested_units` are -- so its calls to
+   `inline` functions are real calls, and `inline` functions are called at
+   run time. An instance of one is made like any other, and is not
+   `inline`.
 5. **Run time, caller side.** JIT call sites with concrete bindings target
    instance cells.
 6. **Cleanup.** The copy-type pass, measured alone.

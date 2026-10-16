@@ -383,13 +383,14 @@ fn compare_backends(
     // a spawned thread, which caught the panic as a side effect of joining
     // and was there for a Cranelift relocation problem that the jit's own
     // arena fixed.
-    let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, name: &str| {
+    let under_jit = |engine: Engine, threshold: u32, osr_threshold: Option<u32>, specialize: bool, name: &str| {
         std::panic::catch_unwind(|| {
             let mut jit = JitEngine::new(threshold)
                 .map_err(|e| format!("JIT engine creation failed: {}", e))?;
             if let Some(iterations) = osr_threshold {
                 jit.set_osr_threshold(iterations);
             }
+            jit.set_specialize(specialize);
             let (value, _) = run_with_executor(
                 db, compiled, descriptor, script_text, engine, Some(Box::new(jit)), name, generics)?;
             Ok(value)
@@ -413,25 +414,31 @@ fn compare_backends(
     // Every other backend, by its name here and its name to
     // `engine_enabled`, compared against the interpreter. All errors are
     // fatal.
-    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 7] = [
+    let backends: [(&str, &str, &dyn Fn() -> Result<String, String>); 9] = [
         ("Bytecode", "bytecode", &|| interpreted(Engine::Bytecode, "Bytecode")),
         // The bytecode without its optimization pass, for the pass's rules
         // to be checked against.
         ("PlainBytecode", "plain", &|| interpreted(Engine::PlainBytecode, "PlainBytecode")),
-        ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, "JIT")),
+        ("JIT", "jit", &|| under_jit(Engine::IrWalker, 1, None, false, "JIT")),
         // The bytecode with the JIT, which it calls into from planned call
         // sites; and with the JIT compiling no function by its calls and
         // entering every loop at its second iteration instead, so that the
         // library's loops and everything after them run in code entered
         // partway through a call.
-        ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, "Bytecode JIT")),
-        ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), "OSR")),
+        ("Bytecode JIT", "jit", &|| under_jit(Engine::Bytecode, 1, None, false, "Bytecode JIT")),
+        ("OSR", "osr", &|| under_jit(Engine::Bytecode, u32::MAX, Some(2), false, "OSR")),
+        // The JIT compiling each generic as an instance at each binding it is
+        // called at, entered from the interpreter and from compiled callers.
+        ("Specializing JIT", "specjit", &|| under_jit(Engine::IrWalker, 1, None, true, "Specializing JIT")),
+        ("Specializing Bytecode JIT", "specjit", &|| under_jit(Engine::Bytecode, 1, None, true, "Specializing Bytecode JIT")),
         ("AOT", "aot", &|| run_aot(db, compiled, script_text, rider_lib_paths, generics)),
         ("C AOT", "c", &|| run_c_aot(db, compiled, script_text, rider_lib_paths, generics)),
     ];
     let mut mismatches = Vec::new();
     for (name, engine, run) in backends {
-        if !datalove_exampletest::engine_enabled(engine) {
+        // Specializing at run time is tested against the program as written;
+        // under a compile-time policy it would mostly find instances already.
+        if !datalove_exampletest::engine_enabled(engine) || (engine == "specjit" && generics != GenericsPolicy::Off) {
             continue;
         }
         let name = named(name);

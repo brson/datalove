@@ -79,7 +79,7 @@ pub use dispatch::{
     CallDispatcher, CompiledEntry, DispatchCallContext, DispatchResult, FuncIdentity, SitePolicy,
     MAX_ENTRY_WORDS,
 };
-pub use ctfe::InterpCtfeEvaluator;
+pub use ctfe::{InterpCtfeEvaluator, ir_type_of_tydesc};
 pub use native::{NativeFunctionTable, NativeFnImpl, NativeResolver, NativeTarget};
 
 pub use datalove_rt::c::DebugOutputMode;

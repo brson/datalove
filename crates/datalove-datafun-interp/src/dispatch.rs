@@ -26,6 +26,13 @@ pub enum FuncIdentity {
     Unit { unit: u32, id: CodeUnitId },
     /// A module function, which is already unambiguous.
     Module { module: IrModuleId, id: CodeUnitId },
+    /// An instance of a generic that a dispatcher made at run time, by the
+    /// dispatcher's own numbering.
+    ///
+    /// The interpreter never runs one: it runs the generic, with the
+    /// descriptors of the binding, which means the same. It meets the
+    /// identity only as a key for what is kept per function.
+    Instance { id: u32 },
 }
 
 impl FuncIdentity {

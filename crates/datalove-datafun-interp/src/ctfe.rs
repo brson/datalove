@@ -574,6 +574,23 @@ unsafe fn borrow_packed(
     }
 }
 
+/// The type a descriptor describes, or `None` for one that is no type a
+/// program has: a template's `Param`, for one.
+///
+/// How a run-time specializer reads the binding a call was made at. A
+/// descriptor carries the whole of a type, struct field names and enum
+/// variants included, and `IrType` is structural, so this is exact for every
+/// type the tydesc table builds; the caller can check by building the
+/// descriptor again and comparing.
+pub fn ir_type_of_tydesc(tydesc: *const datalove_rtdt::TyDesc) -> Option<IrType> {
+    // SAFETY: the caller's descriptor, which is live for the call it came with.
+    let tydesc = unsafe { datalove_rtdt::TyDescRef::from_ptr(tydesc) };
+    match ir_type_from_tydesc(tydesc) {
+        Ok(ty) if !ty.is_dynamic() => Some(ty),
+        _ => None,
+    }
+}
+
 /// Convert a runtime type descriptor back to an IrType.
 ///
 /// This is used for extracting dynamically-typed values like Error contents.
@@ -627,7 +644,8 @@ fn ir_type_from_tydesc(tydesc: datalove_rtdt::TyDescRef) -> Result<IrType, CtfeE
             for field in tydesc.iter_tuple_fields() {
                 fields.push(ir_type_from_tydesc(field.tydesc())?);
             }
-            Ok(IrType::Tuple(fields))
+            // `()` is described as the tuple of no fields.
+            Ok(if fields.is_empty() { IrType::Unit } else { IrType::Tuple(fields) })
         }
         TyTag::Struct => {
             let mut fields = Vec::new();

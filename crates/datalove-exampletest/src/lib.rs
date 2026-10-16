@@ -42,7 +42,7 @@ pub fn matches_filters(test_name: &str, filters: &[String]) -> bool {
 }
 
 /// The engines [`engine_enabled`] knows, as `engine_tests` names them.
-pub const ENGINES: &[&str] = &["bytecode", "plain", "jit", "chaos", "osr", "aot", "c", "noconst", "nospec", "spec", "specchaos"];
+pub const ENGINES: &[&str] = &["bytecode", "plain", "jit", "chaos", "osr", "aot", "c", "noconst", "nospec", "spec", "specchaos", "specjit"];
 
 /// Whether a test should run `engine`, according to `DATALOVE_TEST_ENGINES`.
 ///

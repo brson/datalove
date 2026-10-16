@@ -136,7 +136,8 @@ fn get_dispatch_context() -> Option<NonNull<DispatchContext<'static>>> {
 /// the stub is built, where the unit is known, it holds still.
 ///
 /// Packed as: kind (2 bits) | unit or module (30 bits) | function id (32 bits),
-/// with kind 0 a script unit's function and kind 1 a module's.
+/// with kind 0 a script unit's function, kind 1 a module's, and kind 2 a
+/// run-time instance, by number.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct EncodedFuncKey(u64);
@@ -146,6 +147,7 @@ impl EncodedFuncKey {
         let (kind, owner, id) = match func {
             FuncIdentity::Unit { unit, id } => (0u64, unit, id),
             FuncIdentity::Module { module, id } => (1u64, module.0, id),
+            FuncIdentity::Instance { id } => (2u64, 0, CodeUnitId(id)),
         };
         assert!(owner < (1 << 30), "unit or module {} does not fit the encoding", owner);
         Self((kind << 62) | ((owner as u64) << 32) | id.0 as u64)
@@ -157,6 +159,7 @@ impl EncodedFuncKey {
         match self.0 >> 62 {
             0 => FuncIdentity::Unit { unit: owner, id },
             1 => FuncIdentity::Module { module: IrModuleId(owner), id },
+            2 => FuncIdentity::Instance { id: id.0 },
             kind => unreachable!("no function kind {}", kind),
         }
     }
@@ -247,19 +250,27 @@ pub unsafe extern "C" fn __jit_dispatch_call(
     };
 
     // Count the call, which may compile the callee. Once it is compiled its
-    // stubs call it directly and no longer come here.
-    match ctx.jit_engine.record_call(key, ir_unit, 1, &callee_ctx, ctx.registry, ctx.interp) {
+    // stubs call it directly and no longer come here. When specializing, what
+    // is counted and entered for a generic is its instance at the call's
+    // binding, which takes no descriptors, and so the generic's stubs keep
+    // coming here; the interpreter runs the generic.
+    let instance = ctx.jit_engine.specialized(key, ir_unit, &type_params, ctx.interp);
+    let (counted_key, counted, counted_params) = match &instance {
+        Some((key, unit)) => (*key, &**unit, &[][..]),
+        None => (key, ir_unit, &type_params[..]),
+    };
+    match ctx.jit_engine.record_call(counted_key, counted, 1, &callee_ctx, ctx.registry, ctx.interp) {
         Ok(Recorded::Compiled { entry, .. }) => {
-            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, true, 1);
+            ctx.jit_engine.note_call(counted_key, counted, CallFrom::Native, true, 1);
             // SAFETY: code_ptr is compiled code for this callee.
             unsafe {
                 crate::bridge::call_jit(
-                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_ptrs, dest, &type_params,
+                    entry.code_ptr, entry.uses_sret, rt_handle, &arg_ptrs, dest, counted_params,
                 )
             }
         }
         Ok(Recorded::Interpret) => {
-            ctx.jit_engine.note_call(key, ir_unit, CallFrom::Native, false, 1);
+            ctx.jit_engine.note_call(counted_key, counted, CallFrom::Native, false, 1);
             // The engine, for what the interpreter calls in turn: the
             // dispatcher it belongs to is out of the interpreter for as long as
             // the compiled code calling this runs.

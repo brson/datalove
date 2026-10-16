@@ -23,6 +23,7 @@
 
 mod compiler;
 pub(crate) mod bridge;
+pub(crate) mod instances;
 pub(crate) mod trampoline;
 pub mod optimizing;
 pub mod stats;
@@ -130,6 +131,12 @@ pub struct JitEngine {
     /// and header. Refused where the backend cannot enter at the header; see
     /// `codegen::OsrSpec`.
     loops: FxHashMap<(FuncIdentity, BlockId), Tier>,
+    /// Whether a call to a generic counts toward, and enters, the generic's
+    /// instance at the call's binding rather than the generic; see
+    /// `instances`.
+    specialize: bool,
+    /// The instances made, when specializing.
+    instances: instances::Instances,
 }
 
 /// Calls before compiling a function, for a dispatcher configured by default.
@@ -184,7 +191,36 @@ impl JitEngine {
             count_calls: false,
             osr_threshold: DEFAULT_OSR_THRESHOLD,
             loops: FxHashMap::default(),
+            specialize: false,
+            instances: instances::Instances::default(),
         })
+    }
+
+    /// Compile a generic at each binding it is called at, as an instance, in
+    /// place of compiling it once over descriptors.
+    pub fn set_specialize(&mut self, specialize: bool) {
+        self.specialize = specialize;
+    }
+
+    /// What a call to `func`, which is `key`, at the binding `type_params`
+    /// describe, is counted and run as when compiled: the instance at that
+    /// binding, when specializing and there is one that has not been refused.
+    ///
+    /// `None` leaves the call to the generic, whose descriptors it takes.
+    pub(crate) fn specialized(
+        &mut self,
+        key: FuncIdentity,
+        func: &IrCodeUnit,
+        type_params: &[*const datalove_rtdt::TyDesc],
+        interp: &mut IrInterpreter,
+    ) -> Option<(FuncIdentity, std::sync::Arc<IrCodeUnit>)> {
+        if !self.specialize || type_params.is_empty() {
+            return None;
+        }
+        let (instance, unit) = self.instances.get(key, func, type_params, interp)?;
+        // An instance the backend declined is no better than its generic, which
+        // may yet compile.
+        (!matches!(self.states.get(&instance), Some(Tier::Refused))).then_some((instance, unit))
     }
 
     /// Set how many iterations of a loop make it worth entering compiled code
@@ -257,6 +293,12 @@ impl JitEngine {
     /// Forget the functions `which` picks, and their loops, whose bodies have
     /// been replaced; see `CallDispatcher::bodies_replaced`.
     fn forget(&mut self, mut which: impl FnMut(&FuncIdentity) -> bool) {
+        // An instance goes with its generic.
+        let instances = self.instances.forget(&mut which);
+        let mut which = |f: &FuncIdentity| match f {
+            FuncIdentity::Instance { id } => instances.contains(id),
+            other => which(other),
+        };
         self.states.retain(|f, _| !which(f));
         self.loops.retain(|(f, _), _| !which(f));
         self.compiler.forget(which);
@@ -265,7 +307,13 @@ impl JitEngine {
     /// How a planned call site is to make its calls to `func`; see
     /// `CallDispatcher::site_policy` and `Tier::policy`.
     pub fn site_policy(&self, func: FuncIdentity, body: &IrCodeUnit) -> SitePolicy {
+        let generic = body.function_context().is_some_and(|ctx| ctx.type_param_count > 0);
         match self.states.get(&func) {
+            // When specializing, a call to a generic is counted toward its
+            // instance at the call's binding, which only an offered call says.
+            // The generic is counted itself only once an instance is refused,
+            // and compiled, entered as it always is.
+            Some(Tier::Counting(_)) | None if self.specialize && generic => SitePolicy::EveryCall,
             Some(tier) => tier.policy(self.threshold),
             None if !bridge::enterable(body) => SitePolicy::Interpret,
             None => Tier::Counting(0).policy(self.threshold),
@@ -378,6 +426,7 @@ impl JitEngine {
             Ok((code_ptr, uses_sret, code_size)) => {
                 let compile_time = start.elapsed();
                 self.stats.compiled_count += 1;
+                self.stats.instances_compiled += matches!(key, FuncIdentity::Instance { .. }) as u32;
                 self.stats.total_compile_time += compile_time;
                 self.stats.total_code_size += code_size;
                 let f = self.stats.function(key, &func.name);
@@ -421,6 +470,14 @@ impl JitEngine {
     ) -> JitDispatch {
         let key = FuncIdentity::of(code_ref, call_ctx.exec_ctx.unit());
         let callee_ctx = call_ctx.exec_ctx.for_callee(code_ref, call_ctx.registry);
+        // When specializing, what is counted and entered is the instance at
+        // the call's binding, which takes no descriptors; the interpreter
+        // still runs the generic, with them.
+        let instance = self.specialized(key, func, call_ctx.type_params, call_ctx.interp);
+        let (key, func, type_params) = match &instance {
+            Some((key, unit)) => (*key, &**unit, &[][..]),
+            None => (key, func, call_ctx.type_params),
+        };
         match self.record_call(key, func, call_ctx.weight, &callee_ctx, call_ctx.registry, call_ctx.interp) {
             Err(e) => JitDispatch {
                 result: DispatchResult::Handled(Err(InterpError::RuntimeError(e.to_string()))),
@@ -439,7 +496,6 @@ impl JitEngine {
                     self.note_call(key, func, CallFrom::Interpreter, false, call_ctx.weight - 1);
                 }
                 self.note_call(key, func, CallFrom::Interpreter, true, 1);
-                let type_params = call_ctx.type_params;
                 // What the code's stubs call back into the interpreter with,
                 // for the length of the call.
                 let mut dispatch_ctx = DispatchContext {
