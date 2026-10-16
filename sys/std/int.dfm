@@ -133,14 +133,14 @@ fun pow(self: int, exp: index): int
   var acc: int = 1
   var base: int = self
   var rest: index = exp
-  loop while rest .> (: index / 0)
-    if bitand(rest, (: index / 1)) == (: index / 1)
+  loop while rest .> 0
+    if bitand(rest, 1) == 1
       let factor: int = base@
       set acc = acc * factor
     end if
     let squared: int = base@
     set base = base * squared
-    set rest = shift_right_wrapping(rest, : u32 / 1)
+    set rest = shift_right_wrapping(rest, 1)
   end loop
   ret acc
 end fun

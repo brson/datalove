@@ -25,37 +25,37 @@ import std.f64_from_int
 
 fun nan(): f64
   inline
-  ret (: f64 / 0x7FF8000000000000)
+  ret 0x7FF8000000000000
 end fun
 
 fun infinity(): f64
   inline
-  ret (: f64 / 0x7FF0000000000000)
+  ret 0x7FF0000000000000
 end fun
 
 fun neg_infinity(): f64
   inline
-  ret (: f64 / 0xFFF0000000000000)
+  ret 0xFFF0000000000000
 end fun
 
 fun max_value(): f64
   inline
-  ret (: f64 / 0x7FEFFFFFFFFFFFFF)
+  ret 0x7FEFFFFFFFFFFFFF
 end fun
 
 fun min_value(): f64
   inline
-  ret (: f64 / 0x0010000000000000)
+  ret 0x0010000000000000
 end fun
 
 fun min_positive(): f64
   inline
-  ret (: f64 / 0x0000000000000001)
+  ret 0x0000000000000001
 end fun
 
 fun epsilon(): f64
   inline
-  ret (: f64 / 0x3CB0000000000000)
+  ret 0x3CB0000000000000
 end fun
 
 // Classification.
@@ -104,9 +104,9 @@ fun is_subnormal(self: f64): bool
       ret false
     else
       let bits = icall f64_to_bits(self)
-      let exponent_mask = (: u64 / 0x7FF0000000000000)
+      let exponent_mask: u64 = 0x7FF0000000000000
       let exponent = icall bitand_u64(bits, exponent_mask)
-      let zero = : u64 / 0
+      let zero: u64 = 0
       ret exponent == zero
     end if
   else
@@ -116,15 +116,15 @@ end fun
 
 fun is_sign_positive(self: f64): bool
   let bits = icall f64_to_bits(self)
-  let sign_bit = (: u64 / 0x8000000000000000)
-  let zero = : u64 / 0
+  let sign_bit: u64 = 0x8000000000000000
+  let zero: u64 = 0
   ret icall bitand_u64(bits, sign_bit) == zero
 end fun
 
 fun is_sign_negative(self: f64): bool
   let bits = icall f64_to_bits(self)
-  let sign_bit = (: u64 / 0x8000000000000000)
-  let zero = : u64 / 0
+  let sign_bit: u64 = 0x8000000000000000
+  let zero: u64 = 0
   ret icall bitand_u64(bits, sign_bit) != zero
 end fun
 
@@ -140,9 +140,9 @@ fun signum(self: f64): f64
     ret self
   else
     if is_sign_positive(self)
-      ret (: f64 / 1.0)
+      ret 1.0
     else
-      ret (: f64 / -1.0)
+      ret -1.0
     end if
   end if
 end fun
@@ -183,7 +183,7 @@ end fun
 
 fun recip(self: f64): f64
   inline
-  ret (: f64 / 1.0) / self
+  ret 1.0 / self
 end fun
 
 fun sqrt(self: f64): f64
@@ -222,7 +222,7 @@ end fun
 
 fun is_zero(self: f64): bool
   inline
-  ret self == (: f64 / 0.0)
+  ret self == 0.0
 end fun
 
 // Total ordering comparison. Returns -1 if self < other, 0 if equal, 1 if self > other.
@@ -232,8 +232,8 @@ fun total_cmp(self: f64, other: f64): i32
   let b_bits = icall f64_to_bits(other)
 
   // Convert to signed for total ordering.
-  let sign_bit = (: u64 / 0x8000000000000000)
-  let zero = : u64 / 0
+  let sign_bit: u64 = 0x8000000000000000
+  let zero: u64 = 0
   let a_signed = icall u64_to_i64(a_bits)
   let b_signed = icall u64_to_i64(b_bits)
 
@@ -242,22 +242,22 @@ fun total_cmp(self: f64, other: f64): i32
   var b_ord: i64 = b_signed
 
   if icall bitand_u64(a_bits, sign_bit) != zero
-    let mask = (: u64 / 0x7FFFFFFFFFFFFFFF)
+    let mask: u64 = 0x7FFFFFFFFFFFFFFF
     set a_ord = icall u64_to_i64(icall bitxor_u64(a_bits, mask))
   end if
 
   if icall bitand_u64(b_bits, sign_bit) != zero
-    let mask = (: u64 / 0x7FFFFFFFFFFFFFFF)
+    let mask: u64 = 0x7FFFFFFFFFFFFFFF
     set b_ord = icall u64_to_i64(icall bitxor_u64(b_bits, mask))
   end if
 
   if a_ord .< b_ord
-    ret (: i32 / -1)
+    ret -1
   else
     if a_ord .> b_ord
-      ret : i32 / 1
+      ret 1
     else
-      ret : i32 / 0
+      ret 0
     end if
   end if
 end fun

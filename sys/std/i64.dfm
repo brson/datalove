@@ -6,28 +6,28 @@ import std.int_low_bits_i64
 
 fun min_value(): i64
   inline
-  ret (: i64 / -9223372036854775808)
+  ret -9223372036854775808
 end fun
 
 fun max_value(): i64
   inline
-  ret : i64 / 9223372036854775807
+  ret 9223372036854775807
 end fun
 
 fun bits(): u32
   inline
-  ret (: u32 / 64)
+  ret 64
 end fun
 
 // Sign functions.
 
 fun signum(self: i64): i64
-  let zero = (: i64 / 0)
+  let zero: i64 = 0
   if self .> zero
-    ret : i64 / 1
+    ret 1
   else
     if self .< zero
-      ret (: i64 / -1)
+      ret -1
     else
       ret zero
     end if
@@ -36,17 +36,17 @@ end fun
 
 fun is_positive(self: i64): bool
   inline
-  ret self .> (: i64 / 0)
+  ret self .> 0
 end fun
 
 fun is_negative(self: i64): bool
   inline
-  ret self .< (: i64 / 0)
+  ret self .< 0
 end fun
 
 // Wrapping absolute value.
 fun abs(self: i64): i64
-  if self .< (: i64 / 0)
+  if self .< 0
     ret icall neg_wrapping_i64(self)
   else
     ret self
@@ -195,12 +195,12 @@ end fun
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i64, other: i64): ?i64
   inline
-  let zero = (: i64 / 0)
+  let zero: i64 = 0
   if other == zero
     ret none
   else
     if self == min_value()
-      if other == (: i64 / -1)
+      if other == -1
         ret some zero
       else
         ret some icall srem_i64(self, other)
@@ -218,7 +218,7 @@ fun add_saturating(self: i64, other: i64): i64
     ret value
   else
     // Overflow direction depends on signs.
-    if other .> (: i64 / 0)
+    if other .> 0
       ret max_value()
     else
       ret min_value()
@@ -231,7 +231,7 @@ fun sub_saturating(self: i64, other: i64): i64
     ret value
   else
     // Underflow direction depends on signs.
-    if other .> (: i64 / 0)
+    if other .> 0
       ret min_value()
     else
       ret max_value()
@@ -315,21 +315,21 @@ end fun
 
 fun shift_left_wrapping(self: i64, n: u32): i64
   inline
-  let n_mod = icall bitand_u32(n, : u32 / 63)
+  let n_mod = icall bitand_u32(n, 63)
   if shift_left(self, n_mod) |value|
     ret value
   else
-    ret (: i64 / 0)
+    ret 0
   end if
 end fun
 
 fun shift_right_wrapping(self: i64, n: u32): i64
   inline
-  let n_mod = icall bitand_u32(n, : u32 / 63)
+  let n_mod = icall bitand_u32(n, 63)
   if shift_right(self, n_mod) |value|
     ret value
   else
-    ret (: i64 / 0)
+    ret 0
   end if
 end fun
 
@@ -357,18 +357,18 @@ fun shift_right_saturating(self: i64, n: u32): i64
   if n >= bits()
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
-      ret (: i64 / -1)
+      ret -1
     else
-      ret (: i64 / 0)
+      ret 0
     end if
   else
     if shift_right(self, n) |value|
       ret value
     else
       if is_negative(self)
-        ret (: i64 / -1)
+        ret -1
       else
-        ret (: i64 / 0)
+        ret 0
       end if
     end if
   end if
@@ -377,20 +377,20 @@ end fun
 // Rotations (delegate to u64).
 
 fun rotate_left(self: i64, n: u32): i64
-  let n_mod = icall bitand_u32(n, : u32 / 63)
+  let n_mod = icall bitand_u32(n, 63)
   let u = icall i64_to_u64(self)
   let left_part = icall shl_u64(u, n_mod)
-  let right_amount = icall sub_wrapping_u32(: u32 / 64, n_mod)
+  let right_amount = icall sub_wrapping_u32(64, n_mod)
   let right_part = icall shr_u64(u, right_amount)
   let result = icall bitor_u64(left_part, right_part)
   ret icall u64_to_i64(result)
 end fun
 
 fun rotate_right(self: i64, n: u32): i64
-  let n_mod = icall bitand_u32(n, : u32 / 63)
+  let n_mod = icall bitand_u32(n, 63)
   let u = icall i64_to_u64(self)
   let right_part = icall shr_u64(u, n_mod)
-  let left_amount = icall sub_wrapping_u32(: u32 / 64, n_mod)
+  let left_amount = icall sub_wrapping_u32(64, n_mod)
   let left_part = icall shl_u64(u, left_amount)
   let result = icall bitor_u64(left_part, right_part)
   ret icall u64_to_i64(result)
@@ -452,7 +452,7 @@ end fun
 
 fun is_zero(self: i64): bool
   inline
-  ret self == (: i64 / 0)
+  ret self == 0
 end fun
 
 fun min(self: i64, other: i64): i64
@@ -502,6 +502,6 @@ end fun
 fun midpoint(self: i64, other: i64): i64
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, : u32 / 1)
+  let half_diff = shift_right_wrapping(diff, 1)
   ret add_wrapping(common, half_diff)
 end fun

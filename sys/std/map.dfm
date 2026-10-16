@@ -26,7 +26,7 @@ end fun
 // True if there are no entries.
 fun is_empty<K, V>(ref self: %{K = V}): bool where { K is ord, }
   inline
-  ret map_len(ref self) == (: index / 0)
+  ret map_len(ref self) == 0
 end fun
 
 // True if the key is present.

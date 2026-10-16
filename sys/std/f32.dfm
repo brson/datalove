@@ -25,37 +25,37 @@ import std.f32_from_int
 
 fun nan(): f32
   inline
-  ret (: f32 / 0x7FC00000)
+  ret 0x7FC00000
 end fun
 
 fun infinity(): f32
   inline
-  ret (: f32 / 0x7F800000)
+  ret 0x7F800000
 end fun
 
 fun neg_infinity(): f32
   inline
-  ret (: f32 / 0xFF800000)
+  ret 0xFF800000
 end fun
 
 fun max_value(): f32
   inline
-  ret (: f32 / 0x7F7FFFFF)
+  ret 0x7F7FFFFF
 end fun
 
 fun min_value(): f32
   inline
-  ret (: f32 / 0x00800000)
+  ret 0x00800000
 end fun
 
 fun min_positive(): f32
   inline
-  ret (: f32 / 0x00000001)
+  ret 0x00000001
 end fun
 
 fun epsilon(): f32
   inline
-  ret (: f32 / 0x34000000)
+  ret 0x34000000
 end fun
 
 // Classification.
@@ -104,9 +104,9 @@ fun is_subnormal(self: f32): bool
       ret false
     else
       let bits = icall f32_to_bits(self)
-      let exponent_mask = : u32 / 0x7F800000
+      let exponent_mask: u32 = 0x7F800000
       let exponent = icall bitand_u32(bits, exponent_mask)
-      ret exponent == (: u32 / 0)
+      ret exponent == 0
     end if
   else
     ret false
@@ -115,14 +115,14 @@ end fun
 
 fun is_sign_positive(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = : u32 / 0x80000000
-  ret icall bitand_u32(bits, sign_bit) == (: u32 / 0)
+  let sign_bit: u32 = 0x80000000
+  ret icall bitand_u32(bits, sign_bit) == 0
 end fun
 
 fun is_sign_negative(self: f32): bool
   let bits = icall f32_to_bits(self)
-  let sign_bit = : u32 / 0x80000000
-  ret icall bitand_u32(bits, sign_bit) != (: u32 / 0)
+  let sign_bit: u32 = 0x80000000
+  ret icall bitand_u32(bits, sign_bit) != 0
 end fun
 
 // Sign and absolute value.
@@ -229,7 +229,7 @@ fun total_cmp(self: f32, other: f32): i32
   let b_bits = icall f32_to_bits(other)
 
   // Convert to signed for total ordering.
-  let sign_bit = : u32 / 0x80000000
+  let sign_bit: u32 = 0x80000000
   let a_signed = icall u32_to_i32(a_bits)
   let b_signed = icall u32_to_i32(b_bits)
 
@@ -237,23 +237,23 @@ fun total_cmp(self: f32, other: f32): i32
   var a_ord: i32 = a_signed
   var b_ord: i32 = b_signed
 
-  if icall bitand_u32(a_bits, sign_bit) != (: u32 / 0)
-    let mask = : u32 / 0x7FFFFFFF
+  if icall bitand_u32(a_bits, sign_bit) != 0
+    let mask: u32 = 0x7FFFFFFF
     set a_ord = icall u32_to_i32(icall bitxor_u32(a_bits, mask))
   end if
 
-  if icall bitand_u32(b_bits, sign_bit) != (: u32 / 0)
-    let mask = : u32 / 0x7FFFFFFF
+  if icall bitand_u32(b_bits, sign_bit) != 0
+    let mask: u32 = 0x7FFFFFFF
     set b_ord = icall u32_to_i32(icall bitxor_u32(b_bits, mask))
   end if
 
   if a_ord .< b_ord
-    ret (: i32 / -1)
+    ret -1
   else
     if a_ord .> b_ord
-      ret : i32 / 1
+      ret 1
     else
-      ret : i32 / 0
+      ret 0
     end if
   end if
 end fun

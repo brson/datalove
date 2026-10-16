@@ -21,7 +21,7 @@ end fun
 // True if there are no elements.
 fun is_empty<T>(ref self: #{T}): bool where { T is ord, }
   inline
-  ret set_len(ref self) == (: index / 0)
+  ret set_len(ref self) == 0
 end fun
 
 // True if the element is present.

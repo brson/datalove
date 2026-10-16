@@ -30,7 +30,7 @@ end fun
 // True if there are no elements.
 fun is_empty<T>(ref self: [T]): bool
   inline
-  ret list_len(ref self) == (: index / 0)
+  ret list_len(ref self) == 0
 end fun
 
 // The element at an index, or none if the index is past the end.
@@ -47,14 +47,14 @@ end fun
 // The first element, or none if there are none.
 fun first<T>(ref self: [T]): ?T
   inline
-  ret list_get(ref self, : index / 0)
+  ret list_get(ref self, 0)
 end fun
 
 // The last element, or none if there are none. The subtraction carries the
 // empty case: `-?` gives up on underflow, which returns none from here.
 fun last<T>(ref self: [T]): ?T
   inline
-  ret list_get(ref self, list_len(ref self) -? (: index / 1))
+  ret list_get(ref self, list_len(ref self) -? 1)
 end fun
 
 // Replace the element at an index. False if the index is past the end.
@@ -94,10 +94,10 @@ end fun
 fun repeated<T>(ref elem: T, n: index): [T]
   var built: [T] = []
   call list_reserve(mut built, n)
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     call push(mut built, elem@)
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret built
 end fun
@@ -105,14 +105,14 @@ end fun
 // The first n elements, or all of them if there are fewer.
 fun take<T>(ref self: [T], n: index): [T]
   var built: [T] = []
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     if get(ref self, i) |elem|
       call push(mut built, elem)
     else
       break
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret built
 end fun
@@ -126,7 +126,7 @@ fun skip<T>(ref self: [T], n: index): [T]
     if get(ref self, i) |elem|
       call push(mut built, elem)
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret built
 end fun
@@ -175,14 +175,14 @@ end fun
 fun zip<A, B>(ref self: [A], ref other: [B]): [(A, B)]
   var built: [(A, B)] = []
   let n = len(ref self)
-  var i: index = : index / 0
+  var i: index = 0
   loop while i .< n
     if zip_option(get(ref self, i), get(ref other, i)) |pair|
       call push(mut built, pair)
     else
       break
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret built
 end fun

@@ -35,32 +35,32 @@ end fun
 
 fun equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) == : i8 / 0
+  ret ord_compare(ref self, ref other) == 0
 end fun
 
 fun not_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) != : i8 / 0
+  ret ord_compare(ref self, ref other) != 0
 end fun
 
 fun less<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) .< : i8 / 0
+  ret ord_compare(ref self, ref other) .< 0
 end fun
 
 fun less_or_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) <= : i8 / 0
+  ret ord_compare(ref self, ref other) <= 0
 end fun
 
 fun greater<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) .> : i8 / 0
+  ret ord_compare(ref self, ref other) .> 0
 end fun
 
 fun greater_or_equal<T>(ref self: T, ref other: T): bool where { T is ord, }
   inline
-  ret ord_compare(ref self, ref other) >= : i8 / 0
+  ret ord_compare(ref self, ref other) >= 0
 end fun
 
 // The smaller of two, or self when they sort together.
@@ -135,10 +135,10 @@ end fun
 
 // How many elements sort together with this one.
 fun count_of<T>(ref self: [T], ref elem: T): index where { T is ord, }
-  var seen: index = : index / 0
+  var seen: index = 0
   for item in ref self
     if equal(ref item, ref elem)
-      set seen = icall add_wrapping_index(seen, : index / 1)
+      set seen = icall add_wrapping_index(seen, 1)
     end if
   end for
   ret seen
@@ -149,7 +149,7 @@ end fun
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
 fun least<T>(ref self: [T]): ?T where { T is ord, }
-  var best: index = : index / 0
+  var best: index = 0
   for i, item in ref self
     if less(ref item, ref self[best]?)
       set best = i
@@ -163,7 +163,7 @@ end fun
 // Finds where it is and clones only that one. On an empty list the read at the
 // end is out of bounds, which is the none.
 fun greatest<T>(ref self: [T]): ?T where { T is ord, }
-  var best: index = : index / 0
+  var best: index = 0
   for i, item in ref self
     if greater(ref item, ref self[best]?)
       set best = i
@@ -178,16 +178,16 @@ end fun
 fun is_sorted<T>(ref self: [T]): bool where { T is ord, }
   var ordered = true
   let n = list_len(ref self)
-  var i: index = : index / 1
+  var i: index = 1
   loop while i .< n
-    let i_prev = icall sub_wrapping_index(i, : index / 1)
+    let i_prev = icall sub_wrapping_index(i, 1)
     if greater_at(ref self, i_prev, i) |out_of_order|
       if out_of_order
         set ordered = false
         break
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret ordered
 end fun
@@ -204,10 +204,10 @@ end fun
 fun sorted<T>(ref self: [T]): [T] where { T is ord, }
   let n = list_len(ref self)
   var src: [T] = self@
-  var width: index = : index / 1
+  var width: index = 1
   loop while width .< n
     var dst: [T] = []
-    var lo: index = : index / 0
+    var lo: index = 0
     loop while lo .< n
       // The runs [lo, mid) and [mid, hi), sized from what remains so that
       // nothing here can overflow.
@@ -227,18 +227,18 @@ fun sorted<T>(ref self: [T]): [T] where { T is ord, }
           if list_get(ref src, i) |elem|
             call list_push(mut dst, elem)
           end if
-          set i = icall add_wrapping_index(i, : index / 1)
+          set i = icall add_wrapping_index(i, 1)
         else
           if list_get(ref src, j) |elem|
             call list_push(mut dst, elem)
           end if
-          set j = icall add_wrapping_index(j, : index / 1)
+          set j = icall add_wrapping_index(j, 1)
         end if
       end loop
       set lo = hi
     end loop
     set src = dst
-    set width = index.mul_saturating(width, : index / 2)
+    set width = index.mul_saturating(width, 2)
   end loop
   ret src
 end fun
@@ -266,18 +266,18 @@ end fun
 // having the order is worth.
 fun binary_search<T>(ref self: [T], ref elem: T): ?index where { T is ord, }
   var found: ?index = none
-  var low: index = : index / 0
+  var low: index = 0
   var high: index = list_len(ref self)
   loop while low .< high
     let span = icall sub_wrapping_index(high, low)
-    let mid = icall add_wrapping_index(low, shift_right_wrapping(span, : u32 / 1))
+    let mid = icall add_wrapping_index(low, shift_right_wrapping(span, 1))
     let order = compare(ref self[mid]?, ref elem)
-    if order == : i8 / 0
+    if order == 0
       set found = some mid
       break
     end if
-    if order .< : i8 / 0
-      set low = icall add_wrapping_index(mid, : index / 1)
+    if order .< 0
+      set low = icall add_wrapping_index(mid, 1)
     else
       set high = mid
     end if
@@ -290,20 +290,20 @@ end fun
 // The list has to be sorted already, since only neighbours are compared.
 fun deduped<T>(ref self: [T]): [T] where { T is ord, }
   var out: [T] = []
-  if list_get(ref self, : index / 0) |first|
+  if list_get(ref self, 0) |first|
     call list_push(mut out, first)
   end if
   let n = list_len(ref self)
-  var i: index = : index / 1
+  var i: index = 1
   loop while i .< n
-    if equal_at(ref self, icall sub_wrapping_index(i, : index / 1), i) |same|
+    if equal_at(ref self, icall sub_wrapping_index(i, 1), i) |same|
       if not same
         if list_get(ref self, i) |elem|
           call list_push(mut out, elem)
         end if
       end if
     end if
-    set i = icall add_wrapping_index(i, : index / 1)
+    set i = icall add_wrapping_index(i, 1)
   end loop
   ret out
 end fun

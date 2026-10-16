@@ -26,7 +26,7 @@ const PRODUCT_SLOTS: %{u32 = index} = product_slots()
 const CUSTOMER_SLOTS: %{u32 = index} = customer_slots()
 
 fun next(i: index): index
-    ret index.add_wrapping(i, : index / 1)
+    ret index.add_wrapping(i, 1)
 end fun
 
 // A const cannot early-return, so the result is unwrapped here. An error from
@@ -200,7 +200,7 @@ end fun
 fun line_revenue(o: index, l: index): !u64
     let price = product_price(orders[o]!.lines[l]!.product)!
     let qty: u64 = orders[o]!.lines[l]!.qty@
-    let kept: u64 = (: u32 / 100 -! orders[o]!.lines[l]!.discount)@
+    let kept: u64 = (100 -! orders[o]!.lines[l]!.discount)@
     ret ok (price *! qty *! kept /! 100)
 end fun
 

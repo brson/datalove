@@ -15,13 +15,13 @@ const BITS: u32 = icall index_bits()
 
 // One less than the width, which is what a shift amount is taken modulo and
 // what the sign bit is indexed by.
-const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, : u32 / 1)
+const SHIFT_MASK: u32 = icall sub_wrapping_u32(BITS, 1)
 
 // The sign bit alone, which read as signed is the most negative value.
-const MIN: offset = icall index_to_offset(icall shl_index(: index / 1, SHIFT_MASK))
+const MIN: offset = icall index_to_offset(icall shl_index(1, SHIFT_MASK))
 
 // Every bit but the sign bit, which read as signed is the largest value.
-const MAX: offset = icall index_to_offset(icall shr_index(icall bitnot_index(: index / 0), : u32 / 1))
+const MAX: offset = icall index_to_offset(icall shr_index(icall bitnot_index(0), 1))
 
 fun min_value(): offset
   inline
@@ -41,9 +41,9 @@ end fun
 // Sign functions.
 
 fun signum(self: offset): offset
-  let zero = (: offset / 0)
-  let one = (: offset / 1)
-  let neg_one = (: offset / -1)
+  let zero: offset = 0
+  let one: offset = 1
+  let neg_one: offset = -1
   if self .> zero
     ret one
   else
@@ -57,17 +57,17 @@ end fun
 
 fun is_positive(self: offset): bool
   inline
-  ret self .> (: offset / 0)
+  ret self .> 0
 end fun
 
 fun is_negative(self: offset): bool
   inline
-  ret self .< (: offset / 0)
+  ret self .< 0
 end fun
 
 // Wrapping absolute value.
 fun abs(self: offset): offset
-  if self .< (: offset / 0)
+  if self .< 0
     ret icall neg_wrapping_offset(self)
   else
     ret self
@@ -221,8 +221,8 @@ end fun
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: offset, other: offset): ?offset
   inline
-  let zero = (: offset / 0)
-  let neg_one = (: offset / -1)
+  let zero: offset = 0
+  let neg_one: offset = -1
   if other == zero
     ret none
   else
@@ -241,7 +241,7 @@ end fun
 // Saturating arithmetic.
 
 fun add_saturating(self: offset, other: offset): offset
-  let zero = (: offset / 0)
+  let zero: offset = 0
   if add_checked(self, other) |value|
     ret value
   else
@@ -255,7 +255,7 @@ fun add_saturating(self: offset, other: offset): offset
 end fun
 
 fun sub_saturating(self: offset, other: offset): offset
-  let zero = (: offset / 0)
+  let zero: offset = 0
   if sub_checked(self, other) |value|
     ret value
   else
@@ -348,7 +348,7 @@ fun shift_left_wrapping(self: offset, n: u32): offset
   if shift_left(self, n_mod) |value|
     ret value
   else
-    ret (: offset / 0)
+    ret 0
   end if
 end fun
 
@@ -358,7 +358,7 @@ fun shift_right_wrapping(self: offset, n: u32): offset
   if shift_right(self, n_mod) |value|
     ret value
   else
-    ret (: offset / 0)
+    ret 0
   end if
 end fun
 
@@ -383,8 +383,8 @@ fun shift_left_saturating(self: offset, n: u32): offset
 end fun
 
 fun shift_right_saturating(self: offset, n: u32): offset
-  let zero = (: offset / 0)
-  let neg_one = (: offset / -1)
+  let zero: offset = 0
+  let neg_one: offset = -1
   if n >= BITS
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
@@ -483,7 +483,7 @@ end fun
 
 fun is_zero(self: offset): bool
   inline
-  ret self == (: offset / 0)
+  ret self == 0
 end fun
 
 fun min(self: offset, other: offset): offset
@@ -533,6 +533,6 @@ end fun
 fun midpoint(self: offset, other: offset): offset
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, : u32 / 1)
+  let half_diff = shift_right_wrapping(diff, 1)
   ret add_wrapping(common, half_diff)
 end fun

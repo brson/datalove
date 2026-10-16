@@ -6,28 +6,28 @@ import std.int_low_bits_i64
 
 fun min_value(): i16
   inline
-  ret (: i16 / -32768)
+  ret -32768
 end fun
 
 fun max_value(): i16
   inline
-  ret : i16 / 32767
+  ret 32767
 end fun
 
 fun bits(): u32
   inline
-  ret (: u32 / 16)
+  ret 16
 end fun
 
 // Sign functions.
 
 fun signum(self: i16): i16
-  let zero = (: i16 / 0)
+  let zero: i16 = 0
   if self .> zero
-    ret : i16 / 1
+    ret 1
   else
     if self .< zero
-      ret (: i16 / -1)
+      ret -1
     else
       ret zero
     end if
@@ -36,17 +36,17 @@ end fun
 
 fun is_positive(self: i16): bool
   inline
-  ret self .> (: i16 / 0)
+  ret self .> 0
 end fun
 
 fun is_negative(self: i16): bool
   inline
-  ret self .< (: i16 / 0)
+  ret self .< 0
 end fun
 
 // Wrapping absolute value.
 fun abs(self: i16): i16
-  if self .< (: i16 / 0)
+  if self .< 0
     ret icall neg_wrapping_i16(self)
   else
     ret self
@@ -222,12 +222,12 @@ end fun
 // Overflow can occur with MIN % -1 on some platforms.
 fun rem_checked(self: i16, other: i16): ?i16
   inline
-  let zero = (: i16 / 0)
+  let zero: i16 = 0
   if other == zero
     ret none
   else
     if self == min_value()
-      if other == (: i16 / -1)
+      if other == -1
         ret some zero
       else
         ret some icall srem_i16(self, other)
@@ -245,7 +245,7 @@ fun add_saturating(self: i16, other: i16): i16
     ret value
   else
     // Overflow direction depends on signs.
-    if other .> (: i16 / 0)
+    if other .> 0
       ret max_value()
     else
       ret min_value()
@@ -258,7 +258,7 @@ fun sub_saturating(self: i16, other: i16): i16
     ret value
   else
     // Underflow direction depends on signs.
-    if other .> (: i16 / 0)
+    if other .> 0
       ret min_value()
     else
       ret max_value()
@@ -342,21 +342,21 @@ end fun
 
 fun shift_left_wrapping(self: i16, n: u32): i16
   inline
-  let n_mod = icall bitand_u32(n, : u32 / 15)
+  let n_mod = icall bitand_u32(n, 15)
   if shift_left(self, n_mod) |value|
     ret value
   else
-    ret (: i16 / 0)
+    ret 0
   end if
 end fun
 
 fun shift_right_wrapping(self: i16, n: u32): i16
   inline
-  let n_mod = icall bitand_u32(n, : u32 / 15)
+  let n_mod = icall bitand_u32(n, 15)
   if shift_right(self, n_mod) |value|
     ret value
   else
-    ret (: i16 / 0)
+    ret 0
   end if
 end fun
 
@@ -384,18 +384,18 @@ fun shift_right_saturating(self: i16, n: u32): i16
   if n >= bits()
     // Arithmetic shift fills with sign bit.
     if is_negative(self)
-      ret (: i16 / -1)
+      ret -1
     else
-      ret (: i16 / 0)
+      ret 0
     end if
   else
     if shift_right(self, n) |value|
       ret value
     else
       if is_negative(self)
-        ret (: i16 / -1)
+        ret -1
       else
-        ret (: i16 / 0)
+        ret 0
       end if
     end if
   end if
@@ -404,20 +404,20 @@ end fun
 // Rotations (delegate to u16).
 
 fun rotate_left(self: i16, n: u32): i16
-  let n_mod = icall bitand_u32(n, : u32 / 15)
+  let n_mod = icall bitand_u32(n, 15)
   let u = icall i16_to_u16(self)
   let left_part = icall shl_u16(u, n_mod)
-  let right_amount = icall sub_wrapping_u32(: u32 / 16, n_mod)
+  let right_amount = icall sub_wrapping_u32(16, n_mod)
   let right_part = icall shr_u16(u, right_amount)
   let result = icall bitor_u16(left_part, right_part)
   ret icall u16_to_i16(result)
 end fun
 
 fun rotate_right(self: i16, n: u32): i16
-  let n_mod = icall bitand_u32(n, : u32 / 15)
+  let n_mod = icall bitand_u32(n, 15)
   let u = icall i16_to_u16(self)
   let right_part = icall shr_u16(u, n_mod)
-  let left_amount = icall sub_wrapping_u32(: u32 / 16, n_mod)
+  let left_amount = icall sub_wrapping_u32(16, n_mod)
   let left_part = icall shl_u16(u, left_amount)
   let result = icall bitor_u16(left_part, right_part)
   ret icall u16_to_i16(result)
@@ -479,7 +479,7 @@ end fun
 
 fun is_zero(self: i16): bool
   inline
-  ret self == (: i16 / 0)
+  ret self == 0
 end fun
 
 fun min(self: i16, other: i16): i16
@@ -529,6 +529,6 @@ end fun
 fun midpoint(self: i16, other: i16): i16
   let common = bitand(self, other)
   let diff = bitxor(self, other)
-  let half_diff = shift_right_wrapping(diff, : u32 / 1)
+  let half_diff = shift_right_wrapping(diff, 1)
   ret add_wrapping(common, half_diff)
 end fun
