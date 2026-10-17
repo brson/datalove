@@ -1,8 +1,9 @@
 //! Each front-end phase of a cold `sys/std` compile, timed sequential and parallel.
 //!
-//! Starts after package resolution, which has already parsed every module, so
-//! the parse row measures only the parallel warm-up of memos that are already
-//! there; see `botdocs/compile-time.md`.
+//! Parsing happens in the first row, package resolution and the dependency
+//! walk, which parses every module it reaches. The parse row is phase 1's
+//! warm-up of memos that are already there, and what is left of it is the
+//! sequential aggregator; see `botdocs/compile-time.md`.
 //!
 //! Scratch tool. `cargo run --release -p datalove-bench --example par_phases -- [iterations]`.
 
@@ -10,7 +11,7 @@ use datalove_datafun_compiler::instances::GenericsPolicy;
 use rmx::prelude::*;
 
 use datalove_datafun as datafun;
-use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies};
+use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies_with_mode};
 use datalove_datafun::pipeline::WorkspaceDescriptor;
 use datalove_datafun_compiler::module_graph::parse_module_graph_with_mode;
 use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
@@ -30,7 +31,7 @@ fn one(modules: &[(String, String)], riders: &[(String, String)], mode: Parallel
     }
     let mut d = [Duration::ZERO; N];
     let t = Instant::now();
-    let deps = extract_dependencies(&world, &db, &Roots::All);
+    let deps = extract_dependencies_with_mode(&world, &db, &Roots::All, mode);
     let (graph, rr) = world.build_graph(&db, deps, &Roots::All);
     d[0] = t.elapsed();
     let riders = riders.iter()
@@ -72,7 +73,7 @@ fn main() {
         }
     }
     println!("{} modules, rayon threads {}", modules.len(), rmx::rayon::current_num_threads());
-    let names = ["graph", "parse", "resolve", "typecheck", "ownership", "lower(5)"];
+    let names = ["deps+parse", "parse", "resolve", "typecheck", "ownership", "lower(5)"];
     let mut res = Vec::new();
     for mode in [ParallelMode::Sequential, ParallelMode::Parallel] {
         let _ = one(&modules, &riders, mode);

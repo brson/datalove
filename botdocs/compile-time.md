@@ -223,8 +223,19 @@ ruff repository. It clones once per rayon split rather than once per item
 values from the workers, not branded ones.
 
 `cargo run --release -p datalove-bench --example par_phases` times each phase
-both ways on a fresh database. It starts after package resolution, so its
-parse row is the warm-up described above, not parsing.
+both ways on a fresh database. Parsing is in its first row, package resolution
+with the dependency walk; its parse row is the warm-up described above. In
+October 2026, after the walk went parallel, best of 40 on four threads:
+
+| Phase | Sequential | Parallel | Speedup |
+|---|---:|---:|---:|
+| Dependency walk, with parsing | 5.18ms | 1.94ms | 2.7x |
+| Phase 1 warm-up and aggregator | 0.57ms | 0.61ms | 0.9x |
+| Name resolution | 0.54ms | 0.24ms | 2.3x |
+| Typecheck | 2.13ms | 0.72ms | 3.0x |
+| Ownership | 1.76ms | 0.58ms | 3.0x |
+| Phase 5 | 7.59ms | 3.63ms | 2.1x |
+| Total | 17.77ms | 7.72ms | 2.3x |
 
 ## What was fixed
 
