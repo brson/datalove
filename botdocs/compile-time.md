@@ -13,6 +13,7 @@ reworked; see [the parser plan](plan-parser.md).
 - [Page faults](#user-content-page-faults)
 - [Parsing](#user-content-parsing)
 - [Parallel compilation](#user-content-parallel-compilation)
+  - [Inside phase 5](#user-content-inside-phase-5)
 - [What was fixed](#user-content-what-was-fixed)
 - [What is left](#user-content-what-is-left)
 
@@ -236,6 +237,53 @@ October 2026, after the walk went parallel, best of 40 on four threads:
 | Ownership | 1.76ms | 0.58ms | 3.0x |
 | Phase 5 | 7.59ms | 3.63ms | 2.1x |
 | Total | 17.77ms | 7.72ms | 2.3x |
+
+### Inside phase 5
+
+Phase 5 is half the parallel compile and the phase that scales least, so it
+was timed step by step, October 2026, median of 40 cold `sys/std` runs on four
+threads, without huge pages:
+
+| Step | Sequential | Parallel | Per module? |
+|---|---:|---:|---|
+| Const cache keys (`ConstCache::begin`) | 0.10ms | 0.12ms | Yes: `closure_fingerprint` |
+| `compute_func_id_map` | 0.15ms | 0.18ms | Yes, the scan of each module's items |
+| 5a, first stratum | 3.22ms | 1.42ms | Parallel already |
+| Registry for module consts (`ctfe_module_registry`) | 0.23ms | 0.23ms | Yes, but for the riders |
+| Module-level consts | 0.17ms | 0.17ms | Yes, but for the evaluator |
+| 5a, second stratum and merge | 0.29ms | 0.27ms | Parallel already, few modules |
+| Registry for body consts | 0.13ms | 0.14ms | As above |
+| 5b, body consts | 0.14ms | 0.15ms | Yes, but for the evaluator |
+| 5b', const inlining | 0.22ms | 0.24ms | Yes: `const_inlined_module` |
+| 5c, specialization | 0.05ms | 0.05ms | The gate is; the pass is not |
+| 5d, assembly and inlining | 3.28ms | 1.38ms | Parallel already |
+
+The two parallel steps are most of it and are balanced: no module is more than
+11% of either, so they fall short of 4x for the reason the rest of the
+parallel compile does, the kernel. The steps still on the main thread come to
+about 1.6ms of the 4.3ms, and they come in three kinds.
+
+- **Per-module queries run in a sequential loop:** const inlining, the cache
+  keys, the per-module half of the function-id map and of the registry, the
+  specialization gate. The workers would compute them as the other phases'
+  do, warming then reading back.
+- **The rider units are built twice.** `add_native_rider_units` runs inside
+  each `ctfe_module_registry`, and the registry is built once per const phase
+  because the second stratum changes its key, so the same 0.09ms is paid twice
+  in either mode. A query of its own, keyed on the graph and the id map, would
+  build them once.
+- **Const evaluation is per module but takes one `&mut dyn CtfeEvaluator` and
+  one `&mut ConstCache`.** Each module evaluates against a shared, finished
+  registry and its own consts, so the work is independent. Running it in
+  parallel needs an evaluator per worker, which `CtfeEvaluator` has no way to
+  make, and the cache's reads and writes kept on the main thread around it.
+
+What does not parallelize is the order between the steps. CTFE calls functions
+of any module, so the const phases wait for 5a; specialization reads every
+module's call sites; and 5d inlines callees from any module, so it waits for
+the set `find_inline_modules` builds. All of the above together is worth about
+0.85ms of the 4.3ms, or 6% of the whole run, which is less than huge pages
+would give the two parallel steps.
 
 ## What was fixed
 
