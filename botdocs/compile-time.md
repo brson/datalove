@@ -12,6 +12,7 @@ reworked; see [the parser plan](plan-parser.md).
 - [The breakdown](#user-content-the-breakdown)
 - [Page faults](#user-content-page-faults)
 - [Parsing](#user-content-parsing)
+- [Parallel compilation](#user-content-parallel-compilation)
 - [What was fixed](#user-content-what-was-fixed)
 - [What is left](#user-content-what-is-left)
 
@@ -150,6 +151,59 @@ allocation was -- 35,726 allocations and 12MB to parse `sys/std` -- and what
 building it did: 26,189 and 5.6MB, and parsing from 27% of the run to 23%,
 the rest of the allocation being the AST's own.
 
+## Parallel compilation
+
+`DATALOVE_PARALLEL=1` runs each phase's per-module work on rayon (see
+[the compiler guide](compiler-guide.md#user-content-parallel-execution)), but
+on the `sys/std` script it buys little: measured October 2026 on four cores,
+24.2ms wall sequential and 17.4ms parallel, 1.4x. Two things cost most of the
+rest, and both have been measured rather than guessed.
+
+**Parsing is not parallel.** Package resolution parses every module, on the
+main thread, before phase 1 starts: `extract_dependencies` walks a worklist
+calling `module_import_demands`, which reaches `parse_module_full` so that
+resolution and phase 1 share one parse (see
+`crates/datalove-datafun/src/import_demands.rs`). So by the time
+`parse_module_graph_parallel` warms the parse memos they are all hits, and
+the largest front-end phase runs sequentially. The `parallel` bench does not
+see this, because it calls the phase-1 function directly. A prototype that
+warmed `module_import_demands` for every module on rayon before
+`extract_dependencies` took the parallel run from 17.2ms to 14.2ms. A real
+fix would warm the worklist one frontier at a time, so that a narrowed set of
+roots does not parse modules it never reaches.
+
+**The workers spend as much time in the kernel as in the compiler.** A
+per-thread profile of a parallel run put the rayon workers at about half
+compiler code, 15% page faults and 15% `mprotect`, with the rest scheduling
+and spinning. The `mprotect` calls come from glibc growing each thread's
+private arena a little at a time. Each one takes the process's `mmap_lock` for
+writing, which stalls page faults on every other thread (`rwsem_spin_on_owner`
+in the profile). The huge pages of [Page faults](#user-content-page-faults)
+remove almost all of it, and they help the parallel run more than the
+sequential one:
+
+| | Wall | Task-clock |
+|---|---:|---:|
+| Sequential | 23.2ms | 21.4ms |
+| Parallel | 17.1ms | 28.5ms |
+| Sequential, `hugetlb=1` | 17.3ms | 16.1ms |
+| Parallel, `hugetlb=1` | 12.4ms | 20.4ms |
+| Parallel, `hugetlb=1`, parse prototype | 10.7ms | 22.7ms |
+
+One shared arena (`glibc.malloc.arena_max=1`) is worse than either: 27.7ms,
+on malloc's lock.
+
+With both fixed, what remains on the main thread is phase 5's sequential
+pieces (`ctfe_module_registry`, `add_native_rider_units`, const inlining and
+evaluation, `compute_func_id_map`), the phase-1 aggregator with
+`rider_interfaces`, and building the database, a few percent each, against a
+fixed 3.6ms for a script that requires nothing. The other phases' aggregators
+are under 1%.
+
+`cargo run --release -p datalove-bench --example par_phases` times each phase
+both ways on a fresh database. It starts after package resolution, so its
+parse row is the warm-up described above, not parsing.
+
 ## What was fixed
 
 - `reachable_func_ids` copied, for every module, every entry of the world's
@@ -192,7 +246,9 @@ the rest of the allocation being the AST's own.
 ## What is left
 
 - Huge pages, above: the largest single item, and a decision about the
-  allocator.
+  allocator. It matters more under `DATALOVE_PARALLEL`; see
+  [Parallel compilation](#user-content-parallel-compilation).
+- Parsing in parallel, which it does not today; same section.
 - Parsing: no single fix; see [Parsing](#user-content-parsing).
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,
   since `LowerCtx` owns it; borrowing it would save the copy.
