@@ -5,7 +5,8 @@ datalit and in datafun alike: split it at the token tree into chunks, parse the
 chunks as queries of their own on rayon, and do it only where a tuning bench
 says it pays. Written October 2026, after a prototype for datalit lists.
 Phases 0 to 2 and 5 are done, phase 3 was measured and set aside, and phase 4
-was built, measured and taken out again; see
+was built, measured and taken out again: datalit is parallel within a
+collection and datafun is not; see
 [Progress](#user-content-progress).
 
 ## Contents
@@ -374,6 +375,33 @@ differ from lists'; see [compile-time.md](compile-time.md#user-content-large-col
   their own after the modules' typecheck, against the types it found, would
   allow it, and moves where `F084` is reported from; it is about 20ms of the
   store demo's compile. Not attempted.
+
+**Phase 4 was built and taken out.** Datafun lists, maps and sets were cut and
+parsed number for number as a whole parse would (a chunk numbered its
+expressions and calls from zero and was moved up into its body by a
+`relocate` over every `ExprFunKind`), with an equivalence suite and a warm-up
+in the dependency walk. It worked, and was not worth keeping:
+
+- **It paid only in parallel.** Renumbering a chunk copies every expression
+  out of its memo, so parsed in turn the chunks cost up to 1.6x for a
+  collection of small lists or maps at 1MB, and 1.08-1.17x still at 4MB; in
+  parallel, from 1MB, 0.37-0.68x. So a program's collections could be cut
+  only in a parallel compile, which needed the policy to follow the compile's
+  mode: an application installing thresholds of its own under
+  `DATALOVE_PARALLEL`, and the plan told a data source from a program.
+- **What it bought was small.** A module holding a 1.86MB list compiled in
+  154ms parallel rather than 201ms, and most of what was left was evaluating
+  the const, which no chunking helps; nothing in the repository has a datafun
+  literal within a factor of ten of the threshold.
+- **It was the fragile half.** Datalit's numbers are only keys, so its chunks
+  need no renumbering; datafun's are places in an arena, and every kind of
+  numbered thing an expression might come to hold would have had to be moved
+  by the merge or make it give up.
+
+So data that big goes in a data file, which is what datalit is for: it is
+parsed in chunks, read into values rather than lowered and evaluated, and
+split at the token tree without knowing the grammar around it. The design for
+datafun above is kept as the record of what was tried; the code is not.
 
 **Phase 5**: the thresholds for everything cut are from the bench and in
 [compile-time.md](compile-time.md#user-content-large-collection-literals), and

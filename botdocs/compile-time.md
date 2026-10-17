@@ -400,6 +400,15 @@ row's `Vec` out of its chunk's memo, and the plan walks a collection's level
 once without keeping anything per element, rather than collecting every
 element's start, which for a scalar table cost as much as parsing it.
 
+A datafun collection literal is not cut. Its parse is as dear per byte, and is
+60% of compiling a module whose only content is a 930KB `const` list (93ms;
+evaluating the const is 22%), but a datafun chunk has to be renumbered into
+its body, which copies every expression out of its memo, and parsed in turn
+those chunks cost up to 1.6x. Cut only in parallel compiles, a 1.86MB list
+compiled in 154ms rather than 201ms. That was built and taken out; see
+[the plan](plan-parallel-collections.md#user-content-progress). Data that big
+goes in a data file.
+
 ## What was fixed
 
 - `reachable_func_ids` copied, for every module, every entry of the world's
