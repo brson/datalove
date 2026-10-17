@@ -1199,6 +1199,7 @@ impl DocsCommand {
                     base_url: "https://datalove-language.net",
                     categories: &["design", "devlog", "milestone"],
                     excerpt_bytes: 600,
+                    posts_dir: None,
                     syndication: None,
                 }),
             },
@@ -1212,7 +1213,7 @@ impl DocsCommand {
             },
         ];
 
-        Site { output_dir: &output_dir, doc_sets: &doc_sets }.build()?;
+        Site { output_dir: &output_dir, doc_sets: &doc_sets, deployed_with: &[] }.build()?;
 
         println!("Documentation generated in {}", output_dir.display());
 
