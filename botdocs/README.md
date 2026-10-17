@@ -51,6 +51,7 @@ The [botspec](botspec.md) in particular is usually close to correct and current.
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)
 - [A Plain-Data AST](plan-plain-ast.md)
+- [Reading a Large Data File in Parallel](plan-parallel-data.md)
 - [Carry/Bring](carry-bring.md)
 
 ---
