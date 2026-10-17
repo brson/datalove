@@ -33,8 +33,9 @@ jobs:
           - name: default
             recipe: test
           # Everything that is not the suite in another configuration: the
-          # slow_tests property and exhaustive tests, the wasm build, a smoke
-          # test of sys riders built from source, generated programs on a
+          # slow_tests property and exhaustive tests, the wasm build and the
+          # wasm smoke test, a smoke test of sys riders built from source,
+          # generated programs on a
           # fixed seed, and the benchvs programs and the store demo built in
           # release.
           - name: extras
@@ -67,7 +68,7 @@ jobs:
       - name: Install Rust nightly
         uses: dtolnay/rust-toolchain@nightly
         with:
-          # Only test-slow's check-wasm needs this, but installing it
+          # Only test-slow's check-wasm and test-wasm need this, but installing it
           # everywhere costs seconds and keeps the matrix uniform.
           targets: wasm32-unknown-unknown
 
