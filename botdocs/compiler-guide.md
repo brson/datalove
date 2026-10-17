@@ -1321,9 +1321,11 @@ salsa 0.28 supports genuinely concurrent queries (see its `tests/parallel`).
 What caps all of this is the sequential half. Each phase's aggregator walks the
 graph whatever was edited, so the speedup is bounded by what it does: parse sits
 near 2.7x on sixteen cores in the `parallel` bench and cannot go past it while
-the aggregator rebuilds. In the real pipeline phase 1 gains nothing at all,
-because package resolution has already parsed every module on the main thread;
-see [where compile time goes](compile-time.md#user-content-parallel-compilation).
+the aggregator rebuilds. In the real pipeline phase 1's warm-up finds nothing
+to do, because package resolution has already parsed every module; under
+`DATALOVE_PARALLEL` that parse is the parallel one, in
+`extract_dependencies_with_mode`. See
+[where compile time goes](compile-time.md#user-content-parallel-compilation).
 Thinning `ModuleGraphTypecheckResult` took typecheck from 1.57x to 1.78x for
 exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.

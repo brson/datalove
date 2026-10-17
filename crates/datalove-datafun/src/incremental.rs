@@ -35,6 +35,7 @@ use rmx::std::collections::{BTreeMap, BTreeSet};
 use bct::input::Source;
 use bct::module_graph::{Module, ModuleGraph, ModuleId};
 use salsa::Setter;
+use datalove_datafun_tycheck::{DbClone, ParallelMode};
 
 /// Which of the world's modules a compilation is about.
 ///
@@ -412,6 +413,73 @@ pub fn extract_dependencies<'db>(
         Roots::From(paths) => CompileRoots::new(db, Some(paths.iter().cloned().collect())),
     };
     dependencies_from_roots(db, package_world, roots)
+}
+
+/// [`extract_dependencies`], with the parsing it does spread over rayon's pool
+/// under `ParallelMode::Parallel`.
+///
+/// Resolution parses every module it reaches, and that parse is the one phase 1
+/// uses, so this is where parsing happens; warming phase 1 in parallel instead
+/// finds every parse already done. The walk here runs outside any query, one
+/// frontier at a time: each module of a frontier has its requires read on a
+/// worker, and the next frontier is what those name that has not been seen. The
+/// tracked walk that follows reaches the same modules by the same handles, so
+/// every parse it asks for is a memo hit.
+///
+/// Going a frontier at a time rather than warming the whole world is what keeps
+/// a narrowed set of roots from parsing modules it never reaches.
+pub fn extract_dependencies_with_mode<'db>(
+    world: &IncrementalModuleWorld,
+    db: &'db dyn DbClone,
+    roots: &Roots,
+    mode: ParallelMode,
+) -> &'db BTreeMap<String, BTreeSet<String>> {
+    if mode == ParallelMode::Parallel {
+        warm_import_demands(world, db, roots);
+    }
+    extract_dependencies(world, db.as_salsa_db(), roots)
+}
+
+fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: &Roots) {
+    use rmx::rayon::prelude::*;
+
+    // The modules `dependencies_from_roots` can reach: the ones the package
+    // world is built from in `extract_dependencies`.
+    let reachable = |path: &str| {
+        let parts: Vec<&str> = path.split('/').collect();
+        parts.len() == 3 && matches!(parts[0], "sys" | "local") && world.sources().contains_key(path)
+    };
+
+    let mut frontier: Vec<String> = match roots {
+        Roots::All => world.sources().keys().filter(|p| reachable(p)).cloned().collect(),
+        Roots::From(paths) => paths.iter().filter(|p| reachable(p)).cloned().collect(),
+    };
+    let mut seen: BTreeSet<String> = frontier.iter().cloned().collect();
+
+    let db_salsa = db.as_salsa_db();
+    while !frontier.is_empty() {
+        // Cloned here because `&dyn DbClone` is not `Sync`.
+        let work: Vec<_> = frontier.iter()
+            .map(|path| (db.dyn_clone(), path.as_str()))
+            .collect();
+        work.into_par_iter().for_each(|(db_clone, path)| {
+            let db_clone = db_clone.as_salsa_db();
+            let module = world.module(db_clone, path).expect("the frontier only holds paths the world has");
+            let _ = crate::import_demands::module_import_demands(db_clone, module);
+        });
+
+        let mut next = Vec::new();
+        for path in &frontier {
+            let module = world.module(db_salsa, path).expect("the frontier only holds paths the world has");
+            for (space, package, module) in crate::import_demands::module_import_demands(db_salsa, module) {
+                let target = format!("{}/{}/{}", space, package, module);
+                if reachable(&target) && seen.insert(target.clone()) {
+                    next.push(target);
+                }
+            }
+        }
+        frontier = next;
+    }
 }
 
 /// A root set, as something a query can be keyed on.

@@ -67,6 +67,10 @@ pub fn parse_module_graph<'db>(
 /// This function parses modules in parallel using rayon to warm salsa's memoization cache,
 /// then delegates to the tracked `parse_module_graph` function which can create tracked
 /// structs. The tracked function will hit the warmed cache for all `parse_module_full` calls.
+///
+/// In the pipeline the warming finds every parse already done, by package
+/// resolution in `extract_dependencies_with_mode`; it does the work for a graph
+/// built without resolution, as the benches and tests build theirs.
 pub fn parse_module_graph_parallel<'db>(
     db: &'db dyn DbClone,
     graph: ModuleGraph<'db>,

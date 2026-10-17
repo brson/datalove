@@ -159,18 +159,21 @@ on the `sys/std` script it buys little: measured October 2026 on four cores,
 24.2ms wall sequential and 17.4ms parallel, 1.4x. Two things cost most of the
 rest, and both have been measured rather than guessed.
 
-**Parsing is not parallel.** Package resolution parses every module, on the
-main thread, before phase 1 starts: `extract_dependencies` walks a worklist
-calling `module_import_demands`, which reaches `parse_module_full` so that
-resolution and phase 1 share one parse (see
-`crates/datalove-datafun/src/import_demands.rs`). So by the time
-`parse_module_graph_parallel` warms the parse memos they are all hits, and
-the largest front-end phase runs sequentially. The `parallel` bench does not
-see this, because it calls the phase-1 function directly. A prototype that
-warmed `module_import_demands` for every module on rayon before
-`extract_dependencies` took the parallel run from 17.2ms to 14.2ms. A real
-fix would warm the worklist one frontier at a time, so that a narrowed set of
-roots does not parse modules it never reaches.
+**Parsing was not parallel.** Package resolution parses every module it
+reaches, so that resolution and phase 1 share one parse: `extract_dependencies`
+walks a worklist calling `module_import_demands`, which reaches
+`parse_module_full` (see `crates/datalove-datafun/src/import_demands.rs`). It
+did that on the main thread, so by the time `parse_module_graph_parallel` warmed
+the parse memos they were all hits, and the largest front-end phase ran
+sequentially. The `parallel` bench did not see this, because it calls the
+phase-1 function directly. Under `DATALOVE_PARALLEL` the pipeline now calls
+`extract_dependencies_with_mode`
+(`crates/datalove-datafun/src/incremental.rs`), which runs the same walk
+outside any query, one frontier at a time, with each frontier's parses on
+rayon. The tracked walk that follows finds every parse already done. That took
+the parallel run from 16.9ms to 14.3ms. A script that requires one module
+costs what it did, 0.7% more instructions, so a narrowed set of roots still
+parses only what it reaches.
 
 **The workers spend as much time in the kernel as in the compiler.** A
 per-thread profile of a parallel run put the rayon workers at about half
@@ -188,7 +191,7 @@ sequential one:
 | Parallel | 17.1ms | 28.5ms |
 | Sequential, `hugetlb=1` | 17.3ms | 16.1ms |
 | Parallel, `hugetlb=1` | 12.4ms | 20.4ms |
-| Parallel, `hugetlb=1`, parse prototype | 10.7ms | 22.7ms |
+| Parallel, `hugetlb=1`, parallel parse | 10.9ms | 22.8ms |
 
 One shared arena (`glibc.malloc.arena_max=1`) is worse than either: 27.7ms,
 on malloc's lock.
@@ -203,7 +206,7 @@ are under 1%.
 The barriers between phases are not the problem. A prototype that ran
 resolution, typecheck and ownership as one task per module, with no wait
 between them, measured the same as running them phase by phase, 10.6ms against
-10.5ms with huge pages, at the same instruction count, so it really did reuse
+10.5ms with huge pages (measured against the parallel-parse prototype), at the same instruction count, so it really did reuse
 the memos. That is the shape ty and rust-analyzer use: start the last query per
 unit and let salsa pull the earlier ones in, blocking when two threads want
 the same memo. It is not worth restructuring for at 24 modules on four cores.
@@ -267,7 +270,6 @@ parse row is the warm-up described above, not parsing.
 - Huge pages, above: the largest single item, and a decision about the
   allocator. It matters more under `DATALOVE_PARALLEL`; see
   [Parallel compilation](#user-content-parallel-compilation).
-- Parsing in parallel, which it does not today; same section.
 - Parsing: no single fix; see [Parsing](#user-content-parsing).
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,
   since `LowerCtx` owns it; borrowing it would save the copy.
