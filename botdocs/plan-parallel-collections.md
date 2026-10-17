@@ -4,7 +4,8 @@ A plan for compiling a large collection literal on more than one core, in
 datalit and in datafun alike: split it at the token tree into chunks, parse the
 chunks as queries of their own on rayon, and do it only where a tuning bench
 says it pays. Written October 2026, after a prototype for datalit lists.
-Phases 0 to 2 are done, and phase 3 was measured and set aside; see
+Phases 0 to 2 and 5 are done, phase 3 was measured and set aside, and phase 4
+was built, measured and taken out again; see
 [Progress](#user-content-progress).
 
 ## Contents
@@ -373,6 +374,11 @@ differ from lists'; see [compile-time.md](compile-time.md#user-content-large-col
   their own after the modules' typecheck, against the types it found, would
   allow it, and moves where `F084` is reported from; it is about 20ms of the
   store demo's compile. Not attempted.
+
+**Phase 5**: the thresholds for everything cut are from the bench and in
+[compile-time.md](compile-time.md#user-content-large-collection-literals), and
+`just test-cut`, CI's fifth job, runs the suite with every collection cut
+after every element, in parallel compiles.
 
 ## Open questions
 

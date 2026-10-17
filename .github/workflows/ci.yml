@@ -47,6 +47,10 @@ jobs:
           # is not the same as anything holding it.
           - name: parallel
             recipe: test-parallel
+          # The suite again with every datalit collection parsed in chunks;
+          # see `just test-cut` and botdocs/plan-parallel-collections.md.
+          - name: cut
+            recipe: test-cut
     steps:
       - uses: actions/checkout@v4
 

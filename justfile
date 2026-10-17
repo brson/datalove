@@ -61,7 +61,7 @@ test-demos:
 test-extras: test-slow test-demos
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-64 test-parallel test-extras
+test-ci: test test-64 test-parallel test-cut test-extras
 
 # Run tests with parallel compilation enabled.
 #
@@ -70,6 +70,14 @@ test-ci: test test-64 test-parallel test-extras
 # inlining and specialization each turned off, which lower differently.
 test-parallel:
     DATALOVE_PARALLEL=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+
+# Run tests with every datalit collection literal parsed in chunks, after every
+# element, in parallel compiles so that the chunks are parsed ahead of time
+# as they would be; see `bct::chunk`. A collection in chunks parses to what it
+# parses to whole, so nothing a test checks may change. The engines as for
+# `test-parallel`, since chunks stop at the parse.
+test-cut:
+    DATALOVE_CUT_COLLECTIONS=1 DATALOVE_PARALLEL=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:

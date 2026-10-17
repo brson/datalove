@@ -1331,7 +1331,18 @@ exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
 
 `just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`, as one of CI's
-four jobs. `just test-wasm` checks that the parallel paths still work where
+jobs.
+
+**A large collection literal is parallel within itself.** A datalit list, map,
+set, table or tensor of 32-512KB or more, depending on the kind, is parsed in
+chunks, each a query of its own (`bct::chunk`, `datalit::parser::parse_chunk`),
+and under `DATALOVE_PARALLEL` the compiler parses the data files' chunks on
+rayon before the typecheck that asks for them. A chunked parse is the whole
+parse, which `just test-cut` holds the suite to. A datafun literal is not
+cut: data that big belongs in a data file. See
+[plan-parallel-collections.md](plan-parallel-collections.md).
+
+`just test-wasm` checks that the parallel paths still work where
 there are no threads: it builds `crates/datalove-wasm-smoke` for
 `wasm32-unknown-unknown`, which compiles the system library and runs a script
 on the bytecode, and runs it under wasmi in both modes. Rayon's pool falls back
@@ -1937,10 +1948,12 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 - `BLESS=1 cargo test` updates expected output. Unset `RUST_BACKTRACE` first.
 - Filter: `cargo test -- filter_name`
 - `just test` runs the whole suite; `just test-64` uses 64-bit collection
-  indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, and `just
+  indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, `just test-cut`
+  parses every collection literal in chunks as well (see
+  [plan-parallel-collections.md](plan-parallel-collections.md)), and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
   build, `just test-wasm`, a smoke test of sys riders built from source and
-  `just test-worldgen` -- then `just test-demos`. Those four are CI's four jobs, and
+  `just test-worldgen` -- then `just test-demos`. Those five are CI's five jobs, and
   `just test-ci` runs them all.
 - `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
   on several engines -- `engine_tests`, `std_engine_tests`, and the cli's
