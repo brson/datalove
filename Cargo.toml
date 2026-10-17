@@ -37,7 +37,7 @@ bct.path = "crates/bcts"
 serde.version = "1"
 serde.features = ["rc"]
 enum-iterator.version = "2"
-salsa.version = "0.28.2"
+salsa.version = "0.28.5"
 ariadne.version = "0.6"
 rustc-hash.version = "2"
 
