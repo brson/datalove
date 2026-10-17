@@ -378,6 +378,9 @@ the collection parsed whole, from 32KB to 4MB:
 | set of scalars | 0.73-1.02x | 0.43-0.58x |
 | set of strings | 0.70-1.05x | 0.43-0.66x |
 | set of lists | 0.71-1.01x | 0.29-0.50x |
+| table of scalars, from 64KB | 0.78-1.00x | 0.34-0.47x |
+| table of records, from 64KB | 0.67-1.04x | 0.31-0.46x |
+| rank-2 tensor, from 512KB | 0.83-0.94x | 0.37-0.44x |
 
 The sequential parse gains at the large end, where the chunks' smaller edge
 sets beat the growth above. Below 32KB nothing is cut and the plan pass costs
@@ -386,6 +389,16 @@ looked at. The store demo, whose orders are one 3.6MB list, compiles in 205ms
 sequential, as before, and 138ms parallel, from 225ms; 8KB chunks throughout
 had made it 216ms and 150ms, which is why chunks grow with the collection
 (`target_chunks`).
+
+Tables and tensors (phase 2) start later. A table's chunks in turn cost up to
+8% below 64KB, so tables are cut from there. A tensor does not grow dearer
+per byte the way a list does, so its chunks in turn have nothing to win back,
+and in 8KB chunks they cost 10-25% up to 2MB; tensors are cut from 512KB, in
+chunks of at least 128KB. Getting tables there took two changes: a row's cells
+are an `Arc<[ExprFull]>` now, since putting a cut table together copied every
+row's `Vec` out of its chunk's memo, and the plan walks a collection's level
+once without keeping anything per element, rather than collecting every
+element's start, which for a scalar table cost as much as parsing it.
 
 ## What was fixed
 

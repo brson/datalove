@@ -16,6 +16,7 @@ use rmx::prelude::*;
 
 use crate::bracer::{Cursor, bracer};
 use crate::lexer::{Lexed, Sigil, TokenKind};
+use crate::split;
 
 /// The kinds of collection a bracket can open.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -87,11 +88,17 @@ pub struct ChunkPolicy {
 /// a build with no threads do. Below 32KB the chunks cost the sequential parse
 /// 2-5%. A big collection wants bigger chunks: the store demo's 3.6MB of
 /// orders compiles faster in either mode in chunks of 32-64KB than of 8KB,
-/// hence `target_chunks`. See `botdocs/compile-time.md`.
+/// hence `target_chunks`. Tables from 64KB, below which their chunks in turn
+/// cost up to 8%. Tensors only from 512KB and in chunks of 128KB: a tensor
+/// does not grow dearer per byte as a list does, so chunks in turn have
+/// nothing to win back and cost 10-25% unless they are big. See
+/// `botdocs/compile-time.md`.
 pub const DEFAULT_THRESHOLDS: &[(CollectionKind, Thresholds)] = &[
     (CollectionKind::List, Thresholds { min_bytes: 32 << 10, min_elements: 16, chunk_bytes: 8 << 10, target_chunks: 64 }),
     (CollectionKind::Map, Thresholds { min_bytes: 32 << 10, min_elements: 16, chunk_bytes: 8 << 10, target_chunks: 64 }),
     (CollectionKind::Set, Thresholds { min_bytes: 32 << 10, min_elements: 16, chunk_bytes: 8 << 10, target_chunks: 64 }),
+    (CollectionKind::Table, Thresholds { min_bytes: 64 << 10, min_elements: 16, chunk_bytes: 8 << 10, target_chunks: 64 }),
+    (CollectionKind::Tensor, Thresholds { min_bytes: 512 << 10, min_elements: 16, chunk_bytes: 128 << 10, target_chunks: 64 }),
 ];
 
 /// Thresholds that cut every collection of the kinds that can be cut, as
@@ -100,6 +107,8 @@ pub const CUT_EVERYTHING: &[(CollectionKind, Thresholds)] = &[
     (CollectionKind::List, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes: 0, target_chunks: u32::MAX }),
     (CollectionKind::Map, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes: 0, target_chunks: u32::MAX }),
     (CollectionKind::Set, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes: 0, target_chunks: u32::MAX }),
+    (CollectionKind::Table, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes: 0, target_chunks: u32::MAX }),
+    (CollectionKind::Tensor, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes: 0, target_chunks: u32::MAX }),
 ];
 
 /// The most chunks a source is cut into, all its collections together.
@@ -129,18 +138,37 @@ pub struct PlannedCollection {
     /// the bracket finds it here.
     pub open_byte: u32,
     pub kind: CollectionKind,
-    /// The token positions each chunk runs between, in the collection's
-    /// level: what `Cursor::between` takes. A chunk after the first starts
-    /// just past a separator.
-    pub chunks: Vec<(u32, u32)>,
+    pub chunks: Vec<PlannedChunk>,
     /// The ordinal among all the source's chunks of this collection's first.
     pub first_chunk: u32,
+    /// A table's header row, as token positions, which every chunk of rows
+    /// reads its column count from.
+    pub header: Option<(u32, u32)>,
+    /// A tensor's rank, which its chunks cannot see from their own commas;
+    /// 0 for anything else.
+    pub rank: u32,
+}
+
+/// One chunk of a planned collection.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(salsa::SalsaValue)]
+pub struct PlannedChunk {
+    /// The token positions it runs between, in the collection's level: what
+    /// `Cursor::between` takes. A chunk after the first starts where an
+    /// element, row or group does.
+    pub from: u32,
+    pub to: u32,
+    /// The ordinal in the collection of its first element, row or group,
+    /// which a diagnostic may name: a table counts its rows after the
+    /// header, and a tensor the groups at its outermost axis with something
+    /// in them.
+    pub first: u32,
 }
 
 impl PlannedCollection {
     /// A cursor over chunk `chunk`, in a source whose top level is `top`.
     pub fn chunk_cursor<'db>(&self, top: Cursor<'db>, chunk: usize) -> Cursor<'db> {
-        let (from, to) = self.chunks[chunk];
+        let PlannedChunk { from, to, .. } = self.chunks[chunk];
         top.between(from, to)
     }
 }
@@ -186,6 +214,7 @@ pub fn collection_plan<'db>(db: &'db dyn crate::Db, lexed: Lexed<'db>) -> Vec<Pl
     }
 
     let tokens = lexed.tokens(db);
+    let text = lexed.source(db).text(db).as_str();
     let top = bracer.iter(db);
     let mut plan = Vec::new();
     let mut next_chunk = 0;
@@ -206,18 +235,20 @@ pub fn collection_plan<'db>(db: &'db dyn crate::Db, lexed: Lexed<'db>) -> Vec<Pl
                     }
                     let level = top.between(u32::try_from(index + 1).X(), u32::try_from(resume).X());
                     let room = MAX_CHUNKS - next_chunk;
-                    cut(kind, level, &tokens, limits, bytes, room).map(|chunks| (kind, chunks))
+                    cut(kind, level, text, limits, bytes, room).map(|cut| (kind, cut))
                 }),
             _ => None,
         };
         match planned {
-            Some((kind, chunks)) => {
+            Some((kind, Cut { chunks, header, rank })) => {
                 let count = u32::try_from(chunks.len()).X();
                 plan.push(PlannedCollection {
                     open_byte: u32::try_from(token.span().start).X(),
                     kind,
                     chunks,
                     first_chunk: next_chunk,
+                    header,
+                    rank,
                 });
                 next_chunk += count;
                 index = resume;
@@ -228,20 +259,31 @@ pub fn collection_plan<'db>(db: &'db dyn crate::Db, lexed: Lexed<'db>) -> Vec<Pl
     plan
 }
 
+/// Where a collection is cut, and what its chunks need to know of it.
+struct Cut {
+    chunks: Vec<PlannedChunk>,
+    header: Option<(u32, u32)>,
+    rank: u32,
+}
+
 /// The chunks of one collection's level, or `None` if it is not worth
 /// cutting or cannot be cut into at most `room` of them.
+///
+/// What a chunk starts at is where an element begins in a parse of the whole:
+/// for a list, map or set, just past a comma, which a parse can disagree with
+/// where an element with a mistake in it takes the comma (see
+/// `datalit::parser::parse_chunk`); for a table, a row, which the lines say
+/// before anything is parsed; and for a tensor, a group at its outermost axis,
+/// which the runs of commas say. A rank-1 tensor is not cut: its elements are
+/// written side by side, and where one ends only a parse can say.
 fn cut(
     kind: CollectionKind,
     level: Cursor<'_>,
-    tokens: &[crate::lexer::Token],
+    text: &str,
     limits: Thresholds,
     bytes: usize,
     room: u32,
-) -> Option<Vec<(u32, u32)>> {
-    match kind {
-        CollectionKind::List | CollectionKind::Map | CollectionKind::Set => {}
-        CollectionKind::Table | CollectionKind::Tensor => return None,
-    }
+) -> Option<Cut> {
     if room < 2 {
         return None;
     }
@@ -250,28 +292,113 @@ fn cut(
     let chunk_bytes = (limits.chunk_bytes as usize)
         .max(bytes / limits.target_chunks.max(1) as usize)
         .max(bytes.div_ceil(room as usize));
-
-    let end = level.end();
-    let mut cursor = level;
-    let mut chunks = Vec::new();
-    let mut from = cursor.position();
-    let mut chunk_start = None;
-    let mut separators: u32 = 0;
-    while let Some(index) = cursor.next_index() {
-        let token = &tokens[index as usize];
-        let start = *chunk_start.get_or_insert(token.span().start);
-        if cursor.is_plain(index) && token.kind == TokenKind::Sigil(Sigil::Comma) {
-            separators += 1;
-            let after = cursor.position();
-            if token.span().end - start >= chunk_bytes && !level.between(after, end).is_empty() {
-                chunks.push((from, after));
-                from = after;
-                chunk_start = None;
+    let mut chunker = Chunker { chunk_bytes, chunks: Vec::new(), start_byte: 0, ordinal: 0 };
+    let mut header = None;
+    let mut rank = 0;
+    // Where each element, row or group begins, found in one walk of the level
+    // with nothing kept per element: a collection worth cutting has tens of
+    // thousands of them, and the plan is paid for in every mode.
+    match kind {
+        CollectionKind::List | CollectionKind::Map | CollectionKind::Set => {
+            let mut cursor = level;
+            // An element begins at the first token, and at the first one
+            // after each comma.
+            let mut begins = Some(level.position());
+            while let Some(index) = cursor.next_index() {
+                let token = cursor.raw(index);
+                if let Some(at) = begins.take() {
+                    chunker.item(at, token.span().start, true);
+                }
+                if cursor.is_plain(index) && token.kind == TokenKind::Sigil(Sigil::Comma) {
+                    begins = Some(cursor.position());
+                }
+            }
+        }
+        CollectionKind::Table => {
+            // A row begins at a token a line break came before, as
+            // `split::Lines` has it; the first line is the header.
+            let mut cursor = level;
+            let mut header_from = None;
+            while let Some(index) = cursor.next_index() {
+                let token = cursor.raw(index);
+                match header_from {
+                    None => header_from = Some(index),
+                    Some(from) if token.newline_before => {
+                        if header.is_none() {
+                            header = Some((from, index));
+                        }
+                        chunker.item(index, token.span().start, true);
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+        CollectionKind::Tensor => {
+            let body = match split::split_tensor_header(text, level) {
+                (Some(Err(_)), _) => return None,
+                (_, body) => body,
+            };
+            rank = u32::try_from(split::max_comma_run(body) + 1).X();
+            if rank < 2 {
+                return None;
+            }
+            // A group begins at the first token, and at the first one after
+            // each separator: `rank - 1` commas, counted off a run of them as
+            // `split::split_commas` does, a shorter run staying in its group.
+            let separator = rank - 1;
+            let mut cursor = body;
+            let mut begins = Some(body.position());
+            let mut commas = 0;
+            while let Some(index) = cursor.next_index() {
+                let token = cursor.raw(index);
+                if let Some(at) = begins.take() {
+                    chunker.item(at, token.span().start, true);
+                }
+                if cursor.is_plain(index) && token.kind == TokenKind::Sigil(Sigil::Comma) {
+                    commas += 1;
+                    if commas == separator {
+                        commas = 0;
+                        begins = Some(cursor.position());
+                    }
+                } else {
+                    commas = 0;
+                }
             }
         }
     }
-    chunks.push((from, end));
 
-    let elements = separators + 1;
-    (elements >= limits.min_elements && chunks.len() >= 2).then_some(chunks)
+    if chunker.ordinal < limits.min_elements {
+        return None;
+    }
+    let mut chunks = chunker.chunks;
+    chunks.last_mut()?.to = level.end();
+    (chunks.len() >= 2).then_some(Cut { chunks, header, rank })
+}
+
+/// Chunks made as the elements of a collection go by.
+struct Chunker {
+    chunk_bytes: usize,
+    chunks: Vec<PlannedChunk>,
+    /// Where the chunk being made begins.
+    start_byte: usize,
+    /// How many elements have gone by that count toward a chunk's `first`.
+    ordinal: u32,
+}
+
+impl Chunker {
+    /// An element beginning at token position `at` and byte `byte`; a chunk
+    /// begins with it if the one before has bytes enough.
+    fn item(&mut self, at: u32, byte: usize, counts: bool) {
+        let begins_chunk = self.chunks.is_empty() || byte - self.start_byte >= self.chunk_bytes;
+        if begins_chunk {
+            if let Some(chunk) = self.chunks.last_mut() {
+                chunk.to = at;
+            }
+            self.chunks.push(PlannedChunk { from: at, to: at, first: self.ordinal });
+            self.start_byte = byte;
+        }
+        if counts {
+            self.ordinal += 1;
+        }
+    }
 }

@@ -358,6 +358,18 @@ impl<'db> Parser<'db> {
                 self.merge_spans_from(&mut sub_parser);
                 ast::Expr::Set(ast::ExprSet { elements })
             }
+            Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, open, .. })
+                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+            {
+                let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
+                self.parse_planned_table(index, inner)
+            }
+            Some(TreeToken::Branch { sigil: Sigil::BracketPipeOpen, open, .. })
+                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+            {
+                let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
+                self.parse_planned_tensor(index, inner)
+            }
             Some(TreeToken::Branch { sigil: Sigil::BracePipeOpen, .. }) => {
                 // Table.
                 let inner = match self.next() {
@@ -424,14 +436,14 @@ impl<'db> Parser<'db> {
     }
 
     /// Split a table row into its cells, reporting any stray `,`.
-    fn split_table_cells(&mut self, tokens: Cursor<'db>) -> Vec<Cursor<'db>> {
+    pub(super) fn split_table_cells(&mut self, tokens: Cursor<'db>) -> Vec<Cursor<'db>> {
         let groups = split::split_commas(tokens, 1);
         self.report_stray_delimiters(&groups, "columns");
         split::nonempty_groups(groups)
     }
 
     /// Report every delimiter that was written with nothing before it.
-    fn report_stray_delimiters(&mut self, groups: &[split::TokenGroup<'db>], what: &str) {
+    pub(super) fn report_stray_delimiters(&mut self, groups: &[split::TokenGroup<'db>], what: &str) {
         for written in split::stray_delimiters(groups) {
             self.had_error = true;
             split::stray_delimiter_error(self.db, self.source_text(), &written, what)
@@ -479,7 +491,7 @@ impl<'db> Parser<'db> {
     /// Parse tensor data from tokens with multi-comma structure.
     ///
     /// Returns (shape, flat_elements).
-    fn parse_tensor_multicomma(
+    pub(super) fn parse_tensor_multicomma(
         &mut self,
         tokens: Cursor<'db>,
         rank: u32,
@@ -583,7 +595,7 @@ impl<'db> Parser<'db> {
     /// A cell is one word and nothing else. Anything after the word is
     /// reported rather than dropped, so that `{| x zzz |}` is a refusal and
     /// not a one-column table.
-    fn parse_table_header(&mut self, row_tokens: Cursor<'db>) -> Vec<InternedText<'db>> {
+    pub(super) fn parse_table_header(&mut self, row_tokens: Cursor<'db>) -> Vec<InternedText<'db>> {
         let parts = self.split_table_cells(row_tokens);
         let mut names = Vec::new();
         let mut seen = parser_util::SeenNames::default();
@@ -631,18 +643,17 @@ impl<'db> Parser<'db> {
         }
     }
 
-    fn parse_table_data_row(&mut self, row_tokens: Cursor<'db>) -> Vec<ast::ExprFull<'db>> {
+    pub(super) fn parse_table_data_row(&mut self, row_tokens: Cursor<'db>) -> std::sync::Arc<[ast::ExprFull<'db>]> {
         let parts = self.split_table_cells(row_tokens);
-        let mut elements = Vec::new();
-
-        for part in parts {
-            let mut sub_parser = self.sub_parser_from_tokens(part);
-            let expr = sub_parser.parse_expr_full();
-            sub_parser.error_if_not_exhausted();
-            self.merge_spans_from(&mut sub_parser);
-            elements.push(expr);
-        }
-
-        elements
+        // Collected straight into the row's slice, which is one allocation.
+        parts.into_iter()
+            .map(|part| {
+                let mut sub_parser = self.sub_parser_from_tokens(part);
+                let expr = sub_parser.parse_expr_full();
+                sub_parser.error_if_not_exhausted();
+                self.merge_spans_from(&mut sub_parser);
+                expr
+            })
+            .collect()
     }
 }

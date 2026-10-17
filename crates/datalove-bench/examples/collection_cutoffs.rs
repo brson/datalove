@@ -231,6 +231,8 @@ fn parse_once(shape: &Shape, text: &str, config: Config, pools: &[(usize, rmx::r
                 "list" => CollectionKind::List,
                 "map" => CollectionKind::Map,
                 "set" => CollectionKind::Set,
+                "table" => CollectionKind::Table,
+                "tensor" => CollectionKind::Tensor,
                 other => panic!("a {other} is not cut"),
             };
             vec![(kind, Thresholds { min_bytes: 0, min_elements: 2, chunk_bytes, target_chunks: u32::MAX })]
@@ -281,7 +283,7 @@ fn defaults(options: &Options) {
     println!("{:<7} {:<7} {:>9} {:>9}  {:>14}  {:>14}", "kind", "shape", "bytes", "whole ms",
         "in turn", "on 4 threads");
     let cuttable = SHAPES.iter()
-        .filter(|s| matches!(s.kind, "list" | "map" | "set"))
+        .filter(|s| s.kind != "tensor" || s.ty.contains(", 2|]"))
         .filter(|s| options.kind.as_deref().is_none_or(|k| k == s.kind));
     for shape in cuttable {
         let mut bytes = options.min_bytes;
@@ -311,7 +313,7 @@ fn cutoffs(options: &Options) {
         "cut, in turn", "cut, on 1/2/4 threads: best ms (chunk KB)");
     let mut summary = Vec::new();
     let cuttable = SHAPES.iter()
-        .filter(|s| matches!(s.kind, "list" | "map" | "set"))
+        .filter(|s| s.kind != "tensor" || s.ty.contains(", 2|]"))
         .filter(|s| options.kind.as_deref().is_none_or(|k| k == s.kind));
     for shape in cuttable {
         // Per thread count, per size: whether cutting won, and with what chunks.

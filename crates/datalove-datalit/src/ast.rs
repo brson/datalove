@@ -374,7 +374,9 @@ pub struct ExprTable<'db> {
 #[derive(Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprTableRow<'db> {
-    pub elements: Vec<ExprFull<'db>>,
+    /// Shared, so that a row parsed in a chunk goes into the table for a
+    /// reference count rather than a copy; see `bct::chunk`.
+    pub elements: Arc<[ExprFull<'db>]>,
 }
 
 #[derive(Clone, Hash, PartialEq, Eq)]

@@ -156,3 +156,61 @@ fn a_long_list_with_mistakes() {
         .collect();
     check(&fmt!("[{}]", elements.join(",\n  ")), 1);
 }
+
+#[test]
+fn tables() {
+    check("{| a, b\n  1, 2\n  3, 4\n  5, 6 |}", 1);
+    check("{| a, b; 1, 2; 3, 4; 5, 6 |}", 1);
+    check("{| a; 1; 2; 3;; 4 |}", 1);
+    check(": {| a: u32, b: string |} / {| a, b; 1, \"x\"; 2, \"y\"; 3, \"z\" |}", 1);
+}
+
+#[test]
+fn tables_with_mistakes() {
+    // A row of the wrong width, on each side of a cut.
+    check("{| a, b; 1, 2; 3; 4, 5, 6; 7, 8 |}", 1);
+    // The header's mistakes, reported before the rows'.
+    check("{| a, a, 3; 1, 2, 3; 4, 5, 6; 7 |}", 1);
+    check("{| a b, c; 1, 2; 3, 4 |}", 1);
+    // Stray commas in rows, and a cell that does not parse.
+    check("{| a, b; 1,, 2; , 3; 4x, 5 |}", 1);
+    // A stray in a row makes the table's level have had an error.
+    check("{| a, b; 1,, 2; 3, 4 |} 5", 1);
+}
+
+#[test]
+fn tensors() {
+    check("[| 1 2, 3 4, 5 6 |]", 1);
+    check("[| 1 2, 3 4,, 5 6, 7 8,, 9 10, 11 12 |]", 1);
+    // The type's bracket is planned too, the plan not knowing a type from a
+    // tensor; the parse does not ask for it, and so it changes nothing.
+    check(": [|i32, 2|] / [| 1 2, 3 4, 5 6 |]", 2);
+    check("[| 3 2 | 1 2, 3 4, 5 6 |]", 1);
+    check("[| (1, 2) (3, 4), (5, 6) (7, 8) |]", 1);
+}
+
+#[test]
+fn tensors_with_mistakes() {
+    // A group of the wrong shape, against the first, in a later chunk.
+    check("[| 1 2, 3 4 5, 6 7, 8 |]", 1);
+    check("[| 1 2, 3 4,, 5 6, 7 8, 9 10,, 11 12 |]", 1);
+    // Stray and trailing separators, reported before any group.
+    check("[| 1 2,, 3 4, 5 6,, |]", 1);
+    check("[| 1 2, , 3 4, 5 6 |]", 1);
+    check("[| 1 2, 3 4, |]", 1);
+    // An element that does not parse, and a header that does not fit.
+    check("[| 1 2, 3x 4, 5 6 |]", 1);
+    check("[| 2 2 | 1 2, 3 4, 5 6 |]", 1);
+    // A stray makes the tensor's level have had an error, which the
+    // complaint about what follows the tensor hears of.
+    check("[| 1 2, , 3 4 |] 5", 1);
+}
+
+#[test]
+fn what_is_not_cut() {
+    // A rank-1 tensor's elements are not separated by anything.
+    check("[| 1 2 3 4 |]", 0);
+    // Nor is a table of only a header, or a tensor whose header is wrong.
+    check("{| a, b |}", 0);
+    check("[| x | 1 2, 3 4 |]", 0);
+}

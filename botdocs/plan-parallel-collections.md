@@ -4,7 +4,7 @@ A plan for compiling a large collection literal on more than one core, in
 datalit and in datafun alike: split it at the token tree into chunks, parse the
 chunks as queries of their own on rayon, and do it only where a tuning bench
 says it pays. Written October 2026, after a prototype for datalit lists.
-Phases 0 and 1 are done; see [Progress](#user-content-progress).
+Phases 0 to 2 are done; see [Progress](#user-content-progress).
 
 ## Contents
 
@@ -333,6 +333,22 @@ designed above:
 - **Numbers have gaps**: `span_key_tests` asserted that a parse numbers its
   expressions from 0 without one, which a chunked parse does not, by design.
   It asserts that for an uncut parse now, and only uniqueness for a cut one.
+
+**Phase 2**: tables and tensors in datalit, with their own cases in
+`chunk_tests`. A table's chunks are runs of rows, cut where `split::Lines`
+would split them, so a boundary cannot be taken by a mistake the way a comma
+can, and needs no fallback; a chunk reads the header's column count from the
+plan's record of where the header is, and numbers its rows from the plan's
+`first`. A tensor's chunks are runs of groups at its outermost axis, cut where
+`split::split_commas` would; its rank comes from the plan, since a chunk's own
+commas may not show it. A tensor chunk keeps its delimiter complaints apart
+(`prelude`), which a whole parse makes for every group before parsing any, and
+marks where each group's diagnostics end, so that the complaint about a group
+of the wrong shape, which only the parse putting the chunks together can make
+against the first group's, goes where a whole parse would put it. A table's or
+tensor's delimiter complaints set `had_error` on the parser that reached it,
+so a chunk's carries back there. A rank-1 tensor is not cut. The thresholds
+differ from lists'; see [compile-time.md](compile-time.md#user-content-large-collection-literals).
 
 ## Open questions
 
