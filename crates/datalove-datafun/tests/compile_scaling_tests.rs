@@ -51,7 +51,7 @@ fn module_source(index: usize, functions: usize, salt: usize) -> String {
 
 /// Compile a world of this shape and report every query's memo footprint.
 fn memo_sizes(modules: usize, functions_per_module: usize) -> MemoSizes {
-    let db = Database::default();
+    let mut db = Database::default();
     let mut pipeline = ModuleCompilationPipeline::default();
     for index in 0..modules {
         pipeline.add_module(
@@ -63,7 +63,7 @@ fn memo_sizes(modules: usize, functions_per_module: usize) -> MemoSizes {
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
-    <dyn salsa::Database>::memory_usage(&db).queries.iter()
+    <dyn salsa::Database>::memory_usage(&mut db).queries.iter()
         .map(|(name, info)| {
             (name.S(), (info.count(), info.size_of_fields() + info.size_of_metadata()))
         })

@@ -24,7 +24,7 @@ use datalove_datafun_compiler::module_graph::parse_module_graph;
 
 /// Compile a world of `modules` modules and report what the database holds.
 fn ingredients(modules: usize) -> Vec<(String, usize, usize)> {
-    let db = Database::default();
+    let mut db = Database::default();
     let mut world = IncrementalModuleWorld::new();
     for index in 0..modules {
         world.add_module(
@@ -42,7 +42,7 @@ fn ingredients(modules: usize) -> Vec<(String, usize, usize)> {
     let parsed = parse_module_graph(&db, graph, requires, Vec::new());
     let _ = datalove_datafun_resolve::resolve_all_names(&db, parsed);
 
-    <dyn salsa::Database>::memory_usage(&db)
+    <dyn salsa::Database>::memory_usage(&mut db)
         .structs
         .iter()
         .map(|i| {

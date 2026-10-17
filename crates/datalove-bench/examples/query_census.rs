@@ -46,7 +46,7 @@ fn report(label: &str, by_query: BTreeMap<String, usize>) {
 /// the world -- and a count near the module count means it is keyed per module.
 /// That is the granularity column in `botdocs/salsa-architecture.md`, and this
 /// is how to regenerate it rather than trusting it.
-fn report_granularity(db: &datafun::Database) {
+fn report_granularity(db: &mut datafun::Database) {
     let usage = <dyn salsa::Database>::memory_usage(db);
     let mut rows: Vec<(usize, String, usize)> = usage.queries.iter()
         .map(|(name, info)| (info.count(), name.to_string(),
@@ -110,9 +110,9 @@ fn main() {
     drop(compiled);
     report(&format!("edit sys/{package}/{module}"), counts(&recorder));
 
-    report_granularity(&db);
+    report_granularity(&mut db);
 
-    let usage = <dyn salsa::Database>::memory_usage(&db);
+    let usage = <dyn salsa::Database>::memory_usage(&mut db);
     let mut rows: Vec<_> = usage.structs.iter()
         .map(|i| (i.count(), i.debug_name(), i.size_of_fields() + i.size_of_metadata()))
         .filter(|(c, _, _)| *c > 0).collect();
