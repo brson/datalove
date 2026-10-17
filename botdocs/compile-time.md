@@ -358,6 +358,35 @@ them in an `IndexMap` (5.1%). Chunks bound the edge sets, each having its own;
 not interning numbers at all would remove the cost in every mode, and is worth
 doing on its own.
 
+**Cut into chunks** (phase 1), a datalit list, map or set parses as
+`bct::chunk::DEFAULT_THRESHOLDS` says: from 32KB and 16 elements, in chunks of
+at least 8KB and about 64 to a collection. `collection_cutoffs --cutoffs` chose
+those: with two or more threads, cutting wins by 5% or more from 16KB for every
+shape, and with one only from 32KB to 2MB depending on the shape, which is
+what the sequential compile pays, since a collection is cut in every mode and
+only the warm-up is parallel. `--defaults` checks them, parse alone, against
+the collection parsed whole, from 32KB to 4MB:
+
+| Shape | Chunks in turn | Chunks on four threads |
+|---|---:|---:|
+| list of scalars | 0.58-0.74x | 0.34-0.41x |
+| list of records | 0.64-1.03x | 0.25-0.57x |
+| list of lists | 0.70-1.02x | 0.29-0.48x |
+| map of scalars | 0.78-1.02x | 0.45-0.61x |
+| map of records | 0.76-1.01x | 0.35-0.53x |
+| map of lists | 0.74-1.02x | 0.32-0.46x |
+| set of scalars | 0.73-1.02x | 0.43-0.58x |
+| set of strings | 0.70-1.05x | 0.43-0.66x |
+| set of lists | 0.71-1.01x | 0.29-0.50x |
+
+The sequential parse gains at the large end, where the chunks' smaller edge
+sets beat the growth above. Below 32KB nothing is cut and the plan pass costs
+nothing measurable: a source smaller than the smallest threshold is not
+looked at. The store demo, whose orders are one 3.6MB list, compiles in 205ms
+sequential, as before, and 138ms parallel, from 225ms; 8KB chunks throughout
+had made it 216ms and 150ms, which is why chunks grow with the collection
+(`target_chunks`).
+
 ## What was fixed
 
 - `reachable_func_ids` copied, for every module, every entry of the world's

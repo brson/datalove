@@ -11,15 +11,21 @@
 //! keep going by hand: a sub-parser starts where its parent had got to and
 //! hands the counter back when it finishes. Get that wrong and two expressions
 //! share a position, which is what these tests are watching for.
+//!
+//! A collection parsed in chunks (see `bct::chunk`) numbers each chunk in a
+//! range of its own, so its numbers have gaps; they still may not repeat.
 
 use rmx::prelude::*;
 
 use bct::input::Source;
 use datalove_datalit::Database;
 
-/// The positions recorded for `src`, in table order.
-fn positions(src: &str) -> Vec<u32> {
+/// The positions recorded for `src`, in table order, with collections cut
+/// into chunks or not.
+fn positions_cut(src: &str, cut: bool) -> Vec<u32> {
     let db = Database::default();
+    let thresholds = if cut { bct::chunk::CUT_EVERYTHING.to_vec() } else { Vec::new() };
+    bct::chunk::ChunkPolicy::new(&db, thresholds);
     let source = Source::new(&db, src.S());
     let _ = datalove_datalit::parser::parse(&db, source);
     datalove_datalit::spans::datalit_spans(&db, source)
@@ -27,6 +33,11 @@ fn positions(src: &str) -> Vec<u32> {
         .iter()
         .map(|e| e.expr_index)
         .collect()
+}
+
+/// The positions recorded for `src`, its collections parsed whole.
+fn positions(src: &str) -> Vec<u32> {
+    positions_cut(src, false)
 }
 
 /// The source text each recorded span points at.
@@ -77,6 +88,23 @@ fn every_expression_gets_its_own_position() {
              gaps, since every expression takes exactly one",
             src, found,
         );
+    }
+}
+
+/// The same, with every collection parsed in chunks: no repeats, though gaps.
+#[test]
+fn chunks_number_apart() {
+    for src in [
+        "[1, 2, 3]",
+        "[[1, 2], [3, 4]]",
+        ": %{u32 = u32} / %{\n  0 = 5,\n  2 = 2,\n  3 = : u32 / 2,\n}",
+        "{xs = [7, 7], ys = #{7, 8}}",
+    ] {
+        let found = positions_cut(src, true);
+        let mut unique = found.C();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(found.len(), unique.len(), "parsing {src:?} in chunks gave positions {found:?}, which repeat");
     }
 }
 

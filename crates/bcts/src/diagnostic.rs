@@ -124,6 +124,7 @@ pub struct Diagnostic<'db> {
 /// and re-interned on the way out, and a label names the `Source` it points
 /// into, which is an input and so cannot be recycled.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct StoredDiagnostic {
     pub severity: Severity,
     pub code: Option<String>,
@@ -134,6 +135,7 @@ pub struct StoredDiagnostic {
 }
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(salsa::SalsaValue)]
 pub struct StoredLabel {
     pub source: Source,
     pub span: ByteSpan,
@@ -360,6 +362,12 @@ macro_rules! diagnostics {
                     db: &'db dyn salsa::Database,
                 ) -> $crate::diagnostic::Diagnostic<'db> {
                     self.0.to_diagnostic(db)
+                }
+
+                /// File a diagnostic that was built and kept rather than
+                /// filed when it was made.
+                pub fn emit_stored(db: &dyn salsa::Database, diagnostic: $crate::diagnostic::StoredDiagnostic) {
+                    <$accumulator as salsa::Accumulator>::accumulate($accumulator(diagnostic), db);
                 }
             }
         )*

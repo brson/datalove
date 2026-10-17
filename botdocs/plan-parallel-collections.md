@@ -3,8 +3,8 @@
 A plan for compiling a large collection literal on more than one core, in
 datalit and in datafun alike: split it at the token tree into chunks, parse the
 chunks as queries of their own on rayon, and do it only where a tuning bench
-says it pays. Written October 2026, after a prototype for datalit lists;
-not implemented.
+says it pays. Written October 2026, after a prototype for datalit lists.
+Phases 0 and 1 are done; see [Progress](#user-content-progress).
 
 ## Contents
 
@@ -21,6 +21,7 @@ not implemented.
 - [Proving it changes nothing](#user-content-proving-it-changes-nothing)
 - [The cutoff bench](#user-content-the-cutoff-bench)
 - [Phases](#user-content-phases)
+- [Progress](#user-content-progress)
 - [Open questions](#user-content-open-questions)
 
 ## The problem
@@ -286,6 +287,52 @@ retuning after a change to the parser or the allocator is a diff of a table.
 Each phase pays only under `DATALOVE_PARALLEL`, which is not yet the default;
 the allocator question ([Page faults](compile-time.md#user-content-page-faults))
 decides how much each one is worth.
+
+## Progress
+
+**Phase 0**: `collection_cutoffs` in `datalove-bench`, and its baseline in
+[compile-time.md](compile-time.md#user-content-large-collection-literals). The
+parse is 59-98% of every case in both languages, and it costs more per byte as
+the collection grows, from interning every number.
+
+**Phase 1**: `bct::chunk` (the plan, the policy, the thresholds),
+`datalit::parser::parse_chunk` and `Parser::parse_planned` in
+`crates/datalove-datalit/src/parser/chunk.rs`, the warm-up for data files
+(`warm_data_chunks` in `crates/datalove-datafun-compiler/src/compile.rs`), and
+lists, maps and sets in datalit; `crates/datalove-datalit/tests/chunk_tests.rs`
+is the equivalence suite. The defaults are measured, and the store demo
+compiles in 138ms parallel, from 225ms. Where it came out other than as
+designed above:
+
+- **A collection is cut in every mode**, not only under `DATALOVE_PARALLEL`:
+  the policy cannot see the mode, which is per compile while the policy is per
+  database, and an input set per compile would need `&mut` where the pipeline
+  has `&`. What depends on the mode is only the warm-up. So the thresholds
+  are where the chunks cost a sequential parse nothing, which the bench shows
+  they do from 32KB, and one parse in every mode is an equivalence for free.
+- **There is no policy by default.** A database without one uses
+  `DEFAULT_THRESHOLDS`, or `CUT_EVERYTHING` under `DATALOVE_CUT_COLLECTIONS`,
+  which is how the whole suite runs with every collection cut. Tests and the
+  bench create a policy when they want another.
+- **A chunk's diagnostics are kept, not filed.** Salsa returns a query's own
+  accumulated values before its dependencies', so diagnostics filed by the
+  chunk queries would come after everything the parse that reached the
+  collection filed itself, wherever they were in the source. A chunk keeps its
+  diagnostics as `StoredDiagnostic`s, through a sink its sub-parsers share, and
+  `parse_planned` files them where the collection is. The datalit parser asks
+  `SeenNames::take_reported` for its duplicate-name diagnostic, rather than
+  having `take` file it, for the same reason.
+- **A chunk boundary is checked, and may be given up.** An element that does
+  not parse can take the separator after it as part of its mistake (`[1,, 2]`),
+  and then a whole parse goes on from somewhere the chunks do not. Each chunk
+  says whether it ended by passing its last separator; if one did not, the
+  collection is parsed whole. Only a collection with an error gets there.
+- **Chunks grow with the collection**: at least `chunk_bytes`, and about
+  `target_chunks` of them, since hundreds of small ones made the store demo
+  slower in both modes than a few dozen bigger ones.
+- **Numbers have gaps**: `span_key_tests` asserted that a parse numbers its
+  expressions from 0 without one, which a chunked parse does not, by design.
+  It asserts that for an uncut parse now, and only uniqueness for a cut one.
 
 ## Open questions
 

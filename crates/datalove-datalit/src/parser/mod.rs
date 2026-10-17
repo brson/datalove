@@ -5,6 +5,7 @@
 mod state;
 mod type_hint;
 mod expr;
+mod chunk;
 
 #[cfg(test)]
 mod tests;
@@ -22,6 +23,7 @@ use datalove_diagnostic::DiagnosticBuilderExt;
 use state::Parser;
 
 pub use type_hint::{parse_type_hint, TypeHintStream};
+pub use chunk::{ChunkItems, ChunkParse, parse_chunk};
 
 /// Parse a Source into a datalit expression with span information.
 #[salsa::tracked(returns(copy))]
@@ -47,6 +49,7 @@ fn parse_bracer<'db>(
     source_text: bct::input::Source,
 ) -> ast::ParseResult<'db> {
     let mut parser = Parser::from_branch(db, bracer.iter(db), source_text);
+    parser.plan = bct::chunk::collection_plan(db, bracer.lexed(db));
     let expr = parser.parse_expr_full();
     // A document is one expression, so anything after it was written by
     // mistake rather than left for a caller to read.

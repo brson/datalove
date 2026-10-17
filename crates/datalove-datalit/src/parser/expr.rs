@@ -12,8 +12,7 @@ use bct::{
 use crate::ast;
 use crate::parser_util::{self, TextSpan, TokenStream, TokenStreamExt};
 use bct::diagnostic::DiagnosticBuilder;
-use datalove_diagnostic::DiagnosticBuilderExt;
-use super::state::Parser;
+use super::state::{EmitTo, Parser};
 
 impl<'db> Parser<'db> {
     pub(super) fn parse_expr_full(&mut self) -> ast::ExprFull<'db> {
@@ -96,6 +95,23 @@ impl<'db> Parser<'db> {
             (parser_util::Radix::Dec, true) => ast::Expr::Float(ast::ExprFloat { value }),
             (parser_util::Radix::Dec, false) => ast::Expr::Int(ast::ExprInt { value }),
         }
+    }
+
+    /// One entry of a map, `key = value`.
+    pub(super) fn parse_map_entry(&mut self) -> ast::ExprMapEntry<'db> {
+        let key = self.parse_expr_full();
+        if !self.eat_sigil(Sigil::Equals) {
+            let ts = self.peek_text_span();
+            let error_expr = self.emit_expr_error(ts,
+                "expected '=' between map key and value",
+                "D017",
+                "expected '=' after key"
+            );
+            let error_value = ast::ExprFull::new(None, None, error_expr);
+            return ast::ExprMapEntry { key, value: error_value };
+        }
+        let value = self.parse_expr_full();
+        ast::ExprMapEntry { key, value }
     }
 
     fn parse_expr(&mut self) -> ast::Expr<'db> {
@@ -287,6 +303,24 @@ impl<'db> Parser<'db> {
                 self.merge_spans_from(&mut sub_parser);
                 ast::Expr::AnonStruct(ast::ExprAnonStruct { fields })
             }
+            Some(TreeToken::Branch { sigil: Sigil::BracketOpen, open, .. })
+                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+            {
+                let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
+                ast::Expr::List(ast::ExprList { elements: self.parse_planned(index, inner).into_exprs() })
+            }
+            Some(TreeToken::Branch { sigil: Sigil::PercentBraceOpen, open, .. })
+                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+            {
+                let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
+                ast::Expr::Map(ast::ExprMap { entries: self.parse_planned(index, inner).into_entries() })
+            }
+            Some(TreeToken::Branch { sigil: Sigil::HashBraceOpen, open, .. })
+                if let Some((index, _)) = bct::chunk::planned_at(self.plan, open.span().start) =>
+            {
+                let Some(TreeToken::Branch { inner, .. }) = self.next() else { unreachable!() };
+                ast::Expr::Set(ast::ExprSet { elements: self.parse_planned(index, inner).into_exprs() })
+            }
             Some(TreeToken::Branch { sigil: Sigil::BracketOpen, .. }) => {
                 // List.
                 let inner = match self.next() {
@@ -307,21 +341,7 @@ impl<'db> Parser<'db> {
                     _ => unreachable!(),
                 };
                 let mut sub_parser = self.sub_parser_from_branch(inner);
-                let entries = sub_parser.parse_comma_separated(|p| {
-                    let key = p.parse_expr_full();
-                    if !p.eat_sigil(Sigil::Equals) {
-                        let ts = p.peek_text_span();
-                        let error_expr = p.emit_expr_error(ts,
-                            "expected '=' between map key and value",
-                            "D017",
-                            "expected '=' after key"
-                        );
-                        let error_value = ast::ExprFull::new(None, None, error_expr);
-                        return ast::ExprMapEntry { key, value: error_value };
-                    }
-                    let value = p.parse_expr_full();
-                    ast::ExprMapEntry { key, value }
-                });
+                let entries = sub_parser.parse_comma_separated(|p| p.parse_map_entry());
                 sub_parser.error_if_not_exhausted();
                 self.merge_spans_from(&mut sub_parser);
                 ast::Expr::Map(ast::ExprMap { entries })
@@ -370,7 +390,8 @@ impl<'db> Parser<'db> {
         let name_ts = self.peek_text_span();
         let name = match self.eat_name() {
             Some(n) => {
-                if !seen.take(self.db, n, name_ts, "field") {
+                if let Some(twice) = seen.take_reported(self.db, n, name_ts, "field") {
+                    twice.emit_to(&self.sink);
                     self.had_error = true;
                 }
                 n
@@ -415,7 +436,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             split::stray_delimiter_error(self.db, self.source_text(), &written, what)
                 .code("D033")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
     }
 
@@ -483,7 +504,7 @@ impl<'db> Parser<'db> {
             self.had_error = true;
             split::trailing_delimiter_error(self.db, self.source_text(), &written, "parts")
                 .code("D033")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
         let groups = split::nonempty_groups(groups);
 
@@ -507,7 +528,7 @@ impl<'db> Parser<'db> {
                                 group_idx, expected, sub_shape))
                             .code("D023")
                             .primary_label(ts, "shape mismatch")
-                            .emit_parse();
+                            .emit_to(&self.sink);
                     }
                 }
             }
@@ -549,7 +570,7 @@ impl<'db> Parser<'db> {
                         row_idx + 1, elements.len(), num_columns))
                     .code("D030")
                     .primary_label(ts, "column count mismatch")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
             data_rows.push(ast::ExprTableRow { elements });
         }
@@ -576,13 +597,14 @@ impl<'db> Parser<'db> {
                 DiagnosticBuilder::error(self.db, "expected column name in table header")
                     .code("D031")
                     .primary_label(ts, "expected name")
-                    .emit_parse();
+                    .emit_to(&self.sink);
                 names.push(InternedText::new(self.db, "<error>".S()));
                 continue;
             };
             let name_text = InternedText::new(self.db, name.S());
             let ts = self.extract_text_span(&first);
-            if !seen.take(self.db, name_text, ts, "column") {
+            if let Some(twice) = seen.take_reported(self.db, name_text, ts, "column") {
+                twice.emit_to(&self.sink);
                 self.had_error = true;
             }
             names.push(name_text);
@@ -594,7 +616,7 @@ impl<'db> Parser<'db> {
                     &format!("unexpected token after column name `{}`", name))
                     .code("D034")
                     .primary_label(ts, "a column is named by one word")
-                    .emit_parse();
+                    .emit_to(&self.sink);
             }
         }
 

@@ -12,7 +12,8 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use bct::diagnostic::DiagnosticBuilder;
+use bct::chunk::PlannedCollection;
+use bct::diagnostic::{DiagnosticBuilder, StoredDiagnostic};
 use datalove_diagnostic::DiagnosticBuilderExt;
 
 /// Where a parser reads its tokens: a cursor over a bracket or a part of
@@ -50,6 +51,36 @@ impl<'db> TokenSource<'db> {
 /// salsa hashes and probes its map for every occurrence it is asked to intern.
 type Interned<'db> = Rc<RefCell<FxHashMap<&'db str, InternedText<'db>>>>;
 
+/// Where a parser's diagnostics go: filed as they are made, or kept.
+///
+/// A chunk keeps them, and hands them back to the parse that asked for it to
+/// file at the place in the collection they were made, which keeps them in
+/// the order a parse of the whole collection would have filed them in. Shared
+/// with the chunk's sub-parsers, for the same reason.
+pub(super) type Sink = Option<Rc<RefCell<Vec<StoredDiagnostic>>>>;
+
+/// Filing a diagnostic where a parser's diagnostics go.
+pub(super) trait EmitTo {
+    fn emit_to(self, sink: &Sink);
+}
+
+impl EmitTo for DiagnosticBuilder<'_> {
+    fn emit_to(self, sink: &Sink) {
+        match sink {
+            Some(kept) => kept.borrow_mut().push(self.build_stored()),
+            None => self.emit_parse(),
+        }
+    }
+}
+
+/// File a diagnostic built earlier, as [`EmitTo`] files one being built.
+pub(super) fn emit_stored(db: &dyn crate::Db, sink: &Sink, diagnostic: StoredDiagnostic) {
+    match sink {
+        Some(kept) => kept.borrow_mut().push(diagnostic),
+        None => datalove_diagnostic::ParseDiagnostic::emit_stored(db, diagnostic),
+    }
+}
+
 /// Parser state for datalit parsing.
 pub(super) struct Parser<'db> {
     pub(super) db: &'db dyn crate::Db,
@@ -68,6 +99,10 @@ pub(super) struct Parser<'db> {
     /// The same text as a string, which the tokens' spans index.
     text: &'db str,
     interned: Interned<'db>,
+    /// The collections of the source to parse in chunks; see `bct::chunk`.
+    /// Empty but for the parse of a whole source and the parsers it makes.
+    pub(super) plan: &'db [PlannedCollection],
+    pub(super) sink: Sink,
 }
 
 impl<'db> Parser<'db> {
@@ -84,6 +119,8 @@ impl<'db> Parser<'db> {
             source_text,
             text: source_text.as_str(db),
             interned: Interned::default(),
+            plan: &[],
+            sink: None,
         }
     }
 
@@ -114,6 +151,8 @@ impl<'db> Parser<'db> {
             source_text,
             text: source_text.as_str(db),
             interned: Interned::default(),
+            plan: &[],
+            sink: None,
         }
     }
 
@@ -126,6 +165,8 @@ impl<'db> Parser<'db> {
         let mut sub = Parser::from_branch(self.db, iter, self.source_text());
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
+        sub.plan = self.plan;
+        sub.sink = self.sink.clone();
         sub
     }
 
@@ -134,6 +175,8 @@ impl<'db> Parser<'db> {
         let mut sub = Parser::new(self.db, tokens, self.source_text());
         sub.expr_counter = self.expr_counter;
         sub.interned = Rc::clone(&self.interned);
+        sub.plan = self.plan;
+        sub.sink = self.sink.clone();
         sub
     }
 
@@ -171,7 +214,7 @@ impl<'db> Parser<'db> {
         DiagnosticBuilder::error(self.db, message)
             .code(code)
             .primary_label(ts.clone(), label)
-            .emit_parse();
+            .emit_to(&self.sink);
         ast::Expr::ParseError(ast::ExprParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
@@ -188,7 +231,7 @@ impl<'db> Parser<'db> {
         DiagnosticBuilder::error(self.db, message)
             .code(code)
             .primary_label(ts.clone(), label)
-            .emit_parse();
+            .emit_to(&self.sink);
         ast::TypeHint::ParseError(ast::TypeHintParseError { source: ts.source, span: ts.span, message: message_text })
     }
 
@@ -216,10 +259,7 @@ impl<'db> Parser<'db> {
         if self.peek().is_some() && !self.had_error {
             self.had_error = true;
             let ts = self.peek_text_span();
-            DiagnosticBuilder::error(self.db, "unexpected token after expression")
-                .code("D021")
-                .primary_label(ts, "unexpected token")
-                .emit_parse();
+            not_exhausted_error(self.db, ts).emit_to(&self.sink);
         }
     }
 
@@ -234,10 +274,17 @@ impl<'db> Parser<'db> {
             DiagnosticBuilder::error(self.db, "unexpected token after type")
                 .code("D022")
                 .primary_label(ts, "unexpected token")
-                .emit_parse();
+                .emit_to(&self.sink);
         }
     }
 
+}
+
+/// What a parser reports of tokens left after the expression it parsed.
+pub(super) fn not_exhausted_error<'db>(db: &'db dyn crate::Db, ts: TextSpan) -> DiagnosticBuilder<'db> {
+    DiagnosticBuilder::error(db, "unexpected token after expression")
+        .code("D021")
+        .primary_label(ts, "unexpected token")
 }
 
 impl<'db> TokenStream<'db> for Parser<'db> {

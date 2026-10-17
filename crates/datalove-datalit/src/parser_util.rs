@@ -63,15 +63,34 @@ impl<'db> SeenNames<'db> {
         what: &str,
     ) -> bool {
         use datalove_diagnostic::DiagnosticBuilderExt;
+        match self.take_reported(db, name, ts, what) {
+            None => true,
+            Some(twice) => {
+                twice.emit_parse();
+                false
+            }
+        }
+    }
+
+    /// Take a name, or say what to report if it was taken already.
+    ///
+    /// The report is handed back rather than filed, so that a parser that
+    /// keeps its diagnostics (a chunk's; see `bct::chunk`) keeps this one too.
+    #[must_use]
+    pub fn take_reported(
+        &mut self,
+        db: &'db dyn salsa::Database,
+        name: bct::text::InternedText<'db>,
+        ts: TextSpan,
+        what: &str,
+    ) -> Option<bct::diagnostic::DiagnosticBuilder<'db>> {
         if self.0.insert(name) {
-            return true;
+            return None;
         }
         let name = name.as_str(db);
-        bct::diagnostic::DiagnosticBuilder::error(db, &rmx::std::format!("`{name}` is named twice"))
+        Some(bct::diagnostic::DiagnosticBuilder::error(db, &rmx::std::format!("`{name}` is named twice"))
             .code("D038")
-            .primary_label(ts, &rmx::std::format!("a {what} is named once"))
-            .emit_parse();
-        false
+            .primary_label(ts, &rmx::std::format!("a {what} is named once")))
     }
 }
 

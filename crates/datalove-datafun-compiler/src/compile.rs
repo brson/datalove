@@ -99,6 +99,10 @@ pub fn compile_modules<'db>(
         mode,
     );
 
+    // The data files' large collections, parsed in chunks ahead of the
+    // typecheck that asks for the files.
+    warm_data_chunks(db, input.graph.clone(), mode);
+
     // Phase 2: Name Resolution (memoized per-module, can be parallelized)
     let name_resolution = resolve_all_names_with_mode(db, parsed_graph, mode);
 
@@ -130,6 +134,40 @@ pub fn compile_modules<'db>(
     }
     output.rider_sources = rider_sources;
     output
+}
+
+/// Parse the chunks of every collection the data files plan to cut, on
+/// rayon's pool, under `ParallelMode::Parallel`.
+///
+/// A data file is parsed by the typecheck of the module that requires it, so
+/// the whole file would be one thread's work however many modules there are.
+/// The chunks of its big collections are queries of their own (see
+/// `datalit::parser::parse_chunk`), and this runs them first, outside any
+/// query, so that the parse finds them in their memos. Planning a file lexes
+/// and braces it, which stays sequential.
+fn warm_data_chunks<'db>(db: &'db dyn DbClone, graph: ModuleGraph<'db>, mode: ParallelMode) {
+    use rmx::rayon::prelude::*;
+
+    if mode != ParallelMode::Parallel {
+        return;
+    }
+    let db_salsa = db.as_salsa_db();
+    let mut work = Vec::new();
+    for source in graph.data(db_salsa).values() {
+        let plan = bct::chunk::collection_plan(db_salsa, bct::lexer::lex(db_salsa, *source));
+        for (collection, planned) in plan.iter().enumerate() {
+            for chunk in 0..planned.chunks.len() {
+                // Cloned here because `&dyn DbClone` is not `Sync`.
+                work.push((db.dyn_clone(), *source, u32::try_from(collection).X(), u32::try_from(chunk).X()));
+            }
+        }
+    }
+    if work.is_empty() {
+        return;
+    }
+    work.into_par_iter().for_each(|(db_clone, source, collection, chunk)| {
+        let _ = datalove_datalit::parser::parse_chunk(db_clone.as_salsa_db(), source, collection, chunk);
+    });
 }
 
 /// Collect all analysis results into the output structure.

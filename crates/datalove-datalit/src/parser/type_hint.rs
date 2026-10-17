@@ -9,7 +9,7 @@ use bct::{
 
 use crate::ast;
 use crate::parser_util::{TextSpan, TokenStream, TokenStreamExt};
-use super::state::Parser;
+use super::state::{EmitTo, Parser};
 
 /// A token stream a type hint can be read out of.
 ///
@@ -322,7 +322,8 @@ impl<'db> Parser<'db> {
                 let name_ts = self.peek_text_span();
                 let name = match self.eat_name() {
                     Some(n) => {
-                        if !seen.take(self.db, n, name_ts, "variant") {
+                        if let Some(twice) = seen.take_reported(self.db, n, name_ts, "variant") {
+                            twice.emit_to(&self.sink);
                             self.had_error = true;
                         }
                         n
@@ -341,7 +342,8 @@ impl<'db> Parser<'db> {
                 let name_ts = self.peek_text_span();
                 let name = match self.eat_name() {
                     Some(n) => {
-                        if !seen.take(self.db, n, name_ts, "variant") {
+                        if let Some(twice) = seen.take_reported(self.db, n, name_ts, "variant") {
+                            twice.emit_to(&self.sink);
                             self.had_error = true;
                         }
                         n
@@ -374,7 +376,8 @@ impl<'db> Parser<'db> {
         let name_ts = self.peek_text_span();
         let name = match self.eat_name() {
             Some(n) => {
-                if !seen.take(self.db, n, name_ts, what) {
+                if let Some(twice) = seen.take_reported(self.db, n, name_ts, what) {
+                    twice.emit_to(&self.sink);
                     self.had_error = true;
                 }
                 n

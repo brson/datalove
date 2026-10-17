@@ -7,6 +7,7 @@ pub mod text;
 pub mod escapes;
 pub mod lexer;
 pub mod bracer;
+pub mod chunk;
 pub mod split;
 
 pub mod package2;

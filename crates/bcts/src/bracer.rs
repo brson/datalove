@@ -27,6 +27,15 @@ const HIDDEN: u32 = u32::MAX;
 const PLAIN: u32 = u32::MAX - 1;
 
 impl<'db> Bracer<'db> {
+    /// Where the level around token `index` resumes, if the token opens a
+    /// bracket: just past its close, or where recovery cut it off.
+    pub fn resume(&self, db: &'db dyn crate::Db, index: usize) -> Option<usize> {
+        match self.layout(db)[index] {
+            HIDDEN | PLAIN => None,
+            resume => Some(resume as usize),
+        }
+    }
+
     /// The source's tokens at the top level.
     pub fn iter(&self, db: &'db dyn crate::Db) -> Cursor<'db> {
         let tokens = self.lexed(db).tokens(db);
