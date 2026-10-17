@@ -4,7 +4,8 @@ A plan for compiling a large collection literal on more than one core, in
 datalit and in datafun alike: split it at the token tree into chunks, parse the
 chunks as queries of their own on rayon, and do it only where a tuning bench
 says it pays. Written October 2026, after a prototype for datalit lists.
-Phases 0 to 2 are done; see [Progress](#user-content-progress).
+Phases 0 to 2 are done, and phase 3 was measured and set aside; see
+[Progress](#user-content-progress).
 
 ## Contents
 
@@ -349,6 +350,29 @@ against the first group's, goes where a whole parse would put it. A table's or
 tensor's delimiter complaints set `had_error` on the parser that reached it,
 so a chunk's carries back there. A rank-1 tensor is not cut. The thresholds
 differ from lists'; see [compile-time.md](compile-time.md#user-content-large-collection-literals).
+
+**Phase 3 is not done**, because neither half pays as things are.
+
+- **Reading.** A chunk's values would be read by a query of their own, and a
+  query's value can only be read out of its memo, not taken: putting the
+  chunks into the one `ConstValue::List` the data is means copying every value
+  out. And copying a value costs more than reading it, 1.5-2.8x across every
+  kind and shape at 1-4MB (`collection_cutoffs`, with a stage that clones what
+  `data_file_value` returned): a 4MB list of scalars reads in 10.1ms and
+  copies in 15.8ms, a list of records 6.3ms and 15.9ms. So reading in chunks
+  would be slower in every mode. What would change that is a `ConstValue`
+  whose collections can share their parts, an `Arc<[ConstValue]>` say, so
+  that a chunk's values go into the list for a reference count, as a parsed
+  chunk's elements go into theirs; that is a change to what every backend and
+  CTFE read, and a plan of its own.
+- **Typing.** What a chunk would be checked against is the type the `require
+  data` statement declares, which the typechecker works out from the
+  statement's type hint, under the module's aliases, inside the module's
+  `typecheck_module` and so inside a query, where nothing can run in parallel.
+  The warm-up would have to know it first. Checking data files as a step of
+  their own after the modules' typecheck, against the types it found, would
+  allow it, and moves where `F084` is reported from; it is about 20ms of the
+  store demo's compile. Not attempted.
 
 ## Open questions
 
