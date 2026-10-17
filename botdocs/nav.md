@@ -36,7 +36,7 @@
 - [Organizing the IR Passes](plan-ir-passes.md)
 - [A Parser That Reads Tokens in Place](plan-parser.md)
 - [A Plain-Data AST](plan-plain-ast.md)
-- [Reading a Large Data File in Parallel](plan-parallel-data.md)
+- [Parsing Large Collection Literals in Parallel](plan-parallel-collections.md)
 - [One Rule for Literals That Share a Type](plan-literal-typing.md)
 - [Carry/Bring](carry-bring.md)
 
