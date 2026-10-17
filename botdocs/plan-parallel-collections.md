@@ -72,13 +72,15 @@ is what a bracket of these kinds opens, in either language:
 | `[` | list | `,` |
 | `%{` | map | `,` between entries |
 | `#{` | set | `,` |
-| `{\|` | table | `,` between rows |
-| `[\|` | tensor | runs of `,`, whose length is the rank |
+| `{\|` | table | `;` or a newline between rows, after a header row |
+| `[\|` | tensor | runs of `,`, one fewer than the rank; none at rank 1 |
 
 Structs and tuples are left out: their fields are named or positional and few,
 and splitting them buys nothing. A qualifying collection nested in one already
-chosen is parsed inside its chunk, whole. Tensors come last, since a chunk
-boundary has to fall on a separator of the highest rank.
+chosen is parsed inside its chunk, whole. Tables need their header in every
+chunk, since a row is read against it. Tensors come last: a chunk boundary has
+to fall on a separator of the highest rank, and a rank-1 tensor has no
+separator at all, its elements being written side by side.
 
 **The parse first, in both languages; what follows it only in datalit.** In
 datalit the typing and the reading split the same way and are where the time

@@ -15,6 +15,7 @@ reworked; see [the parser plan](plan-parser.md).
 - [Parallel compilation](#user-content-parallel-compilation)
   - [Inside phase 5](#user-content-inside-phase-5)
   - [On real programs](#user-content-on-real-programs)
+  - [Large collection literals](#user-content-large-collection-literals)
 - [What was fixed](#user-content-what-was-fixed)
 - [What is left](#user-content-what-is-left)
 
@@ -318,6 +319,44 @@ both modes down (141ms sequential) but not the gap (170ms parallel). This is
 the allocator question of [Page faults](#user-content-page-faults) again, from
 the other side: an allocator whose per-thread heaps cost what the main one
 does would remove it.
+
+### Large collection literals
+
+What one big collection costs to compile, by kind and shape, measured by
+`collection_cutoffs` in `datalove-bench`, October 2026, sequential, before any
+chunking (phase 0 of [the plan for it](plan-parallel-collections.md)). In
+nanoseconds a byte, the parse at 64KB and at 4MB, and the other stages at 4MB:
+
+| Language | Kind | Shape | Parse, 64KB | Parse, 4MB | Lex | Type | Read |
+|---|---|---|---:|---:|---:|---:|---:|
+| datalit | list | scalar | 42 | 87 | 4 | 2 | 4 |
+| datalit | list | record | 17 | 30 | 4 | 2 | 4 |
+| datalit | list | nested | 24 | 56 | 6 | 2 | 6 |
+| datalit | map | scalar | 27 | 65 | 4 | 5 | 10 |
+| datalit | map | record | 19 | 28 | 4 | 2 | 4 |
+| datalit | set | scalar | 30 | 78 | 3 | 3 | 4 |
+| datalit | set | string | 13 | 33 | 2 | 1 | 4 |
+| datalit | table | scalar | 47 | 91 | 2 | 3 | 6 |
+| datalit | table | record | 32 | 51 | 2 | 2 | 4 |
+| datalit | tensor | scalar | 26 | 29 | 4 | 4 | 13 |
+| datafun | list | scalar | 27 | 72 | 3 | | |
+| datafun | list | record | 21 | 30 | 4 | | |
+| datafun | map | scalar | 29 | 56 | 3 | | |
+| datafun | set | scalar | 34 | 70 | 3 | | |
+| datafun | table | scalar | 59 | 94 | 2 | | |
+| datafun | tensor | scalar | 46 | 69 | 3 | | |
+
+Two things follow. **The parse is the work**, 59-98% of each case, in both
+languages alike, so that is what chunking is for; typing and reading are a few
+nanoseconds a byte. And **the parse gets dearer per byte as the collection
+grows**, from about 128KB on, each doubling costing 2.2-2.5x, worst where
+every element is a distinct number. A profile of the 4MB list of scalars puts
+it in interning: every number is interned, so salsa's intern table rehashes
+(6.6%), the parse's own cache does (2.3%), and every new interned value is a
+dependency edge of the one `parse` query, which ends with half a million of
+them in an `IndexMap` (5.1%). Chunks bound the edge sets, each having its own;
+not interning numbers at all would remove the cost in every mode, and is worth
+doing on its own.
 
 ## What was fixed
 
