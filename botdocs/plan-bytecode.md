@@ -58,9 +58,9 @@ speed still matters:
 
 - **Targets with no JIT.** A platform that forbids writable executable memory
   (iOS, some consoles, hardened sandboxes), an architecture Cranelift does not
-  support, and a browser. Note that **nothing on the interpreter's path is built
-  for wasm today**: the only wasm32 target is the `datalove` database crate, and
-  `datalove-datafun-interp` has never been compiled for it. A browser playground
+  support, and a browser. When this was written nothing on the interpreter's
+  path had been built for wasm; `just test-wasm` now compiles the system library
+  and runs a script on the bytecode there, under wasmi. A browser playground
   would be the motivating case, but it is a future one.
 - **Code that never gets hot.** The JIT counts calls and compiles at a threshold,
   costs about 14ms to start, and never sees a loop in a function called once.

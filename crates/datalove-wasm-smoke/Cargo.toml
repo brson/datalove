@@ -1,0 +1,25 @@
+[package]
+name = "datalove-wasm-smoke"
+description = "Smoke test of the compiler and bytecode interpreter on wasm, with no threads."
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+edition.workspace = true
+# A test, not a library anybody installs.
+publish = false
+repository.workspace = true
+
+# The rlib for the native run the test compares against, the cdylib for the
+# wasm module it loads.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rmx.workspace = true
+datalove-datafun.workspace = true
+datalove-datafun-common.workspace = true
+datalove-datafun-interp.workspace = true
+datalove-sys-packages.workspace = true
+
+[dev-dependencies]
+wasmi = "2"

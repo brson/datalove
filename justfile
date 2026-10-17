@@ -33,12 +33,14 @@ test-64:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples --features index-64
 
 # The slow configuration: the property tests and exhaustive cases, the wasm
-# build, the sys riders built from source, and generated programs.
+# build and the wasm smoke test, the sys riders built from source, and
+# generated programs.
 test-slow:
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-rt-tests --features slow_tests
     DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test -p datalove-datafun-compiler --features slow_tests
     just check-wasm
+    just test-wasm
     just test-sys-riders
     just test-worldgen
 
@@ -169,6 +171,12 @@ check:
 
 check-wasm:
     cargo check -p datalove --target wasm32-unknown-unknown
+
+# Compile the system library and run a script on the bytecode in wasm, under
+# wasmi, where there are no threads: sequentially and with the parallel paths,
+# which rayon runs on the calling thread there.
+test-wasm:
+    cargo test --release -p datalove-wasm-smoke --test wasm_smoke -- --ignored
 
 loc:
     tokei

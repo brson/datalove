@@ -1331,7 +1331,16 @@ exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
 
 `just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`, as one of CI's
-four jobs. Everything parallel happens before the IR exists, so the engine
+four jobs. `just test-wasm` checks that the parallel paths still work where
+there are no threads: it builds `crates/datalove-wasm-smoke` for
+`wasm32-unknown-unknown`, which compiles the system library and runs a script
+on the bytecode, and runs it under wasmi in both modes. Rayon's pool falls back
+to the calling thread when it cannot spawn one, so the parallel mode runs every
+`into_par_iter` there inline, against salsa clones on the thread that owns the
+database. The module imports wasm-bindgen's functions, because rustmax's
+portable profile turns on `getrandom/js` and chrono's `wasmbind` and
+`datalove-datalit` asks for `getrandom/js` itself; the test binds them to
+functions that trap, so nothing compiled or run may call them. Everything parallel happens before the IR exists, so the engine
 suites run only the reference and the bytecode there, by
 `DATALOVE_TEST_ENGINES`.
 
@@ -1930,8 +1939,8 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 - `just test` runs the whole suite; `just test-64` uses 64-bit collection
   indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
-  build, a smoke test of sys riders built from source and `just
-  test-worldgen` -- then `just test-demos`. Those four are CI's four jobs, and
+  build, `just test-wasm`, a smoke test of sys riders built from source and
+  `just test-worldgen` -- then `just test-demos`. Those four are CI's four jobs, and
   `just test-ci` runs them all.
 - `DATALOVE_TEST_ENGINES=bytecode,jit` limits the suites that run a program
   on several engines -- `engine_tests`, `std_engine_tests`, and the cli's
