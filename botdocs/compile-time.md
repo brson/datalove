@@ -14,6 +14,7 @@ reworked; see [the parser plan](plan-parser.md).
 - [Parsing](#user-content-parsing)
 - [Parallel compilation](#user-content-parallel-compilation)
   - [Inside phase 5](#user-content-inside-phase-5)
+  - [On real programs](#user-content-on-real-programs)
 - [What was fixed](#user-content-what-was-fixed)
 - [What is left](#user-content-what-is-left)
 
@@ -290,6 +291,33 @@ of any module, so the const phases wait for 5a; specialization reads every
 module's call sites; and 5d inlines callees from any module, so it waits for
 the set `find_inline_modules` builds. Huge pages are worth more than any of these
 steps, since they speed up the two parallel ones.
+
+### On real programs
+
+The benchvs programs and the store demo, measured October 2026 on four cores,
+say that `DATALOVE_PARALLEL` is not yet worth turning on for running a program.
+
+The benchvs programs compile in 2 to 11ms (`script --time`, median of 15)
+and run for 0.2 to 5.7s. Parallel compiling saves up to 2.6ms on the larger
+ones (`ordered` 11.0 to 8.4ms, `wordfreq` 9.3 to 7.1ms, `nbody` 8.8 to 7.4ms)
+and costs 0.2 to 0.5ms on the smallest (`fib`, `sum`, `primes`,
+`mandelbrot`); either way it is below the noise of a run, and hyperfine over
+both engines found nothing outside it.
+
+The store demo compiles for 205ms, and parallel makes it slower, 225ms, or
+236ms on one rayon thread. Almost all of that compile is its 4MB of data:
+`data_file_type` parsing the datalit, under the typecheck of the one module
+that requires it, and `data_consts` reading the values back in phase 5. One
+module is the critical path, so there is nothing to spread, and what the
+parallel path changes is only which thread does it. That costs: user cycles
+are the same, kernel cycles are up by about 15ms, and with
+`glibc.malloc.arena_max=1` the parallel compile is back to 210-214ms. So it
+is glibc growing a worker thread's arena, which allocates from heaps it maps
+and grows itself, against the main arena growing by `brk`. Huge pages take
+both modes down (141ms sequential) but not the gap (170ms parallel). This is
+the allocator question of [Page faults](#user-content-page-faults) again, from
+the other side: an allocator whose per-thread heaps cost what the main one
+does would remove it.
 
 ## What was fixed
 
