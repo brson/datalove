@@ -200,6 +200,25 @@ evaluation, `compute_func_id_map`), the phase-1 aggregator with
 fixed 3.6ms for a script that requires nothing. The other phases' aggregators
 are under 1%.
 
+The barriers between phases are not the problem. A prototype that ran
+resolution, typecheck and ownership as one task per module, with no wait
+between them, measured the same as running them phase by phase, 10.6ms against
+10.5ms with huge pages, at the same instruction count, so it really did reuse
+the memos. That is the shape ty and rust-analyzer use: start the last query per
+unit and let salsa pull the earlier ones in, blocking when two threads want
+the same memo. It is not worth restructuring for at 24 modules on four cores.
+It might be on a bigger world, where one slow module holds up every phase
+boundary.
+
+Upstream salsa has no helper for any of this. `salsa::par_map` and
+`salsa::join` were removed in 0.25 (salsa-rs/salsa#1013), because work they
+ran inside a query was not tracked as that query's dependency. What upstream
+recommends is what this compiler does: clone the database for each thread,
+outside any query. ty's version is `crates/ty_project/src/parallel.rs` in the
+ruff repository. It clones once per rayon split rather than once per item
+(`map_with` over a `Clone` wrapper around `dyn_clone`), and returns owned
+values from the workers, not branded ones.
+
 `cargo run --release -p datalove-bench --example par_phases` times each phase
 both ways on a fresh database. It starts after package resolution, so its
 parse row is the warm-up described above, not parsing.
