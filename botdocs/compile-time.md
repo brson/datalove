@@ -260,30 +260,36 @@ threads, without huge pages:
 
 The two parallel steps are most of it and are balanced: no module is more than
 11% of either, so they fall short of 4x for the reason the rest of the
-parallel compile does, the kernel. The steps still on the main thread come to
-about 1.6ms of the 4.3ms, and they come in three kinds.
+parallel compile does, the kernel. The steps on the main thread came to about
+1.6ms of the 4.3ms when this was measured, in three kinds.
 
 - **Per-module queries run in a sequential loop:** const inlining, the cache
-  keys, the per-module half of the function-id map and of the registry, the
-  specialization gate. The workers would compute them as the other phases'
-  do, warming then reading back.
-- **The rider units are built twice.** `add_native_rider_units` runs inside
-  each `ctfe_module_registry`, and the registry is built once per const phase
-  because the second stratum changes its key, so the same 0.09ms is paid twice
-  in either mode. A query of its own, keyed on the graph and the id map, would
-  build them once.
+  keys, the per-module half of the registry, the specialization gate. Under
+  `DATALOVE_PARALLEL` these are now computed on rayon first (`warm` in
+  `crates/datalove-datafun-compiler/src/tracked_lower.rs`), and the loop
+  reads them back.
+- **The rider units were built three times**, by `add_native_rider_units` in
+  each const phase's `ctfe_module_registry` and in the backends'
+  `module_function_registry`, about 0.09ms each. They are a query of their
+  own now, `native_rider_units`, built once in either mode.
 - **Const evaluation is per module but takes one `&mut dyn CtfeEvaluator` and
   one `&mut ConstCache`.** Each module evaluates against a shared, finished
   registry and its own consts, so the work is independent. Running it in
   parallel needs an evaluator per worker, which `CtfeEvaluator` has no way to
   make, and the cache's reads and writes kept on the main thread around it.
+  Not done.
+
+The first two took the sequential compile from 123.8M instructions to 122.7M,
+and the parallel one from 13.8ms to 13.3-13.6ms, or 11.0ms to 10.4ms with
+huge pages. Splitting `compute_func_id_map` into a per-module query as well
+was tried and measured nothing, since what it costs is cloning and sorting the
+names, which the aggregator still does.
 
 What does not parallelize is the order between the steps. CTFE calls functions
 of any module, so the const phases wait for 5a; specialization reads every
 module's call sites; and 5d inlines callees from any module, so it waits for
-the set `find_inline_modules` builds. All of the above together is worth about
-0.85ms of the 4.3ms, or 6% of the whole run, which is less than huge pages
-would give the two parallel steps.
+the set `find_inline_modules` builds. Huge pages are worth more than any of these
+steps, since they speed up the two parallel ones.
 
 ## What was fixed
 

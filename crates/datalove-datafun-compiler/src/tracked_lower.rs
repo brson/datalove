@@ -720,20 +720,41 @@ fn ctfe_module_units<'db>(
     )
 }
 
-/// Create native IrCodeUnits for rider functions and add them to the registry.
+/// Add the native code units of every rider the graph requires to a registry.
 ///
 /// Here rather than at the backend boundary, because consts call natives while
-/// the modules are still lowering. What a native's symbol is called is left to
-/// [`NativeContext::new`](datalove_datafun_ir::NativeContext::new).
+/// the modules are still lowering. The units are built by
+/// [`native_rider_units`], so the three registries a compile builds -- one per
+/// const phase and the one the backends run -- share them.
 pub fn add_native_rider_units<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
-    func_id_map: &lower::FuncIdTable<'db>,
+    func_id_map: FuncIdMap<'db>,
     registry: &mut ModuleFunctionRegistry,
 ) {
+    for (ir_module_id, units) in native_rider_units(db, parsed_graph, func_id_map) {
+        registry.set_module_code_units(*ir_module_id, Arc::clone(units));
+    }
+}
+
+/// The native code units of every rider the graph requires, by rider module.
+///
+/// Tracked, because each registry used to build them again: 0.09ms each on the
+/// system library, three times a compile. A rider has an `IrModuleId` of its
+/// own, so its units are a whole module's and go in with
+/// `set_module_code_units`. What a native's symbol is called is left to
+/// [`NativeContext::new`](datalove_datafun_ir::NativeContext::new).
+#[salsa::tracked(returns(ref))]
+fn native_rider_units<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    func_id_map: FuncIdMap<'db>,
+) -> Vec<(IrModuleId, Arc<datalove_datafun_ir::ModuleCodeUnits>)> {
     use datalove_datafun_ir::NativeContext;
     use std::collections::BTreeSet;
 
+    let func_id_map = func_id_lookup(db, func_id_map);
+    let mut modules: BTreeMap<IrModuleId, datalove_datafun_ir::ModuleCodeUnits> = BTreeMap::new();
     let mut seen_riders: BTreeSet<String> = BTreeSet::new();
 
     for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
@@ -793,10 +814,20 @@ pub fn add_native_rider_units<'db>(
                     name,
                     native_ctx,
                 );
-                registry.add_module_code_unit(ir_module_id, code_unit.id, std::sync::Arc::new(code_unit));
+                modules.entry(ir_module_id).or_default().insert(code_unit.id, Arc::new(code_unit));
             }
         }
     }
+
+    modules.into_iter().map(|(id, units)| (id, Arc::new(units))).collect()
+}
+
+/// Compute each module's `ctfe_module_units` in parallel, ahead of the
+/// `ctfe_module_registry` that collects them.
+fn warm_ctfe_module_units<'db>(db: &'db dyn DbClone, mode: ParallelMode, modules: &LoweredModules<'db>) {
+    warm(db, mode, modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
+        let _ = ctfe_module_units(db, lowered);
+    });
 }
 
 /// Build a module function registry from lowered functions.
@@ -831,7 +862,7 @@ fn ctfe_module_registry<'db>(
         };
         registry.set_module_code_units(ir_module_id, Arc::clone(ctfe_module_units(db, *lowered)));
     }
-    add_native_rider_units(db, parsed_graph, func_id_lookup(db, func_id_map), &mut registry);
+    add_native_rider_units(db, parsed_graph, func_id_map, &mut registry);
     Arc::new(registry)
 }
 
@@ -973,6 +1004,29 @@ pub fn lower_module_functions<'db>(
     log_query("lower_functions", module.id(db).path(db), QueryPhase::End);
 
     ModuleLowerOutcome { lowered, deferred }
+}
+
+/// Compute a per-module query for each item on rayon's pool, under
+/// `ParallelMode::Parallel`, for the memos it leaves behind.
+///
+/// The pattern of the other phases' parallel paths, for the steps of phase 5
+/// that otherwise ask a per-module query in a sequential loop: the loop that
+/// follows is then a run of memo hits. Under `ParallelMode::Sequential` this
+/// does nothing and the loop does the work.
+fn warm<'db, T: Send>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    items: impl IntoIterator<Item = T>,
+    query: impl Fn(&dyn salsa::Database, T) + Sync,
+) {
+    use rmx::rayon::prelude::*;
+
+    if mode != ParallelMode::Parallel {
+        return;
+    }
+    // Cloned here because `&dyn DbClone` is not `Sync`.
+    let work: Vec<_> = items.into_iter().map(|item| (db.dyn_clone(), item)).collect();
+    work.into_par_iter().for_each(|(db_clone, item)| query(db_clone.as_salsa_db(), item));
 }
 
 /// Lower all module functions.
@@ -1383,7 +1437,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // runs neither const phase, so there is nothing to key them for.
     if let Some(cache) = const_cache.as_deref_mut() {
         if graph_declares_consts(db_salsa, parsed_graph) {
-            cache.begin(db_salsa, parsed_graph.graph(db_salsa));
+            let graph = parsed_graph.graph(db_salsa);
+            warm(db, mode, graph.modules(db_salsa).iter().map(|module| module.id(db_salsa)), |db, module_id| {
+                let _ = crate::const_cache::closure_fingerprint(db, graph, module_id);
+            });
+            cache.begin(db_salsa, graph);
         } else {
             cache.begin_without_consts();
         }
@@ -1432,6 +1490,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     } else {
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
+        warm_ctfe_module_units(db, mode, &lowered_modules);
         let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
         evaluator.set_module_registry(Arc::clone(module_registry));
         evaluate_module_level_consts(
@@ -1468,6 +1527,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
+        warm_ctfe_module_units(db, mode, &lowered_modules);
         let module_registry = ctfe_module_registry(db_salsa, parsed_graph, lowered_modules.clone(), func_id_map);
         evaluator.set_module_registry(Arc::clone(module_registry));
 
@@ -1490,6 +1550,11 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let lowered_modules: LoweredModules<'db> = if skip_const_inlining {
         lowered_modules
     } else {
+        warm(db, mode, lowered_modules.iter().filter_map(|(module_id, lowered)| {
+            resolved_consts.get(module_id).map(|consts| (*lowered, consts.clone()))
+        }), |db, (lowered, consts)| {
+            let _ = const_inlined_module(db, lowered, consts);
+        });
         lowered_modules.into_iter()
             .map(|(module_id, lowered)| match resolved_consts.get(&module_id) {
                 Some(consts) => (module_id, const_inlined_module(db_salsa, lowered, consts.clone())),
@@ -1504,6 +1569,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let (lowered_modules, specialize_errors) = if skip_specialization {
         (lowered_modules, Vec::new())
     } else {
+        warm(db, mode, lowered_modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
+            let _ = module_has_comptime_calls(db, lowered);
+        });
         specialize_module_graph(
             db_salsa, parsed_graph, typecheck_result, evaluator, func_id_map,
             &module_consts, callable_modules, lowered_modules,

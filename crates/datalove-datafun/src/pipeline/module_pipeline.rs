@@ -652,12 +652,7 @@ fn module_function_registry<'db>(
         );
     }
 
-    add_native_rider_units(
-        db,
-        parsed_graph,
-        func_id_lookup(db, lowering.func_id_map(db)),
-        &mut registry,
-    );
+    add_native_rider_units(db, parsed_graph, lowering.func_id_map(db), &mut registry);
 
     Arc::new(registry)
 }

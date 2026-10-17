@@ -191,7 +191,7 @@ fn source_fingerprint(db: &dyn salsa::Database, source: Source) -> Fingerprint {
 /// So it covers every module the module reaches. The requires are hashed in
 /// path order, so the fingerprint is a function of content alone.
 #[salsa::tracked(returns(copy))]
-fn closure_fingerprint<'db>(
+pub(crate) fn closure_fingerprint<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph<'db>,
     module_id: ModuleId<'db>,
