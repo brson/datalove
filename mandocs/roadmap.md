@@ -45,9 +45,6 @@ Focus on ergonomic scripting experience and the REPL.
 
 ## In progress
 
-- for loops
-- parser overhaul
-
 
 
 
