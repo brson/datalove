@@ -5,7 +5,8 @@
 //! incremental recompilation and parallel execution.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, HashMap, HashSet};
+use bct::lookup::{LookupMap, LookupSet};
+use rmx::std::collections::{BTreeMap, HashMap};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{Item, Statement};
@@ -100,7 +101,7 @@ impl<'db> FuncIdMap<'db> {
 /// memo key, once per module per compile. As an id it is one word to either.
 ///
 /// It holds a handle per reachable module rather than the entries themselves,
-/// sorted by module. Copying out every reachable entry, names and all, for
+/// sorted by module path. Copying out every reachable entry, names and all, for
 /// every module was 4% of a compile.
 #[salsa::interned]
 pub struct ReachableFuncIds<'db> {
@@ -109,7 +110,7 @@ pub struct ReachableFuncIds<'db> {
 }
 
 /// The modules a `ReachableFuncIds` holds, each with its functions, sorted by
-/// module.
+/// module path.
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ReachableModules<'db>(pub Vec<(ModuleId<'db>, ModuleFuncIds<'db>)>);
@@ -137,7 +138,8 @@ impl<'db> lower::FuncIds<'db> for ReachableModules<'db> {
         module: ModuleId<'db>,
         name: &str,
     ) -> Option<(IrModuleId, FuncId)> {
-        let at = self.0.binary_search_by_key(&module, |(m, _)| *m).ok()?;
+        let path = module.path(db).as_str();
+        let at = self.0.binary_search_by(|(m, _)| m.path(db).as_str().cmp(path)).ok()?;
         let funcs = self.0[at].1;
         let functions = funcs.functions(db);
         let found = functions.binary_search_by(|(n, _)| n.as_str().cmp(name)).ok()?;
@@ -146,25 +148,27 @@ impl<'db> lower::FuncIds<'db> for ReachableModules<'db> {
 }
 
 /// Every module's functions in `func_id_map`, a handle per module, sorted by
-/// module.
+/// module path.
 #[salsa::tracked(returns(ref))]
 fn func_ids_by_module<'db>(
     db: &'db dyn salsa::Database,
     func_id_map: FuncIdMap<'db>,
 ) -> Vec<(ModuleId<'db>, ModuleFuncIds<'db>)> {
-    let mut by_module: BTreeMap<ModuleId<'db>, (IrModuleId, Vec<(String, FuncId)>)> = BTreeMap::new();
+    let mut by_module: LookupMap<ModuleId<'db>, (IrModuleId, Vec<(String, FuncId)>)> = LookupMap::new();
     for ((module_id, name), (ir_module_id, func_id)) in func_id_map.entries(db) {
         by_module.entry(*module_id)
             .or_insert_with(|| (*ir_module_id, Vec::new()))
             .1
             .push((name.clone(), *func_id));
     }
-    by_module.into_iter()
+    let mut modules: Vec<_> = by_module.into_iter_unordered()
         .map(|(module_id, (ir_module_id, mut functions))| {
             functions.sort_by(|a, b| a.0.cmp(&b.0));
             (module_id, ModuleFuncIds::new(db, ir_module_id, functions))
         })
-        .collect()
+        .collect();
+    modules.sort_by(|(a, _), (b, _)| a.path(db).cmp(b.path(db)));
+    modules
 }
 
 #[salsa::tracked(returns(copy))]
@@ -177,21 +181,21 @@ fn reachable_func_ids<'db>(
     let dependencies = graph.dependencies(db);
 
     // Transitive requires of this module.
-    let mut reachable: std::collections::BTreeSet<ModuleId<'db>> = std::collections::BTreeSet::new();
+    let mut reachable: LookupSet<ModuleId<'db>> = LookupSet::new();
     let mut queue = vec![module_id];
     while let Some(current) = queue.pop() {
         if !reachable.insert(current) {
             continue;
         }
         if let Some(deps) = dependencies.get(&current) {
-            queue.extend(deps.iter().copied());
+            queue.extend(deps.iter_unordered().copied());
         }
     }
 
     // Riders live under synthetic module ids that are not in the graph, so
     // they never appear in `dependencies`; keep every entry the graph does
     // not account for rather than work out which rider belongs to whom.
-    let in_graph: std::collections::BTreeSet<ModuleId<'db>> =
+    let in_graph: LookupSet<ModuleId<'db>> =
         graph.iter_modules(db).map(|m| m.id(db)).collect();
 
     let modules = func_ids_by_module(db, func_id_map)
@@ -226,15 +230,15 @@ fn reachable_func_ids<'db>(
 pub fn ir_module_ids<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
-) -> BTreeMap<ModuleId<'db>, IrModuleId> {
+) -> LookupMap<ModuleId<'db>, IrModuleId> {
     let mut riders_by_path: BTreeMap<String, ModuleId<'db>> = BTreeMap::new();
-    for riders in parsed_graph.resolved_riders(db).values() {
+    for riders in parsed_graph.resolved_riders(db).values_unordered() {
         for (_alias, rider) in riders {
             riders_by_path.insert(rider.module_id.path(db).clone(), rider.module_id);
         }
     }
 
-    let mut ids = BTreeMap::new();
+    let mut ids = LookupMap::new();
     let mut next = 0u32;
     for rider_module_id in riders_by_path.into_values() {
         ids.insert(rider_module_id, IrModuleId(next));
@@ -287,8 +291,8 @@ pub fn compute_func_id_map<'db>(
 
     // Add rider functions, under the ids assigned above, once for each rider
     // however many modules require it.
-    let mut riders_added: HashSet<ModuleId<'db>> = HashSet::new();
-    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+    let mut riders_added: LookupSet<ModuleId<'db>> = LookupSet::new();
+    for riders in parsed_graph.resolved_riders(db).values_unordered() {
         for (_alias, rider) in riders {
             let synthetic_module_id = rider.module_id;
             if !riders_added.insert(synthetic_module_id) {
@@ -304,11 +308,12 @@ pub fn compute_func_id_map<'db>(
         }
     }
 
-    // Sort for deterministic ordering.
+    // Sort for deterministic ordering, by path, since a module id would sort
+    // by interning order.
     entries.sort_by(|a, b| {
         let ((mod_a, name_a), _) = a;
         let ((mod_b, name_b), _) = b;
-        mod_a.cmp(mod_b).then_with(|| name_a.cmp(name_b))
+        mod_a.path(db).cmp(mod_b.path(db)).then_with(|| name_a.cmp(name_b))
     });
 
     FuncIdMap::new(db, entries)
@@ -392,7 +397,7 @@ pub struct SingleModuleLoweringResult<'db> {
 pub struct ModuleGraphLoweringResult<'db> {
     /// Per-module lowering results (module_id -> result).
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleLoweringResult<'db>>,
+    pub module_results: LookupMap<ModuleId<'db>, SingleModuleLoweringResult<'db>>,
 
     /// Function ID map for cross-module calls.
     #[returns(copy)]
@@ -414,7 +419,7 @@ pub fn create_module_graph_lowering_result<'db>(
     func_id_map: FuncIdMap<'db>,
     all_success: bool,
 ) -> ModuleGraphLoweringResult<'db> {
-    let module_results: BTreeMap<_, _> = results_vec.into_iter().collect();
+    let module_results: LookupMap<_, _> = results_vec.into_iter().collect();
     ModuleGraphLoweringResult::new(db, module_results, func_id_map, all_success)
 }
 
@@ -424,19 +429,21 @@ impl<'db> ModuleGraphLoweringResult<'db> {
         self.success(db)
     }
 
-    /// Get all lowering errors across all modules.
+    /// Get all lowering errors across all modules, by module path.
     pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<String> {
         self.module_results(db)
-            .values()
-            .flat_map(|r| r.errors(db).iter().cloned())
+            .sorted_by_key(|module| module.path(db))
+            .into_iter()
+            .flat_map(|(_, r)| r.errors(db).iter().cloned())
             .collect()
     }
 
-    /// Get all successfully lowered code units.
+    /// Get all successfully lowered code units, by module path.
     pub fn all_functions(&self, db: &'db dyn salsa::Database) -> Vec<(IrModuleId, FuncId, IrCodeUnit)> {
         self.module_results(db)
-            .values()
-            .flat_map(|r| {
+            .sorted_by_key(|module| module.path(db))
+            .into_iter()
+            .flat_map(|(_, r)| {
                 let ir_mod = r.ir_module_id(db);
                 r.functions(db).iter().map(move |f| (ir_mod, FuncId(f.id.0), (**f).clone()))
             })
@@ -701,7 +708,7 @@ type LoweredModules<'db> = Vec<(ModuleId<'db>, ModuleLowered<'db>)>;
 fn ir_map<'db>(
     db: &'db dyn salsa::Database,
     modules: &LoweredModules<'db>,
-) -> HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>> {
+) -> LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>> {
     modules.iter().map(|(id, lowered)| (*id, lowered.ir(db))).collect()
 }
 
@@ -758,7 +765,7 @@ fn native_rider_units<'db>(
     let mut modules: BTreeMap<IrModuleId, datalove_datafun_ir::ModuleCodeUnits> = BTreeMap::new();
     let mut seen_riders: BTreeSet<String> = BTreeSet::new();
 
-    for (_module_id, riders) in parsed_graph.resolved_riders(db).iter() {
+    for riders in parsed_graph.resolved_riders(db).values_unordered() {
         for (alias, rider) in riders {
             let alias_str = alias.text(db);
             if !seen_riders.insert(alias_str.S()) {
@@ -850,7 +857,7 @@ fn ctfe_module_registry<'db>(
     // Which `IrModuleId` each module was given. The entries are iterated rather
     // than collected, because `to_hashmap` clones every function name in the
     // world to build a map this only walks.
-    let mut ir_module_ids: HashMap<ModuleId<'db>, IrModuleId> = HashMap::new();
+    let mut ir_module_ids: LookupMap<ModuleId<'db>, IrModuleId> = LookupMap::new();
     for ((module_id, _), (ir_module_id, _)) in func_id_map.entries(db) {
         ir_module_ids.entry(*module_id).or_insert(*ir_module_id);
     }
@@ -1027,9 +1034,9 @@ pub fn lower_all_module_functions<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
     func_id_map: FuncIdMap<'db>,
-    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
-    deferred: &mut HashMap<ModuleId<'db>, Vec<String>>,
-    restrict: Option<&HashMap<ModuleId<'db>, Vec<String>>>,
+    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    deferred: &mut LookupMap<ModuleId<'db>, Vec<String>>,
+    restrict: Option<&LookupMap<ModuleId<'db>, Vec<String>>>,
     mode: ParallelMode,
 ) -> LoweredModules<'db> {
     let db_salsa = db.as_salsa_db();
@@ -1111,15 +1118,15 @@ pub fn evaluate_all_module_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
-    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
-    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
-    module_level_errors: &HashMap<ModuleId<'db>, Vec<String>>,
+    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_level_errors: &LookupMap<ModuleId<'db>, Vec<String>>,
     mut cache: Option<&mut ConstCache>,
-) -> HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
+) -> LookupMap<ModuleId<'db>, ModulePreResolvedConsts<'db>> {
     let typecheck_module_results = typecheck_result.module_results(db);
-    let mut result = HashMap::new();
+    let mut result = LookupMap::new();
 
     for (module_id, parsed) in module_statements(db, parsed_graph) {
 
@@ -1275,14 +1282,14 @@ fn evaluate_module_level_consts<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
-    lowered_functions: &HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+    lowered_functions: &LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
-    errors_out: &mut HashMap<ModuleId<'db>, Vec<String>>,
+    errors_out: &mut LookupMap<ModuleId<'db>, Vec<String>>,
     mut cache: Option<&mut ConstCache>,
-) -> HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> {
+) -> LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> {
     let typecheck_module_results = typecheck_result.module_results(db);
-    let mut result = HashMap::new();
+    let mut result = LookupMap::new();
 
     for (module_id, parsed) in module_statements(db, parsed_graph) {
 
@@ -1426,7 +1433,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // What the first stratum does have is the data consts, which need no
     // evaluating; see `data_consts`.
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
-    let data_consts: HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> =
+    let data_consts: LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>> =
         module_statements(db_salsa, parsed_graph)
             .filter_map(|(module_id, parsed)| {
                 let module_id = &module_id;
@@ -1436,7 +1443,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
                 (!consts.is_empty()).then_some((*module_id, consts))
             })
             .collect();
-    let mut deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    let mut deferred: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
     let first_stratum = lower_all_module_functions(
         db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
         &data_consts, &mut deferred, None, mode,
@@ -1448,9 +1455,9 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // so far. Done even when const inlining is skipped, since a module const is
     // resolved when its reference is lowered rather than by a later pass, so
     // there is nothing for that flag to skip.
-    let mut module_const_errors: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+    let mut module_const_errors: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
     let module_consts = if deferred.is_empty() && !module_graph_has_module_consts(db_salsa, parsed_graph) {
-        HashMap::new()
+        LookupMap::new()
     } else {
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
         let func_ids = func_id_lookup(db_salsa, func_id_map);
@@ -1465,12 +1472,12 @@ pub fn lower_module_graph_with_evaluator<'db>(
 
     // Second stratum: the functions that were waiting on those values.
     if !deferred.is_empty() {
-        let mut still_deferred: HashMap<ModuleId<'db>, Vec<String>> = HashMap::new();
+        let mut still_deferred: LookupMap<ModuleId<'db>, Vec<String>> = LookupMap::new();
         let second = lower_all_module_functions(
             db, parsed_graph, typecheck_result, ownership_analysis, func_id_map,
             &module_consts, &mut still_deferred, Some(&deferred), mode,
         );
-        for (module_id, names) in &still_deferred {
+        for (module_id, names) in still_deferred.iter_unordered() {
             for name in names {
                 module_const_errors.entry(*module_id).or_default().push(format!(
                     "function '{}' names a module const that could not be evaluated",
@@ -1486,7 +1493,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // no module declares a const at all -- then there is nothing to evaluate,
     // and building the registry to evaluate it with is pure cost).
     let resolved_consts = if skip_const_inlining || !graph_declares_consts(db_salsa, parsed_graph) {
-        HashMap::new()
+        LookupMap::new()
     } else {
         // Build a module registry from lowered functions for cross-module CTFE calls.
         let lowered_functions = ir_map(db_salsa, &lowered_modules);
@@ -1554,7 +1561,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // Module const failures have to reach the lowering result, or a module
     // whose const could not be evaluated compiles as though the functions that
     // name it were never written. Specialization failures travel the same way.
-    for (module_id, errors) in module_const_errors.into_iter().chain(specialize_errors) {
+    for (module_id, errors) in module_const_errors.into_iter_unordered().chain(specialize_errors) {
         resolved_consts
             .entry(module_id)
             .or_insert_with(|| ModulePreResolvedConsts::new(module_id, Vec::new()))
@@ -1576,7 +1583,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // travels as a `ModuleLowered` handle, so neither the work items, warmed
     // or not, nor the aggregation copies an instruction, and the memo key does
     // not hash one either.
-    let lowered_modules: HashMap<ModuleId<'db>, ModuleLowered<'db>> =
+    let lowered_modules: LookupMap<ModuleId<'db>, ModuleLowered<'db>> =
         lowered_modules.into_iter().collect();
     let work = assembly_work(
         db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules,
@@ -1618,7 +1625,7 @@ fn merge_strata<'db>(
     first: LoweredModules<'db>,
     second: LoweredModules<'db>,
 ) -> LoweredModules<'db> {
-    let mut second: HashMap<ModuleId<'db>, ModuleLowered<'db>> = second.into_iter().collect();
+    let mut second: LookupMap<ModuleId<'db>, ModuleLowered<'db>> = second.into_iter().collect();
     let mut merged: LoweredModules<'db> = first.into_iter()
         .map(|(module_id, first)| match second.remove(&module_id) {
             Some(second) => (module_id, merge_module_strata(db, first, second)),
@@ -1626,7 +1633,7 @@ fn merge_strata<'db>(
         })
         .collect();
 
-    let mut only_second: LoweredModules<'db> = second.into_iter().collect();
+    let mut only_second: LoweredModules<'db> = second.into_iter_unordered().collect();
     only_second.sort_by(|a, b| a.0.path(db).cmp(b.0.path(db)));
     merged.extend(only_second);
     merged
@@ -1744,7 +1751,7 @@ fn specialize_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     evaluator: &mut dyn CtfeEvaluator,
     func_id_map: FuncIdMap<'db>,
-    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
     callable_modules: LoweredModules<'db>,
     modules: LoweredModules<'db>,
 ) -> (LoweredModules<'db>, Vec<(ModuleId<'db>, Vec<String>)>) {
@@ -1786,7 +1793,7 @@ fn instantiate_generics<'db>(
     let mut ir: Vec<(ModuleId<'db>, IrModuleId, ModuleLoweredFunctions)> = modules.iter()
         .map(|(module_id, lowered)| (*module_id, module_ids[module_id], lowered.ir(db).as_ref().clone()))
         .collect();
-    let before: HashMap<ModuleId<'db>, usize> = ir.iter()
+    let before: LookupMap<ModuleId<'db>, usize> = ir.iter()
         .map(|(module_id, _, funcs)| (*module_id, funcs.functions.iter().map(|f| f.id.0 as usize + 1).max().unwrap_or(0)))
         .collect();
     let mut functions: Vec<(IrModuleId, &mut Vec<Arc<IrCodeUnit>>)> = ir.iter_mut()
@@ -1824,9 +1831,9 @@ fn specialize_comptime_functions<'db>(
     evaluator: &mut dyn CtfeEvaluator,
     callable: &ModuleFunctionRegistry,
     func_id_map: &FuncIdLookup<'db>,
-    module_consts: &HashMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
-    mut lowered_functions: HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
-) -> (HashMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
+    module_consts: &LookupMap<ModuleId<'db>, HashMap<String, (IrType, Arc<ConstValue>)>>,
+    mut lowered_functions: LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>,
+) -> (LookupMap<ModuleId<'db>, Arc<ModuleLoweredFunctions>>, Vec<(ModuleId<'db>, Vec<String>)>) {
     // Modules paired with their `IrModuleId`, which is also the order the copies
     // are numbered in. Taken from `ir_module_ids` rather than from a position in
     // the graph, so that this cannot disagree with what a call site was compiled
@@ -2019,8 +2026,8 @@ fn assembly_work<'db>(
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     ownership_analysis: ModuleGraphAnalysis<'db>,
-    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
+    resolved_consts: &LookupMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
+    lowered_modules: &LookupMap<ModuleId<'db>, ModuleLowered<'db>>,
     inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
 ) -> Vec<AssemblyItem<'db>> {

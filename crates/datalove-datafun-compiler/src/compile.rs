@@ -5,6 +5,7 @@
 //! It does not depend on package resolution or the interpreter.
 
 use rmx::prelude::*;
+use bct::lookup::LookupMap;
 use rmx::std::collections::BTreeMap;
 
 use bct::module_graph::{ModuleGraph, ModuleId};
@@ -29,7 +30,7 @@ pub struct ModuleCompilationInput<'db> {
     /// The module graph with modules in dependency order.
     pub graph: ModuleGraph<'db>,
     /// Resolved require aliases per module: (alias, target_module_id).
-    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    pub resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
 }
 
 /// Output of module compilation - analysis results without lowering.
@@ -135,7 +136,7 @@ pub fn parse_phase<'db>(
     db: &'db dyn DbClone,
     mode: ParallelMode,
     graph: ModuleGraph<'db>,
-    resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, bct::input::Source)>,
 ) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
@@ -237,7 +238,7 @@ fn collect_results<'db>(
     let module_results = typecheck_result.module_results(db.as_salsa_db());
     let mut typecheck_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
 
-    for (module_id, result) in module_results {
+    for (module_id, result) in module_results.iter_unordered() {
         let errors = result.errors(db.as_salsa_db());
         if errors.is_empty() {
             continue;
@@ -262,7 +263,7 @@ fn collect_results<'db>(
 
     // Collect ownership analysis errors.
     let mut ownership_errors: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()) {
+    for (module_id, result) in ownership_analysis.module_results(db.as_salsa_db()).iter_unordered() {
         let errors = result.errors(db.as_salsa_db());
         if !errors.is_empty() {
             let path = module_id.path(db.as_salsa_db()).clone();

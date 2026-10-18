@@ -3,7 +3,8 @@
 //! Contains types used by both name resolution and typechecking phases:
 //! Type, TypeFunction, TypeError, ParsedModuleGraph, and related utilities.
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
+use bct::lookup::LookupMap;
 use bct::text::InternedText;
 use bct::module_graph::ModuleId;
 use datalove_datalit as datalit;
@@ -205,7 +206,7 @@ pub struct ParsedModuleGraph<'db> {
     /// import resolution instead of re-parsing require statements.
     #[tracked]
     #[returns(ref)]
-    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
+    pub resolved_requires: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>>,
 
     /// Resolved rider interfaces per module.
     ///
@@ -213,7 +214,7 @@ pub struct ParsedModuleGraph<'db> {
     /// Populated by the compiler driver from `require rider` statements.
     #[tracked]
     #[returns(ref)]
-    pub resolved_riders: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
+    pub resolved_riders: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>>,
 }
 
 impl<'db> ParsedModuleGraph<'db> {
@@ -286,7 +287,7 @@ pub struct ModuleNameResolution<'db> {
 pub struct AllModuleNameResolutions<'db> {
     /// Per-module name resolutions.
     #[returns(ref)]
-    pub resolutions: BTreeMap<ModuleId<'db>, ModuleNameResolution<'db>>,
+    pub resolutions: LookupMap<ModuleId<'db>, ModuleNameResolution<'db>>,
 }
 
 /// Collected names from statements (type aliases and optionally functions).

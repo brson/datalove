@@ -3,7 +3,8 @@
 //! Re-exports core types from bct and adds datafun-specific parsing/orchestration.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, HashMap};
+use bct::lookup::LookupMap;
+use rmx::std::collections::HashMap;
 use rmx::std::hash::Hash;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature};
@@ -39,12 +40,12 @@ pub use datalove_datafun_parser::{parse_module_ast, parse_module_full, module_sp
 pub fn parse_module_graph<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph<'db>,
-    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    resolved_requires_str: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
     rider_sources: Vec<(String, bct::input::Source)>,
 ) -> ParsedModuleGraph<'db> {
     // Convert String aliases to InternedText.
-    let resolved_requires: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>> =
-        resolved_requires_str.into_iter()
+    let resolved_requires: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, ModuleId<'db>)>> =
+        resolved_requires_str.into_iter_unordered()
             .map(|(module_id, requires)| {
                 let interned_requires: Vec<(InternedText<'db>, ModuleId<'db>)> = requires.into_iter()
                     .map(|(alias, target)| (InternedText::new(db, alias), target))
@@ -115,17 +116,17 @@ fn build_resolved_riders_from_sources<'db>(
     db: &'db dyn salsa::Database,
     graph: ModuleGraph<'db>,
     rider_sources: &[(String, bct::input::Source)],
-) -> BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
+) -> LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, datalove_datafun_common::RiderInterface<'db>)>> {
     use datalove_datafun_ast::ast::{Item, StmtRequire};
     use datalove_datafun_common::RiderInterface;
 
     if rider_sources.is_empty() {
-        return BTreeMap::new();
+        return LookupMap::new();
     }
 
     let rider_interfaces = rider_interfaces(db, RiderSources::new(db, rider_sources.to_vec()));
 
-    let mut result: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = BTreeMap::new();
+    let mut result: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, RiderInterface<'db>)>> = LookupMap::new();
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
         for item in &datalove_datafun_parser::module_uses(db, module).items {
@@ -375,7 +376,7 @@ mod tests {
 
         // First parse.
         let (graph, _ids) = build_graph_logging(&db, &[("a", "let x = 1")]);
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
 
         let first_run_queries = db.executed_queries();
         assert!(!first_run_queries.is_empty(), "first run should execute queries");
@@ -383,7 +384,7 @@ mod tests {
         db.clear_events();
 
         // Second parse with same inputs - should be cached.
-        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let _parsed2 = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
 
         let second_run_queries = db.executed_queries();
         assert!(
@@ -399,13 +400,13 @@ mod tests {
 
         // First parse.
         let (graph1, _ids1) = build_graph_logging(&db, &[("a", "let x = 1")]);
-        let _parsed1 = parse_module_graph(&db, graph1, BTreeMap::new(), Vec::new());
+        let _parsed1 = parse_module_graph(&db, graph1, LookupMap::new(), Vec::new());
 
         db.clear_events();
 
         // Second parse with different source.
         let (graph2, _ids2) = build_graph_logging(&db, &[("a", "let x = 2")]);
-        let _parsed2 = parse_module_graph(&db, graph2, BTreeMap::new(), Vec::new());
+        let _parsed2 = parse_module_graph(&db, graph2, LookupMap::new(), Vec::new());
 
         let recompute_queries = db.executed_queries();
         assert!(
@@ -443,7 +444,7 @@ mod tests {
             ("b", "require module /test/c\nfun mid(): i32\n  ret c.base()\nend fun"),
             ("a", "require module /test/b\nlet x = b.mid()"),
         ]);
-        let mut requires = BTreeMap::new();
+        let mut requires = LookupMap::new();
         requires.insert(ids[1], vec![("c".to_string(), ids[0])]);
         requires.insert(ids[2], vec![("b".to_string(), ids[1])]);
 
@@ -468,7 +469,7 @@ mod tests {
         let (graph, _ids) = build_graph(&db, &[("a", "let x = 1")]);
 
         enable_query_logging();
-        let _parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
         parse_every_module(&db, graph);
         let log1 = disable_query_logging();
 
@@ -478,7 +479,7 @@ mod tests {
         // Second run with same inputs.
         // The outer parse_module_graph is cached, so the loop doesn't run.
         enable_query_logging();
-        let _parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let _parsed2 = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
         parse_every_module(&db, graph);
         let log2 = disable_query_logging();
 
@@ -499,12 +500,12 @@ mod tests {
         // gives back the same graph. Building it per phase rather than holding
         // one keeps the handles inside a single revision.
         fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);
             let id_a = builder.add_module("a".to_string(), source_a);
-            let mut requires = BTreeMap::new();
+            let mut requires = LookupMap::new();
             requires.insert(id_a, vec![("b".to_string(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
@@ -759,7 +760,7 @@ mod tests {
             ("b", "fun helper(): i32\n  ret 1\nend fun"),
             ("a", "fun main(): i32\n  ret 2\nend fun"),
         ]);
-        let mut requires = BTreeMap::new();
+        let mut requires = LookupMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
         let parsed = parse_module_graph(&db, graph, requires, Vec::new());
@@ -788,12 +789,12 @@ mod tests {
         // gives back the same graph, which is what lets each phase build its
         // own rather than one being held across the edit.
         fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);
             let id_a = builder.add_module("a".to_string(), source_a);
-            let mut requires = BTreeMap::new();
+            let mut requires = LookupMap::new();
             requires.insert(id_a, vec![("b".to_string(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
@@ -839,11 +840,11 @@ mod tests {
         let graph = builder.build();
 
         // First run.
-        let parsed1 = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let parsed1 = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck(&db, parsed1);
 
         // Second run with no changes.
-        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let parsed2 = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
         enable_query_logging();
         let _result2 = resolve_and_typecheck(&db, parsed2);
         let log = disable_query_logging();
@@ -866,12 +867,12 @@ mod tests {
         // Interned, so each phase can build its own rather than one being held
         // across the edit; they are the same graph.
         fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
+            -> (ModuleGraph<'db>, ModuleId<'db>, ModuleId<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("test/b".to_string(), source_b);
             let id_a = builder.add_module("test/a".to_string(), source_a);
-            let mut requires = BTreeMap::new();
+            let mut requires = LookupMap::new();
             requires.insert(id_a, vec![("b".to_string(), id_b)]);
             (builder.build(), id_a, id_b, requires)
         }
@@ -919,7 +920,7 @@ mod tests {
         let id_a = builder.add_module("test/a".to_string(), source_a);
         let graph = builder.build();
 
-        let mut requires = BTreeMap::new();
+        let mut requires = LookupMap::new();
         requires.insert(id_a, vec![("b".to_string(), id_b)]);
 
         // First run: both modules should have imports resolved.
@@ -956,7 +957,7 @@ mod tests {
             ("b", "fun helper(): i32\n  ret 1\nend fun"),
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
-        let mut requires = BTreeMap::new();
+        let mut requires = LookupMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
         // First: parallel typecheck populates cache (including import resolution).
@@ -998,7 +999,7 @@ mod tests {
         // Parse on a clone, with the original's log watching.
         db.clear_events();
         let db_clone = db.clone();
-        let _parsed = parse_module_graph(&db_clone, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed = parse_module_graph(&db_clone, graph.clone(), LookupMap::new(), Vec::new());
         assert!(
             !db.executed_queries().is_empty(),
             "a clone's queries have to reach the log the original reads",
@@ -1006,7 +1007,7 @@ mod tests {
 
         // And the original finds that work already done.
         db.clear_events();
-        let _parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let _parsed = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
         assert!(
             db.executed_queries().is_empty(),
             "the original should see the clone's work as cached, but ran {:?}",
@@ -1039,7 +1040,7 @@ mod tests {
         eprintln!("Parallel phase complete, trying to use original db...");
 
         // Now try to use the original db.
-        let _parsed = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let _parsed = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
         eprintln!("Original db still works after parallel phase");
     }
 
@@ -1055,7 +1056,7 @@ mod tests {
         ]);
 
         // First parallel parse populates cache.
-        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new());
 
         // Record which queries executed during first parse.
         let first_executed = db.executed_queries();
@@ -1069,7 +1070,7 @@ mod tests {
         db.clear_events();
 
         // Second parse should be fully memoized.
-        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), LookupMap::new(), Vec::new());
 
         let second_executed = db.executed_queries();
         // Filter to just parse_module_full queries (not input lookups).
@@ -1126,7 +1127,7 @@ mod tests {
         ]);
 
         // First: parallel typecheck populates cache.
-        let parsed = parse_module_graph(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let parsed = parse_module_graph(&db, graph.clone(), LookupMap::new(), Vec::new());
         let _result1 = resolve_and_typecheck_parallel(&db, parsed);
 
         // Clear events after parallel phase.
@@ -1134,7 +1135,7 @@ mod tests {
 
         // Second: sequential typecheck should hit cache (warmed by parallel).
         // If parallel didn't populate the cache, this would show typecheck_module executions.
-        let parsed2 = parse_module_graph(&db, graph, BTreeMap::new(), Vec::new());
+        let parsed2 = parse_module_graph(&db, graph, LookupMap::new(), Vec::new());
         let _result2 = resolve_and_typecheck(&db, parsed2);
 
         let executed = db.executed_queries();
@@ -1161,7 +1162,7 @@ mod tests {
             ("b", "fun helper(): i32\n  ret 42\nend fun"),
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
-        let mut requires = BTreeMap::new();
+        let mut requires = LookupMap::new();
         requires.insert(ids[1], vec![("b".to_string(), ids[0])]);
 
         let parsed = parse_module_graph(&db, graph, requires, Vec::new());
@@ -1175,7 +1176,7 @@ mod tests {
             ("b", "fun helper(): i32\n  ret 42\nend fun"),
             ("a", "require module /test/b\nimport b.helper\nfun main(): i32\n  ret helper()\nend fun"),
         ]);
-        let mut requires2 = BTreeMap::new();
+        let mut requires2 = LookupMap::new();
         requires2.insert(ids2[1], vec![("b".to_string(), ids2[0])]);
         let parsed2 = parse_module_graph(&db2, graph2, requires2, Vec::new());
         let result_par = resolve_and_typecheck_with_mode(&db2, parsed2, TypecheckParallelMode::Parallel);
@@ -1192,7 +1193,7 @@ mod tests {
             db: &'db Database,
             result: datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db>,
         ) -> Vec<(String, Vec<String>, usize, Vec<String>)> {
-            let mut per_module: Vec<_> = result.module_results(db).iter()
+            let mut per_module: Vec<_> = result.module_results(db).iter_unordered()
                 .map(|(module_id, single)| {
                     let mut exports: Vec<String> = single.exports(db).iter()
                         .map(|(name, _)| name.text(db).S())
@@ -1252,12 +1253,12 @@ mod tests {
         // Interned, so each phase builds the same graph rather than one being
         // held across the edit.
         fn build<'db>(db: &'db Database, source_a: bct::input::Source, source_b: bct::input::Source)
-            -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
+            -> (ModuleGraph<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>)
         {
             let mut builder = ModuleGraphBuilder::new(db);
             let id_b = builder.add_module("b".to_string(), source_b);
             let id_a = builder.add_module("a".to_string(), source_a);
-            let mut requires = BTreeMap::new();
+            let mut requires = LookupMap::new();
             requires.insert(id_a, vec![("b".to_string(), id_b)]);
             (builder.build(), requires)
         }

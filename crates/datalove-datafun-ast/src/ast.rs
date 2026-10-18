@@ -18,7 +18,7 @@ use datalove_datalit as datalit;
 ///
 /// The module is part of it because every module numbers its expressions from
 /// zero, and a key turns up in diagnostics outside the module's own tables.
-#[derive(Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub struct ExprKey<'db> {
     /// Module the expression belongs to, or None for a script.

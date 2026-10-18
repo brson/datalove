@@ -3,12 +3,12 @@
 //! Provides type checking for datafun scripts and expressions.
 
 use rmx::prelude::*;
-use rmx::std::collections::BTreeMap;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::*;
 use datalove_datalit;
 
 use salsa::Database as Db;
+use bct::lookup::LookupMap;
 use bct::module_graph::ModuleId;
 use datalove_datafun_ast::spans::DatafunSpans;
 
@@ -699,33 +699,37 @@ pub struct ModuleGraphTypecheckResult<'db> {
 
     /// Type errors encountered, per module.
     #[returns(ref)]
-    pub module_errors: BTreeMap<ModuleId<'db>, Vec<TypeError>>,
+    pub module_errors: LookupMap<ModuleId<'db>, Vec<TypeError>>,
 
     /// Module exports, per module.
     #[returns(ref)]
-    pub module_exports: BTreeMap<ModuleId<'db>, ModuleExports<'db>>,
+    pub module_exports: LookupMap<ModuleId<'db>, ModuleExports<'db>>,
 
     /// Module imports, per module.
     #[returns(ref)]
-    pub module_imports: BTreeMap<ModuleId<'db>, ModuleImports<'db>>,
+    pub module_imports: LookupMap<ModuleId<'db>, ModuleImports<'db>>,
 
     /// Per-module typecheck results (tracked structs with stable salsa IDs).
     ///
     /// Used by downstream phases (e.g., IR lowering) to get per-module type
     /// information while preserving memoization.
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>>,
+    pub module_results: LookupMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>>,
 }
 
 impl<'db> ModuleGraphTypecheckResult<'db> {
     /// Check if typechecking succeeded (no errors).
     pub fn is_ok(&self, db: &'db dyn Db) -> bool {
-        self.module_errors(db).values().all(|errors| errors.is_empty())
+        self.module_errors(db).values_unordered().all(|errors| errors.is_empty())
     }
 
-    /// Get all errors across all modules.
-    pub fn all_errors(&self, db: &'db dyn Db) -> Vec<&TypeError> {
-        self.module_errors(db).values().flatten().collect()
+    /// Get all errors across all modules, in the graph's order.
+    pub fn all_errors(&self, db: &'db dyn Db) -> Vec<&'db TypeError> {
+        let module_errors = self.module_errors(db);
+        self.graph(db).iter_modules(db)
+            .filter_map(|module| module_errors.get(&module.id(db)))
+            .flatten()
+            .collect()
     }
 }
 

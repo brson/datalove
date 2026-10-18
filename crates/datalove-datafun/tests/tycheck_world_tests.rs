@@ -345,7 +345,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     let module_errors = typecheck_result.module_errors(&db);
 
     // Get all modules from the graph and sort by path for consistent ordering.
-    let mut module_ids: Vec<_> = graph.module_by_id(&db).keys().copied().collect();
+    let mut module_ids: Vec<_> = graph.module_by_id(&db).keys_unordered().copied().collect();
     module_ids.sort_by_key(|id: &datalove_datafun::module_graph::ModuleId| id.path(&db).clone());
 
     for module_id in module_ids {

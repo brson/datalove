@@ -1,6 +1,7 @@
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeSet, BTreeMap};
+use rmx::std::collections::BTreeMap;
 
+use crate::lookup::{LookupMap, LookupSet};
 use crate::package2::{PackageName, Package, PackageModule, ModuleName};
 
 pub type ImportSpace = String;
@@ -18,17 +19,18 @@ pub type ImportDemand = (ImportSpace, PackageAlias, ModuleAlias);
 #[salsa::tracked]
 pub struct ImportDemandMap<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<PackageModule<'db>, Vec<ImportDemand>>,
+    pub map: LookupMap<PackageModule<'db>, Vec<ImportDemand>>,
 }
 
+/// Each module's imports, by what it asked for, and what each resolved to.
 #[salsa::tracked]
 pub struct PackageWorldModuleGraph<'db> {
     #[returns(ref)]
-    pub map: BTreeMap<PackageModule<'db>, BTreeSet<(ImportDemand, ResolvedPackageModule<'db>)>>,
+    pub map: LookupMap<PackageModule<'db>, BTreeMap<ImportDemand, ResolvedPackageModule<'db>>>,
 }
 
 #[derive(Copy, Clone, Hash, salsa::SalsaValue)]
-#[derive(Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Eq, PartialEq)]
 pub enum ResolvedPackageModule<'db> {
     Resolved(PackageModule<'db>),
     Unresolved,
@@ -52,10 +54,10 @@ pub fn resolve_package_world<'db>(
     package_world_map: PackageWorldMap<'db>,
     import_demand_map: ImportDemandMap<'db>,
 ) -> PackageWorldModuleGraphWithErrors<'db> {
-    let mut module_edges: BTreeMap<PackageModule<'db>, BTreeSet<(ImportDemand, ResolvedPackageModule<'db>)>> = default();
+    let mut module_edges: LookupMap<PackageModule<'db>, BTreeMap<ImportDemand, ResolvedPackageModule<'db>>> = default();
     for package_world_record in package_world_map.flatten_iter(db) {
         let PackageWorldRecord { package, package_module, .. } = package_world_record;
-        let mut module_deps = BTreeSet::new();
+        let mut module_deps = BTreeMap::new();
         let import_demands = &import_demand_map.map(db)[&package_module];
         for import_demand in import_demands.iter() {
             let module_world_map = module_world_map(db, package_world_map, package);
@@ -65,14 +67,14 @@ pub fn resolve_package_world<'db>(
                 import_demand,
             ) {
                 Some(import_package_module) => {
-                    module_deps.insert((
+                    module_deps.insert(
                         import_demand.C(), ResolvedPackageModule::Resolved(import_package_module),
-                    ));
+                    );
                 },
                 None => {
-                    module_deps.insert((
+                    module_deps.insert(
                         import_demand.C(), ResolvedPackageModule::Unresolved,
-                    ));
+                    );
                 }
             }
         }
@@ -109,7 +111,7 @@ fn validate_graph<'db>(
     db: &'db dyn crate::Db,
     graph: PackageWorldModuleGraph<'db>,
 ) -> Result<(), ValidationError> {
-    let edges: BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>> = graph.edges(db);
+    let edges = graph.edges(db);
     detect_cycles(&edges)
 }
 
@@ -120,24 +122,26 @@ enum VisitState {
     Visited,
 }
 
-fn detect_cycles<'db>(edges: &BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>>) -> Result<(), ValidationError> {
-    let mut visit_state: BTreeMap<PackageModule<'db>, VisitState> = BTreeMap::new();
+/// Whether the graph has a cycle, which does not depend on the order it is
+/// searched in.
+fn detect_cycles<'db>(edges: &LookupMap<PackageModule<'db>, LookupSet<PackageModule<'db>>>) -> Result<(), ValidationError> {
+    let mut visit_state: LookupMap<PackageModule<'db>, VisitState> = LookupMap::new();
 
     // Initialize all nodes as unvisited
-    for &node in edges.keys() {
+    for &node in edges.keys_unordered() {
         visit_state.insert(node, VisitState::Unvisited);
     }
 
     // All deps are accounted for
-    for deps in edges.values() {
-        for &dep in deps {
+    for deps in edges.values_unordered() {
+        for &dep in deps.iter_unordered() {
             assert!(visit_state.get(&dep).is_some());
             //visit_state.entry(dep).or_insert(VisitState::Unvisited);
         }
     }
 
     // Perform DFS from each unvisited node
-    let nodes: Vec<PackageModule<'db>> = visit_state.keys().copied().collect();
+    let nodes: Vec<PackageModule<'db>> = visit_state.keys_unordered().copied().collect();
     for node in nodes {
         if visit_state[&node] == VisitState::Unvisited {
             if dfs_detect_cycle(node, edges, &mut visit_state) {
@@ -151,8 +155,8 @@ fn detect_cycles<'db>(edges: &BTreeMap<PackageModule<'db>, BTreeSet<PackageModul
 
 fn dfs_detect_cycle<'db>(
     node: PackageModule<'db>,
-    edges: &BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>>,
-    visit_state: &mut BTreeMap<PackageModule<'db>, VisitState>,
+    edges: &LookupMap<PackageModule<'db>, LookupSet<PackageModule<'db>>>,
+    visit_state: &mut LookupMap<PackageModule<'db>, VisitState>,
 ) -> bool {
     if visit_state[&node] == VisitState::Visiting {
         // Found a back edge - cycle detected
@@ -168,7 +172,7 @@ fn dfs_detect_cycle<'db>(
 
     // Visit all dependencies
     if let Some(deps) = edges.get(&node) {
-        for &dep in deps {
+        for &dep in deps.iter_unordered() {
             if rmx::extras::recurse(|| {
                 dfs_detect_cycle(dep, edges, visit_state)
             }) {
@@ -261,9 +265,9 @@ impl<'db> PackageWorldModuleGraph<'db> {
     fn edges(
         &self,
         db: &'db dyn crate::Db,
-    ) -> BTreeMap<PackageModule<'db>, BTreeSet<PackageModule<'db>>> {
-        self.map(db).iter().map(|(module, modules)| {
-            let modules: BTreeSet<_> = modules.iter()
+    ) -> LookupMap<PackageModule<'db>, LookupSet<PackageModule<'db>>> {
+        self.map(db).iter_unordered().map(|(module, modules)| {
+            let modules: LookupSet<_> = modules.iter()
                 .filter_map(|(_, module)| match module {
                     ResolvedPackageModule::Resolved(module) => Some(module),
                     ResolvedPackageModule::Unresolved => None,
@@ -401,11 +405,11 @@ fn test_input_unresolvable<'db>(
     let module_map = package_world_map.module_map(db);
     let import_demand_map = ImportDemandMap::new(
         db,
-        BTreeMap::from([
+        [
             (module_map["main"]["main/main"], vec![
                 (S("sys"), S("core"), S("core"))
             ]),
-        ]),
+        ].into_iter().collect(),
     );
     TestInput::new(db, package_world_map, import_demand_map)
 }
@@ -424,7 +428,7 @@ fn test_unresolved_import() {
     ];
 
     let mut unresolved_actual = vec![];
-    for (package_module, imports) in resolved.result(db).expect(".").map(db) {
+    for (package_module, imports) in resolved.result(db).expect(".").map(db).iter_unordered() {
         for ((import_space, package_alias, module_alias), resolved_package) in imports {
             if matches!(resolved_package, ResolvedPackageModule::Unresolved) {
                 unresolved_actual.push(
@@ -492,7 +496,7 @@ fn test_input_cycle<'db>(
     let module_b = package_core.modules(db)["b"];
     let import_demand_map = ImportDemandMap::new(
         db,
-        BTreeMap::from([
+        [
             (module_core, vec![
                 (S("pkg"), S("core"), S("b"))
             ]),
@@ -502,7 +506,7 @@ fn test_input_cycle<'db>(
             (module_b, vec![
                 (S("pkg"), S("core"), S("a"))
             ]),
-        ]),
+        ].into_iter().collect(),
     );
     TestInput::new(db, package_world_map, import_demand_map)
 }

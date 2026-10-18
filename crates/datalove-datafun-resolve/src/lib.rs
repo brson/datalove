@@ -3,7 +3,7 @@
 //! Provides name resolution (type aliases, function signatures) as a separate
 //! phase before typechecking. This crate has no dependency on tycheck.
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use bct::text::InternedText;
 use bct::module_graph::Module;
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -249,7 +249,7 @@ pub fn resolve_all_names<'db>(
     db: &'db dyn Db,
     parsed_graph: ParsedModuleGraph<'db>,
 ) -> AllModuleNameResolutions<'db> {
-    let mut all_resolutions = BTreeMap::new();
+    let mut all_resolutions = bct::lookup::LookupMap::new();
 
     for module in parsed_graph.graph(db).iter_modules(db) {
         let resolution = resolve_module_names(db, module);

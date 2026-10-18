@@ -38,7 +38,7 @@ fn typecheck_worldfile(source: &str) -> Vec<String> {
     let mut errors = Vec::new();
     let module_errors = typecheck_result.module_errors(&db);
 
-    for (module_id, errs) in module_errors.iter() {
+    for (module_id, errs) in module_errors.sorted_by_key(|module| module.path(&db)) {
         for err in errs {
             errors.push(format!("{}: {:?}", module_id.path(&db), err));
         }

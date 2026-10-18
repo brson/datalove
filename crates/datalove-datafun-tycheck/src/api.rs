@@ -4,7 +4,8 @@
 //! scripts, expressions, and module graphs.
 
 use rmx::prelude::*;
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
+use bct::lookup::LookupMap;
 use bct::text::InternedText;
 use datalove_ct::query_log::{log_query, QueryPhase};
 
@@ -727,10 +728,10 @@ pub fn typecheck_module_graph<'db>(
     // ========================================================================
     // TYPECHECK PASS
     // ========================================================================
-    let mut module_errors: BTreeMap<ModuleId<'db>, Vec<TypeError>> = BTreeMap::new();
-    let mut module_exports_map: BTreeMap<ModuleId<'db>, ModuleExports<'db>> = BTreeMap::new();
-    let mut module_imports_map: BTreeMap<ModuleId<'db>, ModuleImports<'db>> = BTreeMap::new();
-    let mut module_results_map: BTreeMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>> = BTreeMap::new();
+    let mut module_errors: LookupMap<ModuleId<'db>, Vec<TypeError>> = LookupMap::new();
+    let mut module_exports_map: LookupMap<ModuleId<'db>, ModuleExports<'db>> = LookupMap::new();
+    let mut module_imports_map: LookupMap<ModuleId<'db>, ModuleImports<'db>> = LookupMap::new();
+    let mut module_results_map: LookupMap<ModuleId<'db>, SingleModuleTypecheckResult<'db>> = LookupMap::new();
 
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
@@ -814,10 +815,10 @@ pub fn resolve_module_imports<'db>(
     // is interned, so looking a module up in it costs nothing and depends on
     // nothing computed.
     let graph = parsed_graph.graph(db);
-    let mut dep_exports: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>> =
-        BTreeMap::new();
-    let mut dep_function_asts: BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>> =
-        BTreeMap::new();
+    let mut dep_exports: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>> =
+        LookupMap::new();
+    let mut dep_function_asts: LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>> =
+        LookupMap::new();
     for (_alias, target_id) in parsed_graph.get_requires(db, module_id) {
         let dep = graph.get_module(db, *target_id)
             .expect("a resolved require names a module in the graph");
@@ -926,7 +927,7 @@ fn require_chain<'db>(
     from: ModuleId<'db>,
     to: ModuleId<'db>,
 ) -> Option<Vec<ModuleId<'db>>> {
-    let mut came_from: BTreeMap<ModuleId<'db>, ModuleId<'db>> = BTreeMap::new();
+    let mut came_from: LookupMap<ModuleId<'db>, ModuleId<'db>> = LookupMap::new();
     let mut queue = std::collections::VecDeque::from([from]);
     while let Some(id) = queue.pop_front() {
         if id == to {
@@ -984,8 +985,8 @@ fn resolve_module_imports_internal<'db>(
     module_id: ModuleId<'db>,
     items: &Items<'db>,
     parsed_graph: &ParsedModuleGraph<'db>,
-    all_exports: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
-    module_function_asts: &BTreeMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>>,
+    all_exports: &LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, TypeFunction<'db>)>>,
+    module_function_asts: &LookupMap<ModuleId<'db>, Vec<(InternedText<'db>, FunHead<'db>)>>,
 ) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>, crate::QualifiedScope<'db>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);

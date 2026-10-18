@@ -205,7 +205,7 @@ pub(crate) fn closure_fingerprint<'db>(
     let mut requires: Vec<(&String, Fingerprint)> = graph.dependencies(db)
         .get(&module_id)
         .into_iter()
-        .flatten()
+        .flat_map(|deps| deps.iter_unordered())
         .map(|dep| (dep.path(db), closure_fingerprint(db, graph, *dep)))
         .collect();
     requires.sort();

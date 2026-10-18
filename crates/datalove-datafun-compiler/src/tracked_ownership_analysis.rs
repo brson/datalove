@@ -5,6 +5,7 @@
 //! incremental recompilation and parallel execution.
 
 use rmx::prelude::*;
+use bct::lookup::LookupMap;
 use rmx::std::collections::{BTreeMap, HashMap};
 use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -54,7 +55,7 @@ pub struct SingleModuleAnalysis<'db> {
 pub struct ModuleGraphAnalysis<'db> {
     /// Per-module analysis results.
     #[returns(ref)]
-    pub module_results: BTreeMap<ModuleId<'db>, SingleModuleAnalysis<'db>>,
+    pub module_results: LookupMap<ModuleId<'db>, SingleModuleAnalysis<'db>>,
 
     /// Whether all modules analyzed successfully.
     #[returns(copy)]
@@ -67,11 +68,12 @@ impl<'db> ModuleGraphAnalysis<'db> {
         self.success(db)
     }
 
-    /// Get all analysis errors across all modules.
+    /// Get all analysis errors across all modules, by module path.
     pub fn all_errors(&self, db: &'db dyn salsa::Database) -> Vec<String> {
         self.module_results(db)
-            .values()
-            .flat_map(|r| r.errors(db).iter().cloned())
+            .sorted_by_key(|module| module.path(db))
+            .into_iter()
+            .flat_map(|(_, r)| r.errors(db).iter().cloned())
             .collect()
     }
 }
@@ -157,7 +159,7 @@ pub fn analyze_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
-    let mut module_results = BTreeMap::new();
+    let mut module_results = LookupMap::new();
     let mut all_success = true;
 
     for (module, single_typecheck) in analysis_work(db, parsed_graph, typecheck_result) {

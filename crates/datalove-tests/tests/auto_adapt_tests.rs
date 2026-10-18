@@ -100,7 +100,7 @@ fn typecheck_sections_with_mode(
 
             // Collect module errors.
             let module_errors = typecheck_result.module_errors(&db);
-            for (module_id, errs) in module_errors.iter() {
+            for (module_id, errs) in module_errors.sorted_by_key(|module| module.path(&db)) {
                 for err in errs {
                     all_errors.push(format!("{}: {:?}", module_id.path(&db), err));
                 }
@@ -129,9 +129,9 @@ fn typecheck_sections_with_mode(
             }
 
             // Run ownership analysis for modules if no type errors.
-            if module_errors.values().all(|e| e.is_empty()) {
+            if module_errors.values_unordered().all(|e| e.is_empty()) {
                 let ownership_result = analyze_module_graph(&db, parsed_graph, typecheck_result, mode);
-                for (module_id, analysis) in ownership_result.module_results(&db).iter() {
+                for (module_id, analysis) in ownership_result.module_results(&db).sorted_by_key(|module| module.path(&db)) {
                     for err in analysis.errors(&db) {
                         all_errors.push(format!("{}: {}", module_id.path(&db), err));
                     }

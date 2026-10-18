@@ -176,7 +176,7 @@ fn module_content_hashes(
     parsed_graph: datalove_datafun_tycheck::ParsedModuleGraph<'_>,
 ) -> BTreeMap<String, u64> {
     let resolved_requires = parsed_graph.resolved_requires(db);
-    let mut hashes = BTreeMap::new();
+    let mut hashes = bct::lookup::LookupMap::new();
     for module in parsed_graph.graph(db).iter_modules(db) {
         let module_id = module.id(db);
         let mut hasher = DefaultHasher::new();
@@ -192,7 +192,7 @@ fn module_content_hashes(
         }
         hashes.insert(module_id, hasher.finish());
     }
-    hashes.into_iter().map(|(id, hash)| (id.path(db).clone(), hash)).collect()
+    hashes.into_iter_unordered().map(|(id, hash)| (id.path(db).clone(), hash)).collect()
 }
 
 /// Hash a string using DefaultHasher.
@@ -408,7 +408,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
         // Get content hashes and errors.
         let current_hashes = module_content_hashes(&db, parsed_graph);
         let module_errors: BTreeMap<String, Vec<String>> = typecheck_result.module_errors(&db)
-            .iter()
+            .iter_unordered()
             .map(|(id, errors)| {
                 let path = id.path(&db).clone();
                 let error_strings: Vec<String> = errors.iter()
@@ -419,7 +419,7 @@ pub fn analyze_memo_worldfile(content: &str) -> AnyResult<MemoAnalysis> {
             .collect();
 
         let lowering_errors: BTreeMap<String, Vec<String>> = lowering_result.module_results(&db)
-            .iter()
+            .iter_unordered()
             .map(|(id, result)| {
                 let path = id.path(&db).clone();
                 (path, result.errors(&db).clone())

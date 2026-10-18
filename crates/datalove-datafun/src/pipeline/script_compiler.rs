@@ -1681,7 +1681,7 @@ impl<'db> ScriptCompiler<'db> {
                     // module graph, not with this script.
                     let parsed_graph = self.shared_context.parsed_graph;
                     let Some(module_id) = datalove_datafun_compiler::tracked_lower::ir_module_ids(self.db, parsed_graph)
-                        .iter()
+                        .iter_unordered()
                         .find(|(_, ir_id)| **ir_id == module)
                         .map(|(module_id, _)| *module_id)
                     else {

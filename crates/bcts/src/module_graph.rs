@@ -4,8 +4,9 @@
 //! `ModuleGraph` represents a dependency-ordered collection of modules.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, BTreeSet};
+use rmx::std::collections::BTreeMap;
 use crate::input::Source;
+use crate::lookup::{LookupMap, LookupSet};
 
 /// Opaque module identifier.
 ///
@@ -14,10 +15,11 @@ use crate::input::Source;
 /// asked for. As an input it did not, and every caller had to route through
 /// whoever happened to construct the id first.
 ///
-/// The derived `Ord` compares salsa ids, not paths, so like `InternedText`'s
-/// it is the order of first interning, which a parallel compile does not fix.
+/// Not `Ord`: the only order salsa could give it is the order of first
+/// interning, which a parallel compile does not fix. Key a map on one with
+/// `LookupMap`, and order modules by path or by the graph.
 #[salsa::interned]
-#[derive(Debug, Ord, PartialOrd)]
+#[derive(Debug)]
 pub struct ModuleId<'db> {
     /// Module path (e.g., "sys/std/u32").
     #[returns(ref)]
@@ -58,11 +60,11 @@ pub struct ModuleGraph<'db> {
 
     /// Module lookup by ID.
     #[returns(ref)]
-    pub module_by_id: BTreeMap<ModuleId<'db>, Module<'db>>,
+    pub module_by_id: LookupMap<ModuleId<'db>, Module<'db>>,
 
     /// Direct dependencies per module (for ordering verification).
     #[returns(ref)]
-    pub dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
+    pub dependencies: LookupMap<ModuleId<'db>, LookupSet<ModuleId<'db>>>,
 
     /// The data files `require data` may name, by path (e.g. "local/app/orders").
     ///
@@ -94,8 +96,8 @@ impl<'db> ModuleGraph<'db> {
 pub struct ModuleGraphBuilder<'db> {
     db: &'db dyn salsa::Database,
     modules: Vec<Module<'db>>,
-    module_by_id: BTreeMap<ModuleId<'db>, Module<'db>>,
-    dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>>,
+    module_by_id: LookupMap<ModuleId<'db>, Module<'db>>,
+    dependencies: LookupMap<ModuleId<'db>, LookupSet<ModuleId<'db>>>,
     data: BTreeMap<String, Source>,
 }
 
@@ -105,8 +107,8 @@ impl<'db> ModuleGraphBuilder<'db> {
         Self {
             db,
             modules: Vec::new(),
-            module_by_id: BTreeMap::new(),
-            dependencies: BTreeMap::new(),
+            module_by_id: LookupMap::new(),
+            dependencies: LookupMap::new(),
             data: BTreeMap::new(),
         }
     }
@@ -123,7 +125,7 @@ impl<'db> ModuleGraphBuilder<'db> {
         let module = Module::new(self.db, id, source);
         self.modules.push(module);
         self.module_by_id.insert(id, module);
-        self.dependencies.insert(id, BTreeSet::new());
+        self.dependencies.insert(id, LookupSet::new());
         id
     }
 
@@ -221,10 +223,8 @@ mod tests {
     /// Ids keep working as map keys.
     #[test]
     fn module_id_is_usable_as_a_map_key() {
-        use rmx::std::collections::BTreeMap;
-
         let db = crate::Database::default();
-        let mut map = BTreeMap::new();
+        let mut map = LookupMap::new();
         map.insert(ModuleId::new(&db, "b".to_string()), 2);
         map.insert(ModuleId::new(&db, "a".to_string()), 1);
 

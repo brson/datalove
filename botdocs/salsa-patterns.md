@@ -391,10 +391,12 @@ A sequential compile interns in one order. A parallel one interns from rayon's
 workers in whatever order they run, so two compiles of one world, or a
 sequential and a parallel one, give the same text and the same module different
 ids. That is harmless as long as the rule above holds: a container ordered by id
-(`InternedText`, `ModuleId` and `PackageModule` all are, the last two by derived
-`Ord`) or hashed by id (`FxHashMap` with a salsa struct key; salsa derives
-`Hash` on the id) is for lookup, and anything that reaches output is sorted by
-content first, as `asked_names` and the script unit's `function_types` are.
+(`InternedText` still is) or hashed by id (salsa derives `Hash` on the id) is
+for lookup, and anything that reaches output is sorted by content first, as
+`asked_names` and the script unit's `function_types` are. `ModuleId` and
+`PackageModule` are not `Ord` at all, and maps keyed by them are
+`bct::lookup::LookupMap`, which cannot be iterated except by a method that says
+whether the order may matter.
 
 Audited in October 2026, before parallel compiles became the default: with
 those three `Ord`s replaced by one comparing a scramble of the id bits, the

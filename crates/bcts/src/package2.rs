@@ -24,7 +24,7 @@ pub struct Package<'db> {
 /// The derived `Ord` compares salsa ids, the order of first interning; see
 /// `ModuleId`.
 #[salsa::interned]
-#[derive(Debug, Ord, PartialOrd)]
+#[derive(Debug)]
 pub struct PackageModule<'db> {
     #[returns(ref)]
     pub name: ModuleName,

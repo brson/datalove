@@ -33,6 +33,7 @@
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, BTreeSet};
 use bct::input::Source;
+use bct::lookup::{LookupMap, LookupSet};
 use bct::module_graph::{Module, ModuleGraph, ModuleId};
 use salsa::Setter;
 use datalove_datafun_tycheck::{DbClone, ParallelMode};
@@ -189,7 +190,7 @@ impl IncrementalModuleWorld {
         db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
         roots: &Roots,
-    ) -> (ModuleGraph<'db>, BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
+    ) -> (ModuleGraph<'db>, LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>) {
         let paths = self.paths_in_scope(path_deps, roots);
 
         // Dependencies before dependents.
@@ -199,17 +200,17 @@ impl IncrementalModuleWorld {
             .filter_map(|p| self.module(db, p))
             .collect();
 
-        let module_by_id: BTreeMap<ModuleId<'db>, Module> = paths.iter()
+        let module_by_id: LookupMap<ModuleId<'db>, Module> = paths.iter()
             .filter_map(|p| self.module(db, p).map(|m| (m.id(db), m)))
             .collect();
 
-        let mut dependencies: BTreeMap<ModuleId<'db>, BTreeSet<ModuleId<'db>>> = BTreeMap::new();
+        let mut dependencies: LookupMap<ModuleId<'db>, LookupSet<ModuleId<'db>>> = LookupMap::new();
         for (source_path, target_paths) in path_deps {
             if !paths.contains(source_path) {
                 continue;
             }
             if let Some(source_module) = self.module(db, source_path) {
-                let target_ids: BTreeSet<ModuleId<'db>> = target_paths.iter()
+                let target_ids: LookupSet<ModuleId<'db>> = target_paths.iter()
                     .filter(|p| paths.contains(*p))
                     .filter_map(|p| self.module(db, p).map(|m| m.id(db)))
                     .collect();
@@ -289,8 +290,8 @@ impl IncrementalModuleWorld {
         db: &'db dyn salsa::Database,
         path_deps: &BTreeMap<String, BTreeSet<String>>,
         paths: &BTreeSet<String>,
-    ) -> BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> {
-        let mut resolved_requires = BTreeMap::new();
+    ) -> LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> {
+        let mut resolved_requires = LookupMap::new();
 
         for (source_path, target_paths) in path_deps {
             if !paths.contains(source_path) {
@@ -621,7 +622,7 @@ fn dependencies_of<'db>(
 
     // Convert to path-based dependencies.
     let mut deps: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (source_id, requires) in &graph_with_requires.resolved_requires {
+    for (source_id, requires) in graph_with_requires.resolved_requires.iter_unordered() {
         let source_path = source_id.path(db).C();
         let target_paths: BTreeSet<String> = requires.iter()
             .map(|(_, target_id)| target_id.path(db).C())

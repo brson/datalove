@@ -5,7 +5,6 @@
 //! out means reading its `require` statements.
 
 use rmx::prelude::*;
-use rmx::std::collections::BTreeMap;
 
 use bct::module_graph::{Module, ModuleId};
 use bct::package_resolve2::{ImportDemand, ImportDemandMap, PackageWorldMap};
@@ -18,7 +17,7 @@ pub fn import_demands<'db>(
     db: &'db dyn salsa::Database,
     package_world_map: PackageWorldMap<'db>,
 ) -> ImportDemandMap<'db> {
-    let mut map = BTreeMap::new();
+    let mut map = bct::lookup::LookupMap::new();
     for record in package_world_map.flatten_iter(db) {
         let package_module = record.package_module;
 

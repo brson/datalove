@@ -484,7 +484,7 @@ impl ModuleCompilationPipeline {
         &mut self,
         db: &'db dyn DbClone,
         module_graph: ModuleGraph<'db>,
-        resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+        resolved_requires: bct::lookup::LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
         mode: ParallelMode,
         evaluator: &mut dyn CtfeEvaluator,
     ) -> CompiledModules<'db> {
@@ -553,7 +553,7 @@ impl ModuleCompilationPipeline {
                 let mut module_ir_dumps: BTreeMap<String, Vec<String>> = BTreeMap::new();
                 let mut module_consts = HashMap::new();
 
-                for (module_id, result) in lowering.module_results(db_salsa) {
+                for (module_id, result) in lowering.module_results(db_salsa).iter_unordered() {
                     let module_path = module_id.path(db_salsa).clone();
 
                     let consts = result.consts(db_salsa);
@@ -645,7 +645,7 @@ fn module_function_registry<'db>(
 ) -> Arc<ModuleFunctionRegistry> {
     let mut registry = ModuleFunctionRegistry::new();
 
-    for result in lowering.module_results(db).values() {
+    for result in lowering.module_results(db).values_unordered() {
         registry.set_module_code_units(
             result.ir_module_id(db),
             Arc::clone(module_code_units(db, *result)),

@@ -3,7 +3,7 @@
 //! Resolves package dependencies and converts to ModuleGraph for compilation.
 
 use rmx::prelude::*;
-use rmx::std::collections::{BTreeMap, BTreeSet, HashMap};
+use rmx::std::collections::{BTreeMap, HashMap};
 
 use bct::package_resolve2::{
     ImportDemandMap,
@@ -13,7 +13,9 @@ use bct::package_resolve2::{
     ValidationError,
     resolve_package_world,
 };
+use bct::lookup::{LookupMap, LookupSet};
 use bct::module_graph::{ModuleGraph, ModuleGraphBuilder, ModuleId};
+use bct::package2::PackageModule;
 
 use crate::package::PackageWorld;
 
@@ -39,7 +41,7 @@ pub struct ModuleGraphWithRequires<'db> {
     /// The module graph with modules in dependency order.
     pub graph: ModuleGraph<'db>,
     /// Resolved require aliases per module: (alias, target_module_id).
-    pub resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    pub resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
 }
 
 /// Convert a PackageWorldModuleGraph to a ModuleGraph with resolved requires.
@@ -52,7 +54,7 @@ pub fn to_module_graph<'db>(
     graph: PackageWorldModuleGraph<'db>,
 ) -> ModuleGraphWithRequires<'db> {
     // Build a mapping from PackageModule to its module path string.
-    let mut pkg_module_to_path: HashMap<bct::package2::PackageModule<'db>, String> = HashMap::new();
+    let mut pkg_module_to_path: LookupMap<PackageModule<'db>, String> = LookupMap::new();
 
     // Traverse the package world to build paths.
     let world_map = crate::package::package_world_map(db, package_world);
@@ -65,18 +67,20 @@ pub fn to_module_graph<'db>(
         }
     }
 
+    let path_of = |module: PackageModule<'db>| pkg_module_to_path.get(&module)
+        .cloned()
+        .unwrap_or_else(|| module.name(db).to_string());
+
     // Topological sort modules.
-    let sorted_modules = topological_sort_modules(db, graph)
-        .unwrap_or_else(|_| graph.map(db).keys().copied().collect());
+    let sorted_modules = topological_sort_modules(db, graph, &path_of)
+        .unwrap_or_else(|_| graph.map(db).sorted_by_key(|module| path_of(*module)).into_iter().map(|(module, _)| *module).collect());
 
     // Build ModuleGraph and collect path → ModuleId mapping.
     let mut builder = ModuleGraphBuilder::new(db);
     let mut path_to_module_id: HashMap<String, ModuleId<'db>> = HashMap::new();
 
     for pkg_module in &sorted_modules {
-        let path = pkg_module_to_path.get(pkg_module)
-            .cloned()
-            .unwrap_or_else(|| pkg_module.name(db).to_string());
+        let path = path_of(*pkg_module);
         let source = pkg_module.text(db);
         let module_id = builder.add_module(path.clone(), source);
         path_to_module_id.insert(path, module_id);
@@ -85,9 +89,9 @@ pub fn to_module_graph<'db>(
     let module_graph = builder.build();
 
     // Extract resolved requires from PackageWorldModuleGraph.
-    let mut resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> = BTreeMap::new();
+    let mut resolved_requires: LookupMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>> = LookupMap::new();
 
-    for (pkg_module, demands) in graph.map(db).iter() {
+    for (pkg_module, demands) in graph.map(db).iter_unordered() {
         let source_path = pkg_module_to_path.get(pkg_module);
         let source_module_id = source_path.and_then(|p| path_to_module_id.get(p));
 
@@ -122,81 +126,45 @@ pub fn to_module_graph<'db>(
 }
 
 /// Topologically sort modules so dependencies come before dependents.
+///
+/// Of the modules ready at each step the one first by path goes next, so the
+/// order is the world's and not the order the modules happened to be interned.
 fn topological_sort_modules<'db>(
     db: &'db dyn salsa::Database,
     graph: PackageWorldModuleGraph<'db>,
-) -> Result<Vec<bct::package2::PackageModule<'db>>, ValidationError> {
+    path_of: &impl Fn(PackageModule<'db>) -> String,
+) -> Result<Vec<PackageModule<'db>>, ValidationError> {
     let map = graph.map(db);
 
-    // Build dependency graph.
-    let mut dependencies: BTreeMap<bct::package2::PackageModule<'db>, BTreeSet<bct::package2::PackageModule<'db>>> = BTreeMap::new();
-
-    for (module, deps) in map.iter() {
-        let mut module_deps = BTreeSet::new();
-        for (_demand, resolved) in deps {
-            if let ResolvedPackageModule::Resolved(dep_module) = resolved {
-                module_deps.insert(*dep_module);
-            }
-        }
-        dependencies.insert(*module, module_deps);
-    }
-
-    // Kahn's algorithm for topological sort.
-    let mut in_degree: BTreeMap<bct::package2::PackageModule<'db>, usize> = BTreeMap::new();
-    for module in map.keys() {
-        in_degree.insert(*module, 0);
-    }
-
-    for (_module, deps) in &dependencies {
-        for dep in deps {
-            *in_degree.entry(*dep).or_insert(0) += 0; // Ensure dep is in map.
+    // How many modules each still waits on, and who waits on it.
+    let mut waiting_on: LookupMap<PackageModule<'db>, usize> = LookupMap::new();
+    let mut dependents: LookupMap<PackageModule<'db>, Vec<PackageModule<'db>>> = LookupMap::new();
+    for (module, demands) in map.iter_unordered() {
+        let deps: LookupSet<PackageModule<'db>> = demands.values()
+            .filter_map(|resolved| match resolved {
+                ResolvedPackageModule::Resolved(dep) => Some(*dep),
+                ResolvedPackageModule::Unresolved => None,
+            })
+            .collect();
+        waiting_on.insert(*module, deps.len());
+        for dep in deps.into_iter_unordered() {
+            dependents.entry(dep).or_default().push(*module);
         }
     }
 
-    for deps in dependencies.values() {
-        for dep in deps {
-            if let Some(count) = in_degree.get_mut(dep) {
-                *count += 1;
-            }
-        }
-    }
-
-    // Wait, we have the deps backwards. dependencies[A] contains B means A depends on B.
-    // So in_degree should count how many modules depend ON a module.
-    // Let me fix this.
-
-    // Reset and compute correctly.
-    in_degree.clear();
-    for module in map.keys() {
-        in_degree.insert(*module, 0);
-    }
-
-    // A depends on B means B must come before A.
-    // in_degree[A] = number of modules that A depends on.
-    for (module, deps) in &dependencies {
-        in_degree.insert(*module, deps.len());
-    }
-
-    // Start with modules that have no dependencies (in_degree = 0).
-    let mut queue: Vec<bct::package2::PackageModule<'db>> = in_degree.iter()
-        .filter(|&(_, degree)| *degree == 0)
-        .map(|(module, _)| *module)
+    let mut ready: BTreeMap<String, PackageModule<'db>> = waiting_on.iter_unordered()
+        .filter(|&(_, waiting)| *waiting == 0)
+        .map(|(module, _)| (path_of(*module), *module))
         .collect();
 
     let mut sorted = Vec::new();
-
-    while let Some(module) = queue.pop() {
+    while let Some((_, module)) = ready.pop_first() {
         sorted.push(module);
-
-        // For each module that depends on this one, decrement its in_degree.
-        for (dependent, deps) in &dependencies {
-            if deps.contains(&module) {
-                if let Some(count) = in_degree.get_mut(dependent) {
-                    *count -= 1;
-                    if *count == 0 {
-                        queue.push(*dependent);
-                    }
-                }
+        for dependent in dependents.get(&module).into_iter().flatten() {
+            let waiting = waiting_on.get_mut(dependent).expect("every dependent is a module of the graph");
+            *waiting -= 1;
+            if *waiting == 0 {
+                ready.insert(path_of(*dependent), *dependent);
             }
         }
     }
