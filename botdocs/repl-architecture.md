@@ -84,6 +84,12 @@ app treats like a crash reset. Re-running the earlier units to bring the
 session back was considered and not done: a unit that fails again would
 loop.
 
+`/reset` asks for the same reset on purpose. The engine resets before it
+answers, so the environment that comes back with the answer is already empty.
+The app then drops only the history entries up to and including the
+`/reset`. Anything typed while the reset was running was evaluated in the new
+session, so it stays.
+
 `Engine::run_source` is the one loop over a `---`-separated script. Both
 `repl --script` and the fixture tests use it, so the driver and the tests
 cannot drift.

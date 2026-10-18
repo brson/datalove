@@ -44,6 +44,8 @@ pub enum ReplCommand {
     Unknown,
     Exit,
     Help,
+    /// Start the session again, forgetting everything it defined.
+    Reset,
 }
 
 /// A binding a script fragment defined.
@@ -87,6 +89,7 @@ impl Command {
         let c = match command {
             "exit" => ReplCommand::Exit,
             "help" => ReplCommand::Help,
+            "reset" => ReplCommand::Reset,
             _ => ReplCommand::Unknown,
         };
         InputParse::Command(Command::ReplCommand(c))

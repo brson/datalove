@@ -211,6 +211,43 @@ fn exit_command_asks_the_app_to_exit() {
     assert!(matches!(app.history()[0].status, EntryStatus::Success));
 }
 
+/// A reset forgets the history and environment up to and including itself,
+/// but keeps input submitted while it was being evaluated.
+#[test]
+fn reset_command_clears_history_and_environment() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("let a = 1".to_string());
+    executor.queue(parsed_statement(0, "let a = 1"));
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert_eq!(app.environment().len(), 1);
+
+    app.submit_input("/reset".to_string());
+    app.submit_input("let b = 1".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 1,
+        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Reset)),
+    });
+    executor.queue(WorkerResponse::EvalResult {
+        id: 1,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Reset),
+        environment: Vec::new(),
+    });
+    app.poll_results();
+
+    assert!(app.environment().is_empty());
+    assert_eq!(app.history().len(), 1);
+    assert_eq!(app.history()[0].id, 2);
+
+    executor.queue(parsed_statement(2, "let b = 1"));
+    executor.queue(evaluated_let(2, "b"));
+    app.poll_results();
+    assert!(matches!(app.history()[0].status, EntryStatus::Success));
+    assert_eq!(app.environment().len(), 1);
+}
+
 /// A crash reset clears the history, so responses for requests that were in
 /// flight at the time have nowhere to land and are dropped.
 #[test]

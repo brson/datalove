@@ -1,0 +1,105 @@
+[
+  {
+    "input": "let a: int = 100",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let a: int = 100"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "a",
+            "ty": "int",
+            "value": "100"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "a",
+        "ty": "int",
+        "value": "100"
+      }
+    ]
+  },
+  {
+    "input": "/reset",
+    "parse": {
+      "Command": {
+        "ReplCommand": "Reset"
+      }
+    },
+    "eval": {
+      "CallerInterpret": "Reset"
+    },
+    "environment": []
+  },
+  {
+    "input": "let b: int = 200",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let b: int = 200"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "b",
+            "ty": "int",
+            "value": "200"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "200"
+      }
+    ]
+  },
+  {
+    "input": "b",
+    "parse": {
+      "Command": {
+        "Expression": "b"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "int",
+        "value": "200"
+      }
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "200"
+      }
+    ]
+  },
+  {
+    "input": "a",
+    "parse": {
+      "Command": {
+        "Expression": "a"
+      }
+    },
+    "eval": {
+      "Error": "UnresolvedName(\"a\")"
+    },
+    "environment": [
+      {
+        "name": "b",
+        "ty": "int",
+        "value": "200"
+      }
+    ]
+  }
+]

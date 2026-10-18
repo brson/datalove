@@ -284,6 +284,10 @@ impl Engine {
             ReplCommand::Exit => {
                 Eval::CallerInterpret(command)
             }
+            ReplCommand::Reset => {
+                self.reset();
+                Eval::CallerInterpret(command)
+            }
         }
     }
 

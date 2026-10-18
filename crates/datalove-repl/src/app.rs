@@ -334,6 +334,12 @@ impl<E: ReplExecutor> ReplApp<E> {
                 // todo
                 entry.status = EntryStatus::Success;
             },
+            repl::ReplCommand::Reset => {
+                // Input submitted after the reset was evaluated in the new
+                // session, so only what came before it is forgotten.
+                let _ = entry;
+                self.history.retain(|entry| entry.id > id);
+            }
         }
     }
 

@@ -1,0 +1,9 @@
+let a: int = 100
+---
+/reset
+---
+let b: int = 200
+---
+b
+---
+a
