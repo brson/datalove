@@ -47,7 +47,7 @@ fn main() {
         pipeline.add_module(&db, "local", "pkg", &format!("m{}", i), &module_source(i, 0));
     }
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
 
     let start = std::time::Instant::now();
@@ -55,7 +55,7 @@ fn main() {
         if edit {
             pipeline.update_source(&mut db, "local", "pkg", "m0", &module_source(0, salt));
         }
-        let (compiled, _) = pipeline.compile(&mut db);
+        let compiled = pipeline.compile(&db);
         assert!(compiled.is_successful());
     }
     let elapsed = start.elapsed();

@@ -60,7 +60,7 @@ fn run_with_chaos_interp(
     seed: u64,
 ) -> RunResult {
     let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(db);
+    let compiled = pipeline.compile(db);
 
     if let Some(err) = &compiled.resolution_error {
         return RunResult {
@@ -182,7 +182,7 @@ fn run_with_aot(
     parsed: &package_load_worldfile::ParsedWorldfile,
 ) -> RunResult {
     let mut pipeline = ModuleCompilationPipeline::from_sections(db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(db);
+    let compiled = pipeline.compile(db);
 
     if let Some(err) = &compiled.resolution_error {
         return RunResult {

@@ -56,7 +56,7 @@ fn modules_compiled(roots: Roots) -> usize {
     add_fixture(&db, &mut pipeline);
     pipeline.set_roots(roots);
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -142,7 +142,7 @@ fn an_error_in_an_unreachable_module_is_not_reported() {
         "fun broken_fn(): i32\n    ret \"not an i32\"\nend fun\n");
 
     pipeline.set_roots(Roots::All);
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(
         !compiled.is_successful(),
         "the whole world includes the broken module, so it must be reported",
@@ -150,7 +150,7 @@ fn an_error_in_an_unreachable_module_is_not_reported() {
     drop(compiled);
 
     pipeline.set_roots(roots_of(&["local/test/top"]));
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(
         compiled.is_successful(),
         "`top` does not reach the broken module, so nothing looks at it: {:?}",
@@ -172,13 +172,13 @@ fn the_roots_can_change_between_compiles() {
     add_fixture(&db, &mut pipeline);
 
     pipeline.set_roots(roots_of(&["local/test/zz_island0"]));
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
     pipeline.set_roots(Roots::All);
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -207,7 +207,7 @@ fn every_phase_sees_only_the_reachable_modules() {
     add_fixture(&db, &mut pipeline);
     pipeline.set_roots(roots_of(&["local/test/mid"]));
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -246,7 +246,7 @@ fn only_the_reachable_modules_are_parsed() {
     add_fixture(&db, &mut pipeline);
     pipeline.set_roots(roots_of(&["local/test/mid"]));
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -266,7 +266,7 @@ fn the_whole_world_is_parsed_when_the_roots_are_the_world() {
     let mut pipeline = ModuleCompilationPipeline::default();
     add_fixture(&db, &mut pipeline);
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -291,7 +291,7 @@ fn compiled_for_script(script: &str, also: &[String]) -> usize {
     pipeline.narrow_roots_to_script(&db, script, also);
     recorder.clear();
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

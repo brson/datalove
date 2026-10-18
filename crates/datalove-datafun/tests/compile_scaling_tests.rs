@@ -59,7 +59,7 @@ fn memo_sizes(modules: usize, functions_per_module: usize) -> MemoSizes {
             &module_source(index, functions_per_module, 0),
         );
     }
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -173,13 +173,13 @@ fn queries_for_one_edit(modules: usize) -> Vec<ExecutedQuery> {
     for index in 0..modules {
         pipeline.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
     }
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
     pipeline.update_source(&mut db, "local", "test", "m0", &module_source(0, 3, 7));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -234,7 +234,7 @@ fn a_first_build_does_grow_with_the_world() {
             pipeline.add_module(&db, "local", "test", &format!("m{index}"), &module_source(index, 3, 0));
         }
         recorder.clear();
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
         assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
         drop(compiled);
         recorder.take().len()

@@ -632,7 +632,7 @@ impl ScriptCommand {
         // refuses when a require does not resolve, leaving the whole world for
         // resolution to report on.
         pipeline.narrow_roots_to_script(&db, &script_source, &[]);
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, file_path)?;
 
         // The production defaults: compiling a function on its hundredth
@@ -761,7 +761,7 @@ impl ScriptIrCommand {
         // refuses when a require does not resolve, leaving the whole world for
         // resolution to report on.
         pipeline.narrow_roots_to_script(&db, &script_source, &[]);
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
 
         // Create script compiler.
@@ -882,7 +882,7 @@ impl AotCompileCommand {
         pipeline.narrow_roots_to_script(&db, &script_source, &[]);
 
         // Compile modules (typecheck, drop analysis, lower to IR).
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
         bail_on_module_errors(&db, &compiled, &pipeline, &descriptor, &self.file_path)?;
 
         // Create script compiler and get registry for AOT.
@@ -1048,7 +1048,7 @@ impl ScriptWorldCommand {
         }
 
         // Compile modules.
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
 
         // Check for module compilation errors.
         let cwd = rmx::std::env::current_dir().unwrap_or_default();
@@ -1144,7 +1144,7 @@ impl TypecheckStdCommand {
 
         let mut pipeline = descriptor.to_pipeline(&db);
         attach_natives(&descriptor, &sys, &mut pipeline);
-        let compiled = pipeline.compile_fresh(&db);
+        let compiled = pipeline.compile(&db);
 
         if let Some(err) = &compiled.resolution_error {
             bail!("Package resolution failed: {}", err);

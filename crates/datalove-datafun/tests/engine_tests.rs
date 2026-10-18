@@ -279,10 +279,10 @@ impl ExecutorHooks for Setup {
 /// Run the interpreted analysis under `setup` and render it as the expected
 /// files record it.
 fn analyze(parsed: &ParsedWorldfile, options: AnalysisOptions, setup: Setup) -> Result<(Analysis, String), String> {
-    let mut db = datafun::Database::default();
+    let db = datafun::Database::default();
     let mut setup = setup;
     let analysis = datafun::worldfile_analysis::analyze_worldfile_with_hooks(
-        &mut db,
+        &db,
         parsed,
         options,
         &mut setup,
@@ -346,7 +346,7 @@ fn run_aot(
     let db = datafun::Database::default();
     let mut pipeline = datafun::pipeline::ModuleCompilationPipeline::from_sections(
         &db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut compiler = compiled.script_compiler_default(&db)
         .ok_or("the modules did not compile")?;
     let source = parsed.sections.iter()

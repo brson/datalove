@@ -83,7 +83,7 @@ pub struct AnalysisOptions {
 /// This is equivalent to calling [`analyze_worldfile_with_options`] with
 /// default options (const inlining enabled).
 pub fn analyze_worldfile(
-    db: &mut crate::Database,
+    db: &crate::Database,
     parsed: ParsedWorldfile,
 ) -> AnyResult<Analysis> {
     analyze_worldfile_with_options(db, parsed, AnalysisOptions::default())
@@ -96,7 +96,7 @@ pub fn analyze_worldfile(
 /// 2. scriptunit-fragment sections: compiled and executed
 /// 3. scriptunit-expr sections: compiled, executed, result captured
 pub fn analyze_worldfile_with_options(
-    db: &mut crate::Database,
+    db: &crate::Database,
     parsed: ParsedWorldfile,
     options: AnalysisOptions,
 ) -> AnyResult<Analysis> {
@@ -124,7 +124,7 @@ impl ExecutorHooks for NoHooks {
 /// Analyze a worldfile as [`analyze_worldfile_with_options`] does, with
 /// hooks into the executor.
 pub fn analyze_worldfile_with_hooks(
-    db: &mut crate::Database,
+    db: &crate::Database,
     parsed: &ParsedWorldfile,
     options: AnalysisOptions,
     hooks: &mut dyn ExecutorHooks,
@@ -145,7 +145,7 @@ pub fn analyze_worldfile_with_hooks(
     );
 
     // Compile modules (typecheck, drop analysis, lower).
-    let (compiled, db) = pipeline.compile(db);
+    let compiled = pipeline.compile(db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

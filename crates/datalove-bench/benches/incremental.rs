@@ -55,7 +55,7 @@ fn pipeline(db: &Database) -> ModuleCompilationPipeline {
 
 /// Compile once and check it worked, so no case times an error path.
 fn compile_fresh(db: &Database, pipeline: &mut ModuleCompilationPipeline) {
-    let compiled = pipeline.compile_fresh(db);
+    let compiled = pipeline.compile(db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
 }
 
@@ -88,7 +88,7 @@ fn unchanged_recompile(bencher: Bencher) {
     bencher.bench_local(|| {
         let mut held = state.borrow_mut();
         let (db, pipeline) = &mut *held;
-        let (compiled, _) = pipeline.compile(db);
+        let compiled = pipeline.compile(db);
         assert!(compiled.is_successful());
     });
 }
@@ -108,7 +108,7 @@ fn one_module_edit(bencher: Bencher) {
         // A new body every iteration, or all but the first are no-op recompiles.
         *salt.borrow_mut() += 1;
         pipeline.update_source(db, "local", "pkg", "m0", &module_source(0, *salt.borrow()));
-        let (compiled, _) = pipeline.compile(db);
+        let compiled = pipeline.compile(db);
         assert!(compiled.is_successful());
     });
 }
@@ -167,7 +167,7 @@ fn consts_unchanged_recompile(bencher: Bencher, cache: bool) {
     bencher.bench_local(|| {
         let mut held = state.borrow_mut();
         let (db, pipeline) = &mut *held;
-        let (compiled, _) = pipeline.compile(db);
+        let compiled = pipeline.compile(db);
         assert!(compiled.is_successful());
     });
 }
@@ -183,7 +183,7 @@ fn consts_one_module_edit(bencher: Bencher, cache: bool) {
         let (db, pipeline) = &mut *held;
         *salt.borrow_mut() += 1;
         pipeline.update_source(db, "local", "pkg", "c0", &const_module_source(0, *salt.borrow()));
-        let (compiled, _) = pipeline.compile(db);
+        let compiled = pipeline.compile(db);
         assert!(compiled.is_successful());
     });
 }
@@ -203,7 +203,7 @@ fn consts_shared_module_edit(bencher: Bencher, cache: bool) {
         *salt.borrow_mut() += 1;
         let source = format!("{}fun probe(): int\n  ret {}\nend fun\n", SPIN_SOURCE, *salt.borrow());
         pipeline.update_source(db, "local", "pkg", "spin", &source);
-        let (compiled, _) = pipeline.compile(db);
+        let compiled = pipeline.compile(db);
         assert!(compiled.is_successful());
     });
 }

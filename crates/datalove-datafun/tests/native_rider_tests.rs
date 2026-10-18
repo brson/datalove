@@ -171,7 +171,7 @@ fn run_main_with_int_add(worldfile: &str) -> i32 {
 ///
 /// Errs with the compilation errors, if any.
 fn run_main(worldfile: &str, natives: Option<Arc<dyn NativeResolver>>) -> Result<i32, String> {
-    let mut db = datafun::Database::default();
+    let db = datafun::Database::default();
 
     // Parse the worldfile into sections.
     let parsed = package_load_worldfile::parse_worldfile_sections(worldfile.as_bytes()).X();
@@ -185,7 +185,8 @@ fn run_main(worldfile: &str, natives: Option<Arc<dyn NativeResolver>>) -> Result
     assert!(pipeline.contains_module("local", "test", "main"));
 
     // Compile.
-    let (compiled, db) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
+    let db = &db;
 
     if compiled.has_errors() {
         return Err(compiled.all_errors().join("\n"));

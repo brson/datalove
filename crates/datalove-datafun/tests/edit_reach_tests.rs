@@ -151,14 +151,14 @@ fn reach_of(edit: impl FnOnce(&mut datafun::Database, &mut ModuleCompilationPipe
     let mut pipeline =
         ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
     edit(&mut db, &mut pipeline);
 
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "after the edit: {:?}", compiled.all_errors());
     drop(compiled);
 
@@ -198,7 +198,7 @@ fn a_first_compile_runs_every_phase_for_every_module() {
     let mut pipeline =
         ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

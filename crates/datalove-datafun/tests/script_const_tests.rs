@@ -32,7 +32,7 @@ use datalove_datafun::pipeline::{
 fn compile(units: &[&str]) -> Vec<ScriptCompilationResult> {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     units.iter().map(|unit| compiler.compile_fragment(unit)).collect()
@@ -45,7 +45,7 @@ fn compile(units: &[&str]) -> Vec<ScriptCompilationResult> {
 fn compile_and_eval(units: &[&str], expr: &str) -> (Vec<ScriptCompilationResult>, String) {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     let mut executor = compiled
@@ -194,7 +194,7 @@ fn a_module_const_read_by_a_module_function_works() {
     pipeline.add_module(&db, "local", "test", "m",
         "const K: u32 = 5\n\nfun f(): u32\n    ret K\nend fun\n");
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(
         compiled.is_successful(),
         "a module const in a module function body should compile: {:?}",

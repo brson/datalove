@@ -356,7 +356,7 @@ fn analyze_worldfile_ir_serial(
     // Build pipeline and compile.
     let mut pipeline =
         datafun::pipeline::ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
 
     // Check for resolution errors.
     if let Some(err) = &compiled.resolution_error {

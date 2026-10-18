@@ -39,7 +39,7 @@ pub fn run(mode: ParallelMode) -> AnyResult<String> {
     let natives = Arc::new(RiderNatives::for_workspace(&workspace, &sys.natives));
     pipeline.set_natives(natives.clone());
 
-    let compiled = pipeline.compile_fresh_with_mode(&db, mode);
+    let compiled = pipeline.compile_with_mode(&db, mode);
     if compiled.has_errors() {
         bail!("the system library did not compile: {}", compiled.all_errors().join("; "));
     }

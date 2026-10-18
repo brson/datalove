@@ -98,7 +98,7 @@ impl Session {
 
     fn build(db: datafun::Database, mut pipeline: ModuleCompilationPipeline) -> Session {
         let (script, executor) = {
-            let compiled = pipeline.compile_fresh(&db);
+            let compiled = pipeline.compile(&db);
             assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
             let script = compiled
                 .script_compiler_default(&db)
@@ -119,7 +119,7 @@ impl Session {
 
     /// Compile one more unit on the end of the script, without running it.
     pub fn compile_append(&mut self, text: &str) -> ScriptCompilationResult {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -144,7 +144,7 @@ impl Session {
 
     /// Compile one more unit, submitted as a bare expression, without running it.
     pub fn compile_append_expr(&mut self, text: &str) -> ScriptCompilationResult {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -161,7 +161,7 @@ impl Session {
     /// Returns the result type and the printed value, which is what the REPL
     /// shows for an expression line.
     pub fn append_expr(&mut self, text: &str) -> (Option<String>, String) {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -187,7 +187,7 @@ impl Session {
     /// For the cases where a unit is supposed to stop compiling, which
     /// [`Self::rederive`] refuses to see.
     pub fn relower(&mut self, edited: usize) -> Vec<(usize, ScriptCompilationResult)> {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -211,7 +211,7 @@ impl Session {
     /// Nothing is re-derived: truncating renumbers nothing, because there is
     /// nothing after what goes.
     pub fn truncate(&mut self, n: usize) {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -228,7 +228,7 @@ impl Session {
     /// is a rejected splice -- some unit of the suffix stopped compiling -- and
     /// holds its errors, with the session left exactly as it was.
     pub fn remove(&mut self, i: usize) -> Result<BTreeSet<usize>, Vec<String>> {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -242,7 +242,7 @@ impl Session {
 
     /// Splice a new fragment in at `i`, the other half of [`Self::remove`].
     pub fn insert(&mut self, i: usize, text: &str) -> Result<BTreeSet<usize>, Vec<String>> {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
@@ -318,7 +318,7 @@ impl Session {
         self.pipeline.update_source(
             &mut self.db, module.library, module.package, module.module, module.source);
 
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         assert!(
             compiled.is_successful(),
             "the edited module should compile: {:?}", compiled.all_errors(),
@@ -362,7 +362,7 @@ impl Session {
     /// Owned because it is read before the database is borrowed mutably for the
     /// edit, and everything salsa hands back is tied to that borrow.
     pub fn graph(&mut self) -> Graph {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");

@@ -94,7 +94,7 @@ fn with_world<R>(f: impl FnOnce(World) -> R) -> R {
             let descriptor = WorkspaceDescriptor::from_system_library(sys);
             let pipeline: &'static mut datafun::pipeline::ModuleCompilationPipeline =
                 Box::leak(Box::new(descriptor.to_pipeline(db)));
-            let compiled = pipeline.compile_fresh(db);
+            let compiled = pipeline.compile(db);
             assert!(!compiled.has_errors(), "the system library must compile");
             (db, &*Box::leak(Box::new(compiled)), sys)
         });

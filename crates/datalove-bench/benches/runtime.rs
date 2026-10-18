@@ -136,7 +136,7 @@ debuglog build_map(20000)
 fn run(source: &str) {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
 
     let mut compiler = compiled.script_compiler_default(&db).unwrap();
     let mut executor = compiled

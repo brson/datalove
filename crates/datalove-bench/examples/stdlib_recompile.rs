@@ -27,7 +27,7 @@ fn main() {
     );
     pipeline.add_module(&db, "local", "app", "main", &local_source(0));
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "the system library must compile");
     drop(compiled);
 
@@ -51,7 +51,7 @@ fn main() {
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);
 
     pipeline.update_source(&mut db, "sys", &package, &module, &probe(0));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -62,7 +62,7 @@ fn main() {
         } else if edit {
             pipeline.update_source(&mut db, "sys", &package, &module, &probe(salt));
         }
-        let (compiled, _) = pipeline.compile(&mut db);
+        let compiled = pipeline.compile(&db);
         assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     }
     let elapsed = start.elapsed();

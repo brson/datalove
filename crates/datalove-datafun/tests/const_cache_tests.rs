@@ -80,7 +80,8 @@ impl World {
     /// Returns the modules whose consts the compile evaluated rather than took
     /// from the cache, and what each probe came to.
     fn compile(&mut self, probes: &[&str]) -> (BTreeSet<String>, Vec<String>) {
-        let (compiled, db) = self.pipeline.compile(&mut self.db);
+        let compiled = self.pipeline.compile(&self.db);
+        let db = &self.db;
         assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
         let evaluated = names(&self.pipeline.const_cache_report().evaluated);
 
@@ -261,7 +262,7 @@ end fun
     let mut world = World::new();
     world.module("a", &source(0));
     for _ in 0..2 {
-        let (compiled, _) = world.pipeline.compile(&mut world.db);
+        let compiled = world.pipeline.compile(&world.db);
         assert!(compiled.has_errors(), "dividing by zero is an error");
         assert_eq!(names(&world.pipeline.const_cache_report().evaluated), set(&["a"]));
     }

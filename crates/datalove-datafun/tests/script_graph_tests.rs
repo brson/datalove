@@ -32,7 +32,7 @@ use datalove_datafun::pipeline::{CompilerOptions, ModuleCompilationPipeline};
 fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
 
@@ -64,7 +64,7 @@ fn graph_of(units: &[&str]) -> Vec<(Vec<String>, Vec<String>)> {
 fn last_result(units: &[&str]) -> datafun::pipeline::ScriptCompilationResult {
     let db = datafun::Database::default();
     let mut pipeline = ModuleCompilationPipeline::new(CompilerOptions::default());
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut compiler = compiled.script_compiler_default(&db).expect("a script compiler");
     let mut result = None;
     for unit in units {

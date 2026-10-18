@@ -49,7 +49,7 @@ fn compiled_world(recorder: &QueryRecorder) -> (Database, ModuleCompilationPipel
     for index in 0..MODULES {
         pipeline.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
     }
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
@@ -65,7 +65,7 @@ fn a_first_compile_lowers_every_module() {
     for index in 0..MODULES {
         pipeline.add_module(&db, "local", "test", &format!("m{}", index), &module_source(index, 0));
     }
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
 
     let executed = recorder.take();
@@ -79,9 +79,9 @@ fn a_first_compile_lowers_every_module() {
 #[test]
 fn an_unchanged_recompile_lowers_nothing() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_world(&recorder);
+    let (db, mut pipeline) = compiled_world(&recorder);
 
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful());
     drop(compiled);
 
@@ -103,7 +103,7 @@ fn an_edit_lowers_only_the_module_that_changed() {
     let (mut db, mut pipeline) = compiled_world(&recorder);
 
     pipeline.update_source(&mut db, "local", "test", "m0", &module_source(0, 99));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -143,7 +143,7 @@ fn an_edit_lowers_only_the_module_that_changed() {
 #[test]
 fn an_unchanged_recompile_of_a_world_with_consts_lowers_nothing() {
     let recorder = QueryRecorder::new();
-    let mut db = Database::recording(&recorder);
+    let db = Database::recording(&recorder);
 
     // Enough consts per module that the order they come back in is a real
     // permutation rather than a coin flip.
@@ -163,12 +163,12 @@ fn an_unchanged_recompile_of_a_world_with_consts_lowers_nothing() {
     for index in 0..MODULES {
         pipeline.add_module(&db, "local", "test", &format!("c{index}"), &const_source(index));
     }
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -195,7 +195,7 @@ fn adding_a_module_does_not_relower_the_others() {
 
     let last = format!("m{}", MODULES);
     pipeline.add_module(&db, "local", "test", &last, &module_source(MODULES, 0));
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

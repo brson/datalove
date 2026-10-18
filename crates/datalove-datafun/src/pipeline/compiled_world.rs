@@ -57,7 +57,7 @@ impl CompiledWorld {
     /// honest: the result names salsa values that belong to this database, so it
     /// cannot outlive the world that produced it.
     pub fn compile(&mut self) -> CompiledModules<'_> {
-        self.pipeline.compile_fresh(&self.db)
+        self.pipeline.compile(&self.db)
     }
 
     /// Run `f` against the compiled modules.
@@ -65,7 +65,7 @@ impl CompiledWorld {
     /// For a caller that wants the modules and the database at once without
     /// arguing with the borrow checker about which of the two it has.
     pub fn with_compiled<R>(&mut self, f: impl FnOnce(&Database, &CompiledModules<'_>) -> R) -> R {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         f(&self.db, &compiled)
     }
 }

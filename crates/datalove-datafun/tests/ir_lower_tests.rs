@@ -34,7 +34,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
     }
 
     // Compile modules (typecheck, drop analysis, lower).
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
 
     // Check for errors using consolidated helper methods.
     if let Some(err) = &compiled.resolution_error {

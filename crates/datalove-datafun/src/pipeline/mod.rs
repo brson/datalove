@@ -18,7 +18,7 @@
 //! // Stage 1: compile modules.
 //! let mut pipeline = ModuleCompilationPipeline::default();
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
-//! let compiled = pipeline.compile_fresh(&db);
+//! let compiled = pipeline.compile(&db);
 //!
 //! // Stage 2: compile and run scripts (only if compilation succeeded).
 //! let mut compiler = compiled.script_compiler_default(&db).expect("compilation succeeded");
@@ -32,15 +32,16 @@
 //!
 //! # Incremental Compilation
 //!
-//! After initial compilation with `compile_fresh` (requires `&db`), use
-//! `update_source` and `compile` for incremental updates (requires `&mut db`).
-//! The pipeline preserves salsa identity across updates, enabling memoization.
+//! Edit a module with `update_source`, which needs `&mut db` since it sets an
+//! input, and call `compile` again. The pipeline keeps its inputs across edits,
+//! so the recompile reuses everything the edit did not reach.
 //!
 //! ```ignore
-//! let compiled1 = pipeline.compile_fresh(&db);
+//! let compiled1 = pipeline.compile(&db);
+//! drop(compiled1);
 //!
 //! pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
-//! let (compiled2, db) = pipeline.compile(&mut db);
+//! let compiled2 = pipeline.compile(&db);
 //! ```
 //!
 //! # Parallelism

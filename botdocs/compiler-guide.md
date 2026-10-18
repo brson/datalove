@@ -1804,17 +1804,24 @@ pub fn lower_module_graph_with_evaluator<'db>(
 ```rust
 let mut pipeline = ModuleCompilationPipeline::default();
 pipeline.add_module(&db, "local", "pkg", "main", source);
-let compiled = pipeline.compile_fresh(&db);
+let compiled = pipeline.compile(&db);
+drop(compiled);
 
-// Incremental. Returns the compiled modules and the reborrowed database.
+// An edit, then the same call again.
 pipeline.update_source(&mut db, "local", "pkg", "main", new_source);
-let (compiled, db) = pipeline.compile(&mut db);
+let compiled = pipeline.compile(&db);
 ```
+
+There is one entry point for the first compile and every recompile. What makes
+a recompile incremental is the pipeline, which keeps the `Source` inputs its
+queries are keyed on, not the call. A second `compile(&mut db)` used to exist
+because `ModuleGraph` was an input that a recompile updated through setters;
+with the graph interned nothing in a compile writes, so it was removed.
 
 `ModuleCompilationPipeline::from_sections(&db, &sections, CompilerOptions::default())`
 builds one from parsed worldfile sections, which is how most tests construct it.
-`compile_fresh_with_mode` and `compile_with_mode` take an explicit
-`ParallelMode` instead of reading `DATALOVE_PARALLEL`.
+`compile_with_mode` takes an explicit `ParallelMode` instead of reading
+`DATALOVE_PARALLEL`.
 
 A pipeline's `CompilerOptions` are settled when it is built. Nothing recompiles
 under options it was not made with, so there are no setters for them, and a

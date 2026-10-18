@@ -228,7 +228,7 @@ fn execute_sections_with_mode(
     let db = Database::default();
     let descriptor = WorkspaceDescriptor::from_worldfile_sections(sections, CompilerOptions::default());
     let mut pipeline = descriptor.to_pipeline(&db);
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
 
     if compiled.has_errors() {
         return json!({ "status": "modules did not compile" });

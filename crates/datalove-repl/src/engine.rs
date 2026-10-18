@@ -93,7 +93,7 @@ impl Started {
         pipeline: &mut ModuleCompilationPipeline,
         natives: &Arc<RiderNatives>,
     ) -> AnyResult<Started> {
-        let compiled = pipeline.compile_fresh(db);
+        let compiled = pipeline.compile(db);
 
         if compiled.has_errors() {
             let errors = compiled.all_errors();
@@ -185,7 +185,7 @@ impl Engine {
     /// borrows the database and the engine owns it. The session is out of the
     /// engine while `work` runs, so `work` cannot reach back into it.
     fn with_compiler<R>(&mut self, work: impl FnOnce(&mut ScriptCompiler<'_>) -> R) -> R {
-        let compiled = self.pipeline.compile_fresh(&self.db);
+        let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("the library compiled at startup and has not changed");
@@ -451,7 +451,7 @@ impl Engine {
 
         let path = format!("{library}/{package}/{module}");
         let relowered = {
-            let compiled = self.pipeline.compile_fresh(&self.db);
+            let compiled = self.pipeline.compile(&self.db);
             if compiled.has_errors() {
                 Err(compiled.all_errors().join("; "))
             } else {

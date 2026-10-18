@@ -9,7 +9,7 @@
 //! ```ignore
 //! let mut pipeline = ModuleCompilationPipeline::default();
 //! pipeline.add_module(&db, "local", "mypackage", "main", source);
-//! let compiled = pipeline.compile_fresh(&db);
+//! let compiled = pipeline.compile(&db);
 //!
 //! if compiled.is_successful() {
 //!     let compiler = compiled.script_compiler_default(&db).unwrap();
@@ -47,7 +47,7 @@ use super::workspace::CompilerOptions;
 /// Module compilation pipeline with incremental recompilation support.
 ///
 /// Compiles modules through parsing, typechecking, drop analysis, and IR lowering.
-/// Use `compile_fresh` for initial compilation, then `compile` for incremental updates.
+/// Compile with `compile`, edit with `update_source`, and compile again.
 pub struct ModuleCompilationPipeline {
     world: IncrementalModuleWorld,
     /// Settled when the pipeline is built. Nothing recompiles under different
@@ -403,26 +403,30 @@ impl ModuleCompilationPipeline {
         self.world.update_source(db, &path, source);
     }
 
-    /// Compile all modules (first compilation).
+    /// Compile all modules.
     ///
-    /// Uses `DATALOVE_PARALLEL` env var to determine parallelism mode.
-    pub fn compile_fresh<'db>(&mut self, db: &'db dyn DbClone) -> CompiledModules<'db> {
+    /// The first compile and every recompile after an edit are the same call:
+    /// what makes a recompile cheap is that the pipeline keeps the `Source`
+    /// inputs its queries are keyed on, so an edit made through
+    /// `update_source` reaches only what reads it. Uses `DATALOVE_PARALLEL`
+    /// to choose the parallelism mode.
+    pub fn compile<'db>(&mut self, db: &'db dyn DbClone) -> CompiledModules<'db> {
         let mode = parallel_mode_from_env();
-        self.compile_fresh_with_mode(db, mode)
+        self.compile_with_mode(db, mode)
     }
 
     /// Compile all modules with explicit parallelism mode.
-    pub fn compile_fresh_with_mode<'db>(
+    pub fn compile_with_mode<'db>(
         &mut self,
         db: &'db dyn DbClone,
         mode: ParallelMode,
     ) -> CompiledModules<'db> {
         let mut evaluator = self.ctfe_evaluator();
-        self.compile_fresh_with_mode_and_evaluator(db, mode, &mut evaluator)
+        self.compile_with_mode_and_evaluator(db, mode, &mut evaluator)
     }
 
     /// Compile all modules with explicit parallelism mode and custom CTFE evaluator.
-    pub fn compile_fresh_with_mode_and_evaluator<'db>(
+    pub fn compile_with_mode_and_evaluator<'db>(
         &mut self,
         db: &'db dyn DbClone,
         mode: ParallelMode,
@@ -432,47 +436,6 @@ impl ModuleCompilationPipeline {
         let (module_graph, resolved_requires) =
             self.world.build_graph(db.as_salsa_db(), &path_deps, &self.roots);
         self.compile_impl(db, module_graph, resolved_requires, mode, evaluator)
-    }
-
-    /// Compile all modules (incremental, needs `&mut db`).
-    ///
-    /// Uses `DATALOVE_PARALLEL` env var to determine parallelism mode.
-    /// Requires a concrete type implementing `DbClone` for potential parallelism.
-    pub fn compile<'db, D: DbClone>(
-        &mut self,
-        db: &'db mut D,
-    ) -> (CompiledModules<'db>, &'db D) {
-        let mode = parallel_mode_from_env();
-        self.compile_with_mode(db, mode)
-    }
-
-    /// Compile all modules with explicit parallelism mode (incremental).
-    pub fn compile_with_mode<'db, D: DbClone>(
-        &mut self,
-        db: &'db mut D,
-        mode: ParallelMode,
-    ) -> (CompiledModules<'db>, &'db D) {
-        let mut evaluator = self.ctfe_evaluator();
-        self.compile_with_mode_and_evaluator(db, mode, &mut evaluator)
-    }
-
-    /// Compile all modules with explicit parallelism mode and custom CTFE evaluator (incremental).
-    pub fn compile_with_mode_and_evaluator<'db, D: DbClone>(
-        &mut self,
-        db: &'db mut D,
-        mode: ParallelMode,
-        evaluator: &mut dyn CtfeEvaluator,
-    ) -> (CompiledModules<'db>, &'db D) {
-        // Extract dependencies first (reads from db).
-        let path_deps = extract_dependencies_with_mode(&self.world, &*db, &self.roots, mode);
-        let (module_graph, resolved_requires) =
-            self.world.build_graph(&*db, &path_deps, &self.roots);
-
-        // Reborrow as immutable for the rest of compilation.
-        let db_ref: &'db D = &*db;
-
-        let compiled = self.compile_impl(db_ref, module_graph, resolved_requires, mode, evaluator);
-        (compiled, db_ref)
     }
 
     /// Internal compilation implementation.

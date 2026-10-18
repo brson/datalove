@@ -83,7 +83,7 @@ fn compiled_rider_world(
     let mut pipeline =
         ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
@@ -100,7 +100,7 @@ fn a_first_compile_of_the_rider_world_typechecks_every_module() {
     let mut pipeline =
         ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -125,7 +125,7 @@ fn a_signature_edit_does_not_reach_modules_that_import_from_a_rider() {
 
     // `plain_edited` gains a parameter. Nothing imports or calls it.
     pipeline.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -164,7 +164,7 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
     let mut pipeline =
         ModuleCompilationPipeline::from_sections(&db, &parsed.sections, CompilerOptions::default());
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
@@ -174,7 +174,7 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
 
     let mut db = db;
     pipeline.update_source(&mut db, "local", "test", "plain", &plain_source("a: i32"));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
     assert_eq!(
@@ -187,9 +187,9 @@ fn the_rider_interfaces_are_built_once_and_an_edit_does_not_rebuild_them() {
 #[test]
 fn an_unchanged_recompile_of_the_rider_world_runs_no_queries() {
     let recorder = QueryRecorder::new();
-    let (mut db, mut pipeline) = compiled_rider_world(&recorder);
+    let (db, mut pipeline) = compiled_rider_world(&recorder);
 
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -233,7 +233,7 @@ fn compiled_import_world(
     pipeline.add_module(&db, "local", "test", "user", &user);
     pipeline.add_module(&db, "local", "test", "bystander", &bystander);
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "setup failed: {:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
@@ -256,7 +256,7 @@ fn an_edit_to_an_unrequired_module_re_resolves_no_imports() {
         &mut db, "local", "test", "bystander",
         "fun alone(x: i32, extra: i32): i32\n\x20   ret x\nend fun\n",
     );
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -290,7 +290,7 @@ fn changing_an_unimported_export_stops_at_the_importer_s_import_resolution() {
     // `private` gains a parameter. `user` imports `shared`, not `private`.
     let (lib, _, _) = import_world("x: i32", "y: i32, extra: i32");
     pipeline.update_source(&mut db, "local", "test", "lib", &lib);
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 
@@ -321,7 +321,7 @@ fn changing_an_imported_export_does_reach_the_importer() {
     // takes its type from context, so the world still compiles.
     let (lib, _, _) = import_world("x: u32", "y: i32");
     pipeline.update_source(&mut db, "local", "test", "lib", &lib);
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "{:?}", compiled.all_errors());
     drop(compiled);
 

@@ -69,25 +69,25 @@ fn main() {
     let mut pipeline = descriptor.to_pipeline(&db);
     pipeline.add_module(&db, "local", "app", "main", &local_source(0));
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report("cold compile", counts(&recorder));
 
     // Nothing changed.
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors());
     drop(compiled);
     report("unchanged recompile", counts(&recorder));
 
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors());
     drop(compiled);
     report("second unchanged recompile", counts(&recorder));
 
     // A body edit in the local module, which is what an editing session does.
     pipeline.update_source(&mut db, "local", "app", "main", &local_source(1));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report("edit one local module", counts(&recorder));
@@ -99,13 +99,13 @@ fn main() {
         .expect("the system library has modules");
     let probe = |salt: usize| format!("{}\nfun probe_edit(): int\n  ret {}\nend fun\n", text, salt);
     pipeline.update_source(&mut db, "sys", &package, &module, &probe(0));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     recorder.clear();
 
     pipeline.update_source(&mut db, "sys", &package, &module, &probe(1));
-    let (compiled, _) = pipeline.compile(&mut db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     report(&format!("edit sys/{package}/{module}"), counts(&recorder));

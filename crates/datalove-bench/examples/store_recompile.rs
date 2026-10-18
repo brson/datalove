@@ -51,7 +51,7 @@ fn main() {
     );
 
     let start = Instant::now();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     drop(compiled);
     println!("first compile: {:?}", start.elapsed());
@@ -62,7 +62,7 @@ fn main() {
             pipeline.update_source(&mut db, "local", "store", module, &probe(salt));
         }
         let start = Instant::now();
-        let (compiled, _) = pipeline.compile(&mut db);
+        let compiled = pipeline.compile(&db);
         times.push(start.elapsed());
         assert!(!compiled.has_errors(), "{:?}", compiled.all_errors());
     }

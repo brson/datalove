@@ -62,7 +62,7 @@ fn test_multiple_script_contexts() {
     let mut pipeline = ModuleCompilationPipeline::default();
 
     // Compile with no modules - just testing script context isolation.
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "compilation should succeed");
 
     // Create first script context.
@@ -99,7 +99,7 @@ fn test_interleaved_execution() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful());
 
     let mut ctx_a = TestContext::new(&compiled, &db);
@@ -160,7 +160,7 @@ fun square(n: int): int
 end fun
 "#);
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
     // Clone the compiled modules into an Arc for sharing.
@@ -242,7 +242,7 @@ fun value(x: u32): u32
 end fun
 "#);
 
-    let compiled1 = pipeline.compile_fresh(&db);
+    let compiled1 = pipeline.compile(&db);
     assert!(compiled1.is_successful(), "first compilation failed: {:?}", compiled1.all_errors());
 
     // First run: import and call module function.
@@ -272,7 +272,7 @@ fn test_isolated_unit_functions() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful());
 
     let mut ctx1 = TestContext::new(&compiled, &db);
@@ -304,7 +304,7 @@ fn test_many_script_contexts() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful());
 
     // Create many contexts.
@@ -330,7 +330,7 @@ fun id(x: u32): u32
 end fun
 "#);
 
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "compilation failed: {:?}", compiled.all_errors());
 
     // Create two contexts that both use the module function.
@@ -364,7 +364,7 @@ end fun
 fn test_per_unit_memoization_behavior() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define x.
@@ -398,7 +398,7 @@ fn test_per_unit_memoization_behavior() {
 fn test_per_unit_function_propagation() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define an identity function.
@@ -435,7 +435,7 @@ fn test_per_unit_function_propagation() {
 fn test_per_unit_lowering_memoization() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Unit 1: define a function that returns a list (ownership implications).
@@ -478,7 +478,7 @@ fn test_per_unit_lowering_memoization() {
 fn test_function_lowering_preserves_script_tracking() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Define functions with parameters, then a non-Copy let binding.
@@ -510,7 +510,7 @@ debuglog process(get_value(), 10)
 fn test_function_lowering_preserves_option_tracking() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     let mut ctx = TestContext::new(&compiled, &db);
 
     // Functions with Option parameters and return types.
@@ -546,7 +546,7 @@ debuglog my_string
 fn test_ctfe_struct_with_string_field() {
     let db = make_db();
     let mut pipeline = ModuleCompilationPipeline::default();
-    let compiled = pipeline.compile_fresh(&db);
+    let compiled = pipeline.compile(&db);
     assert!(compiled.is_successful(), "compilation should succeed");
 
     let mut ctx = TestContext::new(&compiled, &db);
