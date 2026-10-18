@@ -119,9 +119,39 @@ which terminates the engine and exits the CLI.
 
 ## Requirements
 
+Today the REPL UI can only append script units.
+It can't undo the previous.
+It can't edit or delete units.
+The engine supports these but not the UI.
+For this reproducible playback system we need every possible action to be describable serializable to text.
+
+And since we already have a text-based syntax for REPL commands, `/command ...`,
+we'll extend that.
+Some commands may not be ergonomic for a human to actually enter,
+but it will be good to have every possible REPL action described in one format.
+
+We can think of the script unit chain as a stack,
+so lets describe the commands we need in terms of a stack.
+
+- `/push <source>`.
+  Pushes the source of a script unit onto the stack.
+  Can span multiple lines.
+  This is conceptually what the three source-based input forms to the REPL desugar to.
+  Not clear whether this will ultimately be useful to have as its own command and make
+  that desugaring real or not.
+- `/pop`.
+  Pops the last script unit.
+- `/edit N <source>`.
+  Changes the source of the Nth prior unit, 0-based.
+  Like N pops then a push.
+- `/delete N`.
+  Deletes the Nth prior unit, 0-based.
+  Like N pops, then pushing all but the last back.
 
 
 
 
-
+Worldfiles are a good-enough base for describing a series of inputs to the REPL.
+They don't describe the outputs of the REPL engine though.
+And for replay on the web we're going to want the sequence of inputs and outputs to be in JSON.
 
