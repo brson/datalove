@@ -4,7 +4,6 @@
 //! and ScriptTypeContext for tracking accumulated bindings across script units.
 
 use rmx::prelude::*;
-use std::collections::HashMap;
 use bct::text::{InternedText, TextSpan};
 
 use datalove_datafun_ast::ast::*;
@@ -83,17 +82,17 @@ pub struct TypeContext<'db> {
     /// Current module being typechecked (for pending diagnostics).
     pub(crate) current_module_id: Option<ModuleId<'db>>,
     /// Variable bindings, by name.
-    pub(crate) variables: rustc_hash::FxHashMap<InternedText<'db>, VarBinding<'db>>,
+    pub(crate) variables: bct::lookup::LookupMap<InternedText<'db>, VarBinding<'db>>,
     /// What each binding made replaced in `variables`, newest last, so that
     /// leaving a scope can put back what it found rather than copying the
     /// whole map on the way in. See `with_scope`.
     scope_undo: Vec<(InternedText<'db>, Option<VarBinding<'db>>)>,
     /// Function signatures (name -> function type).
-    pub(crate) functions: rustc_hash::FxHashMap<InternedText<'db>, TypeFunction<'db>>,
+    pub(crate) functions: bct::lookup::LookupMap<InternedText<'db>, TypeFunction<'db>>,
     /// Function ASTs for resolving call targets (name -> (AST, module_id)).
-    pub(crate) function_asts: rustc_hash::FxHashMap<InternedText<'db>, (FunHead<'db>, Option<ModuleId<'db>>)>,
+    pub(crate) function_asts: bct::lookup::LookupMap<InternedText<'db>, (FunHead<'db>, Option<ModuleId<'db>>)>,
     /// Type aliases (name -> resolved type).
-    pub(crate) type_aliases: HashMap<InternedText<'db>, Type<'db>>,
+    pub(crate) type_aliases: bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
     /// Every name this unit asked the environment about.
     ///
     /// A script unit is typechecked against the bindings the units before it
@@ -114,14 +113,14 @@ pub struct TypeContext<'db> {
     ///
     /// None outside a script unit, which is the only reader: recording every
     /// lookup of a module's typecheck cost a percent of a compile.
-    asked_names: Option<RefCell<rustc_hash::FxHashSet<InternedText<'db>>>>,
+    asked_names: Option<RefCell<bct::lookup::LookupSet<InternedText<'db>>>>,
     /// The bound each of the enclosing function's type parameters carries.
     ///
     /// A bare parameter is absent here and nothing may be done to a value of
     /// it. A bound one says which types it may be, and the operators those
     /// types have in common are allowed on it.
     pub(crate) type_param_bounds:
-        HashMap<InternedText<'db>, datalove_datafun_ast::ast::TypeBound>,
+        bct::lookup::LookupMap<InternedText<'db>, datalove_datafun_ast::ast::TypeBound>,
     /// Expected return type for current function (if inside a function).
     pub(crate) expected_return_type: Option<Type<'db>>,
     /// Whether current function has no declared return type (void function).
@@ -217,8 +216,8 @@ impl<'db> TypeContext<'db> {
             functions: Default::default(),
             asked_names: None,
             function_asts: Default::default(),
-            type_aliases: HashMap::new(),
-            type_param_bounds: HashMap::new(),
+            type_aliases: bct::lookup::LookupMap::new(),
+            type_param_bounds: bct::lookup::LookupMap::new(),
             expected_return_type: None,
             is_void_function: false,
             errors: Vec::new(),
@@ -279,7 +278,7 @@ impl<'db> TypeContext<'db> {
     /// closes nothing. Inlining expands each call it is given, so this is what
     /// makes it finish; refused here, a cycle is refused before any lowering.
     pub fn report_inline_cycles(&mut self) {
-        let mut reported: HashSet<FunKey<'db>> = HashSet::new();
+        let mut reported: bct::lookup::LookupSet<FunKey<'db>> = bct::lookup::LookupSet::new();
         let callers: Vec<FunKey<'db>> = self.inline_calls.iter()
             .map(|(caller, _)| *caller)
             .fold(Vec::new(), |mut seen, caller| {
@@ -315,7 +314,7 @@ would be replaced for ever. Drop `inline` from one function of the cycle.")),
     /// first search in the order the calls were checked.
     fn inline_cycle_from(&self, start: FunKey<'db>) -> Option<Vec<FunKey<'db>>> {
         let mut path = vec![start];
-        let mut visited: HashSet<FunKey<'db>> = HashSet::from([start]);
+        let mut visited: bct::lookup::LookupSet<FunKey<'db>> = [start].into_iter().collect();
         let mut next: Vec<usize> = vec![0];
         while let Some(&at) = path.last() {
             let from = next.last_mut().expect("one cursor per path entry");
@@ -1129,7 +1128,7 @@ replace the view rather than the elements it shows. Index down to single element
     /// same between runs. See the determinism section of salsa-patterns.md.
     pub fn asked_names(&self) -> Vec<InternedText<'db>> {
         let asked = self.asked_names.as_ref().expect("a script unit records what it asks");
-        let mut names: Vec<InternedText<'db>> = asked.borrow().iter().copied().collect();
+        let mut names: Vec<InternedText<'db>> = asked.borrow().iter_unordered().copied().collect();
         names.sort_by(|a, b| a.as_str(self.db).cmp(b.as_str(self.db)));
         names
     }
@@ -1241,7 +1240,7 @@ replace the view rather than the elements it shows. Index down to single element
 
         // Add function signatures with ASTs.
         // First build a map of ASTs for lookup.
-        let ast_map: HashMap<bct::text::InternedText<'db>, FunHead<'db>> = name_resolution.function_asts(self.db)
+        let ast_map: bct::lookup::LookupMap<bct::text::InternedText<'db>, FunHead<'db>> = name_resolution.function_asts(self.db)
             .iter()
             .map(|(name, ast)| (*name, ast.clone()))
             .collect();
@@ -1320,7 +1319,7 @@ replace the view rather than the elements it shows. Index down to single element
         }
 
         // Add function signatures with ASTs.
-        let ast_map: HashMap<bct::text::InternedText<'db>, FunHead<'db>> = collected.function_asts
+        let ast_map: bct::lookup::LookupMap<bct::text::InternedText<'db>, FunHead<'db>> = collected.function_asts
             .iter()
             .map(|(name, ast)| (*name, ast.clone()))
             .collect();

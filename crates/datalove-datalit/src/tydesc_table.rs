@@ -15,7 +15,7 @@ use datalove_rtdt as rtdt;
 pub struct TyDescTable<'db> {
     db: &'db dyn crate::Db,
     /// Deduplication map: Type → TyDesc pointer.
-    cache: HashMap<Type<'db>, *const rtdt::TyDesc>,
+    cache: bct::lookup::LookupMap<Type<'db>, *const rtdt::TyDesc>,
     /// Runtime-constructed Option cache: inner_tydesc → Option<T> tydesc.
     runtime_option_cache: HashMap<*const rtdt::TyDesc, *const rtdt::TyDesc>,
     /// Runtime-constructed Result cache: inner_tydesc → Result<T> tydesc.
@@ -39,7 +39,7 @@ impl<'db> TyDescTable<'db> {
     pub fn new(db: &'db dyn crate::Db) -> Self {
         Self {
             db,
-            cache: HashMap::new(),
+            cache: bct::lookup::LookupMap::new(),
             runtime_option_cache: HashMap::new(),
             runtime_result_cache: HashMap::new(),
             runtime_list_cache: HashMap::new(),

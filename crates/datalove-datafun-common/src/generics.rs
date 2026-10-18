@@ -7,7 +7,6 @@
 //! parameter stands for; everywhere else the two shapes are simply compared,
 //! and disagreements are left for the caller's ordinary type check to report.
 
-use std::collections::HashMap;
 
 use bct::text::InternedText;
 use datalove_datalit as datalit;
@@ -16,7 +15,7 @@ use datalit::tycheck::Type;
 use salsa::Database as Db;
 
 /// What the type parameters of one call were bound to.
-pub type TypeParamBindings<'db> = HashMap<InternedText<'db>, Type<'db>>;
+pub type TypeParamBindings<'db> = bct::lookup::LookupMap<InternedText<'db>, Type<'db>>;
 
 /// Bind the type parameters in `param` from the corresponding parts of `arg`.
 ///

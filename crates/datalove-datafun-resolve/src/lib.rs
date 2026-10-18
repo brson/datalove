@@ -3,7 +3,6 @@
 //! Provides name resolution (type aliases, function signatures) as a separate
 //! phase before typechecking. This crate has no dependency on tycheck.
 
-use std::collections::HashMap;
 use bct::text::InternedText;
 use bct::module_graph::Module;
 use datalove_ct::query_log::{log_query, QueryPhase};
@@ -46,7 +45,7 @@ pub fn resolve_names_impl<'db>(
     let mut errors = Vec::new();
 
     // Pass 0: collect type aliases.
-    let mut type_aliases_map: HashMap<InternedText<'db>, Type<'db>> = HashMap::new();
+    let mut type_aliases_map: bct::lookup::LookupMap<InternedText<'db>, Type<'db>> = bct::lookup::LookupMap::new();
     let mut type_aliases_vec = Vec::new();
 
     for item in items {

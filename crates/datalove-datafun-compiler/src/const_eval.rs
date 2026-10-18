@@ -227,7 +227,7 @@ fn first_uncallable_target(
             match callable.get_module_function_as_unit(*module, *id) {
                 Some(callee) => bodies.push(callee),
                 None => {
-                    let name = names.iter()
+                    let name = names.iter_unordered()
                         .find(|(_, (m, f))| m == module && f.0 == id.0)
                         .map(|((_, name), _)| name.clone())
                         .expect("a module function the compiler numbered has a name");

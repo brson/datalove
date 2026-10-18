@@ -229,10 +229,9 @@ the pipeline already had.
 Five derivations of one numbering is five chances to disagree, and the numbering
 being positional is what let a change at one end of the world move the other.
 
-One deliberate exception survives: `InternedText`'s `Ord`
-(`bcts/src/text.rs`) compares by id. `Ord::cmp` receives no database, so it
-cannot compare content. See the determinism section for why it is load-bearing
-rather than a wart.
+No salsa struct is `Ord`, for the reason in the determinism section: the only
+order salsa could give one is its id, and ids are not the same between
+compiles.
 
 ## Key a query on one entity where you can
 
@@ -370,43 +369,42 @@ object files. The causes, all found by walking hash collections:
 The rule: **`HashMap` for lookup, `BTreeMap` or a sorted `Vec` for anything
 iterated.** About 116 lookup-only hash maps are left alone and should be.
 
-This is also why `InternedText: Ord` exists, via a chain worth knowing:
+### Salsa structs have no order
 
-1. `ExprTypes` and friends are untracked fields of tracked structs, so they are
-   part of the identity hash and must implement `Hash`.
-2. `std::collections::HashMap` does not implement `Hash` and cannot, since its
-   iteration order is unspecified.
-3. `BTreeMap` does, but requires `K: Ord`.
-4. `ExprKey` derives `Ord` and contains `Option<InternedText>`.
-5. `Ord::cmp` gets no database, so the only thing left to compare is the id.
+A salsa struct's `Hash` and `Eq` are its id, and an id is the order of first
+interning. A sequential compile interns in one order; a parallel one interns
+from rayon's workers in whatever order they run. So two compiles of one world,
+or a sequential and a parallel one, give the same text and the same module
+different ids, and anything ordered by id can come out differently.
 
-Swapping those to `HashMap` would free `InternedText` from needing `Ord`, and it
-would be a mistake: `BTreeMap` is what keeps a memoized value's contents
-order-stable.
+So none of them is `Ord`. `InternedText`, `ModuleId` and `PackageModule` used to
+be, by id, and so did `ExprKey`, which contains the first two. A map or set
+keyed by a salsa struct, or by a tuple or struct holding one, is
+`bct::lookup::LookupMap` or `LookupSet` (`bcts/src/lookup.rs`):
 
-### Ids are not the same between compiles
+- **Lookup** is a hash map's: `get`, `insert`, `entry`, `contains_key`, indexing.
+- **Walking it says what the walk may do with the order.** `iter_unordered` and
+  its siblings for a walk whose result cannot depend on it: `all`, a count,
+  collecting into another lookup map or a map keyed by content. `sorted_by_key`
+  for one that reaches output or a memoized value, ordered by content, usually
+  `path` or `as_str`.
+- **Its `Hash` ignores order**, summing a mixed hash of each entry, so unlike
+  `HashMap` it can sit in a tracked struct's identity or a memoized value, which
+  is what the `BTreeMap`s it replaced were for.
 
-Ordering by id is deterministic only while the order of first interning is.
-A sequential compile interns in one order. A parallel one interns from rayon's
-workers in whatever order they run, so two compiles of one world, or a
-sequential and a parallel one, give the same text and the same module different
-ids. That is harmless as long as the rule above holds: a container ordered by id
-(`InternedText` still is) or hashed by id (salsa derives `Hash` on the id) is
-for lookup, and anything that reaches output is sorted by content first, as
-`asked_names` and the script unit's `function_types` are. `ModuleId` and
-`PackageModule` are not `Ord` at all, and maps keyed by them are
-`bct::lookup::LookupMap`, which cannot be iterated except by a method that says
-whether the order may matter.
+A walk over the modules in order should usually walk the graph,
+`ModuleGraph::iter_modules`, which is in dependency order with ties broken by
+path, and look each module up.
 
-Audited in October 2026, before parallel compiles became the default: with
-those three `Ord`s replaced by one comparing a scramble of the id bits, the
-whole suite passed, IR and serialization snapshots included, so nothing the
-suite observes depends on id order. To repeat it, make the three `cmp`s compare
-`f(a.as_bits()).cmp(&f(b.as_bits()))` with `f` a fixed bijection such as
-`x.wrapping_mul(0x9E3779B97F4A7C15).rotate_left(29)`, check on a `BTreeSet` of
-a few `InternedText`s that the order really changed, and run `just test`. The
-`FxHash` maps keyed by salsa structs were read instead: each is lookup only or
-sorted by text before it is kept.
+Taking the order away found what auditing had not. `ModuleGraphTypecheckResult::all_errors`
+returned errors in id order; the lowering and ownership `all_errors` and
+`all_functions` did too; the package resolver's topological sort broke ties by
+id, which ordered the module graph; `FuncIdMap`'s entries were sorted by id; and
+a script unit's function analyses were stored in `HashMap` order, so two equal
+results could compare unequal. Before that, in October 2026, an audit had
+replaced the three `Ord`s with a scramble of the id bits and run the suite,
+which passed: none of these was visible to a test, which is the argument for
+having the compiler refuse them rather than looking for them.
 
 Reproducibility cannot be tested in one process, because the seed is fixed
 within a run and a hash map iterates identically every time. `datalove-cli/tests/reproducible_build_tests.rs`

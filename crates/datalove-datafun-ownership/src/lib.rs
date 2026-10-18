@@ -70,7 +70,7 @@ pub use datalove_datafun_common::AutoAdaptMode;
 // ============================================================================
 
 /// Pre-computed drop analyses for functions in a script unit.
-pub type ScriptFunctionAnalyses<'db> = HashMap<FunKey<'db>, FunctionAnalysis<'db>>;
+pub type ScriptFunctionAnalyses<'db> = bct::lookup::LookupMap<FunKey<'db>, FunctionAnalysis<'db>>;
 
 /// State of a binding during analysis.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1337,7 +1337,7 @@ pub fn analyze_script_functions<'db>(
     stmts: &'db [Statement<'db>],
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
-    let mut analyses = HashMap::new();
+    let mut analyses = bct::lookup::LookupMap::new();
     let mut errors = Vec::new();
 
     for stmt in stmts {
@@ -1372,7 +1372,7 @@ pub fn analyze_script_functions_with_mode<'db>(
     func_param_types: Option<&HashMap<String, Vec<Type<'db>>>>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> Result<ScriptFunctionAnalyses<'db>, Vec<(String, Vec<AnalysisError<'db>>)>> {
-    let mut analyses = HashMap::new();
+    let mut analyses = bct::lookup::LookupMap::new();
     let mut errors = Vec::new();
 
     for stmt in stmts {

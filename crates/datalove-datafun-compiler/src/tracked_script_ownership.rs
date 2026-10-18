@@ -78,7 +78,7 @@ impl<'db> ScriptUnitOwnershipResult<'db> {
         stmts: &'db [Statement<'db>],
     ) -> ScriptFunctionAnalyses<'db> {
         let analyses = self.function_analyses(db);
-        let mut map = HashMap::new();
+        let mut map = bct::lookup::LookupMap::new();
 
         // Build name -> function lookup from statements.
         let mut name_to_stmt: HashMap<&str, FunKey<'db>> = HashMap::new();
@@ -181,14 +181,16 @@ pub fn analyze_script_fragment_tracked<'db>(
         );
     }
 
-    // Convert function analyses to hashable format.
-    let func_analyses_data: Vec<(String, FunctionAnalysisData)> = func_analyses
-        .into_iter()
+    // Convert function analyses to hashable format, sorted by name because
+    // this is part of a memoized value and the map has no order.
+    let mut func_analyses_data: Vec<(String, FunctionAnalysisData)> = func_analyses
+        .into_iter_unordered()
         .map(|(stmt_fun, analysis)| {
             let name = stmt_fun.name.text(db).S();
             (name, FunctionAnalysisData::from(analysis))
         })
         .collect();
+    func_analyses_data.sort_by(|a, b| a.0.cmp(&b.0));
 
     let dead_exports = script_analysis.dead_exports.clone();
     let revived_exports = script_analysis.revived_exports.clone();

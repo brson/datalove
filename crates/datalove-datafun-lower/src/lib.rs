@@ -52,7 +52,6 @@
 //! - `expr`: Expression lowering
 //! - `literal`: Literal parsing (int, float, string constants)
 
-use std::collections::HashMap;
 use datalove_datafun_ast::ast::FunKey;
 use datalove_datafun_sema::FunctionAnalysis;
 
@@ -79,14 +78,14 @@ pub use const_expr::{
 };
 pub use ir_ext::IrTypeExt;
 
-/// Pre-computed drop analyses for functions in a script unit.
 /// Where each module function lives in the IR, by module and name.
-pub type FuncIdTable<'db> = rustc_hash::FxHashMap<
+pub type FuncIdTable<'db> = bct::lookup::LookupMap<
     (bct::module_graph::ModuleId<'db>, String),
     (datalove_datafun_ir::IrModuleId, datalove_datafun_ir::FuncId),
 >;
 
-pub type ScriptFunctionAnalyses<'db> = HashMap<FunKey<'db>, FunctionAnalysis<'db>>;
+/// Pre-computed drop analyses for functions in a script unit.
+pub type ScriptFunctionAnalyses<'db> = bct::lookup::LookupMap<FunKey<'db>, FunctionAnalysis<'db>>;
 
 /// Errors that can occur during lowering.
 ///

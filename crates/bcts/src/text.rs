@@ -56,26 +56,6 @@ impl<'db> InternedText<'db> {
     }
 }
 
-/// Ordering for InternedText based on internal salsa ID.
-///
-/// This enables use in BTreeMap for Salsa-tracked structs that need Hash/Eq.
-/// The ordering is the order texts were first interned, which a parallel
-/// compile does not fix, so it can differ between two compiles of one world.
-/// Iterate such a map only where the order cannot reach output; sort by text
-/// where it can. See the determinism section of salsa-patterns.md.
-impl<'db> Ord for InternedText<'db> {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        use salsa::plumbing::AsId;
-        self.as_id().cmp(&other.as_id())
-    }
-}
-
-impl<'db> PartialOrd for InternedText<'db> {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 #[test]
 fn interned_text_eq() {
     let ref db = crate::Database::default();

@@ -342,7 +342,7 @@ generic, so a const whose type is a type parameter has nowhere to go. Give the c
             let saved_in_function_body = ctx.in_function_body;
             let saved_checking_inline = ctx.checking_inline;
             let saved_enclosing_fun = ctx.enclosing_fun;
-            ctx.variables.retain(|_, binding| binding.is_const);
+            ctx.variables.retain_unordered(|_, binding| binding.is_const);
             ctx.in_function_body = true;
             let key = stmt.head().key();
             ctx.checking_inline = stmt.signature().inline.then_some(key);

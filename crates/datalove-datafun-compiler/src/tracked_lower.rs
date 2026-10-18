@@ -645,7 +645,7 @@ pub fn lower_module<'db>(
 fn export_signatures<'db>(
     db: &'db dyn salsa::Database,
     typecheck: SingleModuleTypecheckResult<'db>,
-) -> rustc_hash::FxHashMap<bct::text::InternedText<'db>, datalove_datafun_tycheck::TypeFunction<'db>> {
+) -> bct::lookup::LookupMap<bct::text::InternedText<'db>, datalove_datafun_tycheck::TypeFunction<'db>> {
     typecheck.exports(db).iter().copied().collect()
 }
 
@@ -1849,8 +1849,8 @@ fn specialize_comptime_functions<'db>(
 
     // The source of each comptime function, for evaluating its consts once the
     // instantiation is known.
-    let mut func_asts: HashMap<(ModuleId<'db>, String), &'db datalove_datafun_ast::ast::StmtFun<'db>> =
-        HashMap::new();
+    let mut func_asts: bct::lookup::LookupMap<(ModuleId<'db>, String), &'db datalove_datafun_ast::ast::StmtFun<'db>> =
+        LookupMap::new();
     for (module_id, parsed) in module_statements(db, parsed_graph) {
         let module_id = &module_id;
         for statement in parsed.statements(db).iter() {

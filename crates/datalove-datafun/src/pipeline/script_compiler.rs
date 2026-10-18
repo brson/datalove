@@ -1104,7 +1104,7 @@ impl<'db> ScriptCompiler<'db> {
                     if let Some(analysis) = script_analysis.as_mut() {
                         analysis.adapt_sites.extend(type_adapts);
                     }
-                    for analysis in func_analyses.values_mut() {
+                    for analysis in func_analyses.values_mut_unordered() {
                         analysis.adapt_sites.extend(type_adapts);
                     }
                 }
@@ -1136,7 +1136,7 @@ impl<'db> ScriptCompiler<'db> {
                     });
                 }
                 Ok(OwnershipOutput {
-                    func_analyses: HashMap::new(),
+                    func_analyses: bct::lookup::LookupMap::new(),
                     script_analysis: None,
                     dead_exports: Vec::new(),
                     revived: Vec::new(),

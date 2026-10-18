@@ -3,7 +3,6 @@
 //! Contains types used by both name resolution and typechecking phases:
 //! Type, TypeFunction, TypeError, ParsedModuleGraph, and related utilities.
 
-use std::collections::HashMap;
 use bct::lookup::LookupMap;
 use bct::text::InternedText;
 use bct::module_graph::ModuleId;
@@ -824,7 +823,7 @@ fn convert_type_hint_inner<'db>(
 pub fn convert_type_hint_with_aliases<'db>(
     db: &'db dyn Db,
     type_hint: TypeHint<'db>,
-    aliases: &HashMap<InternedText<'db>, Type<'db>>,
+    aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
     convert_type_hint_with_aliases_inner(db, type_hint, aliases)
 }
@@ -832,7 +831,7 @@ pub fn convert_type_hint_with_aliases<'db>(
 fn convert_type_hint_with_aliases_inner<'db>(
     db: &'db dyn Db,
     type_hint: TypeHint<'db>,
-    aliases: &HashMap<InternedText<'db>, Type<'db>>,
+    aliases: &bct::lookup::LookupMap<InternedText<'db>, Type<'db>>,
 ) -> Result<Type<'db>, TypeError> {
     let ty = match type_hint {
         TypeHint::Bool => Type::Datalit(datalit::tycheck::Type::Bool),

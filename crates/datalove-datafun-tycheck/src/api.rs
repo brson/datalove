@@ -356,7 +356,7 @@ pub fn typecheck_script_unit<'db>(
             // import of a different function under it would decide the calls
             // that one is answering. In a session the two arrive on separate
             // lines, which is exactly where the shadowing is hardest to see.
-            let mut bound: HashMap<InternedText<'db>, Option<ModuleId<'db>>> = HashMap::new();
+            let mut bound: bct::lookup::LookupMap<InternedText<'db>, Option<ModuleId<'db>>> = bct::lookup::LookupMap::new();
             let defined = defined_function_names(parsed.statements(db));
 
             for (item_name, func_ty, func_ast, source_module_id, local_index) in resolved_imports {
@@ -494,9 +494,9 @@ pub fn typecheck_script_unit<'db>(
     // Every consumer looks these up by the name of a function among this unit's
     // statements, so the earlier units' were never read.
     //
-    // Sorted because a `HashMap`'s iteration order comes from a per-process seed
-    // and this is part of a memoized value's identity.
-    let mut function_types: Vec<_> = ctx.functions.into_iter().collect();
+    // Sorted because a lookup map has no order and this is part of a memoized
+    // value's identity.
+    let mut function_types: Vec<_> = ctx.functions.into_iter_unordered().collect();
     function_types.sort_by(|(a, _), (b, _)| a.as_str(db).cmp(b.as_str(db)));
     let result = UnitTypecheckResultTracked::new(
         db, errors, ctx.expr_types, ctx.call_targets, function_types, adapt_sites, ctx.resolved_data,
@@ -617,7 +617,7 @@ pub fn typecheck_module<'db>(
     // A name binds one function, so a second import under one already bound
     // is refused rather than allowed to take it over. The first stays, which
     // keeps the rest of the module resolving to what it was written against.
-    let mut import_sources: HashMap<InternedText<'db>, String> = HashMap::new();
+    let mut import_sources: bct::lookup::LookupMap<InternedText<'db>, String> = bct::lookup::LookupMap::new();
     let defined = defined_function_names(parsed.statements(db));
     for (local_name, func_type, func_ast, source_module, local_index) in &resolved_imports {
         if defined.contains(local_name) {
@@ -990,14 +990,14 @@ fn resolve_module_imports_internal<'db>(
 ) -> (Vec<ResolvedImportData<'db>>, Vec<crate::UnresolvedImport>, crate::QualifiedScope<'db>) {
     // Build module alias map from pre-resolved requires.
     let resolved_requires = parsed_graph.get_requires(db, module_id);
-    let alias_map: HashMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
+    let alias_map: bct::lookup::LookupMap<InternedText<'db>, ModuleId<'db>> = resolved_requires.iter()
         .map(|(alias, target_id)| (*alias, *target_id))
         .collect();
 
     // Build rider alias map from pre-resolved riders.
     use datalove_datafun_common::RiderInterface;
     let resolved_riders = parsed_graph.get_riders(db, module_id);
-    let rider_alias_map: HashMap<InternedText<'db>, &RiderInterface<'db>> = resolved_riders.iter()
+    let rider_alias_map: bct::lookup::LookupMap<InternedText<'db>, &RiderInterface<'db>> = resolved_riders.iter()
         .map(|(alias, rider)| (*alias, rider))
         .collect();
 
@@ -1367,7 +1367,7 @@ fn resolve_script_imports<'db>(
 /// signature turned out.
 fn defined_function_names<'db>(
     statements: &[Statement<'db>],
-) -> std::collections::HashSet<InternedText<'db>> {
+) -> bct::lookup::LookupSet<InternedText<'db>> {
     statements.iter()
         .filter_map(|statement| match statement {
             Statement::Fun(stmt) => Some(stmt.name()),
