@@ -259,46 +259,6 @@ pub fn resolve_all_names<'db>(
     AllModuleNameResolutions::new(db, all_resolutions)
 }
 
-/// Resolve names for all modules in parallel.
-///
-/// Uses rayon to resolve names for each module in parallel, warming the
-/// memoization cache. Then delegates to `resolve_all_names` for aggregation.
-pub fn resolve_all_names_parallel<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-) -> AllModuleNameResolutions<'db> {
-    use rmx::rayon::prelude::*;
-
-    let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-    let work: Vec<_> = graph.iter_modules(db_salsa)
-        .map(|module| (db.dyn_clone(), module))
-        .collect();
-
-    // Resolve names in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module)| {
-        let db_salsa = db_clone.as_salsa_db();
-        let _ = resolve_module_names(db_salsa, module);
-    });
-
-    // Delegate to tracked function which aggregates results.
-    // All resolve_module_names calls will be cache hits.
-    resolve_all_names(db_salsa, parsed_graph)
-}
-
-/// Resolve names with configurable parallelism.
-pub fn resolve_all_names_with_mode<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    mode: ParallelMode,
-) -> AllModuleNameResolutions<'db> {
-    match mode {
-        ParallelMode::Sequential => resolve_all_names(db.as_salsa_db(), parsed_graph),
-        ParallelMode::Parallel => resolve_all_names_parallel(db, parsed_graph),
-    }
-}
-
 // ============================================================================
 // Script Name Resolution
 // ============================================================================

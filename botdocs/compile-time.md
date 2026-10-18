@@ -166,7 +166,7 @@ rest, and both have been measured rather than guessed.
 reaches, so that resolution and phase 1 share one parse: `extract_dependencies`
 walks a worklist calling `module_import_demands`, which reaches
 `parse_module_full` (see `crates/datalove-datafun/src/import_demands.rs`). It
-did that on the main thread, so by the time `parse_module_graph_parallel` warmed
+did that on the main thread, so by the time phase 1's parallel path warmed
 the parse memos they were all hits, and the largest front-end phase ran
 sequentially. The `parallel` bench did not see this, because it calls the
 phase-1 function directly. Under `DATALOVE_PARALLEL` the pipeline now calls

@@ -36,6 +36,7 @@ use bct::input::Source;
 use bct::module_graph::{Module, ModuleGraph, ModuleId};
 use salsa::Setter;
 use datalove_datafun_tycheck::{DbClone, ParallelMode};
+use datalove_datafun_common::warm;
 
 /// Which of the world's modules a compilation is about.
 ///
@@ -435,14 +436,12 @@ pub fn extract_dependencies_with_mode<'db>(
     mode: ParallelMode,
 ) -> &'db BTreeMap<String, BTreeSet<String>> {
     if mode == ParallelMode::Parallel {
-        warm_import_demands(world, db, roots);
+        warm_import_demands(world, db, roots, mode);
     }
     extract_dependencies(world, db.as_salsa_db(), roots)
 }
 
-fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: &Roots) {
-    use rmx::rayon::prelude::*;
-
+fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: &Roots, mode: ParallelMode) {
     // The modules `dependencies_from_roots` can reach: the ones the package
     // world is built from in `extract_dependencies`.
     let reachable = |path: &str| {
@@ -458,14 +457,9 @@ fn warm_import_demands(world: &IncrementalModuleWorld, db: &dyn DbClone, roots: 
 
     let db_salsa = db.as_salsa_db();
     while !frontier.is_empty() {
-        // Cloned here because `&dyn DbClone` is not `Sync`.
-        let work: Vec<_> = frontier.iter()
-            .map(|path| (db.dyn_clone(), path.as_str()))
-            .collect();
-        work.into_par_iter().for_each(|(db_clone, path)| {
-            let db_clone = db_clone.as_salsa_db();
-            let module = world.module(db_clone, path).expect("the frontier only holds paths the world has");
-            let _ = crate::import_demands::module_import_demands(db_clone, module);
+        warm(db, mode, || frontier.iter().map(String::as_str), |db, path| {
+            let module = world.module(db, path).expect("the frontier only holds paths the world has");
+            let _ = crate::import_demands::module_import_demands(db, module);
         });
 
         let mut next = Vec::new();

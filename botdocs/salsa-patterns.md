@@ -462,15 +462,18 @@ iteration outside the timer, or you measure a memo hit.
 `DbClone` lets a database be cloned across threads. Clones share `Arc<Zalsa>`,
 the global memo state, and get their own `ZalsaLocal`. The pattern is to warm
 the cache in parallel and then let a sequential tracked function aggregate from
-cache hits:
+cache hits, which `datalove_datafun_common::warm` is:
 
 ```rust
-work.into_par_iter().for_each(|(db_clone, module)| {
-    let _ = typecheck_module(db_clone.as_salsa_db(), module, ...);
+warm(db, mode, || graph.iter_modules(db.as_salsa_db()), |db, module| {
+    let _ = typecheck_graph_module(db, parsed_graph, names, module, auto_adapt_mode);
 });
-typecheck_module_graph(db.as_salsa_db(), parsed_graph)
+typecheck_module_graph(db.as_salsa_db(), parsed_graph, names, auto_adapt_mode)
 ```
 
+The warm-up and the aggregator have to ask with the same function, or the warm
+is wasted; see the compiler guide's
+[Parallel Execution](compiler-guide.md#user-content-parallel-execution).
 Enabled with `DATALOVE_PARALLEL=1`.
 
 ## Pitfalls in short

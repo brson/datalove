@@ -56,6 +56,7 @@ datalove-exampletest.path = "../datalove-exampletest"
 datalove-datalit.workspace = true
 datalove-diagnostic.workspace = true
 datalove-datafun-cranelift-jit.workspace = true
+datalove-ct.workspace = true
 ron = "0.8"
 
 [[test]]

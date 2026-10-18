@@ -10,7 +10,6 @@ use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::Statement;
 use datalove_datafun_tycheck::{
-    DbClone, ParallelMode,
     SingleModuleTypecheckResult,
     ModuleGraphTypecheckResult,
     ParsedModuleGraph,
@@ -158,91 +157,42 @@ pub fn analyze_module_graph<'db>(
     typecheck_result: ModuleGraphTypecheckResult<'db>,
     auto_adapt_mode: AutoAdaptMode,
 ) -> ModuleGraphAnalysis<'db> {
-    let graph = parsed_graph.graph(db);
-
-
-    // Get per-module typecheck results.
-    let typecheck_errors = typecheck_result.module_errors(db);
-    let typecheck_module_results = typecheck_result.module_results(db);
-
-    // Analyze each module.
     let mut module_results = BTreeMap::new();
     let mut all_success = true;
 
-    for module in graph.iter_modules(db) {
-        let module_id = &module.id(db);
-        // Skip modules with typecheck errors.
-        if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
-            continue;
-        }
-
-        // Get the tracked per-module typecheck result.
-        let single_typecheck = *typecheck_module_results.get(module_id)
-            .expect("module should have typecheck result");
-
+    for (module, single_typecheck) in analysis_work(db, parsed_graph, typecheck_result) {
         let result = analyze_module(db, module, single_typecheck, auto_adapt_mode);
 
         if !result.errors(db).is_empty() {
             all_success = false;
         }
 
-        module_results.insert(*module_id, result);
+        module_results.insert(module.id(db), result);
     }
 
     ModuleGraphAnalysis::new(db, module_results, all_success)
 }
 
-/// Analyze module graph for ownership errors using parallel execution.
-pub fn analyze_module_graph_parallel<'db>(
-    db: &'db dyn DbClone,
+/// The modules `analyze_module_graph` analyzes, with the typecheck results it
+/// keys `analyze_module` on: every module but those with type errors.
+///
+/// The parallel compile warms `analyze_module` over exactly these
+/// (`datalove_datafun_common::warm`), so that what it computes ahead is what
+/// the graph's analysis then asks for.
+pub fn analysis_work<'db>(
+    db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
-    auto_adapt_mode: AutoAdaptMode,
-) -> ModuleGraphAnalysis<'db> {
-    use rmx::rayon::prelude::*;
-
-    let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-
-    let typecheck_errors = typecheck_result.module_errors(db_salsa);
-    let typecheck_module_results = typecheck_result.module_results(db_salsa);
-
-    // Prepare work items for parallel execution.
-    let work: Vec<_> = graph.iter_modules(db_salsa)
-        .filter_map(|module| {
-            let module_id = &module.id(db_salsa);
-            // Skip modules with typecheck errors.
-            if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
-                return None;
-            }
-
-            let single_typecheck = *typecheck_module_results.get(module_id)?;
-
-            Some((db.dyn_clone(), module, single_typecheck))
+) -> Vec<(Module<'db>, SingleModuleTypecheckResult<'db>)> {
+    let typecheck_errors = typecheck_result.module_errors(db);
+    let typecheck_module_results = typecheck_result.module_results(db);
+    parsed_graph.graph(db).iter_modules(db)
+        .filter(|module| typecheck_errors.get(&module.id(db)).is_none_or(|e| e.is_empty()))
+        .map(|module| {
+            let single_typecheck = *typecheck_module_results.get(&module.id(db))
+                .expect("module should have typecheck result");
+            (module, single_typecheck)
         })
-        .collect();
-
-    // Analyze modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, single_typecheck)| {
-        let db_s = db_clone.as_salsa_db();
-        let _ = analyze_module(db_s, module, single_typecheck, auto_adapt_mode);
-    });
-
-    // Delegate to tracked function which aggregates results.
-    analyze_module_graph(db_salsa, parsed_graph, typecheck_result, auto_adapt_mode)
+        .collect()
 }
 
-/// Analyze module graph for ownership errors with configurable parallelism.
-pub fn analyze_module_graph_with_mode<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-    mode: ParallelMode,
-    auto_adapt_mode: AutoAdaptMode,
-) -> ModuleGraphAnalysis<'db> {
-    match mode {
-        ParallelMode::Sequential => analyze_module_graph(db.as_salsa_db(), parsed_graph, typecheck_result, auto_adapt_mode),
-        ParallelMode::Parallel => analyze_module_graph_parallel(db, parsed_graph, typecheck_result, auto_adapt_mode),
-    }
-}

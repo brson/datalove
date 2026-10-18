@@ -5,10 +5,8 @@
 use rmx::prelude::*;
 use rmx::std::collections::{BTreeMap, HashMap};
 use rmx::std::hash::Hash;
-use rmx::rayon::prelude::*;
 use bct::text::InternedText;
 use datalove_datafun_ast::ast::{FunHead, FunParam, FunSignature};
-use datalove_datafun_tycheck::DbClone;
 
 // Re-export core module graph types from bct.
 pub use bct::module_graph::{
@@ -60,62 +58,6 @@ pub fn parse_module_graph<'db>(
     let resolved_riders = build_resolved_riders_from_sources(db, graph, &rider_sources);
 
     ParsedModuleGraph::new(db, graph, resolved_requires, resolved_riders)
-}
-
-/// Parse all modules in a graph with resolved requires, using parallel execution.
-///
-/// This function parses modules in parallel using rayon to warm salsa's memoization cache,
-/// then delegates to the tracked `parse_module_graph` function which can create tracked
-/// structs. The tracked function will hit the warmed cache for all `parse_module_full` calls.
-///
-/// In the pipeline the warming finds every parse already done, by package
-/// resolution in `extract_dependencies_with_mode`; it does the work for a graph
-/// built without resolution, as the benches and tests build theirs.
-pub fn parse_module_graph_parallel<'db>(
-    db: &'db dyn DbClone,
-    graph: ModuleGraph<'db>,
-    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
-    rider_sources: Vec<(String, bct::input::Source)>,
-) -> ParsedModuleGraph<'db> {
-    let db_salsa = db.as_salsa_db();
-
-    // Collect modules to parse.
-    let modules: Vec<_> = graph.iter_modules(db_salsa).collect();
-
-    // Clone databases upfront - one per module for parallel execution.
-    // Can't clone inside parallel section since &dyn DbClone isn't Sync.
-    let work: Vec<_> = modules.iter()
-        .map(|&module| (db.dyn_clone(), module))
-        .collect();
-
-    // Parse modules in parallel - populates salsa's memoization cache.
-    // Results are discarded; the tracked function will re-fetch with correct lifetimes.
-    work.into_par_iter()
-        .for_each(|(db_clone, module)| {
-            let _ = parse_module_full(db_clone.as_salsa_db(), module);
-        });
-
-    // Delegate to tracked function which can create ParsedModuleGraph.
-    // All parse_module_full calls will be cache hits from the parallel phase.
-    parse_module_graph(db_salsa, graph, resolved_requires_str, rider_sources)
-}
-
-/// Parse module graph with configurable parallelism.
-///
-/// This is the main entry point for parsing. Use `ParallelMode::Sequential` for
-/// standard salsa-tracked behavior, or `ParallelMode::Parallel` to enable rayon
-/// parallelization (useful for benchmarking).
-pub fn parse_module_graph_with_mode<'db>(
-    db: &'db dyn DbClone,
-    graph: ModuleGraph<'db>,
-    resolved_requires_str: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
-    rider_sources: Vec<(String, bct::input::Source)>,
-    mode: ParallelMode,
-) -> ParsedModuleGraph<'db> {
-    match mode {
-        ParallelMode::Sequential => parse_module_graph(db.as_salsa_db(), graph, resolved_requires_str, rider_sources),
-        ParallelMode::Parallel => parse_module_graph_parallel(db, graph, resolved_requires_str, rider_sources),
-    }
 }
 
 /// What each generic native declares about its type parameters.
@@ -1074,6 +1016,8 @@ mod tests {
 
     #[test]
     fn test_parallel_clone_doesnt_break_original() {
+        use rmx::rayon::prelude::*;
+
         // Test that using clones in parallel doesn't break the original db.
         let db = LoggingDatabase::new();
         let (graph, _ids) = build_graph_logging(&db, &[
@@ -1111,7 +1055,7 @@ mod tests {
         ]);
 
         // First parallel parse populates cache.
-        let _parsed1 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed1 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), BTreeMap::new(), Vec::new());
 
         // Record which queries executed during first parse.
         let first_executed = db.executed_queries();
@@ -1125,7 +1069,7 @@ mod tests {
         db.clear_events();
 
         // Second parse should be fully memoized.
-        let _parsed2 = parse_module_graph_parallel(&db, graph.clone(), BTreeMap::new(), Vec::new());
+        let _parsed2 = crate::compile::parse_phase(&db, ParallelMode::Parallel, graph.clone(), BTreeMap::new(), Vec::new());
 
         let second_executed = db.executed_queries();
         // Filter to just parse_module_full queries (not input lookups).
@@ -1145,35 +1089,27 @@ mod tests {
     // Parallel Typecheck Tests
     // ========================================================================
 
-    use datalove_datafun_tycheck::{
-        typecheck_module_graph_parallel,
-        typecheck_module_graph_with_mode,
-        ParallelMode as TypecheckParallelMode,
-    };
-    use datalove_datafun_resolve::{
-        resolve_all_names_parallel,
-        DbClone,
-    };
-    // Note: resolve_all_names, ParsedModuleGraph, AutoAdaptMode
-    // are already imported in the earlier test section.
+    use datalove_datafun_tycheck::ParallelMode as TypecheckParallelMode;
+    use datalove_datafun_resolve::DbClone;
+    // Note: ParsedModuleGraph and AutoAdaptMode are already imported in the
+    // earlier test section.
 
-    /// Helper that calls resolve functions and then typecheck_module_graph_parallel.
+    /// Names resolved and the graph typechecked, in parallel, as the compile does.
     fn resolve_and_typecheck_parallel<'db>(
         db: &'db dyn DbClone,
         parsed: ParsedModuleGraph<'db>,
     ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
-        let all_names = resolve_all_names_parallel(db, parsed);
-        typecheck_module_graph_parallel(db, parsed, all_names, AutoAdaptMode::Disabled)
+        resolve_and_typecheck_with_mode(db, parsed, TypecheckParallelMode::Parallel)
     }
 
-    /// Helper that calls resolve functions and then typecheck_module_graph_with_mode.
+    /// The same, in `mode`.
     fn resolve_and_typecheck_with_mode<'db>(
         db: &'db dyn DbClone,
         parsed: ParsedModuleGraph<'db>,
         mode: TypecheckParallelMode,
     ) -> datalove_datafun_tycheck::ModuleGraphTypecheckResult<'db> {
-        let all_names = resolve_all_names(db.as_salsa_db(), parsed);
-        typecheck_module_graph_with_mode(db, parsed, all_names, mode, AutoAdaptMode::Disabled)
+        let all_names = crate::compile::resolve_phase(db, mode, parsed);
+        crate::compile::typecheck_phase(db, mode, parsed, all_names, AutoAdaptMode::Disabled)
     }
 
     #[test]

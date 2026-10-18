@@ -52,6 +52,43 @@ pub enum ParallelMode {
     Parallel,
 }
 
+/// Compute `query` for each of `items` on rayon's pool, under
+/// `ParallelMode::Parallel`, for the memos it leaves behind.
+///
+/// This is all the compiler's parallelism is: a query that a sequential step
+/// would go on to ask once per module, or per chunk, asked ahead of it on
+/// database clones, so that the step finds every answer in its memo. Nothing
+/// computed here is used except through salsa, and so the parallel compile is
+/// the sequential one, run sooner. What the items are is the step's to say,
+/// from the same function the step uses to make its own calls, so that the two
+/// cannot key the query differently; a warm-up keyed otherwise is not wrong,
+/// only work done twice.
+///
+/// Called outside any query: work run in parallel inside one would not be
+/// tracked as the query's dependency, and on a target without threads rayon
+/// runs it inline, nested in the query. Under `ParallelMode::Sequential`, or
+/// with nothing to do, it does nothing; where rayon's pool has only the calling
+/// thread, as on wasm, it runs the queries there, ahead of the step as ever.
+/// `items` is a closure so that a sequential compile does not even list them.
+pub fn warm<'db, T: Send, I: IntoIterator<Item = T>>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    items: impl FnOnce() -> I,
+    query: impl Fn(&dyn salsa::Database, T) + Sync,
+) {
+    use rmx::rayon::prelude::*;
+
+    if mode != ParallelMode::Parallel {
+        return;
+    }
+    // Cloned here because `&dyn DbClone` is not `Sync`.
+    let work: Vec<_> = items().into_iter().map(|item| (db.dyn_clone(), item)).collect();
+    if work.is_empty() {
+        return;
+    }
+    work.into_par_iter().for_each(|(db_clone, item)| query(db_clone.as_salsa_db(), item));
+}
+
 /// Read parallel mode from `DATALOVE_PARALLEL` environment variable.
 ///
 /// Returns `ParallelMode::Parallel` if the env var is set (to any value),

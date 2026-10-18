@@ -10,6 +10,7 @@ use bct::module_graph::{Module, ModuleId};
 use datalove_ct::query_log::{log_query, QueryPhase};
 use datalove_datafun_ast::ast::{Item, Statement};
 use std::sync::Arc;
+use datalove_datafun_common::warm;
 use datalove_datafun_ir::{CodeRef, CodeUnitId, ConstValue, CtfeEvaluator, SharedConst, IrCodeUnit, IrType, FuncId, IrModuleId, ModuleFunctionRegistry};
 use datalove_datafun_tycheck::{
     DbClone, ParallelMode,
@@ -825,7 +826,7 @@ fn native_rider_units<'db>(
 /// Compute each module's `ctfe_module_units` in parallel, ahead of the
 /// `ctfe_module_registry` that collects them.
 fn warm_ctfe_module_units<'db>(db: &'db dyn DbClone, mode: ParallelMode, modules: &LoweredModules<'db>) {
-    warm(db, mode, modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
+    warm(db, mode, || modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
         let _ = ctfe_module_units(db, lowered);
     });
 }
@@ -1006,29 +1007,6 @@ pub fn lower_module_functions<'db>(
     ModuleLowerOutcome { lowered, deferred }
 }
 
-/// Compute a per-module query for each item on rayon's pool, under
-/// `ParallelMode::Parallel`, for the memos it leaves behind.
-///
-/// The pattern of the other phases' parallel paths, for the steps of phase 5
-/// that otherwise ask a per-module query in a sequential loop: the loop that
-/// follows is then a run of memo hits. Under `ParallelMode::Sequential` this
-/// does nothing and the loop does the work.
-fn warm<'db, T: Send>(
-    db: &'db dyn DbClone,
-    mode: ParallelMode,
-    items: impl IntoIterator<Item = T>,
-    query: impl Fn(&dyn salsa::Database, T) + Sync,
-) {
-    use rmx::rayon::prelude::*;
-
-    if mode != ParallelMode::Parallel {
-        return;
-    }
-    // Cloned here because `&dyn DbClone` is not `Sync`.
-    let work: Vec<_> = items.into_iter().map(|item| (db.dyn_clone(), item)).collect();
-    work.into_par_iter().for_each(|(db_clone, item)| query(db_clone.as_salsa_db(), item));
-}
-
 /// Lower all module functions.
 ///
 /// This lowers all functions across all modules. The lowered functions are
@@ -1054,8 +1032,6 @@ pub fn lower_all_module_functions<'db>(
     restrict: Option<&HashMap<ModuleId<'db>, Vec<String>>>,
     mode: ParallelMode,
 ) -> LoweredModules<'db> {
-    use rmx::rayon::prelude::*;
-
     let db_salsa = db.as_salsa_db();
     let graph = parsed_graph.graph(db_salsa);
     let typecheck_module_results = typecheck_result.module_results(db_salsa);
@@ -1090,21 +1066,9 @@ pub fn lower_all_module_functions<'db>(
         })
         .collect();
 
-    if matches!(mode, ParallelMode::Parallel) {
-        // Clone the database up front, one per module: `&dyn DbClone` is not
-        // `Sync`, so the clones cannot be made inside the parallel section.
-        let work: Vec<_> = ready.iter()
-            .map(|item| (db.dyn_clone(), item.clone()))
-            .collect();
-
-        work.into_par_iter().for_each(
-            |(db_clone, (_module_id, module, tc, own, func_ids, consts, restrict))| {
-                let _ = lower_module_functions(
-                    db_clone.as_salsa_db(), module, tc, own, func_ids, consts, restrict,
-                );
-            },
-        );
-    }
+    warm(db, mode, || ready.iter().cloned(), |db, (_module_id, module, tc, own, func_ids, consts, restrict)| {
+        let _ = lower_module_functions(db, module, tc, own, func_ids, consts, restrict);
+    });
 
     let mut result = Vec::with_capacity(ready.len());
     for (module_id, module, tc, own, func_ids, consts, restrict) in ready {
@@ -1438,7 +1402,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     if let Some(cache) = const_cache.as_deref_mut() {
         if graph_declares_consts(db_salsa, parsed_graph) {
             let graph = parsed_graph.graph(db_salsa);
-            warm(db, mode, graph.modules(db_salsa).iter().map(|module| module.id(db_salsa)), |db, module_id| {
+            warm(db, mode, || graph.modules(db_salsa).iter().map(|module| module.id(db_salsa)), |db, module_id| {
                 let _ = crate::const_cache::closure_fingerprint(db, graph, module_id);
             });
             cache.begin(db_salsa, graph);
@@ -1550,7 +1514,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let lowered_modules: LoweredModules<'db> = if skip_const_inlining {
         lowered_modules
     } else {
-        warm(db, mode, lowered_modules.iter().filter_map(|(module_id, lowered)| {
+        warm(db, mode, || lowered_modules.iter().filter_map(|(module_id, lowered)| {
             resolved_consts.get(module_id).map(|consts| (*lowered, consts.clone()))
         }), |db, (lowered, consts)| {
             let _ = const_inlined_module(db, lowered, consts);
@@ -1569,7 +1533,7 @@ pub fn lower_module_graph_with_evaluator<'db>(
     let (lowered_modules, specialize_errors) = if skip_specialization {
         (lowered_modules, Vec::new())
     } else {
-        warm(db, mode, lowered_modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
+        warm(db, mode, || lowered_modules.iter().map(|(_, lowered)| *lowered), |db, lowered| {
             let _ = module_has_comptime_calls(db, lowered);
         });
         specialize_module_graph(
@@ -1609,19 +1573,19 @@ pub fn lower_module_graph_with_evaluator<'db>(
     // lower_module via pre_resolved_consts.errors.
     //
     // `lower_module` is tracked, so it takes its arguments by value. The IR
-    // travels as a `ModuleLowered` handle, so neither the parallel path's work
-    // items nor the aggregation that follows them copies an instruction, and
-    // the memo key does not hash one either.
+    // travels as a `ModuleLowered` handle, so neither the work items, warmed
+    // or not, nor the aggregation copies an instruction, and the memo key does
+    // not hash one either.
     let lowered_modules: HashMap<ModuleId<'db>, ModuleLowered<'db>> =
         lowered_modules.into_iter().collect();
-    match mode {
-        ParallelMode::Sequential => {
-            assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, inline_modules, skip_const_inlining)
-        }
-        ParallelMode::Parallel => {
-            assemble_module_graph_parallel(db, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules, inline_modules, skip_const_inlining)
-        }
-    }
+    let work = assembly_work(
+        db_salsa, parsed_graph, typecheck_result, ownership_analysis, &resolved_consts, &lowered_modules,
+        inline_modules, skip_const_inlining,
+    );
+    warm(db, mode, || work.iter().cloned(), |db, item| {
+        let _ = item.lower(db);
+    });
+    assemble_module_graph(db_salsa, parsed_graph, work)
 }
 
 /// The two lowering strata for one module, as one module's IR.
@@ -2020,10 +1984,37 @@ fn specialize_comptime_functions<'db>(
     (lowered_functions, errors)
 }
 
-/// Assemble module graph sequentially.
+/// What phase 5d asks `lower_module` for one module.
+#[derive(Clone)]
+struct AssemblyItem<'db> {
+    module: Module<'db>,
+    ir_module_id: IrModuleId,
+    typecheck: SingleModuleTypecheckResult<'db>,
+    ownership: SingleModuleAnalysis<'db>,
+    func_ids: ReachableFuncIds<'db>,
+    consts: Option<ModulePreResolvedConsts<'db>>,
+    inline_modules: Option<InlineModules<'db>>,
+    skip_const_inlining: bool,
+    lowered: Option<ModuleLowered<'db>>,
+}
+
+impl<'db> AssemblyItem<'db> {
+    fn lower(self, db: &'db dyn salsa::Database) -> SingleModuleLoweringResult<'db> {
+        lower_module(
+            db, self.module, self.ir_module_id, self.typecheck, self.ownership, self.func_ids,
+            self.consts, self.inline_modules, self.skip_const_inlining, self.lowered,
+        )
+    }
+}
+
+/// The modules phase 5d assembles, every one but those with type errors, with
+/// what `lower_module` is keyed on for each.
 ///
-/// Combines lowered functions with module-level code, then applies const inlining.
-fn assemble_module_graph<'db>(
+/// The parallel compile warms `lower_module` over exactly these
+/// (`datalove_datafun_common::warm`), and `assemble_module_graph` then asks
+/// for the same.
+#[allow(clippy::too_many_arguments)]
+fn assembly_work<'db>(
     db: &'db dyn salsa::Database,
     parsed_graph: ParsedModuleGraph<'db>,
     typecheck_result: ModuleGraphTypecheckResult<'db>,
@@ -2032,156 +2023,56 @@ fn assemble_module_graph<'db>(
     lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
     inline_modules: Option<InlineModules<'db>>,
     skip_const_inlining: bool,
-) -> ModuleGraphLoweringResult<'db> {
+) -> Vec<AssemblyItem<'db>> {
     let graph = parsed_graph.graph(db);
-
-    // Compute func_id_map (tracked, cached based on parsed_graph).
     let func_id_map = compute_func_id_map(db, parsed_graph);
-
-    // Get per-module typecheck results.
     let typecheck_errors = typecheck_result.module_errors(db);
     let typecheck_module_results = typecheck_result.module_results(db);
-
-    // Get per-module ownership analysis results.
     let ownership_analysis_results = ownership_analysis.module_results(db);
-
-    // Lower each module with its pre-resolved consts.
-    let mut results_vec = Vec::new();
-    let mut all_success = true;
-
     let module_ids = ir_module_ids(db, parsed_graph);
-    for module in graph.iter_modules(db) {
-        let module_id = &module.id(db);
-        let ir_module_id = *module_ids.get(module_id).expect("every parsed module is numbered");
 
-        // Skip modules with typecheck errors.
-        if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
-            continue;
-        }
+    graph.iter_modules(db)
+        .filter(|module| typecheck_errors.get(&module.id(db)).is_none_or(|e| e.is_empty()))
+        .map(|module| {
+            let module_id = module.id(db);
+            AssemblyItem {
+                module,
+                ir_module_id: *module_ids.get(&module_id).expect("every parsed module is numbered"),
+                typecheck: *typecheck_module_results.get(&module_id)
+                    .expect("module should have typecheck result"),
+                ownership: *ownership_analysis_results.get(&module_id)
+                    .expect("module should have ownership analysis result"),
+                func_ids: reachable_func_ids(db, graph, func_id_map, module_id),
+                consts: resolved_consts.get(&module_id).cloned(),
+                inline_modules,
+                skip_const_inlining,
+                lowered: lowered_modules.get(&module_id).copied(),
+            }
+        })
+        .collect()
+}
 
-        // Get the tracked per-module typecheck result.
-        let single_typecheck = *typecheck_module_results.get(module_id)
-            .expect("module should have typecheck result");
-
-        // Get the tracked per-module ownership analysis result.
-        let single_ownership_analysis = *ownership_analysis_results.get(module_id)
-            .expect("module should have ownership analysis result");
-
-        // Get resolved consts for this module.
-        let module_consts = resolved_consts.get(module_id).cloned();
-
-        // Get lowered functions for this module.
-        let module_funcs = lowered_modules.get(module_id).copied();
-
-        let result = lower_module(
-            db,
-            module,
-            ir_module_id,
-            single_typecheck,
-            single_ownership_analysis,
-            reachable_func_ids(db, graph, func_id_map, *module_id),
-            module_consts,
-            inline_modules,
-            skip_const_inlining,
-            module_funcs,
-        );
-
+/// Assemble the modules: each module's lowered functions with its
+/// module-level code, finished by `lower_module`.
+fn assemble_module_graph<'db>(
+    db: &'db dyn salsa::Database,
+    parsed_graph: ParsedModuleGraph<'db>,
+    work: Vec<AssemblyItem<'db>>,
+) -> ModuleGraphLoweringResult<'db> {
+    let func_id_map = compute_func_id_map(db, parsed_graph);
+    let mut results_vec = Vec::with_capacity(work.len());
+    let mut all_success = true;
+    for item in work {
+        let module_id = item.module.id(db);
+        let result = item.lower(db);
         if !result.errors(db).is_empty() {
             all_success = false;
         }
-
-        results_vec.push((*module_id, result));
+        results_vec.push((module_id, result));
     }
 
     // Use tracked wrapper to create the result (requires tracked function context).
     create_module_graph_lowering_result(db, results_vec, func_id_map, all_success)
-}
-
-/// Assemble module graph in parallel.
-///
-/// Warms salsa's memoization cache by assembling modules in parallel,
-/// then delegates to the tracked function for final aggregation.
-fn assemble_module_graph_parallel<'db>(
-    db: &'db dyn DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    typecheck_result: ModuleGraphTypecheckResult<'db>,
-    ownership_analysis: ModuleGraphAnalysis<'db>,
-    resolved_consts: &HashMap<ModuleId<'db>, ModulePreResolvedConsts<'db>>,
-    lowered_modules: &HashMap<ModuleId<'db>, ModuleLowered<'db>>,
-    inline_modules: Option<InlineModules<'db>>,
-    skip_const_inlining: bool,
-) -> ModuleGraphLoweringResult<'db> {
-    use rmx::rayon::prelude::*;
-
-    let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-    // Compute func_id_map once (will be cached).
-    let func_id_map = compute_func_id_map(db_salsa, parsed_graph);
-
-    let typecheck_errors = typecheck_result.module_errors(db_salsa);
-    let typecheck_module_results = typecheck_result.module_results(db_salsa);
-    let ownership_analysis_results = ownership_analysis.module_results(db_salsa);
-
-    // Prepare work items for parallel execution.
-    let module_ids = ir_module_ids(db_salsa, parsed_graph);
-    let work: Vec<_> = graph.iter_modules(db_salsa)
-        .filter_map(|module| {
-            let module_id = &module.id(db_salsa);
-            // Skip modules with typecheck errors.
-            if typecheck_errors.get(module_id).map_or(false, |e| !e.is_empty()) {
-                return None;
-            }
-
-            // Get the tracked per-module typecheck result.
-            let single_typecheck = *typecheck_module_results.get(module_id)?;
-
-            // Get the tracked per-module ownership analysis result.
-            let single_ownership_analysis = *ownership_analysis_results.get(module_id)?;
-
-            // Get resolved consts for this module.
-            let module_consts = resolved_consts.get(module_id).cloned();
-
-            // Get lowered functions for this module.
-            let module_funcs = lowered_modules.get(module_id).copied();
-
-            Some((
-                db.dyn_clone(),
-                module,
-                *module_ids.get(module_id).expect("every parsed module is numbered"),
-                single_typecheck,
-                single_ownership_analysis,
-                reachable_func_ids(db_salsa, graph, func_id_map, *module_id),
-                module_consts,
-                inline_modules,
-                skip_const_inlining,
-                module_funcs,
-            ))
-        })
-        .collect();
-
-    // Assemble modules in parallel - populates salsa's memoization cache.
-    work.into_par_iter().for_each(|(db_clone, module, ir_module_id, single_typecheck, single_ownership_analysis, func_ids, module_consts, inline_modules, skip_const_inlining, module_funcs)| {
-        let db_s = db_clone.as_salsa_db();
-
-        // This populates the cache.
-        let _ = lower_module(
-            db_s,
-            module,
-            ir_module_id,
-            single_typecheck,
-            single_ownership_analysis,
-            func_ids,
-            module_consts,
-            inline_modules,
-            skip_const_inlining,
-            module_funcs,
-        );
-    });
-
-    // Delegate to sequential function which aggregates results.
-    // All lower_module calls will be cache hits from the parallel phase.
-    assemble_module_graph(db_salsa, parsed_graph, typecheck_result, ownership_analysis, resolved_consts, lowered_modules, inline_modules, skip_const_inlining)
 }
 
 #[cfg(test)]

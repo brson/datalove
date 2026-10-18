@@ -738,8 +738,7 @@ pub use api::{
     type_check_script_units,
     type_check_single_script,
     typecheck_module_graph,
-    typecheck_module_graph_parallel,
-    typecheck_module_graph_with_mode,
+    typecheck_graph_module,
     resolve_module_imports,
     // Per-unit memoization.
     ScriptBinding,

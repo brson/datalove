@@ -20,6 +20,9 @@ pub struct ExecutedQuery {
     pub query: String,
     /// The salsa id of the query's argument.
     pub key: salsa::Id,
+    /// Whether it ran on one of rayon's worker threads, which in the parallel
+    /// compile is where a query computed ahead of its step runs.
+    pub on_worker: bool,
 }
 
 /// Collects the queries salsa runs.
@@ -49,7 +52,8 @@ impl QueryRecorder {
             // available on its own, so only the name is taken from the text.
             let rendered = format!("{database_key:?}");
             let query = rendered.split('(').next().unwrap_or(&rendered).to_string();
-            executed.lock().X().push(ExecutedQuery { query, key: database_key.key_index() });
+            let on_worker = rmx::rayon::current_thread_index().is_some();
+            executed.lock().X().push(ExecutedQuery { query, key: database_key.key_index(), on_worker });
         })
     }
 

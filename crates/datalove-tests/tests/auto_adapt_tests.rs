@@ -21,10 +21,10 @@ use datalove_datafun::{
     to_module_graph, module_graph,
 };
 use datalove_datafun_tycheck::{typecheck_module_graph, AutoAdaptMode};
-use datalove_datafun_resolve::{resolve_all_names, ParallelMode};
+use datalove_datafun_resolve::resolve_all_names;
 use datalove_datafun_pkg::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
 use datalove_datafun::pipeline::{WorkspaceDescriptor, CompilerOptions};
-use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
+use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph;
 use datalove_datafun_compiler::tracked_script_ownership::analyze_script_fragment_tracked;
 
 /// Typecheck worldfile sections with a given auto-adapt mode.
@@ -130,7 +130,7 @@ fn typecheck_sections_with_mode(
 
             // Run ownership analysis for modules if no type errors.
             if module_errors.values().all(|e| e.is_empty()) {
-                let ownership_result = analyze_module_graph_with_mode(&db, parsed_graph, typecheck_result, ParallelMode::Sequential, mode);
+                let ownership_result = analyze_module_graph(&db, parsed_graph, typecheck_result, mode);
                 for (module_id, analysis) in ownership_result.module_results(&db).iter() {
                     for err in analysis.errors(&db) {
                         all_errors.push(format!("{}: {}", module_id.path(&db), err));

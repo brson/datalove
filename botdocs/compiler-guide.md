@@ -122,31 +122,33 @@ Binary](#user-content-the-shipped-binary).
 ## Module Compilation Pipeline
 
 Module compilation runs through five phases. Phases 1-4 are handled by `compile_modules()`,
-phase 5 by `lower_module_graph_with_evaluator()`.
+phase 5 by `lower_module_graph_with_evaluator()`. Each `*_phase` is its step
+with, under `DATALOVE_PARALLEL`, the step's per-module queries computed ahead
+of it; see [Parallel Execution](#user-content-parallel-execution).
 
 ```
 Source Text
     |
     v
 [Phase 1: Parse]
-    |   parse_module_graph_with_mode
+    |   parse_phase
     |   Per-module: parse_module_full [tracked]
     |   Rider sources arrive here as raw strings
     v   Output: ParsedModuleGraph (statements + resolved_riders)
     |
 [Phase 2: Name Resolution]
-    |   resolve_all_names_with_mode
+    |   resolve_phase
     |   Per-module: resolve_module_names [tracked]
     v   Output: AllModuleNameResolutions
     |
 [Phase 3: Typecheck]
-    |   typecheck_module_graph_with_mode
+    |   typecheck_phase
     |   Per-module: resolve_module_imports, typecheck_module [tracked]
     |   An importer asks resolve_module_exports of what it requires
     v   Output: ModuleGraphTypecheckResult
     |
 [Phase 4: Ownership Analysis]
-    |   analyze_module_graph_with_mode
+    |   ownership_phase
     |   Per-module: analyze_module [tracked]
     v   Output: ModuleGraphAnalysis
     |
@@ -1288,35 +1290,47 @@ baseline it would have to beat.
 
 ### Parallel Execution
 
-Enabled via `DATALOVE_PARALLEL=1`:
+Enabled via `DATALOVE_PARALLEL=1`. **All of it is one move**: a query a
+sequential step goes on to ask once per module (or per chunk) is computed
+ahead of the step on rayon's pool, on database clones, so that the step finds
+every answer in its memo. Nothing a worker computes is used except through
+salsa, so the parallel compile is the sequential one, run sooner. The move is
+`datalove_datafun_common::warm`:
 
 ```rust
-pub fn parse_module_graph_parallel<'db>(db: &'db dyn DbClone, ...) -> ParsedModuleGraph<'db> {
-    // Prepare cloned databases
-    let work: Vec<_> = modules.iter()
-        .map(|m| (db.dyn_clone(), m))
-        .collect();
-
-    // Warm cache in parallel
-    work.into_par_iter().for_each(|(db_clone, module)| {
-        let _ = parse_module_full(db_clone.as_salsa_db(), module);
+// Phase 3 in `compile.rs`.
+pub fn typecheck_phase<'db>(db: &'db dyn DbClone, mode: ParallelMode, parsed_graph, name_resolution, auto_adapt_mode)
+    -> ModuleGraphTypecheckResult<'db>
+{
+    let graph = parsed_graph.graph(db.as_salsa_db());
+    warm(db, mode, || graph.iter_modules(db.as_salsa_db()), |db, module| {
+        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module, auto_adapt_mode);
     });
-
-    // Tracked function hits cache
-    parse_module_graph(db.as_salsa_db(), ...)
+    typecheck_module_graph(db.as_salsa_db(), parsed_graph, name_resolution, auto_adapt_mode)
 }
 ```
 
-Works because `dyn_clone()` shares the global memoization cache.
+`warm` does nothing under `ParallelMode::Sequential`, and works because
+`dyn_clone()` shares the global memoization cache.
 
-Four of the five phases do it this way: warm, then let the sequential tracked
-aggregator read the memos back. Phase 5a is the exception and worth knowing
-about, because it is what the others would look like if they could. Its output
--- `ModuleLoweredFunctions` and the deferred names -- carries no `'db` brand, so
-a worker hands back what it built rather than warming a cache for a second pass.
-The others return branded values, which cannot escape the borrow of the clone
-that produced them; that is a lifetime problem rather than a salsa one, and
-salsa 0.28 supports genuinely concurrent queries (see its `tests/parallel`).
+**A step and its warm-up ask with the same function.** Here that is
+`typecheck_graph_module`, which `typecheck_module_graph` calls for each module
+too; for ownership it is `analysis_work`, the modules the step analyzes with
+the results it keys `analyze_module` on; for phase 5d `assembly_work`. A
+warm-up that keyed a query otherwise than its step would not be wrong, only
+work done twice, which is the failure nothing else would notice:
+`parallel_warm_tests` asks `QueryRecorder` which thread each per-module query
+ran on, and a warmed one has to have run on a worker.
+
+**The drivers own the parallelism; the phases know nothing of it.** There are
+three: the dependency walk (`extract_dependencies_with_mode`, which parses a
+frontier of modules at a time), phases 1 to 4 (`parse_phase`, `resolve_phase`,
+`typecheck_phase` and `ownership_phase` in `compile.rs`, which
+`compile_modules` is made of, and the data files' chunks), and phase 5
+(`lower_module_graph_with_evaluator`). A warm-up has to sit between the result
+its items come from and the step that reads them, so there is one per phase,
+and outside any query, since salsa does not track work run in parallel inside
+one and on wasm rayon would run it nested there.
 
 What caps all of this is the sequential half. Each phase's aggregator walks the
 graph whatever was edited, so the speedup is bounded by what it does: parse sits
@@ -1997,6 +2011,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-sys-packages`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
+| `parallel_warm_tests` | That under `DATALOVE_PARALLEL` every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
 | `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) |
 

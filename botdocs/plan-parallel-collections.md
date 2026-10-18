@@ -301,7 +301,8 @@ the collection grows, from interning every number.
 **Phase 1**: `bct::chunk` (the plan, the policy, the thresholds),
 `datalit::parser::parse_chunk` and `Parser::parse_planned` in
 `crates/datalove-datalit/src/parser/chunk.rs`, the warm-up for data files
-(`warm_data_chunks` in `crates/datalove-datafun-compiler/src/compile.rs`), and
+(`data_chunks` and its `warm` in `compile_modules`,
+`crates/datalove-datafun-compiler/src/compile.rs`), and
 lists, maps and sets in datalit; `crates/datalove-datalit/tests/chunk_tests.rs`
 is the equivalence suite. The defaults are measured, and the store demo
 compiles in 138ms parallel, from 225ms. Where it came out other than as

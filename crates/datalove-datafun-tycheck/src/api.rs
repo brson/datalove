@@ -686,6 +686,29 @@ pub fn typecheck_module<'db>(
     )
 }
 
+/// One module's typecheck, as `typecheck_module_graph` asks for it: its
+/// imports resolved, then `typecheck_module` keyed with them and its names.
+///
+/// The parallel compile warms exactly this (`datalove_datafun_common::warm`),
+/// so that what it computes ahead is what the graph's typecheck then asks for.
+pub fn typecheck_graph_module<'db>(
+    db: &'db dyn crate::Db,
+    parsed_graph: ParsedModuleGraph<'db>,
+    all_names: AllModuleNameResolutions<'db>,
+    module: Module<'db>,
+    auto_adapt_mode: crate::AutoAdaptMode,
+) -> SingleModuleTypecheckResult<'db> {
+    let name_resolution = *all_names.resolutions(db).get(&module.id(db))
+        .expect("module should have name resolution");
+    let import_resolution = resolve_module_imports(db, module, parsed_graph);
+    typecheck_module(
+        db, module, name_resolution,
+        import_resolution.imports(db).C(), import_resolution.errors(db).C(),
+        import_resolution.require_errors(db).C(), import_resolution.qualified(db).C(),
+        parsed_graph.graph(db).data(db).C(), auto_adapt_mode,
+    )
+}
+
 /// Typecheck a module graph.
 ///
 /// Accepts pre-computed name resolution results from the resolve crate.
@@ -711,23 +734,7 @@ pub fn typecheck_module_graph<'db>(
 
     for module in graph.iter_modules(db) {
         let module_id = module.id(db);
-
-        // Get pre-computed name resolution for this module.
-        let name_resolution = *all_names.resolutions(db).get(&module_id)
-            .expect("module should have name resolution");
-
-        // Resolve imports for this module (tracked, memoized per module).
-        let import_resolution = resolve_module_imports(db, module, parsed_graph);
-        let resolved_imports = import_resolution.imports(db).C();
-        let import_errors = import_resolution.errors(db).C();
-        let require_errors = import_resolution.require_errors(db).C();
-        let qualified = import_resolution.qualified(db).C();
-
-        // Call the tracked typecheck function.
-        let result = typecheck_module(
-            db, module, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, graph.data(db).C(), auto_adapt_mode,
-        );
+        let result = typecheck_graph_module(db, parsed_graph, all_names, module, auto_adapt_mode);
 
         // Collect errors from typecheck result.
         let errors = result.errors(db).C();
@@ -752,82 +759,6 @@ pub fn typecheck_module_graph<'db>(
     }
 
     ModuleGraphTypecheckResult::new(db, graph, module_errors, module_exports_map, module_imports_map, module_results_map)
-}
-
-/// Typecheck a module graph using parallel execution.
-///
-/// This function runs typechecking in parallel using rayon to warm salsa's
-/// memoization cache, then delegates to the tracked `typecheck_module_graph`
-/// function. The tracked function will hit the warmed cache for all calls.
-///
-/// Accepts pre-computed name resolution results from the resolve crate.
-/// Requires `&dyn DbClone` to enable database cloning for parallel execution.
-pub fn typecheck_module_graph_parallel<'db>(
-    db: &'db dyn crate::DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    all_names: AllModuleNameResolutions<'db>,
-    auto_adapt_mode: crate::AutoAdaptMode,
-) -> ModuleGraphTypecheckResult<'db> {
-    use rmx::rayon::prelude::*;
-
-    let db_salsa = db.as_salsa_db();
-    let graph = parsed_graph.graph(db_salsa);
-
-    // ========================================================================
-    // PARALLEL TYPECHECK PASS (warms salsa cache)
-    // ========================================================================
-
-    // Clone databases upfront for parallel execution.
-    let work: Vec<_> = graph
-        .iter_modules(db_salsa)
-        .map(|module| {
-            let module_id = module.id(db_salsa);
-            let name_resolution = *all_names.resolutions(db_salsa).get(&module_id)
-                .expect("module should have name resolution");
-            (db.dyn_clone(), module, name_resolution)
-        })
-        .collect();
-
-    // Typecheck modules in parallel - populates salsa's memoization cache.
-    // Both resolve_module_imports and typecheck_module are tracked and cached.
-    work.into_par_iter().for_each(|(db_clone, module, name_resolution)| {
-        let db_salsa = db_clone.as_salsa_db();
-
-        // Resolve imports (tracked, memoized per module).
-        let import_resolution = resolve_module_imports(db_salsa, module, parsed_graph);
-        let resolved_imports = import_resolution.imports(db_salsa).C();
-        let import_errors = import_resolution.errors(db_salsa).C();
-        let require_errors = import_resolution.require_errors(db_salsa).C();
-        let qualified = import_resolution.qualified(db_salsa).C();
-
-        // Typecheck (tracked, memoized per module).
-        let _ = typecheck_module(
-            db_salsa, module, name_resolution, resolved_imports, import_errors,
-            require_errors, qualified, graph.data(db_salsa).C(), auto_adapt_mode,
-        );
-    });
-
-    // Delegate to tracked function which aggregates results.
-    // All resolve_module_names, resolve_module_imports, and typecheck_module calls will be cache hits.
-    typecheck_module_graph(db_salsa, parsed_graph, all_names, auto_adapt_mode)
-}
-
-/// Typecheck module graph with configurable parallelism.
-///
-/// Accepts pre-computed name resolution results from the resolve crate.
-/// Use `ParallelMode::Sequential` for standard salsa-tracked behavior, or
-/// `ParallelMode::Parallel` to enable rayon parallelization.
-pub fn typecheck_module_graph_with_mode<'db>(
-    db: &'db dyn crate::DbClone,
-    parsed_graph: ParsedModuleGraph<'db>,
-    all_names: AllModuleNameResolutions<'db>,
-    mode: crate::ParallelMode,
-    auto_adapt_mode: crate::AutoAdaptMode,
-) -> ModuleGraphTypecheckResult<'db> {
-    match mode {
-        crate::ParallelMode::Sequential => typecheck_module_graph(db.as_salsa_db(), parsed_graph, all_names, auto_adapt_mode),
-        crate::ParallelMode::Parallel => typecheck_module_graph_parallel(db, parsed_graph, all_names, auto_adapt_mode),
-    }
 }
 
 /// Emit pending diagnostics for a module using spans from the parsed module graph.

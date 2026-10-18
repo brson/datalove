@@ -13,12 +13,10 @@ use rmx::prelude::*;
 use datalove_datafun as datafun;
 use datalove_datafun::incremental::{IncrementalModuleWorld, Roots, extract_dependencies_with_mode};
 use datalove_datafun::pipeline::WorkspaceDescriptor;
-use datalove_datafun_compiler::module_graph::parse_module_graph_with_mode;
-use datalove_datafun_compiler::tracked_ownership_analysis::analyze_module_graph_with_mode;
+use datalove_datafun_compiler::compile::{parse_phase, resolve_phase, typecheck_phase, ownership_phase};
 use datalove_datafun_compiler::tracked_lower::lower_module_graph_with_evaluator;
 use datalove_datafun_interp::InterpCtfeEvaluator;
-use datalove_datafun_resolve::resolve_all_names_with_mode;
-use datalove_datafun_tycheck::{AutoAdaptMode, ParallelMode, typecheck_module_graph_with_mode};
+use datalove_datafun_tycheck::{AutoAdaptMode, ParallelMode};
 use std::time::{Duration, Instant};
 
 const N: usize = 6;
@@ -38,16 +36,16 @@ fn one(modules: &[(String, String)], riders: &[(String, String)], mode: Parallel
         .map(|(n, s)| (n.clone(), bct::input::Source::new(&db, s.clone())))
         .collect();
     let t = Instant::now();
-    let parsed = parse_module_graph_with_mode(&db, graph, rr, riders, mode);
+    let parsed = parse_phase(&db, mode, graph, rr, riders);
     d[1] = t.elapsed();
     let t = Instant::now();
-    let names = resolve_all_names_with_mode(&db, parsed, mode);
+    let names = resolve_phase(&db, mode, parsed);
     d[2] = t.elapsed();
     let t = Instant::now();
-    let tc = typecheck_module_graph_with_mode(&db, parsed, names, mode, AutoAdaptMode::Disabled);
+    let tc = typecheck_phase(&db, mode, parsed, names, AutoAdaptMode::Disabled);
     d[3] = t.elapsed();
     let t = Instant::now();
-    let own = analyze_module_graph_with_mode(&db, parsed, tc, mode, AutoAdaptMode::Disabled);
+    let own = ownership_phase(&db, mode, parsed, tc, AutoAdaptMode::Disabled);
     d[4] = t.elapsed();
     let t = Instant::now();
     let mut ev = InterpCtfeEvaluator::new();

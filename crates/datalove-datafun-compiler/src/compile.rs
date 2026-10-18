@@ -8,20 +8,21 @@ use rmx::prelude::*;
 use rmx::std::collections::BTreeMap;
 
 use bct::module_graph::{ModuleGraph, ModuleId};
+use datalove_datafun_common::warm;
 use datalove_datafun_resolve::{
     DbClone, ParallelMode,
-    resolve_all_names_with_mode,
+    resolve_all_names, resolve_module_names,
     AllModuleNameResolutions,
     ParsedModuleGraph,
 };
 use datalove_datafun_tycheck::{
-    typecheck_module_graph_with_mode,
+    typecheck_graph_module, typecheck_module_graph,
     ModuleGraphTypecheckResult,
     AutoAdaptMode,
 };
 
-use crate::module_graph::{parse_module_graph_with_mode, parse_module_full};
-use crate::tracked_ownership_analysis::{analyze_module_graph_with_mode, ModuleGraphAnalysis};
+use crate::module_graph::{parse_module_graph, parse_module_full};
+use crate::tracked_ownership_analysis::{analysis_work, analyze_module, analyze_module_graph, ModuleGraphAnalysis};
 
 /// Input for module compilation - the output of package resolution.
 pub struct ModuleCompilationInput<'db> {
@@ -87,36 +88,17 @@ pub fn compile_modules<'db>(
     rider_sources: Vec<(String, bct::input::Source)>,
     mode: ParallelMode,
 ) -> ModuleCompilationOutput<'db> {
-    // Phase 1: Parse
-    // Rider sources are passed through as raw strings; RiderInterface creation
-    // happens inside the tracked parse_module_graph function where salsa tracked
-    // struct creation (TypeFunction) is allowed.
-    let parsed_graph = parse_module_graph_with_mode(
-        db,
-        input.graph.clone(),
-        input.resolved_requires,
-        rider_sources.clone(),
-        mode,
-    );
-
     // The data files' large collections, parsed in chunks ahead of the
-    // typecheck that asks for the files.
-    warm_data_chunks(db, input.graph.clone(), mode);
+    // typecheck that asks for the files; see `datalit::parser::parse_chunk`.
+    // Planning a file lexes and braces it, which stays sequential.
+    warm(db, mode, || data_chunks(db.as_salsa_db(), input.graph.clone()), |db, (source, collection, chunk)| {
+        let _ = datalove_datalit::parser::parse_chunk(db, source, collection, chunk);
+    });
 
-    // Phase 2: Name Resolution (memoized per-module, can be parallelized)
-    let name_resolution = resolve_all_names_with_mode(db, parsed_graph, mode);
-
-    // Phase 3: Typecheck (receives name resolution results as parameters)
-    let typecheck_result = typecheck_module_graph_with_mode(
-        db,
-        parsed_graph,
-        name_resolution,
-        mode,
-        AutoAdaptMode::Disabled,
-    );
-
-    // Phase 4: Ownership Analysis
-    let ownership_analysis = analyze_module_graph_with_mode(db, parsed_graph, typecheck_result, mode, AutoAdaptMode::Disabled);
+    let parsed_graph = parse_phase(db, mode, input.graph.clone(), input.resolved_requires, rider_sources.clone());
+    let name_resolution = resolve_phase(db, mode, parsed_graph);
+    let typecheck_result = typecheck_phase(db, mode, parsed_graph, name_resolution, AutoAdaptMode::Disabled);
+    let ownership_analysis = ownership_phase(db, mode, parsed_graph, typecheck_result, AutoAdaptMode::Disabled);
 
     let mut output = collect_results(db, input.graph, parsed_graph, name_resolution, typecheck_result, ownership_analysis);
 
@@ -136,38 +118,94 @@ pub fn compile_modules<'db>(
     output
 }
 
-/// Parse the chunks of every collection the data files plan to cut, on
-/// rayon's pool, under `ParallelMode::Parallel`.
-///
-/// A data file is parsed by the typecheck of the module that requires it, so
-/// the whole file would be one thread's work however many modules there are.
-/// The chunks of its big collections are queries of their own (see
-/// `datalit::parser::parse_chunk`), and this runs them first, outside any
-/// query, so that the parse finds them in their memos. Planning a file lexes
-/// and braces it, which stays sequential.
-fn warm_data_chunks<'db>(db: &'db dyn DbClone, graph: ModuleGraph<'db>, mode: ParallelMode) {
-    use rmx::rayon::prelude::*;
+// Phases 1 to 4, each a sequential step over the graph and, under
+// `ParallelMode::Parallel`, the step's per-module queries computed ahead of it
+// on rayon (`warm`), from the same function the step makes its own calls with.
+// This, the dependency walk before it (`extract_dependencies_with_mode`) and
+// phase 5 after (`lower_module_graph_with_evaluator`) are where the compile is
+// parallel; the phases themselves know nothing of it.
 
-    if mode != ParallelMode::Parallel {
-        return;
-    }
+/// Phase 1: parse. In the pipeline the dependency walk has parsed every
+/// module already; a graph built without it, as the benches and tests build
+/// theirs, is parsed here, ahead of the phases that read each module's AST.
+/// Rider sources are passed through as raw strings; `RiderInterface` creation
+/// happens inside the tracked `parse_module_graph`, where salsa tracked struct
+/// creation is allowed.
+pub fn parse_phase<'db>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    graph: ModuleGraph<'db>,
+    resolved_requires: BTreeMap<ModuleId<'db>, Vec<(String, ModuleId<'db>)>>,
+    rider_sources: Vec<(String, bct::input::Source)>,
+) -> ParsedModuleGraph<'db> {
     let db_salsa = db.as_salsa_db();
-    let mut work = Vec::new();
-    for source in graph.data(db_salsa).values() {
-        let plan = bct::chunk::collection_plan(db_salsa, bct::lexer::lex(db_salsa, *source));
+    warm(db, mode, || graph.iter_modules(db_salsa), |db, module| {
+        let _ = parse_module_full(db, module);
+    });
+    parse_module_graph(db_salsa, graph, resolved_requires, rider_sources)
+}
+
+/// Phase 2: name resolution.
+pub fn resolve_phase<'db>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    parsed_graph: ParsedModuleGraph<'db>,
+) -> AllModuleNameResolutions<'db> {
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+    warm(db, mode, || graph.iter_modules(db_salsa), |db, module| {
+        let _ = resolve_module_names(db, module);
+    });
+    resolve_all_names(db_salsa, parsed_graph)
+}
+
+/// Phase 3: typecheck, given the names phase 2 resolved.
+pub fn typecheck_phase<'db>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    parsed_graph: ParsedModuleGraph<'db>,
+    name_resolution: AllModuleNameResolutions<'db>,
+    auto_adapt_mode: AutoAdaptMode,
+) -> ModuleGraphTypecheckResult<'db> {
+    let db_salsa = db.as_salsa_db();
+    let graph = parsed_graph.graph(db_salsa);
+    warm(db, mode, || graph.iter_modules(db_salsa), |db, module| {
+        let _ = typecheck_graph_module(db, parsed_graph, name_resolution, module, auto_adapt_mode);
+    });
+    typecheck_module_graph(db_salsa, parsed_graph, name_resolution, auto_adapt_mode)
+}
+
+/// Phase 4: ownership analysis.
+pub fn ownership_phase<'db>(
+    db: &'db dyn DbClone,
+    mode: ParallelMode,
+    parsed_graph: ParsedModuleGraph<'db>,
+    typecheck_result: ModuleGraphTypecheckResult<'db>,
+    auto_adapt_mode: AutoAdaptMode,
+) -> ModuleGraphAnalysis<'db> {
+    let db_salsa = db.as_salsa_db();
+    warm(db, mode, || analysis_work(db_salsa, parsed_graph, typecheck_result), |db, (module, single_typecheck)| {
+        let _ = analyze_module(db, module, single_typecheck, auto_adapt_mode);
+    });
+    analyze_module_graph(db_salsa, parsed_graph, typecheck_result, auto_adapt_mode)
+}
+
+/// Every chunk of every collection the data files plan to cut, as
+/// `datalit::parser::parse_chunk` is keyed.
+fn data_chunks<'db>(
+    db: &'db dyn salsa::Database,
+    graph: ModuleGraph<'db>,
+) -> Vec<(bct::input::Source, u32, u32)> {
+    let mut chunks = Vec::new();
+    for source in graph.data(db).values() {
+        let plan = bct::chunk::collection_plan(db, bct::lexer::lex(db, *source));
         for (collection, planned) in plan.iter().enumerate() {
             for chunk in 0..planned.chunks.len() {
-                // Cloned here because `&dyn DbClone` is not `Sync`.
-                work.push((db.dyn_clone(), *source, u32::try_from(collection).X(), u32::try_from(chunk).X()));
+                chunks.push((*source, u32::try_from(collection).X(), u32::try_from(chunk).X()));
             }
         }
     }
-    if work.is_empty() {
-        return;
-    }
-    work.into_par_iter().for_each(|(db_clone, source, collection, chunk)| {
-        let _ = datalove_datalit::parser::parse_chunk(db_clone.as_salsa_db(), source, collection, chunk);
-    });
+    chunks
 }
 
 /// Collect all analysis results into the output structure.
