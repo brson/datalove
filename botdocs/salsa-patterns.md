@@ -384,6 +384,28 @@ Swapping those to `HashMap` would free `InternedText` from needing `Ord`, and it
 would be a mistake: `BTreeMap` is what keeps a memoized value's contents
 order-stable.
 
+### Ids are not the same between compiles
+
+Ordering by id is deterministic only while the order of first interning is.
+A sequential compile interns in one order. A parallel one interns from rayon's
+workers in whatever order they run, so two compiles of one world, or a
+sequential and a parallel one, give the same text and the same module different
+ids. That is harmless as long as the rule above holds: a container ordered by id
+(`InternedText`, `ModuleId` and `PackageModule` all are, the last two by derived
+`Ord`) or hashed by id (`FxHashMap` with a salsa struct key; salsa derives
+`Hash` on the id) is for lookup, and anything that reaches output is sorted by
+content first, as `asked_names` and the script unit's `function_types` are.
+
+Audited in October 2026, before parallel compiles became the default: with
+those three `Ord`s replaced by one comparing a scramble of the id bits, the
+whole suite passed, IR and serialization snapshots included, so nothing the
+suite observes depends on id order. To repeat it, make the three `cmp`s compare
+`f(a.as_bits()).cmp(&f(b.as_bits()))` with `f` a fixed bijection such as
+`x.wrapping_mul(0x9E3779B97F4A7C15).rotate_left(29)`, check on a `BTreeSet` of
+a few `InternedText`s that the order really changed, and run `just test`. The
+`FxHash` maps keyed by salsa structs were read instead: each is lookup only or
+sorted by text before it is kept.
+
 Reproducibility cannot be tested in one process, because the seed is fixed
 within a run and a hash map iterates identically every time. `datalove-cli/tests/reproducible_build_tests.rs`
 compiles a fixture three times in **separate processes** and compares the bytes.

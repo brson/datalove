@@ -19,6 +19,10 @@ pub struct Package<'db> {
     pub modules: BTreeMap<ModuleName, PackageModule<'db>>,
 }
 
+/// A module of a package: its name and its source.
+///
+/// The derived `Ord` compares salsa ids, the order of first interning; see
+/// `ModuleId`.
 #[salsa::interned]
 #[derive(Debug, Ord, PartialOrd)]
 pub struct PackageModule<'db> {

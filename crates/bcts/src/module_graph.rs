@@ -14,6 +14,8 @@ use crate::input::Source;
 /// asked for. As an input it did not, and every caller had to route through
 /// whoever happened to construct the id first.
 ///
+/// The derived `Ord` compares salsa ids, not paths, so like `InternedText`'s
+/// it is the order of first interning, which a parallel compile does not fix.
 #[salsa::interned]
 #[derive(Debug, Ord, PartialOrd)]
 pub struct ModuleId<'db> {
