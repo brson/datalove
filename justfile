@@ -61,23 +61,25 @@ test-demos:
 test-extras: test-slow test-demos
 
 # Everything CI runs, which it does one configuration per runner.
-test-ci: test test-64 test-parallel test-cut test-extras
+test-ci: test test-64 test-cut test-extras
 
-# Run tests with parallel compilation enabled.
+# Run tests with sequential compilation, which is not part of CI.
 #
-# Parallelism stops at lowering, so what runs the IR is the same either way.
-# The engine suites run the reference and the bytecode only, with const
-# inlining and specialization each turned off, which lower differently.
-test-parallel:
-    DATALOVE_PARALLEL=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+# A parallel compile is the sequential one with each step's per-module queries
+# computed ahead of it, so `test` runs every line this does; this is for when
+# that needs checking rather than trusting. The engine suites run the
+# reference and the bytecode only, with const inlining and specialization each
+# turned off, which lower differently.
+test-sequential:
+    DATALOVE_PARALLEL=0 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Run tests with every datalit collection literal parsed in chunks, after every
-# element, in parallel compiles so that the chunks are parsed ahead of time
-# as they would be; see `bct::chunk`. A collection in chunks parses to what it
-# parses to whole, so nothing a test checks may change. The engines as for
-# `test-parallel`, since chunks stop at the parse.
+# element, which a parallel compile parses ahead of time as it would; see
+# `bct::chunk`. A collection in chunks parses to what it parses to whole, so
+# nothing a test checks may change. The engine suites run as for
+# `test-sequential`, since chunks stop at the parse.
 test-cut:
-    DATALOVE_CUT_COLLECTIONS=1 DATALOVE_PARALLEL=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
+    DATALOVE_CUT_COLLECTIONS=1 DATALOVE_TEST_ENGINES=bytecode,noconst,nospec DATALOVE_LEAK_CHECK={{LEAK_CHECK}} cargo test --all --lib --bins --tests --examples
 
 # Time all tests, showing only tests that take over 1 second.
 test-time:

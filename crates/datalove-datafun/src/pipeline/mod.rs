@@ -46,8 +46,8 @@
 //!
 //! # Parallelism
 //!
-//! Set `DATALOVE_PARALLEL=1` to enable parallel compilation, or use the
-//! `*_with_mode` methods for explicit control.
+//! Compiles are parallel unless `DATALOVE_PARALLEL=0` (see
+//! `parallel_mode_from_env`); the `*_with_mode` methods choose explicitly.
 
 mod result;
 mod compiled_modules;

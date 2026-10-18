@@ -156,7 +156,8 @@ the rest of the allocation being the AST's own.
 
 ## Parallel compilation
 
-`DATALOVE_PARALLEL=1` runs each phase's per-module work on rayon (see
+A parallel compile, the default since October 2026, runs each phase's
+per-module work on rayon (see
 [the compiler guide](compiler-guide.md#user-content-parallel-execution)), but
 on the `sys/std` script it buys little: measured October 2026 on four cores,
 24.2ms wall sequential and 17.4ms parallel, 1.4x. Two things cost most of the
@@ -169,7 +170,7 @@ walks a worklist calling `module_import_demands`, which reaches
 did that on the main thread, so by the time phase 1's parallel path warmed
 the parse memos they were all hits, and the largest front-end phase ran
 sequentially. The `parallel` bench did not see this, because it calls the
-phase-1 function directly. Under `DATALOVE_PARALLEL` the pipeline now calls
+phase-1 function directly. In a parallel compile the pipeline now calls
 `extract_dependencies_with_mode`
 (`crates/datalove-datafun/src/incremental.rs`), which runs the same walk
 outside any query, one frontier at a time, with each frontier's parses on
@@ -266,8 +267,8 @@ parallel compile does, the kernel. The steps on the main thread came to about
 1.6ms of the 4.3ms when this was measured, in three kinds.
 
 - **Per-module queries run in a sequential loop:** const inlining, the cache
-  keys, the per-module half of the registry, the specialization gate. Under
-  `DATALOVE_PARALLEL` these are now computed on rayon first (`warm` in
+  keys, the per-module half of the registry, the specialization gate. In a
+  parallel compile these are computed on rayon first (`warm` in
   `crates/datalove-datafun-compiler/src/tracked_lower.rs`), and the loop
   reads them back.
 - **The rider units were built three times**, by `add_native_rider_units` in
@@ -295,8 +296,15 @@ steps, since they speed up the two parallel ones.
 
 ### On real programs
 
-The benchvs programs and the store demo, measured October 2026 on four cores,
-say that `DATALOVE_PARALLEL` is not yet worth turning on for running a program.
+Parallel compiles became the default in October 2026, on two measurements on
+four cores. The store demo compiles in 158ms parallel against 221ms sequential
+(`script --time`, median of 15 interleaved runs each, 4MB of data), now that
+its large datalit collections parse in chunks a parallel compile spreads
+across the pool. And the main test suite takes the same time either way, about
+4m40s and the same CPU time in two interleaved runs of each, since its harness
+already keeps every core busy with small compiles. What follows is the earlier
+measurement, from before the chunking, which said parallel was not yet worth
+turning on.
 
 The benchvs programs compile in 2 to 11ms (`script --time`, median of 15)
 and run for 0.2 to 5.7s. Parallel compiling saves up to 2.6ms on the larger
@@ -451,7 +459,7 @@ goes in a data file.
 ## What is left
 
 - Huge pages, above: the largest single item, and a decision about the
-  allocator. It matters more under `DATALOVE_PARALLEL`; see
+  allocator. It matters more in a parallel compile; see
   [Parallel compilation](#user-content-parallel-compilation).
 - Parsing: no single fix; see [Parsing](#user-content-parsing).
 - Ownership analysis clones each function's `FunctionAnalysis` into lowering,

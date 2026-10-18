@@ -43,10 +43,11 @@ pub trait DbClone: salsa::Database {
 }
 
 /// Controls whether compilation runs sequentially or in parallel.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+///
+/// Parallel is the default; see `parallel_mode_from_env`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParallelMode {
-    /// Sequential compilation (default, salsa-tracked).
-    #[default]
+    /// Sequential compilation: each step computes its own queries.
     Sequential,
     /// Parallel compilation with rayon (warms cache, then delegates to sequential).
     Parallel,
@@ -89,14 +90,21 @@ pub fn warm<'db, T: Send, I: IntoIterator<Item = T>>(
     work.into_par_iter().for_each(|(db_clone, item)| query(db_clone.as_salsa_db(), item));
 }
 
-/// Read parallel mode from `DATALOVE_PARALLEL` environment variable.
+/// The parallelism mode a compile uses unless its caller chose one.
 ///
-/// Returns `ParallelMode::Parallel` if the env var is set (to any value),
-/// otherwise returns `ParallelMode::Sequential`.
+/// Parallel, unless `DATALOVE_PARALLEL` is `0`, or rayon's pool has only the
+/// calling thread, as on wasm: there the warm-ups would run inline ahead of
+/// their steps, which is the sequential compile plus a database clone per item.
+/// `DATALOVE_PARALLEL=1` asks for parallel even then. Any other value is a
+/// mistake and panics.
 pub fn parallel_mode_from_env() -> ParallelMode {
-    match std::env::var("DATALOVE_PARALLEL") {
-        Ok(_) => ParallelMode::Parallel,
-        Err(_) => ParallelMode::Sequential,
+    match std::env::var("DATALOVE_PARALLEL").as_deref() {
+        Ok("0") => ParallelMode::Sequential,
+        Ok("1") => ParallelMode::Parallel,
+        Ok(other) => panic!("DATALOVE_PARALLEL is {other:?}; it takes 0 or 1"),
+        Err(std::env::VarError::NotUnicode(value)) => panic!("DATALOVE_PARALLEL is {value:?}; it takes 0 or 1"),
+        Err(std::env::VarError::NotPresent) if rmx::rayon::current_num_threads() == 1 => ParallelMode::Sequential,
+        Err(std::env::VarError::NotPresent) => ParallelMode::Parallel,
     }
 }
 

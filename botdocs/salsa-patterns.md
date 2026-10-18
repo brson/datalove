@@ -496,7 +496,7 @@ typecheck_module_graph(db.as_salsa_db(), parsed_graph, names, auto_adapt_mode)
 The warm-up and the aggregator have to ask with the same function, or the warm
 is wasted; see the compiler guide's
 [Parallel Execution](compiler-guide.md#user-content-parallel-execution).
-Enabled with `DATALOVE_PARALLEL=1`.
+On by default; `DATALOVE_PARALLEL=0` turns it off.
 
 ## Pitfalls in short
 

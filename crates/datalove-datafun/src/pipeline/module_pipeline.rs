@@ -408,8 +408,8 @@ impl ModuleCompilationPipeline {
     /// The first compile and every recompile after an edit are the same call:
     /// what makes a recompile cheap is that the pipeline keeps the `Source`
     /// inputs its queries are keyed on, so an edit made through
-    /// `update_source` reaches only what reads it. Uses `DATALOVE_PARALLEL`
-    /// to choose the parallelism mode.
+    /// `update_source` reaches only what reads it. Parallel unless
+    /// `DATALOVE_PARALLEL=0`; see `parallel_mode_from_env`.
     pub fn compile<'db>(&mut self, db: &'db dyn DbClone) -> CompiledModules<'db> {
         let mode = parallel_mode_from_env();
         self.compile_with_mode(db, mode)

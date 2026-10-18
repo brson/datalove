@@ -123,8 +123,8 @@ Binary](#user-content-the-shipped-binary).
 
 Module compilation runs through five phases. Phases 1-4 are handled by `compile_modules()`,
 phase 5 by `lower_module_graph_with_evaluator()`. Each `*_phase` is its step
-with, under `DATALOVE_PARALLEL`, the step's per-module queries computed ahead
-of it; see [Parallel Execution](#user-content-parallel-execution).
+with, in a parallel compile, the step's per-module queries computed ahead of
+it; see [Parallel Execution](#user-content-parallel-execution).
 
 ```
 Source Text
@@ -1290,7 +1290,8 @@ baseline it would have to beat.
 
 ### Parallel Execution
 
-Enabled via `DATALOVE_PARALLEL=1`. **All of it is one move**: a query a
+The default, unless `DATALOVE_PARALLEL=0` or rayon's pool has one thread
+(`parallel_mode_from_env`). **All of it is one move**: a query a
 sequential step goes on to ask once per module (or per chunk) is computed
 ahead of the step on rayon's pool, on database clones, so that the step finds
 every answer in its memo. Nothing a worker computes is used except through
@@ -1336,21 +1337,24 @@ What caps all of this is the sequential half. Each phase's aggregator walks the
 graph whatever was edited, so the speedup is bounded by what it does: parse sits
 near 2.7x on sixteen cores in the `parallel` bench and cannot go past it while
 the aggregator rebuilds. In the real pipeline phase 1's warm-up finds nothing
-to do, because package resolution has already parsed every module; under
-`DATALOVE_PARALLEL` that parse is the parallel one, in
+to do, because package resolution has already parsed every module; in a
+parallel compile that parse is the parallel one, in
 `extract_dependencies_with_mode`. See
 [where compile time goes](compile-time.md#user-content-parallel-compilation).
 Thinning `ModuleGraphTypecheckResult` took typecheck from 1.57x to 1.78x for
 exactly that reason -- the restructure is what makes the parallelism worth
 having, not the other way round.
 
-`just test-parallel` runs the suite under `DATALOVE_PARALLEL=1`, as one of CI's
-jobs.
+`just test` runs the suite in parallel compiles, being the default.
+`just test-sequential` runs it under `DATALOVE_PARALLEL=0`; CI does not, since
+the sequential compile is a subset of the parallel one, and October 2026's
+audit and `LookupMap` are what keep salsa's id order, the one thing the two
+could disagree on, out of output (see salsa-patterns.md).
 
 **A large collection literal is parallel within itself.** A datalit list, map,
 set, table or tensor of 32-512KB or more, depending on the kind, is parsed in
 chunks, each a query of its own (`bct::chunk`, `datalit::parser::parse_chunk`),
-and under `DATALOVE_PARALLEL` the compiler parses the data files' chunks on
+and in a parallel compile the compiler parses the data files' chunks on
 rayon before the typecheck that asks for them. A chunked parse is the whole
 parse, which `just test-cut` holds the suite to. A datafun literal is not
 cut: data that big belongs in a data file. See
@@ -1969,7 +1973,7 @@ ExampleTestRunner::new(env!("CARGO_MANIFEST_DIR"), analyze_file)
 - `BLESS=1 cargo test` updates expected output. Unset `RUST_BACKTRACE` first.
 - Filter: `cargo test -- filter_name`
 - `just test` runs the whole suite; `just test-64` uses 64-bit collection
-  indexes, `just test-parallel` sets `DATALOVE_PARALLEL=1`, `just test-cut`
+  indexes, `just test-sequential` sets `DATALOVE_PARALLEL=0`, `just test-cut`
   parses every collection literal in chunks as well (see
   [plan-parallel-collections.md](plan-parallel-collections.md)), and `just
   test-extras` runs `just test-slow` -- the `slow_tests` features, the wasm
@@ -2018,7 +2022,7 @@ Most live in `crates/datalove-datafun/tests`.
 | `embedded_matches_tree` | The embedded stdlib against `sys/`, and every declared native linked (in `datalove-sys-packages`) |
 | `module_memo_tests`, `incremental_memo_tests`, `no_op_recompile_tests`, `parse_firewall_tests` | Salsa memoization behavior |
 | `incremental_lowering_tests` | That an edit lowers the module that changed and an unchanged recompile runs no query at all. Asks `QueryRecorder` what salsa ran, which the `module_memo` fixtures' thread-local log cannot see across rayon |
-| `parallel_warm_tests` | That under `DATALOVE_PARALLEL` every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
+| `parallel_warm_tests` | That in a parallel compile every per-module query a step asks was computed ahead of it on a worker, so that no warm-up keys its query otherwise than its step. Asks `QueryRecorder` which thread each ran on |
 | `database_memory_tests` | Database growth |
 | `worldgen_tests`, `coverage_tests` (in `datalove-worldgen`), `worldgen_dual_tests` (in `datalove-tests`) | Generated worldfiles typecheck, cover the AST, and run the same both ways. See [Worldgen Coverage](#user-content-worldgen-coverage) |
 
