@@ -11,7 +11,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus};
+use crate::{RatatuiApp, ReplApp, ReplExecutor, EntryStatus, Panel};
 
 /// Render the UI.
 pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
@@ -69,6 +69,15 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
     }
 }
 
+/// The border style of a panel: white when it has focus, gray when not.
+fn panel_border<E: ReplExecutor>(repl: &ReplApp<E>, panel: Panel) -> Style {
+    if repl.focus() == panel {
+        Style::default().fg(Color::White)
+    } else {
+        Style::default().fg(Color::DarkGray)
+    }
+}
+
 /// Render one binding a fragment defined.
 fn binding_line(binding: &repl::EvalBinding) -> Line<'_> {
     let check = ratatui::text::Span::styled("  ✓ ", Style::default().fg(Color::Green));
@@ -106,6 +115,7 @@ struct HistoryView {
 fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> HistoryView {
     let history_block = Block::default()
         .borders(Borders::ALL)
+        .border_style(panel_border(repl, Panel::History))
         .title("History");
 
     let mut lines: Vec<Line> = Vec::new();
@@ -348,13 +358,22 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
         "Input [Enter]"
     };
 
-    let border_style = if app.multiline_mode() {
+    let focused = app.focus() == Panel::Input;
+
+    // Multiline mode keeps its yellow while the panel has focus.
+    let border_style = if !focused {
+        panel_border(&app.repl, Panel::Input)
+    } else if app.multiline_mode() {
         Style::default().fg(Color::Yellow)
     } else {
         Style::default().fg(Color::White)
     };
 
     let mut textarea = app.textarea().C();
+    if !focused {
+        // A cursor in a panel keys do not go to says they do.
+        textarea.set_cursor_style(Style::default());
+    }
     textarea.set_block(
         Block::default()
             .borders(Borders::ALL)
@@ -369,6 +388,7 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
 fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
     let debug_block = Block::default()
         .borders(Borders::ALL)
+        .border_style(panel_border(repl, Panel::Environment))
         .title("Environment");
 
     if repl.environment().is_empty() {

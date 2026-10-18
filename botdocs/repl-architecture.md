@@ -157,6 +157,18 @@ which is what `record_history_view` bounds the scroll against - so paging past
 the oldest entry lands on it. The offset itself lives on `ReplApp`, out of the
 widgets, which is what lets `app_tests` page around with no terminal at all.
 
+## Panel focus
+
+One of the three panels has focus, and the input panel has it at the start.
+Tab moves focus down through the panels and Shift+Tab moves it up; both wrap
+around. The focused panel has a white border and the others gray. The input
+panel stays yellow while it has focus in multiline mode. Typing, Enter
+included, only reaches the textarea while the input has focus. Esc, Ctrl+D
+and PageUp/PageDown work from any panel. Focus lives on `ReplApp` as a
+`Panel`, alongside the menu state. So far it only changes the colors and
+whether typing reaches the input; History and Environment have no keys of
+their own yet.
+
 ## Ownership at the prompt
 
 Every line is a script unit, which makes the linear rules that are right

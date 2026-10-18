@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{EntryStatus, ReplApp, ReplExecutor, WorkerResponse};
+use repl::app::{EntryStatus, Panel, ReplApp, ReplExecutor, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -209,6 +209,27 @@ fn exit_command_asks_the_app_to_exit() {
 
     assert!(app.should_exit());
     assert!(matches!(app.history()[0].status, EntryStatus::Success));
+}
+
+/// Focus starts on the input and cycles through the panels both ways.
+#[test]
+fn focus_cycles_through_the_panels() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    assert_eq!(app.focus(), Panel::Input);
+
+    app.focus_next();
+    assert_eq!(app.focus(), Panel::Environment);
+    app.focus_next();
+    assert_eq!(app.focus(), Panel::History);
+    app.focus_next();
+    assert_eq!(app.focus(), Panel::Input);
+
+    app.focus_prev();
+    assert_eq!(app.focus(), Panel::History);
+    app.focus_prev();
+    assert_eq!(app.focus(), Panel::Environment);
+    app.focus_prev();
+    assert_eq!(app.focus(), Panel::Input);
 }
 
 /// A reset forgets the history and environment up to and including itself,

@@ -16,6 +16,34 @@ pub enum UiAction {
     ClearInput,
 }
 
+/// One of the panels the user can focus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Panel {
+    History,
+    Input,
+    Environment,
+}
+
+impl Panel {
+    /// The next panel down, wrapping from the bottom to the top.
+    fn next(self) -> Panel {
+        match self {
+            Panel::History => Panel::Input,
+            Panel::Input => Panel::Environment,
+            Panel::Environment => Panel::History,
+        }
+    }
+
+    /// The next panel up, wrapping from the top to the bottom.
+    fn prev(self) -> Panel {
+        match self {
+            Panel::History => Panel::Environment,
+            Panel::Input => Panel::History,
+            Panel::Environment => Panel::Input,
+        }
+    }
+}
+
 /// A single REPL history entry.
 ///
 /// There is one of these for every line/multiline sent to the repl engine.
@@ -113,6 +141,8 @@ pub struct ReplApp<E: ReplExecutor> {
     environment: Vec<(String, String, String)>,
     /// Whether we're in multiline mode.
     multiline_mode: bool,
+    /// The panel keys go to.
+    focus: Panel,
     /// Whether the ESC menu is open.
     menu_open: bool,
     /// Selected menu item (0 = Resume, 1 = Exit).
@@ -156,6 +186,7 @@ impl<E: ReplExecutor> ReplApp<E> {
             history: Vec::new(),
             environment: Vec::new(),
             multiline_mode: false,
+            focus: Panel::Input,
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
@@ -341,6 +372,21 @@ impl<E: ReplExecutor> ReplApp<E> {
                 self.history.retain(|entry| entry.id > id);
             }
         }
+    }
+
+    /// Move focus to the next panel down.
+    pub fn focus_next(&mut self) {
+        self.focus = self.focus.next();
+    }
+
+    /// Move focus to the next panel up.
+    pub fn focus_prev(&mut self) {
+        self.focus = self.focus.prev();
+    }
+
+    /// The panel keys go to.
+    pub fn focus(&self) -> Panel {
+        self.focus
     }
 
     /// Open the ESC menu.

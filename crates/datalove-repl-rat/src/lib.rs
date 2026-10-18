@@ -4,7 +4,7 @@
 use rmx::prelude::*;
 
 use datalove_repl as repl;
-pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus};
+pub use repl::app::{ReplApp, ReplExecutor, UiAction, HistoryEntry, EntryStatus, Panel};
 pub use repl::ThreadedExecutor;
 pub use repl::{PackageLibrary, SystemLibrary};
 
@@ -116,6 +116,18 @@ impl<E: ReplExecutor> RatatuiApp<E> {
 
     pub fn scroll_history_down(&mut self) {
         self.repl.scroll_history_down();
+    }
+
+    pub fn focus_next(&mut self) {
+        self.repl.focus_next();
+    }
+
+    pub fn focus_prev(&mut self) {
+        self.repl.focus_prev();
+    }
+
+    pub fn focus(&self) -> Panel {
+        self.repl.focus()
     }
 
     pub fn dismiss_crash_modal(&mut self) {

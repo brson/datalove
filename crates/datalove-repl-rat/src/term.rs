@@ -15,7 +15,7 @@ use ratatui::{
 use std::io;
 use std::fs::File;
 
-use crate::{PackageLibrary, RatatuiApp, ReplExecutor, SystemLibrary, ThreadedExecutor};
+use crate::{PackageLibrary, Panel, RatatuiApp, ReplExecutor, SystemLibrary, ThreadedExecutor};
 
 const ENGINE_UPDATES_MAX_LATENCY_MS: u64 = 10;
 
@@ -156,6 +156,15 @@ fn handle_key_event<E: ReplExecutor>(
             KeyCode::Char('d') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.set_should_exit(true);
             }
+            KeyCode::Tab => app.focus_next(),
+            KeyCode::BackTab => app.focus_prev(),
+            KeyCode::Esc => app.open_menu(),
+            // Ahead of the textarea, which would otherwise take these to move
+            // its cursor.
+            KeyCode::PageUp => app.scroll_history_up(),
+            KeyCode::PageDown => app.scroll_history_down(),
+            // The rest are typing, which only the input panel takes.
+            _ if app.focus() != Panel::Input => {}
             KeyCode::Enter => {
                 // In single-line mode: Enter submits.
                 // In multiline mode: Enter inserts newline, Alt+Enter submits.
@@ -174,11 +183,6 @@ fn handle_key_event<E: ReplExecutor>(
                     app.handle_input_key(key);
                 }
             }
-            KeyCode::Esc => app.open_menu(),
-            // Ahead of the textarea, which would otherwise take these to move
-            // its cursor.
-            KeyCode::PageUp => app.scroll_history_up(),
-            KeyCode::PageDown => app.scroll_history_down(),
             _ => {
                 // Pass all other keys to the textarea for handling.
                 app.handle_input_key(key);
