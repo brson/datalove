@@ -8,8 +8,8 @@
 | Level | Operators                                           | Description    |
 |-------|-----------------------------------------------------|----------------|
 | 1     | `()` `f()`                                          | Grouping, call |
-| 2     | `-` `-?` `-!` `not` `some` `ok` `er` `data` `error` | Unary prefix   |
-| 3     | `.field` `.0` `[i]` `?` `!` `@`                     | Postfix        |
+| 2     | `.field` `.0` `[i]` `?` `!` `@`                     | Postfix        |
+| 3     | `-` `-?` `-!` `not` `some` `ok` `er` `data` `error` | Unary prefix   |
 | 4     | `*` `/` `*!` `/!` `*?` `/?`                         | Multiplicative |
 | 5     | `+` `-` `+!` `-!` `+?` `-?`                         | Additive       |
 | 6     | `.<` `.>` `<=` `>=` `==` `!=`                       | Comparison     |
@@ -21,11 +21,11 @@ Binary operators are left-associative:
 and `a or b xor c` is `(a or b) xor c`.
 Comparisons do not chain: `a == b == c` is an error.
 
-Prefix operators bind tighter than postfix operators,
-so `-x?` is `(-x)?` and `not s.a` is `(not s).a`.
+Postfix operators bind tighter than prefix operators,
+so `-x?` is `-(x?)`, `not s.a` is `not (s.a)`,
+and `not list.is_empty(ref xs)` negates what the call returns.
 The payload keywords `some`, `ok`, `er`, `data` and `error`
-are the exception, taking postfix operators onto their payload:
-`some x@` is `some (x@)`.
+take their payload the same way: `some x@` is `some (x@)`.
 
 Spacing decides whether a sigil operator is prefix, infix or postfix
 before precedence is consulted.

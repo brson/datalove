@@ -43,7 +43,7 @@ fun heap_push<T>(mut h: [T], elem: T): !() where { T is ord, }
   var i = index.sub_wrapping(list.len(ref h), 1)
   loop while i .> 0
     let parent = index.shift_right_wrapping(index.sub_wrapping(i, 1), 1)
-    if not (less_at(ref h, i, parent)!)
+    if not less_at(ref h, i, parent)!
       break
     end if
     let swapped = list.swap(mut h, i, parent)
@@ -75,7 +75,7 @@ fun heap_pop<T>(mut h: [T]): !?T where { T is ord, }
         set child = right
       end if
     end if
-    if not (less_at(ref h, child, i)!)
+    if not less_at(ref h, child, i)!
       break
     end if
     let swapped = list.swap(mut h, i, child)

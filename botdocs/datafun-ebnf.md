@@ -124,13 +124,13 @@ or_expr       = and_expr, { ( "or" | "xor" ), and_expr } ;
 and_expr      = cmp_expr, { "and", cmp_expr } ;
 cmp_expr      = add_expr, [ cmp_op, add_expr ] ;    (* a second cmp_op: P067 *)
 add_expr      = mul_expr, { add_op, mul_expr } ;
-mul_expr      = postfix_expr, { mul_op, postfix_expr } ;
+mul_expr      = unary, { mul_op, unary } ;
 cmp_op        = "==" | "!=" | ".<" | ".>" | "<=" | ">=" ;
 add_op        = "+" | "-" | "+!" | "-!" | "+?" | "-?" ;
 mul_op        = "*" | "/" | "*!" | "/!" | "*?" | "/?" ;
 
-postfix_expr  = unary, { postfix } ;            (* postfix takes the whole prefix chain *)
-unary         = prefix_op, unary | primary ;
+unary         = prefix_op, unary | postfix_expr ;
+postfix_expr  = primary, { postfix } ;          (* postfix binds tighter than prefix *)
 prefix_op     = "-" | "-?" | "-!" | "not" ;
 postfix       = ~"?" | ~"!" | ~"@"
               | ~".", field_sel
@@ -149,14 +149,14 @@ primary       = hinted
               | string_lit                            (* D039 *)
               | NAME, [ ~"(", [ arg_list ], ")" ]     (* a call only when glued *)
               | paren | collection ;                  (* any other bracket: P081 *)
-payload       = postfix_expr ;                  (* a binary operator after it: P065 *)
+payload       = unary ;                         (* a binary operator after it: P065 *)
 arg_list      = arg, { ",", arg }, [ "," ] ;
 arg           = [ "ref" | "mut" | "out" ], expr ;
 paren         = "(", [ expr, { ",", expr }, [ "," ] ], ")" ;
                 (* one element, no comma: grouping; else a tuple; () is unit *)
 
 (* Hints  (literal.rs:25-110) *)
-hinted        = ":", type, "/", ( hint_literal | postfix_expr ) ;   (* no "/": D049 *)
+hinted        = ":", type, "/", ( hint_literal | unary ) ;   (* no "/": D049 *)
 hint_literal  = [ "-", ~ ], dec_number | hex_number | string_lit
               | "true" | "false" | "none"
               | ( "some" | "ok" | "er" | "data" | "error" ), payload
@@ -251,15 +251,15 @@ string_lit, digit_run, hex_run, comment, newline
   and parsing goes on left-associative; `(a == b) == c` and
   `a == b and c != d` are fine.
 - The payload of `some`, `ok`, `er`, `data`, `error` and `term Name` is a
-  postfix expression, and any binary operator straight after it is P065,
+  `unary`, and any binary operator straight after it is P065,
   whatever its precedence: `some 1 == x` is P065 and `x == some 1` is not.
-- Postfix binds looser than prefix: `-x@` is `(-x)@` and `not a.b` is
-  `(not a).b`. So `-u8.max_value()` is P072, the base being `-u8`.
+- Postfix binds tighter than prefix: `-x@` is `-(x@)`, `not a.b` is
+  `not (a.b)` and `not list.is_empty(ref xs)` negates the call.
 - A glued `(` after anything but `NAME.NAME` is P072: `a.b.c(1)`, `f(x)(1)`.
 - **What a hint covers.** A hint is a primary, so a binary operator after it
   applies to the hinted expression: `: u32 / x + 1` is `(: u32 / x) + 1`. Under
   the `hint_literal` alternative the hint sits on the literal and a later
-  postfix is outside it (`: u32 / 5@` hints the `5`); under the `postfix_expr`
+  postfix is outside it (`: u32 / 5@` hints the `5`); under the `unary`
   alternative the hint covers the postfixes (`: u32 / o?` hints what `?`
   produces). Which alternative applies is decided by the first token after the
   `/`, so `: u32 / (o)?` hints `o`.

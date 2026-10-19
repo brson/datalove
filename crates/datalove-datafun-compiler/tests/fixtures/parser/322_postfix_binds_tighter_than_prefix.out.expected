@@ -1,0 +1,227 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "kind": "Let",
+        "name": "a",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Not",
+            "operand": {
+              "expr": {
+                "arg_modes": [
+                  "Ref"
+                ],
+                "args": [
+                  {
+                    "expr": {
+                      "kind": "Place",
+                      "root": "xs",
+                      "steps": []
+                    }
+                  }
+                ],
+                "kind": "FunctionCall",
+                "name": "is_empty",
+                "qualifier": "list"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "b",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "NegResult",
+            "operand": {
+              "expr": {
+                "args": [],
+                "kind": "FunctionCall",
+                "name": "max_value",
+                "qualifier": "i8"
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "c",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "BinOp",
+            "lhs": {
+              "expr": {
+                "kind": "UnaryOp",
+                "op": "Not",
+                "operand": {
+                  "expr": {
+                    "kind": "TryResult",
+                    "operand": {
+                      "expr": {
+                        "args": [
+                          {
+                            "expr": {
+                              "kind": "Place",
+                              "root": "x",
+                              "steps": []
+                            }
+                          }
+                        ],
+                        "kind": "FunctionCall",
+                        "name": "f"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "op": "And",
+            "rhs": {
+              "expr": {
+                "kind": "True",
+                "type_hint": null
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "d",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Not",
+            "operand": {
+              "expr": {
+                "kind": "Place",
+                "root": "s",
+                "steps": [
+                  {
+                    "name": "a",
+                    "variant": "Name"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "e",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Neg",
+            "operand": {
+              "expr": {
+                "kind": "CloneCoerce",
+                "operand": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "x",
+                    "steps": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "f",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "NegOptional",
+            "operand": {
+              "expr": {
+                "kind": "TryOption",
+                "operand": {
+                  "expr": {
+                    "kind": "Place",
+                    "root": "x",
+                    "steps": []
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "g",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Not",
+            "operand": {
+              "expr": {
+                "kind": "Place",
+                "root": "xs",
+                "steps": [
+                  {
+                    "error_mode": "Option",
+                    "index": {
+                      "expr": {
+                        "kind": "Int",
+                        "type_hint": null,
+                        "value": "0"
+                      }
+                    },
+                    "variant": "Index"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "kind": "Let",
+        "name": "h",
+        "type_hint": null,
+        "value": {
+          "expr": {
+            "kind": "UnaryOp",
+            "op": "Neg",
+            "operand": {
+              "expr": {
+                "kind": "UnaryOp",
+                "op": "Neg",
+                "operand": {
+                  "expr": {
+                    "kind": "CloneCoerce",
+                    "operand": {
+                      "expr": {
+                        "kind": "Place",
+                        "root": "x",
+                        "steps": []
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "diagnostics": []
+}

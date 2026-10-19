@@ -1,0 +1,8 @@
+let a = not list.is_empty(ref xs)
+let b = -!i8.max_value()
+let c = not f(x)! and true
+let d = not s.a
+let e = -x@
+let f = -?x?
+let g = not xs[0]?
+let h = --x@

@@ -42,7 +42,7 @@ fun by_country(): ![(u64, string, u64)]
             let _ = sales.add(mut revenue, ref country, sales.order_revenue(o)!)!
             // Added to where it is, since reading the set out and putting it
             // back copied and freed the whole of it for every sale.
-            if not (map.contains_key(ref buyers, ref country))
+            if not map.contains_key(ref buyers, ref country)
                 set buyers[country@] = #{}
             end if
             let _ = set.insert(mut buyers[country]!, customer)

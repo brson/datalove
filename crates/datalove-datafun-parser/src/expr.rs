@@ -522,7 +522,9 @@ operation in the payload, or the whole constructor to apply it to what is built"
                 let start = self.current_byte_pos();
                 let text = self.source_text();
                 self.next(); // Consume the operator.
+                // Postfix binds tighter than prefix: `not s.a` is `not (s.a)`.
                 let operand = self.parse_expr_primary();
+                let operand = self.parse_postfix_try_operators(operand);
                 let span = start..self.last_byte_end();
                 return self.create_expr(
                     ast::ExprFunKind::UnaryOp(ast::ExprUnaryOp { op, operand }),

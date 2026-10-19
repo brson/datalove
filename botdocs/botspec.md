@@ -630,8 +630,8 @@ Operators listed from highest to lowest precedence:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `()` | Grouping |
-| 2 | `-` `-?` `-!` `not` | Unary prefix |
-| 3 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
+| 2 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
+| 3 | `-` `-?` `-!` `not` | Unary prefix |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
 | 6 | `.<` `.>` `<=` `>=` `==` `!=` | Comparison |
@@ -642,10 +642,11 @@ Binary operators are left-associative, so `a - b - c` is `(a - b) - c`, except
 that comparisons do not chain (Section 6.3). Postfix operators chain left to
 right: `a.b[0]?@` applies each in turn.
 
-Postfix binds looser than unary prefix, so a postfix operator applies to the
-prefix expression as a whole: `-x@` is `(-x)@`. The payload keywords `some`,
-`ok`, `er`, `data` and `error` are the exception, taking postfix onto their
-payload instead, so `some x@` is `some (x@)`.
+Postfix binds tighter than unary prefix, so a prefix operator applies to the
+postfix expression as a whole: `-x@` is `-(x@)`, `not s.a` is `not (s.a)` and
+`not list.is_empty(ref xs)` negates what the call returns. The payload keywords
+`some`, `ok`, `er`, `data` and `error` take their payload the same way, so
+`some x@` is `some (x@)`.
 
 Which of the three a sigil operator is read as is decided by its spacing before
 precedence is consulted at all: `a - b` and `a-b` are the binary operator in
