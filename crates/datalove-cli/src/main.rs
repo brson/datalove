@@ -274,6 +274,9 @@ struct ReplCommand {
     /// Path to a script file (.dfs) to execute in non-interactive mode.
     #[arg(long)]
     script: Option<PathBuf>,
+    /// Replay a session `/save` wrote before the first prompt.
+    #[arg(long, value_name = "WORLDFILE", conflicts_with = "script")]
+    load: Option<PathBuf>,
 }
 
 #[derive(clap::Args)]
@@ -596,7 +599,14 @@ impl ReplCommand {
             datalove::repl::Engine::run_script(datalove::sys_packages::system_library(), local, script_path)
         } else {
             let local = command_local_library(None)?;
-            datalove_repl_rat::run(datalove::sys_packages::system_library, local)
+            // The workspace is the directory `local` is looked for in.
+            let root = rmx::std::env::current_dir().context("failed to read the current directory")?;
+            datalove_repl_rat::run(
+                datalove::sys_packages::system_library,
+                local,
+                &root,
+                self.load.as_deref(),
+            )
         }
     }
 }

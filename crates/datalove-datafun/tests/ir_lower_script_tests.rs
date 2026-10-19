@@ -274,6 +274,9 @@ fn analyze_file(path: &Path) -> Result<String, String> {
             | WorldfileSection::Rider { .. } => {
                 // Skip module sections in script unit tests.
             }
+            WorldfileSection::ReplCommand { .. } => {
+                return Err(S("a REPL command is not a script unit"));
+            }
         }
     }
 

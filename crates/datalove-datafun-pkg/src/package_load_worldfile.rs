@@ -40,6 +40,12 @@
 //! | `scriptunit-expr` | Single expression |
 //! | `script` | Legacy alias for `scriptunit-fragment` |
 //!
+//! ## REPL Sections
+//!
+//! | Header | Description |
+//! |--------|-------------|
+//! | `repl-command` | A REPL command, like `/reset`, as a saved REPL session holds |
+//!
 //! # Example
 //!
 //! ```text
@@ -216,6 +222,10 @@ pub enum WorldfileSection {
         name: String,
         source: String,
     },
+    /// A REPL command, as typed. Only a saved REPL session has these.
+    ReplCommand {
+        source: String,
+    },
 }
 
 impl WorldfileSection {
@@ -243,7 +253,8 @@ impl WorldfileSection {
             WorldfileSection::Data { .. }
             | WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::Rider { .. } => None,
+            | WorldfileSection::Rider { .. }
+            | WorldfileSection::ReplCommand { .. } => None,
         }
     }
 
@@ -258,7 +269,8 @@ impl WorldfileSection {
             | WorldfileSection::ScriptFragment { source }
             | WorldfileSection::ScriptExpr { source }
             | WorldfileSection::Data { source, .. }
-            | WorldfileSection::Rider { source, .. } => Some(source),
+            | WorldfileSection::Rider { source, .. }
+            | WorldfileSection::ReplCommand { source } => Some(source),
             WorldfileSection::ModuleRemove { .. } => None,
         }
     }
@@ -275,7 +287,8 @@ impl WorldfileSection {
             WorldfileSection::Data { .. }
             | WorldfileSection::ScriptFragment { .. }
             | WorldfileSection::ScriptExpr { .. }
-            | WorldfileSection::Rider { .. } => None,
+            | WorldfileSection::Rider { .. }
+            | WorldfileSection::ReplCommand { .. } => None,
         }
     }
 
@@ -292,6 +305,24 @@ impl WorldfileSection {
             WorldfileSection::ScriptExpr { .. } => "scriptunit-expr",
             WorldfileSection::Data { .. } => "data",
             WorldfileSection::Rider { .. } => "rider",
+            WorldfileSection::ReplCommand { .. } => "repl-command",
+        }
+    }
+
+    /// The header line that introduces this section, as the parser reads it.
+    pub fn header(&self) -> String {
+        match self {
+            WorldfileSection::Data { library, package, name, .. } => {
+                format!("data {library}/{package}/{name}")
+            }
+            WorldfileSection::Rider { name, .. } => format!("rider {name}"),
+            WorldfileSection::ScriptFragment { .. }
+            | WorldfileSection::ScriptExpr { .. }
+            | WorldfileSection::ReplCommand { .. } => self.section_type_str().S(),
+            _ => {
+                let path = self.module_path().expect("every other section is a module section");
+                format!("{} {path}", self.section_type_str())
+            }
         }
     }
 
@@ -393,6 +424,27 @@ pub fn parse_worldfile_sections(mut reader: impl Read) -> AnyResult<ParsedWorldf
 
     let sections = parse_worldfile_to_sections(&content)?;
     Ok(ParsedWorldfile { sections })
+}
+
+/// Write sections out as a worldfile, the inverse of [`parse_worldfile_sections`].
+///
+/// A section's source cannot hold a line the parser would take for a
+/// separator, since nothing in the format escapes one, so that is an error.
+pub fn write_worldfile(sections: &[WorldfileSection]) -> AnyResult<String> {
+    let mut out = String::new();
+    for section in sections {
+        let header = section.header();
+        out.push_str(&format!("----------\n{header}\n----------\n"));
+        if let Some(source) = section.source() {
+            if let Some(line) = source.lines().find(|line| is_separator(line)) {
+                bail!("the source of section '{header}' has a line the format reads as a separator: '{line}'");
+            }
+            out.push('\n');
+            out.push_str(source.trim_end());
+            out.push_str("\n\n");
+        }
+    }
+    Ok(out)
 }
 
 // ============================================================================
@@ -564,6 +616,11 @@ impl<'a> Parser<'a> {
             return Ok(WorldfileSection::ScriptFragment { source });
         }
 
+        if header == "repl-command" {
+            let source = self.read_content();
+            return Ok(WorldfileSection::ReplCommand { source });
+        }
+
         if header == "scriptunit-expr" {
             let source = self.read_content();
             return Ok(WorldfileSection::ScriptExpr { source });
@@ -593,7 +650,7 @@ impl<'a> Parser<'a> {
         bail!(
             "unknown section type '{}' (expected 'module', 'module-add', 'module-remove', \
              'module-change-ws', 'module-change-ast', 'module-change-ty', 'scriptunit-fragment', \
-             'scriptunit-expr', 'data', or 'rider <name>')",
+             'scriptunit-expr', 'repl-command', 'data', or 'rider <name>')",
             header
         );
     }
@@ -629,6 +686,34 @@ mod tests {
         let sections = parse_worldfile_to_sections("// engines: -c\n\n----------\nscriptunit-fragment\n----------\n\nlet x = 1\n").X();
         assert_eq!(sections.len(), 1);
         assert!(parse_worldfile_to_sections("engines: -c\n----------\nscriptunit-fragment\n----------\n").is_err());
+    }
+
+    #[test]
+    fn written_worldfiles_parse_back_to_the_same_sections() {
+        let sections = vec![
+            WorldfileSection::module(ModulePath::new("local", "pkg", "m"), S("fun f(): i32\n    ret 1\nend fun")),
+            WorldfileSection::ModuleRemove { library: S("local"), package: S("pkg"), module: S("old") },
+            WorldfileSection::Data { library: S("local"), package: S("pkg"), name: S("d"), source: S("1") },
+            WorldfileSection::Rider { name: S("testlib"), source: S("native fun g(): i32") },
+            WorldfileSection::ScriptFragment { source: S("let x = 1") },
+            WorldfileSection::ScriptExpr { source: S("x + 1") },
+            WorldfileSection::ReplCommand { source: S("/reset") },
+        ];
+        let text = write_worldfile(&sections).X();
+        let parsed = parse_worldfile_to_sections(&text).X();
+
+        let shape = |sections: &[WorldfileSection]| -> Vec<(String, Option<String>)> {
+            sections.iter()
+                .map(|section| (section.header(), section.source().map(|source| source.trim().S())))
+                .collect()
+        };
+        assert_eq!(shape(&parsed), shape(&sections));
+    }
+
+    #[test]
+    fn a_source_line_that_reads_as_a_separator_is_not_written() {
+        let sections = [WorldfileSection::ScriptFragment { source: S("let x = 1\n----------") }];
+        assert!(write_worldfile(&sections).is_err());
     }
 
     #[test]

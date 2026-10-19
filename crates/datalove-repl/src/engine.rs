@@ -288,6 +288,9 @@ impl Engine {
                 self.reset();
                 Eval::CallerInterpret(command)
             }
+            ReplCommand::Save => {
+                Eval::CallerInterpret(command)
+            }
         }
     }
 

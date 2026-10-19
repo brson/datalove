@@ -18,6 +18,56 @@ pub use datalove_datafun::pipeline::{PackageLibrary, SystemLibrary};
 
 const REPL_COMMAND_SIGIL: char = '/';
 
+/// The worldfile `/save` writes in the workspace root.
+pub const SESSION_FILE_NAME: &str = "repl-session.world";
+
+/// One input of a saved session: the text as it was typed, and what it was.
+#[derive(Debug, Clone)]
+pub struct SavedInput {
+    pub input: String,
+    pub command: Command,
+}
+
+/// The inputs of a session a worldfile holds, in the order they were typed.
+///
+/// A session is script units and REPL commands and nothing else, so a
+/// worldfile with modules, data, or riders in it is not one. Its `/save`s are
+/// left out: replaying one would overwrite the file being loaded with only
+/// the part of it read so far.
+pub fn load_session(path: &std::path::Path) -> AnyResult<Vec<SavedInput>> {
+    use datalove_datafun::package_load_worldfile::{WorldfileSection, parse_worldfile_sections};
+
+    let file = std::fs::File::open(path)
+        .with_context(|| fmt!("failed to open {}", path.display()))?;
+    let parsed = parse_worldfile_sections(file)
+        .with_context(|| fmt!("failed to read {}", path.display()))?;
+    let mut inputs = Vec::new();
+    for section in parsed.sections {
+        let input = section.source().unwrap_or_default().trim().S();
+        let command = match section {
+            WorldfileSection::ScriptFragment { .. } => Command::ScriptStatement(input.C()),
+            WorldfileSection::ScriptExpr { .. } => Command::Expression(input.C()),
+            WorldfileSection::ReplCommand { .. } => {
+                if !input.starts_with(REPL_COMMAND_SIGIL) {
+                    bail!("{} holds a REPL command that is not one: '{input}'", path.display());
+                }
+                match ReplCommand::named(&input) {
+                    ReplCommand::Save => continue,
+                    command => Command::ReplCommand(command),
+                }
+            }
+            other => bail!(
+                "{} holds a '{}' section, and a REPL session is script units and \
+                 REPL commands only",
+                path.display(),
+                other.header(),
+            ),
+        };
+        inputs.push(SavedInput { input, command });
+    }
+    Ok(inputs)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Input {
     Input(String),
@@ -46,6 +96,8 @@ pub enum ReplCommand {
     Help,
     /// Start the session again, forgetting everything it defined.
     Reset,
+    /// Write the history to [`SESSION_FILE_NAME`] in the workspace root.
+    Save,
 }
 
 /// A binding a script fragment defined.
@@ -80,19 +132,27 @@ pub enum Eval {
     /// a value at a time, and every binding the session had was a value the
     /// runtime allocated, so the session starts again.
     ErrorReset(String),
+    /// The history was saved, as this many inputs, to this path.
+    Saved { path: String, inputs: usize },
 }
 
 
-impl Command {
-    pub(crate) fn repl_command(command: &str) -> InputParse {
-        let command = &command.trim()[1..];
-        let c = match command {
+impl ReplCommand {
+    /// The command an input starting with the sigil names.
+    fn named(input: &str) -> ReplCommand {
+        match &input.trim()[1..] {
             "exit" => ReplCommand::Exit,
             "help" => ReplCommand::Help,
             "reset" => ReplCommand::Reset,
+            "save" => ReplCommand::Save,
             _ => ReplCommand::Unknown,
-        };
-        InputParse::Command(Command::ReplCommand(c))
+        }
+    }
+}
+
+impl Command {
+    pub(crate) fn repl_command(command: &str) -> InputParse {
+        InputParse::Command(Command::ReplCommand(ReplCommand::named(command)))
     }
 
     pub(crate) fn script_statement(input: &str) -> InputParse {

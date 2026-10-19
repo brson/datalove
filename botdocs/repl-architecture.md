@@ -94,6 +94,41 @@ session, so it stays.
 `repl --script` and the fixture tests use it, so the driver and the tests
 cannot drift.
 
+## Saving and loading a session
+
+`/save` writes the history to `repl-session.world` in the workspace root,
+which is the directory the REPL was started in, the one it looks for `local`
+in. Script units are `scriptunit-fragment` and `scriptunit-expr` sections,
+and REPL commands are `repl-command` sections. `repl-command` exists only for
+this. `repl --load <worldfile>` replays a saved history before the first
+prompt.
+
+**What is saved is the app's history, not the engine's session.** The
+engine's session holds only the units that compiled, and the history also
+has the failures and the slash commands. So the app writes the file when the
+engine hands `/save` back to it as `CallerInterpret`. A few things are left
+out:
+
+- Anything typed after the `/save`. Those lines can still be waiting on a
+  parse, while everything before it has been answered, because the engine
+  answers in order.
+- The line that only opened a multiline input. The input it opened holds it
+  again.
+- Whatever a reset already took out of the history.
+
+An app given no path with `set_save_path`, as in the tests, answers `/save`
+with an error.
+
+**A load replays through the app,** so the inputs show up in the history as
+though they had been typed. `ReplApp::replay` sends each one straight to
+evaluation rather than through parsing. The file already says what each input
+is, and parsing a `fun` on its own would ask for more lines. A failure fails
+again and a command runs again. The exception is `/save`, which `load_session`
+drops: replaying one would overwrite the file being loaded with only the part
+of it read so far. The file is read before the terminal is set up, so a bad
+one is reported on the ordinary screen. A worldfile with module, data or
+rider sections is refused.
+
 ## Editing, not only appending
 
 `Engine::edit_unit(i, text)` changes one line of the session and re-derives
@@ -213,10 +248,14 @@ out of an earlier unit stops being available.
   own, so `#[test]` functions cannot live beside it. The reach itself is
   measured in `datalove-datafun`'s `script_exec_reactivity_tests` and
   `script_scenario_tests`; these say the engine wires it up.
+- **session_tests** - `/save` and `--load` through the app and a real
+  engine on its worker thread: a saved history replays to the same outcomes
+  and environment, and saving it again writes the same file.
 - **app_tests** - the state machine against a scripted `MockExecutor`, with no
   engine at all, which is how the interleavings are reachable: a result
   arriving after a later input, a crash reset, the multiline round trip, the
-  engine reporting itself ready or dead, and paging through the history.
+  engine reporting itself ready or dead, paging through the history, and
+  what `/save` writes.
 
 Neither the rendering nor the key bindings have tests. `render.rs` would take
 ratatui's `TestBackend`; `term.rs` has no seam, since `run()` does terminal
@@ -228,7 +267,8 @@ setup and the loop together.
   hardcoded false, so an `if` or a loop cannot be typed across lines.
 - No cancellation. `WorkerRequest::Shutdown` is never sent, and an infinite
   loop in evaluated code wedges the worker with no interrupt key.
-- `/exit` and `/help` are the only commands, and help prints the word "help".
+- `/exit`, `/help`, `/reset` and `/save` are the only commands, and help
+  prints the word "help".
 - Errors reach the user as `Debug` output rather than rendered diagnostics,
   though `ScriptCompiler` exposes the spans needed for better.
 - Mouse capture is enabled while only key events are read, which disables

@@ -220,6 +220,15 @@ fn render_history<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect)
                                 ratatui::text::Span::raw(&eval_expr.value),
                             ]));
                         }
+                        repl::Eval::Saved { path, inputs } => {
+                            lines.push(Line::from(vec![
+                                ratatui::text::Span::styled(
+                                    "  ✓ ",
+                                    Style::default().fg(Color::Green),
+                                ),
+                                ratatui::text::Span::raw(format!("saved {inputs} inputs to {path}")),
+                            ]));
+                        }
                         repl::Eval::Error(e) => {
                             lines.push(Line::from(vec![
                                 ratatui::text::Span::styled(

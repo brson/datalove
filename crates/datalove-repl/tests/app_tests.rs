@@ -269,6 +269,136 @@ fn reset_command_clears_history_and_environment() {
     assert_eq!(app.environment().len(), 1);
 }
 
+/// A replayed session goes straight to evaluation, each unit as the kind it
+/// was saved as, and what is typed afterwards follows it.
+#[test]
+fn a_replayed_session_is_evaluated_without_parsing() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    let fun = "fun f(): int\n    ret 1\nend fun".to_string();
+    app.replay(vec![
+        repl::SavedInput { input: fun.clone(), command: repl::Command::ScriptStatement(fun) },
+        repl::SavedInput {
+            input: "f()".to_string(),
+            command: repl::Command::Expression("f()".to_string()),
+        },
+    ]);
+
+    assert_eq!(executor.parse_count(), 0);
+    assert_eq!(executor.evals(), vec![0, 1]);
+    assert_eq!(app.history().len(), 2);
+    assert_eq!(app.history()[1].input, "f()");
+    assert!(matches!(
+        app.history()[1].status,
+        EntryStatus::Evaluating { command: repl::Command::Expression(_) },
+    ));
+
+    executor.queue(evaluated_let(0, "a"));
+    app.poll_results();
+    assert!(matches!(app.history()[0].status, EntryStatus::Success));
+
+    app.submit_input("let b = 1".to_string());
+    assert_eq!(app.history()[2].id, 2);
+}
+
+/// `/save` writes the whole history up to itself, failures and commands
+/// included, and leaves out the line that only opened a multiline input.
+#[test]
+fn save_writes_the_history_up_to_itself() {
+    let dir = rmx::tempfile::tempdir().unwrap();
+    let path = dir.path().join("session.world");
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+    app.set_save_path(path.clone());
+
+    app.submit_input("fun f(): int".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::ReadMultiline("fun f(): int".to_string()),
+    });
+    app.poll_results();
+
+    let fun = "fun f(): int\n    ret 1\nend fun";
+    app.submit_input(fun.to_string());
+    executor.queue(parsed_statement(1, fun));
+    executor.queue(evaluated_let(1, "f"));
+
+    app.submit_input("nope".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 2,
+        parse: repl::InputParse::Command(repl::Command::Expression("nope".to_string())),
+    });
+    executor.queue(WorkerResponse::EvalResult {
+        id: 2,
+        eval: repl::Eval::Error("no such name".to_string()),
+        environment: Vec::new(),
+    });
+
+    app.submit_input("/save".to_string());
+    // Typed while the save was on its way, and not saved.
+    app.submit_input("let late = 1".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 3,
+        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Save)),
+    });
+    executor.queue(WorkerResponse::EvalResult {
+        id: 3,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
+        environment: Vec::new(),
+    });
+    app.poll_results();
+
+    assert!(matches!(
+        app.history()[3].eval_result,
+        Some(repl::Eval::Saved { inputs: 3, .. }),
+    ), "{:?}", app.history()[3]);
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), "\
+----------
+scriptunit-fragment
+----------
+
+fun f(): int
+    ret 1
+end fun
+
+----------
+scriptunit-expr
+----------
+
+nope
+
+----------
+repl-command
+----------
+
+/save
+
+");
+}
+
+/// With nowhere to save to, `/save` is an error on its own entry.
+#[test]
+fn save_without_a_path_is_an_error() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    app.submit_input("/save".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::Command(repl::Command::ReplCommand(repl::ReplCommand::Save)),
+    });
+    executor.queue(WorkerResponse::EvalResult {
+        id: 0,
+        eval: repl::Eval::CallerInterpret(repl::ReplCommand::Save),
+        environment: Vec::new(),
+    });
+    app.poll_results();
+
+    assert!(matches!(app.history()[0].status, EntryStatus::Error));
+    assert!(matches!(app.history()[0].eval_result, Some(repl::Eval::Error(_))));
+}
+
 /// A crash reset clears the history, so responses for requests that were in
 /// flight at the time have nowhere to land and are dropped.
 #[test]

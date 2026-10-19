@@ -215,6 +215,8 @@ pub struct ReplApp<E: ReplExecutor> {
     crash_modal: Option<String>,
     /// Path to stderr log file (for displaying in crash modal).
     stderr_log_path: Option<std::path::PathBuf>,
+    /// Where `/save` writes the history, if it has anywhere to.
+    save_path: Option<std::path::PathBuf>,
 }
 
 impl<E: ReplExecutor> ReplApp<E> {
@@ -242,7 +244,13 @@ impl<E: ReplExecutor> ReplApp<E> {
             engine_dead: None,
             crash_modal: None,
             stderr_log_path: None,
+            save_path: None,
         }
+    }
+
+    /// Have `/save` write the history to this path.
+    pub fn set_save_path(&mut self, path: std::path::PathBuf) {
+        self.save_path = Some(path);
     }
 
     /// Submit input text for processing.
@@ -275,6 +283,25 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.executor.submit_parse(id, input);
 
         UiAction::ClearInput
+    }
+
+    /// Replay a saved session's inputs, as if each had been submitted.
+    ///
+    /// They go straight to evaluation, since a saved input already says what
+    /// it is, and reading a unit's text again would ask for more input on a
+    /// definition that spans lines.
+    pub fn replay(&mut self, inputs: Vec<repl::SavedInput>) {
+        for repl::SavedInput { input, command } in inputs {
+            let id = self.next_id;
+            self.next_id += 1;
+
+            let mut entry = HistoryEntry::new(input, id);
+            entry.parse_result = Some(repl::InputParse::Command(command.C()));
+            entry.status = EntryStatus::Evaluating { command: command.C() };
+            self.history.push(entry);
+
+            self.executor.submit_eval(id, command);
+        }
     }
 
     /// Poll for results from executor and return UI actions to process.
@@ -366,6 +393,9 @@ impl<E: ReplExecutor> ReplApp<E> {
             repl::Eval::SuccessExpr(_) => {
                 entry.status = EntryStatus::Success;
             }
+            repl::Eval::Saved { .. } => {
+                entry.status = EntryStatus::Success;
+            }
             repl::Eval::CallerInterpret(cmd) => {
                 self.handle_caller_interpret(id, cmd);
             }
@@ -417,7 +447,60 @@ impl<E: ReplExecutor> ReplApp<E> {
                 let _ = entry;
                 self.history.retain(|entry| entry.id > id);
             }
+            repl::ReplCommand::Save => {
+                let _ = entry;
+                let eval = self.save(id).unwrap_or_else(|e| repl::Eval::Error(fmt!("{e:#}")));
+                let entry = find_entry(&mut self.history, id).expect("the entry is still there");
+                entry.status = match eval {
+                    repl::Eval::Error(_) => EntryStatus::Error,
+                    _ => EntryStatus::Success,
+                };
+                entry.eval_result = Some(eval);
+            }
         }
+    }
+
+    /// Write the history up to and including the `/save` with this id.
+    ///
+    /// Everything the history holds goes in, failures and REPL commands
+    /// included, as it was typed. What was typed after the `/save` is left
+    /// out, and is the only part of the history that can still be waiting to
+    /// be parsed: the engine answers in order.
+    ///
+    /// A line that only opened a multiline input is left out too, since the
+    /// input it opened holds it again.
+    fn save(&self, save_id: u64) -> AnyResult<repl::Eval> {
+        use datalove_datafun::package_load_worldfile::{WorldfileSection, write_worldfile};
+
+        let Some(path) = &self.save_path else {
+            bail!("this session was not given anywhere to save to");
+        };
+
+        let mut sections = Vec::new();
+        for entry in self.history.iter().filter(|entry| entry.id <= save_id) {
+            let parse = entry.parse_result.as_ref()
+                .expect("the engine parsed everything before the save");
+            let section = match parse {
+                repl::InputParse::Empty | repl::InputParse::ReadMultiline(_) => continue,
+                repl::InputParse::Command(repl::Command::ScriptStatement(source)) => {
+                    WorldfileSection::ScriptFragment { source: source.C() }
+                }
+                repl::InputParse::Command(repl::Command::Expression(source)) => {
+                    WorldfileSection::ScriptExpr { source: source.C() }
+                }
+                repl::InputParse::Command(repl::Command::ReplCommand(_)) => {
+                    WorldfileSection::ReplCommand { source: entry.input.trim().S() }
+                }
+                repl::InputParse::CrashReset(_) => {
+                    unreachable!("a crash reset clears the history it would be in")
+                }
+            };
+            sections.push(section);
+        }
+
+        std::fs::write(path, write_worldfile(&sections)?)
+            .with_context(|| fmt!("failed to write {}", path.display()))?;
+        Ok(repl::Eval::Saved { path: path.display().to_string(), inputs: sections.len() })
     }
 
     /// Move focus to the next panel down.
