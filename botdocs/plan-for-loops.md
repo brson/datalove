@@ -422,11 +422,12 @@ description of a cursor's layout to drift from the runtime's.
 
 ## Bugs found on the way
 
-- **C AOT tensor views are static.** `TensorIndexRef` at rank above 1 writes
-  its view into `static _Alignas(8) uint8_t __view[...]`
-  (`c-aot/src/codegen.rs`), one per instruction. A recursive call that
-  reaches the same instruction overwrites the caller's live view. `for` no
-  longer goes through it; `t[i]?` still does. The view belongs in `__frame`.
+- **Fixed: C AOT tensor views were static.** `TensorIndexRef` at rank above
+  1 wrote its view into a function-scope `static` buffer, one per
+  instruction, so a recursive call reaching the same instruction overwrote
+  the caller's live view. Each activation has its own buffer now, declared at
+  function scope beside `__frame`. Fixture
+  `engines/1016_tensor_view_across_recursion`.
 - **Fixed: DCE could drop a borrowed collection.** `consumed_owned` treated
   `ListElementRef`, `MapValueRef` and `TensorIndexRef` as consuming, so
   removing an unused one whose collection was an owned `Value` inserted a

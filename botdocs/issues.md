@@ -41,7 +41,6 @@ home here.
   - [Datafun records a copy of every expression's type](#user-content-datafun-records-a-copy-of-every-expressions-type)
 
 - [Backends and performance](#user-content-backends-and-performance)
-  - [The C backend's tensor views are static, so not reentrant](#user-content-the-c-backends-tensor-views-are-static-so-not-reentrant)
   - [A generic's descriptor-table cache holds one binding](#user-content-a-generics-descriptor-table-cache-holds-one-binding)
   - [No inlining in Cranelift, and the C backend is built at -O0](#user-content-no-inlining-in-cranelift-and-the-c-backend-is-built-at--o0)
   - [The C backend emits code the size of the data](#user-content-the-c-backend-emits-code-the-size-of-the-data)
@@ -522,28 +521,6 @@ types would remove both.
 ## Backends and performance
 
 Compiled code that is wrong in a corner, or slower or larger than it needs to be.
-
-### The C backend's tensor views are static, so not reentrant
-
-**Reasoned about, not reproduced.** Indexing a tensor of rank above 1 by
-reference (`TensorIndexRef`) makes a view tensor and hands out a pointer to it.
-The C backend puts the view in a function-scope `static` buffer
-(`datalove-datafun-c-aot/src/codegen.rs`, the rank-above-1 arm of
-`TensorIndexRef`, `static _Alignas(8) uint8_t __view[...]`), presumably because
-a block-local array would not outlive the block that makes it. A static is
-shared by every activation of the function: a recursive call that indexes
-through the same instruction overwrites the view its caller still holds, and so
-would two threads. The comment beside it says "on C stack as a local variable",
-which it is not.
-
-The Cranelift backends get this right: the view is a stack slot of the
-function (`datalove-datafun-cranelift/src/codegen/tensors.rs`), one per
-activation. The fix is the same for C -- declare the buffer at function scope,
-beside `__frame`, or give it room in the frame layout.
-
-One instruction executed twice in the same activation, in a loop, reuses its
-view in every backend; whether a reference from an earlier iteration can still
-be live then is a separate question, not looked at.
 
 ### A generic's descriptor-table cache holds one binding
 

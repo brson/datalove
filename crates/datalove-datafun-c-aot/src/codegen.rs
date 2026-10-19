@@ -153,6 +153,8 @@ pub fn emit_function(
         takes_shadow,
     };
 
+    ctx.emit_view_buffers(out);
+
     // Emit blocks.
     for block in &unit.blocks {
         ctx.emit_block(out, block)?;
@@ -414,6 +416,8 @@ pub fn emit_script_body(
         takes_shadow: false,
     };
 
+    ctx.emit_view_buffers(out);
+
     // Emit blocks.
     for block in &unit.blocks {
         ctx.emit_block(out, block)?;
@@ -510,6 +514,25 @@ impl<'a> FunctionCodegenContext<'a> {
     /// holding a pointer to it.
     fn is_dynamic_value(ty: &IrType) -> bool {
         ty.is_dynamic() && !matches!(ty, IrType::Ref(_))
+    }
+
+    /// Declare a view buffer at function scope for each `TensorIndexRef` of a
+    /// tensor of rank above one.
+    ///
+    /// The view has to outlive the instruction's block, and each activation
+    /// needs its own, as a recursive call may index through the same
+    /// instruction while its caller still holds the view.
+    fn emit_view_buffers(&self, out: &mut String) {
+        let tensor_size = std::mem::size_of::<datalove_rtdt::Tensor>();
+        for block in &self.unit.blocks {
+            for inst in &block.instructions {
+                if let Instruction::TensorIndexRef { dest, tensor, .. } = inst
+                    && matches!(self.operand_type(tensor), IrType::Tensor(_, rank) if *rank > 1)
+                {
+                    writeln!(out, "    _Alignas(8) uint8_t __view{}[{}];", dest.0, tensor_size).unwrap();
+                }
+            }
+        }
     }
 
     /// Emit a basic block.
@@ -4330,37 +4353,31 @@ impl<'a> FunctionCodegenContext<'a> {
                 t = tensor_addr, pb = ptr_base_offset, oe = offset_elems_offset,
                 idx = index_addr, st = strides_offset, es = elem_size).unwrap();
         } else {
-            // Rank > 1: construct view tensor at dest.
-            // For C AOT, the dest is a Ref (pointer), so we need stack storage for the view.
+            // Rank > 1: build a view tensor in this instruction's buffer, which
+            // `emit_view_buffers` declared, and point dest at it.
             let shape_offset = std::mem::offset_of!(datalove_rtdt::Tensor, shape);
             let layout_offset = std::mem::offset_of!(datalove_rtdt::Tensor, layout);
             let capacity_offset = std::mem::offset_of!(datalove_rtdt::Tensor, capacity_elems);
-            let index_size = std::mem::size_of::<datalove_rtdt::Index>();
-            let tensor_size = std::mem::size_of::<datalove_rtdt::Tensor>();
+            let view = format!("__view{}", dest.0);
 
-            writeln!(out, "    {{ /* TensorIndexRef rank > 1: construct view */").unwrap();
-            // Allocate view tensor on C stack as a local variable.
-            writeln!(out, "    static _Alignas(8) uint8_t __view[{}];", tensor_size).unwrap();
             // Copy ptr_base.
-            writeln!(out, "    *(void**)(__view + {}) = *(void**)({} + {});",
-                ptr_base_offset, tensor_addr, ptr_base_offset).unwrap();
+            writeln!(out, "    *(void**)({} + {}) = *(void**)({} + {});",
+                view, ptr_base_offset, tensor_addr, ptr_base_offset).unwrap();
             // Set capacity_elems = 0.
-            writeln!(out, "    *(index_t*)(__view + {}) = 0;", capacity_offset).unwrap();
+            writeln!(out, "    *(index_t*)({} + {}) = 0;", view, capacity_offset).unwrap();
             // new_offset = offset + idx * strides[0].
-            writeln!(out, "    *(index_t*)(__view + {oe}) = *(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st});",
-                oe = offset_elems_offset, t = tensor_addr, idx = index_addr, st = strides_offset).unwrap();
-            // shape = parent.shape + 1.
-            writeln!(out, "    *(void**)(__view + {}) = (void*)(*(index_t**)({} + {}) + 1);",
-                shape_offset, tensor_addr, shape_offset).unwrap();
+            writeln!(out, "    *(index_t*)({v} + {oe}) = *(index_t*)({t} + {oe}) + *(index_t*){idx} * **(index_t**)({t} + {st});",
+                v = view, oe = offset_elems_offset, t = tensor_addr, idx = index_addr, st = strides_offset).unwrap();
+            // shape = parent.shape + 1. Pointer arithmetic on index_t* handles the element size.
+            writeln!(out, "    *(void**)({} + {}) = (void*)(*(index_t**)({} + {}) + 1);",
+                view, shape_offset, tensor_addr, shape_offset).unwrap();
             // strides = parent.strides + 1.
-            writeln!(out, "    *(void**)(__view + {}) = (void*)(*(index_t**)({} + {}) + 1);",
-                strides_offset, tensor_addr, strides_offset).unwrap();
-            let _ = index_size; // Pointer arithmetic on index_t* already handles element size.
+            writeln!(out, "    *(void**)({} + {}) = (void*)(*(index_t**)({} + {}) + 1);",
+                view, strides_offset, tensor_addr, strides_offset).unwrap();
             // layout = parent.layout.
-            writeln!(out, "    *(uint8_t*)(__view + {}) = *(uint8_t*)({} + {});",
-                layout_offset, tensor_addr, layout_offset).unwrap();
-            // Store pointer to view as the ref.
-            writeln!(out, "    *(void**){} = __view; }}", dest_addr).unwrap();
+            writeln!(out, "    *(uint8_t*)({} + {}) = *(uint8_t*)({} + {});",
+                view, layout_offset, tensor_addr, layout_offset).unwrap();
+            writeln!(out, "    *(void**){} = {};", dest_addr, view).unwrap();
         }
 
         Ok(())

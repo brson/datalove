@@ -1,0 +1,23 @@
+----------
+scriptunit-fragment
+----------
+
+// A row view of a 2D tensor, held across a recursive call that makes
+// another view through the same instruction. Each activation needs its own.
+fun outer(ref a: [|u32, 2|], d: int): ?bool
+    if d == 0
+        ret some true
+    end if
+    let _ok = inner(ref a[(: index / 0)]?, d)
+    ret some true
+end fun
+
+fun inner(ref row: [|u32, 1|], d: int): ?bool
+    let c: [|u32, 2|] = [| 7 7, 7 7 |]
+    let _ok = outer(ref c, d - 1)
+    debuglog row@
+    ret some true
+end fun
+
+let a: [|u32, 2|] = [| 1 2, 3 4 |]
+debuglog outer(ref a, 2)

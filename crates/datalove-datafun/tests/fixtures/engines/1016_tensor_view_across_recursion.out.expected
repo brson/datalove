@@ -1,0 +1,80 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 1u32
+                        v1 = const 2u32
+                        v2 = const 3u32
+                        v3 = const 4u32
+                        v4 = [| v0 v1, v2 v3 |]
+                        v5 = const 2int
+                        v6 = call u0(v4, v5)
+                        debuglog v6
+                        unit_end_drop v4
+                        unit_end
+                    
+                    fn outer(p0, p1):
+                    block0:
+                        v0 = const 0int
+                        v1 = eq p1, v0
+                        drop v0
+                        branch v1, block1, block2
+                    block1:
+                        v2 = const true
+                        v3 = some v2
+                        drop p1
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4 = const 0index
+                        v5 = tensorboundscheck p0[v4]
+                        branch v5, block5, block4
+                    block4:
+                        v6 = none
+                        return v6
+                    block5:
+                        v7 = tensorindexref p0[v4]
+                        v8 = call u1(*v7, p1)
+                        v9 = const true
+                        v10 = some v9
+                        return v10
+                    
+                    fn inner(p0, p1):
+                    block0:
+                        v0 = const 7u32
+                        v1 = const 7u32
+                        v2 = const 7u32
+                        v3 = const 7u32
+                        v4 = [| v0 v1, v2 v3 |]
+                        v5 = const 1int
+                        v6 = sub p1, v5
+                        drop v5
+                        v7 = call u0(v4, v6)
+                        v8 = clone p0
+                        debuglog v8
+                        drop v8
+                        v9 = const true
+                        v10 = some v9
+                        drop p1
+                        drop v4
+                        return v10
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("[| 7 7 |]\n[| 1 2 |]\nsome true\n"),
+        ),
+    ],
+)
