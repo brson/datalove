@@ -1489,6 +1489,7 @@ Variants of `AnalysisError` in `datalove-datafun-sema`.
 | D012 | `CannotMutateTemporary` | Non-place argument passed as `mut`/`out` |
 | D013 | `UseAfterMoveInEarlierUnit` | Using a binding whose own script unit gave its value away |
 | D014 | `InconsistentLoopExit` | Moved on one way out of a loop and not another |
+| D015 | `WalkedCollectionChanged`, `WalkedCollectionAssigned` | The collection a `for` walks moved, passed `mut`/`out`, or assigned to or through |
 
 D001, D002, D007 and D013 carry an `OwnershipRecoveryHint` suggesting an `@`;
 auto-adapt can apply the first three, not D013. The parsers' own `D0xx` codes

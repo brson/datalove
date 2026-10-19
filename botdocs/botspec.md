@@ -3,23 +3,68 @@
 ## Contents
 
 - [1. Introduction](#user-content-1-introduction)
+  - [1.1 Notation](#user-content-11-notation)
+  - [1.2 Scripts, Modules and Sessions](#user-content-12-scripts-modules-and-sessions)
 - [2. Lexical Conventions](#user-content-2-lexical-conventions)
+  - [2.1 Reserved Words](#user-content-21-reserved-words)
+  - [2.2 Literals](#user-content-22-literals)
+  - [2.3 Comments](#user-content-23-comments)
   - [2.4 Spacing](#user-content-24-spacing)
   - [2.5 Names](#user-content-25-names)
 - [3. Types](#user-content-3-types)
+  - [3.1 Primitive Types](#user-content-31-primitive-types)
+  - [3.2 Collection Types](#user-content-32-collection-types)
+  - [3.3 Aggregate Types](#user-content-33-aggregate-types)
+  - [3.4 Option and Result](#user-content-34-option-and-result)
+  - [3.5 Data and Error Types](#user-content-35-data-and-error-types)
+  - [3.6 Atom, Term, and Enum Types](#user-content-36-atom-term-and-enum-types)
+  - [3.7 Type Aliases](#user-content-37-type-aliases)
 - [4. Type Hints](#user-content-4-type-hints)
 - [5. Copy and Linear Types](#user-content-5-copy-and-linear-types)
 - [6. Expressions](#user-content-6-expressions)
+  - [6.1 Operators](#user-content-61-operators)
+  - [6.2 Arithmetic](#user-content-62-arithmetic)
+  - [6.3 Comparison](#user-content-63-comparison)
+  - [6.4 Logical Operators](#user-content-64-logical-operators)
+  - [6.5 Try Operators](#user-content-65-try-operators)
+  - [6.6 Operator Argument Semantics](#user-content-66-operator-argument-semantics)
+  - [6.7 Intrinsic Calls](#user-content-67-intrinsic-calls)
+  - [6.8 Adapt Operator](#user-content-68-adapt-operator)
 - [7. Place Expressions and Indexing](#user-content-7-place-expressions-and-indexing)
+  - [7.1 Place vs Value Expressions](#user-content-71-place-vs-value-expressions)
+  - [7.2 Field Access](#user-content-72-field-access)
+  - [7.3 Fallible Indexing](#user-content-73-fallible-indexing)
+  - [7.4 Index and Field Chains](#user-content-74-index-and-field-chains)
+  - [7.5 Destination Contexts](#user-content-75-destination-contexts)
+  - [7.6 Parallel with Checked Arithmetic](#user-content-76-parallel-with-checked-arithmetic)
 - [8. Statements](#user-content-8-statements)
-  - [8.4 Const Parameters](#user-content-84-const-parameters)
-  - [8.5 Generic Functions](#user-content-85-generic-functions)
+  - [8.1 Bindings](#user-content-81-bindings)
+  - [8.2 Const](#user-content-82-const)
+  - [8.3 Set](#user-content-83-set)
+  - [8.4 Functions](#user-content-84-functions)
+  - [8.5 Parameter Modes](#user-content-85-parameter-modes)
+  - [8.6 Const Parameters](#user-content-86-const-parameters)
+  - [8.7 Generic Functions](#user-content-87-generic-functions)
+  - [8.8 Control Flow](#user-content-88-control-flow)
+  - [8.9 Return](#user-content-89-return)
+  - [8.10 Debug Log](#user-content-810-debug-log)
+  - [8.11 Call Statements](#user-content-811-call-statements)
 - [9. Module System](#user-content-9-module-system)
+  - [9.1 Hierarchy](#user-content-91-hierarchy)
+  - [9.2 Require](#user-content-92-require)
+  - [9.3 Import](#user-content-93-import)
   - [9.4 Qualified Calls](#user-content-94-qualified-calls)
   - [9.5 Native Riders](#user-content-95-native-riders)
   - [9.6 Data](#user-content-96-data)
 - [10. Numeric Widening](#user-content-10-numeric-widening)
 - [11. Ownership Analysis](#user-content-11-ownership-analysis)
+  - [11.1 Errors](#user-content-111-errors)
+  - [11.2 Mutable Arguments](#user-content-112-mutable-arguments)
+  - [11.3 Argument Aliasing](#user-content-113-argument-aliasing)
+  - [11.4 Loop Restrictions](#user-content-114-loop-restrictions)
+  - [11.5 The Collection a `for` Walks](#user-content-115-the-collection-a-for-walks)
+  - [11.6 Branch Consistency](#user-content-116-branch-consistency)
+  - [11.7 Tracking Categories](#user-content-117-tracking-categories)
 - [12. Bidirectional Type Inference](#user-content-12-bidirectional-type-inference)
 - [Appendix A. Command-Line Interface](#user-content-appendix-a-command-line-interface)
 - [Appendix B. Unimplemented Features](#user-content-appendix-b-unimplemented-features)
@@ -53,8 +98,18 @@ In syntax descriptions, the following conventions apply:
 The complete grammars, as EBNF checked against the parsers, are
 [Datalit Grammar](datalit-ebnf.md) and [Datafun Grammar](datafun-ebnf.md),
 and the type systems are [Datalit Typing Rules](datalit-typing-rules.md) and
-[Datafun Typing Rules](datafun-typing-rules.md). Where those documents and
-this one disagree, they say so.
+[Datafun Typing Rules](datafun-typing-rules.md). They state formally what this
+document states in prose; a disagreement between them is a bug in one or the
+other.
+
+### 1.2 Scripts, Modules and Sessions
+
+A **script** (`.dfs`) is a program whose top level runs from top to bottom. A
+**module** (`.dfm`) holds only declarations, for scripts and other modules to
+use (Section 9.1). The REPL reads a **session**: a sequence of **units**, each
+a line or fragment compiled as script code that continues the units before it,
+so that a binding, function or `require` from an earlier unit is in scope in a
+later one.
 
 ## 2. Lexical Conventions
 
@@ -62,12 +117,12 @@ this one disagree, they say so.
 
 Datalove has no words reserved everywhere. A word is special in a position --
 the start of an expression, a type -- and is reserved only for the names that
-are read in that position, where it would mean something else. It is refused where such a name is declared (P064), and free
-everywhere else.
+are read in that position, where it would mean something else. It is refused
+where such a name is declared (P064), and free everywhere else.
 
 | Name | Reserved | Why |
 |------|----------|-----|
-| value (`let`, `var`, `const`, `if`/`else`/`case` bindings) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `enum` `not` `icall` | they start an expression |
+| value (`let`, `var` and `const` names and patterns, `if`/`else` `\|name\|` and `case term` bindings, `for` names, the const `require data` binds) | `true` `false` `none` `some` `ok` `er` `data` `error` `atom` `term` `enum` `not` `icall` | they start an expression |
 | parameter | the value words, and `mut` `out` `ref` `const` | the mode is written where the name is |
 | function | the value words | a call is read like a value |
 | type alias, type parameter | `bool` `u8`..`u64` `i8`..`i64` `index` `offset` `f32` `f64` `int` `string` `data` `error` `atom` `term` `enum` | they are types, or start one |
@@ -79,7 +134,7 @@ alias `table` or `Error`, and a module `u8` or `set` -- the standard library's
 modules are named after the types they serve.
 
 Every statement begins with its own keyword, a call made for its effect
-included (`call`, Section 8.9), so no name is ever read at the start of a
+included (`call`, Section 8.11), so no name is ever read at the start of a
 statement and the statement words are reserved for nothing. A new statement
 keyword therefore never takes a name away from existing code.
 `and`, `or` and `xor` are read only after an operand, and the words
@@ -88,8 +143,13 @@ after `loop`, `in` and `ref` after a `for`'s names, `module` and `rider` after
 `require`) only where a name cannot be,
 so none of them is reserved.
 
-The lists are in `datalove-datalit/src/parser_util.rs`, which both parsers
-read.
+The lists are in `datalove-datalit/src/parser_util.rs`, read by the Datafun
+parser and type checker. Datalit declares no names but fields, columns and
+variants, so it reserves nothing.
+
+A mode word written as a parameter's name, `fun f(mut: int)`, is read as the
+mode and leaves the name missing (P011), rather than being refused as a name;
+P064 is reached only past the mode, as in `fun f(mut mut: int)`.
 
 **A core principle: a special word is recognized by the word alone.** The
 parser does not look past a word to decide whether it is acting as a keyword
@@ -109,8 +169,14 @@ follow the same rule: extend the table rather than the parser.
 0xFF
 ```
 
-Bare integer literals synthesize as `int` (arbitrary-precision).
-Use a type hint for fixed-width types: `: u32 / 42`.
+Bare integer literals synthesize as `int` (arbitrary-precision), and bare
+float literals as `f64` (Section 12). Use a type hint for other types:
+`: u32 / 42`. An integer literal is not a float literal, so `let a: f64 = 1`
+is a mismatch (F016).
+
+The hex prefix may be `0x` or `0X`, and hex digits are of either case. There
+are no binary or octal literals: `0b101` and `0o17` are a `0` with a suffix
+(P053).
 
 A hex literal is an unsigned integer: it checks against `int`, the unsigned
 fixed-width types and `index`, and against `f32` and `f64` as their bit
@@ -134,7 +200,8 @@ Underscores may group digits, and say nothing about the value:
 ```
 
 A separator goes between digits, so a literal begins and ends with one.
-`_1` is a name rather than a number, and `1_` is neither.
+`_1` is a name rather than a number, and `1_` and `0x_FF` are neither (P052).
+Separators may be doubled: `1__0` is 10.
 
 **Floating-point** numbers use decimal notation, with an optional exponent:
 
@@ -152,17 +219,28 @@ left out, and its marker may be `e` or `E`. The fraction may be left out
 when there is an exponent: `1e-7` needs no `.0`. Separators group the
 digits here too, in any of the three runs: `1_0.000_1e1_0`.
 
-This is also how floats are printed, so a value that comes out of the
-compiler can be typed back into it. Magnitudes from `1e-5` up to `1e16`
-print positionally, the rest with an exponent, and every finite float
-prints with a point or an exponent so that none of them reads as an
-integer: `42.0`, not `42`.
+This is also how floats are printed, so a finite value that comes out of
+the compiler can be typed back into it. Magnitudes from `1e-5` up to but not
+including `1e16` print positionally, the rest with an exponent, and every
+finite float prints with a point or an exponent so that none of them reads as
+an integer: `42.0`, not `42`.
+
+A float literal too large for its type rounds to infinity rather than being
+refused: `1.0e400` is an `f64` infinity, and `: f32 / 1.0e300` an `f32` one.
+Infinity and NaN print as `inf` and `nan`, which are not literals; they are
+had from `sys/std/f32` and `sys/std/f64`.
 
 **Strings** are enclosed in double quotes:
 
 ```datalove
 "hello, world"
+"tab\there, \"quoted\", \u{e9}"
 ```
+
+The escapes are `\"`, `\\`, `\n`, `\r`, `\t`, `\0` and `\u{...}`, the last
+taking one to six hex digits naming a Unicode scalar value. Any other escape,
+or a `\u{...}` that names no scalar value (`\u{D800}`), is D039, in both
+languages. A string may span lines; the newline is part of it.
 
 **Booleans** are `true` and `false`.
 
@@ -178,7 +256,8 @@ the first one's span ends where the second one's begins; a space, a newline or
 a comment between them leaves a gap. Two rules read that one fact: gluing
 decides how far a literal reaches, and fixity decides what an operator attaches
 to. Both are shared by Datalit and Datafun, so the two languages give the same
-answer for the same spelling.
+answer for the same spelling, where Datalit has the construct at all: it has
+no operators, so a spelling that is an operator in Datafun is an error there.
 
 **Literal extent.** A numeric literal is a maximal glued run: an optional sign,
 digits, a `.` and a fraction, an exponent marker with its sign and digits. A
@@ -190,9 +269,11 @@ gap anywhere inside ends it.
 2.5e - 10      // error: an exponent is written without spaces: `2.5e-10`
 ```
 
-Letters written onto the digits are read as a suffix and reported as one, since
-the language has none: `1u8` says to write `: u8 / 1` rather than complaining
-about an unexpected identifier.
+Both are P052 in Datafun.
+
+Letters written onto the digits are read as a suffix and reported as one
+(P053 in Datafun, D019 in Datalit), since the language has none: `1u8` says to
+write `: u8 / 1` rather than complaining about an unexpected identifier.
 
 **Fixity.** An operator's spacing says what it attaches to:
 
@@ -210,12 +291,15 @@ consulted.
 ```datalove
 a - b          // subtraction
 a-b            // subtraction
-a -b           // `a`, then `-b`: two expressions, not one
+a -b           // error (P021): `-` spaced as a prefix operator after an operand
 p . 0          // error: a postfix operator is written against the expression before it
 x ?            // error: likewise
 f (1)          // error: a call's `(` is written against what is called, as a postfix operator is
 a--b           // `a - (-b)`
 ```
+
+A misplaced operator is P021. Inside a tensor row, where elements are
+separated by spacing, `a -b` is the two elements `a` and `-b`.
 
 Fixity is for the sigil operators. A word operator -- `and`, `or`, `xor`, `not`
 -- is delimited by being a word, and gluing it to an operand would make it part
@@ -274,9 +358,9 @@ The `index` and `offset` types are 32-bit by default, or 64-bit when the
 which is not exposed to the language.
 The size of `index` is less than or equal to the platform pointer size.
 
-**A count is always a `u32`.** Every bit count, shift amount, rotate amount
-and exponent in `sys/std` is a `u32`, whatever the width of the value it
-counts or shifts: `u8.count_ones(self: u8): u32`, `u64.bits(): u32`,
+**A count is always a `u32`.** Every bit count, shift amount and rotate
+amount in `sys/std`, and the exponent of every fixed-width integer's `pow_*`,
+is a `u32`, whatever the width of the value it counts or shifts: `u8.count_ones(self: u8): u32`, `u64.bits(): u32`,
 `i64.shift_left(self: i64, n: u32): ?i64`, `u8.pow_checked(self: u8, exp: u32)`.
 This is Rust's rule, and it is here for the same two reasons. A count is
 bounded by the widest integer, so `u32` always holds it and never needs a
@@ -285,9 +369,14 @@ place and masks it, so a shift amount of the shifted type asks a question the
 machine does not answer. It also lets counts compose: a count out of one width
 feeds a shift at another, which a same-width rule cannot express.
 
+`int.pow` takes its exponent as an `index`, since an `int` has no width to
+bound it, and the float `pow`s take a float.
+
 `abs_diff` is the exception, because a magnitude is not a count: it gives the
 unsigned type of the same width, so `i32.abs_diff` gives a `u32` and
-`offset.abs_diff` gives an `index`.
+`offset.abs_diff` gives an `index`. `int.abs_diff` gives an `int`, and the
+generic `fixedint.abs_diff<T>` gives a `?T`, which is `none` where the
+difference does not fit `T`.
 
 ### 3.2 Collection Types
 
@@ -330,21 +419,15 @@ Table literals use a line-oriented syntax:
 
 Semicolons permit single-line format: `{| x, y; 1, 2; 3, 4 |}`. A `;` is a
 line break written on the line, here and between two statements alike, so a
-run of them is a blank line and not an error. A `,` goes between two things,
-so one with nothing before it is an error (`{| x,, y |}`); a trailing one
-closes what it follows and is fine. This holds wherever the two languages read
-a `,` -- table columns and tensor axes.
+run of them is a blank line and not an error. A `,` between table columns goes
+between two things, so one with nothing before it is an error (D033,
+`{| x,, y |}`); a trailing one closes what it follows and is fine. A list,
+struct or tuple takes a trailing comma as well.
 
 A table is opaque: nothing can look inside one. Column projection
 (`table.x`) is not implemented and is refused as a projection on a value with
-no fields (F068); the options are written up in
-[Tables: what the type system is missing](design-table-rows.md).
-
-A projection of a field whose type is linear may not be read as a value: it
-would move the field out of an aggregate that still holds it. It may be
-borrowed -- `debuglog p.a`, or `f(ref p.a)` and the `mut` and `out` forms -- or
-cloned out with `@`, as in `let x = p.a@`. A field of a copy type reads
-directly.
+no fields (F068), and indexing a table is refused too; the options are written
+up in [Tables: what the type system is missing](design-table-rows.md).
 
 **Tensor.** A multi-dimensional array with fixed shape.
 
@@ -364,22 +447,24 @@ Type hints specify element type and rank:
 Shape is inferred from the multi-comma structure: spaces separate elements
 along the innermost axis, `,` separates rows (2nd axis), `,,` separates
 slabs (3rd axis), `,,,` separates blocks (4th axis), etc. A comma run goes
-only between two parts, so a tensor takes no trailing comma.
+only between two parts, so a tensor takes no leading or trailing comma
+(D033).
 
 A shape the separators cannot show -- a zero extent above the innermost axis,
 or a leading extent of 1 -- is written in a header before a `|`, and the body
 after it either flat, in row-major order, or shaped as the header says:
 `[| 1 3 | 1 2 3 |]` has shape [1, 3], `[| 0 3 | |]` is an empty 0x3 tensor,
 and `[| 2 3 | 1 2 3 4 5 6 |]` is a header over a flat body. A tensor has at
-least one axis: `[|T, 0|]` is refused.
+least one axis: `[|T, 0|]` is refused (D042).
 
 Because the innermost axis is separated by nothing but whitespace, an
 operator's spacing decides how many elements a row has (Section 2.4):
-`[| 1 -2 |]` holds two elements and `[| 1 - 2 |]` holds one.
+`[| 1 -2 |]` holds two elements and, in Datafun, `[| 1 - 2 |]` holds one.
+Datalit has no operators, so there `[| 1 - 2 |]` is an error (D050).
 
-Indexing a tensor is exposed: `t[i]?` reads along axis 0, and `set t[i]? = v`
-writes there. `sys/std/tensor` is written over that, at rank 1. Transpose,
-slice and reshape are not exposed; the runtime supports them internally.
+A tensor is indexed along axis 0 (Section 7.3). `sys/std/tensor` is written
+over that, at rank 1. Transpose, slice and reshape are not exposed; the
+runtime supports them internally.
 
 A tensor's rank is part of its type rather than a parameter, so a function
 takes a tensor of one rank -- `[|T, 1|]` and `[|T, 2|]` are different types and
@@ -401,6 +486,10 @@ neither can be written as "a tensor of any rank".
 { x: f32, y: f32 }       // type
 { x = 1.0, y = 2.0 }     // literal
 ```
+
+A struct's fields are in the order written, and the order is part of the type:
+`{ y = 1, x = 2 }` is not a `{ x: int, y: int }` (F075). A field, table column
+or enum variant named twice is D038.
 
 ### 3.4 Option and Result
 
@@ -426,10 +515,10 @@ written `er error "message"`. An `error` is not a result by itself: where a
 `!T` is expected, `error "message"` is a mismatch.
 
 The `some`, `ok`, `er`, `data`, `error` and `term Name` constructors take a
-*primary* expression as their payload -- a literal, variable, function call,
-parenthesized expression, hinted expression or prefix operator -- together with
-the postfix operators written on it, so `some x@` is `some (x@)` and
-`some o?` is `some (o?)`. This is the same with a hint over the constructor:
+*unary* expression as their payload -- a literal, variable, function call,
+parenthesized expression or hinted expression, with any postfix and prefix
+operators written on it -- so `some x@` is `some (x@)`, `some o?` is
+`some (o?)` and `some -x` is `some (-x)`. This is the same with a hint over the constructor:
 `: ?int / some o?` is `some (o?)` too. A binary operator after a payload is
 P065: `some a + b` is refused, and is written `some (a + b)`, or `(some a) + b`
 if the operator is meant for what is built:
@@ -442,7 +531,7 @@ ok(x +! y)              // ok: parenthesized expression
 er(error "msg")          // ok: parenthesized expression
 ```
 
-### 3.5 Data Type
+### 3.5 Data and Error Types
 
 The `data` type is a universal container that can hold any value:
 
@@ -459,7 +548,7 @@ error "message"
 error(some_expr)         // parenthesized for non-primary payload
 ```
 
-Both `data` and `error` take a primary expression as their payload (see Section 3.4).
+Both `data` and `error` take a unary expression as their payload (see Section 3.4).
 A value is a `data` only when written as one. Nothing becomes a `data` by being
 where one is expected: `let d: data = x` is a mismatch, and `let d: data = data
 x` is how to write it. Datalit is the same.
@@ -490,8 +579,9 @@ Two terms are the same type if they have the same name and payload type.
 enum { atom Red, atom Blue, term Custom string }   // type
 ```
 
-Enum variants are matched by name. Atoms and terms can stand alone as types,
-or combine into enums.
+Enum variants are matched by name, and their order is not part of the type:
+`enum { atom Red, atom Blue }` and `enum { atom Blue, atom Red }` are one
+type. Atoms and terms can stand alone as types, or combine into enums.
 
 **Enum values.** An atom or term literal is a value of any enum that lists
 it, so where an enum type is expected it is written bare, or wrapped as an
@@ -519,7 +609,7 @@ let d: enum { atom Red, atom Blue } = a@    // ok
 
 `@` does not widen one enum into another with more variants.
 
-**Match.** Enums are destructured with `match` (see Section 8.6).
+**Match.** Enums are destructured with `match` (see Section 8.8).
 
 ### 3.7 Type Aliases
 
@@ -556,9 +646,10 @@ Examples:
 ```
 
 The expression need not be a literal, and the hint is what it is checked
-against. It is a primary -- a literal, a name, a call, a constructor, a
-parenthesized expression -- with any postfix operators written on it, so a
-binary operator after it applies to the hinted expression: `: u32 / x + 1` is
+against. It is a unary expression, as a constructor's payload is (Section
+3.4) -- a literal, a name, a call, a constructor, a parenthesized expression,
+with any postfix and prefix operators written on it -- so a binary operator
+after it applies to the hinted expression: `: u32 / x + 1` is
 `(: u32 / x) + 1`, and `: u32 / (x + 1)` hints the sum.
 
 ```datalove
@@ -580,11 +671,13 @@ Postfix lands on the expression under the hint, as it does on the payload of
 option it unwraps. A literal is the exception, because the hint is what makes
 it a value of that type: after a number, a string, a constructor, a collection
 or a parenthesized expression the hint stays on that literal and postfix comes
-after it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints `o`. A hint takes nothing of its own, so the expression under it
+after it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints
+`o`. A hint directly under another, `: u8 / : u8 / 1`, is refused; parenthesize
+the inner one. A hint takes nothing of its own, so the expression under it
 moves what it would have moved written without one.
 
 A bare name in type position is a type alias (Section 3.7), or, within a generic
-function's signature or body, one of its type parameters (Section 8.5). Data
+function's signature or body, one of its type parameters (Section 8.7). Data
 literals have neither, so a name in a data literal's type is always an error.
 A name that is neither is F064, wherever the type is written: a `let`, `var` or
 `const` annotation, a hint, a parameter, a return type, or inside any of those.
@@ -600,20 +693,22 @@ in another case, `Int`, gets the same treatment, with the spelling it meant.
 Types are classified as *copy* or *linear*.
 
 **Copy types** can be freely duplicated: `bool`, fixed-width integers (`u8`
-through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`.
-Atoms are always copy. Terms are copy if their payload type is copy.
-Enums are copy if all variant payloads are copy.
+through `u64`, `i8` through `i64`), `index`, `offset`, `f32`, `f64`, and unit.
+Atoms are always copy. A term, option, tuple or struct is copy if everything in
+it is, and an enum if all its variant payloads are.
 
 **Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
-`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`. Terms and enums with
-linear payloads are linear.
+`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`, and every result `!T`, whatever
+`T` is. A term, option, tuple, struct or enum holding a linear type is linear.
 
 A **type parameter** is linear, whatever it is instantiated with, because the
 caller may supply a linear type and the function is compiled once for all of
-them (Section 8.5).
+them (Section 8.7).
 
-A linear value can be used exactly once. After a value is moved, subsequent
-uses are compile-time errors:
+A linear value is moved at most once; one never moved is dropped at the end
+of its scope. Borrowing it -- as a `ref` argument, an operator's operand, under
+`debuglog` -- does not count as a use. After a value is moved, subsequent uses
+are compile-time errors (D001):
 
 ```datalove
 let x: int = 42
@@ -630,7 +725,7 @@ Operators listed from highest to lowest precedence:
 | Precedence | Operators | Description |
 |------------|-----------|-------------|
 | 1 | `()` | Grouping |
-| 2 | `.field` `.0` `[i]` `@` `?` `!` | Postfix (field, index, adapt, try) |
+| 2 | `.field` `.0` `[i]` `(args)` `@` `?` `!` | Postfix (field, index, call, adapt, try) |
 | 3 | `-` `-?` `-!` `not` | Unary prefix |
 | 4 | `*` `/` `*!` `/!` `*?` `/?` | Multiplicative |
 | 5 | `+` `-` `+!` `-!` `+?` `-?` | Additive |
@@ -645,8 +740,8 @@ right: `a.b[0]?@` applies each in turn.
 Postfix binds tighter than unary prefix, so a prefix operator applies to the
 postfix expression as a whole: `-x@` is `-(x@)`, `not s.a` is `not (s.a)` and
 `not list.is_empty(ref xs)` negates what the call returns. The payload keywords
-`some`, `ok`, `er`, `data` and `error` take their payload the same way, so
-`some x@` is `some (x@)`.
+`some`, `ok`, `er`, `data`, `error` and `term Name` take their payload the same
+way, so `some x@` is `some (x@)`.
 
 Which of the three a sigil operator is read as is decided by its spacing before
 precedence is consulted at all: `a - b` and `a-b` are the binary operator in
@@ -689,6 +784,10 @@ Bigint division `/?` yields `int`. Unary `-!` and `-?` negate any fixed
 integer. A signed value fails only at its minimum, which has no counterpart;
 an unsigned one fails for any value but zero.
 
+The error a checked operator returns is a fixed string: `error "arithmetic
+overflow"`, `error "division by zero"`, or for a negation `error "negation
+overflow"`.
+
 Integer division truncates toward zero, so `-7 /? 2` is `-3`. There is no
 remainder operator; derive one from the quotient, which gives it the sign of
 the dividend, or use `int.rem_checked`.
@@ -718,8 +817,9 @@ Order strings with `string.cmp`, and anything else with `sys/std/ord`.
 option, tuple, struct, term or enum whose parts all do. Such a value is
 compared part by part. Floats compare by IEEE 754 wherever they are, so
 `some nan != some nan` and `(0.0, 1) == (-0.0, 1)`. Lists, sets, maps,
-tables, tensors, results, `data`, `error` and functions have no equality
-operator yet, and neither does an aggregate holding a type parameter.
+tables, tensors, results, `data` and `error` have no equality operator yet,
+and neither does a type parameter or an aggregate holding one (Section 8.7).
+Anything can be compared with `sys/std/ord`.
 
 A construction with no type of its own takes the other operand's: with
 `x: ?u32`, `x == none` and `x == some 1` compare `?u32`s.
@@ -745,9 +845,13 @@ The postfix `?` operator unwraps an option, early-returning `none` on failure:
 ```datalove
 fun get_value(opt: ?i32): ?i32
     let x = opt?           // early-return if none
-    ret some (x + 1)
+    ret some (x +? 1)
 end fun
 ```
+
+`?` in a function that does not return an option, and `!` in one that does not
+return a result, is F049; `?` on a value that is not an option, or `!` on one
+that is not a result, is F048.
 
 The postfix `!` operator unwraps a result, early-returning the error on
 failure:
@@ -765,10 +869,11 @@ All operators treat their operands as immutable references. Operands are not
 consumed:
 
 ```datalove
-let x: int = 42
-let a = x + 1       // x is cloned for the operation
-let b = x + 2       // x can be used again
-ret x               // x is still valid
+fun f(x: int): int
+    let a = x + 1       // x is borrowed for the operation
+    let b = x + 2       // x can be used again
+    ret x               // x is still valid
+end fun
 ```
 
 ### 6.7 Intrinsic Calls
@@ -779,12 +884,25 @@ Intrinsics are low-level operations that compile to machine instructions:
 icall intrinsic_name(args)
 ```
 
-Available intrinsics include bitwise operations (`bitnot_u32`, `bitand_u32`,
-`bitor_u32`, `bitxor_u32`), shifts (`shl_u32`, `shr_u32`), bit counting
-(`popcount_u32`, `clz_u32`, `ctz_u32`), byte manipulation (`swap_bytes_u32`,
-`reverse_bits_u32`), wrapping arithmetic (`add_wrapping_u32`,
-`sub_wrapping_u32`, `mul_wrapping_u32`), and type reinterpretation
-(`u32_to_i32`, `i32_to_u32`).
+They are the layer `sys/std` is written over, and a program rarely calls one
+directly. Most come in a version per fixed-width type, named by a suffix
+(`_u8` through `_u64`, `_i8` through `_i64`, `_index`, `_offset`, `_f32`,
+`_f64`):
+
+- bitwise operations: `bitnot`, `bitand`, `bitor`, `bitxor`
+- shifts: `shl`, `shr`, and `sshr` on signed types
+- bit counting and byte order: `popcount`, `clz`, `ctz`, `swap_bytes`,
+  `reverse_bits`
+- wrapping arithmetic: `add_wrapping`, `sub_wrapping`, `mul_wrapping`,
+  `neg_wrapping`
+- remainders: `rem`, and `srem` on signed types
+- float math: `sqrt`, `floor`, `ceil`, `trunc`, `round`, `abs`, `min`, `max`,
+  `copysign`, `is_nan`, `is_infinite`
+- conversions: reinterpretation between same-width types (`u32_to_i32`),
+  float bit casts (`f32_to_bits`, `bits_to_f64`), narrowing and int-to-float
+  casts, and conversions to and from `index` and `offset`
+
+The full list, with signatures, is `crates/datalove-datafun-intrinsics/src/lib.rs`.
 
 Two intrinsics answer a question about the build rather than compute anything:
 `is_big_endian(): bool` and `index_bits(): u32`, the latter being the width of
@@ -807,41 +925,26 @@ let a = consume(msg@)   // clone msg, original stays valid
 let b = consume(msg)    // msg is still available
 ```
 
-**Widen**: For fixed integers, `@` widens to a larger type:
+**Widen**: For fixed integers, `@` widens to a larger type, and `f32` widens
+to `f64` (Section 10 lists the conversions):
 
 ```datalove
 let n: u8 = 42
 let x: int = n@         // widen u8 to int
 ```
 
-**Cross-sign widen**: Unsigned integers can widen to larger signed types:
-
-```datalove
-let n: u8 = 255
-let x: i16 = n@         // u8 widens to i16 (value fits)
-```
+Unsigned integers can widen to larger signed types too: a `u8` is an `i16`
+by `@`.
 
 **Atom/term to enum**: A value of atom or term type widens to an enum type
-that lists it. Like every `@`, it copies, and the original stays usable:
+that lists it (Section 3.6). Like every `@`, it copies, and the original stays
+usable:
 
 ```datalove
 type Color: enum { atom Red, atom Blue }
 let a = atom Red
 let c: Color = a@            // atom widens to enum
 ```
-
-A literal needs no `@` for this: `let c: Color = atom Red` checks the atom
-against the enum directly (Section 3.6). An enum does not widen to another
-enum.
-
-Valid widening chains:
-
-- Same-sign: `u8` -> `u16` -> `u32` -> `u64` -> `int`
-- Same-sign: `i8` -> `i16` -> `i32` -> `i64` -> `int`
-- Cross-sign: `u8` -> `i16`, `i32`, `i64`, `int`
-- Cross-sign: `u16` -> `i32`, `i64`, `int`
-- Cross-sign: `u32` -> `i64`, `int`
-- Index/offset: `index` -> `int`, `offset` -> `int`
 
 **Widening needs a target; cloning does not.** Where an expected type is
 known, `@` converts to it. Where none is, `@` clones, and the clone has the
@@ -860,18 +963,22 @@ An expected type reaches `@` from:
 - A `let` or `var` binding with a type annotation.
 - Return position in a function with a declared return type.
 - An argument to a function call.
-- An operand of an operator whose operands have the same type as its result:
-  `+`, `-`, `*` and `/` where that type is one they accept, the checked and
-  optional operators, and `and`, `or` and `xor`. The expected type of the
+- A constructor's payload or a collection literal's element, from the
+  expected type of what is built: `let o: ?int = some x@`.
+- An operand of a binary arithmetic operator whose operands have the same
+  type as its result: `+`, `-`, `*` and `/` where that type is one they
+  accept, and the checked and optional operators. The expected type of the
   whole expression reaches both operands, so `let c: int = a@ + b@` widens
-  both to `int`.
+  both to `int`. Unary `-` passes nothing on, so `let y: int = -x@` with
+  `x: u8` is an error.
 - An operand of a comparison, when the other operand has a type of its own.
   A comparison returns `bool`, which says nothing about its operands, so the
   type comes from across the operator instead: `a@ .< b` takes `b`'s type. A
   literal has no type of its own to give, so in `a@ .< 0` the literal goes
   along with `a@` and the comparison is at `a`'s type. With `@` on both sides
-  there is nothing to take, so each clones and the two have to agree on their
-  own.
+  the left one clones, and the right one is checked against its type, so with
+  `a: u32` and `b: u8`, `a@ .< b@` compares `u32`s and `b@ .< a@` is an
+  error.
 
 Widening is only what was asked for, so an atom under no expectation stays an
 atom: `let c = (atom Red)@` gives `c` the type `atom Red`, and using it where
@@ -901,7 +1008,9 @@ Value expressions:
 
 Field access and indexing can also follow value expressions (`f(x).field`,
 `f(x)[i]?`), but these produce values, not places -- the result cannot be
-used as a `set` target or `mut` argument.
+used as a `set` target or `mut` argument (D012). A linear part of one is
+refused as a linear part of a place is (Section 7.2): `mk().0` with an `int`
+first element is F070.
 
 ### 7.2 Field Access
 
@@ -921,18 +1030,20 @@ Chained access navigates nested structures:
 let inner = outer.a.b.c
 ```
 
-Field access on a linear-type field requires the place to be in a reference
-context (`ref` param, `mut` param, binop operand, `set` LHS). In consume
-context (`let`, `ret`, `in` param), linear fields require explicit `@` clone:
+A projection of a field whose type is linear may not be read as a value: it
+would move the field out of an aggregate that still holds it (F070). It may be
+borrowed -- as a `ref`, `mut` or `out` argument, an operator's operand, a
+`set` target, under `debuglog` -- or cloned out with `@`:
 
 ```datalove
 let t = (1, 2)
-let x = t.0                   // error: int is linear
-let x = t.0@                  // ok: explicit clone
-call foo(ref t.0)                   // ok: borrow
+let x = t.0                   // error (F070): int is linear
+let y = t.0@                  // ok: explicit clone
+call foo(ref t.0)             // ok: borrow
+debuglog t.0                  // ok: borrow
 ```
 
-Copy-type fields (bool, fixed integers, floats) are freely extracted.
+A field of a copy type (Section 5) is copied out freely.
 
 A borrow of a value being built does not reach its parts. The elements of a
 tuple, struct, collection or constructor are moved into it, so
@@ -977,16 +1088,19 @@ For tensors, each `[i]?` indexes along axis 0, reducing rank by 1.
 A rank-1 tensor indexed produces the element type; a rank-N (N>1) tensor
 indexed produces a rank-(N-1) sub-tensor **view**. A view is a non-owning
 tensor struct that aliases the parent tensor's data buffer. Indexing into
-a non-copy element in consume context requires `@` (clone): `t[i]?@`.
+a non-copy element in consume context requires `@` (clone): `t[i]?@`; without
+it, F072.
 
 **View type restrictions:** Views can be passed to `ref` params but not to
-`mut` or `out` params. Whole-value replacement of a view (`set row = ...`)
+`mut` or `out` params (F073). Whole-value replacement of a view (`set row = ...`)
 would overwrite the view struct without affecting the parent's data, causing
 leaks. The `set t[i]? = new_row` form is likewise rejected for rank > 1
 tensors. Element-level mutation through views (e.g. `set row[j]? = val`)
 is semantically correct but currently also rejected because the typechecker
-cannot distinguish it from whole-view replacement at the call site. The view
-concept is general; tensor sub-views are the only instance today.
+cannot distinguish it from whole-view replacement at the call site. An element
+of a rank-2 tensor is written through the tensor itself, with a chained index:
+`set t[i]?[j]? = v`. The view concept is general; tensor sub-views are the only
+instance today.
 
 ### 7.4 Index and Field Chains
 
@@ -1012,11 +1126,13 @@ A place expression's behavior depends on its destination context:
 | `ref` param | Immutable borrow | `foo(ref a[i]?)` |
 | `mut` param | Mutable borrow (no views) | `foo(mut a[i]?)` |
 | `set` LHS | Mutation target (no views) | `set a[i]? = 5` |
-| binop operand | Immutable borrow | `a[i]? + 1` |
+| operator operand, `debuglog` | Immutable borrow | `a[i]? + 1` |
 
 In consume context (`let`, `ret`, `in` param), copy-type elements are copied
 out freely. Linear-type elements require explicit `@` clone -- moving an
-element out of its container would leave a hole.
+element out of its container would leave a hole. A `set` target has one
+indexing form a read does not: a bare index on a map, which inserts
+(Section 8.3).
 
 ### 7.6 Parallel with Checked Arithmetic
 
@@ -1060,14 +1176,18 @@ let atom Foo = atom Foo            // binds nothing
 var (m, n) = (1, 2)
 ```
 
-A struct pattern names every field, and `let (a)` is an error (P070): a
+A struct pattern names every field (F071), and `let (a)` is an error (P070): a
 pattern has nothing to group, so it is spelled `(a,)` or `a`. Patterns are one
-level deep, and an enum is taken apart with `match` rather than `let`. A `var`
-without a value binds a plain name.
+level deep (P069 for `let (a, (b, c))`), and an enum is taken apart with
+`match` rather than `let` (F071). A `var` without a value binds a plain name
+and needs a type (P026); a destructuring `var` needs a value (P068).
+
+### 8.2 Const
 
 **Const** binds a value the compiler evaluates. It is valid at script top
 level, in a script or module function body, and at module top level, where it
-is in scope for every function in the module regardless of where it is written:
+is in scope for every function in the module regardless of where it is written.
+A script's top-level const is in scope for the functions written below it:
 
 ```datalove
 const LIMIT: u32 = : u32 / 10
@@ -1098,8 +1218,9 @@ const LST: [int] = [1, 2, 3]
 A const is an immutable ref binding: it is borrowed wherever it is named, as a
 `ref` parameter is. It may be read, compared, indexed and passed as `ref` any
 number of times, and moving out of a const of a linear type takes a clone with
-`@`. A move without one is D003, whose help says where the `@` goes;
-auto-adapt supplies it. A const of a copy type is copied as any copy type is.
+`@`. A move without one is D003, whose help says where the `@` goes; in the
+auto-adapt mode, which inserts `@` where an error asks for one, the compiler
+supplies it. A const of a copy type is copied as any copy type is.
 
 ```datalove
 const LST: [int] = [1, 2, 3]
@@ -1120,7 +1241,10 @@ a function while another function reads that const. If a const calls a function
 that itself names a module-level const, the two depend on each other and the
 compiler reports it rather than choosing an order.
 
-**Set** mutates a var binding, mutable parameter, or indexed/chained target:
+### 8.3 Set
+
+**Set** mutates a `var` binding, a `mut` or `out` parameter, or an
+indexed or chained target rooted at one:
 
 ```datalove
 set x = x + 1
@@ -1131,15 +1255,17 @@ set m[key] = v             // upsert: insert or overwrite
 ```
 
 The `set` target is a place expression (see Section 7). The root must be
-`var` or `mut` (F055 otherwise). Mutability propagates backward through the
+`var`, `mut` or `out` (F055 otherwise); an `out` parameter is written whole
+(Section 8.5). Mutability propagates backward through the
 chain: `set a[i]?.x = 5` needs mutable access to `a[i]?` and so to `a`, so a
 `let` or `ref` root is rejected however deep the target. For indexed targets,
 the `?` or `!` on each index step provides early-return on failure; the write
 only happens if all checks pass.
 
 **Map upsert.** Bare `set m[key] = v` (without `?` or `!`) is valid only for
-maps. It inserts if the key is absent, overwrites if present. Lists reject
-bare index on `set` LHS -- list elements must exist to be overwritten.
+maps, and only as the last step of the target. It inserts if the key is
+absent, overwrites if present. A bare index on a list, or partway along a
+target, is F074 -- what it would write through must exist.
 
 An upsert evaluates the RHS, then the key, then looks the key up. If the key
 is present, the old value is dropped and the new one stored; the key already
@@ -1186,7 +1312,7 @@ Some consequences of the order:
 ```datalove
 set total += amount
 set count +!= 1
-set xs[i]!.n *?= 2
+set xs[i]?.n *?= 2
 set m[key]! -= 1
 ```
 
@@ -1202,8 +1328,9 @@ on both sides and as the result:
 | `+?=` `-?=` `*?=` `/?=` | fixed-width integers, `T is fixedint`; `/?=` also `int` |
 
 As with the binary operators, `!` forms need the function to return a result
-and `?` forms an option, and on failure return early, leaving the place as it
-was (F049). Another operator or type is F026.
+and `?` forms an option (F049), and on failure return early, leaving the place
+as it was. The same holds for the `?` and `!` of the target's index steps, so
+one statement uses one family. Another operator or type is F026.
 
 The place is evaluated once, in the order of any `set`: the value, then its
 keys, then its lookups, each a single time, and then the operator reads the
@@ -1216,7 +1343,7 @@ borrowed rather than consumed, and it may be the place itself (`set x += x`).
 A bare map index is rejected (F074): it inserts a missing key, and then there
 is no value to update.
 
-### 8.2 Functions
+### 8.4 Functions
 
 Function definition:
 
@@ -1256,7 +1383,7 @@ an error (F085), at the first function of the cycle. `inline` anywhere else is a
 top-level code are not inlined, only those in function bodies. This is a
 stand-in for an inliner that decides for itself, and will go.
 
-### 8.3 Parameter Modes
+### 8.5 Parameter Modes
 
 All parameters are passed by reference. The mode determines permitted
 operations:
@@ -1275,8 +1402,7 @@ operations:
 - `out` parameters must be initialized before the function returns.
 - `ref` parameters cannot be passed to `mut` parameters.
 - `out` parameters must be written as a whole, not field-by-field.
-- View types (e.g. tensor sub-views from rank > 1 indexing) cannot be
-  passed to `mut` or `out` parameters. Use `ref` instead.
+- Tensor views cannot be passed to `mut` or `out` parameters (Section 7.3).
 
 **Call-site markers.** Every argument repeats its parameter's mode, so that
 borrowing and mutation are visible where the call is written rather than only
@@ -1284,8 +1410,10 @@ in the callee's signature. `in` is written by omitting the marker:
 
 ```datalove
 fun mixed(a: u32, ref b: u32, mut c: u32): u32
+    ...
+end fun
 
-call mixed(x, ref y, mut z)
+let r = mixed(x, ref y, mut z)
 ```
 
 A marker that disagrees with the declared mode is an error (F057), including
@@ -1293,7 +1421,7 @@ a missing marker for a `ref`, `mut` or `out` parameter and a marker on an
 `in` parameter. Intrinsics take every argument by value, so `icall` arguments
 never carry a marker.
 
-### 8.4 Const Parameters
+### 8.6 Const Parameters
 
 The `const` modifier declares a parameter whose value must be known at compile
 time:
@@ -1336,18 +1464,18 @@ let x = repeat(COUNT, ref s)  // COUNT is a const binding
   collections and linear aggregates included. Instantiations are told apart
   by structural equality of the values, floats by their bits, so `0.0` and
   `-0.0` get separate copies and every NaN with the same bits shares one
-- Cannot combine `const` with a passing mode. A const parameter is passed by
+- Cannot combine `const` with a passing mode (P082). A const parameter is passed by
   reference, as any const is borrowed: a specialized copy has the value written
   in and is passed nothing, and a call that is not specialized borrows the
   argument. `ref` would say what it already is, and `out` and `mut` would write
   to a constant
 - A const parameter's type cannot be a type parameter (`const n: T` in a
-  generic function is an error). A const parameter of a concrete type in a
+  generic function is F077). A const parameter of a concrete type in a
   generic function is fine: specialization removes const parameters and
   leaves the type parameters, so one copy per const instantiation serves
   every type instantiation
-- Nothing else is accepted, not a literal and not an expression: `repeat(3, ref s)`
-  is refused as surely as `repeat(2 + 1, ref s)`. The value a const parameter takes
+- Nothing else is accepted, not a literal and not an expression (F076):
+  `repeat(3, ref s)` is refused as surely as `repeat(2 + 1, ref s)`. The value a const parameter takes
   has to be one the compiler already holds, and a `const` binding is the one
   form that says so on its face. A const parameter counts, being a const
   binding within the body
@@ -1357,7 +1485,7 @@ and adding a copy per instantiation beside it. See
 [Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
 in the compiler guide.
 
-### 8.5 Generic Functions
+### 8.7 Generic Functions
 
 A function may take type parameters, written after its name:
 
@@ -1386,15 +1514,15 @@ expected result, the way a list's elements are typed together
 ([Datalove Literals](../mandocs/datalit.md#user-content-typing-together)):
 
 ```datalove
-call unwrap_or(some (: u32 / 7), : u32 / 0)      // T is u32
-call unwrap_or(some "hello", "fallback")         // T is string
+let a = unwrap_or(some (: u32 / 7), : u32 / 0)   // T is u32
+let b = unwrap_or(some "hello", "fallback")      // T is string
 ```
 
 Two arguments that decide a parameter differently are a type mismatch rather
 than a reinterpretation:
 
 ```datalove
-call pick_first(: u32 / 1, "not a u32")          // error: expected u32, found string
+let c = pick_first(: u32 / 1, "not a u32")       // error: expected u32, found string
 ```
 
 An argument that says nothing about a parameter, such as `none`, or a literal,
@@ -1402,12 +1530,13 @@ which only has a default, goes along with what the others say. So order does
 not matter:
 
 ```datalove
-call unwrap_or(none, "fallback")                 // T is string, from the second
-call pick_first(99, : u32 / 1)                   // T is u32; 99 is a u32
+let d = unwrap_or(none, "fallback")              // T is string, from the second
+let e = pick_first(99, : u32 / 1)                // T is u32; 99 is a u32
 let xs: [u32] = list.of(5)                       // T is u32, from the expected result
 ```
 
-A parameter nothing decides is F011. Where an argument such as `[]` leaves it
+The types cannot be written at the call: `f<u32>(1)` is not a call. A
+parameter nothing decides is F011. Where an argument such as `[]` leaves it
 open, the argument is what is reported as needing a type.
 
 **Where a type parameter may appear.** Anywhere: on its own, under `?` or `!`
@@ -1447,9 +1576,9 @@ end fun
 **Bounds.** A signature may end with a `where` clause, which bounds a type
 parameter:
 
-```
+```datalove
 fun scaled<T>(a: T, b: T): T where { T is float, }
-  ret a * b
+    ret a * b
 end fun
 ```
 
@@ -1466,7 +1595,7 @@ There are three bounds:
   ordering, of which the language has none today. It is worth asking for
   because the order is otherwise out of reach — `.<` is for numbers only, and
   `==` is refused for a list, a result, a type parameter inside an aggregate
-  and more (section 6.3), whether or not a generic is involved. `sys/std/ord`
+  and more (Section 6.3), whether or not a generic is involved. `sys/std/ord`
   is what it offers: the
   comparisons, `min`, `max`, `clamp`, and sorting and searching over a list.
 
@@ -1489,7 +1618,8 @@ There are three bounds:
   `i16`, `u32`, `i32`, `u64`, `i64`, `index` and `offset`. What all ten have is
   the comparisons and the checked and optional arithmetic — `+!`, `+?` and the
   rest. Bare `+` is not among them, because a fixed-width integer does not have
-  one. Negation is among them in both forms, `-!` and `-?`. `sys/std/fixedint` is what is written on top of that: the
+  one. Negation is among them in both forms, `-!` and `-?`. `sys/std/fixedint`
+  is what is written on top of that: the
   arithmetic, and the constants. Comparing and sorting are not there, because
   they ask nothing of a fixed-width integer that another type cannot answer.
 
@@ -1497,7 +1627,7 @@ A generic still compiles to one body, so the machine code cannot hold the
 instruction for every type the bound admits. The operands arrive with their
 descriptors and the runtime reads which type it is, the same way a collection
 of a type parameter has its elements walked by a size read off a descriptor. A
-call site that binds the parameter to anything else is refused.
+call site that binds the parameter to anything else is refused (F016).
 
 A value of a bounded parameter is still linear, so handing one to a function
 twice asks for a clone; reading one as the operand of an operator does not move
@@ -1508,19 +1638,17 @@ some type and inside a generic the type is what nobody has picked yet. The
 constants come from the standard library instead — `zero`, `one`, `min_value`
 and `max_value` in `sys/std/fixedint`, and those plus `nan`, `infinity`,
 `epsilon`, `pi` and the rest in `sys/std/float` — which take theirs from a
-descriptor the call site hands over. That works because the type parameter appears only in
-the return, so the call site is the one place that knows; see
-[the native ABI](native-abi.md). The consequence is that such a call has to say
-what it wants:
+descriptor the call site hands over. That works because the type parameter
+appears only in the return, so the call site is the one place that knows; see
+[the native ABI](native-abi.md). The consequence is that such a call has to be
+somewhere its type is decided, by an expected type or by the operand beside it
+(Section 12):
 
+```datalove
+let z: T = zero()      // the binding says `T`
+ret self == zero()     // the other operand says `T`
+debuglog zero()        // F011: nothing says what `T` is
 ```
-let z: T = zero()      -- the binding says `T`, so this works
-ret self == zero()     -- refused: nothing on this line says what `T` is
-```
-
-An operand is read for what it is rather than checked against what is wanted,
-so a call in operand position has nothing to take its type from. That is
-refused rather than guessed at.
 
 **What an *unbounded* type parameter does not admit.** Anything that would need
 to know what the type is. A `T` can be moved, dropped, cloned, printed, stored,
@@ -1550,7 +1678,7 @@ How this is implemented is in [Generics: how it works](generics.md); what is
 refused and why is
 [What is refused](generics.md#user-content-what-is-refused).
 
-### 8.6 Control Flow
+### 8.8 Control Flow
 
 **If statement:**
 
@@ -1562,18 +1690,39 @@ else
 end if
 ```
 
+The condition is a `bool`. An `if` may be followed by any number of
+`else if` arms before its `else`:
+
+```datalove
+if x == 1
+    debuglog "one"
+else if x == 2
+    debuglog "two"
+else
+    debuglog "other"
+end if
+```
+
 **If with binding** unwraps an option or result:
 
 ```datalove
 if opt |value|
     // value is bound here
 end if
+
+if res |value|
+    // value is bound here
+else |e|
+    // the error is bound here
+end if
 ```
 
-A result's `else` must bind the error, `else |e|` (F046). A binding `if` takes
-no part in an `else if` chain, on either side (P073): it cannot be followed by
-`else if`, and an `else if` cannot bind. Nest the `if` in an `else` body
-instead. An `else |e|` cannot be followed by `if` either (P066).
+A result's `if` must have an `else`, and the `else` must bind the error,
+`else |e|` (F046). An option's `else` binds nothing; `else |e|` on one is a
+mismatch (F016). A binding `if` takes no part in an `else if` chain, on either
+side (P073): it cannot be followed by `else if`, and an `else if` cannot bind.
+Nest the `if` in an `else` body instead. An `else |e|` cannot be followed by
+`if` either (P066).
 
 **Loop:**
 
@@ -1584,6 +1733,9 @@ loop
     end if
 end loop
 ```
+
+`break` exits the innermost loop, and `continue` jumps to its next iteration.
+Either outside a loop is an error (F050).
 
 **Conditional loop:**
 
@@ -1615,8 +1767,6 @@ binds a view of each row, one rank less. An index binding is an `index`. A
 `for` binds one or two names (P078), two on a map and one on a set (F087).
 `break` and `continue` work as in `loop`; `continue` goes to the next element.
 
-`break` exits the innermost loop. `continue` jumps to the next iteration.
-
 **Match** destructures an enum value:
 
 ```datalove
@@ -1640,15 +1790,16 @@ end match
 ```
 
 A `case default` arm matches any unmatched variant. Without a default, the
-match must be exhaustive (all enum variants must be covered). Duplicate cases
-are an error, and so is a second `case default`.
+match must be exhaustive (all enum variants must be covered). A missing
+variant and a duplicate case are errors (F016), and so is a second
+`case default` (P049).
 
 The input expression is consumed (moved) by the match.
 
 A `case term` arm's binding belongs to that arm. It may take a name already in
 scope, and the outer one means what it meant again after `end match`.
 
-### 8.7 Return
+### 8.9 Return
 
 `ret` returns a value from a function:
 
@@ -1662,7 +1813,7 @@ Void functions may use bare `ret` for early exit:
 ret
 ```
 
-### 8.8 Debug Log
+### 8.10 Debug Log
 
 `debuglog` prints a value:
 
@@ -1675,7 +1826,7 @@ It accepts an expression of any type, and borrows rather than consumes it, so
 a linear value may be logged and then used. That is why a projection of a
 linear field may be written under it without a `@` (Section 3.2).
 
-### 8.9 Call Statements
+### 8.11 Call Statements
 
 A function called for its effect is written after `call`:
 
@@ -1685,9 +1836,10 @@ call bump(mut v)
 
 `call` takes only a function call, plain or qualified, and nothing written on
 it: `call f(x)!`, `call f(x)@` and `call icall g()` are P031 as surely as
-`call x`, since a value computed and discarded is more likely a mistake than an
-intention. A
-line that begins with no statement keyword at all is P001.
+`call x`. The function must return unit (F016 otherwise), since a value
+computed and discarded is more likely a mistake than an intention; a value
+that is wanted for nothing is bound with `let` and left. A line that begins
+with no statement keyword at all is P001.
 
 ## 9. Module System
 
@@ -1717,7 +1869,9 @@ A command given a script never looks in the current directory, and nothing
 further up the tree is looked at. There is no workspace manifest. The pipeline
 itself takes whatever libraries it is given; the rule is the command line's.
 
-A package in `local` may have a rider. The system library's riders are linked
+A package in `local` may have a rider (Section 9.5), declared in a
+`manifest.toml` beside its modules; a package with a rider and no manifest
+fails to load. The system library's riders are linked
 into the binary; a workspace's own are built with cargo into a library the
 first time one of their natives is called, or into the program `aot-compile`
 links, so running one needs a Rust toolchain. A rider is named after its
@@ -1809,7 +1963,7 @@ using restricted syntax (`native fun` declarations and `type` aliases only):
 
 ```datalove
 native fun string_len(ref self: string): index
-native fun string_contains(ref haystack: string, ref needle: string): bool
+native fun string_contains(ref self: string, ref pattern: string): bool
 native fun list_push<T>(mut self: [T], elem: T)
 ```
 
@@ -1821,31 +1975,31 @@ does not resolve (F064), a native declared twice (F086). A parameter's name is
 a parameter's name here too, so `out` and the other mode words are refused
 (P064) though nothing calls a native by its parameters' names.
 
-A native function may take type parameters. Nothing is converted at one:
-because every parameter arrives as a pointer and a descriptor, the value goes
-across as it stands whatever the mode, where an ordinary function converts an
-owned one into the shape it was compiled for (Section 8.5). The implementation
-reads the element type off the descriptor at runtime, so one implementation
-serves every element type.
+A native function may take type parameters. As at a call to an ordinary
+generic function (Section 8.7), nothing is converted: every parameter arrives
+as a pointer and a descriptor, and the implementation reads the element type
+off the descriptor at runtime, so one implementation serves every element
+type.
 
 #### Rider Crate
 
 The rider crate (`rider/src/lib.rs`) implements native functions as
-`extern "C-unwind"` functions following the rider C ABI. Each parameter
-is a `(ptr, tydesc)` pair, with an out-param for the return value:
+`extern "C-unwind"` functions following the rider C ABI. The runtime handle
+comes first, then each parameter as a `(ptr, tydesc)` pair, then an out-pair
+for the return value, then a descriptor for each type parameter that only the
+return mentions; the function returns a status byte:
 
 ```rust
-#[unsafe(no_mangle)]
+#[no_mangle]
 pub extern "C-unwind" fn dlr_std__string_len(
-    rt: LocalRtHandle,
-    self_ptr: *const u8,
-    self_tydesc: *const TyDesc,
-    result_out: *mut u8,
-    result_tydesc: *const TyDesc,
-) -> RtStatus { ... }
+    rt: *mut u8,
+    self_ptr: *const u8, self_td: *const u8,
+    out: *mut u8, out_td: *const u8,
+) -> u8 { ... }
 ```
 
-Symbol naming convention: `dlr_{rider_name}__{function_name}`.
+Symbol naming convention: `dlr_{rider_name}__{function_name}`. The ABI in full
+is [The native rider ABI](native-abi.md).
 
 #### Using Riders
 
@@ -1867,17 +2021,20 @@ backend.
 
 #### Backend Support
 
-All three execution backends support native rider calls:
+All four execution backends support native rider calls:
 
 - **Interpreter**: function pointers are registered in `NativeFunctionTable`
   and dispatched by symbol name. A rider linked into the running binary
   supplies its own addresses; one found on disk is built into a `.so` and
   loaded via `dlopen`.
-- **AOT**: Native functions are declared as `Linkage::Import` and resolved by
-  the linker against the archive holding the runtime and the riders.
 - **JIT**: Native functions are declared as Cranelift imports with their C ABI
   signatures. Symbol addresses are registered via the JIT's symbol lookup
   mechanism from the same table the interpreter uses.
+- **Cranelift AOT**: Native functions are declared as `Linkage::Import` and
+  resolved by the linker against the archive holding the runtime and the
+  riders.
+- **C AOT** (`aot-compile --c`): Native functions are declared as C prototypes
+  and resolved by the linker the same way.
 
 ### 9.6 Data
 
@@ -1910,11 +2067,12 @@ mismatch inside the file is reported where it is in the file.
 
 ## 10. Numeric Widening
 
-There is no implicit numeric widening in the language. All numeric conversions
-require the explicit `@` operator.
+There is no implicit numeric widening in the language. Every widening is
+written with the explicit `@` operator (Section 6.8), and every other numeric
+conversion is a function.
 
-Fixed integers cannot use bare arithmetic operators. To perform arithmetic,
-either widen to `int` using `@`, or use checked/optional operators:
+Fixed integers cannot use bare arithmetic operators (Section 6.2). To perform
+arithmetic, either widen to `int` using `@`, or use checked/optional operators:
 
 ```datalove
 let a: u32 = 10
@@ -1971,16 +2129,20 @@ Example requiring explicit widening:
 ```datalove
 fun process(x: int): int
     ret x
+end fun
 
 fun example(): int
     let n: u32 = 42
     ret process(n@)     // explicit widen u32 to int
+end fun
 ```
 
 ## 11. Ownership Analysis
 
 Ownership analysis runs after type checking to verify correct use of linear
-values.
+values. Its errors are D001 to D015; the codes from D017 on belong to the
+Datalit parser and checker ([Datalit Grammar](datalit-ebnf.md)), which are
+reached from Datafun through literals and data files.
 
 ### 11.1 Errors
 
@@ -2001,6 +2163,8 @@ values.
 | D012 | CannotMutateTemporary | Temporary passed as `mut`/`out` |
 | D013 | UseAfterMoveInEarlierUnit | Using a binding an earlier script unit gave away |
 | D014 | InconsistentLoopExit | Moving a value on one way out of a loop and not another |
+| D015 | WalkedCollectionChanged | Moving the collection a `for` walks, or passing it `mut`/`out` |
+| D015 | WalkedCollectionAssigned | A `set` to or through the collection a `for` walks |
 
 ### 11.2 Mutable Arguments
 
@@ -2010,10 +2174,13 @@ parameter being forwarded.
 
 ```datalove
 fun bump(mut x: u32)
+    set x = icall add_wrapping_u32(x, 1)
+end fun
 
 var v: u32 = 1
 call bump(mut v)            // ok
-call bump(mut v.0)          // ok for a var aggregate
+var p: (u32, u32) = (1, 2)
+call bump(mut p.0)          // ok: a projection of a var
 
 let w: u32 = 1
 call bump(mut w)            // error: `w` is immutable
@@ -2030,10 +2197,14 @@ binding hand the callee two references to one object. That is an error when
 either is `mut` or `out`:
 
 ```datalove
+require module sys/std/string
+
 fun grow(mut self: string, ref other: string)
+    call string.push_str(mut self, ref other)
+end fun
 
 var s: string = "hi"
-call grow(mut s, ref s)    // error: aliased mutable argument
+call grow(mut s, ref s)    // error (D010): aliased mutable argument
 ```
 
 Two `ref` arguments are permitted, as are two reads of a copy value:
@@ -2052,15 +2223,16 @@ share a root and are rejected, even where they do not overlap in fact.
 Moving an outer-scoped linear value inside a loop is an error:
 
 ```datalove
+var a: int = 0
 var b: int = 5
 loop
-    set a = b      // error: cannot move 'b' in loop
+    set a = b      // error (D007): cannot move `b` in loop
 end loop
 ```
 
 Copy types and operator operands (which are borrowed) are exempt.
 
-### 11.4a The Collection a `for` Walks
+### 11.5 The Collection a `for` Walks
 
 The collection a `for` walks is frozen for the loop's body, since its element
 bindings point into it. Moving it, assigning to it or through it, and passing
@@ -2076,19 +2248,28 @@ end for
 Freezing is by the binding the place is rooted at, as aliasing is, so
 `for x in ref p.items` freezes all of `p`.
 
-### 11.5 Branch Consistency
+### 11.6 Branch Consistency
 
-If a value is moved in one branch, it must be moved in all branches:
+Where branches join, each linear value must be held on every branch or on
+none (D008). A value moved in one branch must be moved in the others, and one
+`set` again after a move in one branch must be set again in the others:
 
 ```datalove
-if cond
-    call consume(x)     // moves x
-else
-    // error: x not moved here
-end if
+fun consume(s: string)
+end fun
+
+fun f(c: bool, s: string)
+    if c
+        call consume(s)     // moves s
+    else
+        // error (D008): s is not moved here
+    end if
+end fun
 ```
 
-### 11.6 Tracking Categories
+The same holds for the ways out of a loop (D014).
+
+### 11.7 Tracking Categories
 
 Bindings are categorized for drop scheduling:
 
@@ -2096,8 +2277,8 @@ Bindings are categorized for drop scheduling:
 - **Precise**: Ownership state known statically.
 - **Tracked**: Runtime tracking byte used.
 
-Tracked bindings include `var` bindings, `out` parameters, and uninitialized
-variables.
+Tracked bindings are `var` bindings, initialized or not, and `out`
+parameters.
 
 ## 12. Bidirectional Type Inference
 
@@ -2178,30 +2359,35 @@ is expected is a mismatch rather than a conversion, and the same in reverse;
 | `lit-op` | Perform datalit operations |
 | `typecheck-std` | Type check the standard library |
 | `worldgen` | Generate a random worldfile |
-| `docs` | Generate HTML documentation from `mandocs/` |
+| `docs` | Generate HTML documentation from `mandocs/` and `botdocs/` |
 
 `script` takes `--jit` to compile hot functions rather than interpreting them,
 with `--jit-threshold` to say how many calls make a function hot,
 `--jit-osr-threshold` how many iterations make a loop worth entering in compiled
 code partway through a call, `--jit-opt-level` how hard the code generator
 works, and `--jit-stats` to report what was compiled; `--time` prints how long compiling
-and running took. `aot-compile` takes `--link`, `--run` and `--c`, the last emitting C and
-compiling that rather than emitting an object file directly. `script`,
-`script-ir`, `script-world` and `aot-compile` each take `--no-sys` to leave the
-system library out.
+and running took (`--jit-stats` implies it). `aot-compile` takes `-o` for the
+output path, `--link`, `--run` and `--c`, the last emitting C and compiling
+that rather than emitting an object file directly. `script`, `script-ir`,
+`script-world` and `aot-compile` each take `--no-sys` to leave the system
+library out. `repl` takes `--script` to run a script through the REPL's
+engine without prompting, and `--load` to replay a session `/save` wrote.
+
+A *worldfile* is a single text file holding several modules, data files,
+riders and a script as named sections; the tests and `worldgen` use them.
+`docs` builds `mandocs/` and `botdocs/` into HTML under `docs/` in the source
+tree.
 
 ## Appendix B. Unimplemented Features
 
 The following features appear in design documents but are not yet implemented:
 
-- Tensor operations (transpose, slice, reshape) --
-  tensor literals and axis-0 indexing work (`t[i]?`/`t[i]!`),
-  but higher-level manipulation operations are not exposed.
-  Mutation of sub-tensor views via `mut` params is rejected;
-  element-level mutation through a view requires direct `set` on the
-  original tensor with chained indexing.
+- Tensor operations (transpose, slice, reshape), and mutation through a
+  tensor view (Section 7.3)
+- Recursive types: an alias cannot name itself, `type L: ?(int, L)` (F064)
+- Table operations beyond literals: column projection, row access, adding rows
 - Arena blocks
 - Memoization
 - Type introspection (`@type`)
-- Panic statement
+- Panic and assert statements
 - Full Datalove layer (procedures and objects)

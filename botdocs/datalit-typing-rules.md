@@ -296,6 +296,7 @@ both `[u8]`.
 Every node is inferred once and every unification is union-find, so inference
 is linear in the expression, up to the inverse-Ackermann factor and the size
 of the types unified. The check after it is one more linear walk.
+
 ## Checking
 
 ### Annotation

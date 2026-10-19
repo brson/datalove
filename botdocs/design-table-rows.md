@@ -35,8 +35,8 @@ in `sys/std/ord` reaches a `[{| ... |}]`: `sorted`, `contains`, `index_of`,
 `count_of`, `least`, `greatest`, `is_sorted`, `binary_search`, `deduped`. That
 is also what lets a table be a set element or a map key.
 
-`==` and `.<` refuse a table, but they refuse a string and a list too; `ord` is
-the way to compare anything that is not a number.
+`==` and `.<` refuse a table, but they refuse a list too, and `.<` a string;
+`ord` is the way to compare anything else.
 
 **Nothing reads a part of one.** `t.x` is `ProjectionOnNonAggregate`, `t[i]?` is
 "indexing requires list, map, or tensor type", and there is no cell accessor of
@@ -46,8 +46,9 @@ part of the whole.
 
 **Nothing changes its shape.** There is no push, pop, insert or remove of a row,
 and no row count. The number of rows a table has is the number written in the
-literal that made it, so a table cannot be built from data: `table_push_row` and
-`table_build_from_rows` exist in the runtime and no syntax reaches them.
+literal that made it, so a table cannot be built from data: the runtime's
+`table_push_row` and `table_build_from_rows` are what a table literal compiles
+to, and nothing else reaches them.
 
 So a table today is a *composite literal with a comparison*: useful as a value,
 inert as a structure.
@@ -309,9 +310,10 @@ So the expensive end is wanted only where it would be written by hand anyway.
 
 ## H4: column projection alone, and no table module
 
-Implement what the spec already promises -- "Column projections (e.g.,
+Implement what the spec used to promise -- "Column projections (e.g.,
 `table.x`) yield a list view that cannot be moved or mutated, but can be passed
-to `ref` parameters" -- and write no module at all.
+to `ref` parameters" -- and write no module at all. (The spec now says
+projection is refused, F068.)
 
 **This is cheaper than it sounds, because the storage is columnar.** A list
 header is `{data, size, capacity}`; a column view is
@@ -401,10 +403,9 @@ parameter that indexes a type does not drag monomorphization along with it.
    for the same reason -- a value that cannot say its own type.
 2. **Types in type position computed by a call**, which is the surface feature.
 3. **Phase order.** Type arguments have to be resolved before const evaluation,
-   because the type feeds the computation. Today it is the other way round,
-   which is why a function may not have both const and type parameters
-   (`ComptimeParamOnGeneric`); the guide records it as a lowering-order
-   problem rather than a fundamental one.
+   because the type feeds the computation. Today it is the other way round:
+   a function may have both const and type parameters, but a const
+   parameter's type may not mention a type parameter (F077).
 4. **A CTFE quota.** Type-level computation can loop, and Zig's answer -- a
    budget with a diagnostic -- is the practical one.
 5. **The two roles of a const parameter separated**, per above, or every

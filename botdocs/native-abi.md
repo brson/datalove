@@ -22,8 +22,13 @@ uint8_t dlr_<rider>__<function>(
 
 In order:
 
-- **`rt`** --- the runtime handle. Every `dtlv_rti_*` entry point takes it
+- **`rt`** --- the runtime handle. Most `dtlv_rti_*` entry points take it
   first, so a native that calls back into the runtime passes its own along.
+  Those that need no runtime state -- `dtlv_rti_init`, `dtlv_rti_data_borrow`,
+  and the layout queries `dtlv_rti_field_offset`, `dtlv_rti_field_tydesc`,
+  `dtlv_rti_payload_offset` and `dtlv_rti_payload_tydesc` -- take none, and
+  have no `call::` wrapper: a rider reaches them through
+  `datalove_rti::table(rt)` directly.
 
   It is also how a native *finds* those entry points. A rider does not link
   the runtime --- it would otherwise carry a second copy of one --- so it
@@ -35,9 +40,11 @@ In order:
   exports nothing.
 
   What a holder of a handle may assume is `datalove_rti::RtHeader`, which the
-  runtime's state starts with: the table, then two fields compiled code reads
-  and writes in place (whether its calls are being abandoned for an error, and
-  the limit to the native stack). A rider reads only the table. The rest of
+  runtime's state starts with: the table, then four fields compiled code
+  reads and writes in place (`abandoning`, whether its calls are being
+  abandoned for an error; `stack_limit`, the limit to the native stack; and
+  `shadow_top` and `shadow_limit`, the shadow stack that holds values sized
+  at run time). A rider reads only the table. The rest of
   what the handle points at belongs to the runtime.
 - **One `(pointer, descriptor)` pair per declared parameter**, in declaration
   order. The pointer is at the value; the descriptor says what is behind it.
@@ -49,7 +56,11 @@ In order:
   parameters*.
 
 The `uint8_t` the function returns is an `RtStatus`: `1` is ok, anything else
-is a failure, and on failure nothing was written to `result_out`.
+is a failure, and on failure nothing was written to `result_out`. No backend
+reads the status yet -- the interpreter, cranelift and C all discard it -- so
+a failure a native reports goes unnoticed and the caller reads an unwritten
+result. A native that can fail should say so in its return type, an option or
+a result.
 
 The symbol is `dlr_{rider}__{function}` --- the rider's name as written in
 `require rider`, two underscores, the function's name. It is spelled in one
@@ -106,14 +117,9 @@ let a: u8 = zero()
 ```
 
 works: `zero` hands `fixedint_zero` its entry for `T`, which the script filled
-with `u8`'s descriptor. And
-
-```
-ret self == zero()      -- refused
-```
-
-does not: an operand is read for what it is, not checked against what is
-wanted, so nothing on that line says what `T` is. The typechecker refuses it.
+with `u8`'s descriptor. A call with nothing to say what `T` is, such as
+`debuglog zero()`, is refused by the type checker (F011); the rules for what
+decides it are the spec's ([Section 8.7](botspec.md#user-content-87-generic-functions)).
 
 ## Writing the result
 
@@ -174,7 +180,7 @@ takes the descriptor from `rtdt::packed_tydesc`, which is a constant per type
 rather than anything made up at run time.
 
 One consequence: a descriptor reached that way is one of those runtime
-constants rather than the one the compiler emitted. Descriptors were never
+constants rather than the one the compiler emitted. Descriptors are not
 deduplicated, so nothing may compare them by address; `same_tydesc` in the
 runtime compares them structurally.
 
@@ -182,9 +188,10 @@ runtime compares them structurally.
 
 The interpreter reaches a native through `call_c` in its `native` module,
 given a flat array of pointer-sized words (`c_words` lays them out), and
-transmutes to a function type of the right arity. The arities are listed one by one because there is no variadic
-form that would keep the C ABI. A native wider than the widest listed arity
-hits a `todo!()` rather than being called wrongly --- add the next row.
+transmutes to a function type of the right arity. The arities are listed one
+by one, up to `MAX_C_WORDS` (32), because there is no variadic form that would
+keep the C ABI. A native wider than that is a runtime error from `c_words`
+rather than being called wrongly.
 
 The cranelift backends build the same signature in `build_native_signature`,
 and the C backend emits the same prototype in `native_declaration`. All three

@@ -7,7 +7,7 @@ real layout together with that value's *type descriptor* -- the runtime's
 descriptor per type parameter, which the caller hands over.
 
 This describes the implementation as it stands. The language-level rules are
-[Section 8.5 of the spec](botspec.md#user-content-85-generic-functions). How it
+[Section 8.7 of the spec](botspec.md#user-content-87-generic-functions). How it
 got here is [Generics by Reference](plan-fat-generics.md), which replaced the
 erasure that [Generics and Specialization](plan-generics.md) describes.
 
@@ -100,8 +100,8 @@ interpreter resolves that once per site, as a `BindingRef` (`Static` or
 Nothing about a callee's descriptors comes from its body, so a callee's
 calling convention depends on its signature alone, and a call at a growing
 type -- `f<T>` calling `f<[T]>` -- builds one more descriptor per level of
-recursion. Every type parameter still has to be determined at a call site;
-that is now plainly the rule that the caller has to have a descriptor to pass.
+recursion. Every type parameter still has to be determined at a call site,
+since the caller has to have a descriptor to pass.
 
 ## Storage
 
@@ -167,7 +167,8 @@ implements an instruction whose operand is dynamic from the descriptor.
 | tuple, struct, option, term, enum, result construction | each part stored at its offset from the destination's descriptor |
 | option and result tests | the tag, at offset 0 whatever the payload |
 | list, set, map, tensor, table literals | built by the runtime from the table entry's descriptor |
-| bounded operations (`ord`, `fixedint`, `float`) | `dyn_ops` on `(ptr, tydesc)` pairs |
+| bounded operations (`fixedint`, `float`) | `dyn_ops` on `(ptr, tydesc)` pairs |
+| the order an `ord` bound admits | the runtime's structural comparison, `dtlv_rti_cmp_total_local`, reached through `sys/std/ord`'s natives and the set and map operations |
 | `debuglog` | the runtime's printer on the pair |
 
 What a reference to a dynamic type points at is the table entry for its
@@ -265,19 +266,29 @@ AOT it fails the build.
 
 **No bounds, so no operations on a `T`.** A value of a bare type parameter can
 be moved, dropped, cloned, printed, stored, returned and handed on. `x + y` and
-`x == y` are errors whatever the call site binds. Printing works because the
+`x == y` are F026 whatever the call site binds. Printing works because the
 descriptor travelling with the value is enough to format it.
 
-`float`, `fixedint` and `ord` bounds dispatch through the runtime on
-descriptors (`dyn_ops`), which is how `sys/std` writes arithmetic over a type
-parameter and how a set or map over one gets its order. A set or map over a
-`T` with no `ord` bound is F061.
+**A bound admits only its own operations.** `float` and `fixedint` give the
+operators their types share, dispatched on descriptors through `dyn_ops`;
+bare `+` under `fixedint` is still F026. `ord` gives no operator at all --
+`.<` and `==` on a `T is ord` are F026 -- only the order `sys/std/ord` and
+sets and maps use. `==` on an aggregate holding a type parameter is F026 even
+when the parameter is bounded. A call site that binds a bounded parameter to a
+type the bound does not admit is F016.
+
+**A set or map over a `T` with no `ord` bound** is F061.
 
 **A const parameter whose type mentions a type parameter** is F077:
 specialization makes one copy per const value, and that copy is still generic.
 
-**A type parameter no argument or expectation determines** cannot be called,
-since the caller has no descriptor to pass.
+**A type parameter no argument or expectation determines** is F011, since the
+caller has no descriptor to pass. The types cannot be written at a call
+either: `f<u32>(1)` is not a call.
+
+**An instruction a compiled backend cannot do on a dynamic value** is refused
+by `check_dynamic_support` (see the engines above): under the JIT the function
+is left to the interpreter, under AOT the build fails.
 
 ## Why not monomorphization
 

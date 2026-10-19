@@ -40,13 +40,19 @@ not written. Two more notations carry what tokens alone cannot:
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
 parsing (P050, P051). `<` and `>` are always brackets, never operators.
 
-The parser's sources are cited by file: `statement.rs`, `expr.rs`,
-`literal.rs`, `state.rs` and `lib.rs` are in `crates/datalove-datafun-parser/src/`.
+The parser's sources are cited by file and function: `statement.rs`,
+`expr.rs`, `literal.rs`, `state.rs` and `lib.rs` are in
+`crates/datalove-datafun-parser/src/`.
+
+Two forms are not plain EBNF. `end_line(k)` is a rule with a parameter, written
+once for every block's closing line: `end_line("fun")` is `"end", "fun"` on a
+line of its own. `~` with nothing after it, as in `[ "-", ~ ], dec_number`,
+says the next token is glued to the one before it.
 
 ## Grammar
 
 ```ebnf
-(* ===== Top level  (lib.rs:147-259) ===== *)
+(* ===== Top level  (lib.rs) ===== *)
 script        = [ EOLS ], [ top_stmt, { EOLS, top_stmt }, [ EOLS ] ] ;
 module        = script ;            (* but see P077 below *)
 interface     = [ EOLS ], [ iface_stmt, { EOLS, iface_stmt }, [ EOLS ] ] ;
@@ -54,13 +60,13 @@ iface_stmt    = native_fun | type_alias ;  (* a rider.dli; anything else: P084 *
 top_stmt      = decl_stmt | stmt ;
 decl_stmt     = fun_def | native_fun | type_alias | require_stmt | import_stmt ;
 stmt          = let_stmt | var_stmt | const_stmt | set_stmt | call_stmt
-              | ret_stmt | if_stmt | match_stmt | loop_stmt | break_stmt
-              | continue_stmt | debuglog_stmt ;
+              | ret_stmt | if_stmt | match_stmt | loop_stmt | for_stmt
+              | break_stmt | continue_stmt | debuglog_stmt ;
                 (* chosen by the first word; anything else: P001 *)
 block         = { ( stmt | decl_stmt ), EOLS } ;   (* decl_stmt in a block: P074 *)
 end_line(k)   = "end", k ;         (* a line of its own; extra tokens: P033; missing: P034 *)
 
-(* ===== Bindings  (statement.rs:157-411) ===== *)
+(* ===== Bindings  (statement.rs: parse_let, parse_var, parse_const, parse_binding) ===== *)
 let_stmt      = "let", binding, [ ":", type ], "=", expr ;      (* no "=": P083 *)
 var_stmt      = "var", binding, [ ":", type ], "=", expr
               | "var", value_name, ":", type ;   (* pattern without value: P068; no type: P026 *)
@@ -72,14 +78,14 @@ binding       = value_name
               | "term", NAME, value_name ;       (* one level deep; nested: P069 *)
 field_pat     = NAME, [ "=", value_name ] ;      (* names unique: D038 *)
 
-(* ===== Assignment  (statement.rs:413-511) ===== *)
+(* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
 set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* no op: D025 *)
 place_step    = ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P021, read anyway *)
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
               | "+?=" | "-?=" | "*?=" | "/?=" ;
 
-(* ===== Functions  (statement.rs:515-801) ===== *)
+(* ===== Functions  (statement.rs: parse_fun, parse_native_fun, parse_type_alias) ===== *)
 fun_def       = "fun", value_name, [ type_params ], param_list, [ ":", type ],
                 [ where_clause ], EOLS,
                 [ "inline", EOLS ],            (* elsewhere: P076 *)
@@ -95,20 +101,23 @@ bound         = NAME, "is", ( "ord" | "float" | "fixedint" ) ;
                 (* P063, P060; a parameter bounded twice: P078 *)
 type_alias    = "type", type_name, ":", type ;  (* P022, P023 *)
 
-(* ===== Modules  (statement.rs:818-1020) ===== *)
+(* ===== Modules  (statement.rs: parse_require, parse_import) ===== *)
 require_stmt  = "require", ( "module", lib_path
                            | "data", lib_path, [ ":", type ]
                            | "rider", value_name ) ;           (* else P005 *)
 lib_path      = NAME, "/", NAME, "/", NAME ;    (* P003, P004, P013-P016 *)
 import_stmt   = "import", NAME, ".", NAME ;     (* P006, P017, P018 *)
 
-(* ===== Control flow  (statement.rs:1022-1530) ===== *)
+(* ===== Control flow  (statement.rs: parse_if, parse_loop, parse_for, parse_match) ===== *)
 if_stmt       = "if", if_arm, end_line("if") ;
 if_arm        = expr, [ pipe_binding ], EOLS, block,
                 [ "else", [ pipe_binding ],
                   ( "if", if_arm | EOLS, block ) ] ;   (* else-if shares one "end if" *)
 pipe_binding  = "|", value_name, "|" ;          (* P019, P020 *)
 loop_stmt     = "loop", [ "while", expr ], EOLS, block, end_line("loop") ;
+for_stmt      = "for", value_name, [ ",", value_name ], "in", "ref", expr,
+                EOLS, block, end_line("for") ;
+                (* no name, or a third: P078; no "in": P078; no "ref": P079 *)
 break_stmt    = "break" ;
 continue_stmt = "continue" ;
 match_stmt    = "match", expr, EOLS, { case_arm }, end_line("match") ;  (* P048 *)
@@ -118,7 +127,7 @@ ret_stmt      = "ret", [ expr ] ;
 debuglog_stmt = "debuglog", expr ;
 call_stmt     = "call", expr ;                  (* must parse to a call node: P031 *)
 
-(* ===== Expressions  (expr.rs:22-91, precedence table 325-348) ===== *)
+(* ===== Expressions  (expr.rs; precedence in binop_precedence) ===== *)
 expr          = or_expr ;
 or_expr       = and_expr, { ( "or" | "xor" ), and_expr } ;
 and_expr      = cmp_expr, { "and", cmp_expr } ;
@@ -135,7 +144,7 @@ prefix_op     = "-" | "-?" | "-!" | "not" ;
 postfix       = ~"?" | ~"!" | ~"@"
               | ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ]
-              | ~"(", [ arg_list ], ")" ;       (* only after NAME "." NAME: P072 *)
+              | ~"(", [ arg_list ], ")" ;       (* only after a single named field step: P072 *)
 field_sel     = NAME | digit, { digit } ;       (* digits fit a u32; else, or nothing: P079 *)
 
 primary       = hinted
@@ -155,8 +164,9 @@ arg           = [ "ref" | "mut" | "out" ], expr ;
 paren         = "(", [ expr, { ",", expr }, [ "," ] ], ")" ;
                 (* one element, no comma: grouping; else a tuple; () is unit *)
 
-(* Hints  (literal.rs:25-110) *)
+(* Hints  (literal.rs) *)
 hinted        = ":", type, "/", ( hint_literal | unary ) ;   (* no "/": D049 *)
+                (* a hinted directly under a hint is refused: P080 *)
 hint_literal  = [ "-", ~ ], dec_number | hex_number | string_lit
               | "true" | "false" | "none"
               | ( "some" | "ok" | "er" | "data" | "error" ), payload
@@ -165,7 +175,7 @@ hint_literal  = [ "-", ~ ], dec_number | hex_number | string_lit
               | paren | collection ;
                 (* chosen by the first token; see "What a hint covers" below *)
 
-(* Collections  (literal.rs:260-737) *)
+(* Collections  (literal.rs) *)
 collection    = list | set | map | struct | table | tensor ;
 list          = "[", [ expr, { ",", expr }, [ "," ] ], "]" ;
 set           = "#{", [ expr, { ",", expr }, [ "," ] ], "}" ;
@@ -185,7 +195,7 @@ comma_run     = ",", { "," } ;
 
 (* ===== Types ===== *)
 type          = ? the datalit type grammar, datalit-ebnf.md, parsed by the same
-                  code (datalove-datalit/src/parser/type_hint.rs:55-268) ? ;
+                  code (datalove-datalit/src/parser/type_hint.rs) ? ;
                 (* a type_name there is an alias or a type parameter here,
                    which F064 refuses when it names neither. There are no
                    function types and no type application. *)
@@ -235,7 +245,8 @@ string_lit, digit_run, hex_run, comment, newline
   (`and`, `or`, `xor`) have no such rule.
 - A postfix operator, `? ! @ . [ (`, is glued on its left: `p . 0`, `x ?`,
   `f (1)` and `u8 .max(1)` are P021. After an index, `?` and `!` are glued to
-  the `]`, so `xs[i]!=3` lexes `!=` and is P021. The steps of a `set` target
+  the `]`; `xs[i]!=3` lexes `!=` as one operator, so it is `xs[i] != 3`, a
+  bare index (F011 in the type checker). The steps of a `set` target
   are held to the same rule, as is the `(` after `icall`'s name.
 - `NAME(` is a call only when glued.
 - A prefix operator has no spacing rule: `- x` is a negation.
@@ -255,8 +266,10 @@ string_lit, digit_run, hex_run, comment, newline
   whatever its precedence: `some 1 == x` is P065 and `x == some 1` is not.
 - Postfix binds tighter than prefix: `-x@` is `-(x@)`, `not a.b` is
   `not (a.b)` and `not list.is_empty(ref xs)` negates the call.
-- A glued `(` after anything but `NAME.NAME` is P072: `a.b.c(1)`, `f(x)(1)`.
-- **What a hint covers.** A hint is a primary, so a binary operator after it
+- A glued `(` is a call after a name, or after a place with exactly one named
+  field step (`u8.max(1)`, and `(u8).max(1)` too); after anything else it is
+  P072: `a.b.c(1)`, `p.0(1)`, `f(x)(1)`.
+- **What a hint covers.** A hint is a unary expression, so a binary operator after it
   applies to the hinted expression: `: u32 / x + 1` is `(: u32 / x) + 1`. Under
   the `hint_literal` alternative the hint sits on the literal and a later
   postfix is outside it (`: u32 / 5@` hints the `5`); under the `unary`
@@ -270,6 +283,9 @@ string_lit, digit_run, hex_run, comment, newline
   pattern is P069, and a name bound twice is D038.
 - A binding `if` takes no part in an `else if` chain on either side (P073),
   and `else |e|` cannot be followed by `if` (P066).
+- A `for` binds one or two names. P078 and P079 are shared with other faults:
+  P078 also says a type parameter is bounded twice, and P079 a field selector
+  is malformed.
 - A line before the first `case` of a `match` is P048.
 - The `where` clause is on the signature's line; on the next one it is P001.
 - Every declared name is checked against the reserved words (P064),
@@ -293,7 +309,7 @@ sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 | calls, `icall` | `Syn-Call`, `Syn-GenericCall`, `Check-GenericCall`, `Syn-Intrinsic` |
 | `binding` | `Pat-*`, `Let`, `Var-Uninit`, `Const` |
 | `set_stmt` | `Place-*`, `Set`, `Set-Compound` |
-| `if_stmt`, `loop_stmt`, `match_stmt`, `ret_stmt` | `If`, `If-Some`, `If-Ok`, `Loop`, `Loop-While`, `Match`, `Ret`, `Ret-Void` |
+| `if_stmt`, `loop_stmt`, `for_stmt`, `match_stmt`, `ret_stmt` | `If`, `If-Some`, `If-Ok`, `Loop`, `Loop-While`, `For`, `Match`, `Ret`, `Ret-Void` |
 | `fun_def` | `Fun` |
 
 ## Differences from datalit
@@ -305,9 +321,9 @@ and differs:
 
 | Form | Datalit | Datafun |
 |---|---|---|
-| Payload of `some`, `ok`, `er`, `data`, `error`, `term` | `full_expr` | a postfix expression; a binary operator after it is P065 |
+| Payload of `some`, `ok`, `er`, `data`, `error`, `term` | `full_expr` | a unary expression; a binary operator after it is P065 |
 | A sign | a glued `-` on a decimal literal; `-0x10` is D050 | part of the literal only right after a hint; elsewhere prefix negation, so `-0x10` is legal |
-| What a hint covers | one datalit expression | a literal form, or a postfix expression wrapped in a `Hinted` node |
+| What a hint covers | one datalit expression | a literal form, or a unary expression wrapped in a `Hinted` node |
 | `(a, b)` | `AnonTuple` | `Tuple` unhinted, `AnonTuple` under a hint |
 | `: T / (x)` | `Group` when under another hint | `Hinted(x)` |
 | Tensor elements and table cells | datalit expressions | datafun expressions, with fixity ending tensor elements |

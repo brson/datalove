@@ -61,6 +61,9 @@ q ::= let | var | const
 b ::= any | ord | float | fixedint
 ```
 
+A bound is written `where { α is b, }`; `any` is not written, and is the bound
+of a parameter given none.
+
 `Γ(x) = T^q` looks a variable up, `Γ(ret)` is the return entry if there is
 one, and `loop ∈ Γ` tests the loop entry. `Γ|const` is `Γ` with every
 variable that is not `const` removed. A binding of kind `var` is mutable; the
@@ -265,13 +268,13 @@ fun add(): !u32
     ret ok (1 +! 2)       // 1 and 2 are checked against u32
 end fun
 
-let c: int = a@ + b@      // with a : u32, b : u64, both widen to int
+let c: int = a@ + b@      // with a, b : u32, both widen to int
 ```
 
 The premise `Γ ⊢ e₁ ⊕ e₂ ⇒ T'` still checks the operator against the
 operand type, so passing a type down never gives an operator a type it does
-not have: `let r: u32 = a@ + b@` leaves the operands `u32`, and bare `+` on
-`u32` is F026. A result that is not `T` is F016, with a note suggesting `@`
+not have: with `a, b : u32`, `let r: u32 = a@ + b@` leaves the operands
+`u32`, and bare `+` on `u32` is F026. A result that is not `T` is F016, with a note suggesting `@`
 where `Check-Adapt` would succeed. Nothing is tried and undone.
 
 Unary operators:
@@ -444,8 +447,9 @@ a bare `e[k]` outside a `set` target.
 **Borrowed positions.** A projection or index that reads a part of a linear
 type moves it out of the aggregate that still holds it, which is refused:
 F070 for a field, F072 for an element. The read is allowed in a *borrowed
-position*, where nothing is moved: an operand of an operator, an argument
-passed `ref`, `mut` or `out`, the argument of `debuglog`, and the inner steps
+position*, where nothing is moved: an operand of an operator, the operand of
+`@`, an argument passed `ref`, `mut` or `out`, the argument of `debuglog`, the
+value of a compound `set`, the collection a `for` walks, and the inner steps
 of a place. A part of a copy type may be read anywhere. Rules that admit a
 read only in a borrowed position carry the side condition
 `copy(T) ∨ borrowed`; it is left out of the rules above for brevity. A view
@@ -604,7 +608,7 @@ element of a tensor of rank above 1, is F073.
 returns early as surely as the last one. An undefined
 root is F054; an immutable one is F055. A compound operator the place's type
 does not admit is F026. The order in which a `set` evaluates its parts is in
-[the spec](botspec.md#user-content-81-bindings).
+[the spec](botspec.md#user-content-83-set).
 
 ### Control flow
 
@@ -638,6 +642,27 @@ loop ∈ Γ                                loop ∈ Γ
 ```
 
 `break` or `continue` outside a loop is F050 or F051.
+
+```
+p is a place    Γ ⊢ p ⇒ C    walk(C, x̄) = Δ    Γ, loop, Δ ⊢ { s̄ }
+-------------------------------------------------------------- (For)
+Γ ⊢ for x̄ in ref p s̄ end for ⊣ Γ
+```
+
+where `walk` gives the bindings each collection admits, each of kind `let`:
+
+| `C` | `x` | `i, x` |
+|---|---|---|
+| `[T]` | `x : T` | `i : index`, `x : T` |
+| `[\|T, 1\|]` | `x : T` | `i : index`, `x : T` |
+| `[\|T, n\|]`, n > 1 | `x : [\|T, n-1\|]` | `i : index`, `x : [\|T, n-1\|]` |
+| `#{T}` | `x : T` | -- |
+| `%{K = V}` | -- | `k : K`, `v : V` |
+
+The collection is read in a borrowed position. A collection that is not a
+place, of any other type, or with the wrong number of names for its type is
+F087. The bindings are references into the collection; the ownership
+analysis, not the checker, keeps them from being moved or written.
 
 ```
 Γ ⊢ e ⇒ E    E = enum {v₁, ..., vₙ}
@@ -704,8 +729,8 @@ completes is F063. It is defined by:
 - A sequence completes when each statement in it does.
 - `ret`, `break` and `continue` do not complete.
 - `if` without `else` completes; with one, when either branch completes.
-- `loop while` completes. A bare `loop` completes when its body contains a
-  `break` belonging to it, not to a nested loop.
+- `loop while` and `for` complete. A bare `loop` completes when its body
+  contains a `break` belonging to it, not to a nested loop or `for`.
 - `match` completes when any arm, or its default, completes.
 - Every other statement completes, including those containing `?`, `!` and
   calls.
@@ -717,7 +742,12 @@ F085.
 
 A type parameter used as a set element or map key, in a signature or in the
 type of a binding in the body, needs a bound that implies `ord` (all of them
-do, other than `any`); otherwise F061.
+do, other than `any`); otherwise F061. Only a binding whose type is written is
+checked so far: `let s = #{x@}` over an unbounded `T` is accepted.
+
+A type parameter passed on to another generic function satisfies the callee's
+bound only when its own bound is the same one; a `T is float` passed where
+`T is ord` is wanted is F016, though `float` implies `ord`.
 
 A name is defined by one function in a module or script: a second `fun` or
 `native fun` of the same name is F086, and so is an `import` of a name a
@@ -739,8 +769,9 @@ F049 ("no enclosing function").
 **Scripts.** A script's top level is checked under `Γ, ret !()`: it is a
 body returning a result, so `!`, `+!` and `ret ok ()` work there and `?`
 does not. A script is checked as a sequence of units; a later unit sees the
-bindings of earlier ones. A unit that is a lone expression is synthesized,
-at any type.
+bindings of earlier ones. A REPL unit may be a lone expression, which is
+synthesized at any type; in a `.dfs` file, a line that is only an expression
+is P001.
 
 **Requires and imports.** `require module p`, `require rider p` and
 `require data p` bind an alias; `import` brings functions into `Σ`
@@ -755,10 +786,10 @@ not reported again.
 | F001 | Undefined variable |
 | F002 | Undefined function; an import or qualified call of a function the module or rider does not have |
 | F011 | No synthesis rule: `none`, `er e` or an enum literal with nothing expected; a type parameter left unbound at a call; an index into something that is not a list, map or tensor, read or `set`; a bare `e[k]` outside a `set` target; an unknown intrinsic or wrong intrinsic arity |
-| F016 | Type mismatch: a failed `Check-Subsume`; operands that do not pair; a collection element that differs from the first; a hint that disagrees with the expected type; `@` that cannot convert; a bound not satisfied; an intrinsic argument; a binding `if` on something that is not an option or result, or `else \|y\|` on an option; a `call` whose callee does not return `()`; every `match` error |
+| F016 | Type mismatch: a failed `Check-Subsume`; operands that do not pair; a collection element that does not unify with the others; a hint that disagrees with the expected type; `@` that cannot convert; a bound not satisfied; an intrinsic argument; a binding `if` on something that is not an option or result, or `else \|y\|` on an option; a `call` whose callee does not return `()`; every `match` error |
 | F026 | An operator applied to a type it does not admit, including a compound `set` |
 | F045 | Wrong number of arguments |
-| F046 | A binding `if` on a result without `else \|y\|` |
+| F046 | A binding `if` on a result with no `else`, or with an `else` that binds nothing |
 | F048 | `?` on a non-option or `!` on a non-result |
 | F049 | An early-return form (`?`, `!`, `[k]?`, `[k]!`, the checked and optional operators, and their compound `set` forms) whose return type does not fit, or outside any function |
 | F050 | `break` outside a loop |
@@ -796,13 +827,16 @@ not reported again.
 | F084 | A `require data` whose file does not have the given type, has no type of its own and is given none, or is given a function type |
 | F085 | `inline` functions calling each other in a cycle |
 | F086 | A function defined twice in one module or script, or an import of a name a function there defines |
+| F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
 
 F047 and F056 are unassigned. F060 is retired. Two parse errors belong to
 the same rules: P074, a declaration inside a block, and P077, a statement at
 the top level of a module that is not a declaration. The datalit checker's
 `TypeError` converts into datafun's, but datafun reports its literal errors
 through its own checks, so the datalit T-codes do not appear in datafun
-programs except as the notes of F084.
+source. They do appear in data files: a `.dlt` that does not have the type its
+`require data` gives is F084 at the `require`, and the datalit errors are
+reported where they are in the file.
 
 ## Implementation
 
@@ -819,14 +853,13 @@ bounds in `type_param_bounds`; the expected return type and
 
 `TypeFunction` (`crates/datalove-datafun-common`) holds a signature's
 parameter types, modes, const flags and return type. Type parameters and
-their bounds are read from the callee's AST at the call, so a native
-function, which has none, is never generic.
+their bounds are read from the callee's `FunHead` (`crates/datalove-datafun-sema`)
+at the call, for an ordinary function and a native alike.
 
-Expression types are stored in a `BTreeMap` keyed by `ExprKey`: module,
-enclosing function and index within it (see
-[Salsa Patterns](salsa-patterns.md) for why not a vector). Each call stores
-a `ResolvedCallTarget`, the callee's AST, module and type arguments, so later
-passes do not look names up again. Qualified calls resolve into
+Expression types are stored in a `BodyTable`, a dense vector per function
+body indexed by an expression's index within it. Each call stores a
+`ResolvedCallTarget`, the callee's `FunHead`, module and type arguments, so
+later passes do not look names up again. Qualified calls resolve into
 `TypeContext::qualified`, not the name table, so `u8.from_int` and
 `i8.from_int` sit side by side; a module's resolve in
 `resolve_module_imports`, a script unit's in `typecheck_script_unit`, through

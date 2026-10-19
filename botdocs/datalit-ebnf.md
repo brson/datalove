@@ -115,11 +115,10 @@ comma_run      = ",", { ws, "," } ;
 (* Table. Between "{|" and "|}", outside nested brackets, ws does not
    include a newline: a newline separates rows. *)
 table_expr     = "{|", tbl_ws,
-                 [ table_header, { ws, row_sep, tbl_ws, table_row }, [ ws, ";" ] ],
+                 [ table_header, { ws, newline, tbl_ws, table_row } ],
                  tbl_ws, "|}" ;
 table_header   = ident, { ws, ",", ws, ident }, [ ws, "," ] ;   (* D031, D034, D038 *)
 table_row      = full_expr, { ws, ",", ws, full_expr }, [ ws, "," ] ;  (* D030 *)
-row_sep        = ";" | newline ;
 tbl_ws         = { ws | newline } ;
 
 (* ===== Literals: one glued run, no ws or comment inside ===== *)
@@ -140,12 +139,13 @@ ident          = ident_start, { ident_start | digit } ;  (* keywords allowed; no
 ident_start    = "a" .. "z" | "A" .. "Z" | "_" ;
 digit          = "0" .. "9" ;
 hex_digit      = digit | "a" .. "f" | "A" .. "F" ;
-ws             = { whitespace | comment } ;
-whitespace     = ? any Unicode whitespace character ? ;
-newline        = "\n" ;
+ws             = { whitespace | newline | comment } ;
+whitespace     = ? any Unicode whitespace character but "\n" ? ;
+newline        = "\n" | ";" ;                     (* the lexer reads ";" as a newline *)
 comment        = line_comment | block_comment ;
 line_comment   = "//", { ? any character except newline ? } ;
-block_comment  = "/*", { block_comment | ? any character ? }, "*/" ;  (* nests; unclosed: D020 *)
+block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "*/" ? }, "*/" ;
+                 (* nests; unclosed: D020 *)
 ```
 
 ## Rules outside the grammar
@@ -195,48 +195,49 @@ block_comment  = "/*", { block_comment | ? any character ? }, "*/" ;  (* nests; 
 ## Diagnostics
 
 Parse errors. File:line is where each is emitted; `type_hint.rs`, `expr.rs`,
-`state.rs` and `mod.rs` are in `crates/datalove-datalit/src/parser/`.
+`chunk.rs`, `state.rs` and `mod.rs` are in `crates/datalove-datalit/src/parser/`.
 
 | Code | Refuses | Where |
 |---|---|---|
-| D017 | Map entry without `=` | `expr.rs:316` |
-| D018 | End of input or a bracket where an expression is expected; struct field without its name or `=` | `expr.rs:362,383,395` |
-| D019 | A malformed number or one with a suffix; a bare identifier | `expr.rs:82,86,228` |
-| D020 | An unexpected sigil or error token | `expr.rs:248` |
-| D021 | Tokens left after an expression | `state.rs:215-224` |
-| D022 | Tokens left inside a type's brackets | `state.rs:230-239` |
-| D023 | Tensor groups of different shapes | `expr.rs:508` |
-| D030 | Table row with the wrong number of cells | `expr.rs:552` |
-| D031 | A table header cell that is not a name | `expr.rs:579` |
+| D017 | Map entry without `=` | `expr.rs:107` |
+| D018 | End of input or a bracket where an expression is expected; struct field without its name or `=` | `expr.rs:394,416,428` |
+| D019 | A malformed number or one with a suffix; a bare identifier | `expr.rs:81,85,244` |
+| D020 | An unexpected sigil or error token | `expr.rs:264` |
+| D021 | Tokens left after an expression | `state.rs:286` |
+| D022 | Tokens left inside a type's brackets | `state.rs:275` |
+| D023 | Tensor groups of different shapes | `expr.rs:541`, `chunk.rs:334` |
+| D030 | Table row with the wrong number of cells | `expr.rs:583`, `chunk.rs:183` |
+| D031 | A table header cell that is not a name | `expr.rs:610` |
 | D032 | `enum` type without `{` | `type_hint.rs:136` |
-| D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:417,485` |
-| D034 | An extra token in a table header cell | `expr.rs:597` |
-| D035 | `atom` with no name | `expr.rs:175` |
-| D036 | `term` with no name | `expr.rs:187` |
-| D037 | `enum` literal without `{` | `expr.rs:200` |
-| D038 | A duplicate field, column or variant name | `datalit/src/parser_util.rs:71` |
-| D039 | A bad string escape | `expr.rs:238` |
-| D040 | A bad or empty tensor header | `expr.rs:435` |
-| D041 | A tensor body that does not fit its header | `expr.rs:453` |
+| D033 | A `,` with nothing before it, in a table or tensor | `expr.rs:450,518`, `chunk.rs:199` |
+| D034 | An extra token in a table header cell | `expr.rs:629` |
+| D035 | `atom` with no name | `expr.rs:191` |
+| D036 | `term` with no name | `expr.rs:203` |
+| D037 | `enum` literal without `{` | `expr.rs:216` |
+| D038 | A duplicate field, column or variant name | `datalit/src/parser_util.rs:92` |
+| D039 | A bad string escape | `expr.rs:254` |
+| D040 | A bad or empty tensor header | `expr.rs:468` |
+| D041 | A tensor body that does not fit its header | `expr.rs:486`, `chunk.rs:358` |
 | D042 | A tensor type of rank 0 | `type_hint.rs:222` |
-| D043 | A non-ASCII name | `mod.rs:37` |
+| D043 | A non-ASCII name | `mod.rs:40` |
 | D044 | Map type without `=` | `type_hint.rs:183` |
 | D045 | Bad tensor rank | `type_hint.rs:229` |
-| D046 | Unexpected token in a type | `type_hint.rs:262` |
+| D046 | Unexpected token in a type | `type_hint.rs:271` |
 | D047 | Tensor type without its `,` | `type_hint.rs:213` |
-| D048 | Struct or table type field without its name or `:` | `type_hint.rs:378,391` |
-| D049 | Hint without its `/` | `expr.rs:44` |
-| D050 | `-` not glued to a decimal number; a signed hex literal | `expr.rs:119,125` |
-| D051 | Atom type with no name | `type_hint.rs:100` |
-| D052 | Term type with no name | `type_hint.rs:115` |
-| D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:352` |
+| D048 | Struct or table type field without its name or `:` | `type_hint.rs:390,403` |
+| D049 | Hint without its `/` | `expr.rs:43` |
+| D050 | `-` not glued to a decimal number; a signed hex literal | `expr.rs:135,141` |
+| D051 | Atom type with no name | `type_hint.rs:100,333` |
+| D052 | Term type with no name | `type_hint.rs:115,353` |
+| D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:363` |
 | D054 | A close bracket with no open | `parser_util.rs`, `emit_bracer_errors` |
 | D055 | An open bracket never closed | `parser_util.rs`, `emit_bracer_errors` |
 
-The parse codes start where the ownership codes (D001 to D014,
-[spec Section 11.1](botspec.md#user-content-111-errors)) end; D044 to D053 are
+The parse codes start after the ownership codes (D001 to D015,
+[spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 are
 faults that used to share a number with an ownership code or with another
-parse fault. Line numbers are approximate.
+parse fault. Line numbers are as of October 2026 and drift; the code string is
+what to search for.
 
 Type errors (T-codes) are listed in
 [Datalit Typing Rules](datalit-typing-rules.md#user-content-diagnostics).
