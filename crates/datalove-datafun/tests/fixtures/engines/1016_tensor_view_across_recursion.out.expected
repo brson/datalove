@@ -44,6 +44,7 @@ Analysis(
                         branch v5, block5, block4
                     block4:
                         v6 = none
+                        drop p1
                         return v6
                     block5:
                         v7 = tensorindexref p0[v4]

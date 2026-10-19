@@ -1,0 +1,217 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const "a"
+                        v1 = list [v0]
+                        v2 = list []
+                        v3 = list [v1, v2]
+                        store.move.tracked s0, v3
+                        v4 = const 5index
+                        v5 = const "lost"
+                        v6 = call u4(s0, v4, v5)
+                        debuglog v6
+                        v7 = const 0index
+                        v8 = const "kept"
+                        v9 = call u4(s0, v7, v8)
+                        debuglog v9
+                        v10 = const 1u32
+                        v11 = list [v10]
+                        v12 = const 5index
+                        v13 = const "lost"
+                        v14 = call u5(v11, v12, v13)
+                        debuglog v14
+                        v15 = const 1u32
+                        v16 = list [v15]
+                        v17 = const 0index
+                        v18 = const "kept"
+                        v19 = call u5(v16, v17, v18)
+                        debuglog v19
+                        v20 = const 1u32
+                        v21 = list [v20]
+                        v22 = const 5index
+                        v23 = const "lost"
+                        v24 = call u6(v21, v22, v23)
+                        debuglog v24
+                        v25 = const 1u32
+                        v26 = list [v25]
+                        v27 = const 0index
+                        v28 = const "kept"
+                        v29 = call u6(v26, v27, v28)
+                        debuglog v29
+                        v30 = const 1u32
+                        v31 = list [v30]
+                        v32 = const 5index
+                        v33 = call u7(v31, v32)
+                        debuglog v33
+                        v34 = const 1u32
+                        v35 = list [v34]
+                        v36 = const 0index
+                        v37 = call u7(v35, v36)
+                        debuglog v37
+                        v38 = const 1u32
+                        v39 = list [v38]
+                        v40 = const 5index
+                        v41 = const "a"
+                        v42 = const "b"
+                        v43 = call u8(v39, v40, v41, v42)
+                        debuglog v43
+                        v44 = list []
+                        v45 = const 5index
+                        v46 = const "a"
+                        v47 = const "b"
+                        v48 = call u8(v44, v45, v46, v47)
+                        debuglog v48
+                        v49 = const 1u32
+                        v50 = list [v49]
+                        v51 = const 0index
+                        v52 = const "a"
+                        v53 = const "b"
+                        v54 = call u8(v50, v51, v52, v53)
+                        debuglog v54
+                        unit_end_drop.tracked s0
+                        unit_end
+                    
+                    fn put(p0, p1):
+                    block0:
+                        drop p1
+                        return
+                    
+                    fn take(p0):
+                    block0:
+                        v0 = const 1u32
+                        drop p0
+                        return v0
+                    
+                    fn take2(p0, p1):
+                    block0:
+                        v0 = copy p0
+                        drop p1
+                        return v0
+                    
+                    fn take3(p0, p1, p2):
+                    block0:
+                        v0 = copy p1
+                        drop p2
+                        return v0
+                    
+                    fn n1(p0, p1, p2):
+                    block0:
+                        v0 = listboundscheck p0[p1]
+                        branch v0, block2, block1
+                    block1:
+                        v1 = none
+                        drop p2
+                        return v1
+                    block2:
+                        v2 = listelementref p0[p1]
+                        v3 = move p2
+                        v4 = some v3
+                        v5 = call u0(*v2, v4)
+                        v6 = copy p1
+                        v7 = some v6
+                        return v7
+                    
+                    fn n2(p0, p1, p2):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        drop p2
+                        return v2
+                    block2:
+                        v3 = call u2(v0, p2)
+                        v4 = some v3
+                        drop p0
+                        return v4
+                    
+                    fn n3(p0, p1, p2):
+                    block0:
+                        v0, v1 = listget p0[p1]
+                        branch v1, block2, block1
+                    block1:
+                        v2 = none
+                        drop p0
+                        drop p2
+                        return v2
+                    block2:
+                        v3 = call u2(v0, p2)
+                        v4 = some v3
+                        drop p0
+                        return v4
+                    
+                    fn n4(p0, p1):
+                    block0:
+                        v0 = const "x"
+                        store.move.tracked s0, v0
+                        v1, v2 = listget p0[p1]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop p0
+                        drop.tracked s0
+                        return v3
+                    block2:
+                        v4 = call u2(v1, s0)
+                        v5 = const 1u32
+                        v6 = eq v4, v5
+                        branch v6, block3, block4
+                    block3:
+                        v7 = const 1u32
+                        v8 = some v7
+                        drop p0
+                        return v8
+                    block4:
+                        goto block5
+                    block5:
+                        v9 = const 2u32
+                        v10 = some v9
+                        drop p0
+                        return v10
+                    
+                    fn n5(p0, p1, p2, p3):
+                    block0:
+                        v0 = const 0index
+                        v1, v2 = listget p0[v0]
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        drop p0
+                        drop p2
+                        drop p3
+                        return v3
+                    block2:
+                        v4 = call u2(v1, p2)
+                        v5, v6 = listget p0[p1]
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        drop p0
+                        drop p3
+                        return v7
+                    block4:
+                        v8 = call u3(v4, v5, p3)
+                        v9 = some v8
+                        drop p0
+                        return v9
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("none\nsome 0\nnone\nsome 1\nnone\nsome 1\nnone\nsome 1\nnone\nnone\nsome 1\n"),
+        ),
+    ],
+)

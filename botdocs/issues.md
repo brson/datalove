@@ -16,7 +16,6 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [An owned argument leaks when a sibling argument's `?` returns early](#user-content-an-owned-argument-leaks-when-a-sibling-arguments--returns-early)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
@@ -60,28 +59,6 @@ home here.
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
-
-### An owned argument leaks when a sibling argument's `?` returns early
-
-**Reproduced, on every engine, before generics by reference too.** When a
-call's argument is a place with `?` -- `call put(mut xs[i]?, v)` -- and the
-index is out of range, the function returns `none` from the `?` without
-dropping `v`, which the caller had handed over by value:
-
-```datalove
-fun put(mut x: [string], v: string)
-end fun
-fun add_to(mut xs: [[string]], i: index, v: string): ?index
-  call put(mut xs[i]?, v)
-  ret some i
-end fun
-var xs: [[string]] = [["a"], []]
-debuglog add_to(mut xs, : index / 5, "lost")
-```
-
-The early-return block is `v1 = none; return v1` with no `drop p2`, so the
-string leaks. The drop schedule for an early return from inside a call's
-arguments has to include the owned parameters not yet consumed.
 
 ### A REPL unit that returns early reports success
 

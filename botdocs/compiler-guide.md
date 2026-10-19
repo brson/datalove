@@ -1505,6 +1505,7 @@ pub struct DropSchedule {
     pub else_branch_exit: BTreeMap<usize, Vec<BindingId>>,
     pub before_return: BTreeMap<usize, Vec<BindingId>>,
     pub before_try_return: BTreeMap<usize, Vec<BindingId>>,
+    pub try_return_not_yet_moved: BTreeMap<usize, Vec<(u32, BindingId)>>,
     pub before_set_target_early_return: BTreeMap<usize, Vec<BindingId>>,
     pub loop_body_end: BTreeMap<usize, Vec<BindingId>>,
     pub before_break: BTreeMap<usize, Vec<BindingId>>,
@@ -1517,6 +1518,16 @@ pub struct DropSchedule {
 `before_set_target_early_return` is computed before RHS moves are analyzed, so
 it includes the RHS binding, which is still live when a set-index bounds check
 fails.
+
+`before_try_return` is what is live once the statement's expression has been
+evaluated, so it leaves out what the expression moves. But a `?` can return
+before the move: in `call put(mut xs[i]?, v)` the call never takes `v`.
+`try_return_not_yet_moved` lists each binding the expression moves with the
+expression index of the place that moves it, and an early return drops one
+whose place lowering has not reached yet (`LowerCtx::note_place_lowered`). A
+binding whose place has been lowered but which a call has not yet taken is the
+lowering's own to drop: the call's pending scope holds it, as it holds an
+argument value.
 
 ### AOT Tracking Bytes
 

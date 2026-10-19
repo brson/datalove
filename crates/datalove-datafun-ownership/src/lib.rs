@@ -1654,14 +1654,7 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
             }
             Statement::ExprStatement(stmt) => {
                 // Expression statement consumes its args via the function call.
-                let may_early_return = ctx.expr_may_early_return(ctx.expr(stmt.expr));
-                ctx.analyze_expr_moves(ctx.expr(stmt.expr), true);
-                if may_early_return {
-                    let drops = early_return_drops(ctx, stmt_id);
-                    if !drops.is_empty() {
-                        ctx.schedule.before_try_return.insert(stmt_id, drops);
-                    }
-                }
+                analyze_leaving_expr(ctx, ctx.expr(stmt.expr), true, stmt_id);
             }
             Statement::Require(_) | Statement::Import(_) | Statement::NativeFun(_) | Statement::ParseError(_) => {
                 // No drops.
@@ -1672,19 +1665,9 @@ fn analyze_statements<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmts: &[Statement<'d
 
 fn analyze_let<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtLet<'db>, stmt_idx: usize) {
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
 
-    // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(ctx.expr(expr), true);
-
-    // Check for early return operators AFTER analyzing moves.
-    // This ensures bindings consumed by the expression itself aren't dropped.
-    if may_early_return {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
+    // The expression result is consumed by the binding.
+    analyze_leaving_expr(ctx, ctx.expr(expr), true, stmt_idx);
 
     let ty = ctx.expr_type(ctx.expr(expr));
     alloc_pattern_bindings(ctx, &stmt.binding, ty, false);
@@ -1721,18 +1704,9 @@ fn alloc_pattern_bindings<'db>(
 /// Const bindings are lowered as let bindings and need the same ownership tracking.
 fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stmt_idx: usize) {
     let expr = stmt.value;
-    let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
 
-    // Analyze moves in the expression. The expression result is consumed by the binding.
-    ctx.analyze_expr_moves(ctx.expr(expr), true);
-
-    // Check for early return operators AFTER analyzing moves.
-    if may_early_return {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
+    // The expression result is consumed by the binding.
+    analyze_leaving_expr(ctx, ctx.expr(expr), true, stmt_idx);
 
     // Create binding for the const. It is dropped at the end of the scope like
     // a let, but is borrowed wherever it is named.
@@ -1743,19 +1717,8 @@ fn analyze_const<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtConst<'db>, stm
 
 fn analyze_var<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtVar<'db>, stmt_idx: usize) {
     if let Some(expr) = stmt.value {
-        // Initialized var - analyze the initializer expression.
-        let may_early_return = ctx.expr_may_early_return(ctx.expr(expr));
-
-        // Analyze moves in the expression. The expression result is consumed by the binding.
-        ctx.analyze_expr_moves(ctx.expr(expr), true);
-
-        // Check for early return operators AFTER analyzing moves.
-        if may_early_return {
-            let drops = early_return_drops(ctx, stmt_idx);
-            if !drops.is_empty() {
-                ctx.schedule.before_try_return.insert(stmt_idx, drops);
-            }
-        }
+        // Initialized var. The expression result is consumed by the binding.
+        analyze_leaving_expr(ctx, ctx.expr(expr), true, stmt_idx);
 
         // Create a binding for each name the var binds, each its own slot.
         let ty = ctx.expr_type(ctx.expr(expr));
@@ -1791,6 +1754,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
 
     // The value comes first. A plain `set` moves it into the place; a compound
     // one reads it as an operand, which borrows.
+    let live_before_value = ctx.live_bindings_for_return();
     ctx.analyze_expr_moves(expr, !compound);
 
     // Then the keys, left to right. A bare index (upsert) consumes its key,
@@ -1811,6 +1775,7 @@ fn analyze_set<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtSet<'db>, stmt_id
     let op_may_early_return = stmt.op.is_some_and(|op| !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div));
     if ctx.expr_may_early_return(expr) || keys_may_early_return || op_may_early_return {
         let drops = early_return_drops(ctx, stmt_idx);
+        schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1935,6 +1900,53 @@ fn early_return_drops<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt_idx: usize) -> V
     ctx.live_bindings_for_return()
 }
 
+/// Analyze the moves of `expr`, an operand of statement `stmt_idx`, and if it
+/// can return early, schedule what such a return drops.
+fn analyze_leaving_expr<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    expr: ExprFun<'db>,
+    is_consumed: bool,
+    stmt_idx: usize,
+) {
+    if !ctx.expr_may_early_return(expr) {
+        ctx.analyze_expr_moves(expr, is_consumed);
+        return;
+    }
+    let live_before = ctx.live_bindings_for_return();
+    ctx.analyze_expr_moves(expr, is_consumed);
+    let drops = early_return_drops(ctx, stmt_idx);
+    schedule_not_yet_moved(ctx, stmt_idx, &live_before, &drops);
+    if !drops.is_empty() {
+        ctx.schedule.before_try_return.insert(stmt_idx, drops);
+    }
+}
+
+/// Schedule the bindings an expression moves, for an early return from inside
+/// it to drop if it comes before the move.
+///
+/// `drops` is what is live once the expression is done, so it leaves out what
+/// the expression moved; but a `?` ahead of a move returns while the binding
+/// is still owned. Which moves come first depends on where in the expression
+/// the return is, so each is scheduled with the place that makes it.
+fn schedule_not_yet_moved<'db>(
+    ctx: &mut AnalysisCtx<'_, 'db>,
+    stmt_idx: usize,
+    live_before: &[BindingId],
+    drops: &[BindingId],
+) {
+    let moved: Vec<(u32, BindingId)> = live_before.iter()
+        .filter(|id| !drops.contains(id))
+        .map(|&id| {
+            let moved_at = ctx.get_moved_at(id)
+                .expect("a binding live before an expression and not after was moved by it");
+            (moved_at.local_index, id)
+        })
+        .collect();
+    if !moved.is_empty() {
+        ctx.schedule.try_return_not_yet_moved.insert(stmt_idx, moved);
+    }
+}
+
 fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx: usize) {
     // Check that all Out params are initialized before return.
     check_out_params_initialized(ctx, Some(stmt_idx));
@@ -1942,6 +1954,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx:
     let may_early_return = stmt.value
         .map(|expr| ctx.expr_may_early_return(ctx.expr(expr)))
         .unwrap_or(false);
+    let live_before_value = ctx.live_bindings_for_return();
 
     // Analyze moves in return value if any. The return value is consumed.
     if let Some(expr) = stmt.value {
@@ -1952,6 +1965,7 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx:
     // This ensures bindings consumed by the expression itself aren't dropped.
     if may_early_return {
         let drops = ctx.live_bindings_for_return();
+        schedule_not_yet_moved(ctx, stmt_idx, &live_before_value, &drops);
         if !drops.is_empty() {
             ctx.schedule.before_try_return.insert(stmt_idx, drops);
         }
@@ -1972,19 +1986,11 @@ fn analyze_return<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtRet, stmt_idx:
 fn analyze_if<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtIf<'db>, stmt_idx: usize) {
     // Analyze condition. For regular bool conditions, it's just read.
     // For Option/Result conditions with bindings, it's consumed by the destructure.
-    let has_binding = stmt.then_binding.is_some();
-    let condition_may_leave = ctx.expr_may_early_return(ctx.expr(stmt.condition));
-    ctx.analyze_expr_moves(ctx.expr(stmt.condition), has_binding);
-
     // A condition can leave the function before either branch is reached -- a
     // `?` in it, or a checked overflow -- and what the function still owns has
     // to go with it.
-    if condition_may_leave {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
+    let has_binding = stmt.then_binding.is_some();
+    analyze_leaving_expr(ctx, ctx.expr(stmt.condition), has_binding, stmt_idx);
 
     // Save state before branches.
     let state_before = ctx.scope_stack.last()
@@ -2206,14 +2212,7 @@ fn check_branches_agree<'db>(
 fn analyze_match<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtMatch<'db>, stmt_idx: usize) {
     // Match consumes its input, which can leave the function before any arm
     // is reached.
-    let input_may_leave = ctx.expr_may_early_return(ctx.expr(stmt.input));
-    ctx.analyze_expr_moves(ctx.expr(stmt.input), true);
-    if input_may_leave {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
+    analyze_leaving_expr(ctx, ctx.expr(stmt.input), true, stmt_idx);
 
     // Save state before match arms.
     let state_before = ctx.scope_stack.last()
@@ -2409,14 +2408,7 @@ fn analyze_for<'db>(ctx: &mut AnalysisCtx<'_, 'db>, stmt: &StmtFor<'db>, stmt_id
 /// the collection a `for` walks. It is read rather than consumed, and if it
 /// can leave the function, what the function still owns goes with it.
 fn analyze_read_before_loop<'db>(ctx: &mut AnalysisCtx<'_, 'db>, expr: ExprFun<'db>, stmt_idx: usize) {
-    let may_leave = ctx.expr_may_early_return(expr);
-    ctx.analyze_expr_moves(expr, false);
-    if may_leave {
-        let drops = early_return_drops(ctx, stmt_idx);
-        if !drops.is_empty() {
-            ctx.schedule.before_try_return.insert(stmt_idx, drops);
-        }
-    }
+    analyze_leaving_expr(ctx, expr, false, stmt_idx);
 }
 
 /// What is true as a loop is entered.

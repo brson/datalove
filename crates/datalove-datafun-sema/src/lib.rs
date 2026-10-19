@@ -753,6 +753,14 @@ pub struct DropSchedule {
     /// Key is the statement index containing the expression with try.
     pub before_try_return: BTreeMap<usize, Vec<BindingId>>,
 
+    /// Bindings a statement's expression moves, each with the expression index
+    /// of the place that moves it.
+    ///
+    /// `before_try_return` leaves them out, being what is live once the
+    /// expression is done. An early return lowered before the place drops the
+    /// binding too, since it still owns it there.
+    pub try_return_not_yet_moved: BTreeMap<usize, Vec<(u32, BindingId)>>,
+
     /// Drops to emit on early return from a set-index bounds check.
     ///
     /// Computed before RHS moves are analyzed, so includes the RHS binding

@@ -1,0 +1,52 @@
+----------
+scriptunit-fragment
+----------
+
+// An owned argument a call has not yet taken when a `?` in the same
+// statement returns early is dropped by that return: one ahead of the `?`,
+// one after it, one nested in a later call, and one a call took before the
+// `?` and so does not drop.
+fun put(mut x: [string], v: ?string)
+end fun
+fun take(v: string): u32
+  ret : u32 / 1
+end fun
+fun take2(a: u32, v: string): u32
+  ret a
+end fun
+fun take3(a: u32, b: u32, w: string): u32
+  ret b
+end fun
+fun n1(mut xs: [[string]], i: index, v: string): ?index
+  call put(mut xs[i]?, some v)
+  ret some i
+end fun
+fun n2(ys: [u32], i: index, v: string): ?u32
+  let t = take2(ys[i]?, v)
+  ret some t
+end fun
+fun n3(ys: [u32], i: index, v: string): ?u32
+  ret some take2(ys[i]?, v)
+end fun
+fun n4(ys: [u32], i: index): ?u32
+  var v = "x"
+  if take2(ys[i]?, v) == : u32 / 1
+    ret some : u32 / 1
+  end if
+  ret some : u32 / 2
+end fun
+fun n5(ys: [u32], i: index, v: string, w: string): ?u32
+  ret some take3(take2(ys[(: index / 0)]?, v), ys[i]?, w)
+end fun
+var xs: [[string]] = [["a"], []]
+debuglog n1(mut xs, : index / 5, "lost")
+debuglog n1(mut xs, : index / 0, "kept")
+debuglog n2([: u32 / 1], : index / 5, "lost")
+debuglog n2([: u32 / 1], : index / 0, "kept")
+debuglog n3([: u32 / 1], : index / 5, "lost")
+debuglog n3([: u32 / 1], : index / 0, "kept")
+debuglog n4([: u32 / 1], : index / 5)
+debuglog n4([: u32 / 1], : index / 0)
+debuglog n5([: u32 / 1], : index / 5, "a", "b")
+debuglog n5([], : index / 5, "a", "b")
+debuglog n5([: u32 / 1], : index / 0, "a", "b")

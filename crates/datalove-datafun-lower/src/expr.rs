@@ -76,6 +76,7 @@ pub fn lower_operand<'db>(
 ) -> Result<Operand, LowerError> {
     match expr.kind() {
         ExprFunKind::Place(place) if place.steps.is_empty() => {
+            ctx.note_place_lowered(expr);
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
@@ -184,6 +185,7 @@ fn lower_call_arg<'db>(
     // For 'in' mode: function consumes the argument, so don't record temps.
     match arg.kind() {
         ExprFunKind::Place(place) if place.steps.is_empty() => {
+            ctx.note_place_lowered(arg);
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             let is_external = matches!(
@@ -381,6 +383,7 @@ pub fn lower_expression_for_ref<'db>(
             }
         }
         ExprFunKind::Place(place) if place.steps.is_empty() => {
+            ctx.note_place_lowered(expr);
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
             if is_fresh_const {
@@ -442,6 +445,7 @@ pub fn lower_expression<'db>(
 ) -> Result<ValueId, LowerError> {
     match expr.kind() {
         ExprFunKind::Place(place) if place.steps.is_empty() => {
+            ctx.note_place_lowered(expr);
             let name_str = place.root.text(ctx.db);
             let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
 
@@ -594,12 +598,19 @@ pub fn lower_expression<'db>(
             for (i, arg) in call_args.iter().enumerate() {
                 let mode = param_modes.get(i).copied().unwrap_or(ParamMode::In);
                 let operand = lower_call_arg(ctx, expr.at(*arg), mode, param_types.get(i))?;
-                // Track in-mode args as pending intermediate.
+                // Track in-mode args as pending intermediate, a binding handed
+                // over as well as a value: a later argument's `?` returns
+                // before the call takes either.
                 // Ref/mut/out args are tracked via lower_operand's expr_temps.
                 if mode == ParamMode::In {
-                    if let Operand::Value(v) = operand {
-                        if let Some(arg_ty) = param_types.get(i) {
-                            ctx.push_pending_intermediate(v, arg_ty);
+                    if let Some(arg_ty) = param_types.get(i) {
+                        match operand {
+                            Operand::Value(v) => ctx.push_pending_intermediate(v, arg_ty),
+                            Operand::Param(_) | Operand::Slot(_) => {
+                                ctx.push_pending_moved_binding(operand, arg_ty);
+                            }
+                            _ if arg_ty.is_copy() => {}
+                            _ => unreachable!("an owned argument lowers to a value, param or slot: {operand:?}"),
                         }
                     }
                 }

@@ -100,7 +100,14 @@ pub struct FrameState<'db> {
     /// Each scope corresponds to one compound expression. Scopes are pushed on
     /// entry and popped on completion. On early return, ALL scopes are dropped
     /// from innermost to outermost.
-    pub pending_intermediate_scopes: Vec<Vec<ValueId>>,
+    ///
+    /// An entry is a value, or a param or slot a call argument hands over:
+    /// the callee takes it only once the call runs, so until then it is the
+    /// caller's to drop.
+    pub pending_intermediate_scopes: Vec<Vec<Operand>>,
+    /// Expression indices of the places lowered so far that name a whole
+    /// binding, for `DropSchedule::try_return_not_yet_moved`.
+    pub lowered_places: rustc_hash::FxHashSet<u32>,
     /// Next global statement ID (must match analysis traversal order).
     pub next_stmt_id: usize,
     /// Current statement index in the parent body (for drop schedule lookup).
@@ -146,6 +153,7 @@ impl<'db> FrameState<'db> {
             in_unreachable: false,
             expr_temps: Vec::new(),
             pending_intermediate_scopes: Vec::new(),
+            lowered_places: Default::default(),
             next_stmt_id: 0,
             current_stmt_idx: None,
             const_values: Vec::new(),
@@ -800,7 +808,21 @@ impl<'db> LowerCtx<'db> {
     pub fn push_pending_intermediate(&mut self, value: ValueId, ty: &IrType) {
         if !ty.is_copy() {
             if let Some(scope) = self.body.pending_intermediate_scopes.last_mut() {
-                scope.push(value);
+                scope.push(Operand::Value(value));
+            }
+        }
+    }
+
+    /// Push a param or slot that a call argument moves to the current scope.
+    ///
+    /// Ownership analysis counts it moved from the statement on, so no
+    /// early-return schedule drops it; until the call runs it is still here.
+    pub fn push_pending_moved_binding(&mut self, operand: Operand, ty: &IrType) {
+        assert!(matches!(operand, Operand::Param(_) | Operand::Slot(_)),
+            "only a param or slot is a moved binding: {operand:?}");
+        if !ty.is_copy() {
+            if let Some(scope) = self.body.pending_intermediate_scopes.last_mut() {
+                scope.push(operand);
             }
         }
     }
@@ -811,12 +833,19 @@ impl<'db> LowerCtx<'db> {
     /// Drops innermost scope first, then outer scopes.
     pub fn emit_pending_intermediate_drops(&mut self) {
         // Collect all values to drop (innermost scope first, newest values first).
-        let values: Vec<ValueId> = self.body.pending_intermediate_scopes.iter()
+        let operands: Vec<Operand> = self.body.pending_intermediate_scopes.iter()
             .rev()
             .flat_map(|scope| scope.iter().rev().copied())
             .collect();
-        for value in values {
-            self.emit(Instruction::Drop { operand: Operand::Value(value) });
+        for operand in operands {
+            match operand {
+                Operand::Value(_) => self.emit(Instruction::Drop { operand }),
+                Operand::Param(_) | Operand::Slot(_) => {
+                    let id = self.body.operand_to_binding[&operand];
+                    self.emit_binding_drop(id);
+                }
+                _ => unreachable!("pending intermediates are values, params and slots"),
+            }
         }
     }
 
@@ -1346,6 +1375,9 @@ impl<'db> LowerCtx<'db> {
     /// Emit drops scheduled before a TryReturn (checked/optional operators).
     ///
     /// Uses current_stmt_idx since TryReturn happens within expression lowering.
+    ///
+    /// A binding the statement moves is dropped too if the place that moves it
+    /// has not been lowered yet, being still the function's here.
     pub fn emit_before_try_return_drops(&mut self) {
         if let Some(stmt_idx) = self.body.current_stmt_idx {
             let binding_ids = self.body.drop_schedule.before_try_return
@@ -1353,7 +1385,19 @@ impl<'db> LowerCtx<'db> {
             for id in binding_ids {
                 self.emit_binding_drop(id);
             }
+            let not_yet_moved = self.body.drop_schedule.try_return_not_yet_moved
+                .get(&stmt_idx).cloned().unwrap_or_default();
+            for (place, id) in not_yet_moved {
+                if !self.body.lowered_places.contains(&place) {
+                    self.emit_binding_drop(id);
+                }
+            }
         }
+    }
+
+    /// Note that `expr`, a place naming a whole binding, has been lowered.
+    pub fn note_place_lowered(&mut self, expr: ExprFun<'db>) {
+        self.body.lowered_places.insert(expr.key().local_index);
     }
 
     /// Emit drops scheduled before a set-target early return (index OOB).
