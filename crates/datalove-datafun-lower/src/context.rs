@@ -279,6 +279,8 @@ pub struct LowerCtx<'db> {
     pub(super) func_scope: HashMap<String, CodeRef>,
     /// Types of external slots from previous script units, keyed by name.
     pub(super) external_slot_types: HashMap<String, IrType>,
+    /// Types of external values from previous script units, keyed by name.
+    pub(super) external_value_types: HashMap<String, IrType>,
     /// Bindings to drop at unit end (for AOT compilation).
     pub(super) unit_end_drops: Vec<BindingId>,
 
@@ -314,6 +316,7 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope: HashMap::new(),
             external_slot_types: HashMap::new(),
+            external_value_types: HashMap::new(),
             unit_end_drops: Vec::new(),
             return_type: None,
             is_script_unit: false,
@@ -399,6 +402,7 @@ impl<'db> LowerCtx<'db> {
             symbols: SymbolTable::new(),
             func_scope,
             external_slot_types: script_ctx.slot_types,
+            external_value_types: script_ctx.value_types,
             unit_end_drops: Vec::new(),
             // Script units have Result<()> return type for ! operator.
             return_type: Some(IrType::Result(Box::new(IrType::Unit))),
@@ -866,6 +870,11 @@ impl<'db> LowerCtx<'db> {
     /// Get the type for an external slot by variable name.
     pub fn external_slot_type(&self, name: &str) -> Option<&IrType> {
         self.external_slot_types.get(name)
+    }
+
+    /// Get the type for an external value by variable name.
+    pub fn external_value_type(&self, name: &str) -> Option<&IrType> {
+        self.external_value_types.get(name)
     }
 
     /// Get the type for a slot by variable name (checks local and external slots).

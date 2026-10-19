@@ -18,7 +18,6 @@ home here.
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
-  - [Indexing an earlier unit's binding panics](#user-content-indexing-an-earlier-units-binding-panics)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
@@ -99,25 +98,6 @@ Setting the whole binding (`set p = (5, "b")`) works. The field set reaches
 the walker with its destination an `ExternalSlot`, which only whole-slot
 stores resolve. Either the walker resolves it through the `FrameStore` as a
 whole-slot store does, or lowering refuses it with a diagnostic.
-
-### Indexing an earlier unit's binding panics
-
-**Reproduced** in the REPL:
-
-```datalove
-let W: [u32] = [: u32 / 7]     // or const
----
-let v = W[(: index / 0)]!
-```
-
-This panics in lowering with `not yet implemented: external value type in
-place lowering` (`operand_type` in `lower/src/expr.rs`). The result is a
-`CrashReset`, and the session is lost. The binding is another unit's export,
-an `Operand::ExternalValue`, and place lowering with a step has no type for
-one. Naming it whole (`let v = W`) and reading it from a function both work.
-`datalove script` runs a file as one unit, so the same lines in a script
-work; this is the REPL's, and that of anything else that splits units
-(`ScriptExecutor` driven by a reactive session).
 
 ### Deep recursion aborts the process off Linux
 

@@ -1,0 +1,514 @@
+[
+  {
+    "input": "let W: [u32] = [: u32 / 7, : u32 / 8]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let W: [u32] = [: u32 / 7, : u32 / 8]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "W",
+            "ty": "list<u32>",
+            "value": "[7, 8]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      }
+    ]
+  },
+  {
+    "input": "let v = W[(: index / 1)]!",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let v = W[(: index / 1)]!"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "v",
+            "ty": "u32",
+            "value": "8"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "v",
+    "parse": {
+      "Command": {
+        "Expression": "v"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "u32",
+        "value": "8"
+      }
+    },
+    "environment": [
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "const C: [u32] = [: u32 / 9]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "const C: [u32] = [: u32 / 9]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "C",
+            "ty": "list<u32>",
+            "value": "[9]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "let c = C[(: index / 0)]!",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let c = C[(: index / 0)]!"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "c",
+            "ty": "u32",
+            "value": "9"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "c",
+    "parse": {
+      "Command": {
+        "Expression": "c"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "u32",
+        "value": "9"
+      }
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "var s: [u32] = [: u32 / 3]",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var s: [u32] = [: u32 / 3]"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "s",
+            "ty": "list<u32>",
+            "value": "[3]"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "let t = s[(: index / 0)]!",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let t = s[(: index / 0)]!"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "t",
+            "ty": "u32",
+            "value": "3"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "t",
+        "ty": "u32",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "t",
+    "parse": {
+      "Command": {
+        "Expression": "t"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "u32",
+        "value": "3"
+      }
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "t",
+        "ty": "u32",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "let p = ([: u32 / 4, : u32 / 5], \"a\")",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let p = ([: u32 / 4, : u32 / 5], \"a\")"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "p",
+            "ty": "(list<u32>, string)",
+            "value": "([4, 5], \"a\")"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "p",
+        "ty": "(list<u32>, string)",
+        "value": "([4, 5], \"a\")"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "t",
+        "ty": "u32",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "let q = p.0[(: index / 1)]!",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "let q = p.0[(: index / 1)]!"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Value": {
+            "name": "q",
+            "ty": "u32",
+            "value": "5"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "p",
+        "ty": "(list<u32>, string)",
+        "value": "([4, 5], \"a\")"
+      },
+      {
+        "name": "q",
+        "ty": "u32",
+        "value": "5"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "t",
+        "ty": "u32",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  },
+  {
+    "input": "q",
+    "parse": {
+      "Command": {
+        "Expression": "q"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "u32",
+        "value": "5"
+      }
+    },
+    "environment": [
+      {
+        "name": "C",
+        "ty": "list<u32>",
+        "value": "[9]"
+      },
+      {
+        "name": "W",
+        "ty": "list<u32>",
+        "value": "[7, 8]"
+      },
+      {
+        "name": "c",
+        "ty": "u32",
+        "value": "9"
+      },
+      {
+        "name": "p",
+        "ty": "(list<u32>, string)",
+        "value": "([4, 5], \"a\")"
+      },
+      {
+        "name": "q",
+        "ty": "u32",
+        "value": "5"
+      },
+      {
+        "name": "s",
+        "ty": "list<u32>",
+        "value": "[3]"
+      },
+      {
+        "name": "t",
+        "ty": "u32",
+        "value": "3"
+      },
+      {
+        "name": "v",
+        "ty": "u32",
+        "value": "8"
+      }
+    ]
+  }
+]

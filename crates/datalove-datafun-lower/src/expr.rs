@@ -1793,18 +1793,17 @@ pub(crate) fn operand_type(ctx: &LowerCtx, op: &Operand) -> IrType {
                 _ => panic!("ValueRef has non-Ref type: {:?}", ref_ty),
             }
         }
-        Operand::ExternalSlot { .. } => {
-            // An earlier unit's slot has its type recorded under its name,
+        Operand::ExternalSlot { .. } | Operand::ExternalValue { .. } => {
+            // An earlier unit's binding has its type recorded under its name,
             // which is the name it's bound to here.
             let name = ctx.body.variables.iter()
                 .find_map(|(name, bound)| (bound == op).then_some(name))
-                .expect("an external slot operand comes from a variable bound to it");
-            ctx.external_slot_type(name)
-                .expect("an external slot has a recorded type")
-                .clone()
-        }
-        Operand::ExternalValue { .. } => {
-            todo!("external value type in place lowering")
+                .expect("an external operand comes from a variable bound to it");
+            let ty = match op {
+                Operand::ExternalSlot { .. } => ctx.external_slot_type(name),
+                _ => ctx.external_value_type(name),
+            };
+            ty.expect("an external binding has a recorded type").clone()
         }
     }
 }
