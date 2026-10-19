@@ -17,7 +17,6 @@ home here.
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
-  - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
@@ -79,25 +78,6 @@ session loses every binding. The REPL ignores a unit's early return
 unit's output, without the `Error:` that marks a failure. The bindings the
 unit never reached also stay on offer. Treating an early return as a runtime
 error would settle both, at the price of the session (see `Eval::ErrorReset`).
-
-### Setting a field of an earlier unit's binding panics
-
-**Reproduced** in the REPL:
-
-```datalove
-var p = (1, "a")
----
-set p.0 = 5
-```
-
-This panics in the IR walker with `get_operand_dest: invalid operand
-ExternalSlot { unit: 0, slot: SlotId(0) } for out param` (`walker.rs`). It
-does so whether the field is a copy type (`p.0`) or owns memory (`p.1`). The
-result is a `CrashReset`, and the session loses `p` and everything else.
-Setting the whole binding (`set p = (5, "b")`) works. The field set reaches
-the walker with its destination an `ExternalSlot`, which only whole-slot
-stores resolve. Either the walker resolves it through the `FrameStore` as a
-whole-slot store does, or lowering refuses it with a diagnostic.
 
 ### Deep recursion aborts the process off Linux
 

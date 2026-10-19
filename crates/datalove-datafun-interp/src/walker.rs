@@ -362,7 +362,7 @@ impl IrInterpreter {
             Instruction::RefStore { dest, value } => {
                 // Store through a reference operand.
                 let src_val = self.read_operand(value, frame, frames);
-                let dest_val = self.get_operand_dest(dest, frame);
+                let dest_val = self.get_operand_dest(dest, frame, frames);
                 let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 Self::mark_source_dropped_local(value, frame);
@@ -788,7 +788,7 @@ impl IrInterpreter {
             Instruction::RefSetField { dest, field_path, value } => {
                 // Store to a field through a reference operand. Used after inlining mut params.
                 let value_val = self.read_operand(value, frame, frames);
-                let dest_ptr = self.get_operand_dest(dest, frame);
+                let dest_ptr = self.get_operand_dest(dest, frame, frames);
                 // Navigate to the field.
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     dest_ptr.ptr, dest_ptr.tydesc, field_path
@@ -800,13 +800,14 @@ impl IrInterpreter {
                 // Store through a reference operand with tracking. Used after inlining out params.
                 // The destination was uninitialized, so don't destroy old value.
                 let src_val = self.read_operand(value, frame, frames);
-                let dest_val = self.get_operand_dest(dest, frame);
+                let dest_val = self.get_operand_dest(dest, frame, frames);
                 let dest_ptr = Destination { ptr: dest_val.ptr, tydesc: dest_val.tydesc };
                 unsafe { self.move_value(&src_val, dest_ptr); }
                 // Mark the destination as initialized.
                 match dest {
                     Operand::Slot(slot) => frame.mark_slot_live(*slot),
                     Operand::Param(param) => frame.mark_param_live(*param),
+                    Operand::ExternalSlot { unit, slot } => frames.mark_external_slot_live(*unit, *slot),
                     // Other operand types don't have tracking in the same way.
                     _ => {}
                 }
@@ -815,7 +816,7 @@ impl IrInterpreter {
             Instruction::RefSetFieldTracked { dest, field_path, value } => {
                 // Store to a field through a reference operand with tracking. Used after inlining out params.
                 let value_val = self.read_operand(value, frame, frames);
-                let dest_ptr = self.get_operand_dest(dest, frame);
+                let dest_ptr = self.get_operand_dest(dest, frame, frames);
                 // Navigate to the field.
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     dest_ptr.ptr, dest_ptr.tydesc, field_path
@@ -826,6 +827,7 @@ impl IrInterpreter {
                 match dest {
                     Operand::Slot(slot) => frame.mark_slot_live(*slot),
                     Operand::Param(param) => frame.mark_param_live(*param),
+                    Operand::ExternalSlot { unit, slot } => frames.mark_external_slot_live(*unit, *slot),
                     // Other operand types don't have tracking in the same way.
                     _ => {}
                 }
@@ -1256,12 +1258,7 @@ impl IrInterpreter {
                 // Get the slot's base pointer and tydesc.
                 let slot_info = match slot {
                     SlotDest::Local(id) => frame.slot_dest(*id),
-                    SlotDest::External { unit, slot: ext_slot } => {
-                        unreachable!(
-                            "SetField on external slot unit={} slot={:?} not supported",
-                            unit, ext_slot
-                        );
-                    }
+                    SlotDest::External { unit, slot } => frames.external_slot_dest(*unit, *slot),
                 };
 
                 // Navigate field path to find target field.
@@ -1292,7 +1289,7 @@ impl IrInterpreter {
                 Self::mark_source_dropped_local(value, frame);
             }
             Instruction::DropField { base, field_path } => {
-                let place = self.get_operand_dest(base, frame);
+                let place = self.get_operand_dest(base, frame, frames);
                 let (field_ptr, field_tydesc) = self.navigate_field_path(
                     place.ptr, place.tydesc, field_path
                 );
@@ -1309,12 +1306,7 @@ impl IrInterpreter {
                 let value_val = self.read_operand(value, frame, frames);
                 let slot_info = match slot {
                     SlotDest::Local(id) => frame.slot_dest(*id),
-                    SlotDest::External { unit, slot: ext_slot } => {
-                        unreachable!(
-                            "SetFieldTracked on external slot unit={} slot={:?} not supported",
-                            unit, ext_slot
-                        );
-                    }
+                    SlotDest::External { unit, slot } => frames.external_slot_dest(*unit, *slot),
                 };
                 let (current_ptr, current_tydesc) = self.navigate_field_path(
                     slot_info.ptr, slot_info.tydesc, field_path
@@ -1329,8 +1321,9 @@ impl IrInterpreter {
                 }
                 // The slot holds something once a field of it is written, as the
                 // compiled backends record.
-                if let SlotDest::Local(id) = slot {
-                    frame.mark_slot_live(*id);
+                match slot {
+                    SlotDest::Local(id) => frame.mark_slot_live(*id),
+                    SlotDest::External { unit, slot } => frames.mark_external_slot_live(*unit, *slot),
                 }
                 Self::mark_source_dropped_local(value, frame);
             }
@@ -1412,8 +1405,9 @@ impl IrInterpreter {
     /// Used for Out params where we need to pass a pointer to an uninitialized slot.
     /// For ValueRef operands, dereferences to get the actual destination.
     ///
-    /// Panics if operand is not a Slot, Value, or ValueRef (compiler bug).
-    pub(super) fn get_operand_dest(&self, op: &Operand, frame: &mut Frame) -> Value {
+    /// Panics if operand is an earlier unit's value, which is immutable
+    /// (compiler bug).
+    pub(super) fn get_operand_dest(&self, op: &Operand, frame: &mut Frame, frames: &FrameStore) -> Value {
         match op {
             Operand::Slot(id) => {
                 let dest = frame.slot_dest(*id);
@@ -1435,7 +1429,13 @@ impl IrInterpreter {
                 let dest = frame.param_dest(*id);
                 Value { ptr: dest.ptr, tydesc: dest.tydesc }
             }
-            _ => panic!("get_operand_dest: invalid operand {:?} for out param", op),
+            Operand::ExternalSlot { unit, slot } => {
+                let dest = frames.external_slot_dest(*unit, *slot);
+                Value { ptr: dest.ptr, tydesc: dest.tydesc }
+            }
+            Operand::ExternalValue { .. } => {
+                panic!("get_operand_dest: invalid operand {:?} for out param", op)
+            }
         }
     }
 

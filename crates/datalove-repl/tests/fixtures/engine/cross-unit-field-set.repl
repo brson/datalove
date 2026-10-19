@@ -1,0 +1,27 @@
+var p = (1, "a")
+---
+set p.0 = 5
+---
+set p.1 = "b"
+---
+p
+---
+var q = ((1, "x"), "y")
+---
+set q.0.1 = "z"
+---
+q
+---
+var r = {name = "Alice", age = 30}
+---
+set r.name = "Bob"
+---
+r
+---
+var s = (1, "a")
+---
+let t = s
+---
+set s.1 = "c"
+---
+t

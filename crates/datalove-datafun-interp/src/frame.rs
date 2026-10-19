@@ -965,6 +965,20 @@ impl FrameStore {
         frame.mark_slot_live(slot);
     }
 
+    /// The storage of a slot in a previous unit, whether or not it holds anything.
+    ///
+    /// For writing into part of it, or for passing it as an `out` argument.
+    ///
+    /// Panics if unit not found (compiler bug).
+    pub fn external_slot_dest(&self, unit: u32, slot: SlotId) -> Destination {
+        self.frame(unit).slot_dest(slot)
+    }
+
+    /// Mark a slot in a previous unit as holding a value.
+    pub fn mark_external_slot_live(&mut self, unit: u32, slot: SlotId) {
+        self.frame(unit).mark_slot_live(slot);
+    }
+
     /// Mark an external value as moved out.
     pub fn mark_external_value_dropped(&mut self, unit: u32, value: ValueId) {
         self.frame(unit).mark_value_dropped(value);

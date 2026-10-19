@@ -1,0 +1,15 @@
+fun fill(out s: string, ref from: string)
+  set s = from@
+end fun
+---
+var s = "old"
+---
+call fill(out s, ref "new")
+---
+s
+---
+var pair = ("a", "b")
+---
+call fill(out pair.1, ref "c")
+---
+pair

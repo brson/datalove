@@ -1,0 +1,197 @@
+[
+  {
+    "input": "fun fill(out s: string, ref from: string)\n  set s = from@\nend fun",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "fun fill(out s: string, ref from: string)\n  set s = from@\nend fun"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Function": {
+            "name": "fill"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      }
+    ]
+  },
+  {
+    "input": "var s = \"old\"",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var s = \"old\""
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "s",
+            "ty": "string",
+            "value": "\"old\""
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"old\""
+      }
+    ]
+  },
+  {
+    "input": "call fill(out s, ref \"new\")",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "call fill(out s, ref \"new\")"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"new\""
+      }
+    ]
+  },
+  {
+    "input": "s",
+    "parse": {
+      "Command": {
+        "Expression": "s"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "string",
+        "value": "\"new\""
+      }
+    },
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"new\""
+      }
+    ]
+  },
+  {
+    "input": "var pair = (\"a\", \"b\")",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "var pair = (\"a\", \"b\")"
+      }
+    },
+    "eval": {
+      "Success": [
+        {
+          "Slot": {
+            "name": "pair",
+            "ty": "(string, string)",
+            "value": "(\"a\", \"b\")"
+          }
+        }
+      ]
+    },
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "pair",
+        "ty": "(string, string)",
+        "value": "(\"a\", \"b\")"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"new\""
+      }
+    ]
+  },
+  {
+    "input": "call fill(out pair.1, ref \"c\")",
+    "parse": {
+      "Command": {
+        "ScriptStatement": "call fill(out pair.1, ref \"c\")"
+      }
+    },
+    "eval": "Nothing",
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "pair",
+        "ty": "(string, string)",
+        "value": "(\"a\", \"c\")"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"new\""
+      }
+    ]
+  },
+  {
+    "input": "pair",
+    "parse": {
+      "Command": {
+        "Expression": "pair"
+      }
+    },
+    "eval": {
+      "SuccessExpr": {
+        "ty": "(string, string)",
+        "value": "(\"a\", \"c\")"
+      }
+    },
+    "environment": [
+      {
+        "name": "fill",
+        "ty": "function",
+        "value": "-"
+      },
+      {
+        "name": "pair",
+        "ty": "(string, string)",
+        "value": "(\"a\", \"c\")"
+      },
+      {
+        "name": "s",
+        "ty": "string",
+        "value": "\"new\""
+      }
+    ]
+  }
+]

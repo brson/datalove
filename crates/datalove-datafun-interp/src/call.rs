@@ -204,7 +204,7 @@ impl IrInterpreter {
         frames: &FrameStore,
     ) -> Value {
         if mode == ParamMode::Out {
-            self.get_operand_dest(op, frame)
+            self.get_operand_dest(op, frame, frames)
         } else {
             self.read_operand(op, frame, frames)
         }
@@ -463,20 +463,21 @@ impl IrInterpreter {
         frame.mark_value_live(dest);
         for (i, op) in args.iter().enumerate() {
             if mode(i) == ParamMode::Out {
-                Self::mark_out_written(op, frame);
+                Self::mark_out_written(op, frame, frames);
             }
         }
         Ok(())
     }
 
     /// Note that a call has written an `out` argument.
-    fn mark_out_written(op: &Operand, frame: &mut Frame) {
+    fn mark_out_written(op: &Operand, frame: &mut Frame, frames: &mut FrameStore) {
         match op {
             Operand::Slot(id) => frame.mark_slot_live(*id),
             Operand::Value(id) => frame.mark_value_live(*id),
             // This function's own `out` parameter, passed straight on.
             Operand::Param(id) => frame.mark_param_live(*id),
-            Operand::ValueRef(_) | Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {}
+            Operand::ExternalSlot { unit, slot } => frames.mark_external_slot_live(*unit, *slot),
+            Operand::ValueRef(_) | Operand::ExternalValue { .. } => {}
         }
     }
 
@@ -553,7 +554,7 @@ impl IrInterpreter {
             frame.mark_value_live(dest);
             for (i, op) in args.iter().enumerate() {
                 if callee_frame.layout().param_modes[i] == ParamMode::Out {
-                    Self::mark_out_written(op, frame);
+                    Self::mark_out_written(op, frame, frames);
                 }
             }
         }
