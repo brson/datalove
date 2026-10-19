@@ -44,6 +44,51 @@ impl Panel {
     }
 }
 
+/// One step of scrolling, in the direction the user pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Scroll {
+    LineUp,
+    LineDown,
+    PageUp,
+    PageDown,
+}
+
+/// How far a pane is scrolled, bounded by what the renderer last laid out.
+///
+/// The offset counts lines in whichever direction the pane measures from;
+/// the pane decides which way is up.
+#[derive(Debug, Default)]
+struct ScrollState {
+    offset: usize,
+    /// Lines a page scrolls by.
+    page: usize,
+    /// The furthest the offset can go.
+    limit: usize,
+}
+
+impl ScrollState {
+    /// Move the offset a step, away from zero or towards it.
+    fn step(&mut self, scroll: Scroll, away_from_zero: bool) {
+        let lines = match scroll {
+            Scroll::LineUp | Scroll::LineDown => 1,
+            Scroll::PageUp | Scroll::PageDown => self.page,
+        };
+        self.offset = if away_from_zero {
+            (self.offset + lines).min(self.limit)
+        } else {
+            self.offset.saturating_sub(lines)
+        };
+    }
+
+    /// A page is the pane less a line, so that scrolling leaves one line of
+    /// what was just read on screen.
+    fn record(&mut self, pane_lines: usize, limit: usize) {
+        self.page = pane_lines.saturating_sub(1).max(1);
+        self.limit = limit;
+        self.offset = self.offset.min(limit);
+    }
+}
+
 /// A single REPL history entry.
 ///
 /// There is one of these for every line/multiline sent to the repl engine.
@@ -155,9 +200,10 @@ pub struct ReplApp<E: ReplExecutor> {
     /// Zero keeps the newest output in sight, which is where a session spends
     /// nearly all its time. Only the renderer knows how tall the pane is or
     /// how many lines the entries came to, so it is what bounds this.
-    history_scroll_back: usize,
-    /// Lines the history pane last showed, which is what a page scrolls by.
-    history_page: usize,
+    history_scroll: ScrollState,
+    /// How far down from the top of the environment the view is scrolled, in
+    /// rows.
+    environment_scroll: ScrollState,
     /// Whether the engine has reported itself ready.
     ///
     /// The engine compiles the system library before it can answer anything,
@@ -190,8 +236,8 @@ impl<E: ReplExecutor> ReplApp<E> {
             menu_open: false,
             menu_selection: 0,
             should_exit: false,
-            history_scroll_back: 0,
-            history_page: 0,
+            history_scroll: ScrollState::default(),
+            environment_scroll: ScrollState::default(),
             engine_ready: false,
             engine_dead: None,
             crash_modal: None,
@@ -224,7 +270,7 @@ impl<E: ReplExecutor> ReplApp<E> {
 
         // Someone who submits wants to see what it did, wherever they had
         // scrolled to read.
-        self.history_scroll_back = 0;
+        self.history_scroll.offset = 0;
 
         self.executor.submit_parse(id, input);
 
@@ -443,29 +489,55 @@ impl<E: ReplExecutor> ReplApp<E> {
         self.crash_modal.is_some()
     }
 
-    /// Scroll the history a page towards the oldest entry.
-    pub fn scroll_history_up(&mut self) {
-        self.history_scroll_back += self.history_page;
+    /// The panel a scroll key goes to, which for the input moves its cursor.
+    ///
+    /// A focused pane takes the plain keys and its opposite takes them with
+    /// Ctrl. The single-line input has no use for them, so it passes them to
+    /// the history, and Ctrl to the environment. Multiline input keeps them
+    /// all, with and without Ctrl, for moving its cursor.
+    pub fn scroll_target(&self, ctrl: bool) -> Panel {
+        match (self.focus, ctrl) {
+            (Panel::History, false) | (Panel::Environment, true) => Panel::History,
+            (Panel::Environment, false) | (Panel::History, true) => Panel::Environment,
+            (Panel::Input, _) if self.multiline_mode => Panel::Input,
+            (Panel::Input, false) => Panel::History,
+            (Panel::Input, true) => Panel::Environment,
+        }
     }
 
-    /// Scroll the history a page towards the newest entry.
-    pub fn scroll_history_down(&mut self) {
-        self.history_scroll_back = self.history_scroll_back.saturating_sub(self.history_page);
+    /// Scroll the history, where up is towards the oldest entry.
+    pub fn scroll_history(&mut self, scroll: Scroll) {
+        let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+        self.history_scroll.step(scroll, up);
+    }
+
+    /// Scroll the environment, where up is towards the first row.
+    pub fn scroll_environment(&mut self, scroll: Scroll) {
+        let up = matches!(scroll, Scroll::LineUp | Scroll::PageUp);
+        self.environment_scroll.step(scroll, !up);
     }
 
     /// How far up from the bottom the history is scrolled.
     pub fn history_scroll_back(&self) -> usize {
-        self.history_scroll_back
+        self.history_scroll.offset
+    }
+
+    /// How far down from the top the environment is scrolled.
+    pub fn environment_scroll(&self) -> usize {
+        self.environment_scroll.offset
     }
 
     /// Tell the app the shape of the history the renderer just laid out.
     ///
-    /// A page is the pane less a line, so that scrolling leaves one line of
-    /// what was just read on screen. Scrolling past the oldest entry lands on
-    /// it rather than running off into nothing.
+    /// Scrolling past the oldest entry lands on it rather than running off
+    /// into nothing.
     pub fn record_history_view(&mut self, pane_lines: usize, scroll_back_limit: usize) {
-        self.history_page = pane_lines.saturating_sub(1).max(1);
-        self.history_scroll_back = self.history_scroll_back.min(scroll_back_limit);
+        self.history_scroll.record(pane_lines, scroll_back_limit);
+    }
+
+    /// Tell the app the shape of the environment the renderer just laid out.
+    pub fn record_environment_view(&mut self, pane_rows: usize, scroll_limit: usize) {
+        self.environment_scroll.record(pane_rows, scroll_limit);
     }
 
     /// Whether the engine has finished starting.

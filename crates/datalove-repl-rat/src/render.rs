@@ -51,7 +51,8 @@ pub fn ui<E: ReplExecutor>(f: &mut Frame, app: &mut RatatuiApp<E>) {
     render_input(f, app, chunks[1]);
 
     // Debug panel - table of variables and values.
-    render_debug_pane(f, &app.repl, chunks[2]);
+    let environment_view = render_debug_pane(f, &app.repl, chunks[2]);
+    app.repl.record_environment_view(environment_view.pane_rows, environment_view.scroll_limit);
 
     // Render menu if open.
     if app.menu_is_open() {
@@ -109,6 +110,14 @@ struct HistoryView {
     pane_lines: usize,
     /// The furthest up from the bottom the view can scroll.
     scroll_back_limit: usize,
+}
+
+/// The shape of the environment pane a frame laid out.
+struct EnvironmentView {
+    /// Rows of bindings the pane showed, not counting the header.
+    pane_rows: usize,
+    /// The furthest down from the top the view can scroll.
+    scroll_limit: usize,
 }
 
 /// Render the history panel with interactive cards.
@@ -385,7 +394,7 @@ fn render_input<E: ReplExecutor>(f: &mut Frame, app: &RatatuiApp<E>, area: Rect)
     f.render_widget(&textarea, area);
 }
 
-fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) {
+fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Rect) -> EnvironmentView {
     let debug_block = Block::default()
         .borders(Borders::ALL)
         .border_style(panel_border(repl, Panel::Environment))
@@ -404,7 +413,15 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Re
         let debug = Paragraph::new(lines)
             .block(debug_block);
         f.render_widget(debug, area);
+
+        EnvironmentView { pane_rows: area.height.saturating_sub(3) as usize, scroll_limit: 0 }
     } else {
+        // Less the borders and the header.
+        let pane_rows = area.height.saturating_sub(3) as usize;
+        let row_count = repl.environment().len();
+        let scroll_limit = row_count.saturating_sub(pane_rows);
+        let offset = repl.environment_scroll().min(scroll_limit);
+
         // Create header row.
         let header = Row::new(vec![
             Cell::from("Name").style(Style::default().fg(Color::Yellow)),
@@ -414,7 +431,7 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Re
         .height(1);
 
         // Create data rows.
-        let rows = repl.environment().iter().map(|(name, ty, value)| {
+        let rows = repl.environment().iter().skip(offset).map(|(name, ty, value)| {
             Row::new(vec![
                 Cell::from(name.as_str()).style(Style::default().fg(Color::Cyan)),
                 Cell::from(ty.as_str()).style(Style::default().fg(Color::Yellow)),
@@ -435,6 +452,21 @@ fn render_debug_pane<E: ReplExecutor>(f: &mut Frame, repl: &ReplApp<E>, area: Re
             .block(debug_block);
 
         f.render_widget(table, area);
+
+        let mut scrollbar_state = ScrollbarState::new(scroll_limit + 1).position(offset);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(None)
+            .end_symbol(None);
+
+        // Beside the bindings, below the top border and the header.
+        let scrollbar_area = Rect {
+            y: area.y + 2,
+            height: pane_rows as u16,
+            ..area
+        };
+        f.render_stateful_widget(scrollbar, scrollbar_area, &mut scrollbar_state);
+
+        EnvironmentView { pane_rows, scroll_limit }
     }
 }
 

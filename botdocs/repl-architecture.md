@@ -163,11 +163,22 @@ One of the three panels has focus, and the input panel has it at the start.
 Tab moves focus down through the panels and Shift+Tab moves it up; both wrap
 around. The focused panel has a white border and the others gray. The input
 panel stays yellow while it has focus in multiline mode. Typing, Enter
-included, only reaches the textarea while the input has focus. Esc, Ctrl+D
-and PageUp/PageDown work from any panel. Focus lives on `ReplApp` as a
-`Panel`, alongside the menu state. So far it only changes the colors and
-whether typing reaches the input; History and Environment have no keys of
-their own yet.
+included, only reaches the textarea while the input has focus. Esc and
+Ctrl+D work from any panel. Focus lives on `ReplApp` as a `Panel`, alongside
+the menu state.
+
+The scroll keys are Up/Down, which move a line, and PageUp/PageDown, which
+move a page. `ReplApp::scroll_target` decides where they go. When History or
+Environment has focus, that pane takes the plain keys and the other pane takes
+them with Ctrl. The single-line input has no use for them, so it lends the
+plain keys to History and the Ctrl ones to Environment. Multiline input keeps
+all of them, Ctrl included, for moving its cursor, so neither pane scrolls
+from there until focus moves.
+
+The environment scrolls down from its first row, where the history counts up
+from its bottom. Both are a `ScrollState`, bounded by the limit the renderer
+last reported and clamped when a key is pressed rather than on the next
+frame.
 
 ## Ownership at the prompt
 

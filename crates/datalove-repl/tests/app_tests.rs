@@ -9,7 +9,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use datalove_repl as repl;
-use repl::app::{EntryStatus, Panel, ReplApp, ReplExecutor, WorkerResponse};
+use repl::app::{EntryStatus, Panel, ReplApp, Scroll, ReplExecutor, WorkerResponse};
 
 /// Submissions the app made, and responses waiting to be delivered to it.
 #[derive(Default)]
@@ -366,31 +366,110 @@ fn history_scrolls_by_the_page_within_its_bounds() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     // Nothing has been rendered, so there is nowhere to scroll yet.
-    app.scroll_history_up();
+    app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 0);
 
     // A ten-line pane over thirty lines of history: a page is nine, and the
     // view can go twenty lines up.
     app.record_history_view(10, 20);
 
-    app.scroll_history_up();
+    app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 9);
 
-    app.scroll_history_up();
+    app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 18);
 
-    // Past the oldest entry lands on it, once the renderer has said so.
-    app.scroll_history_up();
-    app.record_history_view(10, 20);
+    // Past the oldest entry lands on it.
+    app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 20);
 
-    app.scroll_history_down();
+    app.scroll_history(Scroll::PageDown);
     assert_eq!(app.history_scroll_back(), 11);
 
     // And back down stops at the newest.
-    app.scroll_history_down();
-    app.scroll_history_down();
+    app.scroll_history(Scroll::PageDown);
+    app.scroll_history(Scroll::PageDown);
     assert_eq!(app.history_scroll_back(), 0);
+}
+
+/// The arrow keys scroll the history a line at a time.
+#[test]
+fn history_scrolls_by_the_line() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+    app.record_history_view(10, 2);
+
+    app.scroll_history(Scroll::LineUp);
+    assert_eq!(app.history_scroll_back(), 1);
+    app.scroll_history(Scroll::LineUp);
+    app.scroll_history(Scroll::LineUp);
+    assert_eq!(app.history_scroll_back(), 2);
+
+    app.scroll_history(Scroll::LineDown);
+    assert_eq!(app.history_scroll_back(), 1);
+}
+
+/// The environment scrolls down from its first row, by the line and the page,
+/// within what the renderer says it has.
+#[test]
+fn environment_scrolls_from_the_top_within_its_bounds() {
+    let mut app = ReplApp::with_executor(MockExecutor::default());
+
+    // A five-row pane over twelve bindings.
+    app.record_environment_view(5, 7);
+
+    app.scroll_environment(Scroll::LineUp);
+    assert_eq!(app.environment_scroll(), 0);
+
+    app.scroll_environment(Scroll::LineDown);
+    assert_eq!(app.environment_scroll(), 1);
+
+    app.scroll_environment(Scroll::PageDown);
+    assert_eq!(app.environment_scroll(), 5);
+
+    app.scroll_environment(Scroll::PageDown);
+    assert_eq!(app.environment_scroll(), 7);
+
+    app.scroll_environment(Scroll::PageUp);
+    assert_eq!(app.environment_scroll(), 3);
+
+    // Bindings going away pulls the view back to what is left.
+    app.record_environment_view(5, 1);
+    assert_eq!(app.environment_scroll(), 1);
+}
+
+/// A focused pane takes the plain scroll keys and the opposite pane takes
+/// them with Ctrl; the input lends them to the panes until it is multiline,
+/// when it keeps them all.
+#[test]
+fn scroll_keys_go_to_the_focused_pane_and_ctrl_to_its_opposite() {
+    let executor = MockExecutor::default();
+    let mut app = ReplApp::with_executor(executor.clone());
+
+    assert_eq!(app.scroll_target(false), Panel::History);
+    assert_eq!(app.scroll_target(true), Panel::Environment);
+
+    app.focus_next();
+    assert_eq!(app.focus(), Panel::Environment);
+    assert_eq!(app.scroll_target(false), Panel::Environment);
+    assert_eq!(app.scroll_target(true), Panel::History);
+
+    app.focus_next();
+    assert_eq!(app.focus(), Panel::History);
+    assert_eq!(app.scroll_target(false), Panel::History);
+    assert_eq!(app.scroll_target(true), Panel::Environment);
+
+    // Into multiline mode, with the input focused again.
+    app.focus_next();
+    app.submit_input("fun f() {".to_string());
+    executor.queue(WorkerResponse::ParseResult {
+        id: 0,
+        parse: repl::InputParse::ReadMultiline("fun f() {".to_string()),
+    });
+    app.poll_results();
+    assert!(app.multiline_mode());
+
+    assert_eq!(app.scroll_target(false), Panel::Input);
+    assert_eq!(app.scroll_target(true), Panel::Input);
 }
 
 /// History that fits in the pane has nowhere to scroll.
@@ -400,7 +479,7 @@ fn a_short_history_does_not_scroll() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.record_history_view(10, 0);
-    app.scroll_history_up();
+    app.scroll_history(Scroll::PageUp);
     app.record_history_view(10, 0);
 
     assert_eq!(app.history_scroll_back(), 0);
@@ -414,7 +493,7 @@ fn submitting_returns_to_the_newest_entry() {
     let mut app = ReplApp::with_executor(executor.clone());
 
     app.record_history_view(10, 20);
-    app.scroll_history_up();
+    app.scroll_history(Scroll::PageUp);
     assert_eq!(app.history_scroll_back(), 9);
 
     app.submit_input("let x = 1".to_string());
