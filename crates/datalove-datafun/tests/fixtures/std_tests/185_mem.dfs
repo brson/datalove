@@ -1,0 +1,63 @@
+require module sys/std/mem
+
+import mem.replace
+import mem.swap
+import mem.drop
+
+// A generic that swaps through `mem` hands on its own descriptor for `T`.
+fun swapped<T>(a: T, b: T): (T, T)
+  var x: T = a
+  var y: T = b
+  call swap(mut x, mut y)
+  ret (x, y)
+end fun
+
+// A copy value, which the caller keeps after handing it over.
+var n: u32 = 1
+let fresh: u32 = 2
+let old_n = replace(mut n, fresh)
+let fresh_after = fresh
+
+// Linear values: the old one comes back out, the new one is moved in.
+var name: string = "before"
+let old_name = replace(mut name, "after")
+
+var words: [string] = ["a", "b"]
+let old_words = replace(mut words, ["c"])
+
+var left: string = "left"
+var right: string = "right"
+call swap(mut left, mut right)
+
+var xs: [u32] = [1, 2, 3]
+var ys: [u32] = [4]
+call swap(mut xs, mut ys)
+
+// Places reached through a field.
+var pair: (string, u32) = ("one", 1)
+let old_field = replace(mut pair.0, "uno")
+
+// And through an index.
+var letters: [string] = ["p", "q"]
+let old_letter = replace(mut letters[1]!, "r")
+
+let generic_swap = swapped("x", "y")
+
+// Writing the old value back over the place lets go of the new one.
+var again: string = "first"
+set again = replace(mut again, "second")
+
+var doomed: [string] = ["gone"]
+call drop(doomed)
+
+let output = (
+  n, old_n, fresh_after,
+  name, old_name,
+  words, old_words,
+  left, right,
+  xs, ys,
+  pair, old_field,
+  letters, old_letter,
+  again,
+  generic_swap,
+)

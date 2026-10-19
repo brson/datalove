@@ -2541,3 +2541,43 @@ pub extern "C-unwind" fn dlr_std__float_e(
         ) as u8
     }
 }
+
+// --- Moving values in and out of places ---
+//
+// Generic over the type moved, whose size is read off the descriptor. The
+// value's bytes are the value: whatever it owns comes along with them, so a
+// move is a copy of the bytes and a forgetting of where they were.
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__mem_replace(
+    _rt: *mut u8,
+    dest_ptr: *mut u8, dest_td: *const u8,
+    src_ptr: *const u8, _src_td: *const u8,
+    out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    // The caller gave `src` up, so its bytes move into `dest` and are not
+    // destroyed there. Its slot is not written, since a copy value handed over
+    // at a type parameter may still be the caller's.
+    unsafe {
+        let size = (*(dest_td as *const rtdt::TyDesc)).size as usize;
+        std::ptr::copy(dest_ptr, out, size);
+        std::ptr::copy(src_ptr, dest_ptr, size);
+    }
+    OK
+}
+
+#[no_mangle]
+pub extern "C-unwind" fn dlr_std__mem_swap(
+    _rt: *mut u8,
+    a_ptr: *mut u8, a_td: *const u8,
+    b_ptr: *mut u8, _b_td: *const u8,
+    _out: *mut u8, _out_td: *const u8,
+) -> u8 {
+    // The two cannot overlap: two `mut` arguments rooted at one binding are
+    // refused (D010).
+    unsafe {
+        let size = (*(a_td as *const rtdt::TyDesc)).size as usize;
+        std::ptr::swap_nonoverlapping(a_ptr, b_ptr, size);
+    }
+    OK
+}

@@ -1268,7 +1268,9 @@ operations:
 | `out` | `out x: T` | Callee initializes; caller receives value |
 
 **Restrictions:**
-- `ref`, `mut`, and `out` parameters cannot be moved.
+- `ref`, `mut`, and `out` parameters cannot be moved. `sys/std/mem` has
+  `replace` and `swap`, which move a value out of a `mut` place and another
+  in at the same step.
 - `out` parameters must be initialized before the function returns.
 - `ref` parameters cannot be passed to `mut` parameters.
 - `out` parameters must be written as a whole, not field-by-field.

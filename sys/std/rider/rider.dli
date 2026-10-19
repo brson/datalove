@@ -271,3 +271,13 @@ native fun float_min_positive<T>(): T where { T is float, }
 native fun float_epsilon<T>(): T where { T is float, }
 native fun float_pi<T>(): T where { T is float, }
 native fun float_e<T>(): T where { T is float, }
+
+// Moving a value of any type in and out of a place the caller keeps.
+//
+// The language will not move out of a `mut` parameter, since the caller still
+// holds it, so a place cannot give up its value in surface code without being
+// handed another in the same step. These do both at once. Each is a move of
+// the bytes the descriptor says the type has, and nothing is cloned or
+// destroyed. See `sys/std/mem`.
+native fun mem_replace<T>(mut dest: T, src: T): T
+native fun mem_swap<T>(mut a: T, mut b: T)
