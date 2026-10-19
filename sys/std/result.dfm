@@ -7,8 +7,10 @@
 // so a value taken out by `if self |value|` has moved out of `self`.
 
 require module sys/std/fixedint
+require module sys/std/mem
 
 import fixedint.zero
+import mem.drop
 
 // True if result is Ok.
 fun is_ok<T>(self: !T): bool
@@ -46,7 +48,7 @@ fun unwrap_or_zero<T>(self: !T): T where { T is fixedint, }
   if self |value|
     ret value
   else |failure|
-    let unwanted = failure
+    call drop(failure)
     ret zero()
   end if
 end fun

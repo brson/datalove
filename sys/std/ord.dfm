@@ -18,8 +18,10 @@
 
 require rider std
 require module sys/std/index
+require module sys/std/mem
 
 import index.shift_right_wrapping
+import mem.drop
 import std.ord_compare
 import std.list_len
 import std.list_get
@@ -66,10 +68,10 @@ end fun
 // The smaller of two, or self when they sort together.
 fun min<T>(self: T, other: T): T where { T is ord, }
   if less_or_equal(ref self, ref other)
-    let unwanted = other
+    call drop(other)
     ret self
   else
-    let unwanted = self
+    call drop(self)
     ret other
   end if
 end fun
@@ -77,10 +79,10 @@ end fun
 // The larger of two, or self when they sort together.
 fun max<T>(self: T, other: T): T where { T is ord, }
   if greater_or_equal(ref self, ref other)
-    let unwanted = other
+    call drop(other)
     ret self
   else
-    let unwanted = self
+    call drop(self)
     ret other
   end if
 end fun

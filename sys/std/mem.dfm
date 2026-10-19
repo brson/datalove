@@ -35,4 +35,5 @@ end fun
 // The parameter takes the value and the body does nothing with it, so it is
 // destroyed when the call returns.
 fun drop<T>(value: T)
+  inline
 end fun

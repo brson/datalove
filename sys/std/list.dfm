@@ -7,8 +7,10 @@
 // nothing.
 
 require rider std
+require module sys/std/mem
 require module sys/std/option
 
+import mem.drop
 import option.zip_option
 import std.list_len
 import std.list_get
@@ -189,11 +191,10 @@ end fun
 
 // Drop everything past the first n elements.
 //
-// The popped element is bound and not used, which is how it is let go of; the
-// loop ends because each pop shortens the list.
+// The loop ends because each pop shortens the list.
 fun truncate<T>(mut self: [T], n: index)
   loop while n .< len(ref self)
-    let gone = pop(mut self)
+    call drop(pop(mut self))
   end loop
 end fun
 

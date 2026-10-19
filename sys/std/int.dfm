@@ -1,9 +1,11 @@
 require rider std
 require module sys/std/index
+require module sys/std/mem
 import std.int_from_f64
 import std.int_from_f32
 import index.bitand
 import index.shift_right_wrapping
+import mem.replace
 
 // Arbitrary-precision signed integers.
 //
@@ -155,12 +157,10 @@ fun gcd(self: int, other: int): int
   loop while b != 0
     let divisor: int = b@
     if rem_checked(a, divisor) |remainder|
-      set a = b
-      set b = remainder
+      set a = replace(mut b, remainder)
     else
       // Unreachable: the loop condition rules out a zero divisor.
-      set a = b
-      set b = 0
+      set a = replace(mut b, 0)
     end if
   end loop
   ret a
@@ -204,11 +204,8 @@ fun sqrt(self: int): ?int
       var x: int = self@
       var y: int = (self@ + 1) /? 2
       loop while y .< x
-        let next: int = y@
-        set x = next
-        let divisor: int = x@
-        let quotient: int = self@ /? divisor
-        set y = (x@ + quotient) /? 2
+        let next: int = (y + (self /? y)) /? 2
+        set x = replace(mut y, next)
       end loop
       ret some x
     end if
