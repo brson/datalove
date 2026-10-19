@@ -1,0 +1,49 @@
+// A binding moved by a call inside an intrinsic's arguments is moved.
+//
+// Ownership analysis skipped an `icall`'s arguments entirely, so a call there
+// that took a binding by value was never seen to take it, and the binding was
+// dropped again at the end of its scope: a double free on every engine. The
+// intrinsics themselves only read copy scalars; it is what their arguments do
+// that has to be counted.
+
+fun tag(e: enum { term A string, atom C }): u32
+  match e
+  case term A s
+    ret : u32 / 1
+  case atom C
+    ret : u32 / 2
+  end match
+end fun
+
+fun weigh(xs: [string]): u32
+  ret : u32 / 10
+end fun
+
+// Moved in a loop body, once per iteration.
+var tot: u32 = 0
+loop while tot .< 3
+  let ea: enum { term A string, atom C } = term A "x"
+  set tot = icall add_wrapping_u32(tot, tag(ea))
+end loop
+
+// Moved in a function body, where the drop at the end of the body is the
+// second one.
+fun moved_in_body(): u32
+  let xs: [string] = ["a", "b"]
+  ret icall add_wrapping_u32(: u32 / 1, weigh(xs))
+end fun
+
+// A `?` inside an intrinsic's arguments can return early, with an owned
+// binding still held, which has to be dropped on the way out.
+fun first_weighed(xss: [[string]], i: index): ?u32
+  let held: [string] = ["kept"]
+  let n = icall add_wrapping_u32(weigh(held), weigh(xss[i]?@))
+  ret some n
+end fun
+let xss: [[string]] = [["p"], ["q"]]
+let output = (
+  tot,
+  moved_in_body(),
+  first_weighed(xss@, : index / 1),
+  first_weighed(xss, : index / 5),
+)

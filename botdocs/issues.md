@@ -16,7 +16,6 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A binding moved into a call inside an intrinsic's arguments is dropped again](#user-content-a-binding-moved-into-a-call-inside-an-intrinsics-arguments-is-dropped-again)
   - [An owned argument leaks when a sibling argument's `?` returns early](#user-content-an-owned-argument-leaks-when-a-sibling-arguments--returns-early)
   - [A REPL unit that returns early reports success](#user-content-a-repl-unit-that-returns-early-reports-success)
   - [Setting a field of an earlier unit's binding panics](#user-content-setting-a-field-of-an-earlier-units-binding-panics)
@@ -62,29 +61,6 @@ home here.
 ## Engines and the REPL: failing the wrong way
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
-
-### A binding moved into a call inside an intrinsic's arguments is dropped again
-
-**Reproduced, on every engine, before generics by reference too.** A `let`
-binding handed by value to a call that is itself an argument of an `icall` is
-moved into the call and then dropped at the end of its scope as well:
-
-```datalove
-fun matcherc(e: enum { term A string, atom C }): u32
-  ... (matches e, returns a number)
-end fun
-var tot: u32 = 0
-loop while tot .< 1
-  let ea: enum { term A string, atom C } = term A "x"
-  set tot = icall add_wrapping_u32(tot, matcherc(ea))
-end loop
-```
-
-The IR has `v5 = call u0(v4)` and then `drop v4`, so the string is freed twice:
-`free() called on untracked pointer` under leak checking on all four engines.
-Calling `matcherc(ea)` on its own line instead is fine, which points at the
-ownership analysis not seeing a move made inside an intrinsic call's
-arguments. Not investigated past the IR.
 
 ### An owned argument leaks when a sibling argument's `?` returns early
 

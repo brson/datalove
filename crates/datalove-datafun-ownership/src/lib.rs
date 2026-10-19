@@ -878,6 +878,9 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
             ExprFunKind::FunctionCall(call) => {
                 call.args.iter().any(|&arg| self.expr_may_early_return(expr.at(arg)))
             }
+            ExprFunKind::IntrinsicCall(icall) => {
+                icall.args.iter().any(|&arg| self.expr_may_early_return(self.expr(arg)))
+            }
             ExprFunKind::Tuple(tuple) => {
                 tuple.elements.iter().any(|elem| self.expr_may_early_return(self.expr(*elem)))
             }
@@ -1044,6 +1047,16 @@ impl<'a, 'db> AnalysisCtx<'a, 'db> {
                         .map(|mode| !matches!(mode, ParamMode::Ref | ParamMode::Mut | ParamMode::Out))
                         .unwrap_or(true);
                     self.analyze_expr_moves(*arg, is_consumed);
+                }
+                None
+            }
+            ExprFunKind::IntrinsicCall(icall) => {
+                // Every intrinsic takes copy scalars and reads them, but an
+                // argument can still move something, as a call that takes a
+                // binding does. Reaching the fallthrough below left such a
+                // move unseen, and the binding was dropped a second time.
+                for &arg in &icall.args {
+                    self.analyze_expr_moves(self.expr(arg), false);
                 }
                 None
             }
