@@ -1,9 +1,9 @@
 # Tables: what the type system is missing, and four ways out
 
-> **Written under erasure.** Generics have since moved to fat pointers and
-> descriptor tables ([Generics: how it works](generics.md)). What this says
-> about erased values, `data` wrappers, `erase`/`reify` or descriptor shapes
-> describes the old implementation.
+Written September 2026, when generics were erased into `data`; brought up to
+date in October 2026 for generics compiled over descriptor tables
+([Generics: how it works](generics.md)). Hypotheses, not a plan. Nothing here
+is implemented.
 
 A table is a first-class opaque value: it can be built, moved, cloned, compared,
 sorted, keyed on and held inside anything, and nothing can look inside one. This
@@ -16,7 +16,21 @@ that, and [H6](#user-content-h6-row-polymorphism-for-presence-comptime-for-const
 is the direction currently favoured: row types where a signature names the
 columns it needs, and compile-time evaluation where the schema is computed.
 
-Hypotheses, not a plan. Nothing here is implemented.
+## Contents
+
+- [What a table can do today](#user-content-what-a-table-can-do-today)
+- [The problem, stated precisely](#user-content-the-problem-stated-precisely)
+- [What the implementation already believes](#user-content-what-the-implementation-already-believes)
+- [What people want from struct-of-arrays elsewhere](#user-content-what-people-want-from-struct-of-arrays-elsewhere)
+- [H1: a `table` bound](#user-content-h1-a-table-bound)
+- [H2: a table is `table R` for a row type `R`](#user-content-h2-a-table-is-table-r-for-a-row-type-r)
+- [H3: row polymorphism](#user-content-h3-row-polymorphism)
+- [H4: column projection alone, and no table module](#user-content-h4-column-projection-alone-and-no-table-module)
+- [H5: types as compile-time values](#user-content-h5-types-as-compile-time-values)
+- [H6: row polymorphism for presence, comptime for construction](#user-content-h6-row-polymorphism-for-presence-comptime-for-construction)
+- [If the target is Polars](#user-content-if-the-target-is-polars)
+- [Sequencing](#user-content-sequencing)
+- [What would settle it](#user-content-what-would-settle-it)
 
 ## What a table can do today
 
@@ -38,11 +52,11 @@ is also what lets a table be a set element or a map key.
 `==` and `.<` refuse a table, but they refuse a list too, and `.<` a string;
 `ord` is the way to compare anything else.
 
-**Nothing reads a part of one.** `t.x` is `ProjectionOnNonAggregate`, `t[i]?` is
-"indexing requires list, map, or tensor type", and there is no cell accessor of
-any other spelling. A table's *values* can be arbitrary expressions -- `{| x; n |}`
-where `n` is a binding is fine -- so values go in and never come out except as
-part of the whole.
+**Nothing reads a part of one.** `t.x` is F068, "has no fields", `t[i]?` is
+F011, "indexing requires list, map, or tensor type", and there is no cell
+accessor of any other spelling. A table's *values* can be arbitrary
+expressions -- `{| x; n |}` where `n` is a binding is fine -- so values go in
+and never come out except as part of the whole.
 
 **Nothing changes its shape.** There is no push, pop, insert or remove of a row,
 and no row count. The number of rows a table has is the number written in the
@@ -61,10 +75,10 @@ It is *not* that tables cannot be generic. They already are, per column:
 fun ident<T>(t: {| x: T, y: u32 |}): {| x: T, y: u32 |}    // compiles, runs
 ```
 
-`bind_type_params` unifies two table types column by column, and
-`datalit_is_container_of_var` counts a table holding a type parameter as a
-container, so an owned one is wrapped whole into a `data` exactly as a `[T]` is.
-All of the erasure machinery already reaches tables.
+`bind_type_params` unifies two table types column by column, and a table
+holding a type parameter is a dynamic type exactly as a `[T]` is: a pointer at
+the value, described by its descriptor-table entry. All of the generics
+machinery already reaches tables.
 
 What cannot be written is a signature whose *column list* is not fixed. A type
 parameter stands for a column's type; nothing stands for the set of columns or
@@ -221,8 +235,8 @@ And so do the natives, which is the half H1 cannot reach.
 functions above are the shape the runtime already offers, currently unreachable
 because the signature cannot be written. Unification gets simpler and more
 general at once: one descent into the row type instead of a column-wise walk.
-And a table becomes the fourth container of a type parameter, so everything the
-generics work already does -- wrapping an owned one, `DataBorrow` to open it,
+And `table R` is a dynamic type like `[R]`, so everything the generics work
+already does -- a descriptor-table entry built for it at entry,
 descriptor-driven access into it -- applies unchanged rather than needing a
 table-shaped copy.
 
@@ -294,8 +308,8 @@ const generics. Datalove has both ingredients already: CTFE that evaluates const
 expressions including calls, and const parameters. This is the direction
 [H5](#user-content-h5-types-as-compile-time-values) works through, and it turns
 out not to cost compile-once the way it does in Zig -- the type is computed at
-the call site while the body stays erased. It does move the checking of a *type
-application* to the call site, and it does need the two roles of a const
+the call site while the body is compiled once. It does move the checking of a
+*type application* to the call site, and it does need the two roles of a const
 parameter separated so that indexing a type does not also force
 monomorphization.
 
@@ -365,9 +379,9 @@ function is used, and the error is as good as the author made it.
 ### Why it need not monomorphize
 
 The warning earlier was that a type computed per instantiation forces *checking*
-per instantiation, which is what erasure was chosen to avoid. That is true of
-Zig, which monomorphizes everything. It need not be true here, and the reason is
-the machinery that already exists.
+per instantiation, which compiling a generic once was chosen to avoid. That is
+true of Zig, which monomorphizes everything. It need not be true here, and the
+reason is the machinery that already exists.
 
 Split the two things a compile-time value is used for:
 
@@ -378,16 +392,17 @@ Split the two things a compile-time value is used for:
   shuffling columns means reading a descriptor and copying buffers, not knowing
   the type structurally.
 
-So the body compiles **once**, erased, exactly as `list.reversed<T>` does today.
-It declares the output shape in `descriptor_shapes`, and the call site -- which
-computed the output type -- hands over the static descriptor as
-`DescriptorRef::Static`. Nothing is built at run time; the descriptor for the
+So the body compiles **once**, exactly as `list.reversed<T>` does today. The
+output schema is a binding the call site computed, and the call site hands
+over its static descriptor as it does for any concrete binding
+(`BindingRef::Static`). Nothing is built at run time; the descriptor for the
 output schema is a static symbol at every call site, because every call site
 knows its own schemas.
 
-That is the whole of it. The existing shape channel is already "the callee
-builds something it cannot name, and the caller says what it is", which is
-precisely the shape of a schema transformation.
+That is the whole of it. A type parameter only the return mentions, as in
+`fixedint.zero<T>(): T`, is already "the callee builds something it cannot
+name, and the caller says what it is", which is precisely the shape of a
+schema transformation.
 
 **A consequence worth naming.** A const parameter currently means two things at
 once: known early enough to *specialize on*, and known early enough to *compute
@@ -463,8 +478,8 @@ the whole point of having written the constraint.
 column's index in a row whose shape the body was not compiled for, which is a
 by-name walk of a descriptor -- the descriptors already carry names
 (`TyInfoStructField`), and `dtlv_rti_field_offset` already does the by-index
-walk. Nothing else changes: `table R` is a container of a type parameter, so
-erasure wraps it and the existing machinery carries it.
+walk. Nothing else changes: `table R` is a dynamic type, so the existing
+descriptor machinery carries it.
 
 ### Why construction belongs to comptime
 

@@ -6,7 +6,8 @@ real layout together with that value's *type descriptor* -- the runtime's
 `TyDesc` -- and the descriptors the body needs are built at run time from one
 descriptor per type parameter, which the caller hands over.
 
-This describes the implementation as it stands. The language-level rules are
+This describes the implementation as it stands in October 2026, on all four
+engines. The language-level rules are
 [Section 8.7 of the spec](botspec.md#user-content-87-generic-functions). How it
 got here is [Generics by Reference](plan-fat-generics.md), which replaced the
 erasure that [Generics and Specialization](plan-generics.md) describes.
@@ -88,7 +89,8 @@ type-parameter descriptors and the table they built. A call repeating the
 binding costs a compare per type parameter and skips the fill. Every engine
 has one: a writable data object in Cranelift, a `static` in C, and
 `IrLayout::table_cache` in the interpreter. A call site alternating between
-two bindings refills every time; see `botdocs/issues.md`.
+two bindings refills every time; see
+[A generic's descriptor-table cache holds one binding](issues.md#user-content-a-generics-descriptor-table-cache-holds-one-binding).
 
 **Call sites.** A `Call` carries `bindings`, what the site binds each of the
 callee's type parameters to, written over the caller's own. Each becomes a
@@ -182,12 +184,11 @@ appearing only in the return, like `fixedint_zero<T>(): T`.
 `NativeContext::undetermined_type_params` lists those positions, and a call's
 bindings at them are the descriptors (`NativeContext::undetermined_bindings`).
 A generic calling a native passes each dynamic argument's pointer with its
-table entry, and the trailing
-descriptors come from its table.
+table entry, and the trailing descriptors come from its table.
 
 A rider is never handed a `data` standing in for something else: a result slot
 is in the real layout, and an argument is what the caller has. See
-[native-abi.md](native-abi.md).
+[The Native Rider ABI](native-abi.md).
 
 ## What the runtime provides
 

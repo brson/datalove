@@ -32,10 +32,14 @@ not written. Two more notations carry what tokens alone cannot:
 - `~x` means `x` is glued to the token before it: no space, newline or comment
   between them. Spacing decides fixity in datafun
   ([spec Section 2.4](botspec.md#user-content-24-spacing)), and `~` is where it
-  does.
+  does. A `~` with nothing after it, as in `[ "-", ~ ], dec_number`, says the
+  next token is glued to the one before it.
 - `EOL` is a statement break: a newline before a token at bracket depth 0. A
-  `;` is lexed as a newline, so it is one too. Inside any bracket pair a newline is not an `EOL`, nor is
-  one inside a block comment. `EOLS` is one or more; blank lines are free.
+  `;` is lexed as a newline, so it is one too. Inside any bracket pair a
+  newline is not an `EOL`, nor is one inside a block comment. `EOLS` is one or
+  more; blank lines are free.
+- `end_line(k)` is a rule with a parameter, written once for every block's
+  closing line: `end_line("fun")` is `"end", "fun"` on a line of its own.
 
 Brackets, `( [ { {| [| %{ #{ < (| <|` and their partners, are matched before
 parsing (P050, P051). `<` and `>` are always brackets, never operators.
@@ -44,17 +48,13 @@ The parser's sources are cited by file and function: `statement.rs`,
 `expr.rs`, `literal.rs`, `state.rs` and `lib.rs` are in
 `crates/datalove-datafun-parser/src/`.
 
-Two forms are not plain EBNF. `end_line(k)` is a rule with a parameter, written
-once for every block's closing line: `end_line("fun")` is `"end", "fun"` on a
-line of its own. `~` with nothing after it, as in `[ "-", ~ ], dec_number`,
-says the next token is glued to the one before it.
-
 ## Grammar
 
 ```ebnf
 (* ===== Top level  (lib.rs) ===== *)
 script        = [ EOLS ], [ top_stmt, { EOLS, top_stmt }, [ EOLS ] ] ;
-module        = script ;            (* but see P077 below *)
+module        = [ EOLS ], [ mod_stmt, { EOLS, mod_stmt }, [ EOLS ] ] ;
+mod_stmt      = decl_stmt | const_stmt ;   (* any other statement: P077 *)
 interface     = [ EOLS ], [ iface_stmt, { EOLS, iface_stmt }, [ EOLS ] ] ;
 iface_stmt    = native_fun | type_alias ;  (* a rider.dli; anything else: P084 *)
 top_stmt      = decl_stmt | stmt ;
@@ -62,14 +62,16 @@ decl_stmt     = fun_def | native_fun | type_alias | require_stmt | import_stmt ;
 stmt          = let_stmt | var_stmt | const_stmt | set_stmt | call_stmt
               | ret_stmt | if_stmt | match_stmt | loop_stmt | for_stmt
               | break_stmt | continue_stmt | debuglog_stmt ;
-                (* chosen by the first word; anything else: P001 *)
+                (* chosen by the first word; anything else: P001;
+                   tokens left on the line: P021 *)
 block         = { ( stmt | decl_stmt ), EOLS } ;   (* decl_stmt in a block: P074 *)
 end_line(k)   = "end", k ;         (* a line of its own; extra tokens: P033; missing: P034 *)
 
 (* ===== Bindings  (statement.rs: parse_let, parse_var, parse_const, parse_binding) ===== *)
-let_stmt      = "let", binding, [ ":", type ], "=", expr ;      (* no "=": P083 *)
+let_stmt      = "let", binding, [ ":", type ], "=", expr ;   (* P007; no "=": P083 *)
 var_stmt      = "var", binding, [ ":", type ], "=", expr
-              | "var", value_name, ":", type ;   (* pattern without value: P068; no type: P026 *)
+              | "var", value_name, ":", type ;
+                (* P008; pattern without value: P068; no type: P026 *)
 const_stmt    = "const", value_name, [ ":", type ], "=", expr ; (* P024, P025 *)
 binding       = value_name
               | "(", [ value_name, { ",", value_name }, [ "," ] ], ")"   (* (a): P070 *)
@@ -79,7 +81,7 @@ binding       = value_name
 field_pat     = NAME, [ "=", value_name ] ;      (* names unique: D038 *)
 
 (* ===== Assignment  (statement.rs: parse_set, parse_place_steps) ===== *)
-set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* no op: D025 *)
+set_stmt      = "set", NAME, { place_step }, assign_op, expr ;  (* P009; no op: D025 *)
 place_step    = ~".", field_sel
               | ~"[", expr, "]", [ ~"?" | ~"!" ] ;   (* spaced: P021, read anyway *)
 assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
@@ -89,11 +91,11 @@ assign_op     = "=" | "+=" | "-=" | "*=" | "/=" | "+!=" | "-!=" | "*!=" | "/!="
 fun_def       = "fun", value_name, [ type_params ], param_list, [ ":", type ],
                 [ where_clause ], EOLS,
                 [ "inline", EOLS ],            (* elsewhere: P076 *)
-                block, end_line("fun") ;
+                block, end_line("fun") ;     (* no name: P010; no "(": P002 *)
 native_fun    = "native", "fun", value_name, [ type_params ], param_list,
                 [ ":", type ], [ where_clause ] ;   (* P028, P029, P030 *)
 type_params   = "<", [ type_name, { ",", type_name }, [ "," ] ], ">" ;
-param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;  (* P002 *)
+param_list    = "(", [ param, { ",", param }, [ "," ] ], ")" ;
 param         = [ "const" ], [ "ref" | "mut" | "out" ], param_name, ":", type ;
                 (* const with a mode: P082; no name: P011; no ":": P012 *)
 where_clause  = "where", "{", [ bound, { ",", bound }, [ "," ] ], "}" ;  (* P061, P062 *)
@@ -104,8 +106,9 @@ type_alias    = "type", type_name, ":", type ;  (* P022, P023 *)
 (* ===== Modules  (statement.rs: parse_require, parse_import) ===== *)
 require_stmt  = "require", ( "module", lib_path
                            | "data", lib_path, [ ":", type ]
-                           | "rider", value_name ) ;           (* else P005 *)
-lib_path      = NAME, "/", NAME, "/", NAME ;    (* P003, P004, P013-P016 *)
+                           | "rider", value_name ) ;    (* P027; else P005 *)
+lib_path      = NAME, "/", NAME, "/", value_name ;  (* P003, P004, P013-P016 *)
+                (* the last segment is the alias or const the require binds *)
 import_stmt   = "import", NAME, ".", NAME ;     (* P006, P017, P018 *)
 
 (* ===== Control flow  (statement.rs: parse_if, parse_loop, parse_for, parse_match) ===== *)
@@ -157,7 +160,8 @@ primary       = hinted
               | dec_number | hex_number               (* no sign: "-" is prefix_op *)
               | string_lit                            (* D039 *)
               | NAME, [ ~"(", [ arg_list ], ")" ]     (* a call only when glued *)
-              | paren | collection ;                  (* any other bracket: P081 *)
+              | paren | collection ;
+                (* any other bracket, or nothing: P081; another token: P080 *)
 payload       = unary ;                         (* a binary operator after it: P065 *)
 arg_list      = arg, { ",", arg }, [ "," ] ;
 arg           = [ "ref" | "mut" | "out" ], expr ;
@@ -269,13 +273,13 @@ string_lit, digit_run, hex_run, comment, newline
 - A glued `(` is a call after a name, or after a place with exactly one named
   field step (`u8.max(1)`, and `(u8).max(1)` too); after anything else it is
   P072: `a.b.c(1)`, `p.0(1)`, `f(x)(1)`.
-- **What a hint covers.** A hint is a unary expression, so a binary operator after it
-  applies to the hinted expression: `: u32 / x + 1` is `(: u32 / x) + 1`. Under
-  the `hint_literal` alternative the hint sits on the literal and a later
-  postfix is outside it (`: u32 / 5@` hints the `5`); under the `unary`
-  alternative the hint covers the postfixes (`: u32 / o?` hints what `?`
-  produces). Which alternative applies is decided by the first token after the
-  `/`, so `: u32 / (o)?` hints `o`.
+- **What a hint covers.** A hint is a unary expression, so a binary operator
+  after it applies to the hinted expression: `: u32 / x + 1` is
+  `(: u32 / x) + 1`. Under the `hint_literal` alternative the hint sits on the
+  literal and a later postfix is outside it (`: u32 / 5@` hints the `5`);
+  under the `unary` alternative the hint covers the postfixes (`: u32 / o?`
+  hints what `?` produces). Which alternative applies is decided by the first
+  token after the `/`, so `: u32 / (o)?` hints `o`.
 
 **Bindings and signatures.**
 
@@ -291,7 +295,9 @@ string_lit, digit_run, hex_run, comment, newline
 - Every declared name is checked against the reserved words (P064),
   including the name a struct pattern's `{f}` shorthand binds.
 
-**Recovery.** P021 is suppressed after any earlier error in the same
+**Recovery.** P021 is also the code for any token left over after a
+complete statement, or after the last element of a bracket: `debuglog 1 2`
+is P021 at the `2`. It is suppressed after any earlier error in the same
 sub-parser, so `fun f(a, b: u32): u32 extra` reports the parameter and not
 `extra`.
 

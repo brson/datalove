@@ -179,10 +179,10 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
   a row, elements are simply written one after another, and spacing matters
   only where it decides what is glued: `[| 1 -2 |]` and `[|1-2|]` are two
   elements, `1` and `-2`, and `[| 1 - 2 |]` is D050. A `;` is a line break,
-  which a tensor passes over like any other. With a header, the body is either flat, `d₁ × ... × dₖ`
-  elements, or shaped exactly as the header says (D041); zero extents are
-  allowed, `[| 0 3 | |]`. A hint covers one element: `[| : u8 / 1 2 |]` is two
-  elements.
+  which a tensor passes over like any other. With a header, the body is
+  either flat, as many elements as the product of the extents, or shaped
+  exactly as the header says (D041); zero extents are allowed, `[| 0 3 | |]`.
+  A hint covers one element: `[| : u8 / 1 2 |]` is two elements.
 - **Table rows.** A newline or a `;` separates rows, outside nested brackets
   and outside block comments; a line comment's own newline counts. A `;` is a
   line break -- the lexer takes it for a newline -- so a run of them is blank
@@ -194,8 +194,9 @@ block_comment  = "/*", { block_comment | ? any character, not starting "/*" or "
 
 ## Diagnostics
 
-Parse errors. File:line is where each is emitted; `type_hint.rs`, `expr.rs`,
-`chunk.rs`, `state.rs` and `mod.rs` are in `crates/datalove-datalit/src/parser/`.
+Parse errors. File:line is where each is emitted; `type_hint.rs`,
+`expr.rs`, `chunk.rs`, `state.rs` and `mod.rs` are in
+`crates/datalove-datalit/src/parser/`.
 
 | Code | Refuses | Where |
 |---|---|---|
@@ -230,8 +231,8 @@ Parse errors. File:line is where each is emitted; `type_hint.rs`, `expr.rs`,
 | D051 | Atom type with no name | `type_hint.rs:100,333` |
 | D052 | Term type with no name | `type_hint.rs:115,353` |
 | D053 | An enum variant that is not `atom` or `term` | `type_hint.rs:363` |
-| D054 | A close bracket with no open | `parser_util.rs`, `emit_bracer_errors` |
-| D055 | An open bracket never closed | `parser_util.rs`, `emit_bracer_errors` |
+| D054 | A close bracket with no open | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
+| D055 | An open bracket never closed | `mod.rs:37`, through `parser_util.rs` `emit_bracer_errors` |
 
 The parse codes start after the ownership codes (D001 to D015,
 [spec Section 11.1](botspec.md#user-content-111-errors)); D044 to D053 are
@@ -254,16 +255,14 @@ manual still differs from the parser:
 
 - Its `enum_expr` takes only an atom or term, which is what type-checks; the
   parser takes any `full_expr` and leaves the rest to the checker
-  (`enum { 1 }` is T032).
+  (`: enum { atom A } / enum { 1 }` is T032).
 - It has no production for a type name; the parser takes one and the checker
   refuses it (T059). Both should say so.
 - It requires an enum type to have a variant. `enum {}` parses and
   type-checks.
 - It allows no space after `?` or `!` in a type; the parser does.
-- Its prose says spaces separate tensor elements (lines 100 and 564); they are
+- Its prose says spaces separate tensor elements (lines 100 and 576); they are
   written one after another, as above.
-- It says a table literal always needs a hint (lines 529 and 972). Tables
-  synthesize (`Syn-Table`); `{| x; 1 |}` type-checks alone.
 
 ### The specification
 

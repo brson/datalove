@@ -1,5 +1,9 @@
 # Datalove Language Specification
 
+The reference for Datalit and Datafun as the compiler implements them,
+audited against it in October 2026. Designs not yet implemented are listed in
+Appendix B rather than described.
+
 ## Contents
 
 - [1. Introduction](#user-content-1-introduction)
@@ -111,6 +115,11 @@ a line or fragment compiled as script code that continues the units before it,
 so that a binding, function or `require` from an earlier unit is in scope in a
 later one.
 
+A script's top level, and each unit of a session, is checked as the body of a
+function returning `!()`: the `!` operators work there, and the `?` operators
+are F049, as in any function that does not return an option. An error returned
+from a script's top level ends the script, which prints it.
+
 ## 2. Lexical Conventions
 
 ### 2.1 Reserved Words
@@ -149,7 +158,10 @@ variants, so it reserves nothing.
 
 A mode word written as a parameter's name, `fun f(mut: int)`, is read as the
 mode and leaves the name missing (P011), rather than being refused as a name;
-P064 is reached only past the mode, as in `fun f(mut mut: int)`.
+P064 is reached only past the mode, as in `fun f(mut mut: int)`. The same
+holds at the start of an argument: with `let out = 1`, `f(out)` reads `out` as
+the marker and finds no expression after it (P081). Such a value is passed
+parenthesized, `f((out))`.
 
 **A core principle: a special word is recognized by the word alone.** The
 parser does not look past a word to decide whether it is acting as a keyword
@@ -183,9 +195,10 @@ fixed-width types and `index`, and against `f32` and `f64` as their bit
 patterns. It does not check against a signed fixed-width type or `offset`.
 
 A hex literal takes no sign. A `-` before one is the negation operator, as it
-would be before a name, so `-0x10` is the `int` -16 and, bare `-` not being
-defined on fixed-width integers, no `i32` or `u32`. A decimal literal does take
-its sign: `let x: i32 = -5` is an `i32`, and `-128` fits an `i8`. Datafun
+would be before a name, so `-0x10` is the `int` -16. Bare `-` is not defined
+on fixed-width integers, so `-0x10` is never an `i32` or a `u32`. A decimal
+literal does take its sign: `let x: i32 = -5` is an `i32`, and `-128` fits an
+`i8`. Datafun
 parses `-5` as the negation of `5`, except right after a hint, and the type
 checker reads a negated literal where a fixed-width integer is expected as the
 signed literal, so the two are one value (`Check-NegLit` in
@@ -269,7 +282,7 @@ gap anywhere inside ends it.
 2.5e - 10      // error: an exponent is written without spaces: `2.5e-10`
 ```
 
-Both are P052 in Datafun.
+The two errors are P052 in Datafun.
 
 Letters written onto the digits are read as a suffix and reported as one
 (P053 in Datafun, D019 in Datalit), since the language has none: `1u8` says to
@@ -310,9 +323,8 @@ The literal reader runs first and takes what is glued to it, and fixity judges
 only the operators it declined. That is why `2.5e-10` is one number while `x-1`
 subtracts.
 
-This is what settles how many elements a tensor literal's innermost axis has,
-that being the one place in the language where members are separated by nothing
-at all (Section 3.2).
+The same rule settles how many elements a row of a tensor literal has, where
+elements are separated by nothing but spacing (Section 3.2).
 
 ### 2.5 Names
 
@@ -347,7 +359,7 @@ a Cyrillic one -- and two such names would be two names.
 | `u8`, `u16`, `u32`, `u64` | Unsigned integers |
 | `i8`, `i16`, `i32`, `i64` | Signed integers |
 | `index` | Addressable size of indexed collections |
-| `offset` | Signed addressable size etc. |
+| `offset` | Signed counterpart of `index`, for differences between indexes |
 | `f32`, `f64` | Floating-point numbers |
 | `int` | Arbitrary-precision integer |
 | `string` | UTF-8 string |
@@ -360,7 +372,8 @@ The size of `index` is less than or equal to the platform pointer size.
 
 **A count is always a `u32`.** Every bit count, shift amount and rotate
 amount in `sys/std`, and the exponent of every fixed-width integer's `pow_*`,
-is a `u32`, whatever the width of the value it counts or shifts: `u8.count_ones(self: u8): u32`, `u64.bits(): u32`,
+is a `u32`, whatever the width of the value it counts or shifts:
+`u8.count_ones(self: u8): u32`, `u64.bits(): u32`,
 `i64.shift_left(self: i64, n: u32): ?i64`, `u8.pow_checked(self: u8, exp: u32)`.
 This is Rust's rule, and it is here for the same two reasons. A count is
 bounded by the widest integer, so `u32` always holds it and never needs a
@@ -517,18 +530,18 @@ written `er error "message"`. An `error` is not a result by itself: where a
 The `some`, `ok`, `er`, `data`, `error` and `term Name` constructors take a
 *unary* expression as their payload -- a literal, variable, function call,
 parenthesized expression or hinted expression, with any postfix and prefix
-operators written on it -- so `some x@` is `some (x@)`, `some o?` is
-`some (o?)` and `some -x` is `some (-x)`. This is the same with a hint over the constructor:
+operators written on it -- so `some x@` is `some (x@)`, `some o?` is `some (o?)`
+and `some -x` is `some (-x)`. This is the same with a hint over the constructor:
 `: ?int / some o?` is `some (o?)` too. A binary operator after a payload is
 P065: `some a + b` is refused, and is written `some (a + b)`, or `(some a) + b`
 if the operator is meant for what is built:
 
 ```datalove
-some 42                  // ok: literal is primary
-some(a +? b)             // ok: parenthesized expression
-ok result                // ok: variable is primary
-ok(x +! y)              // ok: parenthesized expression
-er(error "msg")          // ok: parenthesized expression
+some 42                  // ok: a literal
+some(a +? b)             // ok: parenthesized
+ok result                // ok: a variable
+ok(x +! y)               // ok: parenthesized
+er(error "msg")          // ok: parenthesized
 ```
 
 ### 3.5 Data and Error Types
@@ -545,13 +558,13 @@ The `error` type is an existential error value:
 
 ```datalove
 error "message"
-error(some_expr)         // parenthesized for non-primary payload
+error(some_expr)         // parenthesized, as any payload may be
 ```
 
-Both `data` and `error` take a unary expression as their payload (see Section 3.4).
+Both `data` and `error` take a unary expression as their payload (Section 3.4).
 A value is a `data` only when written as one. Nothing becomes a `data` by being
-where one is expected: `let d: data = x` is a mismatch, and `let d: data = data
-x` is how to write it. Datalit is the same.
+where one is expected: `let d: data = x` is a mismatch, and
+`let d: data = data x` is how to write it. Datalit is the same.
 
 ### 3.6 Atom, Term, and Enum Types
 
@@ -593,8 +606,8 @@ let d: enum { atom Red, atom Blue } = enum { atom Blue }
 let e: enum { atom Red, term Custom string } = term Custom "hello"
 ```
 
-An enum literal has no type of its own and needs one expected. This is the
-same in datalit.
+An enum literal has no type of its own and needs one expected (F011). This is
+the same in Datalit.
 
 **Coercion.** An atom or term that is not a literal -- a variable, a
 parameter, a call -- has its own atom or term type, and does not become an
@@ -667,14 +680,14 @@ hints that disagree, and `: u32 / (1)` is the same as `: u32 / 1`. Datalit
 checks hints the same way.
 
 Postfix lands on the expression under the hint, as it does on the payload of
-`some` and its fellows: `: u32 / o?` hints what the `?` produces, not the
-option it unwraps. A literal is the exception, because the hint is what makes
-it a value of that type: after a number, a string, a constructor, a collection
-or a parenthesized expression the hint stays on that literal and postfix comes
-after it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints
-`o`. A hint directly under another, `: u8 / : u8 / 1`, is refused; parenthesize
-the inner one. A hint takes nothing of its own, so the expression under it
-moves what it would have moved written without one.
+`some` and its fellows: `: u32 / o?` hints what the `?` produces, not the option
+it unwraps. A literal is the exception, because the hint is what makes it a
+value of that type: after a number, a string, a constructor, a collection or a
+parenthesized expression the hint stays on that literal and postfix comes after
+it, so `: u8 / 5@` is the `u8` 5, adapted, and `: u32 / (o)?` hints `o`. A hint
+directly under another, `: u8 / : u8 / 1`, is refused (P080); parenthesize the
+inner one. A hint takes nothing of its own, so the expression under it moves
+what it would have moved written without one.
 
 A bare name in type position is a type alias (Section 3.7), or, within a generic
 function's signature or body, one of its type parameters (Section 8.7). Data
@@ -683,8 +696,8 @@ A name that is neither is F064, wherever the type is written: a `let`, `var` or
 `const` annotation, a hint, a parameter, a return type, or inside any of those.
 
 A collection type is written with its sigil rather than its name, so `tuple`,
-`list`, `map`, `set`, `table` and `tensor` are not types. They are names like any
-other, free for an alias or a type parameter; where none of that name is in
+`list`, `map`, `set`, `table` and `tensor` are not types. They are names like
+any other, free for an alias or a type parameter; where none of that name is in
 scope the F064 saying so adds how the collection is written. A primitive written
 in another case, `Int`, gets the same treatment, with the spelling it meant.
 
@@ -698,8 +711,9 @@ Atoms are always copy. A term, option, tuple or struct is copy if everything in
 it is, and an enum if all its variant payloads are.
 
 **Linear types** have move semantics: `int`, `string`, `[T]`, `%{K = V}`,
-`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`, and every result `!T`, whatever
-`T` is. A term, option, tuple, struct or enum holding a linear type is linear.
+`#{T}`, `{| ... |}`, `[|T, N|]`, `data`, `error`, and every result `!T`,
+whatever `T` is. A term, option, tuple, struct or enum holding a linear type is
+linear.
 
 A **type parameter** is linear, whatever it is instantiated with, because the
 caller may supply a linear type and the function is compiled once for all of
@@ -743,9 +757,9 @@ postfix expression as a whole: `-x@` is `-(x@)`, `not s.a` is `not (s.a)` and
 `some`, `ok`, `er`, `data`, `error` and `term Name` take their payload the same
 way, so `some x@` is `some (x@)`.
 
-Which of the three a sigil operator is read as is decided by its spacing before
-precedence is consulted at all: `a - b` and `a-b` are the binary operator in
-this table, and `a -b` is not one (Section 2.4).
+Whether a sigil operator is prefix, infix or postfix is decided by its spacing
+before precedence is consulted at all: `a - b` and `a-b` are the binary operator
+in this table, and `a -b` is not one (Section 2.4).
 
 ### 6.2 Arithmetic
 
@@ -784,9 +798,9 @@ Bigint division `/?` yields `int`. Unary `-!` and `-?` negate any fixed
 integer. A signed value fails only at its minimum, which has no counterpart;
 an unsigned one fails for any value but zero.
 
-The error a checked operator returns is a fixed string: `error "arithmetic
-overflow"`, `error "division by zero"`, or for a negation `error "negation
-overflow"`.
+The error a checked operator returns is a fixed string:
+`error "arithmetic overflow"`, `error "division by zero"`, or for a negation
+`error "negation overflow"`.
 
 Integer division truncates toward zero, so `-7 /? 2` is `-3`. There is no
 remainder operator; derive one from the quotient, which gives it the sign of
@@ -813,18 +827,18 @@ a function's type parameters. `a < b` is an unclosed `<` (P051).
 The ordering operators `.<`, `.>`, `<=` and `>=` take numeric operands only.
 Order strings with `string.cmp`, and anything else with `sys/std/ord`.
 
-`==` and `!=` take a number, `bool`, `string`, unit or an atom, and an
-option, tuple, struct, term or enum whose parts all do. Such a value is
-compared part by part. Floats compare by IEEE 754 wherever they are, so
-`some nan != some nan` and `(0.0, 1) == (-0.0, 1)`. Lists, sets, maps,
-tables, tensors, results, `data` and `error` have no equality operator yet,
-and neither does a type parameter or an aggregate holding one (Section 8.7).
-Anything can be compared with `sys/std/ord`.
+`==` and `!=` take a number, `bool`, `string`, unit or an atom, and an option,
+tuple, struct, term or enum whose parts all do. Such a value is compared part by
+part. Floats compare by IEEE 754 wherever they are, so an option `n` holding a
+NaN has `n != n`, and `(0.0, 1) == (-0.0, 1)`. Lists, sets, maps, tables,
+tensors, results, `data` and `error` have no equality operator yet, and neither
+does a type parameter or an aggregate holding one (Section 8.7). Anything can be
+compared with `sys/std/ord`.
 
 A construction with no type of its own takes the other operand's: with
 `x: ?u32`, `x == none` and `x == some 1` compare `?u32`s.
 
-Comparisons do not chain. `a == b == c` is refused; parenthesize the
+Comparisons do not chain. `a == b == c` is refused (P067); parenthesize the
 comparison being compared, or join two with `and`.
 
 ### 6.4 Logical Operators
@@ -849,10 +863,6 @@ fun get_value(opt: ?i32): ?i32
 end fun
 ```
 
-`?` in a function that does not return an option, and `!` in one that does not
-return a result, is F049; `?` on a value that is not an option, or `!` on one
-that is not a result, is F048.
-
 The postfix `!` operator unwraps a result, early-returning the error on
 failure:
 
@@ -862,6 +872,10 @@ fun parse(s: string): !i32
     ret ok n
 end fun
 ```
+
+`?` in a function that does not return an option, and `!` in one that does not
+return a result, is F049; `?` on a value that is not an option, or `!` on one
+that is not a result, is F048.
 
 ### 6.6 Operator Argument Semantics
 
@@ -902,7 +916,8 @@ directly. Most come in a version per fixed-width type, named by a suffix
   float bit casts (`f32_to_bits`, `bits_to_f64`), narrowing and int-to-float
   casts, and conversions to and from `index` and `offset`
 
-The full list, with signatures, is `crates/datalove-datafun-intrinsics/src/lib.rs`.
+The full list, with signatures, is
+`crates/datalove-datafun-intrinsics/src/lib.rs`.
 
 Two intrinsics answer a question about the build rather than compute anything:
 `is_big_endian(): bool` and `index_bits(): u32`, the latter being the width of
@@ -969,8 +984,10 @@ An expected type reaches `@` from:
   type as its result: `+`, `-`, `*` and `/` where that type is one they
   accept, and the checked and optional operators. The expected type of the
   whole expression reaches both operands, so `let c: int = a@ + b@` widens
-  both to `int`. Unary `-` passes nothing on, so `let y: int = -x@` with
-  `x: u8` is an error.
+  both to `int`.
+- The operand of unary `-`, when the expected type is a float:
+  `let y: f64 = -x@` with `x: f32` widens. An `int` is not passed on, so
+  `let y: int = -x@` with `x: u8` is F026.
 - An operand of a comparison, when the other operand has a type of its own.
   A comparison returns `bool`, which says nothing about its operands, so the
   type comes from across the operator instead: `a@ .< b` takes `b`'s type. A
@@ -1091,14 +1108,13 @@ tensor struct that aliases the parent tensor's data buffer. Indexing into
 a non-copy element in consume context requires `@` (clone): `t[i]?@`; without
 it, F072.
 
-**View type restrictions:** Views can be passed to `ref` params but not to
-`mut` or `out` params (F073). Whole-value replacement of a view (`set row = ...`)
-would overwrite the view struct without affecting the parent's data, causing
-leaks. The `set t[i]? = new_row` form is likewise rejected for rank > 1
-tensors. Element-level mutation through views (e.g. `set row[j]? = val`)
-is semantically correct but currently also rejected because the typechecker
-cannot distinguish it from whole-view replacement at the call site. An element
-of a rank-2 tensor is written through the tensor itself, with a chained index:
+**View type restrictions:** Views can be passed to `ref` params but not to `mut`
+or `out` params (F073). Whole-value replacement of a view (`set row = ...`)
+would overwrite the view without affecting the parent's data. The `set t[i]? = new_row` form is likewise rejected for rank > 1 tensors
+(F073). Element-level mutation through views (e.g. `set row[j]? = val`) is
+semantically correct but currently also rejected because the typechecker cannot
+distinguish it from whole-view replacement at the call site. An element of a
+rank-2 tensor is written through the tensor itself, with a chained index:
 `set t[i]?[j]? = v`. The view concept is general; tensor sub-views are the only
 instance today.
 
@@ -1218,9 +1234,8 @@ const LST: [int] = [1, 2, 3]
 A const is an immutable ref binding: it is borrowed wherever it is named, as a
 `ref` parameter is. It may be read, compared, indexed and passed as `ref` any
 number of times, and moving out of a const of a linear type takes a clone with
-`@`. A move without one is D003, whose help says where the `@` goes; in the
-auto-adapt mode, which inserts `@` where an error asks for one, the compiler
-supplies it. A const of a copy type is copied as any copy type is.
+`@`. A move without one is D003, whose help says where the `@` goes. A const of
+a copy type is copied as any copy type is.
 
 ```datalove
 const LST: [int] = [1, 2, 3]
@@ -1336,12 +1351,12 @@ The place is evaluated once, in the order of any `set`: the value, then its
 keys, then its lookups, each a single time, and then the operator reads the
 place and the value and stores its result there.
 
-The place has to hold a value when it's reached, since it is read: a
-moved-out variable, an unwritten `out` parameter, or one the value moves
-(`set x += f(x)` with `f` taking `x` by value) is an error. The value is an operand, so it is
-borrowed rather than consumed, and it may be the place itself (`set x += x`).
-A bare map index is rejected (F074): it inserts a missing key, and then there
-is no value to update.
+The place has to hold a value when it's reached, since it is read: a moved-out
+variable, an unwritten `out` parameter, or one the value moves (`set x += f(x)`
+with `f` taking `x` by value) is an error. The value is an operand, so it is
+borrowed rather than consumed, and it may be the place itself (`set x += x`). A
+bare map index is rejected (F074): it inserts a missing key, and then there is
+no value to update.
 
 ### 8.4 Functions
 
@@ -1379,8 +1394,9 @@ end fun
 The calls are gone from the compiled program, in every engine; what the
 function does, its parameters' modes and its ownership are as they were. An
 inline function may call other inline functions, but not in a cycle, which is
-an error (F085), at the first function of the cycle. `inline` anywhere else is an error (P076). Calls in a script's
-top-level code are not inlined, only those in function bodies. This is a
+an error (F085), at the first function of the cycle. `inline` anywhere else is
+an error (P076). Calls in a script's top-level code are not inlined, only those
+in function bodies. This is a
 stand-in for an inliner that decides for itself, and will go.
 
 ### 8.5 Parameter Modes
@@ -1464,25 +1480,25 @@ let x = repeat(COUNT, ref s)  // COUNT is a const binding
   collections and linear aggregates included. Instantiations are told apart
   by structural equality of the values, floats by their bits, so `0.0` and
   `-0.0` get separate copies and every NaN with the same bits shares one
-- Cannot combine `const` with a passing mode (P082). A const parameter is passed by
-  reference, as any const is borrowed: a specialized copy has the value written
-  in and is passed nothing, and a call that is not specialized borrows the
-  argument. `ref` would say what it already is, and `out` and `mut` would write
-  to a constant
+- Cannot combine `const` with a passing mode (P082). A const parameter is passed
+  by reference, as any const is borrowed: a specialized copy has the value
+  written in and is passed nothing, and a call that is not specialized borrows
+  the argument. `ref` would say what it already is, and `out` and `mut` would
+  write to a constant
 - A const parameter's type cannot be a type parameter (`const n: T` in a
   generic function is F077). A const parameter of a concrete type in a
   generic function is fine: specialization removes const parameters and
   leaves the type parameters, so one copy per const instantiation serves
   every type instantiation
 - Nothing else is accepted, not a literal and not an expression (F076):
-  `repeat(3, ref s)` is refused as surely as `repeat(2 + 1, ref s)`. The value a const parameter takes
-  has to be one the compiler already holds, and a `const` binding is the one
-  form that says so on its face. A const parameter counts, being a const
-  binding within the body
+  `repeat(3, ref s)` is refused as surely as `repeat(2 + 1, ref s)`. The value a
+  const parameter takes has to be one the compiler already holds, and a `const`
+  binding is the one form that says so on its face. A const parameter counts,
+  being a const binding within the body
 
 **Implementation:** The compiler monomorphizes, keeping the original function
-and adding a copy per instantiation beside it. See
-[Const Parameter Specialization](compiler-guide.md#user-content-const-parameter-specialization)
+and adding a copy per instantiation beside it. See [Const Parameter
+Specialization](compiler-guide.md#user-content-const-parameter-specialization)
 in the compiler guide.
 
 ### 8.7 Generic Functions
@@ -1593,7 +1609,7 @@ There are three bounds:
 - **`ord`** is every type there is, and says that the total order every value
   has may be used. It is the weakest bound: what it rules out is a type with no
   ordering, of which the language has none today. It is worth asking for
-  because the order is otherwise out of reach — `.<` is for numbers only, and
+  because the order is otherwise out of reach -- `.<` is for numbers only, and
   `==` is refused for a list, a result, a type parameter inside an aggregate
   and more (Section 6.3), whether or not a generic is involved. `sys/std/ord`
   is what it offers: the
@@ -1616,7 +1632,7 @@ There are three bounds:
   `sys/std/float` offers.
 - **`fixedint`** is any of the ten fixed-width integers: `u8`, `i8`, `u16`,
   `i16`, `u32`, `i32`, `u64`, `i64`, `index` and `offset`. What all ten have is
-  the comparisons and the checked and optional arithmetic — `+!`, `+?` and the
+  the comparisons and the checked and optional arithmetic -- `+!`, `+?` and the
   rest. Bare `+` is not among them, because a fixed-width integer does not have
   one. Negation is among them in both forms, `-!` and `-?`. `sys/std/fixedint`
   is what is written on top of that: the
@@ -1635,9 +1651,9 @@ it.
 
 A literal cannot be written at type `T`, because a literal has to be written at
 some type and inside a generic the type is what nobody has picked yet. The
-constants come from the standard library instead — `zero`, `one`, `min_value`
+constants come from the standard library instead -- `zero`, `one`, `min_value`
 and `max_value` in `sys/std/fixedint`, and those plus `nan`, `infinity`,
-`epsilon`, `pi` and the rest in `sys/std/float` — which take theirs from a
+`epsilon`, `pi` and the rest in `sys/std/float` -- which take theirs from a
 descriptor the call site hands over. That works because the type parameter
 appears only in the return, so the call site is the one place that knows; see
 [the native ABI](native-abi.md). The consequence is that such a call has to be
@@ -1735,7 +1751,7 @@ end loop
 ```
 
 `break` exits the innermost loop, and `continue` jumps to its next iteration.
-Either outside a loop is an error (F050).
+Outside a loop, `break` is F050 and `continue` F051.
 
 **Conditional loop:**
 
@@ -1824,7 +1840,7 @@ debuglog p.a
 
 It accepts an expression of any type, and borrows rather than consumes it, so
 a linear value may be logged and then used. That is why a projection of a
-linear field may be written under it without a `@` (Section 3.2).
+linear field may be written under it without a `@` (Section 7.2).
 
 ### 8.11 Call Statements
 
@@ -1847,15 +1863,16 @@ with no statement keyword at all is P001.
 
 The module system has three levels: library, package, module.
 
-A **library** is a directory of packages (e.g. `sys/`, `local/`).
-A **package** is a directory of modules and data (e.g. `sys/std/`).
-A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`). It defines
-things for others to use, and its top level holds only declarations: `fun`,
-`native fun`, `const`, `type`, `require` and `import`. Any other statement
-there, which would never run, is P077. A script's top level runs from top to
-bottom.
-A **data file** is a single `.dlt` file of datalit (e.g. `local/shop/orders.dlt`),
-which `require data` reads; see Section 9.6.
+- A **library** is a directory of packages (e.g. `sys/`, `local/`).
+- A **package** is a directory of modules and data (e.g. `sys/std/`).
+- A **module** is a single `.dfm` file (e.g. `sys/std/u32.dfm`).
+- A **data file** is a single `.dlt` file of Datalit
+  (e.g. `local/shop/orders.dlt`), which `require data` reads (Section 9.6).
+
+A module defines things for others to use, so its top level holds only
+declarations: `fun`, `const`, `type`, `require` and `import`. Any other
+statement there, which would never run, is P077. A `native fun` parses there
+but is F062, since only a rider interface (Section 9.5) can supply its body.
 
 The `sys` library is compiled into the `datalove` binary. The `local` library
 is a workspace's own, read from disk by the command line (`script`,
@@ -1889,10 +1906,11 @@ require rider std
 require data local/shop/orders: [{sku: string, qty: u32}]
 ```
 
-A `require` or `import` is read only at the top level of a module or script,
-and one inside a block is P074, as is a `fun`, `native fun` or `type`. Where it stands at the top level does not
-matter: the requires and imports are gathered before anything is resolved, so
-a call above the `require` it goes through is fine.
+A `require` or `import` is read only at the top level of a module or script, and
+one inside a block is P074, as is a `fun`, `native fun` or `type`. Where it
+stands at the top level does not matter: the requires and imports are gathered
+before anything is resolved, so a call above the `require` it goes through is
+fine.
 
 A `require` is refused where it is written when the module or rider does not
 exist (F079), when the same one is required twice in one module or script
@@ -1915,7 +1933,7 @@ A name binds one function, so importing a second under a name already bound
 is an error rather than a shadowing (F059). The same holds between an import
 and a function the module or script defines: the import is refused (F086),
 and the function stays. Two modules exporting the same name is
-ordinary - `min` is in every numeric module - so only one of them can be
+ordinary -- `min` is in every numeric module -- so only one of them can be
 imported into a given scope. In a session the imports arrive on separate
 lines and the rule is the same across them; importing the same function
 again is redundant rather than ambiguous, and allowed.
@@ -2365,12 +2383,12 @@ is expected is a mismatch rather than a conversion, and the same in reverse;
 with `--jit-threshold` to say how many calls make a function hot,
 `--jit-osr-threshold` how many iterations make a loop worth entering in compiled
 code partway through a call, `--jit-opt-level` how hard the code generator
-works, and `--jit-stats` to report what was compiled; `--time` prints how long compiling
-and running took (`--jit-stats` implies it). `aot-compile` takes `-o` for the
-output path, `--link`, `--run` and `--c`, the last emitting C and compiling
-that rather than emitting an object file directly. `script`, `script-ir`,
-`script-world` and `aot-compile` each take `--no-sys` to leave the system
-library out. `repl` takes `--script` to run a script through the REPL's
+works, and `--jit-stats` to report what was compiled; `--time` prints how long
+compiling and running took (`--jit-stats` implies it). `aot-compile` takes `-o`
+for the output path, `--link`, `--run` and `--c`, the last emitting C and
+compiling that rather than emitting an object file directly. `script`,
+`script-ir`, `script-world` and `aot-compile` each take `--no-sys` to leave the
+system library out. `repl` takes `--script` to run a script through the REPL's
 engine without prompting, and `--load` to replay a session `/save` wrote.
 
 A *worldfile* is a single text file holding several modules, data files,

@@ -116,7 +116,7 @@ header, though the concrete syntax usually gives it by separators
 (`[| 1 2, 3 4 |]` is `[| 2 2 | 1 2 3 4 |]`). Parentheses around a single
 expression are not a node: `(e)` is `e`, and `: T / (: U / e)` is two nested
 hints. (The AST keeps a `Group` node only to hold the inner of two such
-hints apart; `Syn-Group` and `Check-Group` pass straight through it.)
+hints apart; inference and `Check-Group` pass straight through it.)
 
 ## Type equivalence
 
@@ -434,9 +434,9 @@ become a result by being where one is expected.
 ⊢ data e ⇐ data                 ⊢ error e ⇐ error
 ```
 
-These are derivable from `Syn-Data`, `Syn-Error` and `Check-Subsume`; the
-checker handles them directly. There is no rule `⊢ e ⇐ data` for other
-forms: a value is a `data` only when written as one.
+The payload synthesizes rather than checks: nothing outside it says what its
+type should be, and the package forgets that type. There is no rule
+`⊢ e ⇐ data` for other forms: a value is a `data` only when written as one.
 
 ### Atoms, terms and enums
 
@@ -510,7 +510,9 @@ Some properties follow from the rules and are worth stating outright.
 - **A tensor's shape is the parser's business.** The parser refuses a body
   that does not fill its shape (D041), so the element-count premise of
   `Check-Tensor` (T049) only guards ASTs built some other way. An empty
-  tensor such as `[| 0 3 | |]` is the one with no elements.
+  tensor such as `[| 0 3 | |]` is the one with no elements. A table row is
+  the same: the parser refuses one with the wrong number of elements (D030)
+  before `Check-Table` (T056) sees it.
 
 ## Diagnostics
 
@@ -532,7 +534,7 @@ Some properties follow from the rules and are worth stating outright.
 | T049 | check | Tensor element count does not match the shape |
 | T054 | check | Table column count mismatch |
 | T055 | check | Table column name mismatch |
-| T056 | both | Table row with the wrong number of elements |
+| T056 | check | Table row with the wrong number of elements |
 | T057 | check | Atom or term is not the expected one, or not a variant of the expected enum |
 | T058 | check | Enum literal against a type that is not an enum |
 | T059 | hint | A bare name in a hint; datalit has no type aliases |

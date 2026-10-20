@@ -161,7 +161,10 @@ And for negation of anything under a float:
 Γ ⊢ -e ⇐ F
 ```
 
-These make `let x: i32 = -5` and `let y: f32 = -1.5` check.
+These make `let x: i32 = -5` and `let y: f32 = -1.5` check, and pass a
+float expected type through the sign, so with `x : f32`, `let y: f64 = -x@`
+widens. There is no such rule for `int`: with `x : u8`, `let y: int = -x@`
+synthesizes `-` over a `u8`, which is F026 by `Syn-Neg`.
 
 ### Variables
 
@@ -199,10 +202,10 @@ with `x : ?u32` compares options, `a@ .< b` takes `b`'s type, and
 `a@ .< 0` compares at `a`'s type, the literal going along with the `@`.
 `1 == 2` has nothing but literals and compares two `int`s. Operands whose
 types do not come to the same type, such as `1 == "a"` or `a@ .< b@` with
-`a : u32` and `b : u64`, are F016, "operands must have the same type",
-reported before the operator is checked against the type. Operands that come
-to one type but do not check against it are reported at the operand: with
-`x : u8`, `x == 300` is F065.
+`a : u32` and `b : u64`, are F016, labelled "operands must have the same
+type", reported before the operator is checked against the type. Operands
+that come to one type but do not check against it are reported at the
+operand: with `x : u8`, `x == 300` is F065.
 
 Each arithmetic operator `⊕` admits a set of operand types, `Arith(⊕)`, and
 may require the enclosing function to return an option or a result:
@@ -274,8 +277,9 @@ let c: int = a@ + b@      // with a, b : u32, both widen to int
 The premise `Γ ⊢ e₁ ⊕ e₂ ⇒ T'` still checks the operator against the
 operand type, so passing a type down never gives an operator a type it does
 not have: with `a, b : u32`, `let r: u32 = a@ + b@` leaves the operands
-`u32`, and bare `+` on `u32` is F026. A result that is not `T` is F016, with a note suggesting `@`
-where `Check-Adapt` would succeed. Nothing is tried and undone.
+`u32`, and bare `+` on `u32` is F026. A result that is not `T` is F016, with
+a note suggesting `@` where `Check-Adapt` would succeed. Nothing is tried and
+undone.
 
 Unary operators:
 
@@ -476,8 +480,9 @@ reports:
 
 The class `adapt T` admits every type `T` adapts to (`T ⇝ U`) and defaults to
 `T`: with nothing to convert to, `@` clones. It merges with a class that
-admits `T`, as `adapt T`, so a literal beside `e@` goes along with `T`; two
-`@` of different types stay apart.
+admits `T`, as `adapt T`, so a literal beside `e@` goes along with `T`. Two
+`@` meet at the first one's type when the second adapts to it, so with
+`a : u32` and `b : u8`, `a@ .< b@` compares `u32`s and `b@ .< a@` is F016.
 
 An expression is inferred once, when something first asks for its type, with
 everything inside it. The inferred type of each part is kept, and checking
@@ -829,14 +834,14 @@ not reported again.
 | F086 | A function defined twice in one module or script, or an import of a name a function there defines |
 | F087 | A `for` over something that is not a place, over a type it cannot walk, or binding the wrong number of names for its collection |
 
-F047 and F056 are unassigned. F060 is retired. Two parse errors belong to
-the same rules: P074, a declaration inside a block, and P077, a statement at
-the top level of a module that is not a declaration. The datalit checker's
-`TypeError` converts into datafun's, but datafun reports its literal errors
-through its own checks, so the datalit T-codes do not appear in datafun
-source. They do appear in data files: a `.dlt` that does not have the type its
-`require data` gives is F084 at the `require`, and the datalit errors are
-reported where they are in the file.
+A code missing from the table is unassigned; F060 is retired. Two parse
+errors belong to the same rules: P074, a declaration inside a block, and
+P077, a statement at the top level of a module that is not a declaration.
+The datalit checker's `TypeError` converts into datafun's, but datafun
+reports its literal errors through its own checks, so the datalit T-codes do
+not appear in datafun source. They do appear in data files: a `.dlt` that
+does not have the type its `require data` gives is F084 at the `require`, and
+the datalit errors are reported where they are in the file.
 
 ## Implementation
 
@@ -853,8 +858,9 @@ bounds in `type_param_bounds`; the expected return type and
 
 `TypeFunction` (`crates/datalove-datafun-common`) holds a signature's
 parameter types, modes, const flags and return type. Type parameters and
-their bounds are read from the callee's `FunHead` (`crates/datalove-datafun-sema`)
-at the call, for an ordinary function and a native alike.
+their bounds are read from the callee's `FunHead`
+(`crates/datalove-datafun-ast`) at the call, for an ordinary function and a
+native alike.
 
 Expression types are stored in a `BodyTable`, a dense vector per function
 body indexed by an expression's index within it. Each call stores a

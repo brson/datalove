@@ -1,11 +1,23 @@
-# The native rider ABI
+# The Native Rider ABI
 
-How a compiled datafun program calls a function written in Rust.
+How a compiled datafun program calls a function written in Rust. A reference,
+current with the four backends as of October 2026.
+
+## Contents
+
+- [The shape of a call](#user-content-the-shape-of-a-call)
+- [Where the type comes from](#user-content-where-the-type-comes-from)
+- [Return-position type parameters](#user-content-return-position-type-parameters)
+- [Writing the result](#user-content-writing-the-result)
+- [Ownership](#user-content-ownership)
+- [Declaring a native](#user-content-declaring-a-native)
+- [Borrowing a `data`](#user-content-borrowing-a-data)
+- [Arity](#user-content-arity)
 
 A rider is a package of native functions. Its signatures are declared in a
 `.dli` interface file, its implementations are `extern "C-unwind"` functions in
-a Rust crate, and the two are joined by a linker symbol. Every backend --- the
-interpreter, the two cranelift backends and the C backend --- makes the same
+a Rust crate, and the two are joined by a linker symbol. Every backend -- the
+interpreter, the two cranelift backends and the C backend -- makes the same
 call, so there is one ABI here rather than four.
 
 ## The shape of a call
@@ -22,7 +34,7 @@ uint8_t dlr_<rider>__<function>(
 
 In order:
 
-- **`rt`** --- the runtime handle. Most `dtlv_rti_*` entry points take it
+- **`rt`** -- the runtime handle. Most `dtlv_rti_*` entry points take it
   first, so a native that calls back into the runtime passes its own along.
   Those that need no runtime state -- `dtlv_rti_init`, `dtlv_rti_data_borrow`,
   and the layout queries `dtlv_rti_field_offset`, `dtlv_rti_field_tydesc`,
@@ -31,7 +43,7 @@ In order:
   `datalove_rti::table(rt)` directly.
 
   It is also how a native *finds* those entry points. A rider does not link
-  the runtime --- it would otherwise carry a second copy of one --- so it
+  the runtime -- it would otherwise carry a second copy of one -- so it
   cannot call them by name. The handle points at the runtime's state, whose
   first word is a table of its functions, and `datalove_rti::call` wraps
   reading it: `call::dtlv_rti_string_from_bytes(rt, ..)` looks up the table on
@@ -50,7 +62,7 @@ In order:
   order. The pointer is at the value; the descriptor says what is behind it.
 - **The result, as an out parameter**, given the same way: somewhere to write
   it and a descriptor for what goes there. There is no C return value for the
-  result --- see the status below.
+  result -- see the status below.
 - **Zero or more trailing descriptors**, one for each type parameter that no
   argument determines. Nearly every native has none. See *Return-position type
   parameters*.
@@ -62,7 +74,7 @@ a failure a native reports goes unnoticed and the caller reads an unwritten
 result. A native that can fail should say so in its return type, an option or
 a result.
 
-The symbol is `dlr_{rider}__{function}` --- the rider's name as written in
+The symbol is `dlr_{rider}__{function}` -- the rider's name as written in
 `require rider`, two underscores, the function's name. It is spelled in one
 place, `datalove_datafun_ir::native_symbol`, which `NativeContext::new` uses;
 the compiler names the rider and the function and never the symbol, and every
@@ -98,10 +110,10 @@ parameter mentioned anywhere in the arguments is determined, because a
 descriptor is structural and `[T]` names its element type just as `?T` names
 its payload; one mentioned nowhere in the arguments is not.
 
-The answer is recorded on `RiderInterface::generic_functions` when the `.dli` is
-parsed, and again on `NativeContext::undetermined_type_params` when the code
-unit is built --- the same computation from the same signature, so the two
-agree about how many trailing arguments there are.
+The answer is worked out once, when the `.dli` is parsed, and recorded on
+`RiderInterface::generic_functions`. Lowering copies it onto
+`NativeContext::undetermined_type_params` when it builds the native's code
+unit, so the caller and every backend count the same trailing arguments.
 
 The call site hands over the descriptor of what it bound each of those type
 parameters to (`NativeContext::undetermined_bindings`): a static one where the
@@ -138,13 +150,13 @@ never has to clean up after a refused move, and nothing is destroyed twice.
 
 Three places have to agree, and all three derive from the same `.dli` line.
 
-1. **The interface**, in `sys/<package>/rider/rider.dli`:
+1. **The interface**, in `<library>/<package>/rider/rider.dli`:
 
    ```
    native fun fixedint_zero<T>(): T where { T is fixedint, }
    ```
 
-2. **The implementation**, in the rider crate:
+2. **The implementation**, in the rider crate beside it (`rider/src/lib.rs`):
 
    ```rust
    #[no_mangle]
@@ -165,8 +177,10 @@ Three places have to agree, and all three derive from the same `.dli` line.
    import std.fixedint_zero
    ```
 
-   A rider is visible only to modules in its own package. A script reaches one
-   through a module that re-exports it.
+   Any module may require any rider, in its own package or another's; a
+   script may not (F082). A script reaches a native through a module function
+   that calls it, since an import is not exported again: `std.fixedint_zero`
+   is reached as `fixedint.zero`, the wrapper in `sys/std/fixedint.dfm`.
 
 ## Borrowing a `data`
 
