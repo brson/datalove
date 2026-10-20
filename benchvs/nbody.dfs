@@ -123,7 +123,7 @@ fun run(): !f64
     var bodies = create_bodies()!
     var step: u32 = 0
     loop while step .< STEPS
-      let _ = advance(mut bodies, 0.01)!
+      call advance(mut bodies, 0.01)!
       set step = u32.add_wrapping(step, 1)
     end loop
     set total = total + energy(ref bodies)!

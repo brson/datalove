@@ -1,0 +1,103 @@
+{
+  "ast": {
+    "statements": [
+      {
+        "expr": {
+          "expr": {
+            "kind": "TryResult",
+            "operand": {
+              "expr": {
+                "args": [],
+                "kind": "FunctionCall",
+                "name": "f"
+              }
+            }
+          }
+        },
+        "kind": "ExprStatement"
+      },
+      {
+        "expr": {
+          "expr": {
+            "kind": "TryOption",
+            "operand": {
+              "expr": {
+                "args": [],
+                "kind": "FunctionCall",
+                "name": "f"
+              }
+            }
+          }
+        },
+        "kind": "ExprStatement"
+      },
+      {
+        "expr": {
+          "expr": {
+            "kind": "TryOption",
+            "operand": {
+              "expr": {
+                "kind": "TryResult",
+                "operand": {
+                  "expr": {
+                    "args": [
+                      {
+                        "expr": {
+                          "kind": "Place",
+                          "root": "x",
+                          "steps": []
+                        }
+                      }
+                    ],
+                    "kind": "FunctionCall",
+                    "name": "f",
+                    "qualifier": "m"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "kind": "ExprStatement"
+      },
+      {
+        "kind": "ParseError",
+        "message": "`call` takes a function call"
+      },
+      {
+        "kind": "ParseError",
+        "message": "`call` takes a function call"
+      }
+    ]
+  },
+  "diagnostics": [
+    {
+      "code": "P031",
+      "labels": [
+        {
+          "message": "not a function call",
+          "span": [
+            40,
+            41
+          ],
+          "text": "!"
+        }
+      ],
+      "message": "`call` takes a function call"
+    },
+    {
+      "code": "P031",
+      "labels": [
+        {
+          "message": "not a function call",
+          "span": [
+            54,
+            55
+          ],
+          "text": "?"
+        }
+      ],
+      "message": "`call` takes a function call"
+    }
+  ]
+}

@@ -87,7 +87,7 @@ fun count(ref text: string): !%{string = u32}
   var counts: %{string = u32} = %{}
   for word in ref words
     let lower = string.to_ascii_lowercase(ref word)
-    let _ = map.add(mut counts, ref lower, 1)!
+    call map.add(mut counts, ref lower, 1)!
   end for
   ret ok counts
 end fun

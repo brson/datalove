@@ -128,7 +128,7 @@ case_arm      = "case", ( "atom", NAME | "term", NAME, value_name | "default" ),
                 EOLS, block ;                   (* P044-P047; second default: P049 *)
 ret_stmt      = "ret", [ expr ] ;
 debuglog_stmt = "debuglog", expr ;
-call_stmt     = "call", expr ;                  (* must parse to a call node: P031 *)
+call_stmt     = "call", expr ;      (* a call node, then any "?" and "!": P031 *)
 
 (* ===== Expressions  (expr.rs; precedence in binop_precedence) ===== *)
 expr          = or_expr ;

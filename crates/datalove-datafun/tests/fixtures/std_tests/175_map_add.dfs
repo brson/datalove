@@ -6,27 +6,27 @@ import map.add
 fun words(): !(%{string = u32}, string)
   var counts: %{string = u32} = %{}
   let word = "apple"
-  let _ = add(mut counts, ref word, : u32 / 1)!
-  let _ = add(mut counts, ref "pear", : u32 / 5)!
-  let _ = add(mut counts, ref word, : u32 / 1)!
+  call add(mut counts, ref word, : u32 / 1)!
+  call add(mut counts, ref "pear", : u32 / 5)!
+  call add(mut counts, ref word, : u32 / 1)!
   ret ok (counts, word)
 end fun
 
 // Every fixed-width value type.
 fun widths(): !(%{u8 = i8}, %{i16 = u16}, %{u32 = i32}, %{i64 = u64}, %{index = offset})
   var a: %{u8 = i8} = %{}
-  let _ = add(mut a, ref : u8 / 1, : i8 / -100)!
-  let _ = add(mut a, ref : u8 / 1, : i8 / -28)!
+  call add(mut a, ref : u8 / 1, : i8 / -100)!
+  call add(mut a, ref : u8 / 1, : i8 / -28)!
   var b: %{i16 = u16} = %{}
-  let _ = add(mut b, ref : i16 / -1, : u16 / 65000)!
+  call add(mut b, ref : i16 / -1, : u16 / 65000)!
   var c: %{u32 = i32} = %{}
-  let _ = add(mut c, ref : u32 / 7, : i32 / 2147483000)!
-  let _ = add(mut c, ref : u32 / 7, : i32 / 647)!
+  call add(mut c, ref : u32 / 7, : i32 / 2147483000)!
+  call add(mut c, ref : u32 / 7, : i32 / 647)!
   var d: %{i64 = u64} = %{}
-  let _ = add(mut d, ref : i64 / 0, : u64 / 18446744073709551000)!
+  call add(mut d, ref : i64 / 0, : u64 / 18446744073709551000)!
   var e: %{index = offset} = %{}
-  let _ = add(mut e, ref : index / 3, : offset / -5)!
-  let _ = add(mut e, ref : index / 3, : offset / 2)!
+  call add(mut e, ref : index / 3, : offset / -5)!
+  call add(mut e, ref : index / 3, : offset / 2)!
   ret ok (a, b, c, d, e)
 end fun
 

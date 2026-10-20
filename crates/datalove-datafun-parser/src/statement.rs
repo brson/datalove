@@ -1356,11 +1356,21 @@ statements that run belong in a function or a script")
     }
 
     /// Parse a `call` statement, whose expression must be a function call.
+    ///
+    /// The call may be followed by `?` and `!`, so a function returning `?()`
+    /// or `!()` can be called for its effect.
     fn parse_call(&mut self) -> ast::Statement<'db> {
         self.eat_word("call");
         let expr = self.parse_expr_full();
-        // Verify the expression is a function call.
-        match self.expr_kind(expr) {
+        let mut inner = expr;
+        loop {
+            match self.expr_kind(inner) {
+                ast::ExprFunKind::TryOption(t) => inner = t.operand,
+                ast::ExprFunKind::TryResult(t) => inner = t.operand,
+                _ => break,
+            }
+        }
+        match self.expr_kind(inner) {
             ast::ExprFunKind::FunctionCall(_) => {
                 ast::Statement::ExprStatement(ast::StmtExprStatement { expr })
             }

@@ -382,10 +382,6 @@ that takes types as well as functions.
 **Reproduced**, each while writing `demos/store`, about 800 lines over three
 data files. None stopped it; each cost a detour.
 
-- **A fallible call cannot be a statement.** `call f()!` is P031 (`call`
-  takes a function call) and a bare `f()!` is P001, so a function returning
-  `!()` is called for its effect as `let _ = f()!`. The store's `sales.add`
-  is called that way two dozen times.
 - **Nothing prints a string as it is.** `debuglog` is the only output, and it
   quotes and escapes a string, so the report prints every line in quotes.
 - **A module's ownership errors are not rendered.** They print as the

@@ -1,0 +1,22 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Error",
+                errors: [
+                    "TypeMismatch { expected: \"unit\", actual: \"u32\" }",
+                    "TypeMismatch { expected: \"unit\", actual: \"u32\" }",
+                ],
+            ),
+            ownership: OwnershipResult(
+                status: "Skipped",
+            ),
+            lowering: LoweringResult(
+                status: "Skipped",
+            ),
+            output: "",
+        ),
+    ],
+)

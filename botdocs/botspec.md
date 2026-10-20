@@ -1850,12 +1850,19 @@ A function called for its effect is written after `call`:
 call bump(mut v)
 ```
 
-`call` takes only a function call, plain or qualified, and nothing written on
-it: `call f(x)!`, `call f(x)@` and `call icall g()` are P031 as surely as
-`call x`. The function must return unit (F016 otherwise), since a value
-computed and discarded is more likely a mistake than an intention; a value
-that is wanted for nothing is bound with `let` and left. A line that begins
-with no statement keyword at all is P001.
+`call` takes a function call, plain or qualified, and nothing written on it
+but the try operators (Section 6.5), so that a function returning `!()` or
+`?()` is called for its effect:
+
+```datalove
+call map.add(mut counts, ref word, 1)!
+```
+
+`call f(x)@`, `call icall g()` and `call x!` are P031 as surely as `call x`.
+The call, once its try operators have unwrapped it, must be unit (F016
+otherwise), since a value computed and discarded is more likely a mistake
+than an intention; a value that is wanted for nothing is bound with `let` and
+left. A line that begins with no statement keyword at all is P001.
 
 ## 9. Module System
 

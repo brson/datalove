@@ -1,0 +1,145 @@
+Analysis(
+    sections: [
+        SectionResult(
+            section_type: "module",
+            name: Some("local/test/bump"),
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    fn bump(p0, p1):
+                    block0:
+                        v0 = ge p0, p1
+                        branch v0, block1, block2
+                    block1:
+                        v1 = const "at limit"
+                        v2 = error_from v1
+                        v3 = err v2
+                        return v3
+                    block2:
+                        goto block3
+                    block3:
+                        v4 = const 1u32
+                        v5 = add.assign.checked p0, v4
+                        branch v5, block4, block5
+                    block4:
+                        v6 = const "arithmetic overflow"
+                        v7 = error_from v6
+                        v8 = err v7
+                        return v8
+                    block5:
+                        v9 = pack () {}
+                        v10 = ok v9
+                        return v10
+                    
+                    fn bump_opt(p0, p1):
+                    block0:
+                        v0 = ge p0, p1
+                        branch v0, block1, block2
+                    block1:
+                        v1 = none
+                        return v1
+                    block2:
+                        goto block3
+                    block3:
+                        v2 = const 1u32
+                        v3 = add.assign.checked p0, v2
+                        branch v3, block4, block5
+                    block4:
+                        v4 = none
+                        return v4
+                    block5:
+                        v5 = pack () {}
+                        v6 = some v5
+                        return v6
+                    
+                    fn bump_twice(p0, p1):
+                    block0:
+                        v0 = call m0.u0(p0, p1)
+                        v1, v2, v3 = unwrap_result v0
+                        branch v3, block2, block1
+                    block1:
+                        v4 = err v2
+                        return v4
+                    block2:
+                        v5 = call m0.u0(p0, p1)
+                        v6, v7, v8 = unwrap_result v5
+                        branch v8, block4, block3
+                    block3:
+                        v9 = err v7
+                        return v9
+                    block4:
+                        v10 = pack () {}
+                        v11 = ok v10
+                        return v11
+                    
+                    fn bump_opt_twice(p0, p1):
+                    block0:
+                        v0 = call m0.u1(p0, p1)
+                        v1, v2 = unwrap_option v0
+                        branch v2, block2, block1
+                    block1:
+                        v3 = none
+                        return v3
+                    block2:
+                        v4 = call m0.u1(p0, p1)
+                        v5, v6 = unwrap_option v4
+                        branch v6, block4, block3
+                    block3:
+                        v7 = none
+                        return v7
+                    block4:
+                        v8 = pack () {}
+                        v9 = some v8
+                        return v9
+                """,
+            ),
+            output: "",
+        ),
+        SectionResult(
+            section_type: "scriptunit-fragment",
+            name: None,
+            typecheck: TypecheckResult(
+                status: "Success",
+            ),
+            ownership: OwnershipResult(
+                status: "Success",
+            ),
+            lowering: LoweringResult(
+                status: "Success",
+                ir: """
+                    scriptunit:
+                    block0:
+                        v0 = const 0u32
+                        store.copy s0, v0
+                        v1 = const 5u32
+                        v2 = call m0.u2(s0, v1)
+                        debuglog v2
+                        drop v2
+                        debuglog s0
+                        v3 = const 4u32
+                        store.copy s1, v3
+                        v4 = const 5u32
+                        v5 = call m0.u2(s1, v4)
+                        debuglog v5
+                        drop v5
+                        debuglog s1
+                        v6 = const 0u32
+                        store.copy s2, v6
+                        v7 = const 1u32
+                        v8 = call m0.u3(s2, v7)
+                        debuglog v8
+                        debuglog s2
+                        unit_end
+                """,
+            ),
+            output: "(fragment executed)",
+            debug_output: Some("ok ()\n2\ner error \"at limit\"\n5\nnone\n1\n"),
+        ),
+    ],
+)

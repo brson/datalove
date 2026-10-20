@@ -91,7 +91,7 @@ fun heapsort<T>(elems: [T]): ![T] where { T is ord, }
   var rest = elems
   loop
     if list.pop(mut rest) |elem|
-      let pushed = heap_push(mut heap, elem)!
+      call heap_push(mut heap, elem)!
     else
       break
     end if

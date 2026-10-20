@@ -703,8 +703,9 @@ A `ret` at the top level of a module is refused by the parser (P077).
 ```
 
 `debuglog` takes any type, in a borrowed position. A `call` statement's
-callee must return `()`: a value computed and discarded is F016. `call`
-followed by anything but a call is P031.
+call, after any `?` and `!` on it, must have type `()`: a value computed and
+discarded is F016. `call` followed by anything but a call, with or without
+`?` and `!`, is P031.
 
 ### Functions
 

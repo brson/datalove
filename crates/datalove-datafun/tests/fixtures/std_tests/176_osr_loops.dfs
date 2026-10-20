@@ -86,7 +86,7 @@ fun counts(ref words: [string]): !%{string = u32}
     var seen: %{string = u32} = %{}
     var i: index = 0
     loop while i .< list.len(ref words)
-        let _ = map.add(mut seen, ref words[i]!@, 1)!
+        call map.add(mut seen, ref words[i]!@, 1)!
         set i = icall add_wrapping_index(i, : index / 1)
     end loop
     ret ok seen

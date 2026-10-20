@@ -1,0 +1,51 @@
+----------
+module local/test/bump
+----------
+
+// A function returning `!()` or `?()` is called for its effect with `!` or
+// `?` after it, and a failure returns early from the caller.
+fun bump(mut x: u32, limit: u32): !()
+    if x >= limit
+        ret er(error "at limit")
+    end if
+    set x +!= 1
+    ret ok ()
+end fun
+
+fun bump_opt(mut x: u32, limit: u32): ?()
+    if x >= limit
+        ret none
+    end if
+    set x +?= 1
+    ret some ()
+end fun
+
+fun bump_twice(mut x: u32, limit: u32): !()
+    call bump(mut x, limit)!
+    call bump(mut x, limit)!
+    ret ok ()
+end fun
+
+fun bump_opt_twice(mut x: u32, limit: u32): ?()
+    call bump_opt(mut x, limit)?
+    call bump_opt(mut x, limit)?
+    ret some ()
+end fun
+
+----------
+scriptunit-fragment
+----------
+
+require module local/test/bump
+import bump.bump_twice
+import bump.bump_opt_twice
+
+var a: u32 = 0
+debuglog bump_twice(mut a, 5)
+debuglog a
+var b: u32 = 4
+debuglog bump_twice(mut b, 5)
+debuglog b
+var c: u32 = 0
+debuglog bump_opt_twice(mut c, 1)
+debuglog c
