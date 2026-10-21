@@ -112,7 +112,7 @@ Scripts and script units are allowed to return the type `!()`,
 "result of unit".
 
 In this example all three units compile and execute successfully.
-The third logs the value "10".
+The third logs the value "100".
 Previous units both compile and execute prior to subsequent units,
 as the results of execution may affect which bindings are subsequently available.
 
@@ -248,6 +248,69 @@ and also reexecute unit 2.
 
 
 ### How is re-execution affected when subsequent units mutate the re-executed unit?
+
+Here's a new variation on our running example
+that mutates instead of moves.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+var b = 100
+
+---
+script-unit
+---
+
+set b = b /! 10
+let c = a /! b
+
+debuglog c
+```
+
+In the third unit it divides a by 10 in place.
+On first run it mutates `b` from 100 to 10 and logs the value "100".
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | success    | yes   |
+| 2    | success    | yes   |
+| 3    | success    | yes   |
+
+At this point unit 2's frame contains the mutated `b`, 10.
+Imagine in the second run we cause the first unit to fail as previously.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | fail       | no    |
+| 2    | no         | no    |
+| 3    | fail       | no    |
+
+Unit 2 is untouched because it has no dependencies on unit 1.
+Unit 3 failed to compile because it does.
+Nothing runs.
+
+Now if we fix unit 1,
+like with the previous move-dependency 3 has from 2,
+we need to also rerun unit 2 to avoid 3 reading the stale binding of `b`.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | success    | yes   |
+| 2    | no         | yes   |
+| 3    | success    | yes   |
+
+The analysis is essentially the same,
+but instead of a dependency on move operations
+we have a dependency on mutable borrows.
+
 
 
 
