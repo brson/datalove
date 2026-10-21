@@ -290,20 +290,22 @@ let a = 1000
 script-unit
 ---
 
-var b = 100
+var b = 125
 
 ---
 script-unit
 ---
 
-set b = b /! 10
+set b = b * 2
 let c = a /! b
 
 debuglog c
 ```
 
-In the third unit it divides `b` by 10 in place.
-On first run it mutates `b` from 100 to 10 and logs the value "100".
+The third unit doubles `b` in place.
+Doubling is not idempotent:
+running it twice is not the same as running it once.
+On first run it mutates `b` from 125 to 250 and logs the value "4".
 
 | unit | compiled   | ran   |
 |------|------------|-------|
@@ -311,7 +313,7 @@ On first run it mutates `b` from 100 to 10 and logs the value "100".
 | 2    | success    | yes   |
 | 3    | success    | yes   |
 
-At this point unit 2's frame contains the mutated `b`, 10.
+At this point unit 2's frame contains the mutated `b`, 250.
 Imagine in the second run we cause the first unit to fail as previously.
 
 | unit | compiled   | ran   |
@@ -324,7 +326,7 @@ Unit 3 failed to compile because it depends on unit 1.
 Naively unit 2 is untouched because it doesn't.
 But like with the move, unit 3 wrote to `b` the last time it ran,
 and now it can't have,
-so we need to rerun unit 2 to put `b` back to 100.
+so we need to rerun unit 2 to put `b` back to 125.
 
 | unit | compiled   | ran   |
 |------|------------|-------|
@@ -334,7 +336,11 @@ so we need to rerun unit 2 to put `b` back to 100.
 
 Now if we fix unit 1,
 unit 3 runs against `b` as unit 2 made it,
-and divides it to 10 again rather than to 1.
+doubling 125 to 250 and logging "4" again.
+Had we left unit 2 alone,
+unit 3 would have doubled the 250 it left behind last time,
+to 500,
+and logged "2".
 
 | unit | compiled   | ran   |
 |------|------------|-------|
