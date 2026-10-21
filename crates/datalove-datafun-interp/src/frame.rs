@@ -860,11 +860,10 @@ impl FrameStore {
     /// buffer without destroying the values in it.
     ///
     /// **Nothing else in the store points at what is destroyed.** A unit
-    /// copies out of an earlier unit's bindings rather than referring to them
-    /// (`compiler-guide.md`, "Ownership across units"), so a later unit that
-    /// read one of these holds its own copy. A binding a later unit *moved*
-    /// out of is no longer initialized, so it is skipped rather than destroyed
-    /// twice.
+    /// moves out of an earlier unit's bindings rather than referring to them
+    /// (`compiler-guide.md`, "Ownership across units"), so what a later unit
+    /// took from these is in its own frame, and the binding it was taken from
+    /// is no longer initialized, so it is skipped rather than destroyed twice.
     pub fn replace_frame(
         &mut self,
         rt_handle: datalove_rt::c::LocalRtHandle,
@@ -911,11 +910,11 @@ impl FrameStore {
     /// without destroying the values in it, and the `let` and `var` bindings a
     /// unit left behind live in that buffer.
     ///
-    /// Nothing that survives points at what is destroyed. A unit copies out of
+    /// Nothing that survives points at what is destroyed. A unit moves out of
     /// an earlier unit's bindings rather than referring to them, so a unit
-    /// before `len` that read one of these holds its own copy, and a binding a
-    /// dropped unit moved out of is no longer initialized and so is skipped
-    /// rather than destroyed twice.
+    /// before `len` cannot hold anything of these, and a binding a dropped
+    /// unit moved out of is no longer initialized and so is skipped rather
+    /// than destroyed twice.
     pub fn truncate_units(&mut self, rt_handle: datalove_rt::c::LocalRtHandle, len: usize) {
         assert!(
             len <= self.frames.len(),

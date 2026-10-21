@@ -17,7 +17,7 @@ use datalove_datafun_ownership::{
     TrackingCategory, format_analysis_errors,
 };
 pub use datalove_datafun_sema::{
-    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint,
+    ScriptAnalysisData, AnalysisError, OwnershipRecoveryHint, ExternalBinding,
 };
 
 /// Hashable wrapper for FunctionAnalysis.
@@ -57,9 +57,15 @@ pub struct ScriptUnitOwnershipResult<'db> {
     /// Names this unit exports that hold no value.
     #[returns(ref)]
     pub dead_exports: Vec<String>,
-    /// Names from earlier units this unit assigned to.
+    /// Names an earlier unit gave away that this unit assigned to.
     #[returns(ref)]
     pub revived_exports: Vec<String>,
+    /// The earlier units' bindings this unit gave away.
+    #[returns(ref)]
+    pub taken_externals: Vec<String>,
+    /// The earlier units' bindings this unit wrote to.
+    #[returns(ref)]
+    pub written_externals: Vec<String>,
 }
 
 impl<'db> ScriptUnitOwnershipResult<'db> {
@@ -114,7 +120,7 @@ pub fn analyze_script_fragment_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     top: TopLevel<'db>,
-    dead_externals: Vec<String>,
+    externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     let expr_types = typecheck_result.expr_types(db);
@@ -148,13 +154,15 @@ pub fn analyze_script_fragment_tracked<'db>(
                 structured_errors,
                 Vec::new(),
                 Vec::new(),
+                Vec::new(),
+                Vec::new(),
             );
         }
     };
 
     // Analyze script-level statements for drop schedule.
     let script_analysis = ownership_analysis::analyze_script_statements_with_externals(
-        db, expr_types, typecheck_result.call_targets(db), body, dead_externals, external_consts,
+        db, expr_types, typecheck_result.call_targets(db), body, externals, external_consts,
     );
 
     // Check for script analysis errors.
@@ -167,6 +175,8 @@ pub fn analyze_script_fragment_tracked<'db>(
             None,
             vec![error_msg],
             structured_errors,
+            Vec::new(),
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         );
@@ -185,6 +195,8 @@ pub fn analyze_script_fragment_tracked<'db>(
 
     let dead_exports = script_analysis.dead_exports.clone();
     let revived_exports = script_analysis.revived_exports.clone();
+    let taken_externals = script_analysis.taken_externals;
+    let written_externals = script_analysis.written_externals;
     let script_data = ScriptAnalysisData {
         schedule: script_analysis.schedule,
         bindings: script_analysis.bindings,
@@ -192,6 +204,7 @@ pub fn analyze_script_fragment_tracked<'db>(
         unit_end: script_analysis.unit_end,
         dead_exports: script_analysis.dead_exports,
         revived_exports: script_analysis.revived_exports,
+        externals: script_analysis.externals,
     };
 
     ScriptUnitOwnershipResult::new(
@@ -202,6 +215,8 @@ pub fn analyze_script_fragment_tracked<'db>(
         structured_func_errors,
         dead_exports,
         revived_exports,
+        taken_externals,
+        written_externals,
     )
 }
 
@@ -217,13 +232,14 @@ pub fn analyze_script_expr_tracked<'db>(
     db: &'db dyn salsa::Database,
     typecheck_result: UnitTypecheckResultTracked<'db>,
     parsed: ParsedExpr<'db>,
-    dead_externals: Vec<String>,
+    externals: Vec<ExternalBinding>,
     external_consts: Vec<String>,
 ) -> ScriptUnitOwnershipResult<'db> {
     let expr_types = typecheck_result.expr_types(db);
 
     let analysis = ownership_analysis::analyze_expr_with_externals(
-        db, parsed.expr(db), expr_types, typecheck_result.call_targets(db), dead_externals, external_consts,
+        db, parsed.expr(db), expr_types, typecheck_result.call_targets(db),
+        externals, external_consts,
     );
 
     if !analysis.errors.is_empty() {
@@ -231,7 +247,7 @@ pub fn analyze_script_expr_tracked<'db>(
         let structured_errors = analysis.errors.clone();
         return ScriptUnitOwnershipResult::new(
             db, Vec::new(), None, vec![error_msg], structured_errors,
-            Vec::new(), Vec::new(),
+            Vec::new(), Vec::new(), Vec::new(), Vec::new(),
         );
     }
 
@@ -239,6 +255,7 @@ pub fn analyze_script_expr_tracked<'db>(
     // The expression result is consumed by the caller, so no drops needed.
     ScriptUnitOwnershipResult::new(
         db, Vec::new(), None, Vec::new(), Vec::new(), Vec::new(), Vec::new(),
+        analysis.taken_externals, analysis.written_externals,
     )
 }
 

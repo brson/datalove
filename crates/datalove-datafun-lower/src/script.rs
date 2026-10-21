@@ -96,6 +96,9 @@ pub fn lower_script_fragment_raw<'db>(
     ctx.body.drop_schedule = script_analysis.schedule;
     ctx.body.binding_info = script_analysis.bindings;
     ctx.body.tracking = script_analysis.tracking;
+    // The first bindings are the earlier units' that this unit names, which
+    // have operands already.
+    ctx.body.next_binding_id = script_analysis.externals;
     ctx.unit_end_drops = script_analysis.unit_end;
 
     // Track which functions have already been lowered (to skip in statement handling).

@@ -16,6 +16,7 @@ use datalove_datafun_tycheck::UnitTypecheckResultTracked;
 
 use crate::lower;
 use crate::IrTypeExt;
+use crate::tracked_script_ownership::ExternalBinding;
 
 /// What one script unit's compilation left for the units after it.
 ///
@@ -42,8 +43,16 @@ pub struct UnitLowerRecord {
     pub consts: Vec<(String, IrType, Arc<ConstValue>)>,
     /// Names this unit exported without a value behind them.
     pub dead_exports: Vec<String>,
-    /// Names from earlier units this unit assigned to.
+    /// Names an earlier unit gave away that this unit assigned to.
     pub revived: Vec<String>,
+    /// The earlier units' bindings this unit gave away.
+    pub taken: Vec<String>,
+    /// The earlier units' bindings this unit wrote to.
+    ///
+    /// With `taken`, what the unit did to state that is not its own, which is
+    /// what re-running a unit has to take back first: see
+    /// `ScriptCompiler::reach_from`.
+    pub written: Vec<String>,
     /// The names this unit provides, as the typechecker recorded them.
     ///
     /// Kept as owned text because the reach of an edit is computed across a
@@ -118,20 +127,52 @@ pub fn external_consts_over(records: &[UnitLowerRecord]) -> Vec<String> {
 /// The names earlier units exported and then gave away, for a unit after
 /// `records`.
 ///
-/// A name goes dead when the unit that exported it moved the value out before
-/// it ended, and comes back to life when a later unit exports or assigns to it.
+/// A name goes dead when a unit moves the value out -- the unit that exported
+/// it, or any later one -- and comes back to life when a later unit exports or
+/// assigns to it. What a unit did to an earlier unit's bindings comes before
+/// what it exported itself, which may be the same name again.
 pub fn dead_externals_over(records: &[UnitLowerRecord]) -> Vec<String> {
     let mut dead: Vec<String> = Vec::new();
     for record in records {
-        for (name, _) in &record.exports {
+        dead.extend(record.taken.iter().cloned());
+        for name in &record.revived {
             dead.retain(|held| held != name);
         }
-        for name in &record.revived {
+        for (name, _) in &record.exports {
             dead.retain(|held| held != name);
         }
         dead.extend(record.dead_exports.iter().cloned());
     }
     dead
+}
+
+/// The earlier units' bindings that a unit after `records` names, for its
+/// ownership analysis, in name order.
+///
+/// `names` are the names the unit asked its environment for. The consts
+/// among them are left out, being borrowed wherever they are named, as are
+/// the names that resolve to no binding: a function, a module alias, or a
+/// binding of a unit that did not lower.
+pub fn externals_over(records: &[UnitLowerRecord], names: &[String]) -> Vec<ExternalBinding> {
+    let ctx = lower_context_over(records);
+    let dead = dead_externals_over(records);
+    let consts = external_consts_over(records);
+    let mut names: Vec<&String> = names.iter().filter(|name| !consts.contains(name)).collect();
+    names.sort();
+    names.dedup();
+    names.into_iter()
+        .filter_map(|name| {
+            let (types, is_slot) = if ctx.values.contains_key(name) {
+                (&ctx.value_types, false)
+            } else if ctx.slots.contains_key(name) {
+                (&ctx.slot_types, true)
+            } else {
+                return None;
+            };
+            let ty = types.get(name).expect("an exported binding has a recorded type");
+            Some(ExternalBinding { name: name.C(), ty: ty.C(), is_slot, dead: dead.contains(name) })
+        })
+        .collect()
 }
 
 // ============================================================================

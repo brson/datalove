@@ -950,20 +950,36 @@ Script units accumulate via `AccumulatedLowerBindings`:
 
 ### Ownership across units
 
-A unit copies out of the bindings earlier units own rather than taking from
-them: lowering emits `Clone` for a consuming use that resolves to an
-`ExternalValue`/`ExternalSlot`. Every line of a REPL is a unit, so taking
-would mean inspecting a value consumed it and binding it to a new name
-emptied the old one. A whole-file script is one unit and has no such uses, so
-this changes nothing about running a script.
+A unit moves out of the bindings earlier units own as it would out of its
+own: lowering emits `Move` for a consuming use that resolves to an
+`ExternalValue`/`ExternalSlot`, and the interpreter marks the earlier frame's
+value as holding nothing. Every line of a REPL is a unit, so `let b = a` at
+the prompt empties `a`, and so does passing it to an `in` parameter. `int` is
+a bigint and not copy, so that includes integers. Naming a binding as a bare
+expression reads it where it lives and takes nothing.
 
-A unit can still give away a binding it defined itself, and then the name
-outlives its value. Ownership analysis reports those names in
-`ScriptAnalysisData::dead_exports`, `ScriptCompiler` remembers them in
-`dead_externals`, and using one is D013. Assigning to such a name revives it
-(`revived_exports`), which is why `unit_end` covers every non-Copy slot rather
-than only live ones - a later unit can assign to a slot this one gave away, and
-the cleanup list is fixed at lowering time.
+Ownership analysis checks such moves with the machinery it uses for a unit's
+own bindings. `ScriptCompiler` passes it an `ExternalBinding` for every
+earlier binding the unit asked its environment for (`externals_over`), and
+each becomes a binding in the unit's top scope, ahead of the unit's own, so
+moving one twice, moving one in a loop, or moving one in only one branch is
+the same error it would be for a local. Lowering skips those binding ids
+(`ScriptAnalysis::externals`): it already has an operand for each. An
+external is never dropped by the unit, which is why `live_bindings_for_return`
+and the unit-end list leave them out.
+
+What a unit does to the earlier bindings is part of its record:
+`taken_externals` for the ones it moved out of, `written_externals` for the
+ones it wrote by `set` or through a `mut` or `out` argument, and
+`revived_exports` for the ones that held nothing and that it assigned to. A
+unit can also give away a binding it defined itself, which goes in
+`dead_exports`. `dead_externals_over` folds the records into the names a later
+unit may not use, and using one is D013. The reach of an edit needs `taken` and
+`written` too, for re-running a unit has to put back what it changed first;
+see [script-reactivity-architecture.md](script-reactivity-architecture.md).
+`unit_end` covers every non-Copy slot rather than only live ones, because a
+later unit can assign to a slot this one gave away, and the cleanup list is
+fixed at lowering time.
 
 An expression unit that is a bare name computes nothing: lowering records the
 name in `ScriptContext::result_name` with no result value, and the executor
@@ -1405,7 +1421,7 @@ is a binding with `is_const`. One declared outside the body is only a name, and
 since a body sees only its parameters, what it binds, consts and functions, and
 a function is never named as a value; in a script or expression unit the
 earlier units' consts, from `external_consts_over`, because an earlier unit's
-`let` is copied out of rather than borrowed. A const argument is not a move:
+`let` is a binding the unit may move out of rather than borrow. A const argument is not a move:
 the analysis reads `call_targets` to find the callee's const parameters and
 skips those arguments, and lowering hands the call a copy of its own
 (`lower_comptime_arg`), since the call consumes what it is given.

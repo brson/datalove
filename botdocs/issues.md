@@ -16,7 +16,8 @@ home here.
 ## Contents
 
 - [Engines and the REPL: failing the wrong way](#user-content-engines-and-the-repl-failing-the-wrong-way)
-  - [A REPL unit that fails keeps what it wrote into earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-wrote-into-earlier-units)
+  - [A REPL unit that fails keeps what it did to earlier units](#user-content-a-repl-unit-that-fails-keeps-what-it-did-to-earlier-units)
+  - [A unit that did not run still gives away what it would have taken](#user-content-a-unit-that-did-not-run-still-gives-away-what-it-would-have-taken)
   - [Deep recursion aborts the process off Linux](#user-content-deep-recursion-aborts-the-process-off-linux)
   - [Compile-time evaluation has no limits](#user-content-compile-time-evaluation-has-no-limits)
   - [The JIT has no way back from a full arena](#user-content-the-jit-has-no-way-back-from-a-full-arena)
@@ -58,7 +59,7 @@ home here.
 
 Where running a program crashes, aborts, leaks or answers wrongly instead of reporting an error, in the interpreter's engines, the JIT, compile-time evaluation and the REPL session around them.
 
-### A REPL unit that fails keeps what it wrote into earlier units
+### A REPL unit that fails keeps what it did to earlier units
 
 **Reproduced.**
 
@@ -74,14 +75,51 @@ let x = xs[(: index / 5)]!
 The third unit returns early, and so stays in the session offering none of its
 bindings. But `p` reads `(1, "mutated")` afterwards: a `set` or an `out`
 argument writes into an earlier unit's frame, and nothing puts the write back
-when the unit that made it fails. So a failed unit influences the session, which
-the model in `script-reactivity-architecture.md` says it does not. Running the
-unit again when an edit reaches it applies the write again, which is wrong for a
-write that is not idempotent, like `set n = n + 1`.
+when the unit that made it fails. A move out of an earlier unit's binding before
+the `!` is the same: the value is gone. So a failed unit influences the
+session, which the model in `script-reactivity-architecture.md` says it does
+not.
 
-The places a unit writes are known -- its record lists them as `revived` -- so
-copying them before the unit runs and restoring them if it does not finish would
-close this while every type can be copied.
+It lasts until something re-derives the unit: its record lists what it wrote
+and took, and the rewind of `script-reactivity-architecture.md` section 5 builds
+those bindings again before running it. What is missing is doing the same when
+the unit fails, and the obvious way does not work: rewinding re-runs everything
+that uses the binding after its provider, which includes the failed unit, and it
+fails again having done the same. Copying the places before the unit runs and
+restoring them would work, but only for types that can be cloned, and moves
+across units were made real so as not to depend on that.
+
+### A unit that did not run still gives away what it would have taken
+
+**Reproduced.**
+
+```datalove
+let xs: [u32] = []
+---
+let ys = [1, 2]
+---
+let i = xs[(: index / 5)]!
+---
+let zs = (i, ys)
+---
+let w = ys
+```
+
+The fourth unit reads `i` from the third, which returned early, so it is
+blocked and never runs; `ys` is still in the environment as `[1, 2]`. But the
+fifth unit is refused with D013, "`ys` was given away by an earlier input",
+because the fourth unit's record says it takes `ys`. A unit that returns early
+before its move does the same. The help, to clone `ys` where it was given away,
+names no place and the place never ran.
+
+Whether a binding is given away is decided statically, from records, and a unit
+that compiled keeps its full record whether or not it ran. The cost beyond the
+wrong error is a wasted rewind: re-deriving such a unit rewinds to the provider
+of what it would take. Fixing it means the records of a unit that did not run
+to its end not counting as having taken anything, and then the units after it
+being re-derived when it runs -- which the reach does already, since they use
+the names it takes. A unit that returned early part way through a move is the
+hard half: the runtime knows whether the binding was taken, the record does not.
 
 ### Deep recursion aborts the process off Linux
 

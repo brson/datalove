@@ -53,10 +53,10 @@ Analysis(
                         drop v0
                         drop.tracked unit0.s0
                         store.move.tracked unit0.s0, v1
-                        v2 = clone unit0.v4
-                        v3 = clone unit0.v5
-                        v4 = clone unit0.s0
-                        v5 = clone unit0.s1
+                        v2 = move unit0.v4
+                        v3 = move unit0.v5
+                        v4 = move unit0.s0
+                        v5 = move unit0.s1
                         v6 = pack Tuple4 {v2, v3, v4, v5}
                         debuglog v6
                         drop v6

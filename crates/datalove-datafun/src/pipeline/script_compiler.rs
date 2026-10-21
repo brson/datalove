@@ -36,7 +36,7 @@ use datalove_datafun_compiler::const_eval::{
 };
 use datalove_datafun_const::{inline_script_consts, ScriptFunctionConstsResult};
 use datalove_datafun_compiler::tracked_script_lower::{
-    UnitLowerRecord, collect_const_graph, dead_externals_over, external_consts_over, lower_context_over,
+    UnitLowerRecord, collect_const_graph, external_consts_over, externals_over, lower_context_over,
     script_consts_over,
 };
 use datalove_datafun_compiler::tracked_script_ownership::{
@@ -70,14 +70,37 @@ struct TypecheckOutput<'db> {
     call_targets: &'db datalove_datafun_tycheck::CallTargets<'db>,
 }
 
+/// What a splice re-derived, and where it started.
+///
+/// The caller drops the runtime state from `from` on and runs `redone` as
+/// appends. `from` is the splice point unless the splice had to rewind to
+/// build an earlier binding again.
+pub struct Splice {
+    pub from: usize,
+    pub redone: Vec<(usize, ScriptCompilationResult)>,
+}
+
+/// The graph the units' records held before a re-derivation, which the reach
+/// is taken over beside the graph as it is now.
+struct HeldGraph {
+    provides: Vec<BTreeSet<String>>,
+    uses: Vec<BTreeSet<String>>,
+    /// What each unit took or wrote of earlier units' bindings.
+    changed: Vec<BTreeSet<String>>,
+}
+
 /// Output from ownership phase.
 struct OwnershipOutput<'db> {
     func_analyses: ScriptFunctionAnalyses<'db>,
     script_analysis: Option<ScriptAnalysisData>,
     /// Names this unit exports that hold no value.
     dead_exports: Vec<String>,
-    /// Names from earlier units this unit assigned to.
+    /// Names an earlier unit gave away that this unit assigned to.
     revived: Vec<String>,
+    /// The earlier units' bindings this unit gave away.
+    taken: Vec<String>,
+    /// The earlier units' bindings this unit wrote to.
+    written: Vec<String>,
 }
 
 /// Lowered functions from the lowering phase.
@@ -356,7 +379,7 @@ impl<'db> ScriptCompiler<'db> {
             "unit {edited} was edited but the script has {} units",
             self.scripts.len(),
         );
-        self.rederive(self.edit_reach(edited))
+        self.rederive_reach(BTreeSet::from([edited]))
     }
 
     /// Re-lower the units an edit to the modules at `edited` reaches.
@@ -388,39 +411,40 @@ impl<'db> ScriptCompiler<'db> {
         edited: &[String],
     ) -> Vec<(usize, ScriptCompilationResult)> {
         let seeds = self.module_importers(edited);
-        self.rederive(self.reach_from(&seeds))
+        self.rederive_reach(seeds)
     }
 
     /// Drop the units from `n` on.
     ///
     /// The cheap one of the three splice verbs and **the only one that
     /// renumbers nothing**: there is nothing after the units that go, so no
-    /// surviving unit's `(unit_index, ValueId)` references move and nothing has
-    /// to be re-derived. The caller drops the runtime state of the same units --
-    /// `ScriptExecutor::truncate_units` -- and the session carries on at `n`.
+    /// surviving unit's `(unit_index, ValueId)` references move. Usually
+    /// nothing is re-derived and the splice starts at `n`. But a unit that goes
+    /// may have taken or written an earlier unit's binding, and then the
+    /// session is rewound to that binding's provider, and the units from there
+    /// to `n` are re-derived to build it again (see [`Self::rewind_point`]).
+    /// The caller drops the runtime state from the splice's start on --
+    /// `ScriptExecutor::truncate_units` -- and runs what comes back as appends.
     ///
     /// The units' `Source`s are inputs and are simply let go of; appending
     /// afterwards mints a new one, so the index they vacate is reused by a unit
     /// with a key of its own.
-    pub fn truncate_units(&mut self, n: usize) {
+    pub fn truncate_units(&mut self, n: usize) -> Splice {
         assert!(
             n <= self.scripts.len(),
             "cannot truncate to {n} units; the script has {}",
             self.scripts.len(),
         );
-        self.scripts.truncate(n);
-        self.unit_records.truncate(n);
-        self.last_script = self.scripts.last().copied();
+        let mut units = self.unit_list();
+        units.truncate(n);
+        self.splice(units, n)
     }
 
     /// Splice the unit at `i` out, and re-derive everything after it.
     ///
     /// See [`Self::splice`] for why the whole suffix is re-derived. A unit that
     /// read what the removed unit provided stops compiling, and stays.
-    pub fn remove_unit(
-        &mut self,
-        i: usize,
-    ) -> Vec<(usize, ScriptCompilationResult)> {
+    pub fn remove_unit(&mut self, i: usize) -> Splice {
         let mut units = self.unit_list();
         assert!(
             i < units.len(),
@@ -446,7 +470,7 @@ impl<'db> ScriptCompiler<'db> {
         i: usize,
         source: &str,
         is_expr: bool,
-    ) -> Vec<(usize, ScriptCompilationResult)> {
+    ) -> Splice {
         let mut units = self.unit_list();
         assert!(
             i <= units.len(),
@@ -467,15 +491,44 @@ impl<'db> ScriptCompiler<'db> {
     /// cost is inherent rather than over-propagation: the ids really did
     /// change. The reach is for an edit, which moves no index.
     ///
+    /// The suffix can start before `at`: a unit from `at` on, which is
+    /// dropped or run again, may have taken or written an earlier unit's
+    /// binding, which has to be built again first (see [`Self::rewind_point`]).
+    ///
     /// A unit of the suffix that stops compiling stays, as an appended unit
     /// that fails does, and so does one that already did not compile.
-    fn splice(
-        &mut self,
-        units: Vec<(bct::input::Source, bool)>,
-        at: usize,
-    ) -> Vec<(usize, ScriptCompilationResult)> {
-        self.set_units(units, at);
-        self.rederive((at..self.scripts.len()).collect())
+    fn splice(&mut self, units: Vec<(bct::input::Source, bool)>, at: usize) -> Splice {
+        let from = self.rewind_point(at);
+        self.set_units(units, from);
+        let redone = self.rederive((from..self.scripts.len()).collect());
+        Splice { from, redone }
+    }
+
+    /// Where a splice at `at` has to start for the bindings before it to be as
+    /// they were made.
+    ///
+    /// The units from `at` on are about to be dropped or run again, and one
+    /// that took or wrote an earlier unit's binding left it changed: moved out
+    /// of, or holding what a `set` put there. Running it again would read the
+    /// change, and dropping it would leave the change behind. So the splice
+    /// starts at that binding's provider instead, which builds the binding
+    /// again. The units between are run again as well, so what they changed
+    /// counts too, and the point moves back until nothing earlier is changed.
+    fn rewind_point(&self, at: usize) -> usize {
+        let held = self.held_graph();
+        let provider = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| held.provides[*earlier].contains(name))
+        };
+        let mut from = at;
+        loop {
+            let earliest = (from..held.changed.len())
+                .flat_map(|unit| held.changed[unit].iter().filter_map(move |name| provider(unit, name)))
+                .min();
+            match earliest {
+                Some(source) if source < from => from = source,
+                _ => return from,
+            }
+        }
     }
 
     /// Each unit's source and kind, which is the list a splice is taken over.
@@ -535,9 +588,31 @@ impl<'db> ScriptCompiler<'db> {
         self.compile_unit_at(index)
     }
 
-    /// The units an edit to `edited` reaches, in index order, `edited` included.
-    fn edit_reach(&self, edited: usize) -> Vec<usize> {
-        self.reach_from(&BTreeSet::from([edited]))
+    /// Compile again the units `seeds` reach, in index order, and say what
+    /// each came to.
+    ///
+    /// What a unit took or wrote of an earlier unit's is only known once the
+    /// unit is compiled, and a unit that now takes or writes something reaches
+    /// the units after it that use it. So the reach is taken, its units are
+    /// compiled, and the reach is taken again with what they now do, until it
+    /// stops growing. What the units did before the edit is held from the
+    /// start, being what the running session went through.
+    fn rederive_reach(&mut self, seeds: BTreeSet<usize>) -> Vec<(usize, ScriptCompilationResult)> {
+        let held = self.held_graph();
+        let mut changed = held.changed.clone();
+        loop {
+            let units = self.reach_from(&seeds, &held, &changed);
+            let results = self.rederive(units.clone());
+            let mut grew = false;
+            for (unit, record) in self.unit_records.iter().enumerate() {
+                for name in record.taken.iter().chain(&record.written) {
+                    grew |= changed[unit].insert(name.C());
+                }
+            }
+            if !grew || self.reach_from(&seeds, &held, &changed) == units {
+                return results;
+            }
+        }
     }
 
     /// The units whose imports resolve into one of `edited`.
@@ -562,16 +637,32 @@ impl<'db> ScriptCompiler<'db> {
     ///
     /// A name a unit uses resolves to the nearest earlier unit that provides
     /// it, so the reach extends to a unit when one of the names it uses
-    /// resolves to a unit already reached. One forward pass gives the whole
-    /// transitive reach, because a unit's providers all sit before it.
+    /// resolves to a unit already reached. A unit that took or wrote an earlier
+    /// unit's binding counts as providing it too, since the units after it see
+    /// the binding as it left it. One forward pass gives the whole forward
+    /// reach, because a unit's providers all sit before it.
+    ///
+    /// **And the reach goes back.** A unit runs again against the bindings it
+    /// reads as they are now, and they are not as it first found them if some
+    /// unit after their provider took or wrote them since: it would read a
+    /// moved-out value, or one a later `set` left. So the provider is reached
+    /// as well, which builds the binding again and runs everything that uses
+    /// it after it, in order. That is a pass over what the units did before
+    /// this edit, `held.changed`, which is what the running session went
+    /// through. It repeats until no provider is added.
     ///
     /// The graph is the union of what it was before the edit and what it is
     /// after, since either alone would miss a case: a binding the edit
     /// *removes* is absent from the new graph although the unit that read it
     /// has to be told, and a name the edit *introduces* is absent from the old
     /// one although a later unit that asked for it in vain now finds it.
-    fn reach_from(&self, seeds: &BTreeSet<usize>) -> Vec<usize> {
-        let count = self.unit_records.len();
+    fn reach_from(
+        &self,
+        seeds: &BTreeSet<usize>,
+        held: &HeldGraph,
+        changed: &[BTreeSet<String>],
+    ) -> Vec<usize> {
+        let count = held.provides.len();
         let (now_provides, now_uses) = self.graph_now();
         assert_eq!(
             count, now_provides.len(),
@@ -579,27 +670,69 @@ impl<'db> ScriptCompiler<'db> {
              do not line up",
         );
 
-        let union = |held: &[String], now: &[String]| -> BTreeSet<String> {
+        let union = |held: &BTreeSet<String>, now: &[String]| -> BTreeSet<String> {
             held.iter().chain(now.iter()).cloned().collect()
         };
         let provides: Vec<_> = (0..count)
-            .map(|unit| union(&self.unit_records[unit].provides, &now_provides[unit]))
+            .map(|unit| union(&held.provides[unit], &now_provides[unit]))
             .collect();
         let uses: Vec<_> = (0..count)
-            .map(|unit| union(&self.unit_records[unit].uses, &now_uses[unit]))
+            .map(|unit| union(&held.uses[unit], &now_uses[unit]))
             .collect();
+        let provider = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| provides[*earlier].contains(name))
+        };
 
-        let mut reached = vec![false; count];
-        for unit in 0..count {
-            reached[unit] = seeds.contains(&unit)
-                || uses[unit].iter().any(|name| {
-                    (0..unit)
-                        .rev()
-                        .find(|earlier| provides[*earlier].contains(name))
-                        .is_some_and(|provider| reached[provider])
-                });
+        let mut seeds = seeds.clone();
+        loop {
+            let mut reached = vec![false; count];
+            for unit in 0..count {
+                reached[unit] = seeds.contains(&unit)
+                    || uses[unit].iter().any(|name| {
+                        (0..unit)
+                            .rev()
+                            .find(|earlier| {
+                                provides[*earlier].contains(name) || changed[*earlier].contains(name)
+                            })
+                            .is_some_and(|source| reached[source])
+                    });
+            }
+
+            let mut rewound = Vec::new();
+            for unit in (0..count).filter(|unit| reached[*unit]) {
+                for name in &uses[unit] {
+                    let Some(source) = provider(unit, name) else {
+                        continue;
+                    };
+                    if reached[source] {
+                        continue;
+                    }
+                    let since = (source + 1..count)
+                        .take_while(|later| provider(*later, name) == Some(source))
+                        .any(|later| held.changed[later].contains(name));
+                    if since {
+                        rewound.push(source);
+                    }
+                }
+            }
+            if rewound.is_empty() {
+                return (0..count).filter(|unit| reached[*unit]).collect();
+            }
+            seeds.extend(rewound);
         }
-        (0..count).filter(|unit| reached[*unit]).collect()
+    }
+
+    /// What each unit provided, used, and took or wrote of earlier units'
+    /// bindings, as its record held it before anything is compiled again.
+    fn held_graph(&self) -> HeldGraph {
+        let set = |names: &[String]| names.iter().cloned().collect::<BTreeSet<String>>();
+        HeldGraph {
+            provides: self.unit_records.iter().map(|record| set(&record.provides)).collect(),
+            uses: self.unit_records.iter().map(|record| set(&record.uses)).collect(),
+            changed: self.unit_records.iter()
+                .map(|record| record.taken.iter().chain(&record.written).cloned().collect())
+                .collect(),
+        }
     }
 
     /// What each unit provides and what it asks for, as things stand now.
@@ -703,6 +836,21 @@ impl<'db> ScriptCompiler<'db> {
             skip_specialization: self.skip_specialization,
             generics: self.generics,
         }
+    }
+
+    /// The earlier units' bindings each unit took or wrote, in name order.
+    ///
+    /// What the reach of an edit goes back along; tests derive their
+    /// expectations from it.
+    pub fn unit_changes(&self) -> Vec<Vec<String>> {
+        self.unit_records.iter()
+            .map(|record| {
+                let mut names: Vec<String> = record.taken.iter().chain(&record.written).cloned().collect();
+                names.sort();
+                names.dedup();
+                names
+            })
+            .collect()
     }
 
     /// Each unit's typecheck output, in order, for the units compiled so far.
@@ -1062,7 +1210,10 @@ impl<'db> ScriptCompiler<'db> {
         unit: &ParsedUnit<'db>,
         typecheck: &TypecheckOutput<'db>,
     ) -> Result<OwnershipOutput<'db>, ScriptCompilationResult> {
-        let dead_externals = dead_externals_over(&self.unit_records[..index]);
+        let asked: Vec<String> = typecheck.output.asked_names(self.db).iter()
+            .map(|name| name.as_str(self.db).S())
+            .collect();
+        let externals = externals_over(&self.unit_records[..index], &asked);
         let external_consts = external_consts_over(&self.unit_records[..index]);
         match unit {
             ParsedUnit::Fragment { top, body } => {
@@ -1070,7 +1221,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     *top,
-                    dead_externals,
+                    externals,
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
@@ -1091,6 +1242,8 @@ impl<'db> ScriptCompiler<'db> {
                     script_analysis,
                     dead_exports: ownership_result.dead_exports(self.db).clone(),
                     revived: ownership_result.revived_exports(self.db).clone(),
+                    taken: ownership_result.taken_externals(self.db).clone(),
+                    written: ownership_result.written_externals(self.db).clone(),
                 })
             }
             ParsedUnit::Expr(parsed) => {
@@ -1098,7 +1251,7 @@ impl<'db> ScriptCompiler<'db> {
                     self.db,
                     typecheck.result,
                     parsed.clone(),
-                    dead_externals,
+                    externals,
                     external_consts,
                 );
                 if !ownership_result.errors(self.db).is_empty() {
@@ -1117,6 +1270,8 @@ impl<'db> ScriptCompiler<'db> {
                     script_analysis: None,
                     dead_exports: Vec::new(),
                     revived: Vec::new(),
+                    taken: ownership_result.taken_externals(self.db).clone(),
+                    written: ownership_result.written_externals(self.db).clone(),
                 })
             }
         }
@@ -1791,6 +1946,8 @@ impl<'db> ScriptCompiler<'db> {
             consts: consts.declared_consts.clone(),
             dead_exports: ownership.dead_exports.clone(),
             revived: ownership.revived.clone(),
+            taken: ownership.taken.clone(),
+            written: ownership.written.clone(),
             provides: self.unit_provides_names(typecheck.output),
             uses: self.unit_used_names(index, typecheck.output),
             imports: typecheck.output.imported_modules(self.db).C(),

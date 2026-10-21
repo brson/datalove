@@ -47,7 +47,7 @@
       {
         "name": "v",
         "ty": "list<int>",
-        "value": "[1, 2]"
+        "value": "<moved>"
       },
       {
         "name": "x",

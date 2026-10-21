@@ -231,17 +231,19 @@ frame.
 
 ## Ownership at the prompt
 
-Every line is a script unit, which makes the linear rules that are right
-inside a line hostile between lines. A unit therefore **copies out of the
-bindings earlier units own** rather than taking from them, so names go on
-working and a session need not be typed in dependency order. See
-`compiler-guide.md` under "Ownership across units" for what that costs and
-what it leaves behind (D013 for a binding a unit gave away before it ended).
+Every line is a script unit, and a unit follows the same linear rules
+between lines as inside one: `let b = a` moves `a` out of the unit that bound
+it, and a later line that names `a` is D013. Naming a binding as a bare
+expression shows it without taking it. `compiler-guide.md` under "Ownership
+across units" has how this is checked.
 
-The long-term answer to a moved binding is rewind and replay - recompiling
-the earlier unit with the `@` inserted and re-executing from there. It becomes
-necessary rather than merely nicer when non-cloneable types land, since copying
-out of an earlier unit stops being available.
+This used to be softened: a unit copied out of earlier units' bindings rather
+than taking from them, so that names went on working. That was taken out to
+keep script units as close to the language as possible, and because copying
+stops being available once there are types that cannot be cloned. The
+re-derivation of an edit no longer depends on it either -- re-running a unit
+rewinds to the earlier bindings it took or wrote; see
+[script-reactivity-architecture.md](script-reactivity-architecture.md).
 
 ## Tests
 

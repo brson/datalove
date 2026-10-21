@@ -18,6 +18,13 @@ though it sits between them.**
 Editing a module re-runs the units that import from it, and the units those
 reach.
 
+**Unless a unit took or wrote what it reads.** A unit moves out of an earlier
+unit's binding as it would out of its own, and `set` writes into an earlier
+unit's `var`. Then the binding is no longer as the units that read it found
+it, and re-running one of them means building the binding again first. So if
+D moved `a` out of A, editing B re-runs A, B and D. See
+[5. The reach goes back](#user-content-5-the-reach-goes-back).
+
 ## The shape of it
 
 ```
@@ -39,6 +46,7 @@ per unit, from typechecking:         ScriptUnitTypecheckOutput
 per unit, from lowering:             UnitLowerRecord
   exports, value_types, slot_types   what later units can name
   consts, dead_exports
+  taken, written, revived            what it did to earlier units' bindings
 
 runtime, per unit:                   FrameStore
   frames[i], unit_end_values[i], unit_end_slots[i]
@@ -136,11 +144,60 @@ cannot reach it. Editing rather than removing leaves the indices alone, which is
 what keeps the identification good. `c_holds_no_reference_to_b` checks this by
 walking a unit's serialized IR rather than by argument.
 
+That holds for C's *references*. It does not by itself hold for the state C
+reads: a value C took is in C's own frame, but a binding C reads may have been
+taken or written since by a later unit, and so may one that a re-run unit
+reads. That is what section 5 is for.
+
 A module edit needs one more thing: a unit names a module function by
 `CodeRef::Module`, resolved against the `ModuleFunctionRegistry` the executor
 holds, so re-lowering alone changes nothing that *runs*. `set_module_registry`
 swaps it, down through `FunctionRegistry`, `ScriptEnvironment` and
 `ScriptExecutor`.
+
+### 5. The reach goes back
+
+A unit's record says which earlier units' bindings it **took** (moved out of)
+and which it **wrote** (by `set`, or through a `mut` or `out` argument). Both
+are what the unit did to state that is not its own, and both break the
+assumption that re-running a unit sees what it saw the first time: a taken
+binding holds nothing, and a written one holds what the write left.
+
+So `reach_from` is two rules, repeated until nothing is added:
+
+- **Forward**, as before, with one more kind of edge: a unit is reached when a
+  name it uses resolves to a reached unit, and a unit that took or wrote a
+  name counts as providing it, since the units after it see the binding as it
+  left it.
+- **Back.** A reached unit that uses a binding which some unit after its
+  provider took or wrote would read it changed, so the provider is reached
+  too. Running the provider again builds the binding again, and the forward
+  rule then runs everything that uses it, in index order: the taking and
+  writing units included, which take and write again.
+
+The back rule is taken over what the units did *before* the edit, the records
+as `held_graph` finds them, because that is what the running session went
+through. The forward rule needs what they do *after* it as well -- an edit that
+makes B take `a` reaches the later units that use `a` -- and that is only known
+once B is compiled. So `rederive_reach` takes the reach, compiles it, and takes
+it again with the new records, until it stops growing.
+
+The splices need the same: a unit that goes, or runs again as part of the
+suffix, may have taken or written a binding before the splice point.
+`rewind_point` moves the start of the splice back to that binding's provider,
+and on back while the units in between changed something earlier still, and
+the splice re-derives from there. That is why `truncate_units` can re-derive
+units and returns a `Splice` like the others.
+
+This is rewind and replay, and it is what makes the reach sound without
+copying anything. The cost is running the provider again, which may be the
+expensive unit of a session: a chain of lines that each take the previous
+one's value re-runs from its head when its tail is edited.
+
+What it rests on is that a unit's record says what it took and wrote. A unit
+that compiled and did not run to its end -- returned early, or was blocked --
+keeps its record, so it is assumed to have taken what it would take. Re-running
+its provider for nothing is the cost of that; see `issues.md`.
 
 ## Crossing a mutation
 
@@ -232,10 +289,10 @@ suites missed.
 | `script_graph_tests` | 7 | provides and uses per unit: the graph itself |
 | `script_reactivity_tests` | 6 | analysis reach, at the tycheck layer |
 | `script_exec_reactivity_tests` | 17 | lowering and execution reach, values through an executor |
-| `script_scenario_tests` | 14 | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership |
+| `script_scenario_tests` | 23 | the edit-kind matrix, the module cases, a twelve-unit session, blanking, ownership and rewinding |
 | `script_const_tests` | 11 | consts across units and into function bodies |
 | `script_splice_tests` | 14 | truncate, remove and insert: the suffix, the values, a suffix that stops compiling |
-| `datalove-repl/engine_edit_tests` | 18 | the shipped entry points end to end, failed units going green |
+| `datalove-repl/engine_edit_tests` | 21 | the shipped entry points end to end, failed units going green, rewinding |
 
 **Falsification, which is the part that makes it evidence.** Every stage was
 checked by injecting a fault into the shipped code and confirming the tests
@@ -272,6 +329,14 @@ because a `CodeRef::Local` resolves through the running frame's own list, so a
 call that stays inside one unit is blind to it; only a cross-unit call after a
 truncation asks the registry. `a_truncated_unit_s_functions_go_with_it` is that
 call, and under the fault it returns the dropped function's value.
+
+The rewind against three: dropping the back rule failed the reading and moving
+cases, the leak checker aborting on one of them; dropping the forward edge from
+a unit that took or wrote a name failed nothing until
+`a_unit_that_now_writes_a_var_reaches_its_later_readers` was written, the back
+rule having reached the same units in every other case; and starting a splice
+at its own point rather than `rewind_point` failed the truncate and remove
+cases.
 
 **Two faults found holes in the tests rather than in the code**, and both are
 worth keeping. The registry truncate is above. The other: making
@@ -323,7 +388,9 @@ typechecking is lazy. Ask the units directly when the question is about validity
   `ScriptCompiler::{truncate_units, remove_unit, insert_unit}` are the
   compiler's, `Engine::{truncate_units, remove_unit, insert_unit}` the shipped
   ones. Truncating is the cheap one and the only one that renumbers nothing,
-  because nothing sits after what goes, so it re-derives nothing at all.
+  because nothing sits after what goes, so it re-derives nothing at all --
+  unless a unit that goes took or wrote an earlier binding, which rewinds the
+  splice to where the binding was made (section 5).
 
   Two things each verb needs that an edit does not. **The suffix is run as
   appends**, not in place: `rerun` goes through `replace_frame`, which puts a
@@ -347,13 +414,12 @@ typechecking is lazy. Ask the units directly when the question is about validity
   standing answer is the same each time: derive the id from something content- or
   name-shaped rather than from a position, and the renumbering goes away.
 
-- **A unit that returns early keeps what it wrote into earlier units.** A
-  `set` or an `out` argument writes into an earlier unit's frame, and an early
-  return after one leaves the write in place: `var p = (1, "a")` and then a
-  unit that does `set p.1 = "mutated"` before a failing `!` leaves `p` mutated.
-  So a failed unit does influence the session. Restoring the places a unit
-  writes when it fails -- it records them as `revived` -- would close this
-  while every type can be copied.
+- **A unit that returns early keeps what it did to earlier units.** A `set`
+  or an `out` argument writes into an earlier unit's frame, and a move takes
+  from one, and an early return after either leaves it done: `var p = (1, "a")`
+  and then a unit that does `set p.1 = "mutated"` before a failing `!` leaves
+  `p` mutated. So a failed unit does influence the session until something
+  re-derives it, when the rewind of section 5 builds `p` again first.
 - **There is no undo or redo.** Nothing keeps a unit's previous text;
   `ModuleCompilationPipeline::module_text` exists only so `edit_module` can put
   back an edit that did not compile. The machinery needs nothing new for it --
@@ -374,6 +440,7 @@ typechecking is lazy. Ask the units directly when the question is about validity
 - **Only pure `fun`s exist**, so the only effect is `debuglog` and skipping a
   unit's execution skips nothing observable beyond it. `proc`s and real I/O need
   virtualized I/O, which does not exist yet.
-- **Units copy out of earlier bindings rather than moving from them**, which is
-  what makes re-running B safe for C. Non-cloneable types remove that and the
-  model will need rethinking -- `repl-architecture.md` says so too.
+- **A unit that did not run is assumed to have done what it would do.** Its
+  record lists what it would take and write, so a blocked unit makes the
+  names it would take unusable after it, and its provider is rewound for it,
+  though nothing was taken. See `issues.md`.

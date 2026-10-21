@@ -393,15 +393,17 @@ impl Engine {
     /// Drop the units from `n` on.
     ///
     /// The cheap one of the three splice verbs: nothing sits after what goes,
-    /// so no surviving unit's values change identity and nothing is re-derived
-    /// or re-executed. Their bindings leave the environment and the values they
-    /// held are destroyed, and the next line appended takes the index the first
-    /// dropped unit had.
-    pub fn truncate_units(&mut self, n: usize) {
+    /// so no surviving unit's values change identity, and usually nothing is
+    /// re-derived or re-executed. Their bindings leave the environment and the
+    /// values they held are destroyed, and the next line appended takes the
+    /// index the first dropped unit had. A unit that goes having taken or
+    /// written an earlier unit's binding rewinds the session to where that
+    /// binding was made, and the units from there to `n` run again.
+    pub fn truncate_units(&mut self, n: usize) -> Vec<UnitEdit> {
         let count = self.script.as_ref().expect("a session").unit_sources().len();
         assert!(n <= count, "cannot truncate to {n} units; the session has {count}");
-        self.with_compiler(|compiler| compiler.truncate_units(n));
-        self.executor.truncate_units(n);
+        let splice = self.with_compiler(|compiler| compiler.truncate_units(n));
+        self.rerun_spliced(splice)
     }
 
     /// Splice the unit at `unit` out, and re-derive everything after it.
@@ -415,8 +417,8 @@ impl Engine {
     /// A unit of the suffix that read what the removed unit provided stops
     /// compiling and stays, as any unit that fails does.
     pub fn remove_unit(&mut self, unit: usize) -> Vec<UnitEdit> {
-        let redone = self.with_compiler(|compiler| compiler.remove_unit(unit));
-        self.rerun_spliced(unit, redone)
+        let splice = self.with_compiler(|compiler| compiler.remove_unit(unit));
+        self.rerun_spliced(splice)
     }
 
     /// Splice a new unit in at `unit`, and re-derive everything after it.
@@ -433,8 +435,8 @@ impl Engine {
         source: &str,
         is_expr: bool,
     ) -> Vec<UnitEdit> {
-        let redone = self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr));
-        self.rerun_spliced(unit, redone)
+        let splice = self.with_compiler(|compiler| compiler.insert_unit(unit, source, is_expr));
+        self.rerun_spliced(splice)
     }
 
     /// Change one module's source and re-derive the script units that import
@@ -566,12 +568,9 @@ impl Engine {
     /// appends, each taking the next free index.
     ///
     /// A unit here that did not compile takes its index with no frame.
-    fn rerun_spliced(
-        &mut self,
-        at: usize,
-        redone: Vec<(usize, datafun::pipeline::ScriptCompilationResult)>,
-    ) -> Vec<UnitEdit> {
-        self.executor.truncate_units(at);
+    fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> Vec<UnitEdit> {
+        let datafun::pipeline::Splice { from, redone } = splice;
+        self.executor.truncate_units(from);
         let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
 
         let mut reports = Vec::new();

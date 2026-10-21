@@ -187,18 +187,18 @@ fn lower_call_arg<'db>(
         ExprFunKind::Place(place) if place.steps.is_empty() => {
             ctx.note_place_lowered(arg);
             let name_str = place.root.text(ctx.db);
-            let (operand, is_fresh_const) = lower_var_operand(ctx, name_str)?;
-            let is_external = matches!(
-                operand,
-                Operand::ExternalValue { .. } | Operand::ExternalSlot { .. },
-            );
-            if is_external {
-                // The callee consumes the copy, not the binding, and a const
-                // built for the occasion is dropped once copied.
-                if is_fresh_const {
-                    record_fresh_const_temp(ctx, &operand);
+            let (operand, _) = lower_var_operand(ctx, name_str)?;
+            if matches!(operand, Operand::ExternalValue { .. } | Operand::ExternalSlot { .. }) {
+                // Taken out of the earlier unit's frame first, which marks it
+                // as holding nothing; the callee consumes what was taken.
+                let ty = ctx.expr_type(arg);
+                let dest = ctx.fresh_value(ty.clone());
+                if ty.is_copy() {
+                    ctx.emit(Instruction::Copy { dest, src: operand });
+                } else {
+                    ctx.emit(Instruction::Move { dest, src: operand });
                 }
-                return Ok(Operand::Value(emit_owned_copy(ctx, arg, operand)));
+                return Ok(Operand::Value(dest));
             }
             Ok(operand)
         }
@@ -405,24 +405,6 @@ pub fn lower_expression_for_ref<'db>(
     }
 }
 
-/// Produce an owned value from an operand without consuming it.
-///
-/// Used for every consuming use of a binding an earlier unit owns.
-fn emit_owned_copy<'db>(
-    ctx: &mut LowerCtx<'db>,
-    expr: ExprFun<'db>,
-    operand: Operand,
-) -> ValueId {
-    let ty = ctx.expr_type(expr);
-    let dest = ctx.fresh_value(ty.clone());
-    if ty.is_copy() {
-        ctx.emit(Instruction::Copy { dest, src: operand });
-    } else {
-        ctx.emit(Instruction::Clone { dest, src: operand });
-    }
-    dest
-}
-
 /// Lower an expression, returning the ValueId holding the result.
 pub fn lower_expression<'db>(
     ctx: &mut LowerCtx<'db>,
@@ -477,9 +459,16 @@ pub fn lower_expression<'db>(
                     Ok(dest)
                 }
                 Operand::ExternalValue { .. } | Operand::ExternalSlot { .. } => {
-                    // A binding an earlier unit owns is copied out of, never
-                    // taken: the name has to keep working at the next prompt.
-                    Ok(emit_owned_copy(ctx, expr, operand))
+                    // Taken out of the earlier unit's frame, which marks it
+                    // as holding nothing.
+                    let ext_type = ctx.expr_type(expr);
+                    let dest = ctx.fresh_value(ext_type.clone());
+                    if ext_type.is_copy() {
+                        ctx.emit(Instruction::Copy { dest, src: operand });
+                    } else {
+                        ctx.emit(Instruction::Move { dest, src: operand });
+                    }
+                    Ok(dest)
                 }
             }
         }

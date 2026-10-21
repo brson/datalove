@@ -327,7 +327,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "(1, \"a\")"
+        "value": "<moved>"
       },
       {
         "name": "t",
@@ -343,7 +343,9 @@
         "ScriptStatement": "set s.1 = \"c\""
       }
     },
-    "eval": "Nothing",
+    "eval": {
+      "Error": "error[D013]: `s` was given away by an earlier input\n  help: use `@` to clone `s` where it was given away"
+    },
     "environment": [
       {
         "name": "p",
@@ -363,7 +365,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "(1, \"c\")"
+        "value": "<moved>"
       },
       {
         "name": "t",
@@ -404,7 +406,7 @@
       {
         "name": "s",
         "ty": "(int, string)",
-        "value": "(1, \"c\")"
+        "value": "<moved>"
       },
       {
         "name": "t",

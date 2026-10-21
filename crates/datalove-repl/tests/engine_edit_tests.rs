@@ -255,6 +255,63 @@ fn an_insertion_that_breaks_a_later_unit_leaves_it_failing() {
 }
 
 // ============================================================================
+// Units that took or wrote an earlier unit's binding
+// ============================================================================
+
+/// **Editing a unit that moved an earlier binding re-runs the binding's unit
+/// first**, rather than moving out of a binding that holds nothing.
+#[test]
+fn editing_a_unit_that_moved_a_binding_rebuilds_it_first() {
+    let mut engine = engine();
+    engine.run_source("let a = [1, 2]\n---\nlet b = a\n---\nlet c = 30");
+    assert_eq!(value_of(&mut engine, "a"), "<moved>");
+
+    let reports = engine.edit_unit(1, "let b = a");
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![0, 1],
+        "A, to build `a` again, and B; C has nothing to do with it",
+    );
+    assert_eq!(value_of(&mut engine, "b"), "[1, 2]");
+    assert_eq!(value_of(&mut engine, "a"), "<moved>");
+}
+
+/// **Editing a unit that reads a `var` a later unit wrote** re-runs it
+/// against the `var` as it was, and the write after it.
+#[test]
+fn editing_a_reader_of_a_later_write_rewinds_to_the_var() {
+    let mut engine = engine();
+    engine.run_source("var v = 1\n---\nlet b = v + 1\n---\nset v = 10");
+
+    engine.edit_unit(1, "let b = v + 2");
+
+    assert_eq!(value_of(&mut engine, "b"), "3");
+    assert_eq!(value_of(&mut engine, "v"), "10");
+}
+
+/// **Removing the unit that moved a binding gives the binding back.**
+#[test]
+fn removing_a_unit_that_moved_a_binding_gives_it_back() {
+    let mut engine = engine();
+    engine.run_source("let a = [1, 2]\n---\nlet n = 5\n---\nlet b = a");
+    assert_eq!(value_of(&mut engine, "a"), "<moved>");
+
+    let reports = engine.remove_unit(2);
+
+    assert_eq!(
+        reports.iter().map(|report| report.unit).collect::<Vec<_>>(),
+        vec![0, 1],
+        "rewound to A, and B after it",
+    );
+    assert_eq!(value_of(&mut engine, "a"), "[1, 2]");
+    assert!(!bound(&mut engine, "b"));
+
+    engine.run_source("let c = a");
+    assert_eq!(value_of(&mut engine, "c"), "[1, 2]", "and `a` can be named again");
+}
+
+// ============================================================================
 // Units that did not run to their end
 // ============================================================================
 

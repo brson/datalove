@@ -459,6 +459,19 @@ impl BindingInfo {
     }
 }
 
+/// A binding an earlier script unit made, which the unit being analyzed names.
+///
+/// The analysis gives each one a binding of its own, ahead of the unit's, so
+/// that moving out of it is checked as moving out of any binding is.
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct ExternalBinding {
+    pub name: String,
+    pub ty: IrType,
+    pub is_slot: bool,
+    /// Whether an earlier unit already gave its value away.
+    pub dead: bool,
+}
+
 // ============================================================================
 // Error types
 // ============================================================================
@@ -488,7 +501,7 @@ pub enum OwnershipRecoveryHint {
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 #[derive(salsa::SalsaValue)]
 pub enum AnalysisError<'db> {
-    /// Using a binding whose own unit gave its value away.
+    /// Using a binding an earlier unit gave its value away.
     /// D013 - Recoverable with @ (clone at the use that gave it away)
     UseAfterMoveInEarlierUnit {
         /// Location of the use in this unit.
@@ -824,11 +837,16 @@ pub struct ScriptAnalysisData {
     pub tracking: Vec<TrackingCategory>,
     /// Bindings to drop at unit end (for AOT cleanup).
     pub unit_end: Vec<BindingId>,
-    /// Names this unit exports whose value it already gave away.
+    /// Names whose value this unit gave away: its own exports, and earlier
+    /// units' bindings it moved out of.
     ///
     /// Later units can still see the name, but there is nothing behind it, so
-    /// using one is an error rather than a copy.
+    /// using one is an error.
     pub dead_exports: Vec<String>,
-    /// Names from earlier units this unit assigned to, which have a value again.
+    /// Names an earlier unit gave away that this unit assigned to, which have
+    /// a value again.
     pub revived_exports: Vec<String>,
+    /// How many of the first bindings are earlier units' bindings, which
+    /// lowering makes none of.
+    pub externals: u32,
 }

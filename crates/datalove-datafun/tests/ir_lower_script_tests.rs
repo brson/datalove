@@ -141,6 +141,7 @@ fn analyze_file(path: &Path) -> Result<String, String> {
                     unit_end: script_analysis_raw.unit_end,
                     dead_exports: script_analysis_raw.dead_exports,
                     revived_exports: script_analysis_raw.revived_exports,
+                    externals: script_analysis_raw.externals,
                 };
 
                 // Script tests don't use modules, so use empty func_id_map.

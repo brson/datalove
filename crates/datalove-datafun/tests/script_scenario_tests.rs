@@ -669,10 +669,11 @@ const LONG: [&str; 12] = [
     "let e = 100\ndebuglog \"ran E\"\n",
     // 5: draws on two units at once.
     "let f = b + e\ndebuglog \"ran F\"\n",
-    // 6: a function, which is a provided name of the other kind.
-    "fun g(n: int): int\n    ret n * 2\nend fun\ndebuglog \"ran G\"\n",
+    // 6: a function, which is a provided name of the other kind. It borrows,
+    // so that calling it takes nothing from the unit that bound the argument.
+    "fun g(ref n: int): int\n    ret n * 2\nend fun\ndebuglog \"ran G\"\n",
     // 7: the head of the diamond.
-    "let h = g(e)\ndebuglog \"ran H\"\n",
+    "let h = g(ref e)\ndebuglog \"ran H\"\n",
     // 8: one side of it.
     "let i = h + 1\ndebuglog \"ran I\"\n",
     // 9: the other side.
@@ -724,7 +725,7 @@ fn an_edit_at_the_head_of_a_diamond_reaches_its_foot() {
     let expected = session.graph().reach(7);
     assert_eq!(session.binding("k"), "403", "201 and 202");
 
-    session.edit(7, "let h = g(e) + 1000\ndebuglog \"ran H\"\n");
+    session.edit(7, "let h = g(ref e) + 1000\ndebuglog \"ran H\"\n");
     assert_eq!(session.rederive(7), expected);
     assert_eq!(session.units_run(), expected);
 
@@ -771,7 +772,7 @@ fn editing_a_function_reaches_its_callers() {
         "`g` is called by unit 7, and the diamond hangs off that",
     );
 
-    session.edit(6, "fun g(n: int): int\n    ret n * 3\nend fun\ndebuglog \"ran G\"\n");
+    session.edit(6, "fun g(ref n: int): int\n    ret n * 3\nend fun\ndebuglog \"ran G\"\n");
     assert_eq!(session.rederive(6), expected);
     assert_eq!(session.units_run(), expected);
 
@@ -865,26 +866,21 @@ fn a_blanked_units_index_is_not_reused() {
 // Ownership across a re-execution
 // ============================================================================
 
-/// A unit **copies** out of an earlier unit's binding rather than moving from
-/// it, and that survives the earlier unit being run again.
+/// A unit **moves** out of an earlier unit's binding, and an edit to the earlier
+/// unit builds the binding again and has it taken again.
 ///
-/// This is the property the whole design rests on -- re-running B cannot
-/// invalidate what C took from it, because C took a copy -- and nothing put it
-/// through an edit before. A list is the test because it owns heap memory: if
-/// the copy were a move, re-executing the earlier unit would destroy what the
-/// later unit is holding, and the leak checker would have something to say
-/// about the double free at the end of the session.
-///
-/// Both directions are here: the copy is still good after its source is
-/// re-executed, and re-executing it again with a different value gives the
-/// later unit the new one.
+/// A list, because it owns heap memory: re-executing the earlier unit destroys
+/// what its old frame still holds, and a move that left the old binding marked
+/// live would be destroyed twice, which the leak checker reports at the end of
+/// the session.
 #[test]
-fn a_copy_out_of_an_earlier_unit_survives_its_re_execution() {
+fn a_move_out_of_an_earlier_unit_is_made_again_when_its_source_reruns() {
     let mut session = Session::new();
     session.append("let xs = [1, 2, 3]\ndebuglog \"ran A\"\n");
     session.append("let ys = xs\ndebuglog \"ran B\"\n");
     session.append("let zs = [9]\ndebuglog \"ran C\"\n");
     let _ = session.units_run();
+    assert_eq!(session.binding("xs"), "<moved>");
     assert_eq!(session.binding("ys"), "[1, 2, 3]");
 
     let expected = session.graph().reach(0);
@@ -894,51 +890,215 @@ fn a_copy_out_of_an_earlier_unit_survives_its_re_execution() {
     assert_eq!(session.rederive(0), expected);
     assert_eq!(session.units_run(), expected);
 
-    assert_eq!(session.binding("xs"), "[4, 5, 6]");
-    assert_eq!(session.binding("ys"), "[4, 5, 6]", "the copy was taken again");
+    assert_eq!(session.binding("xs"), "<moved>", "taken again");
+    assert_eq!(session.binding("ys"), "[4, 5, 6]");
     assert_eq!(session.binding("zs"), "[9]");
 }
 
-/// A binding a unit **gave away** is still given away after the unit is
+/// Re-running a unit that moved out of an earlier binding **rewinds to the
+/// binding's provider**, because the binding holds nothing to move out of
+/// until it is built again.
+///
+/// Editing B alone used to run B alone, which read the list it had already
+/// taken. The reach goes back to A, and from A forward to everything that
+/// uses what A provides, which here is B again and not C.
+#[test]
+fn re_running_a_unit_that_moved_an_earlier_binding_rewinds_to_its_provider() {
+    let mut session = Session::new();
+    session.append("let xs = [1, 2, 3]\ndebuglog \"ran A\"\n");
+    session.append("let ys = xs\ndebuglog \"ran B\"\n");
+    session.append("let zs = [9]\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+
+    let graph = session.graph();
+    assert_eq!(graph.changed[1], vec!["xs".S()], "B took `xs`");
+    let expected = graph.reach(1);
+    assert_eq!(expected, BTreeSet::from([0, 1]), "back to A, and not on to C");
+
+    session.edit(1, "let ys = xs\ndebuglog \"ran B again\"\n");
+    assert_eq!(session.rederive(1), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("ys"), "[1, 2, 3]");
+    assert_eq!(session.binding("xs"), "<moved>");
+}
+
+/// A unit that **reads** a binding a later unit moved out of rewinds too.
+///
+/// Neither is about the other's names: B reads `e` and D takes it. Editing B
+/// runs it against `e` as it is now, which is nothing, unless A runs first to
+/// build `e` again -- and then D, which uses `e` too, takes it again. The
+/// function C stays out of it.
+#[test]
+fn reading_a_binding_a_later_unit_moved_rewinds_to_its_provider() {
+    let mut session = Session::new();
+    session.append("let e = 100\ndebuglog \"ran A\"\n");
+    session.append("let f = e + 1\ndebuglog \"ran B\"\n");
+    session.append("fun g(n: int): int\n    ret n * 2\nend fun\ndebuglog \"ran C\"\n");
+    session.append("let h = g(e)\ndebuglog \"ran D\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("e"), "<moved>", "`int` is not copy, so the call took it");
+
+    let expected = session.graph().reach(1);
+    assert_eq!(expected, BTreeSet::from([0, 1, 3]));
+
+    session.edit(1, "let f = e + 2\ndebuglog \"ran B\"\n");
+    assert_eq!(session.rederive(1), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("f"), "102");
+    assert_eq!(session.binding("h"), "200");
+}
+
+/// A unit that reads a `var` a later unit **wrote** rewinds to its provider,
+/// rather than reading what the later write left.
+#[test]
+fn reading_a_var_a_later_unit_wrote_rewinds_to_its_provider() {
+    let mut session = Session::new();
+    session.append("var v = 1\ndebuglog \"ran A\"\n");
+    session.append("let b = v + 1\ndebuglog \"ran B\"\n");
+    session.append("set v = 10\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("b"), "2");
+
+    let expected = session.graph().reach(1);
+    assert_eq!(expected, BTreeSet::from([0, 1, 2]), "A builds `v`, and C writes it again");
+
+    session.edit(1, "let b = v + 2\ndebuglog \"ran B\"\n");
+    assert_eq!(session.rederive(1), expected);
+    assert_eq!(session.units_run(), expected);
+    assert_eq!(session.binding("b"), "3", "B saw `v` as it was before C wrote it");
+    assert_eq!(session.binding("v"), "10");
+}
+
+/// A write that is not idempotent happens once, however often the unit making
+/// it is re-derived.
+#[test]
+fn re_running_an_increment_rewinds_to_what_it_increments() {
+    let mut session = Session::new();
+    session.append("var n = 1\ndebuglog \"ran A\"\n");
+    session.append("set n = n + 1\ndebuglog \"ran B\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("n"), "2");
+
+    for _ in 0..2 {
+        session.edit(1, "set n = n + 1\ndebuglog \"ran B\"\n");
+        assert_eq!(session.rederive(1), BTreeSet::from([0, 1]));
+        assert_eq!(session.binding("n"), "2", "applied once, not once per edit");
+    }
+}
+
+/// An edit that makes a unit take an earlier binding reaches the later units
+/// that use it, which can no longer name it.
+///
+/// Nothing B provides is involved: C uses `a`, which A provides. What reaches
+/// C is that B now takes `a`, which is only known once B is compiled again.
+/// And A is reached as well, because C took `a` before the edit: B runs
+/// against `a` as A builds it, not as C left it.
+#[test]
+fn a_unit_that_now_moves_a_binding_reaches_its_later_users() {
+    let mut session = Session::new();
+    session.append("let a = [1]\ndebuglog \"ran A\"\n");
+    session.append("let n = 1\ndebuglog \"ran B\"\n");
+    session.append("let c = a\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+
+    session.edit(1, "let n = a\ndebuglog \"ran B\"\n");
+    let redone = session.relower(1);
+    assert_eq!(redone.iter().map(|(unit, _)| *unit).collect::<Vec<_>>(), vec![0, 1, 2]);
+    let c = &redone[2].1;
+    assert!(format!("{:?}", c.ownership).contains("D013"), "{:?}", c.ownership);
+}
+
+/// An edit that makes a unit write an earlier `var` reaches the later units
+/// that read it, which see the write.
+///
+/// The case only the forward edge reaches: nothing changed `v` before the
+/// edit, so there is nothing to rewind, and C uses nothing B provides. What
+/// reaches C is that B now writes `v`, known once B is compiled again.
+#[test]
+fn a_unit_that_now_writes_a_var_reaches_its_later_readers() {
+    let mut session = Session::new();
+    session.append("var v = 1\ndebuglog \"ran A\"\n");
+    session.append("let n = 1\ndebuglog \"ran B\"\n");
+    session.append("let c = v + 1\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("c"), "2");
+
+    session.edit(1, "set v = 10\ndebuglog \"ran B\"\n");
+    assert_eq!(session.rederive(1), BTreeSet::from([1, 2]));
+    assert_eq!(session.binding("c"), "11", "C read `v` after B wrote it");
+}
+
+/// A move inside one unit is still checked when the binding is an earlier
+/// unit's: taking it twice, or in a loop, is an error, as it is for a binding
+/// of the unit's own.
+#[test]
+fn an_earlier_units_binding_moves_once_within_a_unit() {
+    let mut session = Session::new();
+    session.append("let xs = [1, 2]\n");
+
+    let twice = session.compile_append("let a = xs\nlet b = xs\n");
+    assert!(format!("{:?}", twice.ownership).contains("D001"), "{:?}", twice.ownership);
+    session.truncate(1);
+
+    let looped = session.compile_append(
+        "var i = 0\nloop\n    set i = i + 1\n    if i == 3\n        break\n    end if\n    let a = xs\nend loop\n",
+    );
+    assert!(format!("{:?}", looped.ownership).contains("D007"), "{:?}", looped.ownership);
+    session.truncate(1);
+
+    session.append("let a = xs\n");
+    assert_eq!(session.binding("a"), "[1, 2]");
+}
+
+/// Truncating a unit that took an earlier binding **puts the binding back**,
+/// by running its provider again.
+#[test]
+fn truncating_a_unit_that_moved_a_binding_rewinds_to_its_provider() {
+    let mut session = Session::new();
+    session.append("let xs = [1, 2, 3]\ndebuglog \"ran A\"\n");
+    session.append("let n = 5\ndebuglog \"ran B\"\n");
+    session.append("let ys = xs\ndebuglog \"ran C\"\n");
+    let _ = session.units_run();
+    assert_eq!(session.binding("xs"), "<moved>");
+
+    assert_eq!(session.truncate(2), BTreeSet::from([0, 1]), "rewound to A, and on from there");
+    assert_eq!(session.marks_run(&["A", "B", "C"]), BTreeSet::from(["A", "B"]));
+    assert_eq!(session.binding("xs"), "[1, 2, 3]");
+    assert!(!session.has_binding("ys"));
+}
+
+/// A binding a unit **gave away** stays given away after the unit is
 /// re-executed, and a unit compiled afterwards is still told so.
 ///
-/// A unit may only move out of a binding it defined itself -- a use that
-/// resolves into an earlier unit is lowered as a `Clone`, which is the previous
-/// test -- and then the name outlives its value. `dead_exports` records that
-/// and `dead_externals_over` folds the records to decide what a new unit may
-/// name, so **a move has to survive a re-derivation**: if the record went
-/// missing, a line typed after the edit would read a value that was given away.
-///
-/// D013 is the observable, and it is the only one: the frame still holds the
-/// list, so reading the given-away name through the executor prints it. What is
-/// gone is the *right* to name it, which is a compile-time fact. Asserted
-/// before the edit and again after, because the fold is recomputed from the
-/// records each time and the edited unit's record is the one that was replaced.
+/// `dead_exports` and `taken` record the moves and `dead_externals_over` folds
+/// the records to decide what a new unit may name, so **a move has to survive
+/// a re-derivation**: if the record went missing, a line typed after the edit
+/// would read a value that was given away. Asserted before the edit and again
+/// after, because the fold is recomputed from the records each time and the
+/// edited unit's record is the one that was replaced.
 #[test]
 fn a_move_across_units_survives_an_edit() {
     let mut session = Session::new();
     session.append("let xs = [1, 2, 3]\nlet moved = xs\ndebuglog \"ran A\"\n");
     session.append("let n = 5\ndebuglog \"ran B\"\n");
-    session.append("let copied = moved\ndebuglog \"ran C\"\n");
+    session.append("let taken = moved\ndebuglog \"ran C\"\n");
     let _ = session.units_run();
-    assert_eq!(session.binding("moved"), "[1, 2, 3]");
-    assert_eq!(session.binding("copied"), "[1, 2, 3]", "unit 2 took a copy");
+    assert_eq!(session.binding("moved"), "<moved>");
+    assert_eq!(session.binding("taken"), "[1, 2, 3]", "unit 2 took it");
     assert!(gave_away(&mut session, "xs"), "unit 0 gave `xs` away to `moved`");
+    assert!(gave_away(&mut session, "moved"), "unit 2 took `moved`");
 
     let expected = session.graph().reach(0);
-    assert_eq!(expected, BTreeSet::from([0, 2]), "the unit that copied it, and not `n`");
+    assert_eq!(expected, BTreeSet::from([0, 2]), "the unit that took it, and not `n`");
 
     session.edit(0, "let xs = [7, 8]\nlet moved = xs\ndebuglog \"ran A\"\n");
     assert_eq!(session.rederive(0), expected);
     assert_eq!(session.units_run(), expected);
 
-    assert_eq!(session.binding("moved"), "[7, 8]", "the move ran again over the new list");
-    assert_eq!(session.binding("copied"), "[7, 8]", "the copy was taken again");
+    assert_eq!(session.binding("taken"), "[7, 8]", "the move ran again over the new list");
     assert_eq!(session.binding("n"), "5");
-    assert!(
-        gave_away(&mut session, "xs"),
-        "the record of the move survived the re-derivation",
-    );
+    assert!(gave_away(&mut session, "xs"), "the record of the move survived the re-derivation");
+    assert!(gave_away(&mut session, "moved"));
 }
 
 /// Whether a unit compiled now would be refused for naming `name`.
@@ -955,9 +1115,8 @@ fn gave_away(session: &mut Session, name: &str) -> bool {
 /// A const from an earlier unit is **borrowed**, as one from this unit is, and
 /// stops being a const once a later unit rebinds the name.
 ///
-/// A unit sees an earlier unit's `let` as something to copy out of, so moving
-/// one is fine, but an earlier unit's const is a ref binding and a move out of
-/// it takes `@`. Ownership learns which names are consts from
+/// A unit may move out of an earlier unit's `let`, but an earlier unit's const
+/// is a ref binding and a move out of it takes `@`. Ownership learns which names are consts from
 /// `external_consts_over`, which folds the records, so the rebinding has to
 /// take the name back out of the set. The bare expression goes through the
 /// expression-unit analysis, which is told the same thing.
@@ -979,5 +1138,5 @@ fn an_earlier_units_const_is_borrowed_until_rebound() {
 
     session.append("let L = [9]\n");
     session.append("let c = L\n");
-    assert_eq!(session.binding("c"), "[9]", "an earlier unit's let is copied out of");
+    assert_eq!(session.binding("c"), "[9]", "an earlier unit's let is moved out of");
 }

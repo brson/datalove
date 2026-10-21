@@ -214,17 +214,19 @@ impl Session {
 
     /// Drop the units from `n` on.
     ///
-    /// Nothing is re-derived: truncating renumbers nothing, because there is
-    /// nothing after what goes.
-    pub fn truncate(&mut self, n: usize) {
+    /// Returns the units re-derived. Truncating renumbers nothing, because
+    /// there is nothing after what goes, so that is none unless a unit that
+    /// went took or wrote an earlier unit's binding, which rewinds to where the
+    /// binding was made.
+    pub fn truncate(&mut self, n: usize) -> BTreeSet<usize> {
         let compiled = self.pipeline.compile(&self.db);
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        compiler.truncate_units(n);
+        let splice = compiler.truncate_units(n);
         self.script = Some(compiler.into_session());
-        self.executor.truncate_units(n);
         self.texts.truncate(n);
+        self.rerun_spliced(splice)
     }
 
     /// Splice the unit at `i` out and re-derive and re-execute the suffix.
@@ -238,11 +240,11 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let redone = compiler.remove_unit(i);
+        let splice = compiler.remove_unit(i);
         self.script = Some(compiler.into_session());
 
         self.texts.remove(i);
-        self.rerun_spliced(i, redone)
+        self.rerun_spliced(splice)
     }
 
     /// Splice a new fragment in at `i`, the other half of [`Self::remove`].
@@ -251,11 +253,11 @@ impl Session {
         let mut compiler = compiled
             .script_compiler_resumed(&self.db, self.script.take().expect("a session"))
             .expect("a script compiler");
-        let redone = compiler.insert_unit(i, text, false);
+        let splice = compiler.insert_unit(i, text, false);
         self.script = Some(compiler.into_session());
 
         self.texts.insert(i, text.S());
-        self.rerun_spliced(i, redone)
+        self.rerun_spliced(splice)
     }
 
     /// The units that did not run to their end, in index order.
@@ -271,12 +273,9 @@ impl Session {
     /// at the index its unit already had -- right for an edit, where no index
     /// moved. A splice moves them, so the frames from the splice point on are
     /// destroyed and the suffix is run again from the top.
-    fn rerun_spliced(
-        &mut self,
-        at: usize,
-        redone: Vec<(usize, ScriptCompilationResult)>,
-    ) -> BTreeSet<usize> {
-        self.executor.truncate_units(at);
+    fn rerun_spliced(&mut self, splice: datafun::pipeline::Splice) -> BTreeSet<usize> {
+        let datafun::pipeline::Splice { from, redone } = splice;
+        self.executor.truncate_units(from);
         let is_expr = self.script.as_ref().expect("a session").unit_is_expr();
 
         let mut order = Vec::new();
@@ -384,6 +383,7 @@ impl Session {
             signatures: Vec::new(),
             uses: Vec::new(),
             imports: Vec::new(),
+            changed: compiler.unit_changes(),
             failed: Vec::new(),
         };
         for (index, output) in compiler.unit_typecheck_outputs().iter().enumerate() {
@@ -503,6 +503,9 @@ pub struct Graph {
     pub signatures: Vec<Vec<(String, u64)>>,
     pub uses: Vec<Vec<String>>,
     pub imports: Vec<Vec<String>>,
+    /// The earlier units' bindings each unit took or wrote, which are the
+    /// edges a reach goes back along.
+    pub changed: Vec<Vec<String>>,
     pub failed: Vec<bool>,
 }
 
@@ -533,6 +536,9 @@ impl Graph {
             signatures: other.signatures.clone(),
             uses: join(&self.uses, &other.uses),
             imports: join(&self.imports, &other.imports),
+            // What the running session went through, which is the graph from
+            // before the edit.
+            changed: self.changed.clone(),
             failed: other.failed.clone(),
         }
     }
@@ -540,25 +546,54 @@ impl Graph {
     /// The units reachable from `seeds`, in index order, the seeds included.
     ///
     /// A name a unit uses resolves to the nearest earlier unit that provides
-    /// it, so the reach extends to a unit when one of the names it uses
-    /// resolves to a unit already reached. Transitive, and one forward pass
-    /// gives all of it, because a unit's providers all sit before it.
+    /// it -- or took or wrote it, which leaves the binding as the units after
+    /// see it -- so the reach extends to a unit when one of the names it uses
+    /// resolves to a unit already reached.
+    ///
+    /// It also goes back. A reached unit that uses a binding some unit after
+    /// its provider took or wrote would read it changed, so the provider is
+    /// reached too, and everything that provider reaches. Repeated until no
+    /// provider is added.
     ///
     /// An edited unit is always in its own reach: `asked_names` records a name
     /// the unit binds itself, deliberately, and that over-reporting is what
     /// makes it sound. See `script_graph_tests`.
     pub fn reach_from(&self, seeds: &BTreeSet<usize>) -> BTreeSet<usize> {
-        let mut reached = vec![false; self.uses.len()];
-        for unit in 0..self.uses.len() {
-            reached[unit] = seeds.contains(&unit)
-                || self.uses[unit].iter().any(|name| {
-                    (0..unit)
-                        .rev()
-                        .find(|earlier| self.provides[*earlier].contains(name))
-                        .is_some_and(|provider| reached[provider])
-                });
+        let count = self.uses.len();
+        let provider = |unit: usize, name: &String| {
+            (0..unit).rev().find(|earlier| self.provides[*earlier].contains(name))
+        };
+        let mut seeds = seeds.clone();
+        loop {
+            let mut reached = vec![false; count];
+            for unit in 0..count {
+                reached[unit] = seeds.contains(&unit)
+                    || self.uses[unit].iter().any(|name| {
+                        (0..unit)
+                            .rev()
+                            .find(|earlier| {
+                                self.provides[*earlier].contains(name)
+                                    || self.changed[*earlier].contains(name)
+                            })
+                            .is_some_and(|source| reached[source])
+                    });
+            }
+            let before = seeds.len();
+            for unit in (0..count).filter(|unit| reached[*unit]) {
+                for name in &self.uses[unit] {
+                    let Some(source) = provider(unit, name) else { continue };
+                    let changed_since = (source + 1..count)
+                        .filter(|later| provider(*later, name) == Some(source))
+                        .any(|later| self.changed[later].contains(name));
+                    if !reached[source] && changed_since {
+                        seeds.insert(source);
+                    }
+                }
+            }
+            if seeds.len() == before {
+                return (0..count).filter(|unit| reached[*unit]).collect();
+            }
         }
-        (0..reached.len()).filter(|unit| reached[*unit]).collect()
     }
 
     /// The units an edit to unit `edited` reaches.

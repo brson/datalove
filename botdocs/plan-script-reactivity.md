@@ -396,6 +396,10 @@ Two things make this tractable now and will stop being true:
   (`compiler-guide.md`, "Ownership across units"). So re-running B cannot
   invalidate a copy C took. Non-cloneable types remove this and the model needs
   rethinking -- `repl-architecture.md` says so too.
+
+  *Since stopped being true, on purpose:* units move out of earlier bindings
+  now, and the reach goes back to rebuild what a unit took or wrote before
+  re-running it. `script-reactivity-architecture.md` section 5 has how.
 - **Only pure `fun`s exist.** The only effect is `debuglog`, which is per-unit
   output, so skipping a unit's execution skips nothing observable beyond it.
   `proc`s and real I/O need virtualized I/O.
@@ -506,7 +510,9 @@ has to be built out of.
 `a_blanked_units_index_is_not_reused` hold both halves, the second of them
 stating the cost: a session that deletes lines spends an index per deletion.
 
-**Ownership across a re-execution holds.** A unit copies out of an earlier
+**Ownership across a re-execution holds.** *(Written when units copied out of
+earlier bindings; that is gone, and the tests named here were rewritten for
+moves -- see `script-reactivity-architecture.md` section 5.)* A unit copies out of an earlier
 unit's binding, and `a_copy_out_of_an_earlier_unit_survives_its_re_execution`
 puts a list -- heap memory, so a move would be visible to the leak checker --
 through an edit to the unit it came from. A unit may only move out of a binding
