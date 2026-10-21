@@ -37,9 +37,9 @@ Let's figure it out.
 - [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
 - [What if a unit overwrites a binding without reading it?](#user-content-what-if-a-unit-overwrites-a-binding-without-reading-it)
 - [Hypothesis: an algebra of rewind and replay for moves and mutations](#user-content-hypothesis-an-algebra-of-rewind-and-replay-for-moves-and-mutations)
-- What if a unit reads a binding before a later unit moves it?
-- What if a unit reads a binding before a later unit mutates it?
-- What if a unit reads a binding after an earlier unit mutated it?
+- [What if a unit reads a binding before a later unit moves it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-moves-it)
+- [What if a unit reads a binding before a later unit mutates it?](#user-content-what-if-a-unit-reads-a-binding-before-a-later-unit-mutates-it)
+- [What if a unit reads a binding after an earlier unit mutated it?](#user-content-what-if-a-unit-reads-a-binding-after-an-earlier-unit-mutated-it)
 - What if an edit adds or removes a move?
 - What if an edit adds or removes a mutation?
 - What if a unit that moves or mutates is deleted?
@@ -536,6 +536,220 @@ and rewinds a read whenever any unit after the binding's provider took or
 wrote it. That is correct but rewinds more than this table says it needs to:
 `var v = 1` / `set v = 10` / `let b = v + 1`, editing the third unit,
 reruns all three. A candidate for the last section.
+-->
+
+
+
+
+## What if a unit reads a binding before a later unit moves it?
+
+So far the unit being redone was the one doing the moving.
+But a unit that only reads can be caught out too,
+if the binding it reads was taken _after_ it ran.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+let c = a /! 10
+
+---
+script-unit
+---
+
+let a_moved = a
+```
+
+Unit 2 borrows `a`, and unit 3 takes it.
+
+**Step 1: all three units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` moved |
+| 2 | `let c = a /! 10` | reads `a` (1) | compiles, runs | new | `c` = 100 |
+| 3 | `let a_moved = a` | takes `a` (1) | compiles, runs | new | `a_moved` = 1000 |
+
+Now edit unit 2.
+It reads `a`, which is empty:
+unit 3 took it after unit 2 last ran.
+Nothing unit 3 does depends on unit 2,
+and unit 2 is only reading,
+but unit 2 still can't run until unit 1 builds `a` again.
+And once unit 1 has rerun,
+unit 3 has to take the new `a`,
+or `a` will be left holding a value nothing took.
+
+**Step 2: unit 2 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | reruns | rewind: unit 2 reads `a`, which unit 3 took after it | `a` moved |
+| 2 | `let c = a /! 100` | reads `a` (1) | recompiles, runs | edited | `c` = 10 |
+| 3 | `let a_moved = a` | takes `a` (1) | reruns | replay: takes `a` from unit 1, which reran | `a_moved` = 1000 |
+
+So a read can need a rewind as much as a move can.
+What matters is not what the edited unit does to `a`,
+but whether anything changed `a` between when it was made and now.
+The behavior of units that are subsequent to the edit
+affects which units need to be redone.
+
+
+
+
+## What if a unit reads a binding before a later unit mutates it?
+
+The same goes for a mutation after the read.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+var b = 125
+
+---
+script-unit
+---
+
+let c = a /! b
+
+---
+script-unit
+---
+
+set b = b * 2
+```
+
+Unit 3 reads `b` as 125, so `c` is 8.
+Then unit 4 doubles `b` to 250.
+
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
+| 3 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 8 |
+| 4 | `set b = b * 2` | updates `b` (2) | compiles, runs | new | - |
+
+Edit unit 3 to double its result.
+Rerun on its own it would read the 250 that unit 4 left
+and get 8 again, rather than 16.
+So unit 2 reruns to put `b` back to 125,
+unit 3 runs against that,
+and unit 4 doubles `b` again.
+
+**Step 2: unit 3 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | `var b = 125` | - | reruns | rewind: unit 3 reads `b`, which unit 4 updated after it | `b` = 250 |
+| 3 | `let c = (a /! b) * 2` | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 16 |
+| 4 | `set b = b * 2` | updates `b` (2) | reruns | replay: updates `b` from unit 2, which reran | - |
+
+Here it doesn't matter what kind of write unit 4 makes.
+Had it been an overwrite, `set b = 500`,
+unit 3 would still have read the wrong `b`,
+so the rewind is the same.
+The kind of write decides whether redoing _the writer_ needs a rewind,
+not whether redoing a unit before it does.
+
+Unit 1 is a useful control.
+Unit 3 reads `a` too, but nothing changed `a`,
+so unit 1 is left alone.
+
+
+
+
+## What if a unit reads a binding after an earlier unit mutated it?
+
+Swap units 3 and 4, so the write comes first.
+
+```datalove
+---
+script-unit
+---
+
+let a = 1000
+
+---
+script-unit
+---
+
+var b = 125
+
+---
+script-unit
+---
+
+set b = b * 2
+
+---
+script-unit
+---
+
+let c = a /! b
+```
+
+**Step 1: all four units are entered.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | compiles, runs | new | `a` = 1000 |
+| 2 | `var b = 125` | - | compiles, runs | new | `b` = 250 |
+| 3 | `set b = b * 2` | updates `b` (2) | compiles, runs | new | - |
+| 4 | `let c = a /! b` | reads `a` (1), reads `b` (2) | compiles, runs | new | `c` = 4 |
+
+Now unit 4 reads `b` after the write,
+and the `b` it reads is the one unit 3 left.
+That's still what's there,
+so editing unit 4 needs nothing else rerun.
+
+**Step 2: unit 4 is edited.**
+
+| unit | code | uses from earlier units | this step | because | holds after |
+|------|------|-------------------------|-----------|---------|-------------|
+| 1 | `let a = 1000` | - | untouched | nothing changed `a` | `a` = 1000 |
+| 2 | `var b = 125` | - | untouched | `b` is as unit 4 first saw it | `b` = 250 |
+| 3 | `set b = b * 2` | updates `b` (2) | untouched | unit 4 reads after it | - |
+| 4 | `let c = (a /! b) * 2` | reads `a` (1), reads `b` (2) | recompiles, runs | edited | `c` = 8 |
+
+A write passes its value forward,
+and a unit after it depends on it the way it would on a `let`.
+A move has no such case.
+If unit 3 had been `let b_moved = b`,
+unit 4 wouldn't compile at all:
+
+```
+error[D013]: `b` was given away by an earlier input
+```
+
+So the rule for a reader is narrower than "anything changed the binding".
+A reader needs a rewind only if the binding was changed
+_after_ the reader last ran.
+Changes before it are just what it read.
+
+<!--
+Note: the engine today rewinds here too, rerunning units 2, 3 and 4 for
+the step 2 edit, because its rule is "changed by any unit after the
+binding's provider". Correct, but more than necessary. The D013 case also
+reruns units 2 and 3 for an edit to the failing unit 4. Candidates for the
+last section.
 -->
 
 
