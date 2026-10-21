@@ -3,11 +3,11 @@
 Title: An initial semantics for reactive interactive script units in Datalove
 Summary:
 
-Audience: practicioners
+Audience: practitioners
 
 Problem:
 Datalove incrementally recompiles and reexecutes only dependent script units
-when dependant code and data changes. What does this mean in the cases?
+when dependent code and data changes. What does this mean in the cases?
 
 Thesis:
 Antithesis:
@@ -20,9 +20,9 @@ primarily as an interactive scripting environment.
 It has been designed such that editing existing
 code quickly recompiles previously compiled code.
 It has been designed such that editing existing
-code _should be able to _quickly re-executes previously compiled code,
+code _should be able to_ quickly re-execute previously compiled code,
 producing the same result.
-Datalove's scripting enviroment is intended to be
+Datalove's scripting environment is intended to be
 deterministically reactive to its code and data input.
 
 Until now though the CLI REPL has only barely functioned,
@@ -35,12 +35,12 @@ Let's figure it out.
 ## Datalove's design for reactivity
 
 There are two pillars to Datalove's design that help make the goal
-of interactive determimnistic reexecution feasible:
+of interactive deterministic reexecution feasible:
 
 _Language restrictions_.
 Datalove has a linear type system and its functions are side-effect free.
 At the moment there is not even any way to do I/O,
-which complicates determinism greatly.
+which would complicate determinism greatly.
 The compiler can track precise data dependencies statically,
 and know exactly which code can mutate which data.
 
@@ -100,7 +100,7 @@ let c = a_moved /! b_moved
 debuglog c
 ```
 
-> Worlfiles are chunks of text delimited by headers bound between `---` lines.
+> Worldfiles are chunks of text delimited by headers bound between `---` lines.
 > Each chunk is interpreted as determined by the header.
 
 In this example the integers are type `int`, bigints.
@@ -112,7 +112,7 @@ Scripts and script units are allowed to return the type `!()`,
 "result of unit".
 
 In this example all three units compile and execute successfully.
-The third logs the value "100".
+The third logs the value "10".
 Previous units both compile and execute prior to subsequent units,
 as the results of execution may affect which bindings are subsequently available.
 
@@ -122,7 +122,7 @@ as the results of execution may affect which bindings are subsequently available
 ## The complications involved in (re)checking and (re)running script units
 
 
-### How does one unit failing to compiler affect subsequent units?
+### How does one unit failing to compile affect subsequent units?
 
 Imagine our first script unit doesn't compile.
 No recompilation yet.
@@ -160,7 +160,8 @@ creating the binding `b` and making it available to subsequent units.
 The third will fail to compile because the binding `a` does not exist,
 as the unit that creates it failed to compile.
 
-So in the first compile/run pass where the first unit failed:
+So in the first compile/run pass where the first unit failed
+(the columns say what happened to each unit in this pass):
 
 | unit | compiled   | ran   |
 |------|------------|-------|
@@ -185,6 +186,9 @@ After this second pass, because unit 3 ran,
 it moved `a` and `b` out of the frames of units 1 and 2, into its own.
 
 Now let's revert the previous edit to unit 1, making it fail to compile again.
+Unit 3 depends on unit 1, so it recompiles and fails, and doesn't reexecute.
+Unit 2 doesn't depend on unit 1,
+so naively it neither recompiles nor reexecutes.
 
 | unit | compiled   | ran   |
 |------|------------|-------|
@@ -192,19 +196,25 @@ Now let's revert the previous edit to unit 1, making it fail to compile again.
 | 2    | no         | no    |
 | 3    | fail       | no    |
 
-Because unit 2 doesn't depend on unit 1 it neither compiles nor reexucutes.
-Unit 3 recompiles and fails, so doesn't reexecute.
+But that's wrong.
 
 
 
 
 ### How is re-execution affected when subsequent units consume bindings from the re-executed unit?
 
-Continuing the previous example, lets make unit 1 compile again!
-This time we have a complication:
-unit 3 wants to reexecute,
-but it already executed once in a previous revision,
-moving the `b` binding out of unit 2.
+When unit 3 ran it moved `b` out of unit 2's frame and into its own.
+Now unit 3 has failed to compile,
+so what it did is gone:
+its frame is destroyed, `b_moved` with it,
+and it offers no bindings to anybody.
+
+Static ownership analysis now says there is a value in `b`.
+Nothing gave it away, because the only unit that did no longer compiles.
+But at run time `b` is still empty.
+The environment says `b` is moved,
+and a new unit typed after this one that reads `b`
+compiles fine and then reads a value that isn't there.
 
 ```datalove
 ---
@@ -212,13 +222,14 @@ script-unit
 ---
 
 let a = 1000
+let x = y // broken again
 
 ---
 script-unit
 ---
 
 // Naively we don't want to rerun this because it doesn't depend on
-// unit 1, which now compiles...
+// unit 1...
 let b = 100
 
 ---
@@ -226,22 +237,38 @@ script-unit
 ---
 
 let a_moved = a
-// ...but `b` no longer exists!
+// ...but this moved `b` the last time it ran,
+// and now it doesn't compile, so it can't have.
 let b_moved = b
 let c = a_moved /! b_moved
 
 debuglog c
 ```
 
-Static ownership analysis says there is a value in `b`,
-but if we just rerun unit 2 there won't be.
-We have to recognize that unit 3 moves bindings out of unit 2,
-and also reexecute unit 2.
+We have to recognize that unit 3 moved a binding out of unit 2,
+and that anything that undoes or redoes unit 3 has to build the binding again,
+by rerunning unit 2.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | fail       | no    |
+| 2    | no         | yes   |
+| 3    | fail       | no    |
+
+The rule is in terms of what unit 3 did _the last time it ran_,
+not what it does now.
+That is what the running session went through,
+and the session has to end up the same as if it had been run fresh from the top.
+
+Then when we make unit 1 compile again,
+unit 2 has nothing to do:
+`b` is already as unit 2 made it,
+and unit 3 moves it again.
 
 | unit | compiled   | ran   |
 |------|------------|-------|
 | 1    | success    | yes   |
-| 2    | no         | yes   |
+| 2    | no         | no    |
 | 3    | success    | yes   |
 
 
@@ -275,7 +302,7 @@ let c = a /! b
 debuglog c
 ```
 
-In the third unit it divides a by 10 in place.
+In the third unit it divides `b` by 10 in place.
 On first run it mutates `b` from 100 to 10 and logs the value "100".
 
 | unit | compiled   | ran   |
@@ -293,23 +320,32 @@ Imagine in the second run we cause the first unit to fail as previously.
 | 2    | no         | no    |
 | 3    | fail       | no    |
 
-Unit 2 is untouched because it has no dependencies on unit 1.
-Unit 3 failed to compile because it does.
-Nothing runs.
+Unit 3 failed to compile because it depends on unit 1.
+Naively unit 2 is untouched because it doesn't.
+But like with the move, unit 3 wrote to `b` the last time it ran,
+and now it can't have,
+so we need to rerun unit 2 to put `b` back to 100.
+
+| unit | compiled   | ran   |
+|------|------------|-------|
+| 1    | fail       | no    |
+| 2    | no         | yes   |
+| 3    | fail       | no    |
 
 Now if we fix unit 1,
-like with the previous move-dependency 3 has from 2,
-we need to also rerun unit 2 to avoid 3 reading the stale binding of `b`.
+unit 3 runs against `b` as unit 2 made it,
+and divides it to 10 again rather than to 1.
 
 | unit | compiled   | ran   |
 |------|------------|-------|
 | 1    | success    | yes   |
-| 2    | no         | yes   |
+| 2    | no         | no    |
 | 3    | success    | yes   |
 
 The analysis is essentially the same,
 but instead of a dependency on move operations
-we have a dependency on mutable borrows.
+we have a dependency on writes:
+`set`, and passing a binding to a `mut` or `out` parameter.
 
 
 
