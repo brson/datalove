@@ -31,6 +31,14 @@ as code is recompiled and reexecuted have been left to future work.
 Ok, future is now.
 Let's figure it out.
 
+- [Datalove's design for reactivity](#user-content-dataloves-design-for-reactivity)
+- [How does one unit failing to compile affect subsequent units?](#user-content-how-does-one-unit-failing-to-compile-affect-subsequent-units)
+- [How is re-execution affected when subsequent units consume bindings from the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-consume-bindings-from-the-re-executed-unit)
+- [How is re-execution affected when subsequent units mutate the re-executed unit?](#user-content-how-is-re-execution-affected-when-subsequent-units-mutate-the-re-executed-unit)
+- [How does one unit returning early affect subsequent units?](#user-content-how-does-one-unit-returning-early-affect-subsequent-units)
+
+
+
 
 ## Datalove's design for reactivity
 
@@ -119,10 +127,7 @@ as the results of execution may affect which bindings are subsequently available
 
 
 
-## The complications involved in (re)checking and (re)running script units
-
-
-### How does one unit failing to compile affect subsequent units?
+## How does one unit failing to compile affect subsequent units?
 
 Imagine our first script unit doesn't compile.
 No recompilation yet.
@@ -201,7 +206,7 @@ But that's wrong.
 
 
 
-### How is re-execution affected when subsequent units consume bindings from the re-executed unit?
+## How is re-execution affected when subsequent units consume bindings from the re-executed unit?
 
 When unit 3 ran it moved `b` out of unit 2's frame and into its own.
 Now unit 3 has failed to compile,
@@ -274,7 +279,7 @@ and unit 3 moves it again.
 
 
 
-### How is re-execution affected when subsequent units mutate the re-executed unit?
+## How is re-execution affected when subsequent units mutate the re-executed unit?
 
 Here's a new variation on our running example
 that mutates instead of moves.
@@ -356,6 +361,6 @@ we have a dependency on writes:
 
 
 
-### How does one unit returning early affect subsequent units?
+## How does one unit returning early affect subsequent units?
 
 
