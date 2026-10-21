@@ -51,7 +51,7 @@ The compiler design is aided by and informs the restrictions of the language des
 
 Of course a language that doesn't do any I/O is quite limited.
 Datalove will have I/O.
-One of my [principles](#todo) in Datalove is to start with a severely
+One of my [principles](../principles.md) in Datalove is to start with a severely
 restricted language design, build out the desired compiler capabilities,
 then slowly loosen those language restrictions while designing
 within the established restrictions of the compiler architecture.
